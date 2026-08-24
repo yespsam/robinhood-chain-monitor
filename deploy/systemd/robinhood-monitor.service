@@ -1,0 +1,54 @@
+[Unit]
+Description=Robinhood chain and platform monitor
+Documentation=file:/opt/robinhood-chain-monitor/current/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+PartOf=robinhood-monitor.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=robinhood-monitor
+Group=robinhood-monitor
+WorkingDirectory=/opt/robinhood-chain-monitor/current
+EnvironmentFile=/etc/robinhood-chain-monitor/monitor.env
+EnvironmentFile=/etc/robinhood-chain-monitor/runtime.env
+ExecStartPre=/usr/local/libexec/robinhood-monitor/assert-active.sh main
+ExecStart=/usr/bin/node --max-old-space-size=2560 /opt/robinhood-chain-monitor/current/src/index.js
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=90s
+KillSignal=SIGTERM
+UMask=0077
+LimitNOFILE=65536
+StateDirectory=robinhood-chain-monitor
+StateDirectoryMode=0700
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=robinhood-monitor
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=2000
+
+# The monitor only needs outbound networking and its persistent state directory.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+ReadWritePaths=/var/lib/robinhood-chain-monitor
+
+[Install]
+WantedBy=robinhood-monitor.target

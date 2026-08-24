@@ -1,0 +1,39 @@
+[Unit]
+Description=Robinhood monitoring stack health check
+Documentation=file:/opt/robinhood-chain-monitor/current/deploy/README.md
+After=robinhood-monitor.service robinhood-fomo.service
+PartOf=robinhood-monitor.target
+
+[Service]
+Type=oneshot
+User=robinhood-monitor
+Group=robinhood-monitor
+WorkingDirectory=/opt/robinhood-chain-monitor/current
+EnvironmentFile=/etc/robinhood-chain-monitor/runtime.env
+EnvironmentFile=/etc/robinhood-chain-monitor/health.env
+ExecStart=/usr/bin/node /opt/robinhood-chain-monitor/current/deploy/health-check.mjs
+UMask=0077
+StateDirectory=robinhood-chain-monitor
+StateDirectoryMode=0700
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=robinhood-health
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+ReadWritePaths=/var/lib/robinhood-chain-monitor

@@ -1,0 +1,34 @@
+node_modules/
+
+# Runtime configuration and credentials. Keep only the reviewed template.
+.env
+.env.*
+!.env.example
+
+# Durable cursors, outboxes, event history, and local browser artifacts.
+data/
+.playwright-cli/
+
+# Local logs and package-manager diagnostics.
+*.log
+npm-debug.log*
+coverage/
+
+# Private-key and credential containers must never enter Git history.
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+/id_rsa
+/id_rsa.pub
+/id_ed25519
+/id_ed25519.pub
+/id_ecdsa
+/id_ecdsa.pub
+/id_dsa
+/id_dsa.pub
+
+.DS_Store

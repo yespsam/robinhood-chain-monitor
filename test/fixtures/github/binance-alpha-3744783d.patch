@@ -1,0 +1,19 @@
+From 3744783d9cb92a6de8a19b5d4ed06fc7dd5b98a2 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Release alpha v1.7.0
+
+### Changed (1)
+
+- Updated `github.com/binance/binance-connector-go/common/v2` library to version `2.7.0`.
+---
+diff --git a/clients/alpha/go.mod b/clients/alpha/go.mod
+--- a/clients/alpha/go.mod
++++ b/clients/alpha/go.mod
+@@ -5,7 +5,7 @@ go 1.25.0
+- github.com/binance/binance-connector-go/common/v2 v2.6.0
++ github.com/binance/binance-connector-go/common/v2 v2.7.0
+diff --git a/clients/alpha/src/websocketstreams/docs/DefaultAPI.md b/clients/alpha/src/websocketstreams/docs/DefaultAPI.md
+--- a/clients/alpha/src/websocketstreams/docs/DefaultAPI.md
++++ b/clients/alpha/src/websocketstreams/docs/DefaultAPI.md
+@@ -50,7 +50,7 @@ func main() {
+- err := wsClient.WebsocketStreams.Connect()
++ err := wsClient.WebsocketStreams.Connect([]string{})

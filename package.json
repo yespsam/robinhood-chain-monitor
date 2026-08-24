@@ -1,0 +1,19 @@
+{
+  "name": "robinhood-chain-launchpad-monitor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "once": "ONCE=true node src/index.js",
+    "sync:gmgn": "node scripts/sync-gmgn-baseline.js",
+    "import:telegram": "node scripts/import-existing-telegram.js",
+    "test:telegram": "node scripts/telegram-smoke.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "ethers": "^6.15.0",
+    "ws": "^8.21.0"
+  }
+}

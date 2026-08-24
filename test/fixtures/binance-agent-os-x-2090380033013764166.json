@@ -1,0 +1,27 @@
+{
+  "timeline": {
+    "code": 200,
+    "results": [
+      {
+        "id": "2090380033013764166",
+        "text": "Meet Agent OS - a new way to build, deploy and use AI agents on Binance.\n\nBring Binance market intelligence, payment, on-chain, data and trading capabilities directly into your AI workflow.\n\nBuild. Analyze. Trade. With AI. 🫡\n\nExperience it ↠ https://www.binance.com/agent-os",
+        "created_timestamp": 1787220411,
+        "author": {
+          "id": "877807935493033984",
+          "name": "Binance",
+          "screen_name": "binance"
+        },
+        "url": "https://x.com/binance/status/2090380033013764166",
+        "replying_to": null,
+        "replies": 0,
+        "reposts": 0,
+        "likes": 0
+      }
+    ]
+  },
+  "oembed": {
+    "url": "https://x.com/binance/status/2090380033013764166",
+    "author_url": "https://x.com/binance",
+    "html": "<blockquote class=\"twitter-tweet\"><p lang=\"en\" dir=\"ltr\">Meet Agent OS - a new way to build, deploy and use AI agents on Binance.<br><br>Bring Binance market intelligence, payment, on-chain, data and trading capabilities directly into your AI workflow.<br><br>Build. Analyze. Trade. With AI. 🫡<br><br>Experience it ↠ <a href=\"https://www.binance.com/agent-os\">https://www.binance.com/agent-os</a></p>&mdash; Binance (@binance) <a href=\"https://x.com/binance/status/2090380033013764166\">August 20, 2026</a></blockquote>"
+  }
+}

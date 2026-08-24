@@ -1,0 +1,21 @@
+From 665ca7fdf188983d67c855cb9b03dbc40b92f432 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Release wallet v1.13.0
+
+### Changed (1)
+
+- Updated `github.com/binance/binance-connector-go/common/v2` library to version `2.7.0`.
+---
+diff --git a/clients/wallet/go.mod b/clients/wallet/go.mod
+--- a/clients/wallet/go.mod
++++ b/clients/wallet/go.mod
+@@ -5,7 +5,7 @@ go 1.25.0
+ require (
+- github.com/binance/binance-connector-go/common/v2 v2.6.0
++ github.com/binance/binance-connector-go/common/v2 v2.7.0
+ )
+diff --git a/clients/wallet/src/restapi/rest_api.go b/clients/wallet/src/restapi/rest_api.go
+--- a/clients/wallet/src/restapi/rest_api.go
++++ b/clients/wallet/src/restapi/rest_api.go
+@@ -14,7 +14,7 @@
+-// RestAPIClient manages communication with the Wallet REST API API v1.12.0
++// RestAPIClient manages communication with the Wallet REST API API v1.13.0

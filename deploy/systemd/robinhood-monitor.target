@@ -1,0 +1,8 @@
+[Unit]
+Description=Robinhood chain monitoring stack (single active node)
+Requires=robinhood-monitor.service robinhood-fomo.service
+Wants=network-online.target robinhood-health.timer
+After=network-online.target
+
+[Install]
+WantedBy=multi-user.target

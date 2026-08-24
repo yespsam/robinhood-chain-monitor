@@ -1,0 +1,19 @@
+From 1b4d14eadc66e841a03f16b7eed1e51f32e710df Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Release mining v1.9.0
+
+### Changed (1)
+
+- Updated `github.com/binance/binance-connector-go/common/v2` library to version `2.7.0`.
+---
+diff --git a/clients/mining/CHANGELOG.md b/clients/mining/CHANGELOG.md
+--- a/clients/mining/CHANGELOG.md
++++ b/clients/mining/CHANGELOG.md
+@@ -1,5 +1,5 @@
+-## 1.8.0 - 2026-08-19
++## 1.9.0 - 2026-08-19
+diff --git a/clients/mining/src/restapi/rest_api.go b/clients/mining/src/restapi/rest_api.go
+--- a/clients/mining/src/restapi/rest_api.go
++++ b/clients/mining/src/restapi/rest_api.go
+@@ -14,7 +14,7 @@
+-// RestAPIClient manages communication with the Mining REST API API v1.8.0
++// RestAPIClient manages communication with the Mining REST API API v1.9.0

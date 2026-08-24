@@ -1,0 +1,13 @@
+[Unit]
+Description=Run Robinhood monitor health checks every 15 seconds
+PartOf=robinhood-monitor.target
+
+[Timer]
+OnActiveSec=20s
+OnUnitActiveSec=15s
+AccuracySec=1s
+RandomizedDelaySec=0
+Unit=robinhood-health.service
+
+[Install]
+WantedBy=robinhood-monitor.target

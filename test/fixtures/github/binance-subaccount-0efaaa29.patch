@@ -1,0 +1,26 @@
+From 0efaaa297cd54be4e619049288aee63cde0c9270 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Release subaccount v1.11.0
+
+### Changed (2)
+
+- Updated `github.com/binance/binance-connector-go/common/v2` library to version `2.7.0`.
+- Modified response for `querySubAccountApiKey()` (`GET /sapi/v1/sub-account/subAccountApi`):
+  - property `rows` added
+  - property `list` deleted
+---
+diff --git a/clients/subaccount/CHANGELOG.md b/clients/subaccount/CHANGELOG.md
+--- a/clients/subaccount/CHANGELOG.md
++++ b/clients/subaccount/CHANGELOG.md
+@@ -1,7 +1,8 @@
+-## 1.11.0 - 2026-08-06
++## 1.11.0 - 2026-08-19
++- Updated `github.com/binance/binance-connector-go/common/v2` library to version `2.7.0`.
+ - Modified response for `querySubAccountApiKey()` (`GET /sapi/v1/sub-account/subAccountApi`):
+   - property `rows` added
+   - property `list` deleted
+diff --git a/clients/subaccount/go.mod b/clients/subaccount/go.mod
+--- a/clients/subaccount/go.mod
++++ b/clients/subaccount/go.mod
+@@ -5,7 +5,7 @@
+- github.com/binance/binance-connector-go/common/v2 v2.6.0
++ github.com/binance/binance-connector-go/common/v2 v2.7.0
