@@ -317,6 +317,37 @@ test("focus3 admits only provenance-bound official Binance sources after an expl
   }
 });
 
+test("verified Binance CMS and WebSocket announcements defer stock/RWA semantics to central relevance", () => {
+  const title = "Binance Futures Will Launch Multiple USDⓈ-Margined TradFi Perpetual Contracts";
+  const official = [
+    {
+      type: "binance_official_update",
+      title,
+      source: {
+        id: "binance_exchange_cms",
+        url: "https://www.binance.com/en/support/announcement/detail/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      },
+      url: "https://www.binance.com/en/support/announcement/detail/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      detailSource: "https://www.binance.com/bapi/composite/v1/public/cms/article/detail/query?articleCode=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    },
+    {
+      type: "binance_official_update",
+      title,
+      source: {
+        id: "binance_announcement_websocket",
+        url: "https://developers.binance.com/en/docs/products/announcements/announcement",
+      },
+      url: "https://www.binance.com/en/support/announcement/detail/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    },
+  ];
+  for (const event of official) assert.equal(isMonitoringSourceEnabled(binanceFocusConfig, event), true, event.source.id);
+
+  assert.equal(isMonitoringSourceEnabled(binanceFocusConfig, {
+    ...official[0],
+    detailSource: "https://binance.com.evil.example/copied-detail",
+  }), false, "a copied official source id with hostile provenance remains fail-closed");
+});
+
 test("focus3 Binance opt-in rejects display-name spoofing, hostile repositories, and non-official X identities", () => {
   const rejected = [
     {

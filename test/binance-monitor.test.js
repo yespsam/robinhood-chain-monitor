@@ -201,25 +201,26 @@ function monitorConfig(dataDir) {
   };
 }
 
-test("keeps structural Binance features and rejects ordinary listings and campaigns", () => {
+test("keeps Binance product features plus priority listings while rejecting uncatalogued campaigns", () => {
   const relevant = [
     "Binance Wallet Launches Web3 API, Enabling Developers to Build on Binance Web3 Infrastructure",
     "Introducing the BuildKey TGE Model on Binance Wallet in Collaboration with Aspecta",
     "Introducing the Exclusive Bonding Curve-Based Token Generation Event (TGE) on Binance Wallet, in Collaboration With Four.Meme",
     "Binance Introduces Revamped Launchpool and BNB Pages for Easier Airdrop Tracking",
     "Binance Launches Pre-Market: Exclusive Offering Before Official Spot Listing",
-  ];
-  const ignored = [
     "Introducing Opinion (OPN) on Binance Launchpool! Farm OPN by Locking BNB and USDC",
-    "Participate in the Exclusive Mitosis (MITO) Booster Program and Token Generation Event on Binance Wallet",
-    "Binance Wallet Alpha Deposit Campaign: Deposit GRVT and Share $20K Worth of Rewards",
     "GAIB (GAIB) Will Be Available on Binance Alpha and Binance Futures",
     "Binance Futures Will Launch EDGEUSDT Perpetual Contract Pre-Market Trading",
+    "Binance Futures Will Launch Multiple USDⓈ-Margined TradFi Perpetual Contracts",
+    "牛来 was added to Binance Alpha. You can trade 牛来 using market and limit orders.",
+  ];
+  const ignored = [
+    "Participate in the Exclusive Mitosis (MITO) Booster Program and Token Generation Event on Binance Wallet",
+    "Binance Wallet Alpha Deposit Campaign: Deposit GRVT and Share $20K Worth of Rewards",
     "Binance Will Add 10 bStocks Tokenized Securities as Collateral Assets",
     "Subscribe to Binance Wallet DeFi to Earn Up to 20% APR",
     "Join the Meme Rush Campaign and Win Token Rewards",
     "Binance Wallet Meme Rush Adds Three New Tokens",
-    "牛来 was added to Binance Alpha. You can trade 牛来 using market and limit orders.",
   ];
   for (const title of relevant) assert.equal(classifyBinanceOfficialText(title).relevant, true, title);
   for (const title of ignored) assert.equal(classifyBinanceOfficialText(title).relevant, false, title);
@@ -230,7 +231,7 @@ test("keeps structural Binance features and rejects ordinary listings and campai
   assert.equal(classifyBinanceOfficialText("Binance Wallet launches limit orders across all Alpha assets").relevant, true);
 });
 
-test("classifies high-value exchange and Wallet announcements without routine market noise", () => {
+test("classifies listings, contracts, activities, and ordinary exchange or Wallet announcements", () => {
   const spot = classifyBinanceAnnouncement({
     title: "Binance Will List Example (EXM) with Seed Tag Applied",
     catalogId: 48,
@@ -254,9 +255,13 @@ test("classifies high-value exchange and Wallet announcements without routine ma
     { title: "Binance Futures Will Launch EXMUSDT USDⓈ-Margined Perpetual Contract", catalogId: 48 },
     { title: "Notice on New Trading Pairs & Trading Bots Services on Binance Spot", catalogId: 48 },
     { title: "Notice of Removal of Spot Trading Pairs - 2026-08-07", catalogId: 161 },
-    { title: "Binance Exchange Adds 10 bStocks Trading Pairs on Binance Spot", catalogId: 48 },
   ];
-  for (const item of ordinary) assert.equal(classifyBinanceAnnouncement(item).relevant, false, item.title);
+  for (const item of ordinary) assert.equal(classifyBinanceAnnouncement(item).relevant, true, item.title);
+  assert.deepEqual(classifyBinanceAnnouncement(ordinary[0]).labels, ["新合约上线"]);
+  assert.equal(classifyBinanceAnnouncement({
+    title: "Binance Exchange Adds 10 bStocks Trading Pairs on Binance Spot",
+    catalogId: 48,
+  }).relevant, false, "tokenized-equity announcements remain outside the Web3 scope");
 
   const tickSize = classifyBinanceAnnouncement({
     title: "Updates on Tick Size for Multiple USDⓈ-M Perpetual Futures Contracts",
@@ -314,12 +319,14 @@ test("classifies high-value exchange and Wallet announcements without routine ma
   assert.equal(exchangeWalletMaintenance.scope, "exchange");
   assert.equal(exchangeWalletMaintenance.strong, false);
 
-  const garbage = [
+  const newlyIncluded = [
     { title: "Binance Alpha Adds Example (EXM)", catalogId: 49 },
     { title: "Binance Wallet Launches an Exclusive Airdrop for EXM", catalogId: 128 },
     { title: "Binance Launches Zero-Fee Spot Trading Promotion", catalogId: 49 },
   ];
-  for (const item of garbage) assert.equal(classifyBinanceAnnouncement(item).relevant, false, item.title);
+  for (const item of newlyIncluded) assert.equal(classifyBinanceAnnouncement(item).relevant, true, item.title);
+  assert.deepEqual(classifyBinanceAnnouncement(newlyIncluded[0]).labels, ["Alpha 上新"]);
+  assert.equal(classifyBinanceAnnouncement(newlyIncluded[1]).category, "活动公告");
 });
 
 test("announcement body navigation cannot hide a valid title or turn Square programming into a product launch", () => {
@@ -344,7 +351,7 @@ test("announcement body navigation cannot hide a valid title or turn Square prog
   assert.equal(squareProgramming.relevant, false);
 });
 
-test("classifies Binance Square KOL sharing and Futures product features without admitting routine contracts", () => {
+test("classifies Binance Square KOL sharing, Futures product features, and new contracts", () => {
   const square = classifyBinanceOfficialText("Binance Square rolls out Faster Trade Sharing so KOL buys can be shared as calls and copied by followers");
   assert.equal(square.relevant, true);
   assert.equal(square.strong, true);
@@ -353,7 +360,9 @@ test("classifies Binance Square KOL sharing and Futures product features without
   const futuresFeature = classifyBinanceOfficialText("New on Binance Futures: View funding and trading fees directly in position history");
   assert.equal(futuresFeature.relevant, true);
   assert.deepEqual(futuresFeature.labels, ["Futures 功能更新"]);
-  assert.equal(classifyBinanceOfficialText("Binance Futures Will Launch DOGUSDT Perpetual Contract").relevant, false);
+  const contract = classifyBinanceOfficialText("Binance Futures Will Launch DOGUSDT Perpetual Contract");
+  assert.equal(contract.relevant, true);
+  assert.deepEqual(contract.labels, ["新合约上线"]);
 });
 
 test("extracts concrete announcement facts while dropping boilerplate", () => {
@@ -677,7 +686,9 @@ test("parses official announcement details and uses SEO/body evidence for Wallet
   const bodyCampaign = parseBinanceAnnouncementDetail(announcementDetail(code, "Product Upgrade Notice", {
     body: JSON.stringify({ text: "Binance Wallet launches a Meme Rush trading campaign. Trade tokens and win rewards." }),
   }), code);
-  assert.equal(classifyBinanceAnnouncement({ title: bodyCampaign.title, catalogId: 49 }, bodyCampaign).relevant, false);
+  const bodyCampaignSignal = classifyBinanceAnnouncement({ title: bodyCampaign.title, catalogId: 49 }, bodyCampaign);
+  assert.equal(bodyCampaignSignal.relevant, true);
+  assert.equal(bodyCampaignSignal.category, "活动公告");
 });
 
 test("extracts only Meme Rush platform capabilities and Launchpool structure", () => {
@@ -872,18 +883,19 @@ test("first run is a silent baseline, then only structural deltas are delivered"
   assert.equal(delivered.length, 0);
   stage = 1;
   await monitor.check();
-  assert.deepEqual(delivered.map((event) => event.kind), ["announcement", "launchpool_capability", "meme_rush_capability"]);
+  assert.deepEqual(delivered.map((event) => event.kind), ["announcement", "announcement", "launchpool_capability", "meme_rush_capability"]);
   assert.equal(delivered[0].article.code, featureCode);
-  assert.deepEqual(delivered[1].changes.newStakeAssets, ["USDX"]);
-  assert.equal(delivered[2].changes.newProtocols[0].protocol, "2099");
-  assert.equal(delivered.some((event) => event.article?.code === listingCode), false);
+  assert.equal(delivered[1].article.code, listingCode);
+  assert.deepEqual(delivered[2].changes.newStakeAssets, ["USDX"]);
+  assert.equal(delivered[3].changes.newProtocols[0].protocol, "2099");
+  assert.equal(delivered.some((event) => event.article?.code === listingCode), true);
 
   const state = JSON.parse(await fs.readFile(path.join(dataDir, "binance-state.json"), "utf8"));
   assert.ok(state.announcements.articles[listingCode], "ignored articles still advance the durable cursor");
   assert.ok(state.memeRush.protocols["56:2099"]);
 });
 
-test("routes new exchange and Wallet announcements separately while keeping campaigns silent", async (t) => {
+test("routes exchange, Wallet, and campaign announcements separately", async (t) => {
   const dataDir = await fixture(t);
   let stage = 0;
   const delivered = [];
@@ -935,11 +947,12 @@ test("routes new exchange and Wallet announcements separately while keeping camp
     { code: spotCode, scope: "exchange", strong: true, source: "binance_exchange_cms" },
     { code: rulesCode, scope: "exchange", strong: false, source: "binance_exchange_cms" },
     { code: walletCode, scope: "wallet", strong: true, source: "binance_wallet_cms" },
+    { code: campaignCode, scope: "exchange", strong: false, source: "binance_exchange_cms" },
   ]);
-  assert.equal(delivered.some((event) => event.article.code === campaignCode), false);
+  assert.equal(delivered.some((event) => event.article.code === campaignCode), true);
 
   const state = JSON.parse(await fs.readFile(path.join(dataDir, "binance-state.json"), "utf8"));
-  assert.equal(state.announcements.articles[campaignCode].relevant, false);
+  assert.equal(state.announcements.articles[campaignCode].relevant, true);
   assert.equal(state._health.exchangeAnnouncements.status, "healthy");
   assert.equal(state._health.walletAnnouncements.status, "healthy");
 });
@@ -979,9 +992,9 @@ test("isolates a detail 429 so a later conclusive exchange alert is not blocked"
   stage = 1;
   await monitor.check();
 
-  assert.deepEqual(delivered.map((event) => event.article.code), [spotCode]);
+  assert.deepEqual(delivered.map((event) => event.article.code), [hiddenCode, spotCode]);
   const state = JSON.parse(await fs.readFile(path.join(dataDir, "binance-state.json"), "utf8"));
-  assert.equal(state.announcements.articles[hiddenCode], undefined, "detail-dependent article stays pending for retry");
+  assert.equal(state.announcements.articles[hiddenCode].relevant, true, "catalogued ordinary notice is retained even while detail is rate-limited");
   assert.equal(state.announcements.articles[spotCode].relevant, true);
   assert.equal(state._health.announcements.status, "degraded");
   assert.equal(state._health.announcements.detailFailures, 1);
@@ -1211,6 +1224,59 @@ test("an alert delivery failure does not advance the Binance announcement cursor
   assert.match(state._health.announcements.lastError, /telegram unavailable/);
 });
 
+test("terminal Binance announcement rejections advance the cursor and do not block later articles", async (t) => {
+  const dataDir = await fixture(t);
+  let stage = 0;
+  const baseCode = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const sourceDisabledCode = "cccccccccccccccccccccccccccccccc";
+  const notRelevantCode = "dddddddddddddddddddddddddddddddd";
+  const blockedCode = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+  const deliveredCode = "ffffffffffffffffffffffffffffffff";
+  const newArticles = [
+    article(sourceDisabledCode, "Binance Futures Will Launch Multiple USDⓈ-Margined TradFi Perpetual Contracts"),
+    article(notRelevantCode, "Example Two (TWO) Will Be Available on Binance Alpha"),
+    article(blockedCode, "Binance Futures Will Launch THREEUSDT USDⓈ-Margined Perpetual Contract"),
+    article(deliveredCode, "Binance Launches Example Four Trading Activity"),
+  ];
+  const attempted = [];
+  const fetchImpl = async (url) => {
+    if (BINANCE_ANNOUNCEMENT_URLS.includes(url)) return ok(announcements(stage === 0
+      ? [article(baseCode, "Binance Adds a New Spot Trading Pair")]
+      : [article(baseCode, "Binance Adds a New Spot Trading Pair"), ...newArticles]));
+    const detailCode = detailRequestCode(url);
+    const matching = newArticles.find((candidate) => candidate.code === detailCode);
+    if (matching) return ok(announcementDetail(matching.code, matching.title));
+    if (BINANCE_LAUNCHPOOL_URLS.includes(url)) return ok(launchpool([]));
+    if (url === BINANCE_MEME_RUSH_URL) return ok(memeRush([item()]));
+    throw new Error(`unexpected URL ${url}`);
+  };
+  const monitor = createBinanceMonitor(monitorConfig(dataDir), {
+    autoStart: false,
+    memeRushTargets: [{ chainId: "56", rankType: 10 }],
+    fetchImpl,
+    sendAlertsImpl: async (_config, event) => {
+      attempted.push(event.article.code);
+      if (event.article.code === sourceDisabledCode) return { status: "suppressed", reason: "monitoring_source_disabled" };
+      if (event.article.code === notRelevantCode) return { status: "suppressed", reason: "not_relevant" };
+      if (event.article.code === blockedCode) return { status: "suppressed", reason: "blocked_event" };
+      return { status: "delivered" };
+    },
+    logger: { error() {} },
+  });
+
+  await monitor.check();
+  stage = 1;
+  await monitor.check();
+
+  assert.deepEqual(attempted, [sourceDisabledCode, notRelevantCode, blockedCode, deliveredCode]);
+  const state = JSON.parse(await fs.readFile(path.join(dataDir, "binance-state.json"), "utf8"));
+  for (const code of attempted) assert.ok(state.announcements.articles[code], `${code} cursor was not persisted`);
+  assert.equal(state._health.announcements.status, "healthy");
+
+  await monitor.check();
+  assert.deepEqual(attempted, [sourceDisabledCode, notRelevantCode, blockedCode, deliveredCode], "consumed articles must not replay");
+});
+
 test("Square starts silently, marks a new feature against the monitoring baseline, and compares edits exactly", async (t) => {
   const dataDir = await fixture(t);
   let stage = 0;
@@ -1284,7 +1350,7 @@ test("Square starts silently, marks a new feature against the monitoring baselin
   assert.ok(delivered[1].changedFields.includes("facts"));
 });
 
-test("Developer changelogs report exact additions and removals while ignoring line reordering", async (t) => {
+test("Developer changelogs consume terminal scope rejections while preserving exact cursor deltas", async (t) => {
   const dataDir = await fixture(t);
   let stage = 0;
   let current = Date.parse("2026-08-11T01:00:00Z");
@@ -1321,7 +1387,10 @@ test("Developer changelogs report exact additions and removals while ignoring li
     memeRushTargets: [{ chainId: "56", rankType: 10 }],
     fetchImpl,
     now: () => current,
-    sendAlertsImpl: async (_config, event) => delivered.push(event),
+    sendAlertsImpl: async (_config, event) => {
+      delivered.push(event);
+      return { status: "suppressed", reason: "not_relevant" };
+    },
     logger: { error() {} },
   });
 

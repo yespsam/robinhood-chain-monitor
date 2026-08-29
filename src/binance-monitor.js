@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import WebSocket from "ws";
-import { sendAlerts } from "./alerts.js";
+import { isTerminalAlertSuppression, sendAlerts } from "./alerts.js";
 
 export const BINANCE_ANNOUNCEMENT_URLS = [
   "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&pageNo=1&pageSize=50",
@@ -132,6 +132,9 @@ const ORDINARY_WALLET_TOKEN = [
   /\b(?:features?|lists?|adds?)\b.{0,80}\b(?:tokens?|coins?)\b.{0,80}\bmeme\s+rush\b/i,
 ];
 const SPOT_FIRST_LISTING = /\bbinance\s+will\s+list\s+(?!new\s+trading\s+pairs?)[^.!]{1,120}(?:seed\s+tag|innovation\s+zone|on\s+spot|\bon\s+\d{4}|$)/i;
+const FUTURES_CONTRACT_LISTING = /\bbinance\s+futures\s+will\s+(?:launch|list)\s+[^.!?]{1,160}\b(?:perpetual|delivery|quarterly)\s+contracts?\b|\bnew\s+(?:usdⓢ?[- ]m|coin[- ]m)?\s*(?:perpetual|delivery|quarterly)\s+contracts?\b/i;
+const ALPHA_TOKEN_LISTING = /\b(?:will\s+be|is|are|was|were|has\s+been|have\s+been)\s+(?:now\s+)?(?:available|added|listed|featured)\s+(?:on|in|to)\s+binance\s+alpha\b|\bbinance\s+alpha\b[^.!?]{0,120}\b(?:adds?|added|features?|featured|lists?|listed|starts?\s+trading)\b[^.!?]{0,120}\b(?:token|coin|asset|[A-Z0-9]{2,15})\b/i;
+const LAUNCH_PRODUCT_TOKEN = /\bintroducing\s+.+\([a-z0-9]{2,15}\)\s+on\s+binance\s+(?:launchpool|megadrop)\b/i;
 const FULL_TOKEN_DELISTING = /\bbinance\s+will\s+delist\s+(?!.*\b(?:spot|margin|futures)\s+trading\s+pairs?\b)[^.!]{1,160}\bon\s+\d{4}/i;
 const ORDINARY_MARKET_ADDITION = /\b(?:futures\s+will\s+(?:launch|convert)|new\s+trading\s+pairs?|adds?\s+.+\s+trading\s+pairs?|trading\s+bots?\s+services?|removal\s+of\s+(?:spot|margin|futures)\s+trading\s+pairs?)\b/i;
 const TRADING_RULE_UPDATE = /\b(?:tick\s+size|collateral\s+ratio|leverage\s*(?:&|and)\s*margin\s+tiers?|margin\s+tiers?|position\s+limits?|funding\s+rate|trading\s+rules?|risk\s+control|price\s+limit|minimum\s+order|fee\s+schedule)\b/i;
@@ -413,21 +416,58 @@ export function classifyBinanceAnnouncement(article = {}, detail = null) {
   // Footer navigation and recommendation modules contain unrelated product
   // names. Hard exclusions must come from the title/SEO facts, not arbitrary
   // body text, or valid API/maintenance announcements are silently discarded.
-  if (STOCK_OR_SECURITIES.test(headline)) return { relevant: false, labels: [] };
+  const futuresContractListing = FUTURES_CONTRACT_LISTING.test(title);
+  if (STOCK_OR_SECURITIES.test(headline) && !futuresContractListing) return { relevant: false, labels: [] };
 
   const marketing = MARKETING_OR_REWARD.some((pattern) => pattern.test(headline))
     || MARKETING_OR_REWARD.some((pattern) => pattern.test(analysisText));
   const explicitWalletMode = EXPLICIT_WALLET_MODE.test(analysisText);
   const structuralWalletChange = explicitWalletMode && nearbySignals(analysisText, PRODUCT_ACTION, WALLET_STRUCTURAL_SIGNAL);
-  if (marketing && !structuralWalletChange) return { relevant: false, labels: [] };
 
   const agentNativeSignal = classifyAgentNativeOfficialText(headline);
   if (agentNativeSignal.relevant) return agentNativeSignal;
 
+  // Listings are the user's highest-priority Binance facts. Detect them before
+  // Wallet/Alpha and marketing rules so an Alpha listing, a Launchpool token,
+  // or a new Futures contract cannot be mistaken for routine promotion.
+  const listingLabels = [];
+  if (SPOT_FIRST_LISTING.test(title)) listingLabels.push("现货首次上币");
+  if (futuresContractListing) listingLabels.push("新合约上线");
+  if (ALPHA_TOKEN_LISTING.test(title)) listingLabels.push("Alpha 上新");
+  if (LAUNCH_PRODUCT_TOKEN.test(title)) listingLabels.push("Launchpool/Megadrop 新币");
+  if (listingLabels.length) {
+    const walletListing = listingLabels.includes("Alpha 上新");
+    const category = listingLabels.length > 1
+      ? "多市场上新"
+      : listingLabels[0] === "现货首次上币"
+        ? "现货上币"
+        : listingLabels[0];
+    return classified(listingLabels, {
+      project: walletListing ? "binance-wallet" : "binance",
+      strong: true,
+      category,
+    });
+  }
+  if (FULL_TOKEN_DELISTING.test(title)) return classified(["整币下架"], { strong: true, category: "整币下架" });
+
+  // Activities and rewards are useful official notices, but only a catalogued
+  // CMS/WebSocket item may use this broad fallback. Square/X text shares this
+  // classifier and must not turn every promotional post into an alert.
+  if (marketing && !structuralWalletChange) {
+    return catalogs.size > 0
+      ? classified(["活动/奖励公告"], { category: "活动公告" })
+      : { relevant: false, labels: [] };
+  }
+
   const lowValueCatalog = catalogs.has(BINANCE_CATALOGS.fiat)
     || catalogs.has(BINANCE_CATALOGS.activities)
     || catalogs.has(BINANCE_CATALOGS.airdrop);
-  if (lowValueCatalog && !structuralWalletChange && !SECURITY_OR_EMERGENCY.test(headline)) return { relevant: false, labels: [] };
+  if (lowValueCatalog && !structuralWalletChange && !SECURITY_OR_EMERGENCY.test(headline)) {
+    const activity = catalogs.has(BINANCE_CATALOGS.activities) || catalogs.has(BINANCE_CATALOGS.airdrop);
+    return classified([activity ? "活动/奖励公告" : "普通官方公告"], {
+      category: activity ? "活动公告" : "普通公告",
+    });
+  }
 
   const exchangeWalletMaintenance = /^wallet\s+maintenance\b/i.test(title);
   const walletContext = !exchangeWalletMaintenance && (WALLET_CONTEXT.test(analysisText) || explicitWalletMode);
@@ -454,9 +494,11 @@ export function classifyBinanceAnnouncement(article = {}, detail = null) {
     return classified(labels, { project: "binance-wallet", strong, category: labels[0] });
   }
 
-  if (SPOT_FIRST_LISTING.test(title)) return classified(["现货首次上币"], { strong: true, category: "现货上币" });
-  if (FULL_TOKEN_DELISTING.test(title)) return classified(["整币下架"], { strong: true, category: "整币下架" });
-  if (ORDINARY_MARKET_ADDITION.test(title)) return { relevant: false, labels: [] };
+  if (ORDINARY_MARKET_ADDITION.test(title)) {
+    return classified([/removal\s+of/i.test(title) ? "交易对调整" : "新增交易对/交易服务"], {
+      category: "市场公告",
+    });
+  }
   if (catalogs.has(BINANCE_CATALOGS.api) || /\bbinance\s+(?:spot|futures)?\s*api\s+update/i.test(title)) {
     return classified(["交易所 API 更新"], { strong: BREAKING_API_CHANGE.test(headline), category: "API 更新" });
   }
@@ -466,6 +508,9 @@ export function classifyBinanceAnnouncement(article = {}, detail = null) {
   if (EXCHANGE_MAINTENANCE.test(headline)) return classified(["充提/网络维护"], { category: "维护更新" });
   if (FUTURES_PRODUCT_UPDATE.test(headline)) return classified(["Futures 功能更新"], { category: "Futures 产品更新" });
   if (EXCHANGE_PRODUCT_UPDATE.test(headline)) return classified(["交易所新产品/功能"], { category: "产品更新" });
+  // Only catalogued exchange announcements receive the ordinary fallback.
+  // Bare X/Square prose has no catalog and remains fail-closed.
+  if (catalogs.size > 0) return classified(["普通官方公告"], { category: "普通公告" });
   return { relevant: false, labels: [] };
 }
 
@@ -2066,8 +2111,11 @@ export function createBinanceMonitor(config, dependencies = {}) {
 
   async function deliver(event) {
     const result = await alertSender(config, event);
-    if (result?.status === "suppressed" && ["monitoring_source_disabled", "not_relevant", "blocked_event"].includes(result.reason)) {
-      const error = new Error(`Binance alert was suppressed before durable queueing: ${result.reason}`);
+    // Terminal policy/relevance decisions have durably consumed this source
+    // item. Only an explicitly retryable (or otherwise unknown) suppression
+    // must stop the cursor so a later poll can try delivery again.
+    if (result?.status === "suppressed" && !isTerminalAlertSuppression(result)) {
+      const error = new Error(`Binance alert was retryably suppressed before durable queueing: ${result.reason || "unknown"}`);
       error.code = "BINANCE_ALERT_NOT_QUEUED";
       throw error;
     }

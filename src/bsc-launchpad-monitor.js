@@ -4107,6 +4107,8 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   const warmedKnownOfficialModes = new Set();
   const officialControllerIdentityCache = new Map();
   const blockCache = new Map();
+  const blockCacheAbortController = new AbortController();
+  let blockCacheGeneration = 0;
   const creationTransactionCache = new Map();
   const openFourPresetCache = new Map();
   const bscScanWaiters = [];
@@ -4210,6 +4212,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   const inFlightEntries = new Map();
   const fourMemeReplayFlights = new Map();
   const flapReplayFlights = new Map();
+  const flapReplayAbortController = new AbortController();
   let flapReplaySweepLock = Promise.resolve();
   const backgroundReplayTasks = new Set();
   const activeObservationProcessors = new Set();
@@ -4246,6 +4249,50 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   let lastFlapReplayFailureFingerprint = null;
   let lastFlapReplayFailureLoggedAt = 0;
   let suppressedFlapReplayFailureLogs = 0;
+
+  const flapReplayStoppedError = () => {
+    const error = new Error("Flap activation replay stopped");
+    error.code = "BSC_FLAP_REPLAY_STOPPED";
+    return error;
+  };
+
+  const isFlapReplayStoppedError = (error) => error?.code === "BSC_FLAP_REPLAY_STOPPED";
+
+  const throwIfFlapReplayStopped = (signal = flapReplayAbortController.signal) => {
+    if (stopped || signal?.aborted) throw flapReplayStoppedError();
+  };
+
+  // Replay RPC reads are safe cancellation boundaries: no state mutation has
+  // started yet, and the retained hot-index candidate remains the durable
+  // restart cursor. The underlying provider promise still gets fulfillment
+  // and rejection handlers so a late socket failure cannot become unhandled.
+  const awaitFlapReplayRead = (operation, signal = flapReplayAbortController.signal) => {
+    throwIfFlapReplayStopped(signal);
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (handler, value) => {
+        if (settled) return;
+        settled = true;
+        signal?.removeEventListener?.("abort", onAbort);
+        handler(value);
+      };
+      const onAbort = () => finish(reject, flapReplayStoppedError());
+      signal?.addEventListener?.("abort", onAbort, { once: true });
+      if (signal?.aborted || stopped) {
+        onAbort();
+        return;
+      }
+      Promise.resolve()
+        .then(() => {
+          throwIfFlapReplayStopped(signal);
+          return operation();
+        })
+        .then(
+          (value) => finish(resolve, value),
+          (error) => finish(reject, error),
+        );
+    });
+  };
 
   const withState = (operation) => {
     const run = stateLock.catch(() => {}).then(() => {
@@ -6108,7 +6155,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         || left.transactionHash.localeCompare(right.transactionHash));
   }
 
-  async function processStoredFlapReplayCandidate(activationKey, candidate) {
+  async function processStoredFlapReplayCandidate(
+    activationKey,
+    candidate,
+    signal = flapReplayAbortController.signal,
+  ) {
+    throwIfFlapReplayStopped(signal);
     const reserved = await withState(async () => {
       const activation = state.officialSources?.flap?.featureActivations?.[activationKey];
       if (!activation || activation.active === false || activation.firstTokenAlertedAt || activation.firstTokenTransactionHash) return false;
@@ -6120,6 +6172,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       return true;
     });
     if (!reserved) return false;
+    throwIfFlapReplayStopped(signal);
     try {
       enqueue(candidate.transactionHash, candidate.blockNumber, "flap_feature_replay", {
         transactionIndex: candidate.transactionIndex,
@@ -6132,8 +6185,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       });
       const entry = queue.get(candidate.transactionHash);
       if (!entry) throw new Error(`Flap replay could not reserve ${candidate.transactionHash}`);
-      await processEntries([entry]);
-      return withState(async () => {
+      await processEntries([entry], entryRpcConcurrency, { flapReplaySignal: signal });
+      throwIfFlapReplayStopped(signal);
+      const alerted = await withState(async () => {
         const activation = state.officialSources?.flap?.featureActivations?.[activationKey];
         if (!activation) return false;
         activation.replayAttemptedTransactionHashes = [...new Set([
@@ -6143,7 +6197,15 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         await save();
         return Boolean(activation.firstTokenAlertedAt || activation.firstTokenTransactionHash);
       });
+      throwIfFlapReplayStopped(signal);
+      return alerted;
     } catch (error) {
+      if (isFlapReplayStoppedError(error)) {
+        // enqueue() is in-memory only here. Removing its abandoned work does
+        // not remove the durable hot-index candidate used on the next start.
+        queue.delete(candidate.transactionHash);
+        throw error;
+      }
       await withState(async () => {
         const activation = state.officialSources?.flap?.featureActivations?.[activationKey];
         if (activation) {
@@ -6156,8 +6218,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     }
   }
 
-  async function runFlapActivationReplay(activationKey) {
+  async function runFlapActivationReplay(
+    activationKey,
+    signal = flapReplayAbortController.signal,
+  ) {
     while (true) {
+      throwIfFlapReplayStopped(signal);
       const phase = await withState(() => {
         const activation = state.officialSources?.flap?.featureActivations?.[activationKey];
         if (!activation || activation.active === false || activation.replayCompletedAt
@@ -6170,8 +6236,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       });
       if (!phase) return false;
       for (const candidate of phase.candidates) {
-        if (await processStoredFlapReplayCandidate(activationKey, candidate)) return true;
+        throwIfFlapReplayStopped(signal);
+        if (await processStoredFlapReplayCandidate(activationKey, candidate, signal)) return true;
       }
+      throwIfFlapReplayStopped(signal);
       const completion = await withState(async () => {
         const activation = state.officialSources?.flap?.featureActivations?.[activationKey];
         if (!activation || activation.active === false
@@ -6190,14 +6258,18 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         await save();
         return "done";
       });
+      throwIfFlapReplayStopped(signal);
       if (completion !== "rescan") return false;
     }
   }
 
-  async function replayFlapActivation(activationKey) {
+  async function replayFlapActivation(
+    activationKey,
+    signal = flapReplayAbortController.signal,
+  ) {
     if (flapReplayFlights.has(activationKey)) return flapReplayFlights.get(activationKey);
     let flight;
-    flight = runFlapActivationReplay(activationKey).finally(() => {
+    flight = runFlapActivationReplay(activationKey, signal).finally(() => {
       if (flapReplayFlights.get(activationKey) === flight) flapReplayFlights.delete(activationKey);
     });
     flapReplayFlights.set(activationKey, flight);
@@ -6283,7 +6355,11 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     resetFlapReplayFailureLog();
   }
 
-  async function runPendingFlapActivations(keys = null, { throwOnError = false } = {}) {
+  async function runPendingFlapActivations(
+    keys = null,
+    { throwOnError = false, signal = flapReplayAbortController.signal } = {},
+  ) {
+    if (stopped || signal?.aborted) return { skipped: true, reason: "stopped" };
     const current = Number(now());
     const persistedRetryAt = Date.parse(state?.officialSources?.flap?.replayControl?.nextRetryAt || "");
     flapReplayRetryAt = Math.max(
@@ -6301,7 +6377,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     for (const key of requested) {
       try {
         while (true) {
-          await replayFlapActivation(key);
+          throwIfFlapReplayStopped(signal);
+          await replayFlapActivation(key, signal);
+          throwIfFlapReplayStopped(signal);
           const stillPending = await withState(() => {
             const activation = state.officialSources?.flap?.featureActivations?.[key];
             return Boolean(activation && activation.active !== false
@@ -6311,8 +6389,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           });
           if (!stillPending) break;
         }
+        throwIfFlapReplayStopped(signal);
         await clearFlapReplayBackoff(key);
       } catch (error) {
+        if (isFlapReplayStoppedError(error)) return { skipped: true, reason: "stopped" };
         const replayBackoff = await recordFlapReplayBackoff(key, error);
         if (replayBackoff.shouldLog) logFlapReplayFailure(key, error);
         failures.push({ key, error });
@@ -6330,10 +6410,16 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   }
 
   function replayPendingFlapActivations(keys = null, options = {}) {
+    const signal = options.signal || flapReplayAbortController.signal;
+    if (stopped || signal.aborted) return Promise.resolve({ skipped: true, reason: "stopped" });
     // Serialize whole sweeps as well as individual features. The per-key map
     // keeps identical work single-flight; this lane lock prevents different
     // activation keys from concurrently probing one shared half-open host.
-    const operation = flapReplaySweepLock.catch(() => {}).then(() => runPendingFlapActivations(keys, options));
+    const operation = flapReplaySweepLock.catch(() => {}).then(() => (
+      stopped || signal.aborted
+        ? { skipped: true, reason: "stopped" }
+        : runPendingFlapActivations(keys, { ...options, signal })
+    ));
     flapReplaySweepLock = operation.catch(() => {});
     return operation;
   }
@@ -7761,21 +7847,187 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     }
   }
 
-  async function cachedBlock(blockNumber) {
+  function blockCacheStoppedError() {
+    const error = new Error("BSC block cache stopped");
+    error.code = "BSC_BLOCK_CACHE_STOPPED";
+    return error;
+  }
+
+  function isBlockCacheStoppedError(error) {
+    return error?.code === "BSC_BLOCK_CACHE_STOPPED";
+  }
+
+  function throwIfBlockCacheStopped() {
+    if (stopped || blockCacheAbortController.signal.aborted) throw blockCacheStoppedError();
+  }
+
+  function awaitBlockCacheGeneration(entry) {
+    throwIfBlockCacheStopped();
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (handler, value) => {
+        if (settled) return;
+        settled = true;
+        blockCacheAbortController.signal.removeEventListener("abort", onAbort);
+        handler(value);
+      };
+      const onAbort = () => finish(reject, blockCacheStoppedError());
+      blockCacheAbortController.signal.addEventListener("abort", onAbort, { once: true });
+      if (stopped || blockCacheAbortController.signal.aborted) {
+        onAbort();
+        return;
+      }
+      Promise.race([
+        entry.outcome.then((outcome) => ({ kind: "outcome", outcome })),
+        entry.superseded.then((next) => ({ kind: "superseded", next })),
+      ]).then(
+        (result) => finish(resolve, result),
+        (error) => finish(reject, error),
+      );
+    });
+  }
+
+  function installBlockCacheGeneration(blockNumber, source, load) {
     const key = Number(blockNumber);
-    if (!blockCache.has(key)) {
-      const request = provider.getBlock(key).catch((error) => {
-        blockCache.delete(key);
-        throw error;
+    const previous = blockCache.get(key) || null;
+    let supersede;
+    const entry = {
+      id: ++blockCacheGeneration,
+      key,
+      source,
+      settled: false,
+      superseded: new Promise((resolve) => { supersede = resolve; }),
+      supersede,
+      outcome: null,
+    };
+    // Outcomes always resolve, even when the underlying RPC/deferred proof
+    // rejects. This absorbs late failures after a newer WebSocket generation
+    // has replaced the entry and prevents unhandled rejections.
+    entry.outcome = Promise.resolve()
+      .then(load)
+      .then(
+        (block) => ({ ok: true, block }),
+        (error) => ({ ok: false, error }),
+      )
+      .then((outcome) => {
+        entry.settled = true;
+        return outcome;
       });
-      blockCache.set(key, request);
+    blockCache.set(key, entry);
+    previous?.supersede(entry);
+    return entry;
+  }
+
+  function invalidateBlockCacheGeneration(blockNumber, expected) {
+    const key = Number(blockNumber);
+    if (!expected || blockCache.get(key) !== expected) return false;
+    blockCache.delete(key);
+    expected.supersede(null);
+    return true;
+  }
+
+  function replaceBlockCacheGenerationWithHttp(blockNumber, expected) {
+    throwIfBlockCacheStopped();
+    const key = Number(blockNumber);
+    const current = blockCache.get(key) || null;
+    if (current && current !== expected) return current;
+    return installBlockCacheGeneration(key, "http", () => provider.getBlock(key));
+  }
+
+  function currentBlockCacheGeneration(blockNumber) {
+    throwIfBlockCacheStopped();
+    const key = Number(blockNumber);
+    return blockCache.get(key)
+      || installBlockCacheGeneration(key, "http", () => provider.getBlock(key));
+  }
+
+  async function readBlockCacheGeneration(blockNumber) {
+    throwIfBlockCacheStopped();
+    const key = Number(blockNumber);
+    let entry = currentBlockCacheGeneration(key);
+    // One reader may observe HTTP -> WS pending -> WS verified. Cap further
+    // generation churn so no external task can make shutdown wait forever.
+    for (let hop = 0; hop < 4; hop += 1) {
+      const result = await awaitBlockCacheGeneration(entry);
+      throwIfBlockCacheStopped();
+      if (result.kind === "superseded") {
+        entry = result.next || currentBlockCacheGeneration(key);
+        continue;
+      }
+      const current = blockCache.get(key) || null;
+      if (current !== entry) {
+        entry = current || currentBlockCacheGeneration(key);
+        continue;
+      }
+      if (!result.outcome.ok) {
+        if (entry.source === "ws_pending") {
+          entry = replaceBlockCacheGenerationWithHttp(key, entry);
+          continue;
+        }
+        invalidateBlockCacheGeneration(key, entry);
+        throw result.outcome.error;
+      }
+      if (blockCache.size > 256) {
+        const cutoff = key - 128;
+        for (const [number, cached] of blockCache) {
+          if (number < cutoff && cached.settled && cached.source !== "ws_pending") {
+            invalidateBlockCacheGeneration(number, cached);
+          }
+        }
+      }
+      return { entry, block: result.outcome.block };
     }
-    const block = await blockCache.get(key);
-    if (blockCache.size > 256) {
-      const cutoff = key - 128;
-      for (const number of blockCache.keys()) if (number < cutoff) blockCache.delete(number);
-    }
-    return block;
+    const error = new Error(`BSC block cache generation churn ${key}`);
+    error.code = "BSC_BLOCK_CACHE_GENERATION_CHURN";
+    throw error;
+  }
+
+  async function cachedBlock(blockNumber) {
+    return (await readBlockCacheGeneration(blockNumber)).block;
+  }
+
+  function reserveWebsocketProofBlock(blockNumber, deadlineAtMs, candidateId) {
+    const key = Number(blockNumber);
+    let resolvePending;
+    let rejectPending;
+    let settled = false;
+    const pending = new Promise((resolve, reject) => {
+      resolvePending = resolve;
+      rejectPending = reject;
+    });
+    const entry = installBlockCacheGeneration(key, "ws_pending", () => pending);
+    const remainingMs = Math.max(1, Math.min(
+      BSC_WEBSOCKET_DELIVERY_BUDGET_MS,
+      Math.floor(deadlineAtMs - Number(now()) - BSC_WEBSOCKET_PROOF_DELIVERY_RESERVE_MS),
+    ));
+    const timer = websocketRpcSetTimeout(() => {
+      if (settled) return;
+      settled = true;
+      const error = websocketProofUnavailable(`BSC websocket block reservation timed out for ${candidateId}`);
+      rejectPending(error);
+      invalidateBlockCacheGeneration(key, entry);
+    }, remainingMs);
+    timer.unref?.();
+    return {
+      publish(block) {
+        if (!settled) {
+          settled = true;
+          websocketRpcClearTimeout(timer);
+          resolvePending(block);
+        }
+        // A fully normalized proof is authoritative for this confirmed block.
+        // Replacing the generation wakes readers of an older pending HTTP RPC;
+        // its eventual failure is absorbed by its own outcome.
+        return installBlockCacheGeneration(key, "ws_verified", () => block);
+      },
+      fail(error) {
+        if (settled) return;
+        settled = true;
+        websocketRpcClearTimeout(timer);
+        rejectPending(error || websocketProofUnavailable(`BSC websocket block reservation failed for ${candidateId}`));
+        invalidateBlockCacheGeneration(key, entry);
+      },
+    };
   }
 
   async function cachedBlockTimestamp(blockNumber) {
@@ -9055,11 +9307,16 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
 
   async function runProcessEntries(entries, rpcConcurrency = entryRpcConcurrency, {
     preserveRealtimePendingOnFailure = false,
+    flapReplaySignal = null,
   } = {}) {
     const boundedRpcConcurrency = Math.max(1, Number(rpcConcurrency) || 1);
     const results = await mapLimit(entries, boundedRpcConcurrency, async (entry) => {
       const revision = Number(entry.revision || 0);
-      if (!await needsTransactionInspection(entry)) return { revision, observation: null };
+      if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
+      const needsInspection = flapReplaySignal
+        ? await awaitFlapReplayRead(() => needsTransactionInspection(entry), flapReplaySignal)
+        : await needsTransactionInspection(entry);
+      if (!needsInspection) return { revision, observation: null };
       const websocketProof = websocketProofContexts.get(entry.transactionHash) || null;
       const referenceHead = Math.max(
         Number(currentHead || 0),
@@ -9076,12 +9333,16 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       const getTransactionReceipt = historical && provider.getHistoricalTransactionReceipt
         ? provider.getHistoricalTransactionReceipt.bind(provider)
         : provider.getTransactionReceipt.bind(provider);
+      const transactionAndReceipt = () => Promise.all([
+        getTransaction(entry.transactionHash),
+        getTransactionReceipt(entry.transactionHash),
+      ]);
       const [transaction, receipt] = websocketProof
         ? [websocketProof.transaction, websocketProof.receipt]
-        : await Promise.all([
-          getTransaction(entry.transactionHash),
-          getTransactionReceipt(entry.transactionHash),
-        ]);
+        : flapReplaySignal
+          ? await awaitFlapReplayRead(transactionAndReceipt, flapReplaySignal)
+          : await transactionAndReceipt();
+      if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
       if (!transaction || !receipt) throw new Error(`missing finalized transaction or receipt ${entry.transactionHash}`);
       registerSingularryCurves(receipt.logs || [], {
         transactionHash: entry.transactionHash,
@@ -9091,7 +9352,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       let receiptFlapCreationCandidates = [];
       if ((receipt.logs || []).some((log) => [FLAP_TOKEN_CREATED_TOPIC, FLAP_VAULT_TOKEN_CREATED_TOPIC]
         .includes(String(log?.topics?.[0] || "").toLowerCase()))) {
-        const observedAt = await cachedBlockTimestamp(entry.blockNumber);
+        const observedAt = flapReplaySignal
+          ? await awaitFlapReplayRead(() => cachedBlockTimestamp(entry.blockNumber), flapReplaySignal)
+          : await cachedBlockTimestamp(entry.blockNumber);
         receiptFlapCreationCandidates = parseFlapCreationHotCandidates(receipt.logs || [], {
           transactionHash: entry.transactionHash,
           blockNumber: entry.blockNumber,
@@ -9104,13 +9367,28 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       }
       let observation;
       try {
+        if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
+        // These observers own durable commit boundaries. Once one starts it
+        // must finish before cancellation is observed so shutdown cannot cut
+        // a state/WAL transaction in half.
         await observeOfficialLifecycle(receipt, entry.blockNumber);
+        if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
         await observeOfficialUpgrades(receipt, entry.blockNumber);
+        if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
         const hookPools = bscPools.filter((pool) => pool.verifiedDex && pool.hook && pool.hook.toLowerCase() !== "0x0000000000000000000000000000000000000000");
         let hookEvent = null;
-        for (const pool of hookPools) hookEvent ||= await observeVerifiedHook(pool, entry.transactionHash, entry.blockNumber, { transaction, receipt, verifiedNewContracts: entry.verifiedNewContracts });
+        for (const pool of hookPools) {
+          if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
+          hookEvent ||= await observeVerifiedHook(pool, entry.transactionHash, entry.blockNumber, { transaction, receipt, verifiedNewContracts: entry.verifiedNewContracts });
+        }
         if (hookEvent) return { revision, observation: null, flapCreationCandidates: receiptFlapCreationCandidates };
-        observation = await prepareTransaction(entry, { transaction, receipt, bscPools });
+        observation = flapReplaySignal
+          ? await awaitFlapReplayRead(
+            () => prepareTransaction(entry, { transaction, receipt, bscPools }),
+            flapReplaySignal,
+          )
+          : await prepareTransaction(entry, { transaction, receipt, bscPools });
+        if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
       } catch (error) {
         // Receipt parsing is sufficient to preserve exact Flap creation and
         // quote/vault evidence. Carry it through a later profile/RPC failure so
@@ -9152,6 +9430,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         flapCreationCandidates,
       };
     });
+    // No result below this boundary has mutated the queue/state yet. An
+    // aborted replay therefore leaves every candidate in its durable hot
+    // index and skips failure/backoff bookkeeping during shutdown.
+    if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
     const transientRpcFailures = results.filter((result) => result.status === "rejected"
       && result.reason?.code !== "ALERT_DELIVERY_PENDING"
       && isTransientCoverageError(result.reason));
@@ -9168,6 +9450,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     const fourMemeReplayKeys = new Set();
     const dirtyEntries = [];
     for (let index = 0; index < results.length; index += 1) {
+      if (flapReplaySignal && (stopped || flapReplaySignal.aborted)) {
+        // A prior result may already have installed a valid state mutation.
+        // Finish that WAL boundary before honoring cancellation.
+        if (stateChanged) await save();
+        throwIfFlapReplayStopped(flapReplaySignal);
+      }
       const result = results[index];
       const entry = entries[index];
       if (result.status === "rejected") {
@@ -9272,6 +9560,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         dirtyEntries.push(entry);
         continue;
       }
+      if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
       if (result.value.observation) await observe(result.value.observation, { persistIrrelevant: false });
       await withState(async () => {
         const fourMemeAppend = appendFourMemeCreationHotIndex(state, result.value.fourMemeCreationCandidates || []);
@@ -9300,13 +9589,15 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       queue.delete(entry.transactionHash);
     }
     if (stateChanged) await save();
-    if (flapReplayNeeded) void replayPendingFlapActivations();
+    if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
+    if (flapReplayNeeded && !stopped) void replayPendingFlapActivations();
     if (fourMemeReplayKeys.size) void replayPendingFourMemeActivations([...fourMemeReplayKeys]);
     if (retryError) {
       throw retryError;
     }
     if (dirtyEntries.length) await runProcessEntries(dirtyEntries, boundedRpcConcurrency, {
       preserveRealtimePendingOnFailure,
+      flapReplaySignal,
     });
   }
 
@@ -9686,14 +9977,16 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     return { flapReplayNeeded };
   }
 
-  async function recoverBlock(blockNumber, reason = "gap_recovery", rpc = provider) {
-    const [receipts, block] = await Promise.all([
-      Promise.resolve().then(() => rpc.send("eth_getBlockReceipts", [hexBlock(blockNumber)])),
-      Promise.resolve().then(() => rpc.getBlock(blockNumber)),
-    ]);
+  function validateRecoveredBlockBundle(blockNumber, receipts, block) {
     if (!Array.isArray(receipts)) throw new Error(`eth_getBlockReceipts missing block ${blockNumber}`);
     if (!block || Number(block.number) !== blockNumber || !Array.isArray(block.transactions)) {
       throw new Error(`eth_getBlockReceipts cannot verify block ${blockNumber}`);
+    }
+    const blockHash = block.hash === undefined || block.hash === null
+      ? null
+      : normalizeTransactionHash(block.hash);
+    if (blockHash !== null && !/^0x[0-9a-f]{64}$/.test(blockHash)) {
+      throw new Error(`block ${blockNumber} returned a malformed block hash`);
     }
     const blockTransactions = block.transactions.map((transaction) => normalizeTransactionHash(
       typeof transaction === "string" ? transaction : transaction?.hash,
@@ -9712,9 +10005,14 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       const receiptBlockNumber = typeof receipt?.blockNumber === "number"
         ? receipt.blockNumber
         : Number.parseInt(receipt?.blockNumber, 16);
+      const receiptBlockHash = receipt?.blockHash === undefined || receipt?.blockHash === null
+        ? null
+        : normalizeTransactionHash(receipt.blockHash);
       if (!expectedTransactions.has(transactionHash)
         || recoveredTransactions.has(transactionHash)
         || receiptBlockNumber !== blockNumber
+        || (receiptBlockHash !== null && !/^0x[0-9a-f]{64}$/.test(receiptBlockHash))
+        || (blockHash !== null && receiptBlockHash !== null && receiptBlockHash !== blockHash)
         || !Array.isArray(receipt?.logs)) {
         throw new Error(`eth_getBlockReceipts returned malformed block ${blockNumber}`);
       }
@@ -9725,6 +10023,42 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         transactionIndex: bscQueuePosition(receipt.transactionIndex ?? receipt.index ?? blockTransactions.indexOf(transactionHash)),
         logs: receipt.logs,
       });
+    }
+    return validatedReceipts;
+  }
+
+  async function readRecoveryBlockBundle(blockNumber, rpc) {
+    const [receiptsResult, blockResult] = await Promise.allSettled([
+      Promise.resolve().then(() => rpc.send("eth_getBlockReceipts", [hexBlock(blockNumber)])),
+      rpc === provider
+        ? readBlockCacheGeneration(blockNumber)
+        : Promise.resolve().then(() => rpc.getBlock(blockNumber)).then((block) => ({ entry: null, block })),
+    ]);
+    if (receiptsResult.status === "rejected") throw receiptsResult.reason;
+    if (blockResult.status === "rejected") throw blockResult.reason;
+    return { receipts: receiptsResult.value, ...blockResult.value };
+  }
+
+  async function recoverBlock(blockNumber, reason = "gap_recovery", rpc = provider) {
+    let bundle = await readRecoveryBlockBundle(blockNumber, rpc);
+    let validatedReceipts;
+    try {
+      validatedReceipts = validateRecoveredBlockBundle(blockNumber, bundle.receipts, bundle.block);
+    } catch (initialError) {
+      if (rpc !== provider) throw initialError;
+      // A resolved cached block can be null, malformed, or from a fork that
+      // disagrees with the receipt set. Replace only the generation we read;
+      // concurrent callers join the same HTTP refresh, while a newer verified
+      // WebSocket generation wins without being deleted. Re-source receipts
+      // with the block exactly once so either side of a short reorg can heal.
+      replaceBlockCacheGenerationWithHttp(blockNumber, bundle.entry);
+      try {
+        bundle = await readRecoveryBlockBundle(blockNumber, rpc);
+        validatedReceipts = validateRecoveredBlockBundle(blockNumber, bundle.receipts, bundle.block);
+      } catch (refreshError) {
+        invalidateBlockCacheGeneration(blockNumber, bundle.entry);
+        throw refreshError;
+      }
     }
     for (const receipt of validatedReceipts) ingestRecoveryLogs(receipt.transactionHash, receipt.blockNumber, receipt.logs, reason, { transactionIndex: receipt.transactionIndex });
   }
@@ -9850,6 +10184,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           const blockNumbers = Array.from({ length: batchEnd - from + 1 }, (_, index) => from + index);
           const recovered = await mapLimit(blockNumbers, recoveryBlockConcurrency, recoverBlock);
           const failed = recovered.find((result) => result.status === "rejected");
+          if (isBlockCacheStoppedError(failed?.reason)) throw failed.reason;
           if (failed) throw new Error(`range recovery failed: ${errorSummary(rangeError)}; block fallback failed: ${errorSummary(failed.reason)}`);
         }
         failurePhase = "entry_processing";
@@ -9858,6 +10193,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         if (Number(state.lastFinalizedBlock) >= recoveryTarget) recoveryTarget = 0;
       }
     } catch (error) {
+      if (stopped && isBlockCacheStoppedError(error)) return;
       await withState(async () => {
         const health = state._health.rpc || { consecutiveFailures: 0 };
         const consecutiveFailures = Number(health.consecutiveFailures || 0) + 1;
@@ -10545,7 +10881,25 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     const candidateId = `${entry.transactionHash}:${deliverySla.startedAt}`;
     const requestBudget = { count: 0 };
     let ownsSlot = false;
+    let blockReservation = null;
     try {
+      const deadlineAtMs = Date.parse(deliverySla.deadlineAt);
+      const stillFocused = websocketFocusCandidatePlatform(triggerLog, observedAt);
+      if (stillFocused
+        && !websocketProofCandidateActive
+        && !inFlightEntries.has(entry.transactionHash)
+        && Number.isFinite(deadlineAtMs)
+        && Number(now()) < deadlineAtMs - BSC_WEBSOCKET_PROOF_DELIVERY_RESERVE_MS
+        && socket === websocket) {
+        // Claim the transaction and its block synchronously, before the first
+        // durability await. No proof RPC starts until the pending transaction
+        // is durable, but coverage can no longer race ahead with an HTTP read
+        // for the same block while that save is in flight.
+        websocketProofCandidateActive = true;
+        ownsSlot = true;
+        websocketProofReservations.add(entry.transactionHash);
+        blockReservation = reserveWebsocketProofBlock(entry.blockNumber, deadlineAtMs, candidateId);
+      }
       // The candidate is durable before any fast proof or alert work starts.
       // A busy, stale, mismatched or failed fast path therefore falls back to
       // the unchanged HTTP queue after restart without moving a chain cursor.
@@ -10561,20 +10915,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       });
       if (!persisted) return { status: "already_processed", requests: 0 };
 
-      const deadlineAtMs = Date.parse(deliverySla.deadlineAt);
-      const stillFocused = websocketFocusCandidatePlatform(triggerLog, observedAt);
-      if (!stillFocused
-        || websocketProofCandidateActive
-        || inFlightEntries.has(entry.transactionHash)
-        || !Number.isFinite(deadlineAtMs)
-        || Number(now()) >= deadlineAtMs - BSC_WEBSOCKET_PROOF_DELIVERY_RESERVE_MS
-        || socket !== websocket) {
+      if (!ownsSlot) {
         scheduleRealtime();
         return { status: "http_fallback", requests: 0 };
       }
-      websocketProofCandidateActive = true;
-      ownsSlot = true;
-      websocketProofReservations.add(entry.transactionHash);
       const [transaction, receipt] = await Promise.all([
         requestWebsocketProofRpc(socket, "eth_getTransactionByHash", [entry.transactionHash], deadlineAtMs, candidateId, requestBudget),
         requestWebsocketProofRpc(socket, "eth_getTransactionReceipt", [entry.transactionHash], deadlineAtMs, candidateId, requestBudget),
@@ -10609,7 +10953,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         throw websocketProofUnavailable("BSC websocket proof completed after its delivery budget");
       }
       websocketProofContexts.set(entry.transactionHash, proof);
-      blockCache.set(Number(entry.blockNumber), Promise.resolve(proof.block));
+      blockReservation.publish(proof.block);
       try {
         await processEntries([entry], 1, {
           preserveRealtimePendingOnFailure: true,
@@ -10621,11 +10965,13 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         }
       }
       return { status: "processed", requests: requestBudget.count };
-    } catch {
+    } catch (error) {
+      blockReservation?.fail(error);
       scheduleRealtime();
       return { status: "http_fallback", requests: requestBudget.count };
     } finally {
       if (ownsSlot) {
+        blockReservation?.fail(websocketProofUnavailable("BSC websocket proof finished without a verified block"));
         cancelWebsocketProofCandidate(candidateId);
         websocketProofReservations.delete(entry.transactionHash);
         websocketProofCandidateActive = false;
@@ -11050,6 +11396,15 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     if (stopPromise) return stopPromise;
     stopped = true;
     started = false;
+    if (!blockCacheAbortController.signal.aborted) {
+      blockCacheAbortController.abort(blockCacheStoppedError());
+    }
+    // Cancel replay reads before awaiting lane locks. Already-started durable
+    // commits still drain through stateLock/saveLock; unstarted candidates
+    // remain in the persisted Flap hot index for the next process.
+    if (!flapReplayAbortController.signal.aborted) {
+      flapReplayAbortController.abort(flapReplayStoppedError());
+    }
     if (reconnectTimer) clearTimeout(reconnectTimer);
     if (startRetryTimer) clearTimeout(startRetryTimer);
     reconnectTimer = null;

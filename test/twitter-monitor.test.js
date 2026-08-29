@@ -397,11 +397,11 @@ Trade tokens launched on https://four.meme/ for a chance to compete for a 50,000
   assert.equal(expansionWithCampaign.chainSupport[0].name, "Base");
 });
 
-test("uses Binance-specific X filtering instead of treating ordinary token launches as platform updates", () => {
+test("uses Binance-specific X filtering while retaining priority token and Alpha listings", () => {
   assert.equal(classifyTweet("Binance Wallet launches a new Meme Rush launchpad filter", "binance").relevant, true);
-  assert.equal(classifyTweet("Introducing TOKEN (TOKEN) on Binance Launchpool", "binance").relevant, false);
+  assert.equal(classifyTweet("Introducing TOKEN (TOKEN) on Binance Launchpool", "binance").relevant, true);
   assert.equal(classifyTweet("Binance Alpha trading competition: trade TOKEN and share rewards", "binance").relevant, false);
-  assert.equal(classifyTweet("牛来 was added to Binance Alpha. You can trade 牛来 using market and limit orders.", "binance").relevant, false);
+  assert.equal(classifyTweet("牛来 was added to Binance Alpha. You can trade 牛来 using market and limit orders.", "binance").relevant, true);
   assert.equal(classifyTweet("Binance Wallet Meme Rush adds Pools.fun as a new launchpad protocol", "binance").relevant, true);
 });
 
@@ -708,7 +708,7 @@ test("tracks official Binance, Binance Wallet, and Binance Futures X accounts wi
   assert.equal(delivered[0].project.id, "binance-wallet");
 });
 
-test("the critical Binance X classifier admits Agent OS and major structures but rejects ordinary noise", async () => {
+test("the critical Binance X classifier admits Agent OS, major structures, and priority market listings", async () => {
   const fixture = JSON.parse(await fs.readFile(new URL("./fixtures/binance-agent-os-x-2090380033013764166.json", import.meta.url), "utf8"));
   const agentOs = classifyBinanceCriticalProductText(fixture.timeline.results[0].text);
   assert.equal(agentOs.relevant, true);
@@ -718,11 +718,12 @@ test("the critical Binance X classifier admits Agent OS and major structures but
 
   assert.equal(classifyBinanceCriticalProductText("Binance launches a new developer platform for autonomous agents.").relevant, true);
   assert.equal(classifyBinanceCriticalProductText("Binance Wallet now supports isolated agent sub-accounts with a user-controlled permission model.").relevant, true);
+  assert.equal(classifyBinanceCriticalProductText("Binance will list TEST token on Spot.").relevant, true);
+  assert.equal(classifyBinanceCriticalProductText("Binance Futures will launch TESTUSDT perpetual contract.").relevant, true);
+  assert.equal(classifyBinanceCriticalProductText("TEST was added to Binance Alpha.").relevant, true);
   for (const text of [
     "Initializing a new mode. Less than 24 hours to go.",
     "Trade and win in our new Agent OS campaign with 10,000 USDT in rewards.",
-    "Binance will list TEST token on Spot.",
-    "Binance Futures launches a new TESTUSDT perpetual contract.",
     "Binance announces scheduled wallet maintenance.",
     "Binance Wallet adds dark mode.",
     "Binance launches a new platform for tokenized stocks.",

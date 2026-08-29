@@ -3718,6 +3718,141 @@ test("a background Flap activation replay preserves the durable checkpoint and r
   assert.equal(alerts.length, 1, "a repeated durable handoff must not alert the first token twice");
 });
 
+test("stop aborts a blocked Flap replay and a restart resumes its durable candidate", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-flap-replay-stop-"));
+  const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
+  const clock = Date.parse("2026-08-29T01:30:00.000Z");
+  const launcher = "0x90497450f2a706f1951b5bdda52b4e5d16f34c06";
+  const token = "0x1111111111111111111111111111111111111111";
+  const vault = "0x2222222222222222222222222222222222222222";
+  const vaultFactory = "0x3333333333333333333333333333333333333333";
+  const creator = "0x4444444444444444444444444444444444444444";
+  const transactionHash = `0x${"8".repeat(64)}`;
+  const observedAt = new Date(clock - 60_000).toISOString();
+  const candidate = {
+    launcher,
+    token,
+    transactionHash,
+    blockNumber: 99,
+    transactionIndex: 0,
+    logIndex: 0,
+    topic: FLAP_VAULT_TOKEN_CREATED_TOPIC,
+    observedAt,
+    indexedAt: observedAt,
+    vaultFactory,
+    quoteAssets: [],
+  };
+  await fs.writeFile(stateFile, JSON.stringify({
+    version: 6,
+    initializedAt: new Date(clock - 60 * 60_000).toISOString(),
+    lastFinalizedBlock: 100,
+    launchers: {},
+    seenTransactions: { [transactionHash]: 99 },
+    officialSources: { flap: { creationEventHotIndex: [candidate] } },
+  }));
+  const iface = new Interface(["event FlapTaxVaultTokenCreated(address indexed token,address indexed vault,address indexed vaultFactory)"]);
+  const encoded = iface.encodeEventLog(iface.getEvent("FlapTaxVaultTokenCreated"), [token, vault, vaultFactory]);
+  const log = { address: launcher, topics: encoded.topics, data: encoded.data, transactionHash, blockNumber: 99, transactionIndex: 0, logIndex: 0 };
+  let releaseBlockedReads;
+  let signalBlockedRead;
+  const blockedReads = new Promise((resolve) => { releaseBlockedReads = resolve; });
+  const blockedReadStarted = new Promise((resolve) => { signalBlockedRead = resolve; });
+  let destroyCalls = 0;
+  const lateUnhandled = [];
+  const onUnhandled = (error) => lateUnhandled.push(error);
+  process.on("unhandledRejection", onUnhandled);
+  const blockedProvider = {
+    async getTransaction() {
+      signalBlockedRead();
+      await blockedReads;
+      throw new Error("late blocked replay transaction failure");
+    },
+    async getTransactionReceipt() {
+      signalBlockedRead();
+      await blockedReads;
+      throw new Error("late blocked replay receipt failure");
+    },
+    destroy() { destroyCalls += 1; },
+  };
+  let monitor = createBscLaunchpadMonitor({ dataDir }, {
+    autoStart: false,
+    externalAttribution: false,
+    provider: blockedProvider,
+    now: () => clock,
+    logger: { error() {}, info() {} },
+  });
+  let restarted;
+  t.after(async () => {
+    process.removeListener("unhandledRejection", onUnhandled);
+    releaseBlockedReads();
+    await monitor?.stop();
+    await restarted?.stop();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+  const record = {
+    pool: { identity: `vault:INDEX:${vaultFactory}`, category: "INDEX", vaultFactory, sourceUrl: "https://flap.sh/board" },
+    confirmed: true,
+    observations: 2,
+    firstObservedAt: new Date(clock - 30_000).toISOString(),
+    confirmedAt: new Date(clock).toISOString(),
+    observedAt: new Date(clock).toISOString(),
+  };
+  assert.equal(await monitor.registerFlapFeatureActivations([record], { awaitReplay: false }), 1);
+  await blockedReadStarted;
+
+  let timeout;
+  const stopStartedAt = Date.now();
+  const stopOutcome = await Promise.race([
+    monitor.stop().then(() => "stopped"),
+    new Promise((resolve) => { timeout = setTimeout(() => resolve("timed_out"), 750); }),
+  ]);
+  clearTimeout(timeout);
+  assert.equal(stopOutcome, "stopped", "a blocked replay read must not hold the stop boundary");
+  assert.ok(Date.now() - stopStartedAt < 750);
+  assert.equal(destroyCalls, 1);
+
+  let durable = await readBscLaunchpadDurableState(stateFile);
+  let activation = Object.values(durable.officialSources.flap.featureActivations)[0];
+  assert.equal(activation.replayCompletedAt, null);
+  assert.equal(activation.firstTokenTransactionHash, null);
+  assert.equal(activation.replayAttemptedTransactionHashes.includes(transactionHash), false);
+  assert.equal(durable.officialSources.flap.creationEventHotIndex.some((item) => item.transactionHash === transactionHash), true,
+    "shutdown must retain the replay cursor for restart");
+
+  releaseBlockedReads();
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(lateUnhandled, [], "late provider failures must remain observed after replay cancellation");
+  durable = await readBscLaunchpadDurableState(stateFile);
+  activation = Object.values(durable.officialSources.flap.featureActivations)[0];
+  assert.equal(activation.replayLastError, null, "shutdown cancellation is not a replay failure/backoff");
+
+  const alerts = [];
+  const replayProvider = {
+    async getTransaction(hash) { return { hash, to: launcher, from: creator, data: `0x8cb5772c${"0".repeat(64)}` }; },
+    async getTransactionReceipt(hash) { return { transactionHash: hash, status: 1, blockNumber: 99, index: 0, logs: [log] }; },
+    async getBlock() { return { number: 99, timestamp: Math.floor(Date.parse(observedAt) / 1_000), transactions: [] }; },
+    async getCode(address) { return String(address).toLowerCase() === token ? `0x${"6000".repeat(300)}` : `0x${"6000".repeat(400)}`; },
+    async getStorage() { return "0x"; },
+    async call() { return "0x"; },
+    destroy() {},
+  };
+  restarted = createBscLaunchpadMonitor({ dataDir }, {
+    autoStart: false,
+    externalAttribution: false,
+    provider: replayProvider,
+    now: () => clock,
+    logger: { error() {}, info() {} },
+    sendAlertsImpl: async (_config, event) => { alerts.push(event); return { status: "delivered" }; },
+  });
+  await restarted.getState();
+  await restarted.replayFlapFeatureActivations();
+  const resumed = await restarted.getState();
+  activation = Object.values(resumed.officialSources.flap.featureActivations)[0];
+  assert.equal(activation.firstTokenTransactionHash, transactionHash);
+  assert.equal(alerts.length, 1);
+});
+
 test("a background Four.Meme activation replay returns after the durable handoff and remains single-flight", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-fourmeme-background-replay-"));
   const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
@@ -8694,6 +8829,8 @@ async function createBscWebsocketProofHarness(t, {
   proofResponder = null,
   proofTimeoutMs = 1_250,
   failDeepProof = false,
+  providerSend = null,
+  providerGetBlock = null,
 } = {}) {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-ws-proof-fast-path-"));
   const ingressAt = Date.parse("2026-08-24T12:00:00.000Z");
@@ -8722,7 +8859,15 @@ async function createBscWebsocketProofHarness(t, {
   const alerts = [];
   const alertTimes = [];
   const errors = [];
-  const httpCalls = { transaction: 0, receipt: 0, block: 0, getCode: 0, getLogs: 0 };
+  const httpCalls = {
+    transaction: 0,
+    receipt: 0,
+    block: 0,
+    blockNumbers: [],
+    blockReceipts: 0,
+    getCode: 0,
+    getLogs: 0,
+  };
   const sockets = [];
 
   const addCandidate = ({
@@ -8731,6 +8876,8 @@ async function createBscWebsocketProofHarness(t, {
     transactionIndex = proofs.size,
     removed = false,
     candidateVaultFactory = vaultFactory,
+    candidateBlockNumber = blockNumber,
+    candidateBlockHash = blockHash,
   } = {}) => {
     const encoded = iface.encodeEventLog(iface.getEvent("FlapTaxVaultTokenCreated"), [token, vault, candidateVaultFactory]);
     const quantityIndex = `0x${transactionIndex.toString(16)}`;
@@ -8739,8 +8886,8 @@ async function createBscWebsocketProofHarness(t, {
       topics: encoded.topics,
       data: encoded.data,
       transactionHash,
-      blockNumber: `0x${blockNumber.toString(16)}`,
-      blockHash,
+      blockNumber: `0x${candidateBlockNumber.toString(16)}`,
+      blockHash: candidateBlockHash,
       transactionIndex: quantityIndex,
       logIndex: quantityIndex,
       removed,
@@ -8748,7 +8895,7 @@ async function createBscWebsocketProofHarness(t, {
     const transaction = {
       hash: transactionHash,
       blockNumber: log.blockNumber,
-      blockHash,
+      blockHash: candidateBlockHash,
       transactionIndex: quantityIndex,
       from: creator,
       to: launcher,
@@ -8758,25 +8905,36 @@ async function createBscWebsocketProofHarness(t, {
     const receipt = {
       transactionHash,
       blockNumber: log.blockNumber,
-      blockHash,
+      blockHash: candidateBlockHash,
       transactionIndex: quantityIndex,
       from: creator,
       to: launcher,
       status: "0x1",
       logs: [log],
     };
-    const proof = { transactionHash, token, log, transaction, receipt, transactionIndex };
+    const proof = {
+      transactionHash,
+      token,
+      log,
+      transaction,
+      receipt,
+      transactionIndex,
+      blockNumber: candidateBlockNumber,
+      blockHash: candidateBlockHash,
+    };
     proofs.set(transactionHash, proof);
     return proof;
   };
 
-  const buildBlock = () => {
-    const transactions = [...proofs.values()]
+  const buildBlock = (requestedBlockNumber = blockNumber) => {
+    const matchingProofs = [...proofs.values()]
+      .filter((proof) => proof.blockNumber === Number(requestedBlockNumber));
+    const transactions = matchingProofs
       .sort((left, right) => left.transactionIndex - right.transactionIndex)
       .map((proof) => proof.transactionHash);
     return {
-      number: `0x${blockNumber.toString(16)}`,
-      hash: blockHash,
+      number: `0x${Number(requestedBlockNumber).toString(16)}`,
+      hash: matchingProofs[0]?.blockHash || blockHash,
       timestamp: `0x${Math.floor(ingressAt / 1_000).toString(16)}`,
       transactions,
     };
@@ -8786,6 +8944,12 @@ async function createBscWebsocketProofHarness(t, {
     async getNetwork() { return { chainId: 56n }; },
     async getBlockNumber() { return currentHead; },
     async getLogs() { httpCalls.getLogs += 1; return []; },
+    async send(method, params) {
+      if (method === "eth_getLogs") httpCalls.getLogs += 1;
+      if (method === "eth_getBlockReceipts") httpCalls.blockReceipts += 1;
+      if (providerSend) return providerSend({ method, params, proofs, buildBlock });
+      throw new Error(`BSC websocket harness has no ${method} response`);
+    },
     async getTransaction() {
       httpCalls.transaction += 1;
       const error = new Error("eth_getTransaction failed on every BSC RPC: providers cooling down");
@@ -8802,7 +8966,14 @@ async function createBscWebsocketProofHarness(t, {
     },
     async getBlock(number) {
       httpCalls.block += 1;
-      return { number: Number(number), timestamp: Math.floor(ingressAt / 1_000), transactions: [...proofs.keys()] };
+      httpCalls.blockNumbers.push(Number(number));
+      if (providerGetBlock) return providerGetBlock({ number: Number(number), proofs, buildBlock });
+      const raw = buildBlock(Number(number));
+      return {
+        ...raw,
+        number: Number(number),
+        timestamp: Number.parseInt(raw.timestamp, 16),
+      };
     },
     async getCode(address) {
       httpCalls.getCode += 1;
@@ -8851,7 +9022,9 @@ async function createBscWebsocketProofHarness(t, {
       let result;
       if (request.method === "eth_getTransactionByHash") result = proof?.transaction || null;
       else if (request.method === "eth_getTransactionReceipt") result = proof?.receipt || null;
-      else if (request.method === "eth_getBlockByNumber") result = buildBlock();
+      else if (request.method === "eth_getBlockByNumber") {
+        result = buildBlock(Number.parseInt(request.params?.[0], 16));
+      }
       const respond = (message = { jsonrpc: "2.0", id: request.id, result }) => {
         queueMicrotask(() => this.emitMessage(message));
       };
@@ -8958,13 +9131,16 @@ async function createBscWebsocketProofHarness(t, {
 }
 
 test("BSC WebSocket fast proof waits for confirmations, routes mixed responses, and sends through the unified path", async (t) => {
+  let releaseBlockProof;
+  const blockProofGate = new Promise((resolve) => { releaseBlockProof = resolve; });
+  t.after(() => releaseBlockProof());
   const harness = await createBscWebsocketProofHarness(t, {
     proofResponder({ request, result, respond }) {
-      // Let the normal 25ms HTTP queue wake while the WebSocket candidate is
-      // still proving its canonical block. The per-transaction reservation
-      // must keep that wakeup from racing or duplicating the fast proof.
+      // Hold the canonical block beyond the 150ms coverage timer. The block
+      // generation reservation must make coverage wait instead of starting a
+      // parallel HTTP getBlock for the same proof block.
       if (request.method === "eth_getBlockByNumber") {
-        setTimeout(() => respond({ jsonrpc: "2.0", id: request.id, result }), 50);
+        void blockProofGate.then(() => respond({ jsonrpc: "2.0", id: request.id, result }));
         return;
       }
       respond({ jsonrpc: "2.0", id: request.id, result });
@@ -8986,6 +9162,13 @@ test("BSC WebSocket fast proof waits for confirmations, routes mixed responses, 
   assert.equal(socket.proofRequests.length, 2, "head N+1 must not fetch the canonical block yet");
   harness.advance(800);
   harness.emitHead(103);
+  await waitUntil(() => harness.httpCalls.blockReceipts > 0);
+  assert.equal(
+    harness.httpCalls.blockNumbers.includes(harness.blockNumber),
+    false,
+    "coverage must not start an HTTP read while the WS block generation is pending",
+  );
+  releaseBlockProof();
   await waitUntil(() => harness.alerts.length === 1);
   await harness.monitor.awaitIdle();
   const successSnapshot = await harness.monitor.getState();
@@ -9008,7 +9191,11 @@ test("BSC WebSocket fast proof waits for confirmations, routes mixed responses, 
   assert.ok(harness.alertTimes[0] - harness.ingressAt < 5_000);
   assert.equal(harness.httpCalls.transaction, 0);
   assert.equal(harness.httpCalls.receipt, 0);
-  assert.equal(harness.httpCalls.block, 0, "the post-confirmation WS block proof must feed the shared cache");
+  assert.equal(
+    harness.httpCalls.blockNumbers.includes(harness.blockNumber),
+    false,
+    "the post-confirmation WS block proof must feed every shared block consumer",
+  );
   const snapshot = successSnapshot;
   assert.equal(snapshot.seenTransactions[proof.transactionHash], harness.blockNumber);
   assert.equal(snapshot.realtimePendingEntries[proof.transactionHash], undefined);
@@ -9017,6 +9204,196 @@ test("BSC WebSocket fast proof waits for confirmations, routes mixed responses, 
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(harness.alerts.length, 1, "a duplicate response id is ignored after its exact waiter is settled");
   assert.equal(harness.sockets.length, 1);
+});
+
+test("stop aborts coverage waiting on a WS block reservation without starting a new HTTP read", async (t) => {
+  let releaseBlockProof;
+  const blockProofGate = new Promise((resolve) => { releaseBlockProof = resolve; });
+  const neverSettles = new Promise(() => {});
+  const unhandled = [];
+  const onUnhandled = (error) => unhandled.push(error);
+  process.on("unhandledRejection", onUnhandled);
+  t.after(() => {
+    releaseBlockProof();
+    process.off("unhandledRejection", onUnhandled);
+  });
+  const harness = await createBscWebsocketProofHarness(t, {
+    proofResponder({ request, result, respond }) {
+      if (request.method === "eth_getBlockByNumber") {
+        void blockProofGate.then(() => respond({ jsonrpc: "2.0", id: request.id, result }));
+        return;
+      }
+      respond({ jsonrpc: "2.0", id: request.id, result });
+    },
+    providerGetBlock({ number, buildBlock }) {
+      if (number === 101) return neverSettles;
+      const raw = buildBlock(number);
+      return { ...raw, number, timestamp: Number.parseInt(raw.timestamp, 16) };
+    },
+  });
+  const proof = harness.addCandidate({ transactionIndex: 0 });
+  harness.emitCandidate(proof);
+  await waitUntil(() => harness.sockets[0].proofRequests.length === 2);
+  harness.advance(1_500);
+  harness.emitHead(103);
+  await waitUntil(() => harness.sockets[0].proofRequests.length === 3);
+  await waitUntil(() => harness.httpCalls.blockReceipts > 0);
+  const beforeStop = await harness.monitor.getState();
+  assert.equal(beforeStop.lastFinalizedBlock, 99);
+  assert.ok(beforeStop.realtimePendingEntries[proof.transactionHash]);
+
+  let timeout;
+  const startedAt = Date.now();
+  try {
+    await Promise.race([
+      harness.monitor.stop(),
+      new Promise((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error("BSC stop exceeded 750ms")), 750);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+  assert.ok(Date.now() - startedAt < 750);
+  assert.equal(
+    harness.httpCalls.blockNumbers.filter((number) => number === 101).length,
+    0,
+    "stop must not replace the failed WS reservation with a new HTTP generation",
+  );
+  releaseBlockProof();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(unhandled, []);
+
+  const durable = await readBscLaunchpadDurableState(path.join(harness.dataDir, "bsc-launchpad-state.json"));
+  assert.equal(durable.lastFinalizedBlock, 99, "shutdown must not advance the coverage cursor");
+  assert.equal(durable.seenTransactions[proof.transactionHash], undefined);
+  assert.ok(durable.realtimePendingEntries[proof.transactionHash], "the durable candidate must remain restartable");
+});
+
+test("late HTTP block failures cannot evict newer WS generations under concurrent pressure", async (t) => {
+  const unhandled = [];
+  const onUnhandled = (error) => unhandled.push(error);
+  process.on("unhandledRejection", onUnhandled);
+  t.after(() => process.off("unhandledRejection", onUnhandled));
+
+  await Promise.all(Array.from({ length: 4 }, async (_, round) => {
+    let proof;
+    let rejectOldBlock;
+    let signalOldBlockStarted;
+    const oldBlockStarted = new Promise((resolve) => { signalOldBlockStarted = resolve; });
+    const oldBlock = new Promise((_resolve, reject) => { rejectOldBlock = reject; });
+    const harness = await createBscWebsocketProofHarness(t, {
+      providerSend({ method, params }) {
+        if (method === "eth_getLogs") throw new Error("force verified receipt fallback");
+        if (method === "eth_getBlockReceipts") {
+          const requested = Number.parseInt(params[0], 16);
+          return requested === 101 ? [proof.receipt] : [];
+        }
+        throw new Error(`unexpected ${method}`);
+      },
+      providerGetBlock({ number, buildBlock }) {
+        if (number === 101) {
+          signalOldBlockStarted();
+          return oldBlock;
+        }
+        const raw = buildBlock(number);
+        return { ...raw, number, timestamp: Number.parseInt(raw.timestamp, 16) };
+      },
+    });
+    const nibble = (10 + round).toString(16);
+    proof = harness.addCandidate({
+      transactionHash: `0x${nibble.repeat(64)}`,
+      token: `0x${nibble.repeat(40)}`,
+      transactionIndex: 0,
+    });
+
+    // Start coverage first so its old HTTP generation is genuinely pending.
+    harness.emitHead(103);
+    await oldBlockStarted;
+    harness.emitCandidate(proof);
+    await waitUntil(() => harness.alerts.length === 1);
+    assert.equal(
+      harness.httpCalls.blockNumbers.filter((number) => number === 101).length,
+      1,
+      "the pending pre-proof HTTP generation is the only HTTP read",
+    );
+    rejectOldBlock(new Error(`late old-generation failure ${round}`));
+    await harness.monitor.awaitIdle();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(
+      harness.httpCalls.blockNumbers.filter((number) => number === 101).length,
+      1,
+      "a late rejection must not delete the verified WS generation or trigger another read",
+    );
+    const snapshot = await harness.monitor.getState();
+    assert.equal(snapshot.seenTransactions[proof.transactionHash], 101);
+  }));
+
+  assert.deepEqual(unhandled, []);
+});
+
+test("coverage invalidates one stale WS block generation and refreshes the fork exactly once", async (t) => {
+  let proof;
+  let releaseLogRange;
+  let signalLogRangeStarted;
+  const logRangeGate = new Promise((resolve) => { releaseLogRange = resolve; });
+  const logRangeStarted = new Promise((resolve) => { signalLogRangeStarted = resolve; });
+  t.after(() => releaseLogRange());
+  const refreshedBlockHash = `0x${"c".repeat(64)}`;
+  const harness = await createBscWebsocketProofHarness(t, {
+    async providerSend({ method, params }) {
+      if (method === "eth_getLogs") {
+        signalLogRangeStarted();
+        await logRangeGate;
+        throw new Error("force block receipt recovery after WS publish");
+      }
+      if (method === "eth_getBlockReceipts") {
+        const requested = Number.parseInt(params[0], 16);
+        if (requested !== 101) return [];
+        return [{
+          ...proof.receipt,
+          blockHash: refreshedBlockHash,
+          logs: [],
+        }];
+      }
+      throw new Error(`unexpected ${method}`);
+    },
+    providerGetBlock({ number, buildBlock }) {
+      if (number === 101) {
+        return {
+          number,
+          hash: refreshedBlockHash,
+          timestamp: Math.floor(Date.parse("2026-08-24T12:00:00.000Z") / 1_000),
+          transactions: [proof.transactionHash],
+        };
+      }
+      const raw = buildBlock(number);
+      return { ...raw, number, timestamp: Number.parseInt(raw.timestamp, 16), transactions: [] };
+    },
+  });
+  proof = harness.addCandidate({ transactionIndex: 0 });
+  harness.emitCandidate(proof);
+  harness.advance(1_500);
+  harness.emitHead(103);
+  await waitUntil(() => harness.alerts.length === 1);
+  await logRangeStarted;
+  assert.equal(
+    harness.httpCalls.blockNumbers.includes(101),
+    false,
+    "coverage must initially read the strictly verified WS generation",
+  );
+
+  releaseLogRange();
+  await waitUntil(() => harness.httpCalls.blockReceipts > 0);
+  await harness.monitor.awaitIdle();
+  assert.equal(
+    harness.httpCalls.blockNumbers.filter((number) => number === 101).length,
+    1,
+    "an old-fork hash mismatch must trigger exactly one shared HTTP refresh",
+  );
+  const snapshot = await harness.monitor.getState();
+  assert.equal(snapshot.lastFinalizedBlock, 101);
+  assert.equal(snapshot.seenTransactions[proof.transactionHash], 101);
 });
 
 test("BSC WebSocket fast proof failures retain the durable HTTP pending item without reconnecting", async (t) => {

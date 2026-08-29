@@ -1601,6 +1601,38 @@ function isUntrustedOpenGithubPullRequest(event) {
   return !TRUSTED_GITHUB_PULL_REQUEST_ASSOCIATIONS.has(association);
 }
 
+function isBinanceOfficialProductFeature(event) {
+  const classification = String(
+    event?.developerChange?.classification
+      || event?.binanceChange?.classification
+      || "",
+  ).trim().toLowerCase();
+  if (classification === "product_feature") {
+    return event?.developerChange?.productFeature === true
+      || event?.binanceChange?.productFeature === true
+      || event?.productFeature === true;
+  }
+  // Agent OS / Agent Native is an actual Binance product surface, not a
+  // connector release. The developer monitor already assigns this exact
+  // category from Binance's official product documentation.
+  return String(event?.signal?.category || "").trim().toLowerCase() === "agent_native";
+}
+
+function isRelevantBinanceOfficialUpdate(event) {
+  if (event?.type !== "binance_official_update") return false;
+  if (["announcement", "meme_rush_capability", "launchpool_capability"].includes(event.kind)) return true;
+  if (event.kind === "developer_update") return isBinanceOfficialProductFeature(event);
+  return false;
+}
+
+function isRelevantBinanceGithubUpdate(event) {
+  if (event?.type !== "github_module_update" || !isBinancePlatformEvent(event)) return false;
+  const classification = String(event?.binanceChange?.classification || "").trim().toLowerCase();
+  return event?.sourceTrust === "official_verified"
+    && classification === "product_feature"
+    && event?.binanceChange?.productFeature === true;
+}
+
 export function isStrongAlert(event) {
   if (event?.type === "telegram_news_update") return false;
   if (["late", "suppress"].includes(effectiveFreshnessDecision(event))) return false;
@@ -1612,7 +1644,7 @@ export function isStrongAlert(event) {
   // the relevance gate is delivered as a non-silent strong alert. Ordinary
   // token launches still fail the relevance gate and remain quiet.
   if (isFocusPlatformEvent(event) && isRelevantAlert(event)) return true;
-  if (event.type === "binance_official_update") return event.strong === true;
+  if (event.type === "binance_official_update") return isRelevantBinanceOfficialUpdate(event) && event.strong === true;
   if (event.type === "uniswap_official_update") return event.strong === true;
   if (event.type === "ai_official_update") return event.strong === true;
   if (isMorphLaunchpadEvent(event)) return event.strong === true;
@@ -1627,12 +1659,12 @@ export function isStrongAlert(event) {
     if (event.sourceTrust === "unverified_candidate") return false;
     if (event.xaiOfficial === true) return event.strong === true;
     if (isUniswapPlatformEvent(event)) return event.strong === true;
-    if (isBinancePlatformEvent(event)) return Boolean(event.modeChange?.candidate || event.strong);
+    if (isBinancePlatformEvent(event)) return isRelevantBinanceGithubUpdate(event) && Boolean(event.modeChange?.candidate || event.strong);
     return isFocusPlatformEvent(event) || Boolean(event.modeChange?.candidate);
   }
   if (event.type === "github_repository_verified") return true;
   if (event.type === "github_monitor_gap") return isFocusPlatformEvent(event);
-  if (event.type === "github_repository_discovered") return (isFocusPlatformEvent(event) || isUniswapPlatformEvent(event) || isBinancePlatformEvent(event)) && event.sourceTrust !== "unverified_candidate";
+  if (event.type === "github_repository_discovered") return (isFocusPlatformEvent(event) || isUniswapPlatformEvent(event)) && event.sourceTrust !== "unverified_candidate";
   if (event.type === "launchpad_site_update") {
     const structural = Boolean(event.newContracts?.length || event.newKeywords?.length || event.newFeatures?.length || event.newPages?.length || event.newChains?.length);
     return structural && (isFocusPlatformEvent(event) || (isUniswapPlatformEvent(event) && event.newChains?.length));
@@ -3786,7 +3818,7 @@ export function isRelevantAlert(event) {
       && event.security?.metrics?.sellObserved === true
       && (event.market?.curveVerified === true || Number(event.market?.liquidityUsd || 0) > 0);
   }
-  if (event.type === "binance_official_update") return true;
+  if (event.type === "binance_official_update") return isRelevantBinanceOfficialUpdate(event);
   if (event.type === "uniswap_official_update") return event.strong === true && Boolean(event.url && (event.labels?.length || event.title));
   if (event.type === "ai_official_update") return event.strong === true && Boolean(event.url && event.title && event.source?.id);
   if (["pons_v2_factory_discovered", "pons_v2_factory_status_update", "github_repository_verified"].includes(event.type)) return true;
@@ -3794,10 +3826,11 @@ export function isRelevantAlert(event) {
   if (event.type === "github_module_update") {
     if (event.xaiOfficial === true) return event.sourceTrust === "official_verified" && event.strong === true;
     if (isUniswapPlatformEvent(event)) return event.sourceTrust === "official_verified" && event.strong === true;
-    return isFocusPlatformEvent(event) || (isBinancePlatformEvent(event) && event.sourceTrust === "official_verified") || (event.sourceTrust !== "unverified_candidate" && Boolean(event.modeChange?.candidate));
+    if (isBinancePlatformEvent(event)) return isRelevantBinanceGithubUpdate(event);
+    return isFocusPlatformEvent(event) || (event.sourceTrust !== "unverified_candidate" && Boolean(event.modeChange?.candidate));
   }
   if (event.type === "github_monitor_gap") return isFocusPlatformEvent(event);
-  if (event.type === "github_repository_discovered") return (isFocusPlatformEvent(event) || isUniswapPlatformEvent(event) || isBinancePlatformEvent(event)) && event.sourceTrust !== "unverified_candidate";
+  if (event.type === "github_repository_discovered") return (isFocusPlatformEvent(event) || isUniswapPlatformEvent(event)) && event.sourceTrust !== "unverified_candidate";
   if (event.type === "launchpad_site_update") {
     return isFocusPlatformEvent(event) || isUniswapPlatformEvent(event) || Boolean(event.newContracts?.length || event.newKeywords?.length || event.newFeatures?.length || event.newPages?.length || event.newAssets?.length || event.newChains?.length);
   }

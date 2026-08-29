@@ -444,15 +444,17 @@ test("Fomo-linked X call card shows the CA-wallet-X link without claiming an off
   assert.equal(result.status, "delivered");
   assert.equal(payloads.length, 1);
   const text = payloads[0].text;
-  assert.match(text, /Fomo｜@alpha X 喊单/);
-  assert.match(text, /Fomo｜@alpha X call/);
+  assert.match(text, /平台：Fomo/);
+  assert.match(text, /更新了什么：@alpha X 喊单：原文：I bought CALL/);
+  assert.match(text, /Platform: Fomo/);
+  assert.match(text, /What changed: @alpha X call: I bought CALL/);
   assert.match(text, new RegExp(TOKEN, "i"));
   assert.match(text, new RegExp(WALLET, "i"));
   assert.match(text, new RegExp(`X#${X_POST_ID}`));
   assert.match(text, /GMGN 观测关联/);
   assert.match(text, /非 Fomo 官方/);
   assert.doesNotMatch(text, /Fomo 官方发布|Official Fomo publication|链上首买|zero.position/i);
-  assert.equal(text.split("\n").length, 12);
+  assert.equal(text.split("\n").length, 8);
   assert.ok(text.length <= 650, `expected compact technical card, got ${text.length} chars`);
 
   const buttons = telegramButtons(event).inline_keyboard.flat();
@@ -576,13 +578,15 @@ test("Fomo published-call Telegram card is concise, bilingual and contains only 
   assert.match(text, /🔴 强提醒 \| STRONG ALERT/);
   assert.match(text, /🇨🇳 中文/);
   assert.match(text, /🇬🇧 English/);
-  assert.match(text, /Fomo｜@alpha 新喊单/);
-  assert.match(text, /Fomo｜@alpha New call/);
-  assert.equal(text.match(/@alpha/g)?.length, 2, "the handle appears once in each mirrored title only");
+  assert.match(text, /平台：Fomo/);
+  assert.match(text, /更新了什么：@alpha 新喊单：原文：Accumulating CALL while BSC liquidity is expanding\./);
+  assert.match(text, /Platform: Fomo/);
+  assert.match(text, /What changed: @alpha New call: Accumulating CALL while BSC liquidity is expanding\./);
+  assert.equal(text.match(/@alpha/g)?.length, 2, "the handle appears once in each mirrored change summary");
   assert.match(text, /Accumulating CALL while BSC liquidity is expanding\./);
   assert.match(text, new RegExp(TOKEN, "i"));
   assert.match(text, /callId=thesis-1001/);
-  assert.match(text, /重点: 原文：Accumulating CALL while BSC liquidity is expanding\./);
+  assert.match(text, /更新了什么：@alpha 新喊单：原文：Accumulating CALL while BSC liquidity is expanding\./);
   assert.equal(text.match(/原文：/g)?.length, 1, "only the untranslated Chinese focus fact is marked");
   assert.deepEqual(translationHosts, [], "strong-alert delivery must not wait on either translation provider");
   assert.match(text, /Fomo 官方认证 Feed 发布；安全初筛通过，非买入建议/);
@@ -660,7 +664,7 @@ test("Fomo published-call translation fallback is persisted and retried without 
   assert.equal(entry.renderBundle.zh.status, "fallback_source");
   assert.equal(entry.renderBundle.zh.provider, "local_structured");
   assert.equal(translationCalls, 0, "critical delivery uses the immediate local fallback");
-  assert.match(entry.renderBundle.zh.text, /重点: 原文：Accumulating CALL while BSC liquidity is expanding\./);
+  assert.match(entry.renderBundle.zh.text, /更新了什么：@alpha 新喊单：原文：Accumulating CALL while BSC liquidity is expanding\./);
   assert.equal(entry.renderBundle.zh.text.match(/原文：/g)?.length, 1);
   const callsAfterRender = translationCalls;
   entry.destinations.telegram.nextAttemptAt = null;
@@ -671,8 +675,8 @@ test("Fomo published-call translation fallback is persisted and retried without 
   assert.equal(telegramCalls, 2);
   assert.equal(payloads[1].text, payloads[0].text, "retry wording must be byte-for-byte stable");
   assert.equal(payloads[1].text.match(/原文：/g)?.length, 1);
-  assert.equal(entry.renderBundle.zh.text.split("\n").length, 4);
-  assert.equal(entry.renderBundle.en.text.split("\n").length, 4);
+  assert.equal(entry.renderBundle.zh.text.split("\n").length, 2);
+  assert.equal(entry.renderBundle.en.text.split("\n").length, 2);
   assert.ok(payloads[1].text.length <= 600, `card is ${payloads[1].text.length} characters`);
 });
 

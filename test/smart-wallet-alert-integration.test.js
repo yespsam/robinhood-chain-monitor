@@ -208,12 +208,14 @@ test("smart wallet card extracts performance and omits purchase amount and Fomo/
     alertTranslationTimeoutMs: 50,
   }, event, "高收益高胜率钱包买入");
   const rendered = renderBilingualTelegramText(bundle, true);
-  assert.equal(bundle.zh.text.split("\n").length, 4);
-  assert.equal(bundle.en.text.split("\n").length, 4);
-  assert.equal(rendered.split("\n").length, 12);
+  assert.equal(bundle.zh.text.split("\n").length, 2);
+  assert.equal(bundle.en.text.split("\n").length, 2);
+  assert.equal(rendered.split("\n").length, 8);
   assert.ok(rendered.length <= 600, `card is ${rendered.length} characters`);
-  assert.match(bundle.zh.text, /^高收益高胜率钱包｜买入/m);
-  assert.match(bundle.en.text, /^High-profit\/high-win-rate wallet｜Buy/m);
+  assert.match(bundle.zh.text, /^平台：/m);
+  assert.match(bundle.zh.text, /^更新了什么：/m);
+  assert.match(bundle.en.text, /^Platform: /m);
+  assert.match(bundle.en.text, /^What changed: /m);
   assert.match(bundle.zh.text, /30D \+\$17\.5K · 胜率63\.2%\/510币 · ABC/);
   assert.match(bundle.en.text, /30d \+\$17\.5K · win 63\.2%\/510 tokens · ABC/);
   assert.match(rendered, new RegExp(TOKEN, "i"));

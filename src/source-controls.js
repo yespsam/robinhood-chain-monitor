@@ -425,13 +425,14 @@ function claimsBinanceIdentity(source) {
 }
 
 function focus3BinanceOfficialSourceAllowed(config, source) {
-  return config?.binanceMonitorEnabled === true
-    && !focus3StockRwaSignal(source)
-    && (
-    isOfficialBinanceInternalEvent(source)
-    || isOfficialBinanceXSource(source)
-    || isOfficialBinanceGithubSource(source)
-  );
+  if (config?.binanceMonitorEnabled !== true) return false;
+  // CMS/WebSocket events have already crossed the strict source-id plus
+  // all-declared-URLs provenance check. Do not make this source-control layer
+  // a second semantic filter: listings, contracts, activities, and ordinary
+  // announcements belong to the central relevance policy.
+  if (isOfficialBinanceInternalEvent(source)) return true;
+  return !focus3StockRwaSignal(source)
+    && (isOfficialBinanceXSource(source) || isOfficialBinanceGithubSource(source));
 }
 
 function strictAiUrl(value) {

@@ -240,6 +240,23 @@ const BINANCE_CRITICAL_X_NOISE = /(?:\b(?:campaign|competition|tournament|giveaw
 // pass; tokens, campaigns, trading activity and routine notices cannot.
 export function classifyBinanceCriticalProductText(text = "") {
   const source = String(text || "").replace(/&amp;/gi, "&");
+  const officialMarketSignal = classifyBinanceOfficialText(source);
+  const priorityMarketLabels = new Set([
+    "现货首次上币",
+    "新合约上线",
+    "Alpha 上新",
+    "Launchpool/Megadrop 新币",
+  ]);
+  if (officialMarketSignal.relevant
+    && officialMarketSignal.labels?.some((label) => priorityMarketLabels.has(label))) {
+    return appendOfficialClaims({
+      ...officialMarketSignal,
+      strong: true,
+      productStructural: true,
+      criticalBinanceMarket: true,
+      reason: "official_priority_listing_contract_or_alpha",
+    }, source);
+  }
   if (!source.trim() || BINANCE_CRITICAL_X_NOISE.test(source)) {
     return { relevant: false, strong: false, labels: [], reason: "marketing_token_trading_or_routine_noise" };
   }

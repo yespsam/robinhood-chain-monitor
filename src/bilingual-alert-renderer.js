@@ -5,9 +5,15 @@ import {
   translateAlertLines,
 } from "./chinese-localizer.js";
 import { deriveAlertChangeModel, renderAlertChangeLines } from "./alert-change-model.js";
+import {
+  interpretBinanceOfficialUpdate,
+  interpretGithubWeb3Change,
+  interpretPlatformPoolChange,
+  interpretTwitterWeb3Update,
+} from "./web3-alert-interpreter.js";
 
-export const BILINGUAL_RENDER_VERSION = 13;
-const MAX_CARD_LINES = 4;
+export const BILINGUAL_RENDER_VERSION = 15;
+const MAX_CARD_LINES = 2;
 const MAX_LINE_LENGTH = 230;
 
 const EVENT_TITLES = {
@@ -165,6 +171,25 @@ function condenseCardLines(value, maximumLines = MAX_CARD_LINES) {
   return lines;
 }
 
+function normalizeTwoFieldLines(lines, language) {
+  const values = list(lines)
+    .map((line) => oneLine(line, 10_000))
+    .filter(Boolean);
+  const compacted = values.length <= MAX_CARD_LINES
+    ? values.slice(0, MAX_CARD_LINES)
+    : condenseCardLines(values.join("\n"), MAX_CARD_LINES);
+  const zh = language === "zh";
+  if (compacted[0]) {
+    const platform = compacted[0].replace(/^(?:平台|Platform)[:：]\s*/iu, "");
+    compacted[0] = `${zh ? "平台：" : "Platform: "}${platform}`;
+  }
+  if (compacted[1]) {
+    const changed = compacted[1].replace(/^(?:更新了什么|What changed)[:：]\s*/iu, "");
+    compacted[1] = `${zh ? "更新了什么：" : "What changed: "}${changed}`;
+  }
+  return compacted;
+}
+
 function protectedTerms(event) {
   const repositoryName = typeof event?.repository === "string" ? event.repository.split("/").filter(Boolean).at(-1) : null;
   return [
@@ -257,18 +282,17 @@ function requiredTechnicalLiterals(baseLines, event) {
 }
 
 function ensureTechnicalLiterals(lines, required, language) {
-  const compacted = condenseCardLines(lines.join("\n"), MAX_CARD_LINES);
+  const compacted = normalizeTwoFieldLines(lines, language);
   const current = compacted.join("\n");
   const missing = required.filter((literal) => !current.includes(literal));
   if (!missing.length) return compacted;
 
-  // Keep the compact four-line shape. Fill spare room on the identifier row
-  // first, then use the remaining rows before ever cutting a protected literal.
-  // This avoids both a fifth "Technical" wall and one needlessly long row.
-  const referenceIndex = Math.min(2, Math.max(0, compacted.length - 2));
+  // The two-field layout keeps every identifier inside "What changed". Never
+  // spill a CA, tx hash, endpoint or function name into the platform field.
+  const referenceIndex = compacted.length > 1 ? 1 : 0;
   const label = language === "zh" ? "标识" : "ID";
   for (const literal of missing) {
-    const targets = [...new Set([referenceIndex, 1, 0, 3])].filter((index) => index < compacted.length);
+    const targets = [referenceIndex].filter((index) => index < compacted.length);
     let placed = false;
     for (const index of targets) {
       const hasLabel = new RegExp(`(?:${label}|来源|Source)[:：]`, "i").test(compacted[index]);
@@ -1239,6 +1263,20 @@ function githubRepresentativeFile(event) {
   return paths.find((path) => !/(?:^|\/)CHANGELOG(?:\.|$)/i.test(path)) || paths[0] || null;
 }
 
+function githubWeb3Interpretation(event, language = "zh") {
+  if (event?.type !== "github_module_update") return null;
+  const paths = githubChangedFilePaths(event);
+  const moduleSlug = githubModuleSlug(event, paths);
+  const module = githubModuleLabel(moduleSlug);
+  const version = githubReleaseVersion(event);
+  const evidence = githubStructuredEvidence(event);
+  const semantic = evidence.find((change) => change.kind !== "dependency_version")
+    || evidence[0]
+    || event?.githubChange?.primaryFact
+    || null;
+  return interpretGithubWeb3Change(event, semantic, { language, module, moduleSlug, version });
+}
+
 function githubConcreteFocus(event, language = "zh") {
   if (event?.type !== "github_module_update") return null;
   const zh = language === "zh";
@@ -1281,6 +1319,8 @@ function githubConcreteFocus(event, language = "zh") {
       ? `${context}：SDK 维护发布，未发现产品新功能`
       : `${context}: SDK maintenance release; no product feature found`;
   }
+  const web3Interpretation = githubWeb3Interpretation(event, language);
+  if (web3Interpretation?.summary) return web3Interpretation.summary;
   if (dependency && !semantic) {
     const subject = factValue(dependency.subject || dependency.file || "dependency");
     if (dependency.before != null && dependency.after != null) return zh
@@ -1365,6 +1405,8 @@ function githubConcreteFocus(event, language = "zh") {
 
 function poolFocusKey(event, language) {
   const zh = language === "zh";
+  const interpreted = interpretPlatformPoolChange(event, language);
+  if (interpreted) return interpreted;
   const added = list(event?.changes?.newFlapPools)[0];
   if (added) {
     const category = factValue(added.category || added.vaultFactoryCategory || added.poolCategory || added.poolType || "quote");
@@ -1534,7 +1576,14 @@ function uniswapGithubReleaseFocus(event, language = "zh") {
       added: { zh: "新增", en: "Added" },
       changed: { zh: "变更", en: "Changed" },
     };
-    return `${labels[key]?.[language === "zh" ? "zh" : "en"] || selected.label}: ${firstFocusClause(selected.detail)}`;
+    let detail = firstFocusClause(selected.detail);
+    if (language === "zh") {
+      detail = detail
+        .replace(/\bRobinhood\s+hooks?\s+support\b/iu, "Robinhood Hooks 支持")
+        .replace(/\bsupport\s+for\s+([A-Za-z0-9_.-]+)/giu, "支持 $1")
+        .replace(/\bdefault\s+fee\s+validation\b/giu, "默认费率校验");
+    }
+    return `${labels[key]?.[language === "zh" ? "zh" : "en"] || selected.label}: ${detail}`;
   }
   const version = String(event?.tag || event?.title || "").match(/\bv?\d+(?:\.\d+){1,3}(?:-[A-Za-z0-9.-]+)?\b/i)?.[0]
     || String(event?.tag || "").trim();
@@ -1570,20 +1619,32 @@ function focusKey(event, changeModel, language = "zh") {
   if (agentSkill) return zh
     ? "Agentic Wallet/AI Agent 新增平台发币 skill 入口"
     : "Agentic Wallet/AI Agent added a platform token-launch skill entry";
+  const twitterUpdate = interpretTwitterWeb3Update(event, language);
+  if (twitterUpdate) return twitterUpdate;
   const hooklist = hooklistRegistryFacts(event);
   if (hooklist) {
-    const flags = [
-      `chainId=${hooklist.chainId}`,
-      ...(hooklist.dynamicFee === null ? [] : [`dynamicFee=${hooklist.dynamicFee}`]),
-    ].join("·");
-    return `${hooklist.hookName}→Robinhood${flags ? `·${flags}` : ""}`;
+    const chain = `chainId=${hooklist.chainId}`;
+    const dynamicFee = hooklist.dynamicFee === true || String(hooklist.dynamicFee).toLowerCase() === "true";
+    const fee = hooklist.dynamicFee === null
+      ? null
+      : zh
+        ? `${dynamicFee ? "动态费率" : "固定费率"}(dynamicFee=${hooklist.dynamicFee})`
+        : `${dynamicFee ? "dynamic fee" : "fixed fee"}(dynamicFee=${hooklist.dynamicFee})`;
+    return zh
+      ? `${hooklist.hookName}→Robinhood${fee ? `·${fee}` : ""}·${chain}`
+      : `${hooklist.hookName}→Robinhood${fee ? `·${fee}` : ""}·${chain}`;
   }
   if (event?.type === "uniswap_official_update" && event?.kind === "blog") {
     return firstFocusClause(event?.title || event?.summary || event?.description || (zh ? "官方文章更新" : "Official article updated"));
   }
   if (event?.type === "fomo_family_top_call") {
     if (["fomo_published_call", "fomo_x_call"].includes(event?.signalKind)) {
-      return firstFocusClause(event?.thesis?.text || event?.body || (zh ? "发布新喊单" : "Published a new call"));
+      const handle = String(event?.caller?.handle || event?.handle || event?.thesis?.handle || "").replace(/^@/, "");
+      const label = event?.signalKind === "fomo_x_call"
+        ? (zh ? "X 喊单" : "X call")
+        : (zh ? "新喊单" : "New call");
+      const source = firstFocusClause(event?.thesis?.text || event?.body || (zh ? "发布新喊单" : "Published a new call"));
+      return `${handle ? `@${handle} ` : ""}${label}${zh ? "：" : ": "}${source}`;
     }
     return fomoInferredKey(event, language);
   }
@@ -1609,6 +1670,9 @@ function focusKey(event, changeModel, language = "zh") {
   if (walletThesis) return zh
     ? "KOL 买入后可发布 Trade Thesis"
     : "KOL can publish a post-buy Trade Thesis";
+
+  const binanceOfficial = interpretBinanceOfficialUpdate(event, language);
+  if (binanceOfficial) return binanceOfficial;
 
   const snapshotBefore = event?.previousSnapshot;
   const snapshotAfter = event?.currentSnapshot;
@@ -1667,9 +1731,19 @@ function poolEvidence(event) {
     || pool.vaultFactory?.address || pool.vaultFactory || pool.factory).find(Boolean);
   const quote = changedQuote ? null : pools.map((pool) => pool.quoteAddress || pool.quoteTokenAddress || pool.quoteAssetAddress
     || pool.quoteToken?.address || pool.quoteAsset?.address || pool.quoteAsset || pool.quoteToken).find(Boolean);
+  const chainId = pools.map((pool) => pool.chainId || pool.chain?.id).find((value) => value != null)
+    ?? event?.chainId
+    ?? event?.chain?.id;
+  const chain = chainId != null ? `chainId=${factValue(chainId)}` : null;
   return [
-    factory ? { zh: `Factory ${factValue(factory)}`, en: `Factory ${factValue(factory)}` } : null,
-    quote ? { zh: `Quote ${factValue(quote)}`, en: `Quote ${factValue(quote)}` } : null,
+    factory ? {
+      zh: ["Factory", factValue(factory), chain].filter(Boolean).join(" "),
+      en: ["Factory", factValue(factory), chain].filter(Boolean).join(" "),
+    } : null,
+    quote ? {
+      zh: ["Quote", factValue(quote), factory ? null : chain].filter(Boolean).join(" "),
+      en: ["Quote", factValue(quote), factory ? null : chain].filter(Boolean).join(" "),
+    } : null,
   ].filter(Boolean);
 }
 
@@ -1708,8 +1782,8 @@ function focusEvidence(event) {
     if (hooklist.hookAddress && hooklist.relatedAddresses.length) {
       const related = hooklist.relatedAddresses.join(" · ");
       return [{
-        zh: `Hook ${hooklist.hookAddress} · 关联 ${related}（角色未解析） · #${hooklist.shortSha}`,
-        en: `Hook ${hooklist.hookAddress} · Related ${related} (role unresolved) · #${hooklist.shortSha}`,
+        zh: `Hook ${hooklist.hookAddress} · 关联 ${related}（角色待核）· #${hooklist.shortSha}`,
+        en: `Hook ${hooklist.hookAddress} · Related ${related} (role pending) · #${hooklist.shortSha}`,
       }];
     }
     return [
@@ -1734,16 +1808,34 @@ function focusEvidence(event) {
     const repository = event?.repository;
     const sha = shortGithubRevision(event);
     const file = githubRepresentativeFile(event);
+    const interpretedZh = githubWeb3Interpretation(event, "zh");
+    const interpretedEn = githubWeb3Interpretation(event, "en");
+    const candidateTechnical = String(interpretedZh?.technical || interpretedEn?.technical || "").trim();
+    const versionTransition = candidateTechnical.match(/^([^\s]+)\s+(v?\d+(?:\.\d+){1,3})\s*→\s*(v?\d+(?:\.\d+){1,3})$/);
+    const technicalAlreadyInKey = event?.binanceChange?.classification === "sdk_maintenance"
+      || (Boolean(versionTransition)
+      && [interpretedZh?.summary, interpretedEn?.summary].every((summary) => {
+        const rendered = String(summary || "");
+        return versionTransition.slice(1).every((literal) => rendered.includes(literal));
+      }));
+    const technicalZh = technicalAlreadyInKey ? "" : String(interpretedZh?.technical || "").trim();
+    const technicalEn = technicalAlreadyInKey ? "" : String(interpretedEn?.technical || interpretedZh?.technical || "").trim();
     const revision = repository && sha ? `${repository}#${sha}` : repository;
     const contract = event?.contract || list(event?.newContracts)[0];
     const commitTechnicalHint = String(event?.message || "").match(/\b[A-Za-z_$][A-Za-z0-9_$]*\([^\n()]{0,100}\)/)?.[0] || null;
-    const supplemental = [contract ? `CA ${contract}` : null, commitTechnicalHint ? `Commit ref ${commitTechnicalHint}` : null]
-      .filter(Boolean).join(" · ");
+    const supplemental = technicalZh || technicalEn
+      ? null
+      : commitTechnicalHint ? `Commit ref ${commitTechnicalHint}` : null;
     return [
       revision ? { zh: revision, en: revision } : null,
-      file ? { zh: file, en: file } : null,
+      technicalZh || technicalEn ? {
+        zh: technicalZh ? `技术 ${technicalZh}` : `技术 ${technicalEn}`,
+        en: technicalEn ? `Technical ${technicalEn}` : `Technical ${technicalZh}`,
+      } : null,
+      contract ? { zh: `CA ${contract}`, en: `CA ${contract}` } : null,
       supplemental ? { zh: supplemental, en: supplemental } : null,
-    ].filter(Boolean).slice(0, 2);
+      file ? { zh: file, en: file } : null,
+    ].filter(Boolean);
   }
   if (event?.type === "github_monitor_gap") {
     const repository = event?.repository;
@@ -1824,6 +1916,12 @@ function focusEvidence(event) {
     return [token ? { zh: `CA ${token}`, en: `CA ${token}` } : null].filter(Boolean);
   }
   if (event?.type === "binance_official_update") {
+    if (event?.kind === "developer_update") {
+      const developerCorpus = [event?.title, ...list(event?.keyChanges), ...list(event?.signal?.keyChanges)]
+        .filter(Boolean).join(" ").replaceAll("\\", "").replaceAll("`", "");
+      const endpoint = developerCorpus.match(/\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/[A-Za-z0-9_{}<>.\-/]+/i)?.[0];
+      if (endpoint) return [{ zh: `API ${endpoint}`, en: `API ${endpoint}` }];
+    }
     const code = event?.article?.code;
     return [{
       zh: code ? `官方公告 · ${String(code).slice(0, 8)}` : "官方公告",
@@ -1858,6 +1956,25 @@ function focusEvidence(event) {
   ].filter(Boolean);
   if (evidence.length) return evidence.slice(0, 2);
   return [{ zh: "官方来源", en: "Official source" }];
+}
+
+function selectEvidenceForCard(evidence) {
+  const selected = [];
+  let bilingualCost = 0;
+  for (const item of list(evidence)) {
+    const zh = String(item?.zh || "").trim();
+    const en = String(item?.en || zh).trim();
+    if (!zh && !en) continue;
+    const cost = zh.length + en.length + 6;
+    // Evidence is atomic: keep repo#sha, function/endpoint, CA or file whole,
+    // in that order. If the next item would exceed the card's evidence budget,
+    // omit the entire lower-priority item rather than truncating an identifier.
+    if (selected.length && bilingualCost + cost > 400) break;
+    selected.push({ zh, en });
+    bilingualCost += cost;
+    if (selected.length >= 3) break;
+  }
+  return selected;
 }
 
 function securityDecision(event) {
@@ -1940,7 +2057,7 @@ function bscStage(event, language) {
     : security === "block"
       ? (zh ? "本地安全门已拦截" : "Blocked by local safety gate")
       : (zh ? "安全待核" : "safety pending");
-  return `${onchain ? (zh ? "链上已确认" : "On-chain confirmed") : (zh ? "官方模式已记录，链上待核" : "Official mode recorded; on-chain pending")} · security=${security} · liquidityConfirmed=${liquidity} · ${boundary}`;
+  return `${boundary} · ${onchain ? (zh ? "链上已确认" : "On-chain confirmed") : (zh ? "官方模式已记录，链上待核" : "Official mode recorded; on-chain pending")} · security=${security} · liquidityConfirmed=${liquidity}`;
 }
 
 function focusStage(event, language = "zh", sourceStatus = "") {
@@ -1994,6 +2111,16 @@ function focusStage(event, language = "zh", sourceStatus = "") {
   if (event?.type === "github_module_update" && event?.binanceChange?.classification === "sdk_maintenance") return zh
     ? "SDK 维护发布已记录"
     : "SDK maintenance release recorded";
+  const githubInterpretation = githubWeb3Interpretation(event, language);
+  if (githubInterpretation?.maintenance) return zh
+    ? "SDK/依赖维护已记录；未确认 Web3 产品功能变化"
+    : "SDK/dependency maintenance recorded; no Web3 product change confirmed";
+  if (githubInterpretation?.domain === "documentation") return zh
+    ? "文档或示例已更新；链上行为未确认"
+    : "Docs or examples updated; on-chain behavior unconfirmed";
+  if (githubInterpretation?.domain === "api-deprecation") return zh
+    ? "接口弃用已提交；集成方需迁移，发布状态待确认"
+    : "API deprecation committed; integrations must migrate; release unconfirmed";
   if (event?.type === "github_module_update" && event?.binanceChange?.classification === "api_or_schema_change") return zh
     ? "API/schema 变更已提交，下游兼容性待验证"
     : "API/schema change committed; downstream compatibility pending";
@@ -2042,6 +2169,10 @@ function buildFocusModel(event, changeModel, sourceLines) {
     const occurredAt = event?.sourceOccurredAt || eventTime(event) || "时间未取得";
     return {
       eventType: event.type,
+      platform: {
+        zh: `Telegram · @${String(event?.username || event?.channel?.username || "maxguruai").replace(/^@/, "")}`,
+        en: `Telegram · @${String(event?.username || event?.channel?.username || "maxguruai").replace(/^@/, "")}`,
+      },
       title: { zh: "频道线索", en: "Channel lead" },
       key: {
         zh: `分类: ${zhFacts.category} · ${zhFacts.summary}`,
@@ -2062,10 +2193,13 @@ function buildFocusModel(event, changeModel, sourceLines) {
       },
     };
   }
+  const rawPlatform = isGithubSkillUpdate(event) ? "Binance Skills" : focusProject(event);
+  const platform = rawPlatform === "监控" ? { zh: "监控", en: "Monitor" } : { zh: rawPlatform, en: rawPlatform };
   return {
+    platform,
     title: { zh: focusTitle(event, "zh"), en: focusTitle(event, "en") },
     key: { zh: focusKey(event, changeModel, "zh"), en: focusKey(event, changeModel, "en") },
-    evidence: focusEvidence(event),
+    evidence: selectEvidenceForCard(focusEvidence(event)),
     stage: { zh: focusStage(event, "zh", sourceStatus), en: focusStage(event, "en", sourceStatus) },
     time: { zh: focusTime(event, timeLine, "zh"), en: focusTime(event, timeLine, "en") },
   };
@@ -2073,63 +2207,141 @@ function buildFocusModel(event, changeModel, sourceLines) {
 
 function renderFocusLines(focusModel, language = "zh") {
   const zh = language === "zh";
-  if (focusModel?.eventType === "telegram_news_update") {
-    return [
-      oneLine(focusModel.key[language], 160),
-      oneLine(`${zh ? "来源" : "Source"}: ${focusModel.telegramNews.sourceMarker}`, 90),
-      oneLine(`${zh ? "阶段" : "Stage"}: ${focusModel.stage[language]}`, 100),
-      oneLine(`${zh ? "时间" : "Time"}: ${focusModel.time[language]}`, 70),
-    ];
-  }
-  const evidence = focusModel.evidence.map((item) => item[language]).filter(Boolean).slice(0, 2);
+  const evidence = focusModel.evidence.map((item) => item[language]).filter(Boolean);
+  const separator = zh ? "｜" : " | ";
+  const changed = [
+    oneLine(focusModel.key[language], 10_000),
+    evidence.join(" · ") || (zh ? "官方来源" : "Official source"),
+    oneLine(focusModel.stage[language], 10_000),
+    oneLine(focusModel.time[language], 10_000),
+  ].filter(Boolean).join(separator);
   return [
-    oneLine(focusModel.title[language], 90),
-    oneLine(`${zh ? "重点" : "Key"}: ${focusModel.key[language]}`, 165),
-    oneLine(`${zh ? "证据" : "Evidence"}: ${evidence.join(" · ") || (zh ? "官方来源" : "Official source")}`, 190),
-    oneLine(`${zh ? "阶段/时间" : "Stage/Time"}: ${focusModel.stage[language]} · ${focusModel.time[language]}`, 175),
+    oneLine(`${zh ? "平台：" : "Platform: "}${focusModel.platform?.[language] || focusModel.title[language]}`, 70),
+    `${zh ? "更新了什么：" : "What changed: "}${changed}`,
   ];
 }
 
-// The longest Telegram envelope is 47 UTF-16 code units. Keeping both localized
-// bodies below 545 hard-bounds the complete card at 592 while leaving room for
-// the selected delta, evidence, stage, and time literals.
-const GITHUB_COMBINED_BLOCK_BUDGET = 545;
+// The bilingual envelope plus both internal body line breaks stays below 600
+// when the two localized blocks together remain within this budget.
+const TWO_FIELD_COMBINED_BLOCK_BUDGET = 549;
 
-function fitGithubBilingualLines(chineseLines, englishLines) {
+function compactTextKeepingRequired(value, maximum, required = []) {
+  const source = String(value || "");
+  if (source.length <= maximum) return source;
+  const retained = required
+    .filter((literal) => source.includes(literal))
+    .sort((left, right) => right.length - left.length);
+  if (!retained.length) return oneLine(source, maximum);
+
+  let prose = source;
+  for (const literal of retained) prose = prose.replaceAll(literal, " ");
+  prose = prose
+    .replace(/\s*[·|｜]\s*(?=[·|｜]|$)/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const suffix = ` · ${retained.join(" · ")}`;
+  const room = maximum - suffix.length;
+  // Protected literals take precedence over the prose budget. Returning a
+  // slightly longer component is intentional; the bilingual fitter can take
+  // that space from the other language or from non-technical components.
+  return `${oneLine(prose, Math.max(18, room - 1))}${suffix}`.trim();
+}
+
+function compactTwoFieldLine(value, maximum, required = []) {
+  const line = String(value || "");
+  if (line.length <= maximum) return line;
+  const prefix = line.match(/^(?:更新了什么|What changed)[:：]\s*/u)?.[0] || "";
+  if (!prefix) return compactTextKeepingRequired(line, maximum, required);
+
+  const body = line.slice(prefix.length);
+  const separator = body.includes("｜") ? "｜" : body.includes(" | ") ? " | " : null;
+  if (!separator) {
+    return `${prefix}${compactTextKeepingRequired(
+      body,
+      Math.max(24, maximum - prefix.length),
+      required,
+    )}`;
+  }
+
+  const parts = body.split(separator);
+  if (parts.length < 3) {
+    return `${prefix}${compactTextKeepingRequired(
+      body,
+      Math.max(24, maximum - prefix.length),
+      required,
+    )}`;
+  }
+
+  const key = parts.shift() || "";
+  const time = parts.pop() || "";
+  const stage = parts.pop() || "";
+  const evidence = parts.join(separator);
+  let compacted = [key, evidence, stage, time];
+  const render = () => `${prefix}${compacted.filter(Boolean).join(separator)}`;
+
+  const minimums = [30, 0, 24, 20];
+  for (const index of [3, 2, 0]) {
+    if (render().length <= maximum) break;
+    const excess = render().length - maximum;
+    const nextMaximum = Math.max(minimums[index], compacted[index].length - excess);
+    compacted[index] = oneLine(compacted[index], nextMaximum);
+  }
+
+  let output = render();
+  const missing = required.filter((literal) => line.includes(literal) && !output.includes(literal));
+  if (missing.length) {
+    compacted[1] = [compacted[1], missing.join(" · ")].filter(Boolean).join(" · ");
+    output = render();
+  }
+  if (output.length <= maximum) return output;
+
+  const fixedLength = prefix.length
+    + compacted[0].length + compacted[2].length + compacted[3].length
+    + (separator.length * 3);
+  compacted[1] = compactTextKeepingRequired(
+    compacted[1],
+    Math.max(24, maximum - fixedLength),
+    required.filter((literal) => line.includes(literal)),
+  );
+  return render();
+}
+
+function fitTwoFieldBilingualLines(chineseLines, englishLines, chineseRequired = [], englishRequired = []) {
   const originals = [chineseLines, englishLines].map((lines) => lines.slice(0, MAX_CARD_LINES).map(String));
+  const required = [chineseRequired, englishRequired];
   const length = (blocks) => blocks.reduce((total, lines) => total + lines.join("\n").length, 0);
   let blocks = originals.map((lines) => lines.slice());
-  if (length(blocks) <= GITHUB_COMBINED_BLOCK_BUDGET) return blocks;
+  if (length(blocks) <= TWO_FIELD_COMBINED_BLOCK_BUDGET) return blocks;
 
-  // The revision is immutable evidence. Drop the secondary file before ever
-  // shortening repo#sha or a selected technical delta.
-  blocks = blocks.map((lines) => lines.map((line, index) => {
-    if (index !== 2) return line;
-    const prefix = line.match(/^(?:证据|Evidence)[:：]\s*/u)?.[0] || "";
-    const parts = line.slice(prefix.length).split(/\s+·\s+/u).filter(Boolean);
-    const revision = parts.find((part) => /#[a-f0-9]{8,16}\b/i.test(part));
-    return revision ? `${prefix}${revision}` : line;
-  }));
-  if (length(blocks) <= GITHUB_COMBINED_BLOCK_BUDGET) return blocks;
-
-  // Titles are descriptive and may be compacted. Evidence, stage, and the
-  // key delta stay byte-for-byte intact.
-  const titleMinimum = 24;
-  while (length(blocks) > GITHUB_COMBINED_BLOCK_BUDGET) {
+  const changedMinimum = 100;
+  while (length(blocks) > TWO_FIELD_COMBINED_BLOCK_BUDGET) {
     const candidate = [0, 1]
-      .filter((block) => blocks[block][0].length > titleMinimum)
+      .filter((block) => blocks[block]?.[1]?.length > changedMinimum)
+      .sort((left, right) => blocks[right][1].length - blocks[left][1].length)[0];
+    if (candidate === undefined) break;
+    const excess = length(blocks) - TWO_FIELD_COMBINED_BLOCK_BUDGET;
+    const previous = blocks[candidate][1];
+    blocks[candidate][1] = compactTwoFieldLine(
+      blocks[candidate][1],
+      Math.max(changedMinimum, blocks[candidate][1].length - Math.min(12, excess)),
+      required[candidate],
+    );
+    if (blocks[candidate][1] === previous) break;
+  }
+  if (length(blocks) <= TWO_FIELD_COMBINED_BLOCK_BUDGET) return blocks;
+
+  const platformMinimum = 24;
+  while (length(blocks) > TWO_FIELD_COMBINED_BLOCK_BUDGET) {
+    const candidate = [0, 1]
+      .filter((block) => blocks[block]?.[0]?.length > platformMinimum)
       .sort((left, right) => blocks[right][0].length - blocks[left][0].length)[0];
     if (candidate === undefined) break;
-    const excess = length(blocks) - GITHUB_COMBINED_BLOCK_BUDGET;
-    blocks[candidate][0] = oneLine(blocks[candidate][0], Math.max(titleMinimum, blocks[candidate][0].length - Math.min(8, excess)));
+    const excess = length(blocks) - TWO_FIELD_COMBINED_BLOCK_BUDGET;
+    blocks[candidate][0] = oneLine(
+      blocks[candidate][0],
+      Math.max(platformMinimum, blocks[candidate][0].length - Math.min(8, excess)),
+    );
   }
-  if (length(blocks) <= GITHUB_COMBINED_BLOCK_BUDGET) return blocks;
-
-  // Keep the complete stage wording but remove a trailing delivery-delay
-  // annotation before touching any technical literal.
-  blocks = blocks.map((lines) => lines.map((line, index) => index === 3
-    ? line.replace(/\s+·\s+(?:延迟[^·]+|\d+(?:s|m|h|d)(?:\d+[mh])?\s+delay)$/iu, "")
-    : line));
   return blocks;
 }
 
@@ -2146,12 +2358,25 @@ function normalizePublishedCallChineseFallback(lines, baseLines, event, status) 
     }
     if (!publishedCall) return value;
     if (/英文原文[:：]/u.test(value)) return value.replace(/英文原文\s*[:：]\s*/u, "原文：");
+    const sourceNarrative = String(event?.thesis?.text || event?.body || "").trim();
+    const sourceFocus = firstFocusClause(sourceNarrative);
+    const sourceLatin = (sourceNarrative.match(/[A-Za-z]/g) || []).length;
+    const sourceChinese = (sourceNarrative.match(/[\u3400-\u9fff]/g) || []).length;
     const narrative = labelledValue(value);
     const latin = (narrative.match(/[A-Za-z]/g) || []).length;
     const chinese = (narrative.match(/[\u3400-\u9fff]/g) || []).length;
     const fellBack = ["fallback_source", "partial_fallback"].includes(status);
+    if (fellBack
+      && sourceNarrative
+      && sourceLatin >= 8
+      && sourceChinese < Math.max(2, Math.floor(sourceLatin * 0.12))
+      && sourceFocus
+      && value.includes(sourceFocus)
+      && !value.includes(`原文：${sourceFocus}`)) {
+      return value.replace(sourceFocus, `原文：${sourceFocus}`);
+    }
     if (fellBack && latin >= 8 && chinese < Math.max(2, Math.floor(latin * 0.12))) {
-      return `重点: 原文：${labelledValue(baseLines[index]) || narrative}`;
+      return `更新了什么：原文：${labelledValue(baseLines[index]) || narrative}`;
     }
     return line;
   });
@@ -2182,7 +2407,7 @@ function telegramNewsLeadWithRequiredLiterals(line, required, fixedLines, maximu
 function finalizeTelegramNewsLines(lines, baseLines, language, status, required) {
   const zh = language === "zh";
   const fellBack = ["fallback_source", "partial_fallback"].includes(status);
-  let narrative = String(lines?.[0] || baseLines[0] || "").trim();
+  let narrative = String(lines?.[1] || baseLines[1] || "").trim();
   if (fellBack && zh) {
     if (/英文原文\s*[:：]/u.test(narrative)) {
       narrative = narrative.replace(/英文原文\s*[:：]\s*/u, "翻译暂不可用，原文: ");
@@ -2190,25 +2415,21 @@ function finalizeTelegramNewsLines(lines, baseLines, language, status, required)
       const latin = (narrative.match(/[A-Za-z]/g) || []).length;
       const chinese = (narrative.match(/[\u3400-\u9fff]/g) || []).length;
       if (latin >= 8 && chinese < Math.max(2, Math.floor(latin * 0.12))) {
-        narrative = `翻译暂不可用，原文: ${baseLines[0]}`;
+        narrative = `翻译暂不可用，原文: ${baseLines[1]}`;
       }
     }
   } else if (fellBack && !zh) {
     const chinese = (narrative.match(/[\u3400-\u9fff]/g) || []).length;
     if (/Source fact \(translation pending\)/iu.test(narrative) || chinese >= 2) {
-      narrative = `Translation unavailable; source: ${baseLines[0]}`;
+      narrative = `Translation unavailable; source: ${baseLines[1]}`;
     }
   }
-  narrative = narrative
-    .replace(/^(?:频道线索\s*[｜|]|Channel lead\s*[|｜])\s*/iu, "")
-    .trim();
-  const fixedLines = baseLines.slice(1, 4);
-  const lead = telegramNewsLeadWithRequiredLiterals(
-    `${zh ? "频道线索｜" : "Channel lead | "}${narrative}`,
-    required,
-    fixedLines,
-  );
-  return [lead, ...fixedLines];
+  const prefix = zh ? "更新了什么" : "What changed";
+  narrative = narrative.replace(/^(?:更新了什么|What changed)[:：]\s*/iu, "").trim();
+  return ensureTechnicalLiterals([
+    baseLines[0],
+    `${prefix}${zh ? "：" : ": "}${narrative}`,
+  ], required, language);
 }
 
 function translationMeta(result, fallbackStatus = null) {
@@ -2228,23 +2449,34 @@ function usesLocalStructuredChineseFocus(event) {
 
 function usesLocalStructuredBilingualFocus(event) {
   return event?.type === "github_module_update"
+    || event?.type === "uniswap_official_update"
     || Boolean(binanceAgentNativeDetails(event))
-    || flapAgenticFirstTokenCandidate(event);
+    || flapAgenticFirstTokenCandidate(event)
+    || Boolean(interpretPlatformPoolChange(event, "zh"))
+    || Boolean(interpretTwitterWeb3Update(event, "zh"))
+    || Boolean(interpretBinanceOfficialUpdate(event, "zh"));
 }
 
-function localStructuredResult(lines, { language = "zh", deliveryBudgetFallback = false } = {}) {
+function localStructuredResult(lines, { language = "zh", deliveryBudgetFallback = false, event = null } = {}) {
   const rendered = lines.map((line, index) => {
-    const value = oneLine(line);
+    const value = oneLine(line, index === 1 ? 10_000 : 70);
     if (language !== "zh" || !deliveryBudgetFallback || index !== 1) return value;
     const narrative = labelledValue(value);
     const latin = (narrative.match(/[A-Za-z]/g) || []).length;
     const chinese = (narrative.match(/[\u3400-\u9fff]/g) || []).length;
     if (latin < 8 || chinese >= Math.max(2, Math.floor(latin * 0.12))) return value;
-    return value.replace(/^((?:重点|Key)\s*[:：]\s*)/u, "$1英文原文: ");
+    return value.replace(/^((?:更新了什么|What changed)\s*[:：]\s*)/u, "$1英文原文: ");
   });
+  const sourceNarrative = String(event?.thesis?.text || event?.body || "").trim();
+  const sourceLatin = (sourceNarrative.match(/[A-Za-z]/g) || []).length;
+  const sourceChinese = (sourceNarrative.match(/[\u3400-\u9fff]/g) || []).length;
+  const untranslatedFomoCall = event?.type === "fomo_family_top_call"
+    && ["fomo_published_call", "fomo_x_call"].includes(event?.signalKind)
+    && sourceLatin >= 8
+    && sourceChinese < Math.max(2, Math.floor(sourceLatin * 0.12));
   const untranslatedSource = deliveryBudgetFallback
     && language === "zh"
-    && rendered.some((line) => /英文原文\s*[:：]/u.test(line));
+    && (rendered.some((line) => /英文原文\s*[:：]/u.test(line)) || untranslatedFomoCall);
   return {
     lines: rendered,
     status: untranslatedSource ? "fallback_source" : "not_needed",
@@ -2321,10 +2553,11 @@ export async function buildBilingualAlertBundle(config, event, baseMessage) {
       ? Promise.resolve(localStructuredResult(chineseBaseLines, {
         language: "zh",
         deliveryBudgetFallback: config?.alertForceLocalStructured === true,
+        event,
       }))
       : translateAlertLines(chineseBaseLines, { ...options, targetLanguage: "zh-CN" }),
     localBilingual
-      ? Promise.resolve(localStructuredResult(englishBaseLines, { language: "en" }))
+      ? Promise.resolve(localStructuredResult(englishBaseLines, { language: "en", event }))
       : translateAlertLines(englishBaseLines, { ...options, targetLanguage: "en" }),
   ]);
 
@@ -2335,26 +2568,29 @@ export async function buildBilingualAlertBundle(config, event, baseMessage) {
     englishLines = finalizeTelegramNewsLines(english.lines, englishBaseLines, "en", english.status, englishRequired);
   } else {
     chineseLines = ensureTechnicalLiterals(
-      normalizePublishedCallChineseFallback(chinese.lines, chineseBaseLines, event, chinese.status).map((line) => oneLine(line)),
+      normalizePublishedCallChineseFallback(chinese.lines, chineseBaseLines, event, chinese.status),
       chineseRequired,
       "zh",
     );
     englishLines = ensureTechnicalLiterals(
-      english.lines.map((line) => oneLine(line)),
+      english.lines,
       englishRequired,
       "en",
     );
   }
-  if (event?.type === "github_module_update") {
-    [chineseLines, englishLines] = fitGithubBilingualLines(chineseLines, englishLines);
-  }
+  [chineseLines, englishLines] = fitTwoFieldBilingualLines(
+    chineseLines,
+    englishLines,
+    chineseRequired,
+    englishRequired,
+  );
   const sourceHash = createHash("sha256")
     .update(`${chineseBaseLines.join("\n")}\n---\n${englishBaseLines.join("\n")}`)
     .digest("hex");
 
   return {
     version: BILINGUAL_RENDER_VERSION,
-    format: "telegram_zh_en_compact_v10",
+    format: "telegram_zh_en_compact_v12",
     ...(event?.type === "telegram_news_update" ? { eventType: event.type } : {}),
     sourceHash,
     generatedAt: new Date().toISOString(),

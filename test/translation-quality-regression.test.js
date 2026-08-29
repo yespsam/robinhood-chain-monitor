@@ -49,7 +49,7 @@ test("canonical English terminology overrides literal public-provider mistransla
     "发射台: 已启用",
   ].join("\n"));
 
-  assert.equal(bundle.en.text.split("\n")[0], "Flap｜Capability update");
+  assert.equal(bundle.en.text.split("\n")[0], "Platform: Flap");
   assert.match(bundle.changeModel.after.text, /新底池/);
   assert.match(bundle.en.text, /new pool/i);
   assert.doesNotMatch(bundle.en.text, /Translation unavailable|see Chinese block/i);
@@ -102,7 +102,7 @@ test("a structured platform diff outranks generic source-only capability prose",
     "具体更新: 页面摘要发生变化",
   ].join("\n"));
 
-  assert.match(bundle.zh.text, /重点: 新增 QUOTE 底池/);
+  assert.match(bundle.zh.text, /更新了什么：新增发币报价资产；可作为新币定价与结算币种/);
   assert.match(bundle.zh.text, new RegExp(factory));
   assert.match(bundle.zh.text, new RegExp(quote));
   assert.doesNotMatch(bundle.zh.text, /页面摘要发生变化/);
@@ -129,7 +129,7 @@ test("source-only platform fallback replaces the unresolved placeholder and mirr
 
   assert.deepEqual(bundle.changeModel.after.items, [`新底池 / NEW POOL: INDEX · Factory ${factory}`]);
   for (const block of [bundle.zh.text, bundle.en.text]) {
-    assert.equal(block.split("\n").length, 4, "v8 compact card must keep exactly four lines per language");
+    assert.equal(block.split("\n").length, 2, "the compact card must keep exactly two fields per language");
     assert.equal((block.match(/Factory/g) || []).length, 1, "Factory evidence must appear exactly once per language");
     assert.doesNotMatch(block, /能力快照变化|Capability snapshot changed|字段尚未解析|exact field unresolved/i);
     assert.match(block, /2026-08-18 17:30:00/);

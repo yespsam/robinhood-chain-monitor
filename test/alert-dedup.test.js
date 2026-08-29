@@ -159,7 +159,7 @@ test("Telegram news freshness uses source time with 10-minute realtime and 2-hou
   assert.equal(isStrongAlert({ ...event, freshness: late }), false);
 });
 
-test("Binance connector maintenance stays relevant but non-strong while API/schema diffs are strong", () => {
+test("Binance connector and SDK code noise is filtered unless the producer proves a product feature", () => {
   const base = {
     type: "github_module_update",
     repository: "binance/binance-connector-go",
@@ -177,10 +177,47 @@ test("Binance connector maintenance stays relevant but non-strong while API/sche
     strong: true,
     binanceChange: { scheme: "binance_connector_diff_v1", classification: "api_or_schema_change", substantive: true, productFeature: false },
   };
-  assert.equal(isRelevantAlert(maintenance), true);
+  assert.equal(isRelevantAlert(maintenance), false);
   assert.equal(isStrongAlert(maintenance), false);
-  assert.equal(isRelevantAlert(schema), true);
-  assert.equal(isStrongAlert(schema), true);
+  assert.equal(isRelevantAlert(schema), false);
+  assert.equal(isStrongAlert(schema), false);
+  const productFeature = {
+    ...base,
+    strong: true,
+    binanceChange: { scheme: "binance_connector_diff_v1", classification: "product_feature", substantive: true, productFeature: true },
+  };
+  assert.equal(isRelevantAlert(productFeature), true);
+  assert.equal(isStrongAlert(productFeature), true);
+});
+
+test("central Binance relevance admits announcement classes and only genuine developer product features", () => {
+  const source = {
+    id: "binance_exchange_cms",
+    url: "https://www.binance.com/en/support/announcement/example",
+  };
+  for (const category of ["新币上线", "新合约上线", "Alpha 上新", "活动公告", "普通公告", "产品更新"]) {
+    assert.equal(isRelevantAlert({
+      type: "binance_official_update",
+      kind: "announcement",
+      title: `Binance ${category}`,
+      signal: { category, relevant: true },
+      source,
+    }), true, category);
+  }
+
+  const developerBase = {
+    type: "binance_official_update",
+    kind: "developer_update",
+    source: { id: "binance_developer_docs", url: "https://developers.binance.com/en/docs/products/wallet/change-log.md" },
+  };
+  assert.equal(isRelevantAlert({
+    ...developerBase,
+    developerChange: { classification: "product_feature", productFeature: true },
+  }), true);
+  assert.equal(isRelevantAlert({
+    ...developerBase,
+    developerChange: { classification: "sdk_maintenance", productFeature: false },
+  }), false);
 });
 
 test("focus3 merges the same official Binance feature across CMS and X", async (t) => {
@@ -243,7 +280,7 @@ test("focus3 merges the same official Binance feature across CMS and X", async (
   assert.equal(telegramCalls, 1);
 });
 
-test("Agent Native dedup keeps docs and launch stages distinct, merges same-stage sources, and preserves unrelated developer deltas", async (t) => {
+test("Agent Native dedup keeps docs and launch stages distinct while filtering unrelated developer noise", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-binance-agent-native-dedup-"));
   let telegramCalls = 0;
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -266,6 +303,11 @@ test("Agent Native dedup keeps docs and launch stages distinct, merges same-stag
     eventKey,
     project: { id: "binance", name: "Binance", website: "https://www.binance.com", twitter: "https://x.com/binance" },
     title: "Developer 文档目录 官方更新",
+    signal: {
+      category: addedSignals.some((item) => /Agent|MCP/i.test(item)) ? "agent_native" : "官方开发文档",
+      relevant: true,
+      strong: true,
+    },
     addedSignals,
     keyChanges: addedSignals,
     comparisonBasis: "exact_snapshot",
@@ -302,8 +344,10 @@ test("Agent Native dedup keeps docs and launch stages distinct, merges same-stag
   const duplicate = await sendAlerts(config, cms);
   assert.equal(duplicate.status, "suppressed", "the same launch stage should merge across official sources");
   assert.equal(duplicate.reason, "semantic_duplicate");
-  assert.equal((await sendAlerts(config, unrelated)).status, "delivered", "a different Developer delta must remain independently alertable");
-  assert.equal(telegramCalls, 3);
+  const unrelatedResult = await sendAlerts(config, unrelated);
+  assert.equal(unrelatedResult.status, "suppressed", "ordinary Developer API deltas are outside the requested Binance scope");
+  assert.equal(unrelatedResult.reason, "not_relevant");
+  assert.equal(telegramCalls, 2);
 });
 
 test("focus3 assigns stable cross-source novelty ids and sends only the first source", async (t) => {
@@ -561,9 +605,9 @@ test("Flap quote-token prose and structured pools receive stable identities and 
   assert.equal(payloads.length, 1);
   const payload = payloads[0];
   assert.match(payload.text, /^🔴 强提醒 \| STRONG ALERT/);
-  assert.match(payload.text, /🇨🇳 中文[\s\S]*新增 STAKING 底池/);
+  assert.match(payload.text, /🇨🇳 中文[\s\S]*新增 STAKING Vault Factory 登记；具体用途与链上启用待核/);
   assert.doesNotMatch(payload.text.split("🇬🇧 English")[0], /\/\s*NEW POOL/);
-  assert.match(payload.text, /🇬🇧 English[\s\S]*New STAKING pool/i);
+  assert.match(payload.text, /🇬🇧 English[\s\S]*Registered a STAKING Vault Factory; its purpose and on-chain activation remain unverified/i);
   assert.equal(payload.text.split(factory).length - 1, 2, "Factory remains byte-for-byte in both language blocks");
   assert.equal(payload.text.split(quoteAddress).length - 1, 2, "Quote address remains byte-for-byte in both language blocks");
   const buttons = payload.reply_markup.inline_keyboard.flat();
@@ -600,8 +644,7 @@ test("Flap quote-token prose and structured pools receive stable identities and 
   }, updatedEvent);
   assert.equal(updatedResult.status, "delivered", "a structured update has its own semantic revision identity");
   assert.equal(payloads.length, 2);
-  assert.match(payloads[1].text, /底池更新/);
-  assert.match(payloads[1].text, /Pool (?:configuration )?update/i);
+  assert.match(payloads[1].text, new RegExp(`STAKING Quote ${quoteAddress}→${nextQuote}`));
   assert.ok(payloads[1].text.split(quoteAddress).length - 1 >= 2, "old quote remains in both language blocks");
   assert.ok(payloads[1].text.split(nextQuote).length - 1 >= 2, "new quote remains in both language blocks");
   assert.ok(payloads[1].reply_markup.inline_keyboard.flat()
@@ -1285,8 +1328,13 @@ test("Binance official capability events are relevant without taking Flap/Four p
   assert.equal(alertEventKey(fromX), alertEventKey(quiet), "X and CMS links to the same official article must share one dedup key");
 
   const code = { type: "github_module_update", launchpad: "Binance Wallet", sourceTrust: "official_verified", modeChange: { candidate: false } };
-  assert.equal(isRelevantAlert(code), true);
+  assert.equal(isRelevantAlert(code), false);
   assert.equal(isStrongAlert(code), false);
+  assert.equal(isRelevantAlert({
+    ...code,
+    strong: true,
+    binanceChange: { classification: "product_feature", productFeature: true },
+  }), true);
 });
 
 test("X, xAI and Grok official events use strict strong-alert cards and official links", () => {
