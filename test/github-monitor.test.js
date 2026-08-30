@@ -330,15 +330,26 @@ test("official xAI commits baseline silently then emit a strong product event wi
   assert.deepEqual(alerts[0].newContracts, []);
 });
 
-test("AI GitHub delivery accepts durable queue states, including a persisted semantic duplicate", () => {
+test("AI GitHub delivery accepts durable queue states and terminal suppressions only", () => {
   assert.equal(isAcceptedAiGithubAlertDelivery(undefined), true);
   assert.equal(isAcceptedAiGithubAlertDelivery({ status: "queued" }), true);
   assert.equal(isAcceptedAiGithubAlertDelivery({ status: "delivered" }), true);
-  assert.equal(isAcceptedAiGithubAlertDelivery({ status: "suppressed", reason: "semantic_duplicate", persisted: true }), true);
-  assert.equal(isAcceptedAiGithubAlertDelivery({ status: "suppressed", reason: "semantic_duplicate", persisted: false }), false);
+  for (const reason of [
+    "freshness_too_old",
+    "not_relevant",
+    "monitoring_source_disabled",
+    "blocked_event",
+    "semantic_duplicate",
+  ]) {
+    assert.equal(isAcceptedAiGithubAlertDelivery({ status: "suppressed", reason }), true, reason);
+  }
+  assert.equal(isAcceptedAiGithubAlertDelivery({ status: "suppressed", reason: "future_terminal_policy", terminal: true }), true);
+  assert.equal(isAcceptedAiGithubAlertDelivery({ status: "suppressed", reason: "freshness_too_old", terminal: false }), false);
+  assert.equal(isAcceptedAiGithubAlertDelivery({ status: "suppressed", reason: "freshness_too_old", disposition: "retry" }), false);
+  assert.equal(isAcceptedAiGithubAlertDelivery({ status: "suppressed", reason: "unknown_policy" }), false);
   assert.equal(isAcceptedAiGithubAlertDelivery(false), false);
   assert.equal(isAcceptedAiGithubAlertDelivery(true), false);
-  for (const status of ["suppressed", "failed", "error", "rejected", "dropped"]) {
+  for (const status of ["failed", "error", "rejected", "dropped"]) {
     assert.equal(isAcceptedAiGithubAlertDelivery({ status }), false, status);
   }
   for (const reason of ["monitoring_source_disabled", "not_relevant", "blocked_event"]) {
@@ -346,7 +357,7 @@ test("AI GitHub delivery accepts durable queue states, including a persisted sem
   }
 });
 
-test("a non-durable AI commit alert keeps the previous SHA and retries the same commit", async (t) => {
+test("a terminally suppressed old AI commit advances its SHA and does not replay after restart", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "github-xai-alert-retry-"));
   const repository = "xai-org/xai-sdk-python";
   const entry = DEFAULT_REPOSITORIES.find(({ repository: candidate }) => candidate === repository);
@@ -374,6 +385,62 @@ test("a non-durable AI commit alert keeps the previous SHA and retries the same 
       text: async () => "diff --git a/src/xai_sdk/responses.py b/src/xai_sdk/responses.py\n+++ b/src/xai_sdk/responses.py\n+class Grok5ResponsesApi: pass",
     };
   });
+  const createMonitor = () => createGithubMonitor({ dataDir, githubToken: "" }, {
+    autoStart: false,
+    repositories: [entry],
+    now: () => new Date(current),
+    sendAlertsImpl: async () => {
+      attempts += 1;
+      return { status: "suppressed", reason: "freshness_too_old", disposition: "terminal", terminal: true };
+    },
+  });
+
+  const monitor = createMonitor();
+  await monitor.check(true);
+  let state = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
+  assert.equal(attempts, 1);
+  assert.equal(state[repository].sha, "bbbb7002");
+  assert.equal(state._health.repositories[repository].status, "healthy");
+
+  current = new Date("2026-08-12T03:00:01.000Z");
+  const restartedMonitor = createMonitor();
+  await restartedMonitor.check(true);
+  current = new Date("2026-08-12T03:00:02.000Z");
+  await restartedMonitor.check(true);
+  state = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
+  assert.equal(attempts, 1, "a terminal policy decision must not replay across restart or continuous polls");
+  assert.equal(state[repository].sha, "bbbb7002");
+  assert.equal(state._health.repositories[repository].status, "healthy");
+});
+
+test("retryable, unknown, and thrown AI delivery failures keep the previous SHA", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "github-xai-alert-nondurable-"));
+  const repository = "xai-org/xai-sdk-python";
+  const entry = DEFAULT_REPOSITORIES.find(({ repository: candidate }) => candidate === repository);
+  let current = new Date("2026-08-12T04:00:00.000Z");
+  let attempts = 0;
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(console, "error", () => {});
+  await fs.writeFile(path.join(dataDir, "github-state.json"), JSON.stringify({
+    [repository]: { sha: "aaaa8001", checkedAt: "2026-08-12T03:59:00.000Z" },
+  }));
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).endsWith(".atom")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => `<feed>
+          <entry><id>tag:github.com,2008:Grit::Commit/bbbb8002</id><updated>2026-08-12T04:00:00Z</updated><title>feat: add Grok 5 Responses API endpoint</title></entry>
+          <entry><id>tag:github.com,2008:Grit::Commit/aaaa8001</id><updated>2026-08-12T03:59:00Z</updated><title>old</title></entry>
+        </feed>`,
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      text: async () => "diff --git a/src/xai_sdk/responses.py b/src/xai_sdk/responses.py\n+++ b/src/xai_sdk/responses.py\n+class Grok5ResponsesApi: pass",
+    };
+  });
   const monitor = createGithubMonitor({
     dataDir,
     githubToken: "",
@@ -386,23 +453,26 @@ test("a non-durable AI commit alert keeps the previous SHA and retries the same 
     random: () => 0.5,
     sendAlertsImpl: async () => {
       attempts += 1;
-      return attempts === 1
-        ? { status: "suppressed", reason: "not_relevant" }
-        : { status: "queued", eventId: "github:xai-sdk-python:bbbb7002" };
+      if (attempts === 1) return { status: "suppressed", reason: "delivery_backpressure", disposition: "retry" };
+      if (attempts === 2) return { status: "suppressed", reason: "unknown_policy" };
+      if (attempts === 3) throw new Error("delivery unavailable");
+      return { status: "queued", eventId: "github:xai-sdk-python:bbbb8002" };
     },
   });
 
-  await monitor.check(true);
-  let state = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
-  assert.equal(state[repository].sha, "aaaa7001");
-  assert.equal(state._health.repositories[repository].status, "degraded");
-  assert.match(state._health.repositories[repository].lastError, /not durably accepted/);
+  for (const milliseconds of [0, 1_000, 3_000]) {
+    current = new Date(Date.parse("2026-08-12T04:00:00.000Z") + milliseconds);
+    await monitor.check(true);
+    const state = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
+    assert.equal(state[repository].sha, "aaaa8001");
+    assert.equal(state._health.repositories[repository].status, "degraded");
+  }
 
-  current = new Date("2026-08-12T03:00:01.000Z");
+  current = new Date("2026-08-12T04:00:07.000Z");
   await monitor.check(true);
-  state = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
-  assert.equal(attempts, 2);
-  assert.equal(state[repository].sha, "bbbb7002");
+  const state = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
+  assert.equal(attempts, 4);
+  assert.equal(state[repository].sha, "bbbb8002");
   assert.equal(state._health.repositories[repository].status, "healthy");
 });
 

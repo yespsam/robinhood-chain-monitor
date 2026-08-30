@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { sendAlerts } from "./alerts.js";
+import { isTerminalAlertSuppression, sendAlerts } from "./alerts.js";
 import { extractChainSupportSignals } from "./chain-support.js";
 import { isMonitoringSourceEnabled } from "./source-controls.js";
 
@@ -278,10 +278,10 @@ export function isAcceptedAiGithubAlertDelivery(result) {
   if (result === undefined) return true;
   if (!result || typeof result !== "object") return false;
   const status = String(result.status || "").trim().toLowerCase();
+  if (status === "suppressed") return isTerminalAlertSuppression(result);
   const reason = String(result.reason || result.disabledReason || "").trim().toLowerCase();
   if (/source[_ -]?disabled|monitoring[_ -]?source[_ -]?disabled|not[_ -]?relevant|blocked/.test(reason)) return false;
-  if (status === "suppressed" && reason === "semantic_duplicate" && result.persisted === true) return true;
-  if (["suppressed", "failed", "error", "rejected", "dropped"].includes(status)) return false;
+  if (["failed", "error", "rejected", "dropped"].includes(status)) return false;
   return ["queued", "delivered"].includes(status);
 }
 
