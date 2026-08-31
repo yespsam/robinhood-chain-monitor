@@ -122,6 +122,7 @@ function createHarness({
   configOverrides = {},
   discoverVerifiedSeedImpl,
   resolveBindingImpl,
+  sendAlertsImpl,
   fetchImpl,
   logger = quietLogger,
 }) {
@@ -135,7 +136,7 @@ function createHarness({
     resolveVerifiedBindingImpl: resolveBindingImpl || (async (candidateRow) => binding || candidateRow.walletBinding || null),
     discoverVerifiedSeedImpl,
     qualifyCallImpl,
-    sendAlertsImpl: async (_config, event) => { alerts.push(event); return { status: "delivered" }; },
+    sendAlertsImpl: sendAlertsImpl || (async (_config, event) => { alerts.push(event); return { status: "delivered" }; }),
     fetchImpl: fetchImpl || (async (url) => {
       requests.push(url);
       if (url === "https://api.fxtwitter.test/2/profile/alpha") {
@@ -154,6 +155,39 @@ function createHarness({
       throw new Error(`unexpected URL ${url}`);
     }),
   });
+}
+
+async function baselineVerifiedSeed({ dataDir, nowRef, tweetsRef, baselineId = "900" }) {
+  const checkedAt = new Date(nowRef.value).toISOString();
+  const binding = {
+    status: "verified",
+    verified: true,
+    proofSource: "fomoscan",
+    wallet: WALLET,
+    handle: "alpha",
+    twitterHandle: "alpha",
+    checkedAt,
+    lastCheckedAt: checkedAt,
+  };
+  tweetsRef.value = [timelineTweet(baselineId, "verified seed baseline", nowRef.value - 1_000)];
+  const monitor = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef: { value: [] },
+    tweetsRef,
+    alerts: [],
+    configOverrides: { fomoCallPublicHandles: ["alpha"] },
+    discoverVerifiedSeedImpl: async () => ({
+      ...candidate(nowRef.value),
+      source: "fomoscan_verified_profile",
+      walletBinding: binding,
+    }),
+  });
+  await monitor.check();
+  await monitor.waitForDiscovery();
+  await monitor.check();
+  await monitor.stop();
+  return binding;
 }
 
 test("call text requires an explicit call word and exactly one EVM contract", () => {
@@ -286,6 +320,43 @@ test("first timeline is silent; a new oEmbed-verified X call emits one observed-
   assert.equal(Object.keys(state.pending).length, 0);
   const mode = (await fs.stat(path.join(dataDir, "fomo-x-call-state.json"))).mode & 0o777;
   assert.equal(mode, 0o600);
+});
+
+test("retryable X alert suppression keeps the tweet pending while terminal suppression consumes it", async (t) => {
+  const dataDir = await fixture(t);
+  const nowRef = { value: Date.parse("2026-08-19T06:10:00.000Z") };
+  const rowsRef = { value: [candidate(nowRef.value)] };
+  const tweetsRef = { value: [timelineTweet("100", "ordinary baseline", nowRef.value - 1_000)] };
+  const alerts = [];
+  let delivery = { status: "suppressed", disposition: "retry", terminal: false };
+  const monitor = createHarness({
+    dataDir, nowRef, rowsRef, tweetsRef, alerts,
+    sendAlertsImpl: async (_config, event) => { alerts.push(event); return delivery; },
+  });
+  await monitor.check();
+
+  nowRef.value += 5_000;
+  tweetsRef.value = [timelineTweet("101", `I am buying this. CA ${TOKEN}`, nowRef.value - 500), ...tweetsRef.value];
+  await monitor.check();
+  let state = await monitor.getState();
+  assert.ok(state.pending["alpha:101"]);
+  assert.equal(state.seenTweetContracts[`101:${TOKEN}`], undefined);
+
+  delivery = { status: "delivered" };
+  nowRef.value += 5_000;
+  await monitor.check();
+  state = await monitor.getState();
+  assert.equal(state.pending["alpha:101"], undefined);
+  assert.ok(state.seenTweetContracts[`101:${TOKEN}`]);
+
+  delivery = { status: "suppressed", disposition: "terminal", terminal: true, reason: "not_relevant" };
+  nowRef.value += 5_000;
+  tweetsRef.value = [timelineTweet("102", `I am buying this. CA ${TOKEN_TWO}`, nowRef.value - 500), ...tweetsRef.value];
+  await monitor.check();
+  state = await monitor.getState();
+  assert.equal(state.pending["alpha:102"], undefined);
+  assert.ok(state.seenTweetContracts[`102:${TOKEN_TWO}`]);
+  assert.equal(state.alertedTokens[TOKEN_TWO], undefined);
 });
 
 test("reply, repost, weak text and ambiguous CA are ignored before oEmbed", async (t) => {
@@ -524,6 +595,97 @@ test("a changed wallet clears the old cursor and silently re-baselines the new a
   assert.deepEqual(state.pending, {});
 });
 
+test("a same-wallet handle migration drops the old runtime and silently baselines the new handle", async (t) => {
+  const dataDir = await fixture(t);
+  const nowRef = { value: Date.parse("2026-08-19T12:30:00.000Z") };
+  const betaId = "223456789012345678";
+  const rowsRef = { value: [candidate(nowRef.value)] };
+  const alerts = [];
+  const requests = [];
+  const timelines = {
+    alpha: [timelineTweet("100", "alpha baseline", nowRef.value - 1_000)],
+    beta: [],
+  };
+  const fetchImpl = async (url) => {
+    requests.push(url);
+    if (url.endsWith("/2/profile/alpha")) {
+      return jsonResponse(200, { code: 200, user: { id: X_ID, screen_name: "alpha", followers: 25_000, protected: false } });
+    }
+    if (url.endsWith("/2/profile/beta")) {
+      return jsonResponse(200, { code: 200, user: { id: betaId, screen_name: "beta", followers: 25_000, protected: false } });
+    }
+    if (url.includes(`/2/profile/id:${X_ID}/statuses`)) return jsonResponse(200, { code: 200, results: timelines.alpha });
+    if (url.includes(`/2/profile/id:${betaId}/statuses`)) return jsonResponse(200, { code: 200, results: timelines.beta });
+    if (url.startsWith("https://publish.x.test/oembed?")) {
+      const requested = new URL(url).searchParams.get("url");
+      const [, handle, id] = requested.match(/x\.com\/([^/]+)\/status\/(\d+)$/) || [];
+      const tweet = timelines[handle]?.find((item) => String(item.id) === id);
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          author_url: `https://x.com/${handle}`,
+          url: requested,
+          html: `<blockquote><p>${tweet.text}</p>&mdash; ${handle} (@${handle}) <a href="${requested}">August 19, 2026</a></blockquote>`,
+        }),
+      };
+    }
+    throw new Error(`unexpected URL ${url}`);
+  };
+  const monitor = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef,
+    tweetsRef: { value: [] },
+    alerts,
+    requests,
+    fetchImpl,
+    qualifyCallImpl: async (call) => call.handle === "alpha" ? {
+      decision: "block",
+      reason: "hold old handle pending",
+      market: { liquidityUsd: 25_000 },
+      security: { decision: "block", metrics: { liquidityConfirmed: false, sellObserved: true } },
+    } : passQualification(),
+  });
+
+  await monitor.check();
+  nowRef.value += 5_000;
+  timelines.alpha = [timelineTweet("101", `I am buying this. CA ${TOKEN}`, nowRef.value - 500), ...timelines.alpha];
+  await monitor.check();
+  assert.ok((await monitor.getState()).pending["alpha:101"]);
+
+  nowRef.value += 5_000;
+  rowsRef.value = [candidate(nowRef.value, { handle: "beta", twitterHandles: ["beta"] })];
+  timelines.beta = [timelineTweet("201", `I am buying on the renamed handle. CA ${TOKEN_TWO}`, nowRef.value - 500, {
+    author: { id: betaId, screen_name: "beta", name: "Beta" },
+    url: "https://x.com/beta/status/201",
+  })];
+  await monitor.check();
+  let state = await monitor.getState();
+  assert.equal(alerts.length, 0, "the migration snapshot must be a silent baseline");
+  assert.equal(state.roster.alpha, undefined);
+  assert.equal(state.initialized.alpha, undefined);
+  assert.equal(state.cursors.alpha, undefined);
+  assert.deepEqual(state.pending, {});
+  assert.equal(state.roster.beta.wallet, WALLET);
+  assert.equal(state.cursors.beta, "201");
+
+  nowRef.value += 5_000;
+  timelines.beta = [timelineTweet("202", `I am buying after the baseline. CA ${TOKEN}`, nowRef.value - 500, {
+    author: { id: betaId, screen_name: "beta", name: "Beta" },
+    url: "https://x.com/beta/status/202",
+  }), ...timelines.beta];
+  const result = await monitor.check();
+  state = await monitor.getState();
+  assert.equal(result.delivered, 1);
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].handle, "beta");
+  assert.equal(state.cursors.beta, "202");
+  assert.equal(requests.filter((url) => url.startsWith("https://publish.x.test/oembed?"))
+    .some((url) => new URL(url).searchParams.get("url")?.endsWith("/status/201")), false,
+  "the migration baseline must never be replayed through oEmbed");
+});
+
 test("an ineligible X profile is cached instead of being requested every five seconds", async (t) => {
   const dataDir = await fixture(t);
   const nowRef = { value: Date.parse("2026-08-19T13:00:00.000Z") };
@@ -534,13 +696,16 @@ test("an ineligible X profile is cached instead of being requested every five se
   const profileRef = { value: { id: X_ID, screen_name: "alpha", followers: 9_999, protected: false } };
   const monitor = createHarness({ dataDir, nowRef, rowsRef, tweetsRef, alerts, requests, profileRef });
   const first = await monitor.check();
-  assert.equal(first.status, "healthy_no_admitted");
+  assert.equal(first.status, "degraded");
   nowRef.value += 5_000;
   const second = await monitor.check();
-  assert.equal(second.status, "healthy_no_admitted");
+  assert.equal(second.status, "degraded");
   assert.equal(requests.filter((url) => url.endsWith("/2/profile/alpha")).length, 1);
   const state = await monitor.getState();
   assert.equal(state.health.rejectedCount, 1);
+  assert.equal(state.health.activeCount, 0);
+  assert.equal(state.health.backlogCount, 1);
+  assert.equal(state.health.sources.x.coverage, "source_limited");
   assert.equal(state.health.sources.x.failures, 0);
 });
 
@@ -565,6 +730,8 @@ test("fresh FomoScan verified public handles seed the roster without a GMGN trad
       },
     }),
   });
+  await monitor.check();
+  await monitor.waitForDiscovery();
   const result = await monitor.check();
   const state = await monitor.getState();
   assert.equal(result.status, "healthy");
@@ -592,6 +759,8 @@ test("a FomoScan seed without a fresh verified binding is rejected and never dow
       walletBinding: null,
     }),
   });
+  await monitor.check();
+  await monitor.waitForDiscovery();
   const result = await monitor.check();
   const state = await monitor.getState();
   assert.equal(result.status, "healthy_no_candidates");
@@ -624,6 +793,8 @@ test("a transient FomoScan binding refresh failure preserves the last successful
     },
   });
   await monitor.check();
+  await monitor.waitForDiscovery();
+  await monitor.check();
   nowRef.value += 60_000;
   tweetsRef.value = [timelineTweet("831", `I am buying this. CA ${TOKEN}`, nowRef.value - 500), ...tweetsRef.value];
   const result = await monitor.check();
@@ -633,6 +804,94 @@ test("a transient FomoScan binding refresh failure preserves the last successful
   assert.equal(alerts[0].walletBinding.checkedAt, checkedAt);
   assert.equal(alerts[0].walletBinding.xProfileId, X_ID);
   assert.equal("walletAttribution" in alerts[0], false);
+});
+
+test("a restarted verified seed clears its binding and freezes the cursor on FomoScan 404 or exact-match mismatch", async (t) => {
+  const cases = [
+    ["HTTP 404", () => {
+      const error = new Error("HTTP 404 FomoScan");
+      error.httpStatus = 404;
+      throw error;
+    }],
+    ["200 handle-wallet mismatch", (_candidate, nowMs) => ({
+      status: "verified",
+      verified: true,
+      proofSource: "fomoscan",
+      wallet: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      handle: "different_handle",
+      twitterHandle: "different_handle",
+      checkedAt: new Date(nowMs).toISOString(),
+      lastCheckedAt: new Date(nowMs).toISOString(),
+    })],
+  ];
+  for (const [label, refreshBinding] of cases) {
+    await t.test(label, async () => {
+      const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "fomo-x-binding-hard-"));
+      try {
+        const nowRef = { value: Date.parse("2026-08-19T14:22:00.000Z") };
+        const tweetsRef = { value: [] };
+        await baselineVerifiedSeed({ dataDir, nowRef, tweetsRef, baselineId: "835" });
+        nowRef.value += 60_000;
+        tweetsRef.value = [timelineTweet("836", `I am buying but the binding is revoked. CA ${TOKEN}`, nowRef.value - 500), ...tweetsRef.value];
+        const alerts = [];
+        const requests = [];
+        const restarted = createHarness({
+          dataDir,
+          nowRef,
+          rowsRef: { value: [] },
+          tweetsRef,
+          alerts,
+          requests,
+          resolveBindingImpl: async (candidateRow) => refreshBinding(candidateRow, nowRef.value),
+        });
+        const result = await restarted.check();
+        const state = await restarted.getState();
+        assert.equal(result.status, "degraded");
+        assert.equal(result.delivered, 0);
+        assert.equal(alerts.length, 0);
+        assert.equal(state.roster.alpha.walletBinding, null);
+        assert.equal(state.cursors.alpha, "835", "a hard binding failure must not advance the durable X cursor");
+        assert.equal(state.seenTweets["alpha:836"], undefined);
+        assert.equal(state.pending["alpha:836"], undefined);
+        assert.ok(Number(state.roster.alpha.admissionRejectedUntil) > nowRef.value);
+        assert.equal(requests.some((url) => url.includes("/statuses")), false);
+      } finally {
+        await fs.rm(dataDir, { recursive: true, force: true });
+      }
+    });
+  }
+});
+
+test("a restarted verified seed may reuse a fresh binding on FomoScan 503 and keep polling", async (t) => {
+  const dataDir = await fixture(t);
+  const nowRef = { value: Date.parse("2026-08-19T14:24:00.000Z") };
+  const tweetsRef = { value: [] };
+  const binding = await baselineVerifiedSeed({ dataDir, nowRef, tweetsRef, baselineId: "838" });
+  nowRef.value += 60_000;
+  tweetsRef.value = [timelineTweet("839", `I am buying while FomoScan is transiently unavailable. CA ${TOKEN}`, nowRef.value - 500), ...tweetsRef.value];
+  const alerts = [];
+  const requests = [];
+  const restarted = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef: { value: [] },
+    tweetsRef,
+    alerts,
+    requests,
+    resolveBindingImpl: async () => {
+      const error = new Error("HTTP 503 FomoScan");
+      error.httpStatus = 503;
+      throw error;
+    },
+  });
+  const result = await restarted.check();
+  const state = await restarted.getState();
+  assert.equal(result.status, "healthy");
+  assert.equal(result.delivered, 1);
+  assert.equal(alerts.length, 1);
+  assert.equal(state.cursors.alpha, "839");
+  assert.deepEqual(state.roster.alpha.walletBinding, binding);
+  assert.equal(requests.some((url) => url.includes(`/2/profile/id:${X_ID}/statuses`)), true);
 });
 
 test("a fresh persisted legacy FomoScan seed can migrate its proof cache once without affecting GMGN candidates", async (t) => {
@@ -692,9 +951,11 @@ test("a partial FomoScan seed check retries only failed handles on a bounded bac
     },
   });
   await monitor.check();
+  await monitor.waitForDiscovery();
   assert.deepEqual(calls.sort(), ["alpha", "beta"]);
   let state = await monitor.getState();
   assert.equal(state.health.sources.fomoscanSeeds.status, "partial");
+  assert.equal(state.health.sources.fomoscanSeeds.backlog, 1);
   assert.deepEqual(Object.keys(state.verifiedSeedFailures), ["beta"]);
 
   nowRef.value += 5_000;
@@ -703,10 +964,142 @@ test("a partial FomoScan seed check retries only failed handles on a bounded bac
 
   nowRef.value += 55_000;
   await monitor.check();
+  await monitor.waitForDiscovery();
   state = await monitor.getState();
   assert.deepEqual(calls, ["alpha", "beta", "beta"]);
   assert.deepEqual(state.verifiedSeedFailures, {});
   assert.equal(state.health.sources.fomoscanSeeds.status, "healthy");
+  assert.equal(state.health.sources.fomoscanSeeds.backlog, 0);
+});
+
+test("a hung FomoScan seed batch is single-flight and cannot consume the hot timeline budget", async (t) => {
+  const dataDir = await fixture(t);
+  const nowRef = { value: Date.parse("2026-08-19T14:40:00.000Z") };
+  const rowsRef = { value: [candidate(nowRef.value)] };
+  const tweetsRef = { value: [timelineTweet("870", "baseline", nowRef.value - 1_000)] };
+  const requests = [];
+  let seedCalls = 0;
+  let releaseSeed;
+  const blockedSeed = new Promise((resolve) => { releaseSeed = resolve; });
+  const seedHandles = Array.from({ length: 29 }, (_, index) => `seed${index}`);
+  const monitor = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef,
+    tweetsRef,
+    alerts: [],
+    requests,
+    configOverrides: {
+      fomoCallPublicHandles: seedHandles,
+      fomoXCallVerifiedSeedBatchSize: 6,
+      fomoXCallRequestTimeoutMs: 30_000,
+    },
+    discoverVerifiedSeedImpl: async () => {
+      seedCalls += 1;
+      return blockedSeed;
+    },
+  });
+
+  const hotCheck = (label) => Promise.race([
+    monitor.check(),
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} exceeded the hot-loop budget`)), 250)),
+  ]);
+  const first = await hotCheck("first check");
+  assert.equal(first.active, 1);
+  assert.equal(first.status, "degraded", "pending configured discovery remains source-limited without blocking live polling");
+  nowRef.value += 5_000;
+  const second = await hotCheck("second check");
+  assert.equal(second.active, 1);
+  assert.equal(seedCalls, 2, "only the bounded worker count may enter a blocked six-handle batch");
+  assert.equal(requests.filter((url) => url.includes(`/2/profile/id:${X_ID}/statuses`)).length, 2);
+  let state = await monitor.getState();
+  assert.equal(state.health.sources.fomoscanSeeds.inFlight, true);
+  assert.equal(state.health.sources.fomoscanSeeds.backlog, 29);
+  assert.equal(state.health.liveCount, 1);
+
+  releaseSeed(null);
+  await monitor.waitForDiscovery();
+  state = await monitor.getState();
+  assert.equal(seedCalls, 6, "only one bounded batch may finish after the blocked calls release");
+  assert.equal(state.health.sources.fomoscanSeeds.inFlight, false);
+  assert.equal(state.health.sources.fomoscanSeeds.backlog, 23);
+});
+
+test("bounded FomoScan discovery persists its cursor across restart", async (t) => {
+  const dataDir = await fixture(t);
+  const nowRef = { value: Date.parse("2026-08-19T14:45:00.000Z") };
+  const handles = ["seedone", "seedtwo", "seedthree", "seedfour", "seedfive"];
+  const calls = [];
+  const makeMonitor = () => createHarness({
+    dataDir,
+    nowRef,
+    rowsRef: { value: [] },
+    tweetsRef: { value: [] },
+    alerts: [],
+    configOverrides: { fomoCallPublicHandles: handles, fomoXCallVerifiedSeedBatchSize: 2 },
+    discoverVerifiedSeedImpl: async (handle) => { calls.push(handle); return null; },
+  });
+
+  const firstMonitor = makeMonitor();
+  await firstMonitor.check();
+  await firstMonitor.waitForDiscovery();
+  let state = await firstMonitor.getState();
+  assert.deepEqual(calls, handles.slice(0, 2));
+  assert.equal(state.verifiedSeedCursor, 2);
+  assert.equal(state.health.sources.fomoscanSeeds.backlog, 3);
+  assert.equal(state.verifiedSeedCheckedAt, null);
+  await firstMonitor.stop();
+
+  const restarted = makeMonitor();
+  await restarted.check();
+  await restarted.waitForDiscovery();
+  state = await restarted.getState();
+  assert.deepEqual(calls, handles.slice(0, 4));
+  assert.equal(state.verifiedSeedCursor, 4);
+  assert.equal(state.health.sources.fomoscanSeeds.backlog, 1);
+
+  await restarted.check();
+  await restarted.waitForDiscovery();
+  state = await restarted.getState();
+  assert.deepEqual(calls, handles);
+  assert.equal(state.verifiedSeedCursor, 0);
+  assert.equal(state.health.sources.fomoscanSeeds.backlog, 0);
+  assert.equal(state.verifiedSeedCheckedAt, new Date(nowRef.value).toISOString());
+});
+
+test("stop cancels blocked seed discovery, waits for its final write, and leaves no late mutation", async (t) => {
+  const dataDir = await fixture(t);
+  const nowRef = { value: Date.parse("2026-08-19T14:50:00.000Z") };
+  let seedCalls = 0;
+  let releaseIgnoredDependency;
+  const ignoredAbort = new Promise((resolve) => { releaseIgnoredDependency = resolve; });
+  const monitor = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef: { value: [] },
+    tweetsRef: { value: [] },
+    alerts: [],
+    configOverrides: { fomoCallPublicHandles: ["alpha"] },
+    discoverVerifiedSeedImpl: async () => {
+      seedCalls += 1;
+      return ignoredAbort;
+    },
+  });
+  await monitor.check();
+  assert.equal(seedCalls, 1);
+  await Promise.race([
+    monitor.stop(),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("stop did not cancel blocked discovery")), 250)),
+  ]);
+  const stoppedState = await monitor.getState();
+  const stoppedFile = await fs.readFile(path.join(dataDir, "fomo-x-call-state.json"), "utf8");
+  assert.equal(stoppedState.health.sources.fomoscanSeeds.inFlight, false);
+  assert.equal(stoppedState.health.sources.fomoscanSeeds.status, "stopped");
+
+  releaseIgnoredDependency(null);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(await monitor.getState(), stoppedState);
+  assert.equal(await fs.readFile(path.join(dataDir, "fomo-x-call-state.json"), "utf8"), stoppedFile);
 });
 
 test("empty discovery is healthy but has no admitted identities and never sends", async (t) => {
@@ -723,6 +1116,125 @@ test("empty discovery is healthy but has no admitted identities and never sends"
   assert.equal(state.health.status, "healthy_no_candidates");
   assert.equal(state.health.sources.gmgn.status, "healthy");
   assert.equal(state.health.eligibleCount, 0);
+});
+
+test("a fresh persisted numeric identity survives a transient profile timeout and keeps polling after restart", async (t) => {
+  const dataDir = await fixture(t);
+  const startedAt = Date.parse("2026-08-24T10:00:00.000Z");
+  const nowRef = { value: startedAt };
+  const rowsRef = { value: [candidate(startedAt)] };
+  const tweetsRef = { value: [timelineTweet("880", "baseline", startedAt - 1_000)] };
+  const first = createHarness({ dataDir, nowRef, rowsRef, tweetsRef, alerts: [] });
+  await first.check();
+  await first.stop();
+
+  nowRef.value += 60_000;
+  tweetsRef.value = [timelineTweet("881", `I am buying after restart. CA ${TOKEN}`, nowRef.value - 500), ...tweetsRef.value];
+  const alerts = [];
+  const requests = [];
+  const fetchImpl = async (url) => {
+    requests.push(url);
+    if (url.endsWith("/2/profile/alpha")) {
+      const error = new Error("profile timed out");
+      error.name = "TimeoutError";
+      throw error;
+    }
+    if (url.includes(`/2/profile/id:${X_ID}/statuses`)) {
+      return jsonResponse(200, { code: 200, results: tweetsRef.value });
+    }
+    if (url.startsWith("https://publish.x.test/oembed?")) {
+      const requested = new URL(url).searchParams.get("url");
+      const id = requested.match(/\/status\/(\d+)$/)?.[1];
+      const tweet = tweetsRef.value.find((item) => String(item.id) === id);
+      return { ok: true, status: 200, text: async () => JSON.stringify(oembed(id, tweet.text)) };
+    }
+    throw new Error(`unexpected URL ${url}`);
+  };
+  const restarted = createHarness({ dataDir, nowRef, rowsRef, tweetsRef, alerts, requests, fetchImpl });
+  const result = await restarted.check();
+  const state = await restarted.getState();
+  assert.equal(result.status, "healthy");
+  assert.equal(result.active, 1);
+  assert.equal(result.delivered, 1);
+  assert.equal(alerts.length, 1);
+  assert.equal(state.transportCircuits["fxtwitter_profile:alpha"].reason, "timeout");
+  assert.deepEqual(state.health.sources.x.profileFallbackHandles, ["alpha"]);
+  assert.equal(state.health.sources.x.effectiveTransportBackoffs, 0);
+  assert.equal(state.health.cachedCount, 1);
+  assert.equal(state.health.freshCount, 1);
+  assert.equal(state.health.liveCount, 1);
+  assert.equal(requests.filter((url) => url.includes(`/2/profile/id:${X_ID}/statuses`)).length, 1);
+});
+
+test("profile 404 remains fail-closed even while cached identity evidence is fresh", async (t) => {
+  const dataDir = await fixture(t);
+  const startedAt = Date.parse("2026-08-24T10:15:00.000Z");
+  const nowRef = { value: startedAt };
+  const rowsRef = { value: [candidate(startedAt)] };
+  const tweetsRef = { value: [timelineTweet("890", "baseline", startedAt - 1_000)] };
+  const alerts = [];
+  const requests = [];
+  let profileMissing = false;
+  const fetchImpl = async (url) => {
+    requests.push(url);
+    if (url.endsWith("/2/profile/alpha")) {
+      return profileMissing
+        ? jsonResponse(404, { code: 404, message: "User not found" })
+        : jsonResponse(200, { code: 200, user: { id: X_ID, screen_name: "alpha", followers: 25_000, protected: false } });
+    }
+    if (url.includes(`/2/profile/id:${X_ID}/statuses`)) return jsonResponse(200, { code: 200, results: tweetsRef.value });
+    throw new Error(`unexpected URL ${url}`);
+  };
+  const monitor = createHarness({ dataDir, nowRef, rowsRef, tweetsRef, alerts, requests, fetchImpl });
+  await monitor.check();
+  profileMissing = true;
+  nowRef.value += 60_000;
+  tweetsRef.value = [timelineTweet("891", `I am buying but must not pass 404. CA ${TOKEN}`, nowRef.value - 500), ...tweetsRef.value];
+  const result = await monitor.check();
+  const state = await monitor.getState();
+  assert.equal(result.status, "degraded");
+  assert.equal(result.admitted, 1);
+  assert.equal(result.active, 0);
+  assert.equal(alerts.length, 0);
+  assert.equal(requests.filter((url) => url.includes(`/2/profile/id:${X_ID}/statuses`)).length, 1, "timeline must not run after a hard profile 404");
+  assert.equal(state.transportCircuits["fxtwitter_profile:alpha"].reason, "http_404");
+  assert.deepEqual(state.health.sources.x.effectiveCircuitHandles, ["alpha"]);
+  assert.ok(state.health.coverage.reasonsByHandle.alpha.includes("profile_http_404"));
+});
+
+test("protected, mismatched, and non-numeric X identities remain fail-closed admission gates", async (t) => {
+  const cases = [
+    ["protected", { id: X_ID, screen_name: "alpha", followers: 25_000, protected: true }],
+    ["mismatched handle", { id: X_ID, screen_name: "beta", followers: 25_000, protected: false }],
+    ["non-numeric id", { id: "not-numeric", screen_name: "alpha", followers: 25_000, protected: false }],
+  ];
+  for (const [label, profile] of cases) {
+    await t.test(label, async () => {
+      const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "fomo-x-gate-"));
+      try {
+        const nowRef = { value: Date.parse("2026-08-24T10:20:00.000Z") };
+        const requests = [];
+        const monitor = createHarness({
+          dataDir,
+          nowRef,
+          rowsRef: { value: [candidate(nowRef.value)] },
+          tweetsRef: { value: [] },
+          alerts: [],
+          requests,
+          profileRef: { value: profile },
+        });
+        const result = await monitor.check();
+        const state = await monitor.getState();
+        assert.equal(result.status, "degraded");
+        assert.equal(result.active, 0);
+        assert.equal(state.health.rejectedCount, 1);
+        assert.equal(state.transportCircuits["fxtwitter_profile:alpha"], undefined);
+        assert.equal(requests.some((url) => url.includes("/statuses")), false);
+      } finally {
+        await fs.rm(dataDir, { recursive: true, force: true });
+      }
+    });
+  }
 });
 
 test("a profile 404 opens a six-hour per-handle circuit that survives restart while other handles continue", async (t) => {
@@ -890,9 +1402,18 @@ test("an open transport circuit outside the current batch keeps X health source-
   alphaAvailable = true;
   const recovered = await monitor.check();
   state = await monitor.getState();
-  assert.equal(recovered.status, "healthy");
+  assert.equal(recovered.status, "degraded", "recovery of alpha cannot hide beta's now-stale timeline");
   assert.equal(state.transportCircuits[circuitKey], undefined);
   assert.equal(state.cursors.alpha, "100");
+  assert.equal(state.health.activeCount, 2);
+  assert.equal(state.health.cachedCount, 3);
+  assert.equal(state.health.freshCount, 3);
+  assert.equal(state.health.backlogCount, 1);
+
+  nowRef.value += 5_000;
+  const refreshed = await monitor.check();
+  state = await monitor.getState();
+  assert.equal(refreshed.status, "healthy");
   assert.equal(state.health.status, "healthy");
   assert.equal(state.health.sources.x.status, "healthy");
   assert.equal(state.health.sources.x.coverage, "complete");

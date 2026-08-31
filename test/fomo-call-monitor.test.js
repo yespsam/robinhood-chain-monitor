@@ -189,6 +189,9 @@ function smartCheckpointState(current, options = {}) {
     lastStatsAttemptAt: options.lastStatsAttemptAt ?? current - 1_000,
     nextStatsAttemptAt: options.nextStatsAttemptAt ?? current + 60 * 60_000,
     walletProfile,
+    eoaVerified: true,
+    eoaCheckedAt: checkedAt,
+    walletCode: "0x",
   };
   return {
     version: 10,
@@ -222,7 +225,10 @@ function smartCheckpointState(current, options = {}) {
         solana: "not_configured",
         base: "not_configured",
         bsc: "healthy",
-        smartMoney: { feed: "healthy", stats: "healthy", exactTrades: "not_configured", admitted: 1 },
+        smartMoney: {
+          feed: "healthy", stats: "healthy", qualification: "healthy",
+          fresh: 1, lastKnownGood: 0, exactTrades: "not_configured", admitted: 1,
+        },
       },
       smartMoney: {
         initializedAt: checkedAt,
@@ -230,6 +236,9 @@ function smartCheckpointState(current, options = {}) {
         feedCheckedAt: checkedAt,
         feedStatus: "healthy",
         feedError: null,
+        feedFailureCount: 0,
+        feedNextRetryAt: null,
+        lastFeedSuccessAt: checkedAt,
         candidates: { [wallet]: candidate },
         roster: options.includeRoster === false ? {} : {
           [wallet]: {
@@ -242,6 +251,13 @@ function smartCheckpointState(current, options = {}) {
             eoaCheckedAt: checkedAt,
             walletCode: "0x",
             source: "gmgn_profitable_wallet_onchain",
+            sourceClassification: {
+              id: "gmgn_public_performance_wallet",
+              gmgnTags: [...walletProfile.tags],
+              includesKolTag: false,
+              fomoOfficial: false,
+              identityVerified: false,
+            },
           },
         },
         admittedWallets: options.includeRoster === false ? [] : [wallet],
@@ -251,6 +267,9 @@ function smartCheckpointState(current, options = {}) {
         statsCheckedAt: checkedAt,
         statsStatus: "healthy",
         statsError: null,
+        qualificationCoverage: {
+          status: "healthy", admitted: 1, fresh: 1, lastKnownGood: 0, checkedAt,
+        },
         exactTradeStatus: "not_configured",
         rateLimitedUntil: null,
       },
@@ -584,7 +603,23 @@ test("smart-only producer migrates v9, silently baselines, rate-limits GMGN, and
 
   async function runScenario(mode) {
     const curveMode = ["curve", "curve_quote_outage", "curve_quote_bad_data", "curve_quote_decode_error", "curve_event_decode_error"].includes(mode);
-    const shouldDeliver = ["swap", "curve", "token_created_same_block"].includes(mode);
+    const shouldDeliver = ["swap", "profile_only_kol", "trade_only_kol", "curve", "token_created_same_block"].includes(mode);
+    const profileTags = ["swap", "profile_only_kol"].includes(mode)
+      ? ["smart_degen", "kol", "gmgn"]
+      : (["trade_only_kol", "dirty_trade_tag"].includes(mode)
+        ? ["smart_degen", "gmgn"]
+        : ["launchpad_smart", "axiom"]);
+    const baselineTradeTags = ["profile_only_kol", "trade_only_kol", "dirty_trade_tag"].includes(mode)
+      ? ["GMGN", "smart_degen"]
+      : profileTags;
+    const currentTradeTags = mode === "trade_only_kol"
+      ? ["KOL", "smart_degen", "kol"]
+      : (mode === "dirty_trade_tag"
+        ? ["smart_degen", "MEV_BOT"]
+        : (mode === "profile_only_kol" ? ["gmgn", "SMART_DEGEN"] : profileTags));
+    const expectedGmgnTags = mode === "trade_only_kol"
+      ? ["smart_degen", "gmgn", "kol"]
+      : profileTags;
     const dataDir = await fixture(t);
     const startedAt = Date.now() - 120_000;
     const baselineAt = startedAt + 31_000;
@@ -592,6 +627,9 @@ test("smart-only producer migrates v9, silently baselines, rate-limits GMGN, and
     const hashDigit = ({
       curve: "9",
       swap: "8",
+      profile_only_kol: "8",
+      trade_only_kol: "8",
+      dirty_trade_tag: "8",
       pool_mismatch: "a",
       zero_payment: "b",
       from_mismatch: "c",
@@ -652,7 +690,7 @@ test("smart-only producer migrates v9, silently baselines, rate-limits GMGN, and
     let copeCalls = 0;
     const gmgnStarts = [];
     const captured = [];
-    const trade = (token, transaction, timestampMs) => ({
+    const trade = (token, transaction, timestampMs, tags) => ({
       scheme: "gmgn_smartmoney_trade_v1",
       wallet: smartWallet,
       token,
@@ -662,7 +700,7 @@ test("smart-only producer migrates v9, silently baselines, rate-limits GMGN, and
       occurredAt: new Date(timestampMs).toISOString(),
       observedAt: new Date(current).toISOString(),
       timestampMs,
-      tags: ["launchpad_smart", "axiom"],
+      tags,
       tokenSymbol: curveMode ? "CURVE" : "SWAP",
       launchpad: curveMode ? "fourmeme" : null,
       amountUsd: null,
@@ -671,8 +709,12 @@ test("smart-only producer migrates v9, silently baselines, rate-limits GMGN, and
       eligible: true,
       blockedTags: [],
     });
-    const baselineTrade = trade(baselineToken, baselineTx, baselineAt);
-    const buyTrade = trade(BASE_TOKEN, transactionHash, buyAt);
+    const baselineTrade = trade(baselineToken, baselineTx, baselineAt, baselineTradeTags);
+    const buyTrade = trade(BASE_TOKEN, transactionHash, buyAt, currentTradeTags);
+    if (mode === "dirty_trade_tag") {
+      buyTrade.eligible = false;
+      buyTrade.blockedTags = ["mev_bot"];
+    }
     const stats = (period, checkedAtMs) => ({
       wallet: smartWallet,
       period,
@@ -685,7 +727,7 @@ test("smart-only producer migrates v9, silently baselines, rate-limits GMGN, and
       lastTradeAt: new Date(checkedAtMs - 1_000).toISOString(),
       createdAt: new Date(checkedAtMs - 365 * 24 * 60 * 60_000).toISOString(),
       createdTokenCount: 0,
-      tags: ["launchpad_smart", "axiom"],
+      tags: profileTags,
       checkedAt: new Date(checkedAtMs).toISOString(),
     });
     const receiptToken = mode === "token_mismatch" ? SECOND_BASE_TOKEN : BASE_TOKEN;
@@ -1057,6 +1099,13 @@ test("smart-only producer migrates v9, silently baselines, rate-limits GMGN, and
         assert.equal(rejectedState.publicOnchain.smartMoney.pendingTrades[pendingKey], undefined,
           `${mode} is a conclusive non-buy and must not clog exact retries`);
       }
+      if (mode === "dirty_trade_tag") {
+        assert.equal(rejectedState.publicOnchain.smartMoney.candidates[smartWallet]?.profileStatus, "revoked_blocked_tag");
+        assert.deepEqual(rejectedState.publicOnchain.smartMoney.candidates[smartWallet]?.tags,
+          ["gmgn", "smart_degen", "mev_bot"], "the actual trade's dirty maker tag must remain auditable");
+        assert.equal(rejectedState.publicOnchain.smartMoney.roster[smartWallet], undefined,
+          "a dirty current feed trade must revoke admission before exact evidence can emit");
+      }
       return;
     }
     assert.equal(captured.length, 1);
@@ -1068,7 +1117,25 @@ test("smart-only producer migrates v9, silently baselines, rate-limits GMGN, and
     assert.equal(emitted?.walletAttribution, null);
     assert.equal(emitted?.fomoUrl, undefined);
     assert.equal(emitted?.profileUrl, undefined);
-    assert.deepEqual(emitted?.walletProfile?.tags, ["launchpad_smart", "axiom"]);
+    assert.equal(emitted?.action, "buy");
+    assert.equal(emitted?.platform?.id, "smart-money");
+    assert.deepEqual(emitted?.walletProfile?.tags, profileTags);
+    assert.deepEqual(emitted?.sourceTrade?.tags, expectedGmgnTags,
+      `${mode} must preserve the normalized profile + candidate/current-trade tag union`);
+    assert.deepEqual(emitted?.sourceClassification, {
+      id: "gmgn_public_performance_wallet",
+      gmgnTags: expectedGmgnTags,
+      includesKolTag: expectedGmgnTags.includes("kol"),
+      fomoOfficial: false,
+      identityVerified: false,
+    });
+    assert.deepEqual(emitted?.positionSemantics, {
+      id: "new_position_after_previous_block_zero",
+      label: "前一区块零仓后的新建仓",
+      proofBoundary: "previous_block",
+      lifetimeFirstBuyVerified: false,
+      transactionImmediatePreBalanceVerified: false,
+    });
     assert.equal(emitted?.sourceTrade?.paymentRaw, "1", "one wei of verified positive payment must pass without a USD floor");
     assert.equal(emitted?.sourceTrade?.executionPool, pool);
     assert.equal(emitted?.sourceTrade?.exactExecutionPoolVerified, true);
@@ -1087,6 +1154,15 @@ test("smart-only producer migrates v9, silently baselines, rate-limits GMGN, and
   }
 
   await runScenario("swap");
+  await t.test("profile-only KOL tag is preserved in the exact normalized producer union", async () => {
+    await runScenario("profile_only_kol");
+  });
+  await t.test("trade-only KOL tag is preserved without creating a Fomo or KOL identity claim", async () => {
+    await runScenario("trade_only_kol");
+  });
+  await t.test("dirty current trade maker tag revokes the wallet and never emits", async () => {
+    await runScenario("dirty_trade_tag");
+  });
   await runScenario("curve");
   await runScenario("token_created_same_block");
   for (const mode of [
@@ -1140,7 +1216,7 @@ test("smart-only producer migrates v9, silently baselines, rate-limits GMGN, and
     "receipt_failed_from_missing",
     "receipt_failed_from_mismatch",
   ]) await runScenario(mode);
-  assert.equal(telegramCalls, 3, "each real producer path must reach Telegram exactly once");
+  assert.equal(telegramCalls, 5, "each real producer path must reach Telegram exactly once");
 });
 
 test("exact smart-money work ignores unknown backlog, purges rejected wallets, and caps admitted checks at three", async (t) => {
@@ -1756,6 +1832,347 @@ test("GMGN RATE_LIMIT_BANNED reset_at stops all feed and stats CLI work until re
   assert.equal(state.publicOnchain.smartMoney.statsStatus, "rate_limited");
 });
 
+test("GMGN smart-money feed uses persisted 1m, 2m, 5m backoff and recovers without a timeout storm", async (t) => {
+  const dataDir = await fixture(t);
+  const clock = { current: Date.parse("2027-01-15T00:00:00Z") };
+  await writeCurveCircuitState(dataDir, clock.current);
+  const initial = JSON.parse(await fs.readFile(path.join(dataDir, "fomo-call-state.json"), "utf8"));
+  initial.publicOnchain.smartMoney.feedCheckedAt = new Date(clock.current - 60_000).toISOString();
+  initial.publicOnchain.smartMoney.feedStatus = "healthy";
+  initial.publicOnchain.smartMoney.feedFailureCount = 0;
+  initial.publicOnchain.smartMoney.feedNextRetryAt = null;
+  await fs.writeFile(path.join(dataDir, "fomo-call-state.json"), JSON.stringify(initial));
+
+  let feedCalls = 0;
+  let recover = false;
+  const dependencies = {
+    autoStart: false,
+    now: () => clock.current,
+    wallNow: () => clock.current,
+    discoverSmartMoneyTradesImpl: async () => {
+      feedCalls += 1;
+      if (!recover) throw new Error("ConnectTimeout");
+      return [];
+    },
+    fetchSmartMoneyStatsImpl: async () => { throw new Error("empty candidate set must not request stats"); },
+    fetchImpl: async (url) => { throw new Error(`fresh curve inventory must not poll ${url}`); },
+    baseProvider: {},
+    bscProvider: {},
+    bscHistoricalProvider: {},
+    evmRpcImpl: async () => { throw new Error("empty roster must not scan BSC"); },
+    logger: { error() {}, info() {} },
+  };
+  const config = {
+    dataDir,
+    fomoCallEnabled: true,
+    fomoBuyMonitorEnabled: false,
+    fomoSmartMoneyMonitorEnabled: true,
+    fomoCallBscOnly: true,
+    fomoSmartMoneyDiscoveryIntervalMs: 15_000,
+  };
+
+  const first = createFomoCallMonitor(config, dependencies);
+  await first.check();
+  let checked = JSON.parse(await fs.readFile(path.join(dataDir, "fomo-call-state.json"), "utf8"));
+  assert.equal(feedCalls, 1);
+  assert.equal(checked.publicOnchain.smartMoney.feedFailureCount, 1);
+  assert.equal(checked.publicOnchain.smartMoney.feedNextRetryAt, new Date(clock.current + 60_000).toISOString());
+  await first.stop();
+
+  clock.current += 30_000;
+  const restarted = createFomoCallMonitor(config, dependencies);
+  await restarted.check();
+  assert.equal(feedCalls, 1, "feed retry cooldown survives process restart");
+  clock.current += 30_000;
+  await restarted.check();
+  checked = JSON.parse(await fs.readFile(path.join(dataDir, "fomo-call-state.json"), "utf8"));
+  assert.equal(feedCalls, 2);
+  assert.equal(checked.publicOnchain.smartMoney.feedFailureCount, 2);
+  assert.equal(checked.publicOnchain.smartMoney.feedNextRetryAt, new Date(clock.current + 2 * 60_000).toISOString());
+
+  clock.current += 119_000;
+  await restarted.check();
+  assert.equal(feedCalls, 2, "the second ConnectTimeout must not create a rapid retry loop");
+  clock.current += 1_000;
+  await restarted.check();
+  checked = JSON.parse(await fs.readFile(path.join(dataDir, "fomo-call-state.json"), "utf8"));
+  assert.equal(feedCalls, 3);
+  assert.equal(checked.publicOnchain.smartMoney.feedFailureCount, 3);
+  assert.equal(checked.publicOnchain.smartMoney.feedNextRetryAt, new Date(clock.current + 5 * 60_000).toISOString());
+
+  clock.current += 299_000;
+  await restarted.check();
+  assert.equal(feedCalls, 3);
+  recover = true;
+  clock.current += 1_000;
+  await restarted.check();
+  checked = JSON.parse(await fs.readFile(path.join(dataDir, "fomo-call-state.json"), "utf8"));
+  assert.equal(feedCalls, 4);
+  assert.equal(checked.publicOnchain.smartMoney.feedStatus, "empty");
+  assert.equal(checked.publicOnchain.smartMoney.feedFailureCount, 0);
+  assert.equal(checked.publicOnchain.smartMoney.feedNextRetryAt, null);
+  assert.equal(checked.publicOnchain.smartMoney.lastFeedSuccessAt, new Date(clock.current).toISOString());
+  await restarted.stop();
+});
+
+test("expired smart-wallet stats retain a bounded LKG roster across outage and restart, then recover before BSC scanning", async (t) => {
+  const dataDir = await fixture(t);
+  const clock = { current: Date.parse("2027-01-15T00:00:00Z"), head: 100 };
+  const wallet = BASE_WALLET.toLowerCase();
+  const state = smartCheckpointState(clock.current, {
+    nextStatsAttemptAt: clock.current - 1,
+    bscNextBlock: 101,
+  });
+  const staleAt = new Date(clock.current - 3 * 60 * 60_000).toISOString();
+  state.publicOnchain.smartMoney.candidates[wallet].walletProfile.statsCheckedAt = staleAt;
+  state.publicOnchain.smartMoney.candidates[wallet].eoaCheckedAt = staleAt;
+  state.publicOnchain.smartMoney.roster[wallet].walletProfile.statsCheckedAt = staleAt;
+  state.publicOnchain.smartMoney.roster[wallet].eoaCheckedAt = staleAt;
+  state.publicOnchain.smartMoney.qualificationCoverage = {
+    status: "last_known_good", admitted: 1, fresh: 0, lastKnownGood: 1, checkedAt: staleAt,
+  };
+  await fs.writeFile(path.join(dataDir, "fomo-call-state.json"), JSON.stringify(state));
+
+  let statsMode = "outage";
+  let statsCalls = 0;
+  let bscHeadCalls = 0;
+  const statsFor = (period, checkedAtMs) => {
+    const profile = qualifiedSmartWalletProfile(wallet, checkedAtMs);
+    return {
+      wallet,
+      period,
+      ...profile.windows[period],
+      lastTradeAt: new Date(checkedAtMs - 1_000).toISOString(),
+      createdAt: profile.createdAt,
+      createdTokenCount: profile.createdTokenCount,
+      tags: profile.tags,
+      checkedAt: new Date(checkedAtMs).toISOString(),
+    };
+  };
+  const dependencies = checkpointBscDependencies(clock, {
+    sleepImpl: async () => {},
+    fetchSmartMoneyStatsImpl: async (_wallet, period, checkedAtMs) => {
+      statsCalls += 1;
+      if (statsMode === "outage") return null;
+      return statsFor(period, checkedAtMs);
+    },
+    evmRpcImpl: async (_url, method) => {
+      if (method === "eth_getCode") return "0x";
+      if (method === "eth_blockNumber") {
+        bscHeadCalls += 1;
+        return "0x64";
+      }
+      throw new Error(`unexpected LKG RPC ${method}`);
+    },
+  });
+  const config = {
+    dataDir,
+    fomoCallEnabled: true,
+    fomoBuyMonitorEnabled: false,
+    fomoSmartMoneyMonitorEnabled: true,
+    fomoCallBscOnly: true,
+    fomoSmartMoneyDiscoveryIntervalMs: 10 * 60_000,
+    fomoSmartMoneyQualifiedCacheMs: 60_000,
+    fomoSmartMoneyMaxStatsAgeMs: 2 * 60 * 60_000,
+    fomoSmartMoneyCandidateRetentionMs: 24 * 60 * 60_000,
+  };
+
+  const monitor = createFomoCallMonitor(config, dependencies);
+  await monitor.check();
+  let checked = JSON.parse(await fs.readFile(path.join(dataDir, "fomo-call-state.json"), "utf8"));
+  assert.equal(statsCalls, 1, "invalid/null 7d stats is a transient outage, not a deterministic rejection");
+  assert.equal(checked.publicOnchain.smartMoney.candidates[wallet].profileStatus, "qualified_degraded_stats");
+  assert.deepEqual(checked.publicOnchain.smartMoney.admittedWallets, [wallet]);
+  assert.ok(checked.publicOnchain.smartMoney.roster[wallet], "the last-known-good profile must not be erased");
+  assert.deepEqual(checked.publicOnchain.smartMoney.qualificationCoverage, {
+    status: "last_known_good", admitted: 1, fresh: 0, lastKnownGood: 1,
+    checkedAt: new Date(clock.current).toISOString(),
+  });
+  assert.equal(checked.publicOnchain.coverage.bsc, "partial",
+    "LKG keeps the roster/cursor but cannot emit or advance the BSC scanner before fresh stats");
+  assert.equal(checked.publicOnchain.bscNextBlock, 101);
+  assert.equal(bscHeadCalls, 0);
+  await monitor.stop();
+
+  clock.current += 30_000;
+  const restarted = createFomoCallMonitor(config, dependencies);
+  await restarted.check();
+  assert.equal(statsCalls, 1, "restart must honor the persisted one-minute transient retry schedule");
+  checked = JSON.parse(await fs.readFile(path.join(dataDir, "fomo-call-state.json"), "utf8"));
+  assert.deepEqual(checked.publicOnchain.smartMoney.admittedWallets, [wallet]);
+
+  statsMode = "healthy";
+  clock.current += 31_000;
+  await restarted.check();
+  checked = JSON.parse(await fs.readFile(path.join(dataDir, "fomo-call-state.json"), "utf8"));
+  assert.equal(statsCalls, 3, "the due LKG wallet refreshes both 7d and 30d before block scanning resumes");
+  assert.equal(checked.publicOnchain.smartMoney.candidates[wallet].profileStatus, "qualified");
+  assert.equal(checked.publicOnchain.smartMoney.qualificationCoverage.status, "healthy");
+  assert.equal(checked.publicOnchain.smartMoney.qualificationCoverage.fresh, 1);
+  assert.equal(checked.publicOnchain.coverage.bsc, "healthy");
+  assert.equal(bscHeadCalls, 1);
+  await restarted.stop();
+});
+
+test("a due last-known-good wallet cannot be starved by a large newer candidate queue", async (t) => {
+  const dataDir = await fixture(t);
+  const clock = { current: Date.parse("2027-01-15T00:00:00Z"), head: 100 };
+  const wallet = BASE_WALLET.toLowerCase();
+  const state = smartCheckpointState(clock.current, { nextStatsAttemptAt: clock.current - 1 });
+  const staleAt = new Date(clock.current - 3 * 60 * 60_000).toISOString();
+  state.publicOnchain.smartMoney.candidates[wallet].walletProfile.statsCheckedAt = staleAt;
+  state.publicOnchain.smartMoney.candidates[wallet].eoaCheckedAt = staleAt;
+  state.publicOnchain.smartMoney.roster[wallet].walletProfile.statsCheckedAt = staleAt;
+  state.publicOnchain.smartMoney.roster[wallet].eoaCheckedAt = staleAt;
+  for (let index = 0; index < 100; index += 1) {
+    const candidateWallet = `0x${(10_000 + index).toString(16).padStart(40, "0")}`;
+    state.publicOnchain.smartMoney.candidates[candidateWallet] = {
+      wallet: candidateWallet,
+      tags: ["smart_degen"],
+      firstSeenAt: clock.current - 60_000,
+      lastSeenAt: clock.current - index,
+      lastTradeAt: clock.current - index,
+      feedObservedAt: new Date(clock.current).toISOString(),
+      profileStatus: "stats_error",
+      nextStatsAttemptAt: clock.current - 1,
+    };
+  }
+  await fs.writeFile(path.join(dataDir, "fomo-call-state.json"), JSON.stringify(state));
+  const requestedWallets = [];
+  const monitor = createFomoCallMonitor({
+    dataDir,
+    fomoCallEnabled: true,
+    fomoBuyMonitorEnabled: false,
+    fomoSmartMoneyMonitorEnabled: true,
+    fomoCallBscOnly: true,
+    fomoSmartMoneyDiscoveryIntervalMs: 10 * 60_000,
+    fomoSmartMoneyStatsBatchLimit: 1,
+  }, checkpointBscDependencies(clock, {
+    fetchSmartMoneyStatsImpl: async (requestedWallet) => {
+      requestedWallets.push(requestedWallet);
+      return null;
+    },
+    evmRpcImpl: async () => { throw new Error("stale qualification must freeze BSC scanning"); },
+  }));
+  await monitor.check();
+  assert.deepEqual(requestedWallets, [wallet]);
+  await monitor.stop();
+});
+
+test("transient smart-wallet stats failures persist 1m, 2m, 5m backoff across restart and never become deterministic rejection", async (t) => {
+  const dataDir = await fixture(t);
+  const clock = { current: Date.parse("2027-01-15T00:00:00Z"), head: 100 };
+  const wallet = BASE_WALLET.toLowerCase();
+  const state = smartCheckpointState(clock.current, {
+    includeRoster: false,
+    nextStatsAttemptAt: clock.current - 1,
+  });
+  const smartMoney = state.publicOnchain.smartMoney;
+  const candidate = smartMoney.candidates[wallet];
+  candidate.profileStatus = "stats_error";
+  candidate.statsFailureCount = 0;
+  delete candidate.walletProfile;
+  delete candidate.eoaVerified;
+  delete candidate.eoaCheckedAt;
+  delete candidate.walletCode;
+  smartMoney.qualificationCoverage = {
+    status: "empty", admitted: 0, fresh: 0, lastKnownGood: 0,
+    checkedAt: new Date(clock.current).toISOString(),
+  };
+  state.publicOnchain.coverage.smartMoney = {
+    feed: "healthy", stats: "degraded", qualification: "empty",
+    fresh: 0, lastKnownGood: 0, exactTrades: "not_configured", admitted: 0,
+  };
+  await fs.writeFile(path.join(dataDir, "fomo-call-state.json"), JSON.stringify(state));
+
+  let statsCalls = 0;
+  let statsMode = "outage";
+  const dependencies = checkpointBscDependencies(clock, {
+    sleepImpl: async () => {},
+    fetchSmartMoneyStatsImpl: async (requestedWallet, period, checkedAtMs) => {
+      statsCalls += 1;
+      assert.equal(requestedWallet, wallet);
+      if (statsMode === "healthy") {
+        const profile = qualifiedSmartWalletProfile(wallet, checkedAtMs);
+        return {
+          wallet, period, ...profile.windows[period],
+          lastTradeAt: new Date(checkedAtMs - 1_000).toISOString(),
+          createdAt: profile.createdAt,
+          createdTokenCount: profile.createdTokenCount,
+          tags: profile.tags,
+          checkedAt: new Date(checkedAtMs).toISOString(),
+        };
+      }
+      if (statsCalls === 1) return null;
+      if (statsCalls === 2) throw new Error("ConnectTimeout");
+      return { wallet, period, checkedAt: new Date(checkedAtMs).toISOString() };
+    },
+    evmRpcImpl: async (_url, method) => {
+      if (method === "eth_getCode") return "0x";
+      throw new Error(`no BSC scan is expected before admission: ${method}`);
+    },
+  });
+  const config = {
+    dataDir,
+    fomoCallEnabled: true,
+    fomoBuyMonitorEnabled: false,
+    fomoSmartMoneyMonitorEnabled: true,
+    fomoCallBscOnly: true,
+    fomoSmartMoneyDiscoveryIntervalMs: 10 * 60_000,
+    fomoSmartMoneyStatsBatchLimit: 1,
+  };
+  const persistedNextAttemptAt = async () => {
+    const checkpoint = JSON.parse(await fs.readFile(path.join(dataDir, "fomo-call-checkpoint.json"), "utf8"));
+    return checkpoint.smartMoney.wallets[wallet].nextStatsAttemptAt;
+  };
+
+  const first = createFomoCallMonitor(config, dependencies);
+  await first.check();
+  let checked = JSON.parse(await fs.readFile(path.join(dataDir, "fomo-call-state.json"), "utf8"));
+  assert.equal(statsCalls, 1);
+  assert.equal(checked.publicOnchain.smartMoney.candidates[wallet].profileStatus, "stats_error");
+  assert.equal(checked.publicOnchain.smartMoney.candidates[wallet].statsFailureCount, 1);
+  assert.equal(await persistedNextAttemptAt(), clock.current + 60_000);
+  await first.stop();
+
+  clock.current += 30_000;
+  const restarted = createFomoCallMonitor(config, dependencies);
+  await restarted.check();
+  assert.equal(statsCalls, 1, "the persisted first backoff survives restart");
+
+  clock.current += 30_000;
+  await restarted.check();
+  checked = JSON.parse(await fs.readFile(path.join(dataDir, "fomo-call-state.json"), "utf8"));
+  assert.equal(statsCalls, 2);
+  assert.equal(checked.publicOnchain.smartMoney.candidates[wallet].statsFailureCount, 2);
+  assert.equal(await persistedNextAttemptAt(), clock.current + 2 * 60_000);
+
+  clock.current += 119_000;
+  await restarted.check();
+  assert.equal(statsCalls, 2);
+  clock.current += 1_000;
+  await restarted.check();
+  checked = JSON.parse(await fs.readFile(path.join(dataDir, "fomo-call-state.json"), "utf8"));
+  assert.equal(statsCalls, 3);
+  assert.equal(checked.publicOnchain.smartMoney.candidates[wallet].statsFailureCount, 3);
+  assert.equal(await persistedNextAttemptAt(), clock.current + 5 * 60_000);
+  assert.equal(checked.publicOnchain.smartMoney.admittedWallets.length, 0,
+    "null, timeout, and incomplete data must not synthesize an LKG admission");
+
+  statsMode = "healthy";
+  clock.current += 299_000;
+  await restarted.check();
+  assert.equal(statsCalls, 3);
+  clock.current += 1_000;
+  await restarted.check();
+  checked = JSON.parse(await fs.readFile(path.join(dataDir, "fomo-call-state.json"), "utf8"));
+  assert.equal(statsCalls, 5, "a due healthy retry fetches the complete 7d and 30d pair");
+  assert.equal(checked.publicOnchain.smartMoney.candidates[wallet].profileStatus, "qualified");
+  assert.equal(checked.publicOnchain.smartMoney.candidates[wallet].statsFailureCount, 0);
+  assert.deepEqual(checked.publicOnchain.smartMoney.admittedWallets, [wallet]);
+  await restarted.stop();
+});
+
 test("Four.Meme curve HTTP 403 circuit escalates 15m, 1h, then 6h without request or log storms", async (t) => {
   const dataDir = await fixture(t);
   const startedAt = Date.parse("2026-08-24T09:00:00.000Z");
@@ -1921,7 +2338,10 @@ test("stable health-only ticks coalesce full-state writes to one per sixty secon
         solana: "not_configured",
         base: "not_configured",
         bsc: "not_configured",
-        smartMoney: { feed: "empty", stats: "healthy", exactTrades: "not_configured", admitted: 0 },
+        smartMoney: {
+          feed: "empty", stats: "partial", qualification: "empty",
+          fresh: 0, lastKnownGood: 0, exactTrades: "not_configured", admitted: 0,
+        },
       },
       smartMoney: {
         initializedAt: checkedAt,
@@ -1929,6 +2349,9 @@ test("stable health-only ticks coalesce full-state writes to one per sixty secon
         feedCheckedAt: checkedAt,
         feedStatus: "empty",
         feedError: null,
+        feedFailureCount: 0,
+        feedNextRetryAt: null,
+        lastFeedSuccessAt: checkedAt,
         candidates: {},
         roster: {},
         admittedWallets: [],
@@ -1936,8 +2359,11 @@ test("stable health-only ticks coalesce full-state writes to one per sixty secon
         pendingTrades: {},
         chainProofedTransactions: {},
         statsCheckedAt: checkedAt,
-        statsStatus: "healthy",
-        statsError: null,
+        statsStatus: "degraded",
+        statsError: "no fresh or last-known-good qualified wallets",
+        qualificationCoverage: {
+          status: "empty", admitted: 0, fresh: 0, lastKnownGood: 0, checkedAt,
+        },
         exactTradeStatus: "not_configured",
         rateLimitedUntil: null,
       },
@@ -1976,6 +2402,9 @@ test("stable health-only ticks coalesce full-state writes to one per sixty secon
   current += 30_000;
   await monitor.check();
   assert.deepEqual(writes.map((entry) => entry.reason), ["telemetry"]);
+  const persisted = JSON.parse(await fs.readFile(path.join(dataDir, "fomo-call-state.json"), "utf8"));
+  assert.equal(persisted.coverageSummary.complete, false);
+  assert.ok(persisted.coverageSummary.incompleteReasons.includes("no_admitted_smart_money_wallets"));
 });
 
 test("eleven BSC cursor advances in thirty-five seconds use the small checkpoint instead of the main state", async (t) => {
@@ -3102,7 +3531,11 @@ test("GoPlus BSC gate is fail-closed and supplements only missing cannot_sell_al
 test("Fomo token dedup advances only after an auditable alert acceptance", () => {
   assert.equal(classifyFomoAlertDelivery({ status: "delivered" }), "accepted");
   assert.equal(classifyFomoAlertDelivery({ status: "queued" }), "accepted");
-  assert.equal(classifyFomoAlertDelivery({ status: "suppressed" }), "suppressed");
+  assert.equal(classifyFomoAlertDelivery({ status: "suppressed", terminal: true }), "suppressed");
+  assert.equal(classifyFomoAlertDelivery({ status: "suppressed", reason: "not_relevant" }), "suppressed");
+  assert.throws(() => classifyFomoAlertDelivery({ status: "suppressed", terminal: false }), /unknown status: suppressed/);
+  assert.throws(() => classifyFomoAlertDelivery({ status: "suppressed", disposition: "retry" }), /unknown status: suppressed/);
+  assert.throws(() => classifyFomoAlertDelivery({ status: "failed" }), /unknown status: failed/);
   assert.throws(() => classifyFomoAlertDelivery(undefined), /unknown status: missing/);
   assert.throws(() => classifyFomoAlertDelivery({ status: "unknown" }), /unknown status: unknown/);
 });

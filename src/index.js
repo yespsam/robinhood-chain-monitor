@@ -16,6 +16,7 @@ import { createBinanceMonitor } from "./binance-monitor.js";
 import { createBscLaunchpadMonitor } from "./bsc-launchpad-monitor.js";
 import { createAbortableJsonRpcProvider, createMorphLaunchpadMonitor, mapWithConcurrency } from "./morph-launchpad-monitor.js";
 import { createFomoCallMonitor } from "./fomo-call-monitor.js";
+import { createFomoHealthMonitor } from "./fomo-health-monitor.js";
 import { createFomoThesisMonitor } from "./fomo-thesis-monitor.js";
 import { createFomoXCallMonitor } from "./fomo-x-call-monitor.js";
 import { createUniswapMonitor } from "./uniswap-monitor.js";
@@ -93,6 +94,7 @@ let binanceMonitor;
 let bscLaunchpadMonitor;
 let morphLaunchpadMonitor;
 let fomoCallMonitor;
+let fomoHealthMonitor;
 let fomoThesisMonitor;
 let fomoXCallMonitor;
 let uniswapMonitor;
@@ -465,6 +467,16 @@ function startIndependentMonitors() {
   if (config.telegramNewsMonitorEnabled) startMonitor("telegram-news", () => {
     telegramNewsMonitor = createTelegramNewsMonitor(config);
   });
+  const anyFomoLaneEnabled = config.fomoBuyMonitorEnabled
+    || config.fomoSmartMoneyMonitorEnabled
+    || config.fomoPublishedCallEnabled
+    || config.fomoXCallEnabled;
+  if (config.fomoCallEnabled && config.fomoHealthMonitorEnabled && anyFomoLaneEnabled) {
+    // This watchdog intentionally stays in the main process when the scanners
+    // run in the standalone worker. Persisted heartbeats still reveal a stuck
+    // or dead worker, and health transitions use the main durable outbox.
+    fomoHealthMonitor = createFomoHealthMonitor(config);
+  }
   if (config.fomoCallEnabled && !config.fomoCallStandalone
     && (config.fomoBuyMonitorEnabled || config.fomoSmartMoneyMonitorEnabled)) {
     fomoCallMonitor = createFomoCallMonitor(config);
@@ -601,6 +613,7 @@ function createdMonitorEntries() {
     ["bsc", bscLaunchpadMonitor],
     ["morph", morphLaunchpadMonitor],
     ["fomo-call", fomoCallMonitor],
+    ["fomo-health", fomoHealthMonitor],
     ["fomo-thesis", fomoThesisMonitor],
     ["fomo-x-call", fomoXCallMonitor],
     ["uniswap", uniswapMonitor],

@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import {
   isMonitoringSourceEnabled,
+  isFomoMonitorHealthUpdateAllowed,
   isTelegramNewsUpdateAllowed,
   isThreePlatformScope,
 } from "./source-controls.js";
@@ -944,6 +945,15 @@ function twitterStageText(event) {
 }
 
 const compact = (event) => {
+  if (event.type === "fomo_monitor_health_update") {
+    const label = event.transition === "recovered" ? "聚合监控恢复"
+      : event.transition === "updated" ? "聚合监控故障扩大" : "聚合监控严重降级";
+    return compactCard(`🩺 Fomo ${label}`, [
+      `状态: ${event.aggregateStatus}`,
+      `范围: Smart Money / BSC / X / Thesis / Fomo outbox`,
+      compactAlertEventTime(event, event.observedAt, event.alertQueuedAt || event.observedAt),
+    ]);
+  }
   if (event.type === "telegram_news_update") {
     const externalHosts = [...new Set((event.news?.externalUrls || []).flatMap((value) => {
       try { return [new URL(value).hostname.toLowerCase()]; } catch { return []; }
@@ -1634,6 +1644,7 @@ function isRelevantBinanceGithubUpdate(event) {
 }
 
 export function isStrongAlert(event) {
+  if (event?.type === "fomo_monitor_health_update") return false;
   if (event?.type === "telegram_news_update") return false;
   if (["late", "suppress"].includes(effectiveFreshnessDecision(event))) return false;
   // Open pull requests are useful early evidence, but only organization-owned
@@ -2750,6 +2761,7 @@ function semanticDuplicate(outbox, eventId, event, now = Date.now()) {
 }
 
 export function alertEventKey(event) {
+  if (event.type === "fomo_monitor_health_update") return String(event.eventKey);
   if (event.type === "telegram_news_update") {
     return `telegram-news:${event.chatId}:${String(event.messageId)}:${String(event.contentDigest).slice(0, 16)}`;
   }
@@ -2923,7 +2935,9 @@ async function deliverDestination(config, event, destination, renderBundle = nul
   if (destination === "telegram") {
     const strong = config.telegramStrongAlerts && isStrongAlert(event);
     let renderedText;
-    if (config.alertBilingualEnabled === true) {
+    const bilingualDelivery = config.alertBilingualEnabled === true
+      || event.type === "fomo_monitor_health_update";
+    if (bilingualDelivery) {
       const bundle = renderBundle || await buildBilingualAlertBundle(config, event, telegramFreshnessText(event, compact(event)));
       renderedText = telegramSafeText(renderBilingualTelegramText(bundle, strong), 3_900);
     } else {
@@ -3016,7 +3030,7 @@ async function deliverDestination(config, event, destination, renderBundle = nul
     return {
       messageId: payload.result.message_id,
       renderedText,
-      renderVersion: config.alertBilingualEnabled === true ? ALERT_RENDER_VERSION : LEGACY_ALERT_RENDER_VERSION,
+      renderVersion: bilingualDelivery ? ALERT_RENDER_VERSION : LEGACY_ALERT_RENDER_VERSION,
       timing,
       ...(renderBundle ? {
         translation: {
@@ -3307,7 +3321,9 @@ async function deliverOutboxEvent(config, eventId, { force = false, pipelineStar
     const criticalAlert = isCriticalAlertDelivery(claim.event);
     const claimedAtMs = Date.parse(claim.claimedAt || "");
     const renderStartedAtMs = alertPipelineNow(config);
-    const renderBundle = config.alertBilingualEnabled === true && claim.destinations.includes("telegram")
+    const bilingualDelivery = config.alertBilingualEnabled === true
+      || claim.event.type === "fomo_monitor_health_update";
+    const renderBundle = bilingualDelivery && claim.destinations.includes("telegram")
       ? await ensureTelegramRenderBundle(config, eventId, claim.event, claim.renderBundle)
       : null;
     const renderCompletedAtMs = alertPipelineNow(config);
@@ -3436,6 +3452,7 @@ export async function drainAlertOutbox(config) {
       .sort((left, right) => {
         const priority = (entry) => {
           const event = entry.event || {};
+          if (event.type === "fomo_monitor_health_update") return 98;
           if (isFocusPlatformEvent(event)) return 100;
           if (isBscLaunchpadEvent(event)) return 95;
           if (event.type === "fomo_family_top_call") return 92;
@@ -3623,6 +3640,8 @@ function isRelevantSmartWalletBuy(event) {
   const profile = event?.walletProfile || {};
   const trade = event?.sourceTrade || {};
   const transactionProof = event?.transactionProof || {};
+  const sourceClassification = event?.sourceClassification || {};
+  const positionSemantics = event?.positionSemantics || {};
   const market = event?.market || {};
   const stats7d = profile?.windows?.["7d"] || {};
   const stats30d = profile?.windows?.["30d"] || {};
@@ -3630,14 +3649,26 @@ function isRelevantSmartWalletBuy(event) {
     ...(Array.isArray(profile?.tags) ? profile.tags : []),
     ...(Array.isArray(trade?.tags) ? trade.tags : []),
   ].map(lower).filter(Boolean))];
+  const classificationTags = [...new Set((Array.isArray(sourceClassification?.gmgnTags)
+    ? sourceClassification.gmgnTags : []).map(lower).filter(Boolean))];
   const proof = event?.positionProof || {};
   const zeroPosition = lower(proof?.phase) === "previous_block" && String(proof?.previousBalanceRaw ?? "") === "0";
   const createdAt = Date.parse(profile?.createdAt || "");
-  const explicitDirections = [event?.activity, event?.action, event?.side, event?.tradeSide, event?.transactionType, trade?.side]
-    .map(lower)
-    .filter(Boolean);
-  const buyDirection = explicitDirections.length > 0
-    && explicitDirections.every((value) => ["buy", "first_buy", "swap_buy", SMART_WALLET_SIGNAL_KIND].includes(value));
+  const buyDirection = [event?.activity, event?.action, event?.trade, event?.side, trade?.side]
+    .every((value) => lower(value) === "buy")
+    && [event?.tradeSide, event?.transactionType]
+      .every((value) => !lower(value) || lower(value) === "buy");
+  const sourceClassificationAligned = lower(sourceClassification?.id) === "gmgn_public_performance_wallet"
+    && sourceClassification?.fomoOfficial === false
+    && sourceClassification?.identityVerified === false
+    && sourceClassification?.includesKolTag === tags.includes("kol")
+    && classificationTags.length === tags.length
+    && classificationTags.every((tag) => tags.includes(tag));
+  const positionSemanticsAligned = lower(positionSemantics?.id) === "new_position_after_previous_block_zero"
+    && lower(positionSemantics?.proofBoundary) === "previous_block"
+    && positionSemantics?.lifetimeFirstBuyVerified === false
+    && positionSemantics?.transactionImmediatePreBalanceVerified === false
+    && event?.firstBuyVerified !== true;
   const profileAligned = profile?.scheme === "gmgn_wallet_stats_dual_window_v1"
     && profile?.qualified === true
     && lower(profile?.source) === "gmgn_portfolio_stats"
@@ -3753,6 +3784,8 @@ function isRelevantSmartWalletBuy(event) {
     && Number.isSafeInteger(logIndex)
     && logIndex >= 0
     && buyDirection
+    && sourceClassificationAligned
+    && positionSemanticsAligned
     && profileAligned
     && tradeAligned
     && executionPoolAligned
@@ -3765,6 +3798,9 @@ function isRelevantSmartWalletBuy(event) {
 }
 
 export function isRelevantAlert(event) {
+  if (event?.type === "fomo_monitor_health_update") {
+    return isFomoMonitorHealthUpdateAllowed({ fomoHealthMonitorEnabled: true }, event);
+  }
   if (event?.type === "telegram_news_update") return isTelegramNewsUpdateAllowed(event);
   if (isMorphLaunchpadEvent(event)) {
     const platform = eventPlatform(event);

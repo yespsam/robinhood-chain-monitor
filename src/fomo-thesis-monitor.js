@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { isAddress, JsonRpcProvider } from "ethers";
 import WebSocket from "ws";
+import { isTerminalAlertSuppression } from "./alerts.js";
 import { assessLocalTokenSecurity } from "./local-security.js";
 
 export const FOMO_OFFICIAL_API_BASE = "https://prod-api.fomo.family";
@@ -376,8 +377,8 @@ function acceptedQualification(result) {
   return result === true || result?.qualified === true || result?.ok === true || result?.decision === "pass";
 }
 
-function rejectedDelivery(result) {
-  return ["monitoring_source_disabled", "not_relevant", "blocked_event", "failed"].includes(result?.status);
+function acceptedDelivery(result) {
+  return ["delivered", "queued"].includes(result?.status) || isTerminalAlertSuppression(result);
 }
 
 export function createFomoThesisMonitor(config, dependencies = {}) {
@@ -539,7 +540,9 @@ export function createFomoThesisMonitor(config, dependencies = {}) {
         observedAt: new Date(observedAt).toISOString(),
       };
       const delivery = await sendAlert(config, event);
-      if (rejectedDelivery(delivery)) throw new Error(`Fomo thesis delivery rejected: ${delivery.status}`);
+      if (!acceptedDelivery(delivery)) {
+        throw new Error(`Fomo thesis delivery was not durably accepted: ${delivery?.status || "missing"}`);
+      }
       state.seen[namespacedId] = observedAt;
       delete state.pending[namespacedId];
       if (sourcePublishedMs) state.cursors[sourceKey] = Math.max(Number(state.cursors[sourceKey] || 0), sourcePublishedMs);

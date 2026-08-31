@@ -145,6 +145,53 @@ test("first snapshot is a silent baseline and a later new thesis is delivered on
   assert.equal(alerts[0].source.trust, "official_authenticated_api");
 });
 
+test("retryable thesis alert suppression preserves pending state while terminal suppression is consumed", async (t) => {
+  const dataDir = await fixture(t);
+  let current = Date.parse("2026-08-11T02:30:05.000Z");
+  let rows = [officialRecord({ id: "baseline", body: "existing call", publishedAt: "2026-08-11T02:30:01.000Z" })];
+  const alerts = [];
+  let delivery = { status: "suppressed", disposition: "retry", terminal: false };
+  const monitor = createFomoThesisMonitor({
+    dataDir,
+    fomoPublishedCallEnabled: true,
+    fomoOfficialBearerToken: "token",
+    fomoPublishedCallMaxAgeMs: 300_000,
+  }, {
+    autoStart: false,
+    now: () => current,
+    logger: quietLogger,
+    fetchImpl: async () => ok({ data: rows }),
+    qualifyCallImpl: async () => ({ decision: "pass" }),
+    sendAlertsImpl: async (_config, event) => { alerts.push(event); return delivery; },
+  });
+  await monitor.check();
+
+  current += 2_000;
+  rows = [...rows, officialRecord({ id: "retry", body: "retry delivery", publishedAt: new Date(current - 500).toISOString() })];
+  assert.equal((await monitor.check()).status, "degraded");
+  let state = await monitor.getState();
+  const retryKey = "fomo_family_official_thesis:external-retry";
+  assert.ok(state.pending[retryKey]);
+  assert.equal(state.seen[retryKey], undefined);
+
+  delivery = { status: "delivered" };
+  current += 2_000;
+  assert.equal((await monitor.check()).status, "healthy");
+  state = await monitor.getState();
+  assert.equal(state.pending[retryKey], undefined);
+  assert.ok(state.seen[retryKey]);
+
+  delivery = { status: "suppressed", disposition: "terminal", terminal: true, reason: "not_relevant" };
+  current += 2_000;
+  rows = [...rows, officialRecord({ id: "terminal", body: "terminal suppression", publishedAt: new Date(current - 500).toISOString() })];
+  assert.equal((await monitor.check()).status, "healthy");
+  state = await monitor.getState();
+  const terminalKey = "fomo_family_official_thesis:external-terminal";
+  assert.equal(state.pending[terminalKey], undefined);
+  assert.ok(state.seen[terminalKey]);
+  assert.equal(alerts.length, 3);
+});
+
 test("persisted ids are not replayed after restart", async (t) => {
   const dataDir = await fixture(t);
   let current = Date.parse("2026-08-11T03:00:05.000Z");
@@ -160,7 +207,7 @@ test("persisted ids are not replayed after restart", async (t) => {
   const firstAlerts = [];
   const first = createFomoThesisMonitor(config, {
     ...common,
-    sendAlertsImpl: async (_config, event) => { firstAlerts.push(event); },
+    sendAlertsImpl: async (_config, event) => { firstAlerts.push(event); return { status: "delivered" }; },
   });
   await first.check();
   current += 2_000;
@@ -171,7 +218,7 @@ test("persisted ids are not replayed after restart", async (t) => {
   const restartedAlerts = [];
   const restarted = createFomoThesisMonitor(config, {
     ...common,
-    sendAlertsImpl: async (_config, event) => { restartedAlerts.push(event); },
+    sendAlertsImpl: async (_config, event) => { restartedAlerts.push(event); return { status: "delivered" }; },
   });
   await restarted.check();
   assert.equal(restartedAlerts.length, 0);
@@ -261,7 +308,7 @@ test("BSC-only mode accepts resolver-confirmed records without a chain claim", a
     fetchImpl: async () => ok({ data: rows }),
     resolveCallImpl: async () => ({ chainId: 56 }),
     qualifyCallImpl: async () => ({ decision: "pass" }),
-    sendAlertsImpl: async (_config, event) => alerts.push(event),
+    sendAlertsImpl: async (_config, event) => { alerts.push(event); return { status: "delivered" }; },
   });
   await monitor.check();
   current += 2_000;
@@ -277,7 +324,7 @@ test("missing credentials writes blocked health and never sends", async (t) => {
   const monitor = createFomoThesisMonitor({ dataDir, fomoPublishedCallEnabled: true }, {
     autoStart: false,
     logger: quietLogger,
-    sendAlertsImpl: async (_config, event) => alerts.push(event),
+    sendAlertsImpl: async (_config, event) => { alerts.push(event); return { status: "delivered" }; },
   });
   const result = await monitor.check();
   assert.equal(result.status, "blocked_missing_credentials");
@@ -403,7 +450,7 @@ test("relay websocket authenticates with token subprotocol and only trusts ready
     logger: quietLogger,
     fetchImpl: async () => ok({ data: [baseline] }),
     qualifyCallImpl: async (call) => ({ decision: "pass", caller: call.caller }),
-    sendAlertsImpl: async (_config, event) => alerts.push(event),
+    sendAlertsImpl: async (_config, event) => { alerts.push(event); return { status: "delivered" }; },
   });
   t.after(() => monitor.stop());
   await monitor.start();

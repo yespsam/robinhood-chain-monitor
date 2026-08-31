@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 const PONS_REPOSITORIES = new Set([
   "ponsdotdev/ponsfamily",
   "ponsdotfamily/ponsdotfamily",
@@ -154,6 +156,35 @@ const SMART_WALLET_SIGNAL_KIND = "high_profit_high_winrate_wallet_buy";
 const SMART_WALLET_SOURCE_ID = "gmgn_profitable_wallet_onchain";
 const SMART_WALLET_SOURCE_TRUST = "public_onchain_profiled";
 const SMART_WALLET_BLOCKED_TAG = /(?:^|[_-])(?:wash(?:[_-]?trader)?|arbitrager|arbitrage|mev(?:[_-]?bot)?|sandwich|router|cex|exchange|contract)(?:$|[_-])/i;
+const FOMO_HEALTH_SOURCE_ID = "local_fomo_health_watchdog";
+const FOMO_HEALTH_SOURCE_TRUST = "local_persisted_health";
+const FOMO_HEALTH_LEVELS = new Set(["healthy", "degraded", "critical", "disabled", "unknown"]);
+const FOMO_HEALTH_REASON_CODES = new Set([
+  "call_state_missing",
+  "call_state_unreadable",
+  "call_state_stale",
+  "smart_telemetry_missing",
+  "smart_feed_unhealthy",
+  "smart_stats_unhealthy",
+  "smart_zero_targets",
+  "smart_no_fresh_profiles",
+  "smart_exact_trade_unhealthy",
+  "bsc_unhealthy",
+  "x_state_missing",
+  "x_state_unreadable",
+  "x_state_stale",
+  "x_no_eligible_targets",
+  "x_no_live_targets",
+  "x_low_live_coverage",
+  "thesis_state_missing",
+  "thesis_state_unreadable",
+  "thesis_state_stale",
+  "thesis_blocked",
+  "thesis_unhealthy",
+  "fomo_outbox_unreadable",
+  "fomo_outbox_failed",
+  "fomo_outbox_backlog",
+]);
 const FOCUS3_FOMO_PUBLISHED_SOURCES = new Map([
   ["fomo_family_official_thesis", "official_authenticated_api"],
   ["fomoscan_thesis_relay", "verified_thesis_relay"],
@@ -866,6 +897,8 @@ function focus3SmartWalletBuyAllowed(config, source) {
   const profile = source?.walletProfile || {};
   const trade = source?.sourceTrade || {};
   const transactionProof = source?.transactionProof || {};
+  const sourceClassification = source?.sourceClassification || {};
+  const positionSemantics = source?.positionSemantics || {};
   const market = source?.market || {};
   const stats7d = smartWalletWindow(profile, "7d") || {};
   const stats30d = smartWalletWindow(profile, "30d") || {};
@@ -873,14 +906,26 @@ function focus3SmartWalletBuyAllowed(config, source) {
     ...(Array.isArray(profile?.tags) ? profile.tags : []),
     ...(Array.isArray(trade?.tags) ? trade.tags : []),
   ].map(normalized).filter(Boolean))];
+  const classificationTags = [...new Set((Array.isArray(sourceClassification?.gmgnTags)
+    ? sourceClassification.gmgnTags : []).map(normalized).filter(Boolean))];
   const proof = source?.positionProof || {};
   const proofPhase = normalized(proof?.phase);
   const zeroPosition = proofPhase === "previous_block" && String(proof?.previousBalanceRaw ?? "") === "0";
-  const explicitDirections = [source?.activity, source?.action, source?.side, source?.tradeSide, source?.transactionType, trade?.side]
-    .map(normalized)
-    .filter(Boolean);
-  const buyDirection = explicitDirections.length > 0
-    && explicitDirections.every((value) => ["buy", "first_buy", "swap_buy", SMART_WALLET_SIGNAL_KIND].includes(value));
+  const buyDirection = [source?.activity, source?.action, source?.trade, source?.side, trade?.side]
+    .every((value) => normalized(value) === "buy")
+    && [source?.tradeSide, source?.transactionType]
+      .every((value) => !normalized(value) || normalized(value) === "buy");
+  const sourceClassificationAligned = normalized(sourceClassification?.id) === "gmgn_public_performance_wallet"
+    && sourceClassification?.fomoOfficial === false
+    && sourceClassification?.identityVerified === false
+    && sourceClassification?.includesKolTag === tags.includes("kol")
+    && classificationTags.length === tags.length
+    && classificationTags.every((tag) => tags.includes(tag));
+  const positionSemanticsAligned = normalized(positionSemantics?.id) === "new_position_after_previous_block_zero"
+    && normalized(positionSemantics?.proofBoundary) === "previous_block"
+    && positionSemantics?.lifetimeFirstBuyVerified === false
+    && positionSemantics?.transactionImmediatePreBalanceVerified === false
+    && source?.firstBuyVerified !== true;
   const profileMaxAgeMs = Math.max(60_000, Number(config?.fomoSmartMoneyMaxStatsAgeMs ?? config?.fomoSmartMoneyProfileMaxAgeMs ?? 7_200_000));
   const candidateMaxAgeMs = Math.max(60_000, Number(config?.fomoSmartMoneyCandidateRetentionMs ?? 86_400_000));
   const tradeMaxAgeMs = Math.max(60_000, Number(config?.fomoCallMaxSignalAgeMs ?? 300_000));
@@ -1002,6 +1047,8 @@ function focus3SmartWalletBuyAllowed(config, source) {
     && Number.isSafeInteger(logIndex)
     && logIndex >= 0
     && buyDirection
+    && sourceClassificationAligned
+    && positionSemanticsAligned
     && profileAligned
     && tradeAligned
     && executionPoolAligned
@@ -1398,7 +1445,105 @@ export function isPonsMonitoringEnabled(config) {
   return config?.ponsMonitorEnabled !== false;
 }
 
+function hasOnlyKeys(value, allowed) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    && Object.keys(value).every((key) => allowed.has(key));
+}
+
+function safeHealthCount(value) {
+  return Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000;
+}
+
+function safeHealthDuration(value) {
+  return Number.isSafeInteger(value) && value >= 0 && value <= 10 * 366 * 24 * 60 * 60_000;
+}
+
+function validHealthLane(value, keys) {
+  return hasOnlyKeys(value, new Set(keys)) && FOMO_HEALTH_LEVELS.has(value.status);
+}
+
+function fomoHealthReasonDigest(reasonCodes, summary) {
+  const criticalLanes = Object.entries(summary || {})
+    .filter(([, lane]) => lane?.status === "critical")
+    .map(([lane]) => lane)
+    .sort();
+  return createHash("sha256")
+    .update(JSON.stringify({ reasonCodes: [...new Set(reasonCodes)].sort(), criticalLanes }))
+    .digest("hex")
+    .slice(0, 16);
+}
+
+/**
+ * Authenticate the one locally generated operational event. Its closed schema
+ * contains only aggregate health levels and bounded counters: raw errors,
+ * handles, addresses, URLs and credentials cannot cross this routing gate.
+ */
+export function isFomoMonitorHealthUpdateAllowed(config, source, now = Date.now()) {
+  if (config?.fomoHealthMonitorEnabled !== true
+    || !source || typeof source !== "object" || Array.isArray(source)
+    || source.type !== "fomo_monitor_health_update") return false;
+  const allowedTopLevel = new Set([
+    "type", "eventKey", "lane", "transition", "incidentId", "aggregateStatus",
+    "observedAt", "openedAt", "durationMs", "reasonCodes", "summary", "source",
+    "sourceTrust", "strong", "alertQueuedAt", "reasonDigest",
+  ]);
+  if (!hasOnlyKeys(source, allowedTopLevel)
+    || source.lane !== "aggregate"
+    || !["opened", "updated", "recovered"].includes(source.transition)
+    || !/^aggregate-\d{1,16}$/.test(String(source.incidentId || ""))
+    || source.aggregateStatus !== (source.transition === "recovered" ? "healthy" : "critical")
+    || source.strong !== false
+    || source.sourceTrust !== FOMO_HEALTH_SOURCE_TRUST
+    || !hasOnlyKeys(source.source, new Set(["id", "trust"]))
+    || source.source.id !== FOMO_HEALTH_SOURCE_ID
+    || source.source.trust !== FOMO_HEALTH_SOURCE_TRUST
+    || !Array.isArray(source.reasonCodes)
+    || source.reasonCodes.length > 20
+    || new Set(source.reasonCodes).size !== source.reasonCodes.length
+    || !source.reasonCodes.every((reason) => FOMO_HEALTH_REASON_CODES.has(reason))) return false;
+  const evaluatedAt = Number(now);
+  const observedAt = strictTelegramNewsInstant(source.observedAt);
+  const openedAt = strictTelegramNewsInstant(source.openedAt);
+  if (!Number.isFinite(evaluatedAt) || observedAt === null || openedAt === null
+    || observedAt > evaluatedAt + 60_000 || evaluatedAt - observedAt > 7 * 24 * 60 * 60_000
+    || openedAt > observedAt
+    || !safeHealthDuration(source.durationMs)
+    || source.durationMs !== observedAt - openedAt) return false;
+  if (source.alertQueuedAt != null && strictTelegramNewsInstant(source.alertQueuedAt) === null) return false;
+
+  const summary = source.summary;
+  if (!hasOnlyKeys(summary, new Set(["smartMoney", "bsc", "x", "thesis", "outbox"]))) return false;
+  if (!validHealthLane(summary.smartMoney, ["status", "admitted", "fresh", "lastKnownGood"])
+    || !safeHealthCount(summary.smartMoney.admitted)
+    || !safeHealthCount(summary.smartMoney.fresh)
+    || !safeHealthCount(summary.smartMoney.lastKnownGood)
+    || !validHealthLane(summary.bsc, ["status"])
+    || !validHealthLane(summary.x, ["status", "live", "eligible"])
+    || !safeHealthCount(summary.x.live)
+    || !safeHealthCount(summary.x.eligible)
+    || summary.x.live > summary.x.eligible
+    || !validHealthLane(summary.thesis, ["status"])
+    || !validHealthLane(summary.outbox, ["status", "pending", "failed"])
+    || !safeHealthCount(summary.outbox.pending)
+    || !safeHealthCount(summary.outbox.failed)
+    || summary.outbox.failed > summary.outbox.pending) return false;
+  const summaryLevels = Object.values(summary).map((lane) => lane.status);
+  if (source.transition === "recovered") {
+    if (summaryLevels.some((level) => !["healthy", "disabled"].includes(level))) return false;
+  } else if (!summaryLevels.includes("critical")) return false;
+  const expectedDigest = fomoHealthReasonDigest(source.reasonCodes, summary);
+  if (source.transition === "updated") {
+    if (source.reasonDigest !== expectedDigest
+      || source.eventKey !== `fomo-health:${source.incidentId}:updated:${expectedDigest}`) return false;
+  } else if (source.reasonDigest != null
+    || source.eventKey !== `fomo-health:${source.incidentId}:${source.transition}`) return false;
+  return source.transition === "recovered" || source.reasonCodes.length > 0;
+}
+
 export function isMonitoringSourceEnabled(config, source) {
+  if (source?.type === "fomo_monitor_health_update") {
+    return isFomoMonitorHealthUpdateAllowed(config, source);
+  }
   if (source?.type === "telegram_news_update") {
     return config?.telegramNewsMonitorEnabled === true && isTelegramNewsUpdateAllowed(source);
   }

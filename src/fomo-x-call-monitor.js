@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { isAddress } from "ethers";
-import { sendAlerts } from "./alerts.js";
+import { isTerminalAlertSuppression, sendAlerts } from "./alerts.js";
 import {
   discoverGmgnBscKolCandidates,
   parseFomoScanProfile,
@@ -21,6 +21,7 @@ const FX_PROFILE_SOURCE = "fxtwitter_profile";
 const FX_TIMELINE_SOURCE = "fxtwitter_timeline";
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
 const TRANSPORT_BACKOFFS = Object.freeze({
   timeline404: Object.freeze([15 * MINUTE_MS, HOUR_MS, 6 * HOUR_MS]),
   timeout: Object.freeze([MINUTE_MS, 5 * MINUTE_MS, 15 * MINUTE_MS, HOUR_MS]),
@@ -65,7 +66,7 @@ function maxTweetId(tweets) {
 }
 
 function acceptedDelivery(result) {
-  return ["delivered", "queued", "suppressed"].includes(result?.status);
+  return ["delivered", "queued"].includes(result?.status) || isTerminalAlertSuppression(result);
 }
 
 function strictQualification(result, minimumLiquidityUsd) {
@@ -180,6 +181,7 @@ function defaultState() {
     batchCursor: 0,
     discoveryCheckedAt: null,
     verifiedSeedCheckedAt: null,
+    verifiedSeedCursor: 0,
     verifiedSeedFailures: {},
     health: {
       status: "initializing",
@@ -192,8 +194,13 @@ function defaultState() {
       eligibleCount: 0,
       admittedCount: 0,
       activeCount: 0,
+      cachedCount: 0,
+      freshCount: 0,
+      liveCount: 0,
+      backlogCount: 0,
       rejectedCount: 0,
       batchCount: 0,
+      coverage: {},
       sources: {},
     },
   };
@@ -214,8 +221,14 @@ async function readState(file, fsImpl) {
       alertedTokens: asObject(parsed.alertedTokens),
       pending: asObject(parsed.pending),
       transportCircuits: asObject(parsed.transportCircuits),
+      verifiedSeedCursor: Math.max(0, Number(parsed.verifiedSeedCursor || 0)),
       verifiedSeedFailures: asObject(parsed.verifiedSeedFailures),
-      health: { ...defaultState().health, ...asObject(parsed.health), sources: asObject(parsed.health?.sources) },
+      health: {
+        ...defaultState().health,
+        ...asObject(parsed.health),
+        coverage: asObject(parsed.health?.coverage),
+        sources: asObject(parsed.health?.sources),
+      },
     };
   } catch (error) {
     if (error?.code === "ENOENT") return defaultState();
@@ -298,15 +311,6 @@ function summarizeTransportCircuits(state, nowMs) {
   };
 }
 
-function transportCoverageError(summary, batchFailure = null) {
-  if (!summary.count) return batchFailure ? String(batchFailure).slice(0, 180) : null;
-  const phase = summary.probeDue
-    ? `${summary.probeDue} probe_due${summary.open ? `, ${summary.open} open` : ""}`
-    : `${summary.open} open`;
-  const detail = `X identity coverage limited: ${phase}; handles=${summary.handles.map((handle) => `@${handle}`).join(",")}; reasons=${summary.reasons.join(",")}; nextRetryAt=${summary.nextRetryAt}`;
-  return `${detail}${batchFailure ? `; batch=${batchFailure}` : ""}`.slice(0, 180);
-}
-
 function parseRetryAfterMs(value, nowMs) {
   const raw = String(value || "").trim();
   if (!raw) return null;
@@ -347,12 +351,27 @@ function classifyTransportFailure(source, error, nowMs, failureCount = 1) {
 }
 
 function requestOptions(timeoutMs, options = {}) {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const signal = options.signal && typeof AbortSignal.any === "function"
+    ? AbortSignal.any([timeoutSignal, options.signal])
+    : options.signal || timeoutSignal;
   return {
     method: options.method || "GET",
     headers: { accept: "application/json", "user-agent": "robinhood-chain-monitor/0.1 (Fomo-linked public X calls)", ...(options.headers || {}) },
     ...(options.body === undefined ? {} : { body: JSON.stringify(options.body), headers: { accept: "application/json", "content-type": "application/json", "user-agent": "robinhood-chain-monitor/0.1 (Fomo-linked public X calls)", ...(options.headers || {}) } }),
-    signal: AbortSignal.timeout(timeoutMs),
+    signal,
   };
+}
+
+function abortableTask(task, signal) {
+  if (!signal) return Promise.resolve(task);
+  if (signal.aborted) return Promise.reject(Object.assign(new Error("FomoScan discovery cancelled"), { code: "verified_seed_cancelled" }));
+  return Promise.race([
+    Promise.resolve(task),
+    new Promise((_, reject) => signal.addEventListener("abort", () => {
+      reject(Object.assign(new Error("FomoScan discovery cancelled"), { code: "verified_seed_cancelled" }));
+    }, { once: true })),
+  ]);
 }
 
 async function settleBounded(items, limit, task) {
@@ -391,6 +410,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
   const discoveryIntervalMs = Math.max(5_000, Number(config.fomoXCallDiscoveryIntervalMs || 60_000));
   const attributionMaxAgeMs = Math.max(60_000, Number(config.fomoXCallAttributionMaxAgeMs || config.fomoCallGmgnAttributionMaxAgeMs || 86_400_000));
   const profileRefreshMs = Math.max(60_000, Number(config.fomoXCallProfileRefreshMs || 1_800_000));
+  const identityGraceMs = Math.min(DAY_MS, Math.max(profileRefreshMs, Number(config.fomoXCallIdentityGraceMs || DAY_MS)));
   const verifiedSeedRefreshMs = Math.max(60_000, Number(config.fomoXCallVerifiedSeedRefreshMs || profileRefreshMs));
   const verifiedSeedRetryMs = Math.max(60_000, Number(config.fomoXCallVerifiedSeedRetryMs || 300_000));
   const maximumPostAgeMs = Math.max(60_000, Number(config.fomoXCallMaxPostAgeMs || 300_000));
@@ -401,6 +421,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
   const minimumLiquidityUsd = Math.max(1, Number(config.fomoXCallMinLiquidityUsd || 10_000));
   const candidateLimit = Math.max(1, Math.min(1_000, Number(config.fomoXCallCandidateLimit || 500)));
   const batchSize = Math.max(1, Math.min(50, Number(config.fomoXCallBatchSize || 6)));
+  const verifiedSeedBatchSize = Math.max(1, Math.min(50, Number(config.fomoXCallVerifiedSeedBatchSize || batchSize)));
   const concurrency = Math.max(1, Math.min(10, Number(config.fomoXCallConcurrency || 3)));
   const requestTimeoutMs = Math.max(500, Number(config.fomoXCallRequestTimeoutMs || 8_000));
   const verifiedSeedHandles = [...new Set((Array.isArray(config.fomoCallPublicHandles) ? config.fomoCallPublicHandles : [])
@@ -413,6 +434,9 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
   };
   let state = null;
   let serial = Promise.resolve();
+  let writeSerial = Promise.resolve();
+  let verifiedSeedDiscovery = null;
+  let verifiedSeedAbortController = null;
   let timer = null;
   let started = false;
   let stopped = false;
@@ -422,9 +446,12 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     return state;
   };
 
-  const persist = async (nowMs) => {
+  const persist = (nowMs) => {
     pruneState(state, nowMs, attributionMaxAgeMs, tokenDedupMs, pendingMaxAgeMs);
-    await atomicWriteFomoXCallState(stateFile, state, fsImpl);
+    const snapshot = structuredClone(state);
+    const current = writeSerial.catch(() => {}).then(() => atomicWriteFomoXCallState(stateFile, snapshot, fsImpl));
+    writeSerial = current.catch(() => {});
+    return current;
   };
 
   function hasExactCandidateIdentity(candidate) {
@@ -442,6 +469,59 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       && cleanHandle(binding?.handle || binding?.twitterHandle).toLowerCase() === candidate.handle
       && Number.isFinite(checkedAtMs) && checkedAtMs <= nowMs + FUTURE_TOLERANCE_MS
       && nowMs - checkedAtMs <= attributionMaxAgeMs;
+  }
+
+  function freshCachedProfile(candidate, profile, nowMs) {
+    const checkedAtMs = Date.parse(profile?.checkedAt || "");
+    return /^\d+$/.test(String(profile?.id || ""))
+      && cleanHandle(profile?.handle).toLowerCase() === candidate.handle
+      && profile?.protected !== true
+      && Number(profile?.followers || 0) >= minimumFollowers
+      && Number.isFinite(checkedAtMs) && checkedAtMs <= nowMs + FUTURE_TOLERANCE_MS
+      && nowMs - checkedAtMs <= identityGraceMs;
+  }
+
+  function freshCachedBscActivity(activity, nowMs) {
+    const checkedAtMs = Date.parse(activity?.checkedAt || "");
+    return Number.isSafeInteger(Number(activity?.count)) && Number(activity.count) > 0
+      && Number.isFinite(checkedAtMs) && checkedAtMs <= nowMs + FUTURE_TOLERANCE_MS
+      && nowMs - checkedAtMs <= identityGraceMs;
+  }
+
+  function freshCandidateEvidence(candidate, nowMs) {
+    if (!hasExactCandidateIdentity(candidate)) return false;
+    const discoveredAt = Number(candidate?.discoveredAt);
+    if (!Number.isFinite(discoveredAt) || discoveredAt > nowMs + FUTURE_TOLERANCE_MS
+      || nowMs - discoveredAt > Math.min(attributionMaxAgeMs, identityGraceMs)) return false;
+    if (candidate.source === FOMOSCAN_SEED_SOURCE) {
+      const checkedAtMs = Date.parse(candidate?.walletBinding?.checkedAt || candidate?.walletBinding?.lastCheckedAt || "");
+      return freshVerifiedBinding(candidate, candidate.walletBinding, nowMs)
+        && Number.isFinite(checkedAtMs) && nowMs - checkedAtMs <= identityGraceMs;
+    }
+    return candidate.source === GMGN_CANDIDATE_SOURCE
+      && candidate.origin === GMGN_CANDIDATE_SOURCE
+      && candidate.candidateSource === GMGN_CANDIDATE_SOURCE
+      && candidate.fomoTagged === true && candidate.ambiguousIdentity === false;
+  }
+
+  function hasFreshCachedIdentity(candidate, stored, nowMs) {
+    return freshCachedProfile(candidate, stored?.xProfile, nowMs)
+      && freshCachedBscActivity(stored?.bscActivity, nowMs)
+      && freshCandidateEvidence(candidate, nowMs)
+      && Number(stored?.admissionRejectedUntil || 0) <= nowMs;
+  }
+
+  function isTransientProfileReason(reason) {
+    return reason === "timeout" || reason === "http_429" || /^http_5\d\d$/.test(String(reason || ""));
+  }
+
+  function isTransientBindingRefreshError(error) {
+    const message = String(error?.message || error || "");
+    const statusFromMessage = Number(message.match(/(?:^|\b)(?:HTTP\s*)?(\d{3})(?:\b|$)/i)?.[1] || 0);
+    const status = Number(error?.httpStatus || error?.status || statusFromMessage || 0);
+    return status === 429 || status >= 500 && status <= 599
+      || ["AbortError", "TimeoutError"].includes(error?.name)
+      || /\b(?:timeout|timed out)\b|aborted/i.test(message);
   }
 
   function migrateFreshSeedBinding(candidate, nowMs) {
@@ -543,7 +623,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     const payload = await fetchWithTransportCircuit(FX_PROFILE_SOURCE, handle,
       () => fetchJson(`${fxTwitterBase}/2/profile/${encodeURIComponent(handle)}`));
     const parsed = parseFxTwitterProfile(payload, handle);
-    if (!parsed) throw new Error(`@${handle} FxTwitter profile schema or identity mismatch`);
+    if (!parsed) throw admissionError(`@${handle} FxTwitter profile schema or handle/id mismatch`, "ineligible_x_profile");
     if (!/^\d+$/.test(String(parsed.id || "")) || parsed.protected === true || parsed.followers < minimumFollowers) {
       throw admissionError(`@${handle} failed numeric X identity or ${minimumFollowers}+ follower gate`, "ineligible_x_profile");
     }
@@ -619,6 +699,17 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
         .map((candidate) => cleanHandle(candidate?.handle).toLowerCase())
         .filter((handle) => HANDLE.test(handle)));
       const selectedByHandle = new Map(selected.map((candidate) => [candidate.handle.toLowerCase(), candidate]));
+      // A clean GMGN observation of the same wallet under a new unique handle is a
+      // handle migration. Drop the old runtime completely so the new timeline is
+      // silently baselined and no pre-migration post can be replayed.
+      for (const candidate of selected) {
+        for (const [oldKey, previous] of Object.entries(state.roster || {})) {
+          if (oldKey === candidate.handle || previous?.source !== GMGN_CANDIDATE_SOURCE) continue;
+          if (String(previous.wallet || "").toLowerCase() !== candidate.wallet) continue;
+          delete state.roster[oldKey];
+          clearHandleRuntimeState(state, oldKey);
+        }
+      }
       for (const [key, previous] of Object.entries(state.roster || {})) {
         if (previous?.source === GMGN_CANDIDATE_SOURCE && discoveredHandles.has(key) && !selectedByHandle.has(key)) {
           delete state.roster[key];
@@ -658,8 +749,8 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     }
   }
 
-  async function fetchVerifiedSeed(handle, nowMs) {
-    const response = await fetchImpl(`${fomoScanBase}/get-user/${encodeURIComponent(handle)}`, requestOptions(requestTimeoutMs));
+  async function fetchVerifiedSeed(handle, nowMs, signal) {
+    const response = await fetchImpl(`${fomoScanBase}/get-user/${encodeURIComponent(handle)}`, requestOptions(requestTimeoutMs, { signal }));
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`HTTP ${response.status} ${new URL(fomoScanBase).hostname}`);
     const parsed = parseFomoScanProfile(await response.json(), handle);
@@ -696,24 +787,63 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     });
   }
 
-  async function refreshVerifiedSeeds(nowMs) {
+  function verifiedSeedRefreshPlan(nowMs) {
     if (!verifiedSeedHandles.length) {
-      state.health.sources.fomoscanSeeds = { status: "disabled_no_handles", checkedAt: new Date(nowMs).toISOString(), verified: 0 };
-      return "disabled_no_handles";
+      state.health.sources.fomoscanSeeds = {
+        status: "disabled_no_handles",
+        checkedAt: new Date(nowMs).toISOString(),
+        configured: 0,
+        queried: 0,
+        verified: 0,
+        inFlight: false,
+        backlog: 0,
+      };
+      return null;
     }
     const previousCheck = Date.parse(state.verifiedSeedCheckedAt || "");
     const fullRefreshDue = !Number.isFinite(previousCheck) || nowMs - previousCheck >= verifiedSeedRefreshMs;
+    const failedHandles = Object.keys(state.verifiedSeedFailures || {})
+      .filter((handle) => verifiedSeedHandles.includes(handle));
     const failedHandlesDue = Object.entries(state.verifiedSeedFailures || {})
       .filter(([handle, value]) => verifiedSeedHandles.includes(handle) && Number(value?.nextRetryAt || 0) <= nowMs)
-      .map(([handle]) => handle);
-    if (!fullRefreshDue && !failedHandlesDue.length) {
-      return state.health.sources.fomoscanSeeds?.status || "healthy";
+      .map(([handle]) => handle)
+      .sort();
+    if (fullRefreshDue) {
+      const start = Math.max(0, Number(state.verifiedSeedCursor || 0)) % verifiedSeedHandles.length;
+      const queriedHandles = verifiedSeedHandles.slice(start, start + verifiedSeedBatchSize);
+      const nextCursor = start + queriedHandles.length;
+      return {
+        mode: "full_sweep",
+        queriedHandles,
+        start,
+        nextCursor: nextCursor >= verifiedSeedHandles.length ? 0 : nextCursor,
+        fullSweepComplete: nextCursor >= verifiedSeedHandles.length,
+        backlogAfter: Math.max(0, verifiedSeedHandles.length - nextCursor),
+        backlogBefore: new Set([...verifiedSeedHandles.slice(start), ...failedHandles]).size,
+      };
     }
-    const queriedHandles = fullRefreshDue ? verifiedSeedHandles : failedHandlesDue;
+    if (!failedHandlesDue.length) return null;
+    const queriedHandles = failedHandlesDue.slice(0, verifiedSeedBatchSize);
+    return {
+      mode: "retry",
+      queriedHandles,
+      start: null,
+      nextCursor: Number(state.verifiedSeedCursor || 0),
+      fullSweepComplete: false,
+      backlogAfter: Math.max(0, failedHandlesDue.length - queriedHandles.length),
+      backlogBefore: failedHandles.length,
+    };
+  }
+
+  async function refreshVerifiedSeeds(nowMs, plan, signal) {
+    const queriedHandles = plan.queriedHandles;
     const results = await settleBounded(queriedHandles, concurrency, async (handle) => {
-      if (dependencies.discoverVerifiedSeedImpl) return dependencies.discoverVerifiedSeedImpl(handle, nowMs);
-      return fetchVerifiedSeed(handle, nowMs);
+      const task = dependencies.discoverVerifiedSeedImpl
+        ? dependencies.discoverVerifiedSeedImpl(handle, nowMs, { signal })
+        : fetchVerifiedSeed(handle, nowMs, signal);
+      return abortableTask(task, signal);
     });
+    if (signal?.aborted) throw Object.assign(new Error("FomoScan discovery cancelled"), { code: "verified_seed_cancelled" });
     let verified = 0;
     let absent = 0;
     let failures = 0;
@@ -759,14 +889,22 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
         lastSeenAt: nowMs,
       };
     }
-    if (fullRefreshDue) state.verifiedSeedCheckedAt = new Date(nowMs).toISOString();
+    if (plan.mode === "full_sweep") {
+      state.verifiedSeedCursor = plan.nextCursor;
+      if (plan.fullSweepComplete) state.verifiedSeedCheckedAt = new Date(nowMs).toISOString();
+    }
     for (const handle of Object.keys(state.verifiedSeedFailures)) {
       if (!verifiedSeedHandles.includes(handle)) delete state.verifiedSeedFailures[handle];
     }
-    const outstandingFailures = Object.keys(state.verifiedSeedFailures).length;
+    const outstandingFailureHandles = Object.keys(state.verifiedSeedFailures);
+    const outstandingFailures = outstandingFailureHandles.length;
     const totalVerified = Object.values(state.roster || {}).filter((entry) => entry?.source === FOMOSCAN_SEED_SOURCE
       && freshVerifiedBinding(entry, entry.walletBinding, nowMs)).length;
-    const status = outstandingFailures ? (totalVerified || failures < results.length ? "partial" : "error") : "healthy";
+    const unvisitedHandles = plan.mode === "full_sweep" && !plan.fullSweepComplete
+      ? verifiedSeedHandles.slice(plan.nextCursor) : [];
+    const discoveryBacklog = new Set([...unvisitedHandles, ...outstandingFailureHandles]).size;
+    const status = outstandingFailures ? (totalVerified || failures < results.length ? "partial" : "error")
+      : plan.backlogAfter ? "partial" : "healthy";
     const checkedAt = new Date(nowMs).toISOString();
     state.health.sources.fomoscanSeeds = {
       status,
@@ -774,18 +912,84 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       fullCheckedAt: state.verifiedSeedCheckedAt,
       configured: verifiedSeedHandles.length,
       queried: queriedHandles.length,
+      mode: plan.mode,
+      cursor: state.verifiedSeedCursor,
       verified: totalVerified,
       verifiedThisCheck: verified,
       absent,
       failures: outstandingFailures,
       failuresThisCheck: failures,
+      inFlight: false,
+      backlog: discoveryBacklog,
     };
     return status;
   }
 
+  function scheduleVerifiedSeedRefresh(nowMs) {
+    if (stopped) return "stopped";
+    if (verifiedSeedDiscovery) {
+      state.health.sources.fomoscanSeeds = {
+        ...state.health.sources.fomoscanSeeds,
+        inFlight: true,
+      };
+      return "in_flight";
+    }
+    const plan = verifiedSeedRefreshPlan(nowMs);
+    if (!plan) return state.health.sources.fomoscanSeeds?.status || "healthy";
+    state.health.sources.fomoscanSeeds = {
+      ...state.health.sources.fomoscanSeeds,
+      status: state.health.sources.fomoscanSeeds?.status || "checking",
+      checkedAt: new Date(nowMs).toISOString(),
+      configured: verifiedSeedHandles.length,
+      queried: plan.queriedHandles.length,
+      mode: plan.mode,
+      cursor: Number(state.verifiedSeedCursor || 0),
+      inFlight: true,
+      backlog: plan.backlogBefore,
+    };
+    const controller = new AbortController();
+    verifiedSeedAbortController = controller;
+    const task = (async () => {
+      try {
+        const status = await refreshVerifiedSeeds(nowMs, plan, controller.signal);
+        await persist(now());
+        return status;
+      } catch (error) {
+        const checkedAt = new Date(now()).toISOString();
+        if (error?.code === "verified_seed_cancelled") {
+          state.health.sources.fomoscanSeeds = {
+            ...state.health.sources.fomoscanSeeds,
+            status: "stopped",
+            checkedAt,
+            inFlight: false,
+          };
+          await persist(now()).catch(() => {});
+          return "stopped";
+        }
+        state.health.sources.fomoscanSeeds = {
+          ...state.health.sources.fomoscanSeeds,
+          status: "error",
+          checkedAt,
+          inFlight: false,
+          backlog: Math.max(1, Number(state.health.sources.fomoscanSeeds?.backlog || plan.queriedHandles.length)),
+          error: String(error?.message || error).slice(0, 180),
+        };
+        logger.error?.(`[fomo-x-call] FomoScan seed discovery: ${error?.message || error}`);
+        await persist(now()).catch(() => {});
+        return "error";
+      }
+    })();
+    verifiedSeedDiscovery = task.finally(() => {
+      if (verifiedSeedAbortController === controller) verifiedSeedAbortController = null;
+      verifiedSeedDiscovery = null;
+    });
+    verifiedSeedDiscovery.catch(() => {});
+    return "scheduled";
+  }
+
   async function refreshDiscovery(nowMs) {
     const gmgn = await refreshGmgnDiscovery(nowMs);
-    const fomoscanSeeds = await refreshVerifiedSeeds(nowMs);
+    const fomoscanSeeds = scheduleVerifiedSeedRefresh(nowMs);
     return { gmgn, fomoscanSeeds };
   }
 
@@ -819,6 +1023,100 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     const selected = Array.from({ length: count }, (_, index) => roster[(start + index) % roster.length]);
     state.batchCursor = (start + count) % roster.length;
     return selected;
+  }
+
+  function summarizeEffectiveCoverage(roster, nowMs) {
+    const uniqueRoster = [...new Map(roster.map((candidate) => [candidate.handle.toLowerCase(), candidate])).values()];
+    const rotationMs = intervalMs * Math.max(1, Math.ceil(uniqueRoster.length / batchSize));
+    const timelineFreshnessMs = Math.max(MINUTE_MS, rotationMs * 3);
+    const cachedHandles = [];
+    const freshHandles = [];
+    const liveHandles = [];
+    const backlogHandles = [];
+    const profileFallbackHandles = [];
+    const effectiveCircuitHandles = [];
+    const reasonsByHandle = {};
+    const reasonCounts = {};
+    for (const candidate of uniqueRoster) {
+      const handle = candidate.handle.toLowerCase();
+      const stored = state.roster[handle] || candidate;
+      const reasons = [];
+      const profile = stored.xProfile;
+      const profileAt = Date.parse(profile?.checkedAt || "");
+      const bscAt = Date.parse(stored.bscActivity?.checkedAt || "");
+      const cached = /^\d+$/.test(String(profile?.id || ""))
+        && cleanHandle(profile?.handle).toLowerCase() === handle
+        && profile?.protected !== true
+        && Number(profile?.followers || 0) >= minimumFollowers
+        && Number(stored.bscActivity?.count || 0) > 0
+        && Number(stored.admissionRejectedUntil || 0) <= nowMs;
+      if (cached) cachedHandles.push(handle);
+      else if (Number(stored.admissionRejectedUntil || 0) > nowMs) reasons.push("admission_rejected");
+      else if (!/^\d+$/.test(String(profile?.id || ""))) reasons.push("profile_missing_or_non_numeric");
+      else if (cleanHandle(profile?.handle).toLowerCase() !== handle || profile?.protected === true
+        || Number(profile?.followers || 0) < minimumFollowers) reasons.push("profile_identity_gate");
+      else if (!(Number(stored.bscActivity?.count || 0) > 0)) reasons.push("bsc_identity_missing");
+
+      const fresh = cached && hasFreshCachedIdentity(candidate, stored, nowMs);
+      if (fresh) freshHandles.push(handle);
+      else if (cached) {
+        if (!Number.isFinite(profileAt) || nowMs - profileAt > identityGraceMs) reasons.push("profile_cache_stale");
+        if (!Number.isFinite(bscAt) || nowMs - bscAt > identityGraceMs) reasons.push("bsc_identity_stale");
+        if (!freshCandidateEvidence(candidate, nowMs)) reasons.push("wallet_identity_stale");
+      }
+
+      const profileCircuit = state.transportCircuits[transportCircuitKey(FX_PROFILE_SOURCE, handle)];
+      const timelineCircuit = state.transportCircuits[transportCircuitKey(FX_TIMELINE_SOURCE, handle)];
+      const cachedFallback = Boolean(profileCircuit && fresh && isTransientProfileReason(profileCircuit.reason));
+      if (cachedFallback) profileFallbackHandles.push(handle);
+      const effectiveProfileCircuit = Boolean(profileCircuit && !cachedFallback);
+      if (effectiveProfileCircuit) reasons.push(`profile_${profileCircuit.reason || "transport_error"}`);
+      if (timelineCircuit) reasons.push(`timeline_${timelineCircuit.reason || "transport_error"}`);
+      if (effectiveProfileCircuit || timelineCircuit) effectiveCircuitHandles.push(handle);
+
+      const lastTimelineSuccessAt = Date.parse(stored.timelineHealth?.lastSuccessAt || "");
+      const timelineFresh = Number.isFinite(lastTimelineSuccessAt)
+        && lastTimelineSuccessAt <= nowMs + FUTURE_TOLERANCE_MS
+        && nowMs - lastTimelineSuccessAt <= timelineFreshnessMs;
+      if (!timelineFresh) {
+        reasons.push(Number.isFinite(lastTimelineSuccessAt) ? "timeline_stale" : "timeline_never_succeeded");
+      }
+      const timelineFailedAfterSuccess = stored.timelineHealth?.status === "error"
+        && Date.parse(stored.timelineHealth?.checkedAt || "") >= lastTimelineSuccessAt;
+      if (timelineFailedAfterSuccess && !timelineCircuit) reasons.push("timeline_latest_check_failed");
+      const live = fresh && timelineFresh && !effectiveProfileCircuit && !timelineCircuit && !timelineFailedAfterSuccess;
+      if (live) liveHandles.push(handle);
+      else backlogHandles.push(handle);
+      const uniqueReasons = [...new Set(reasons)];
+      if (uniqueReasons.length) reasonsByHandle[handle] = uniqueReasons;
+      for (const reason of uniqueReasons) reasonCounts[reason] = Number(reasonCounts[reason] || 0) + 1;
+    }
+    return {
+      eligibleCount: uniqueRoster.length,
+      cachedCount: cachedHandles.length,
+      freshCount: freshHandles.length,
+      liveCount: liveHandles.length,
+      backlogCount: backlogHandles.length,
+      cachedHandles,
+      freshHandles,
+      liveHandles,
+      backlogHandles,
+      profileFallbackHandles,
+      effectiveCircuitHandles: [...new Set(effectiveCircuitHandles)].sort(),
+      reasonsByHandle,
+      reasonCounts,
+      timelineFreshnessMs,
+    };
+  }
+
+  function effectiveCoverageError(coverage, seedBacklog = 0, batchFailure = null) {
+    const topReasons = Object.entries(coverage.reasonCounts || {})
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+      .slice(0, 4)
+      .map(([reason, count]) => `${reason}:${count}`)
+      .join(",");
+    const detail = `X effective coverage limited: ${coverage.liveCount}/${coverage.eligibleCount}; cached=${coverage.cachedCount}; fresh=${coverage.freshCount}; backlog=${coverage.backlogCount}${seedBacklog ? `; seedBacklog=${seedBacklog}` : ""}${topReasons ? `; reasons=${topReasons}` : ""}`;
+    return `${detail}${batchFailure ? `; batch=${batchFailure}` : ""}`.slice(0, 180);
   }
 
   function markSeen(key, nowMs) {
@@ -1033,39 +1331,64 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
         profile = await fetchXProfile(candidate.handle);
       } catch (error) {
         const transportBackoff = transportBackoffResult(error);
-        if (transportBackoff) return transportBackoff;
-        if (error?.code !== "ineligible_x_profile") throw error;
-        stored.admissionRejectedUntil = nowMs + admissionRetryMs;
-        stored.admissionRejectionReason = error.message;
-        delete stored.xProfile;
-        return { status: "ineligible_profile", reason: error.message };
-      }
-      stored.xProfile = profile;
-      const previousBinding = stored.walletBinding;
-      try {
-        const resolvedBinding = await resolveVerifiedBinding(candidate);
-        if (freshVerifiedBinding(candidate, resolvedBinding, nowMs)) {
-          const checkedAt = resolvedBinding.checkedAt || resolvedBinding.lastCheckedAt;
-          stored.walletBinding = { ...resolvedBinding, checkedAt, lastCheckedAt: checkedAt };
-        } else if (candidate.source === FOMOSCAN_SEED_SOURCE) {
-          stored.walletBinding = null;
+        if (transportBackoff && isTransientProfileReason(transportBackoff.reason)
+          && hasFreshCachedIdentity(candidate, stored, nowMs)) {
+          profile = stored.xProfile;
+          stored.profileRefreshHealth = {
+            status: "cached_identity_fallback",
+            checkedAt: new Date(nowMs).toISOString(),
+            reason: transportBackoff.reason,
+            nextRetryAt: transportBackoff.nextRetryAt,
+          };
+        } else if (transportBackoff) {
+          return transportBackoff;
+        } else {
+          if (error?.code !== "ineligible_x_profile") throw error;
           stored.admissionRejectedUntil = nowMs + admissionRetryMs;
-          stored.admissionRejectionReason = `@${candidate.handle} no longer has an exact fresh FomoScan wallet binding`;
-          return { status: "ineligible_fomoscan_binding", reason: stored.admissionRejectionReason };
-        } else {
-          stored.walletBinding = null;
+          stored.admissionRejectionReason = error.message;
+          delete stored.xProfile;
+          delete stored.timelineHealth;
+          return { status: "ineligible_profile", reason: error.message };
         }
-      } catch (error) {
-        if (freshVerifiedBinding(candidate, previousBinding, nowMs)) {
-          stored.walletBinding = previousBinding;
-        } else if (candidate.source === FOMOSCAN_SEED_SOURCE) {
-          throw error;
-        } else {
-          stored.walletBinding = null;
+      }
+      if (profile !== stored.xProfile) {
+        stored.xProfile = profile;
+        delete stored.profileRefreshHealth;
+        const previousBinding = stored.walletBinding;
+        const hadExactVerifiedBinding = previousBinding?.status === "verified" && previousBinding?.verified === true
+          && previousBinding?.proofSource === "fomoscan"
+          && String(previousBinding?.wallet || "").toLowerCase() === candidate.wallet
+          && cleanHandle(previousBinding?.handle || previousBinding?.twitterHandle).toLowerCase() === candidate.handle;
+        try {
+          const resolvedBinding = await resolveVerifiedBinding(candidate);
+          if (freshVerifiedBinding(candidate, resolvedBinding, nowMs)) {
+            const checkedAt = resolvedBinding.checkedAt || resolvedBinding.lastCheckedAt;
+            stored.walletBinding = { ...resolvedBinding, checkedAt, lastCheckedAt: checkedAt };
+          } else if (candidate.source === FOMOSCAN_SEED_SOURCE || hadExactVerifiedBinding) {
+            stored.walletBinding = null;
+            stored.admissionRejectedUntil = nowMs + admissionRetryMs;
+            stored.admissionRejectionReason = `@${candidate.handle} FomoScan binding refresh returned no exact handle-wallet match`;
+            return { status: "ineligible_fomoscan_binding", reason: stored.admissionRejectionReason };
+          } else {
+            stored.walletBinding = null;
+          }
+        } catch (error) {
+          if (isTransientBindingRefreshError(error) && freshVerifiedBinding(candidate, previousBinding, nowMs)) {
+            stored.walletBinding = previousBinding;
+          } else {
+            stored.walletBinding = null;
+            if (candidate.source === FOMOSCAN_SEED_SOURCE || hadExactVerifiedBinding) {
+              stored.admissionRejectedUntil = nowMs + admissionRetryMs;
+              stored.admissionRejectionReason = `@${candidate.handle} FomoScan binding refresh failed closed: ${String(error?.message || error).slice(0, 100)}`;
+              return { status: "ineligible_fomoscan_binding", reason: stored.admissionRejectionReason };
+            }
+          }
         }
       }
     }
-    if (!/^\d+$/.test(String(profile.id || "")) || profile.followers < minimumFollowers) {
+    if (!/^\d+$/.test(String(profile.id || ""))
+      || cleanHandle(profile.handle).toLowerCase() !== candidate.handle
+      || profile.protected === true || profile.followers < minimumFollowers) {
       stored.admissionRejectedUntil = nowMs + admissionRetryMs;
       stored.admissionRejectionReason = `@${candidate.handle} has no current qualifying numeric X identity`;
       return { status: "ineligible_profile", reason: stored.admissionRejectionReason };
@@ -1096,9 +1419,22 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       tweets = await fetchTimeline(profile);
     } catch (error) {
       const transportBackoff = transportBackoffResult(error);
+      stored.timelineHealth = {
+        ...stored.timelineHealth,
+        status: "error",
+        checkedAt: new Date(nowMs).toISOString(),
+        reason: transportBackoff?.reason || String(error?.message || error).slice(0, 120),
+        nextRetryAt: transportBackoff?.nextRetryAt || null,
+      };
       if (transportBackoff) return transportBackoff;
       throw error;
     }
+    stored.timelineHealth = {
+      status: "healthy",
+      checkedAt: new Date(nowMs).toISOString(),
+      lastSuccessAt: new Date(nowMs).toISOString(),
+      itemCount: tweets.length,
+    };
     const latestId = maxTweetId(tweets);
     const initialized = state.initialized[key];
     const identityChanged = initialized && (String(initialized.xUserId || "") !== String(profile.id)
@@ -1157,62 +1493,79 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     const failures = results.filter((result) => result.status === "rejected");
     const batchTransportBackoffs = results.filter((result) => result.status === "fulfilled" && result.value?.transportFailure === true);
     const transportCoverage = summarizeTransportCircuits(state, nowMs);
-    const issueCount = failures.length + transportCoverage.count;
     const delivered = results.reduce((total, result) => total + Number(result.value?.delivered || 0), 0);
     const checkedAt = new Date(nowMs).toISOString();
-    const admittedCount = roster.filter((candidate) => {
-      const key = candidate.handle.toLowerCase();
-      return /^\d+$/.test(String(candidate.xProfile?.id || ""))
-        && Number(candidate.bscActivity?.count || 0) > 0
-        && Number(candidate.admissionRejectedUntil || 0) <= nowMs;
-    }).length;
+    const coverage = summarizeEffectiveCoverage(roster, nowMs);
+    const admittedCount = coverage.cachedCount;
     const rejectedCount = roster.filter((candidate) => Number(candidate.admissionRejectedUntil || 0) > nowMs).length;
-    const everyDiscoveryFailed = discoveryStatus.gmgn === "error" && discoveryStatus.fomoscanSeeds === "error";
-    const status = issueCount || (everyDiscoveryFailed && !roster.length) ? "degraded"
+    const seedBacklog = Number(state.health.sources.fomoscanSeeds?.backlog || 0);
+    const seedInFlight = state.health.sources.fomoscanSeeds?.inFlight === true;
+    const discoveryLimited = discoveryStatus.gmgn === "error"
+      || discoveryStatus.fomoscanSeeds === "error" || seedInFlight || seedBacklog > 0;
+    const coverageLimited = coverage.liveCount < coverage.eligibleCount;
+    const sourceLimited = discoveryLimited || coverageLimited;
+    const issueCount = failures.length + coverage.effectiveCircuitHandles.length;
+    const status = sourceLimited || failures.length ? "degraded"
       : !roster.length ? "healthy_no_candidates"
-        : !admittedCount ? "healthy_no_admitted"
-          : "healthy";
+        : "healthy";
     const successful = status.startsWith("healthy");
     const batchFailure = failures.length
       ? String(failures[0].reason?.message || failures[0].reason)
       : batchTransportBackoffs.length
         ? `${batchTransportBackoffs[0].value.source || "fxtwitter"} @${batchTransportBackoffs[0].value.handle || "unknown"} ${batchTransportBackoffs[0].value.reason}`
         : null;
+    const discoveryFailure = discoveryStatus.gmgn === "error" ? state.health.sources.gmgn?.error
+      : discoveryStatus.fomoscanSeeds === "error" ? state.health.sources.fomoscanSeeds?.error
+        : null;
     state.health = {
       ...state.health,
       status,
       checkedAt,
       lastSuccessAt: successful ? checkedAt : state.health.lastSuccessAt,
-      lastError: transportCoverage.count ? transportCoverageError(transportCoverage, batchFailure)
-        : batchFailure ? batchFailure.slice(0, 180)
-          : everyDiscoveryFailed ? state.health.sources.gmgn?.error || "all discovery sources failed"
-            : null,
+      lastError: sourceLimited || failures.length
+        ? effectiveCoverageError(coverage, seedBacklog, batchFailure || discoveryFailure)
+        : null,
       consecutiveFailures: successful ? 0 : Number(state.health.consecutiveFailures || 0) + 1,
       rosterCount: Object.keys(state.roster).length,
       discoveredCandidateCount: Number(state.health.sources.gmgn?.discovered || 0)
         + Number(state.health.sources.fomoscanSeeds?.verified || 0),
       eligibleCount: roster.length,
       admittedCount,
-      activeCount: admittedCount,
+      activeCount: coverage.liveCount,
+      cachedCount: coverage.cachedCount,
+      freshCount: coverage.freshCount,
+      liveCount: coverage.liveCount,
+      backlogCount: coverage.backlogCount,
       rejectedCount,
       batchCount: batch.length,
+      coverage,
       sources: {
         ...state.health.sources,
         x: {
-          status: issueCount ? "partial" : admittedCount ? "healthy" : roster.length ? "no_admitted_profiles" : "no_candidates",
-          coverage: transportCoverage.count ? "source_limited" : "complete",
+          status: sourceLimited || failures.length ? "partial" : coverage.liveCount ? "healthy" : "no_candidates",
+          coverage: sourceLimited ? "source_limited" : "complete",
           checkedAt,
           checked: batch.length,
           admitted: admittedCount,
+          cached: coverage.cachedCount,
+          fresh: coverage.freshCount,
+          live: coverage.liveCount,
+          backlog: coverage.backlogCount,
           rejected: rejectedCount,
           failures: issueCount,
           transportBackoffs: transportCoverage.count,
+          effectiveTransportBackoffs: coverage.effectiveCircuitHandles.length,
           transportOpen: transportCoverage.open,
           transportProbeDue: transportCoverage.probeDue,
           handles: transportCoverage.handles,
           reasons: transportCoverage.reasons,
           sources: transportCoverage.sources,
           nextRetryAt: transportCoverage.nextRetryAt,
+          liveHandles: coverage.liveHandles,
+          backlogHandles: coverage.backlogHandles,
+          profileFallbackHandles: coverage.profileFallbackHandles,
+          effectiveCircuitHandles: coverage.effectiveCircuitHandles,
+          coverageReasons: coverage.reasonCounts,
         },
       },
     };
@@ -1223,7 +1576,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       roster: roster.length,
       discoveredCandidates: state.health.discoveredCandidateCount,
       admitted: admittedCount,
-      active: admittedCount,
+      active: coverage.liveCount,
       rejected: rejectedCount,
       checked: batch.length,
       delivered,
@@ -1252,7 +1605,12 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     started = false;
     if (timer) clearInterval(timer);
     timer = null;
+    verifiedSeedAbortController?.abort();
     await serial.catch(() => {});
+    verifiedSeedAbortController?.abort();
+    const discovery = verifiedSeedDiscovery;
+    if (discovery) await discovery.catch(() => {});
+    await writeSerial.catch(() => {});
   }
 
   if (dependencies.autoStart !== false) start().catch((error) => logger.error?.(`[fomo-x-call] startup: ${error.message}`));
@@ -1262,6 +1620,11 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     start,
     stop,
     stateFile,
-    async getState() { await serial.catch(() => {}); await ensureState(); return structuredClone(state); },
+    async waitForDiscovery() {
+      const current = verifiedSeedDiscovery;
+      if (current) await current.catch(() => {});
+      await writeSerial.catch(() => {});
+    },
+    async getState() { await serial.catch(() => {}); await writeSerial.catch(() => {}); await ensureState(); return structuredClone(state); },
   };
 }

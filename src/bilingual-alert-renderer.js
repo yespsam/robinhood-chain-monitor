@@ -20,6 +20,7 @@ const EVENT_TITLES = {
   bsc_launchpad_update: "BSC launchpad structural update",
   evm_launchpad_update: "Morph launchpad structural update",
   fomo_family_top_call: "FOMO BSC KOL first buy",
+  fomo_monitor_health_update: "Fomo monitoring health transition",
   uniswap_official_update: "Uniswap official update",
   ai_official_update: "X / xAI / Grok official product update",
   platform_capability_update: "Official platform capability update",
@@ -43,6 +44,7 @@ const EVENT_TITLES_ZH = {
   bsc_launchpad_update: "BSC 发射台结构更新",
   evm_launchpad_update: "Morph 发射台结构更新",
   fomo_family_top_call: "FOMO BSC KOL 首次买入",
+  fomo_monitor_health_update: "Fomo 监控健康转场",
   uniswap_official_update: "Uniswap 官方更新",
   ai_official_update: "X / xAI / Grok 官方产品更新",
   platform_capability_update: "官方平台能力更新",
@@ -2015,10 +2017,10 @@ function fomoStage(event, language) {
   const separator = zh ? "；" : "; ";
   const safety = fomoSafetyBoundary(event, language);
   if (event?.signalKind === "high_profit_high_winrate_wallet_buy") {
-    const verified = event?.positionProof?.status === "verified" && event?.positionProof?.complete === true;
+    const position = fomoPositionTier(event, language);
     return zh
-      ? `链上确认${verified ? "，零仓" : ""}${separator}GMGN公开画像，归属未证${separator}安全通过`
-      : `On-chain confirmed${verified ? ", zero position" : ""}${separator}public GMGN profile, owner unverified${separator}safety passed`;
+      ? `链上买入确认${separator}${position}${separator}GMGN公开画像，归属未证${separator}${safety}`
+      : `On-chain buy confirmed${separator}${position}${separator}public GMGN profile, owner unverified${separator}${safety}`;
   }
   if (event?.signalKind === "fomo_x_call") {
     const observed = event?.walletAttribution?.status === "observed" && event?.walletAttribution?.verified === false;
@@ -2163,6 +2165,38 @@ function buildFocusModel(event, changeModel, sourceLines) {
   const statusLine = sourceLines.slice(1).find((line) => /^状态[:：]/u.test(line));
   const timeLine = sourceLines.slice(1).find((line) => /^时间[:：]/u.test(line));
   const sourceStatus = statusLine ? labelledValue(statusLine) : "";
+  if (event?.type === "fomo_monitor_health_update") {
+    const summary = event.summary || {};
+    const healthLabel = (status, language) => {
+      const labels = language === "zh"
+        ? { healthy: "正常", degraded: "降级", critical: "严重降级", disabled: "未启用", unknown: "未确认" }
+        : { healthy: "healthy", degraded: "degraded", critical: "critical", disabled: "disabled", unknown: "unknown" };
+      return labels[String(status || "unknown")] || labels.unknown;
+    };
+    const recovered = event.transition === "recovered";
+    const updated = event.transition === "updated";
+    const render = (language) => {
+      const zh = language === "zh";
+      const smart = summary.smartMoney || {};
+      const x = summary.x || {};
+      const outbox = summary.outbox || {};
+      const prefix = recovered
+        ? (zh ? "聚合监控已恢复稳定" : "Aggregate monitoring recovered and is stable")
+        : updated
+          ? (zh ? "严重降级范围已扩大" : "Critical degradation scope expanded")
+          : (zh ? "持续严重降级已确认" : "Sustained critical degradation confirmed");
+      const separator = zh ? "｜" : " | ";
+      const open = zh ? "（" : " (";
+      const close = zh ? "）" : ")";
+      const colon = zh ? "：" : ": ";
+      return `${prefix}${colon}Smart Money ${healthLabel(smart.status, language)}${open}admitted ${Number(smart.admitted || 0)} / fresh ${Number(smart.fresh || 0)} / LKG ${Number(smart.lastKnownGood || 0)}${close}${separator}BSC ${healthLabel(summary.bsc?.status, language)}${separator}X ${healthLabel(x.status, language)}${open}live ${Number(x.live || 0)}/${Number(x.eligible || 0)}${close}${separator}Thesis ${healthLabel(summary.thesis?.status, language)}${separator}Fomo outbox ${healthLabel(outbox.status, language)}${open}pending ${Number(outbox.pending || 0)} / failed ${Number(outbox.failed || 0)}${close}`;
+    };
+    return {
+      eventType: event.type,
+      platform: { zh: "Fomo 监控 · 聚合健康", en: "Fomo Monitor · Aggregate health" },
+      health: { zh: render("zh"), en: render("en") },
+    };
+  }
   if (event?.type === "telegram_news_update") {
     const zhFacts = telegramNewsFacts(event, "zh");
     const enFacts = telegramNewsFacts(event, "en");
@@ -2207,6 +2241,12 @@ function buildFocusModel(event, changeModel, sourceLines) {
 
 function renderFocusLines(focusModel, language = "zh") {
   const zh = language === "zh";
+  if (focusModel.eventType === "fomo_monitor_health_update") {
+    return [
+      `${zh ? "平台：" : "Platform: "}${focusModel.platform[language]}`,
+      `${zh ? "更新了什么：" : "What changed: "}${focusModel.health[language]}`,
+    ];
+  }
   const evidence = focusModel.evidence.map((item) => item[language]).filter(Boolean);
   const separator = zh ? "｜" : " | ";
   const changed = [
@@ -2448,7 +2488,8 @@ function usesLocalStructuredChineseFocus(event) {
 }
 
 function usesLocalStructuredBilingualFocus(event) {
-  return event?.type === "github_module_update"
+  return event?.type === "fomo_monitor_health_update"
+    || event?.type === "github_module_update"
     || event?.type === "uniswap_official_update"
     || Boolean(binanceAgentNativeDetails(event))
     || flapAgenticFirstTokenCandidate(event)

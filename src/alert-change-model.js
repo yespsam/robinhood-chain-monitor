@@ -576,10 +576,14 @@ function fomoModel(event) {
     const winRate = Number(stats.winRate);
     const tokenCount = Number(stats.tokenCount);
     const symbol = event.tokenSymbol || event.symbol || "代币";
+    const proofBoundary = event.positionSemantics?.proofBoundary || event.positionProof?.phase;
+    const zeroPositionLabel = proofBoundary === "previous_block"
+      ? "前一区块仓位: 0"
+      : proofBoundary === "immediately_before_transaction" ? "交易前仓位: 0" : "零仓位证明: 已核验";
     return model({
       kind: "addition",
       basis: "exact_snapshot",
-      before: { state: "known", items: ["交易前仓位: 0"] },
+      before: { state: "known", items: [zeroPositionLabel] },
       after: {
         state: "known",
         items: [

@@ -33,7 +33,9 @@ function smartWalletBuy(overrides = {}) {
     qualified: true,
     strong: true,
     activity: "buy",
-    action: "first_buy",
+    action: "buy",
+    trade: "buy",
+    side: "buy",
     source: {
       id: "gmgn_profitable_wallet_onchain",
       name: "GMGN profitable wallet on-chain monitor",
@@ -68,6 +70,20 @@ function smartWalletBuy(overrides = {}) {
         "7d": { realizedProfitUsd: 6_258.72, winRate: 0.62011, realizedRoi: 0.017249, tokenCount: 223, buyCount: 1_476, sellCount: 1_478 },
         "30d": { realizedProfitUsd: 17_458.42, winRate: 0.63172, realizedRoi: 0.01963, tokenCount: 510, buyCount: 3_610, sellCount: 3_616 },
       },
+    },
+    sourceClassification: {
+      id: "gmgn_public_performance_wallet",
+      gmgnTags: ["fomo", "smart_degen"],
+      includesKolTag: false,
+      fomoOfficial: false,
+      identityVerified: false,
+    },
+    positionSemantics: {
+      id: "new_position_after_previous_block_zero",
+      label: "前一区块零仓后的新建仓",
+      proofBoundary: "previous_block",
+      lifetimeFirstBuyVerified: false,
+      transactionImmediatePreBalanceVerified: false,
     },
     sourceTrade: {
       scheme: "gmgn_smartmoney_trade_v1",
@@ -153,8 +169,24 @@ test("qualified GMGN smart-money tags do not require the smart_degen label", () 
   const event = smartWalletBuy();
   event.walletProfile.tags = ["launchpad_smart", "axiom"];
   event.sourceTrade.tags = ["launchpad_smart", "axiom"];
+  event.sourceClassification.gmgnTags = ["launchpad_smart", "axiom"];
   assert.equal(isMonitoringSourceEnabled(monitorConfig, event), true);
   assert.equal(isRelevantAlert(event), true);
+});
+
+test("a smartmoney-feed wallet may overlap a KOL tag without becoming a Fomo or KOL identity claim", () => {
+  const event = smartWalletBuy();
+  event.walletProfile.tags.push("kol");
+  event.sourceTrade.tags.push("kol");
+  event.sourceClassification.gmgnTags.push("kol");
+  event.sourceClassification.includesKolTag = true;
+  assert.equal(isMonitoringSourceEnabled(monitorConfig, event), true);
+  assert.equal(isRelevantAlert(event), true);
+  assert.equal(event.sourceClassification.fomoOfficial, false);
+  assert.equal(event.sourceClassification.identityVerified, false);
+  assert.equal(event.caller, undefined);
+  assert.equal(event.walletBinding, undefined);
+  assert.equal(event.walletAttribution, undefined);
 });
 
 test("smart wallet routing fails closed on weak stats, dirty tags, stale evidence, and mismatches", () => {
@@ -188,6 +220,12 @@ test("smart wallet routing fails closed on weak stats, dirty tags, stale evidenc
   });
   reject("payment proof mismatch", (event) => { event.transactionProof.paymentRaw = "2"; });
   reject("position zero proof mismatch", (event) => { event.transactionProof.positionProof.previousBalanceRaw = "1"; });
+  reject("first-buy action overclaims the previous-block proof", (event) => { event.action = "first_buy"; });
+  reject("missing position semantics", (event) => { delete event.positionSemantics; });
+  reject("lifetime first-buy overclaim", (event) => { event.positionSemantics.lifetimeFirstBuyVerified = true; });
+  reject("immediate pre-transaction overclaim", (event) => { event.positionSemantics.transactionImmediatePreBalanceVerified = true; });
+  reject("Fomo ownership overclaim", (event) => { event.sourceClassification.fomoOfficial = true; });
+  reject("KOL tag classification mismatch", (event) => { event.sourceClassification.includesKolTag = true; });
   reject("Fomo platform spoof", (event) => { event.platform.id = "fomo"; });
   reject("non-array caller spoof", (event) => { event.callers = "@fake"; });
   reject("stale trade", (event) => { event.sourceTrade.occurredAt = new Date(Date.now() - 300_001).toISOString(); });
@@ -201,6 +239,7 @@ test("smart wallet card extracts performance and omits purchase amount and Fomo/
   const event = smartWalletBuy();
   const model = deriveAlertChangeModel(event);
   assert.match(model.after.text, /高收益高胜率钱包买入 ABC/);
+  assert.equal(model.before.text, "前一区块仓位: 0");
   assert.doesNotMatch(model.after.text, /@\?|金额/);
 
   const bundle = await buildBilingualAlertBundle({
@@ -223,6 +262,8 @@ test("smart wallet card extracts performance and omits purchase amount and Fomo/
   assert.doesNotMatch(rendered, new RegExp(TX, "i"));
   assert.equal(event.transactionHash, TX, "the immutable event and transaction button retain the full hash");
   assert.doesNotMatch(rendered, /\$0\.01|Fomo|KOL|喊单|X call|绑定钱包|linked wallet/i);
+  assert.match(rendered, /前一区块代币零仓位|Token zero position at previous block/);
+  assert.doesNotMatch(rendered, /交易前仓位|首仓|first.position|lifetime first/i);
 });
 
 test("smart wallet buttons contain only contract, GMGN, transaction, and monitored-wallet actions", () => {

@@ -4,7 +4,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { Interface, JsonRpcProvider, formatUnits, id, isAddress } from "ethers";
-import { sendAlerts } from "./alerts.js";
+import { isTerminalAlertSuppression, sendAlerts } from "./alerts.js";
 import { assessLocalTokenSecurity } from "./local-security.js";
 
 export const COPE_API_BASE = "https://api.cope.capital";
@@ -163,6 +163,8 @@ const PENDING_MAX_AGE_MS = 10 * 60 * 1_000;
 const DEFAULT_TELEMETRY_PERSIST_INTERVAL_MS = 60_000;
 const SMART_MONEY_EXACT_MAX_PER_CHECK = 3;
 const SMART_MONEY_EXACT_BUDGET_MS = 8_000;
+const SMART_MONEY_FEED_BACKOFF_MS = [60_000, 2 * 60_000, 5 * 60_000];
+const SMART_MONEY_STATS_BACKOFF_MS = [60_000, 2 * 60_000, 5 * 60_000];
 const FOMO_CALL_CHECKPOINT_VERSION = 1;
 const FOMO_CALL_CHECKPOINT_EPOCH = "1970-01-01T00:00:00.000Z";
 
@@ -174,6 +176,20 @@ const finite = (value) => {
 const normalizedTags = (value) => Array.isArray(value)
   ? [...new Set(value.map((tag) => String(tag || "").trim().toLowerCase()).filter(Boolean))]
   : [];
+
+const normalizedTagUnion = (...values) => normalizedTags(values.flatMap((value) =>
+  Array.isArray(value) ? value : []));
+
+const smartMoneySourceClassification = (...tagSets) => {
+  const gmgnTags = normalizedTagUnion(...tagSets);
+  return {
+    id: "gmgn_public_performance_wallet",
+    gmgnTags,
+    includesKolTag: gmgnTags.includes("kol"),
+    fomoOfficial: false,
+    identityVerified: false,
+  };
+};
 
 const gmgnTagsAreClean = (value) => {
   const tags = normalizedTags(value);
@@ -1008,8 +1024,8 @@ export function selectFreshFomoXCallRoster(payload, options = {}) {
 
 export function classifyFomoAlertDelivery(delivery) {
   const status = delivery?.status;
-  if (status === "suppressed") return "suppressed";
   if (["delivered", "queued"].includes(status)) return "accepted";
+  if (isTerminalAlertSuppression(delivery)) return "suppressed";
   throw new Error(`Fomo alert sender returned an unknown status: ${String(status || "missing")}`);
 }
 
@@ -1721,6 +1737,9 @@ function defaultState() {
         feedCheckedAt: null,
         feedStatus: "initializing",
         feedError: null,
+        feedFailureCount: 0,
+        feedNextRetryAt: null,
+        lastFeedSuccessAt: null,
         baseline: null,
         candidates: {},
         roster: {},
@@ -1731,6 +1750,13 @@ function defaultState() {
         statsCheckedAt: null,
         statsStatus: "initializing",
         statsError: null,
+        qualificationCoverage: {
+          status: "initializing",
+          admitted: 0,
+          fresh: 0,
+          lastKnownGood: 0,
+          checkedAt: null,
+        },
         exactTradeStatus: "initializing",
         rateLimitedUntil: null,
       },
@@ -2042,8 +2068,14 @@ function materialSourceHealthState(state = {}) {
     sharedRosterReason: sharedRoster.reason || null,
     smartFeedStatus: smartMoney.feedStatus || null,
     smartFeedError: smartMoney.feedError || null,
+    smartFeedFailureCount: Number(smartMoney.feedFailureCount || 0),
+    smartFeedNextRetryAt: smartMoney.feedNextRetryAt || null,
     smartStatsStatus: smartMoney.statsStatus || null,
     smartStatsError: smartMoney.statsError || null,
+    smartQualificationStatus: smartMoney.qualificationCoverage?.status || null,
+    smartQualificationAdmitted: Number(smartMoney.qualificationCoverage?.admitted || 0),
+    smartQualificationFresh: Number(smartMoney.qualificationCoverage?.fresh || 0),
+    smartQualificationLastKnownGood: Number(smartMoney.qualificationCoverage?.lastKnownGood || 0),
     smartExactTradeStatus: smartMoney.exactTradeStatus || null,
     coverageProfiles: coverage.profiles || null,
     coverageCurves: coverage.curves || null,
@@ -2052,6 +2084,9 @@ function materialSourceHealthState(state = {}) {
     coverageBsc: coverage.bsc || null,
     coverageSmartFeed: smartCoverage.feed || null,
     coverageSmartStats: smartCoverage.stats || null,
+    coverageSmartQualification: smartCoverage.qualification || null,
+    coverageSmartFresh: Number(smartCoverage.fresh || 0),
+    coverageSmartLastKnownGood: Number(smartCoverage.lastKnownGood || 0),
     coverageSmartExactTrades: smartCoverage.exactTrades || null,
   };
 }
@@ -2535,6 +2570,15 @@ export function createFomoCallMonitor(config, dependencies = {}) {
   const smartMoneyRejectedCacheMs = Math.max(5 * 60_000, Number(config.fomoSmartMoneyRejectedCacheMs ?? 60 * 60_000));
   const smartMoneyMaxStatsAgeMs = Math.max(smartMoneyQualifiedCacheMs, Number(config.fomoSmartMoneyMaxStatsAgeMs ?? 2 * 60 * 60_000));
   const smartMoneyCandidateRetentionMs = Math.max(60 * 60_000, Number(config.fomoSmartMoneyCandidateRetentionMs ?? 24 * 60 * 60_000));
+  // A previously qualified wallet remains observable for one bounded feed
+  // retention window when GMGN profile stats are temporarily unavailable.
+  // All qualification, blocked-tag, EOA, first-position, and token safety gates
+  // still apply; this only prevents an upstream stats outage from erasing the
+  // entire on-chain watch roster at the two-hour freshness boundary.
+  const smartMoneyLastKnownGoodGraceMs = Math.max(
+    smartMoneyMaxStatsAgeMs,
+    Math.min(7 * 24 * 60 * 60_000, Number(config.fomoSmartMoneyLastKnownGoodGraceMs ?? smartMoneyCandidateRetentionMs)),
+  );
   const smartMoneyCandidateLimit = Math.max(1, Math.min(2_000, Number(config.fomoSmartMoneyCandidateLimit ?? 500)));
   const smartMoneyMaxWallets = Math.max(1, Math.min(100, Number(config.fomoSmartMoneyMaxWallets ?? 20)));
   const smartMoneyQualificationOptions = {
@@ -2670,11 +2714,17 @@ export function createFomoCallMonitor(config, dependencies = {}) {
       }
     }
     if (!legacyBuyEnabled && smartMoneyEnabled) {
-      const freshSmartProfiles = Object.values(smartMoney.roster || {})
-        .filter((entry) => smartWalletProfileFresh(entry.walletProfile, entry.wallet, summaryNowMs)).length;
+      const usableSmartProfiles = Object.values(smartMoney.roster || {})
+        .filter((entry) => smartRosterEntryUsable(entry, summaryNowMs));
+      const freshSmartProfiles = usableSmartProfiles
+        .filter((entry) => smartWalletProfileFresh(entry.walletProfile, entry.wallet, summaryNowMs)
+          && freshTimestamp(entry.eoaCheckedAt, summaryNowMs, smartMoneyMaxStatsAgeMs)).length;
+      const lastKnownGoodProfiles = Math.max(0, usableSmartProfiles.length - freshSmartProfiles);
       profileFreshness.fresh = freshSmartProfiles;
-      profileFreshness.unknown = Math.max(0, smartWalletCount - freshSmartProfiles);
-      profileFreshness.status = smartWalletCount === 0 || freshSmartProfiles === smartWalletCount ? "fresh" : "unknown";
+      profileFreshness.stale = lastKnownGoodProfiles;
+      profileFreshness.unknown = Math.max(0, smartWalletCount - freshSmartProfiles - lastKnownGoodProfiles);
+      profileFreshness.status = smartWalletCount === 0 ? "empty"
+        : (lastKnownGoodProfiles ? "last_known_good" : (profileFreshness.unknown ? "unknown" : "fresh"));
     } else if (!topBloggers.length || profileFreshness.unknown) profileFreshness.status = "unknown";
     if (profileFreshness.stale) profileFreshness.status = "stale";
 
@@ -2707,6 +2757,7 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     };
     const incompleteReasons = [];
     if (profileFreshness.status !== "fresh") incompleteReasons.push(`profile_freshness_${profileFreshness.status}`);
+    if (!legacyBuyEnabled && smartMoneyEnabled && smartWalletCount === 0) incompleteReasons.push("no_admitted_smart_money_wallets");
     if (missingChains.length) incompleteReasons.push(`missing_chains:${missingChains.join(",")}`);
     if (unhealthyChains.length) incompleteReasons.push(`unhealthy_chains:${unhealthyChains.join(",")}`);
     if (gapSummary.count) incompleteReasons.push("unresolved_coverage_gaps");
@@ -2916,6 +2967,14 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     return changed;
   };
 
+  const setSmartStatsFailureCount = (candidate, value) => {
+    const next = Math.max(0, Number.isSafeInteger(Number(value)) ? Number(value) : 0);
+    if (Number(candidate.statsFailureCount || 0) === next) return false;
+    candidate.statsFailureCount = next;
+    markDurableState();
+    return true;
+  };
+
   const setSmartRateLimitedUntil = (smartMoney, value) => setCheckpointField(smartMoney, "rateLimitedUntil", value);
 
   const setSmartProfileStatus = (candidate, status) => {
@@ -2945,7 +3004,33 @@ export function createFomoCallMonitor(config, dependencies = {}) {
       && Number.isSafeInteger(Number(window?.sellCount)) && Number(window.sellCount) >= 0;
   }
 
-  function smartWalletProfileFresh(profile, wallet, nowMs) {
+  function smartStatsRecordValid(stats, wallet, period, nowMs) {
+    const checkedAt = Date.parse(stats?.checkedAt || "");
+    const lastTradeAt = Date.parse(stats?.lastTradeAt || "");
+    const createdAt = Date.parse(stats?.createdAt || "");
+    return String(stats?.wallet || "").toLowerCase() === wallet
+      && stats?.period === period
+      && Number.isFinite(stats?.realizedProfitUsd)
+      && Number.isFinite(stats?.winRate)
+      && stats.winRate >= 0 && stats.winRate <= 1
+      && Number.isFinite(stats?.realizedRoi)
+      && Number.isSafeInteger(stats?.tokenCount) && stats.tokenCount >= 0
+      && Number.isSafeInteger(stats?.buyCount) && stats.buyCount >= 0
+      && Number.isSafeInteger(stats?.sellCount) && stats.sellCount >= 0
+      && Number.isFinite(checkedAt)
+      && checkedAt <= nowMs + ATTRIBUTION_FUTURE_TOLERANCE_MS
+      && nowMs - checkedAt <= smartMoneyMaxStatsAgeMs
+      && Number.isFinite(lastTradeAt)
+      && lastTradeAt <= nowMs + ATTRIBUTION_FUTURE_TOLERANCE_MS
+      && nowMs - lastTradeAt <= 7 * 24 * 60 * 60_000
+      && Number.isFinite(createdAt)
+      && createdAt <= nowMs + ATTRIBUTION_FUTURE_TOLERANCE_MS
+      && Number.isSafeInteger(stats?.createdTokenCount)
+      && stats.createdTokenCount >= 0
+      && smartMoneyTagsAreClean(stats?.tags);
+  }
+
+  function smartWalletProfileWithinAge(profile, wallet, nowMs, maximumStatsAgeMs) {
     const normalizedWallet = String(wallet || "").toLowerCase();
     const statsCheckedAt = Date.parse(profile?.statsCheckedAt || "");
     const feedObservedAt = Date.parse(profile?.feedObservedAt || "");
@@ -2959,7 +3044,7 @@ export function createFomoCallMonitor(config, dependencies = {}) {
       && smartMoneyTagsAreClean(profile?.tags)
       && Number.isFinite(statsCheckedAt)
       && statsCheckedAt <= nowMs + ATTRIBUTION_FUTURE_TOLERANCE_MS
-      && nowMs - statsCheckedAt <= smartMoneyMaxStatsAgeMs
+      && nowMs - statsCheckedAt <= maximumStatsAgeMs
       && Number.isFinite(feedObservedAt)
       && feedObservedAt <= nowMs + ATTRIBUTION_FUTURE_TOLERANCE_MS
       && nowMs - feedObservedAt <= smartMoneyCandidateRetentionMs
@@ -2969,6 +3054,75 @@ export function createFomoCallMonitor(config, dependencies = {}) {
       && Number(profile.createdTokenCount) <= smartMoneyQualificationOptions.maximumCreatedTokens
       && smartWindowPass(profile?.windows?.["7d"], "7d")
       && smartWindowPass(profile?.windows?.["30d"], "30d");
+  }
+
+  function smartWalletProfileFresh(profile, wallet, nowMs) {
+    return smartWalletProfileWithinAge(profile, wallet, nowMs, smartMoneyMaxStatsAgeMs);
+  }
+
+  function smartWalletProfileLastKnownGood(profile, wallet, nowMs) {
+    return smartWalletProfileWithinAge(profile, wallet, nowMs, smartMoneyLastKnownGoodGraceMs);
+  }
+
+  function smartCandidateHasLastKnownGood(candidate, nowMs) {
+    const status = String(candidate?.profileStatus || "");
+    return ["qualified", "qualified_degraded_stats", "qualified_degraded_rate_limited"].includes(status)
+      && smartWalletProfileLastKnownGood(candidate?.walletProfile, candidate?.wallet, nowMs);
+  }
+
+  function smartRosterEntryUsable(entry, nowMs) {
+    const wallet = String(entry?.wallet || "").toLowerCase();
+    return entry?.monitorKind === "smart_money_performance"
+      && entry?.source === SMART_MONEY_SOURCE_ID
+      && entry?.eoaVerified === true
+      && String(entry?.walletCode || "").toLowerCase() === "0x"
+      && freshTimestamp(entry?.eoaCheckedAt, nowMs, smartMoneyLastKnownGoodGraceMs)
+      && smartWalletProfileLastKnownGood(entry?.walletProfile, wallet, nowMs);
+  }
+
+  function smartRosterEntryFresh(entry, nowMs) {
+    const wallet = String(entry?.wallet || "").toLowerCase();
+    return smartRosterEntryUsable(entry, nowMs)
+      && freshTimestamp(entry.eoaCheckedAt, nowMs, smartMoneyMaxStatsAgeMs)
+      && smartWalletProfileFresh(entry.walletProfile, wallet, nowMs);
+  }
+
+  function smartRosterEntryFromCandidate(candidate, walletProfile, eoaCheckedAt) {
+    const wallet = String(candidate?.wallet || walletProfile?.wallet || "").toLowerCase();
+    return {
+      monitorKind: "smart_money_performance",
+      wallet,
+      baseAddress: wallet,
+      walletProfile,
+      lastTradeAt: candidate?.lastTradeAt,
+      eoaVerified: true,
+      eoaCheckedAt,
+      walletCode: "0x",
+      source: SMART_MONEY_SOURCE_ID,
+      sourceClassification: smartMoneySourceClassification(walletProfile?.tags, candidate?.tags),
+    };
+  }
+
+  function smartQualificationSnapshot(smartMoney, nowMs) {
+    const admitted = Object.values(smartMoney.roster || {}).filter((entry) => smartRosterEntryUsable(entry, nowMs));
+    const fresh = admitted.filter((entry) => smartRosterEntryFresh(entry, nowMs)).length;
+    const lastKnownGood = Math.max(0, admitted.length - fresh);
+    return {
+      status: admitted.length === 0 ? "empty" : (lastKnownGood ? "last_known_good" : "healthy"),
+      admitted: admitted.length,
+      fresh,
+      lastKnownGood,
+      checkedAt: new Date(nowMs).toISOString(),
+    };
+  }
+
+  function updateSmartQualificationCoverage(smartMoney, nowMs) {
+    const next = smartQualificationSnapshot(smartMoney, nowMs);
+    const previous = smartMoney.qualificationCoverage || {};
+    if (["status", "admitted", "fresh", "lastKnownGood"]
+      .some((field) => !Object.is(previous[field], next[field]))) markTelemetryTransition();
+    smartMoney.qualificationCoverage = next;
+    return next;
   }
 
   async function waitForSmartMoneyStatsSlot() {
@@ -3016,7 +3170,7 @@ export function createFomoCallMonitor(config, dependencies = {}) {
   function boundSmartPendingTrades(smartMoney, nowMs) {
     const previousKeys = new Set(Object.keys(smartMoney.pendingTrades || {}));
     const admittedWallets = new Set(Object.entries(smartMoney.roster || {})
-      .filter(([wallet, profile]) => smartWalletProfileFresh(profile?.walletProfile, wallet, nowMs))
+      .filter(([, profile]) => smartRosterEntryUsable(profile, nowMs))
       .map(([wallet]) => wallet));
     const admitted = [];
     const unknown = [];
@@ -3090,6 +3244,11 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     if (Number.isFinite(rateLimitedUntil) && nowMs >= rateLimitedUntil) {
       setSmartRateLimitedUntil(smartMoney, null);
     }
+    const feedNextRetryAt = Date.parse(smartMoney.feedNextRetryAt || "");
+    if (Number.isFinite(feedNextRetryAt) && nowMs < feedNextRetryAt) {
+      setTelemetryField(smartMoney, "feedStatus", "partial");
+      return "partial";
+    }
     const checkedAt = Date.parse(smartMoney.feedCheckedAt || "");
     if (Number.isFinite(checkedAt) && nowMs - checkedAt < smartMoneyDiscoveryIntervalMs) return smartMoney.feedStatus;
     try {
@@ -3143,6 +3302,9 @@ export function createFomoCallMonitor(config, dependencies = {}) {
       smartMoney.feedCheckedAt = new Date(nowMs).toISOString();
       setTelemetryField(smartMoney, "feedStatus", trades.length ? "healthy" : "empty");
       setTelemetryField(smartMoney, "feedError", null);
+      setTelemetryField(smartMoney, "feedFailureCount", 0);
+      setTelemetryField(smartMoney, "feedNextRetryAt", null);
+      smartMoney.lastFeedSuccessAt = new Date(nowMs).toISOString();
       if (!smartMoney.initializedAt) {
         smartMoney.initializedAt = new Date(nowMs).toISOString();
         markDurableState();
@@ -3153,6 +3315,10 @@ export function createFomoCallMonitor(config, dependencies = {}) {
       setTelemetryField(smartMoney, "feedStatus", "partial");
       setTelemetryField(smartMoney, "feedError", String(error?.message || error).slice(0, 180));
       const resetAt = gmgnRateLimitResetMs(error, nowMs);
+      const failureCount = Number(smartMoney.feedFailureCount || 0) + 1;
+      const backoffMs = SMART_MONEY_FEED_BACKOFF_MS[Math.min(failureCount - 1, SMART_MONEY_FEED_BACKOFF_MS.length - 1)];
+      setTelemetryField(smartMoney, "feedFailureCount", failureCount);
+      setTelemetryField(smartMoney, "feedNextRetryAt", new Date(resetAt || nowMs + backoffMs).toISOString());
       if (resetAt) {
         setSmartRateLimitedUntil(smartMoney, new Date(resetAt).toISOString());
       }
@@ -3167,26 +3333,57 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     const rateLimitedUntil = Date.parse(smartMoney.rateLimitedUntil || "");
     if (Number.isFinite(rateLimitedUntil) && nowMs < rateLimitedUntil) {
       setTelemetryField(smartMoney, "statsStatus", "rate_limited");
+      updateSmartQualificationCoverage(smartMoney, nowMs);
       return "partial";
     }
     if (Number.isFinite(rateLimitedUntil) && nowMs >= rateLimitedUntil) {
       setSmartRateLimitedUntil(smartMoney, null);
     }
+    for (const candidate of Object.values(smartMoney.candidates || {})) {
+      const wallet = String(candidate?.wallet || "").toLowerCase();
+      if (smartMoney.roster[wallet]
+        || /^(?:rejected_|revoked_)/.test(String(candidate?.profileStatus || ""))
+        || candidate?.eoaVerified !== true
+        || String(candidate?.walletCode || "").toLowerCase() !== "0x"
+        || !freshTimestamp(candidate?.eoaCheckedAt, nowMs, smartMoneyLastKnownGoodGraceMs)
+        || !smartCandidateHasLastKnownGood(candidate, nowMs)) continue;
+      smartMoney.roster[wallet] = smartRosterEntryFromCandidate(
+        candidate,
+        candidate.walletProfile,
+        candidate.eoaCheckedAt,
+      );
+      markDurableState();
+    }
     const pendingWallets = new Set(Object.values(smartMoney.pendingTrades).map((trade) => String(trade.wallet || "").toLowerCase()));
     const candidates = Object.values(smartMoney.candidates)
       .filter((candidate) => isAddress(String(candidate.wallet || "")) && smartMoneyTagsAreClean(candidate.tags))
       .filter((candidate) => !Number.isFinite(Number(candidate.nextStatsAttemptAt)) || nowMs >= Number(candidate.nextStatsAttemptAt))
-      .sort((left, right) => Number(pendingWallets.has(right.wallet)) - Number(pendingWallets.has(left.wallet))
-        || Number(right.lastSeenAt || 0) - Number(left.lastSeenAt || 0))
+      // Refresh known-good wallets first so a constantly changing public feed
+      // cannot starve the small admitted roster. Pending new trades are next;
+      // each tier is oldest-attempt-first for bounded, restart-safe fairness.
+      .sort((left, right) => {
+        const priority = (candidate) => smartCandidateHasLastKnownGood(candidate, nowMs)
+          ? 2 : (pendingWallets.has(candidate.wallet) ? 1 : 0);
+        const lastAttempt = (candidate) => Number.isFinite(Number(candidate?.lastStatsAttemptAt))
+          ? Number(candidate.lastStatsAttemptAt) : Number.NEGATIVE_INFINITY;
+        return priority(right) - priority(left)
+          || lastAttempt(left) - lastAttempt(right)
+          || Number(right.lastSeenAt || 0) - Number(left.lastSeenAt || 0);
+      })
       .slice(0, smartMoneyStatsBatchLimit);
     let succeeded = 0;
     let failed = 0;
     for (const candidate of candidates) {
       const wallet = String(candidate.wallet).toLowerCase();
+      let eoaCheckAttempted = false;
       try {
         const sevenDay = await readSmartMoneyStats(wallet, "7d", nowMs);
-        if (!sevenDay || !smartWindowPass(sevenDay, "7d")) {
+        if (!sevenDay || !smartStatsRecordValid(sevenDay, wallet, "7d", nowMs)) {
+          throw new Error("GMGN 7d stats unavailable, incomplete, or invalid");
+        }
+        if (!smartWindowPass(sevenDay, "7d")) {
           setSmartProfileStatus(candidate, "rejected_7d");
+          setSmartStatsFailureCount(candidate, 0);
           setSmartStatsSchedule(candidate, nowMs, nowMs + smartMoneyRejectedCacheMs);
           if (Object.prototype.hasOwnProperty.call(smartMoney.roster, wallet)) {
             delete smartMoney.roster[wallet];
@@ -3197,13 +3394,18 @@ export function createFomoCallMonitor(config, dependencies = {}) {
           continue;
         }
         const thirtyDay = await readSmartMoneyStats(wallet, "30d", nowMs);
+        if (!thirtyDay || !smartStatsRecordValid(thirtyDay, wallet, "30d", nowMs)) {
+          throw new Error("GMGN 30d stats unavailable, incomplete, or invalid");
+        }
         let walletProfile = qualifyGmgnSmartMoneyWallet(sevenDay, thirtyDay, { nowMs, ...smartMoneyQualificationOptions });
         if (walletProfile) {
+          eoaCheckAttempted = true;
           const code = await evmRpcFallback(bscBatchReceiptRpcUrls, "eth_getCode", [wallet, "latest"]);
           if (String(code || "").toLowerCase() !== "0x") walletProfile = null;
         }
         if (!walletProfile) {
           setSmartProfileStatus(candidate, "rejected_30d_or_wallet");
+          setSmartStatsFailureCount(candidate, 0);
           setSmartStatsSchedule(candidate, nowMs, nowMs + smartMoneyRejectedCacheMs);
           if (Object.prototype.hasOwnProperty.call(smartMoney.roster, wallet)) {
             delete smartMoney.roster[wallet];
@@ -3216,30 +3418,57 @@ export function createFomoCallMonitor(config, dependencies = {}) {
         walletProfile.feedObservedAt = candidate.feedObservedAt || new Date(nowMs).toISOString();
         const previousWalletProfile = candidate.walletProfile;
         const previousRoster = smartMoney.roster[wallet];
-        const nextRoster = {
-          monitorKind: "smart_money_performance",
-          wallet,
-          baseAddress: wallet,
-          walletProfile,
-          lastTradeAt: candidate.lastTradeAt,
-          eoaVerified: true,
-          eoaCheckedAt: new Date(nowMs).toISOString(),
-          walletCode: "0x",
-          source: SMART_MONEY_SOURCE_ID,
-        };
+        const previousCandidateEoa = candidate.eoaVerified === true
+          && candidate.walletCode === "0x" && Boolean(candidate.eoaCheckedAt);
+        const eoaCheckedAt = new Date(nowMs).toISOString();
+        const nextRoster = smartRosterEntryFromCandidate(candidate, walletProfile, eoaCheckedAt);
         smartMoney.roster[wallet] = nextRoster;
         setSmartProfileStatus(candidate, "qualified");
+        setSmartStatsFailureCount(candidate, 0);
         setSmartStatsSchedule(candidate, nowMs, nowMs + smartMoneyQualifiedCacheMs);
         candidate.walletProfile = walletProfile;
+        candidate.eoaVerified = true;
+        candidate.eoaCheckedAt = eoaCheckedAt;
+        candidate.walletCode = "0x";
         if (smartWalletProfileMaterial(previousWalletProfile) !== smartWalletProfileMaterial(walletProfile)
-          || smartRosterMaterial(previousRoster) !== smartRosterMaterial(nextRoster)) markDurableState();
+          || smartRosterMaterial(previousRoster) !== smartRosterMaterial(nextRoster)
+          || !previousCandidateEoa) markDurableState();
         succeeded += 1;
       } catch (error) {
         failed += 1;
         const resetAt = gmgnRateLimitResetMs(error, nowMs);
-        setSmartProfileStatus(candidate, resetAt ? "rate_limited" : "stats_error");
-        setSmartStatsSchedule(candidate, nowMs, resetAt || nowMs + smartMoneyRejectedCacheMs);
+        const hasLastKnownGood = smartCandidateHasLastKnownGood(candidate, nowMs);
+        setSmartProfileStatus(candidate, hasLastKnownGood
+          ? (resetAt ? "qualified_degraded_rate_limited" : "qualified_degraded_stats")
+          : (resetAt ? "rate_limited" : "stats_error"));
+        const previousFailureCount = Number(candidate.statsFailureCount || 0);
+        const failureCount = (Number.isSafeInteger(previousFailureCount) && previousFailureCount >= 0
+          ? previousFailureCount : 0) + 1;
+        setSmartStatsFailureCount(candidate, failureCount);
+        const transientRetryMs = SMART_MONEY_STATS_BACKOFF_MS[
+          Math.min(failureCount - 1, SMART_MONEY_STATS_BACKOFF_MS.length - 1)
+        ];
+        setSmartStatsSchedule(candidate, nowMs, resetAt || nowMs + transientRetryMs);
         setTelemetryField(smartMoney, "statsError", String(error?.message || error).slice(0, 180));
+        // A state written by the old all-or-nothing cleanup may retain the
+        // qualified profile but no roster entry. Re-prove only the immutable
+        // EOA gate; the performance profile itself must already pass every LKG
+        // gate and is never refreshed from a malformed stats response.
+        if (hasLastKnownGood && !smartMoney.roster[wallet] && !eoaCheckAttempted) {
+          try {
+            const code = await evmRpcFallback(bscBatchReceiptRpcUrls, "eth_getCode", [wallet, "latest"]);
+            if (String(code || "").toLowerCase() === "0x") {
+              const eoaCheckedAt = new Date(nowMs).toISOString();
+              candidate.eoaVerified = true;
+              candidate.eoaCheckedAt = eoaCheckedAt;
+              candidate.walletCode = "0x";
+              smartMoney.roster[wallet] = smartRosterEntryFromCandidate(candidate, candidate.walletProfile, eoaCheckedAt);
+              markDurableState();
+            }
+          } catch (restoreError) {
+            logger.error(`[fomo-call][smart-money-lkg] ${wallet} EOA recheck failed: ${String(restoreError?.message || restoreError).slice(0, 140)}`);
+          }
+        }
         if (resetAt) {
           setSmartRateLimitedUntil(smartMoney, new Date(resetAt).toISOString());
           break;
@@ -3249,12 +3478,14 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     for (const [wallet, profile] of Object.entries(smartMoney.roster)) {
       const candidate = smartMoney.candidates[wallet];
       if (!candidate || nowMs - Number(candidate.lastSeenAt || 0) > smartMoneyCandidateRetentionMs
-        || !smartWalletProfileFresh(profile.walletProfile, wallet, nowMs)) {
+        || !smartCandidateHasLastKnownGood(candidate, nowMs)
+        || !smartRosterEntryUsable(profile, nowMs)) {
         delete smartMoney.roster[wallet];
         markDurableState();
       }
     }
     const ranked = Object.values(smartMoney.roster)
+      .filter((profile) => smartRosterEntryUsable(profile, nowMs))
       .sort((left, right) => Number(right.walletProfile?.windows?.["30d"]?.realizedProfitUsd || 0)
         - Number(left.walletProfile?.windows?.["30d"]?.realizedProfitUsd || 0))
       .slice(0, smartMoneyMaxWallets);
@@ -3266,8 +3497,16 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     smartMoney.roster = nextRoster;
     smartMoney.admittedWallets = nextAdmittedWallets;
     smartMoney.statsCheckedAt = new Date(nowMs).toISOString();
-    setTelemetryField(smartMoney, "statsStatus", failed ? (succeeded ? "partial" : "degraded") : "healthy");
-    if (!failed) setTelemetryField(smartMoney, "statsError", null);
+    const qualificationCoverage = updateSmartQualificationCoverage(smartMoney, nowMs);
+    const statsStatus = failed
+      ? (qualificationCoverage.admitted ? "partial" : "degraded")
+      : (qualificationCoverage.status === "healthy" ? "healthy"
+        : (qualificationCoverage.status === "last_known_good" ? "partial" : "degraded"));
+    setTelemetryField(smartMoney, "statsStatus", statsStatus);
+    if (!failed && statsStatus === "healthy") setTelemetryField(smartMoney, "statsError", null);
+    else if (!failed && qualificationCoverage.status === "empty") {
+      setTelemetryField(smartMoney, "statsError", "no fresh or last-known-good qualified wallets");
+    }
     return smartMoney.statsStatus === "healthy" ? "healthy" : "partial";
   }
 
@@ -3768,7 +4007,7 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     } catch { return fallback; }
   };
 
-  function smartTransactionEvidence(call, transaction, receipt, smartProfile, nowMs, feedTrade = null) {
+  function smartTransactionEvidence(call, transaction, receipt, smartProfile, nowMs, feedTrade = null, candidate = null) {
     const wallet = String(smartProfile?.wallet || smartProfile?.baseAddress || "").toLowerCase();
     const token = String(call?.token || "").toLowerCase();
     const transactionHash = exactTransactionHash(call?.transactionHash);
@@ -3784,6 +4023,12 @@ export function createFomoCallMonitor(config, dependencies = {}) {
       && call?.swapVerified === true
       && executionPools.length === 1
       && executionPool === executionPools[0];
+    const gmgnTags = normalizedTagUnion(
+      smartProfile?.walletProfile?.tags,
+      smartProfile?.sourceClassification?.gmgnTags,
+      candidate?.tags,
+      feedTrade?.tags,
+    );
     if (!smartWalletProfileFresh(smartProfile?.walletProfile, wallet, nowMs)
       || smartProfile?.eoaVerified !== true
       || String(smartProfile?.walletCode || "").toLowerCase() !== "0x"
@@ -3794,11 +4039,13 @@ export function createFomoCallMonitor(config, dependencies = {}) {
       || Number(receipt?.status) !== 1
       || (receipt?.transactionHash && exactTransactionHash(receipt.transactionHash) !== transactionHash)
       || (!exactSwapExecution && !exactCurveExecution)
-      || !rawPositive(call?.paymentRaw)) return null;
+      || !rawPositive(call?.paymentRaw)
+      || !smartMoneyTagsAreClean(gmgnTags)) return null;
     if (feedTrade && (exactTransactionHash(feedTrade.transactionHash) !== transactionHash
       || String(feedTrade.wallet || "").toLowerCase() !== wallet
       || String(feedTrade.token || "").toLowerCase() !== token
-      || String(feedTrade.side || "").toLowerCase() !== "buy")) return null;
+      || String(feedTrade.side || "").toLowerCase() !== "buy"
+      || !smartMoneyTagsAreClean(feedTrade.tags))) return null;
     const deltas = evmTransferDeltas(receipt, wallet);
     const tokenDelta = deltas.get(token) || 0n;
     if (tokenDelta <= 0n) return null;
@@ -3828,7 +4075,7 @@ export function createFomoCallMonitor(config, dependencies = {}) {
       side: "buy",
       occurredAt: new Date(call.timestampMs).toISOString(),
       observedAt: new Date(nowMs).toISOString(),
-      tags: normalizedTags(smartProfile.walletProfile.tags),
+      tags: gmgnTags,
       transactionFrom: wallet,
       receiptStatus: 1,
       paymentRaw: String(call.paymentRaw),
@@ -3871,17 +4118,29 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     let enriched;
     if (smartMoneyProfile) {
       if (Number(call.chain?.id) !== BSC_CHAIN_ID) return;
-      const evidence = smartTransactionEvidence(call, context.transaction, context.receipt, smartMoneyProfile, nowMs, context.feedTrade);
+      const smartCandidate = state.publicOnchain.smartMoney?.candidates?.[
+        String(smartMoneyProfile.wallet || smartMoneyProfile.baseAddress || "").toLowerCase()
+      ] || null;
+      const evidence = smartTransactionEvidence(
+        call,
+        context.transaction,
+        context.receipt,
+        smartMoneyProfile,
+        nowMs,
+        context.feedTrade,
+        smartCandidate,
+      );
       if (!evidence) return;
       enriched = {
         ...call,
         kind: SMART_MONEY_SIGNAL_KIND,
         source: {
           id: SMART_MONEY_SOURCE_ID,
-          name: "GMGN 高盈利高胜率公开钱包画像 + 本机 BSC 买入证明",
+          name: "GMGN 公开高收益钱包画像 + 本机 BSC 建仓证明",
           trust: SMART_MONEY_SOURCE_TRUST,
           url: "https://gmgn.ai",
         },
+        sourceClassification: smartMoneySourceClassification(evidence.sourceTrade.tags),
         walletProfile: smartMoneyProfile.walletProfile,
         sourceTrade: evidence.sourceTrade,
         transactionProof: evidence.transactionProof,
@@ -3905,7 +4164,16 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     state.pending[`public:${enriched.callId}`] = {
       call: enriched,
       firstSeenAt: nowMs,
-      firstBuyVerified: true,
+      firstBuyVerified: smartMoneyProfile ? false : true,
+      ...(smartMoneyProfile ? {
+        positionSemantics: {
+          id: "new_position_after_previous_block_zero",
+          label: "前一区块零仓后的新建仓",
+          proofBoundary: "previous_block",
+          lifetimeFirstBuyVerified: false,
+          transactionImmediatePreBalanceVerified: false,
+        },
+      } : {}),
       ...(smartMoneyProfile ? { smartMoney: true } : {}),
     };
     markDurableState();
@@ -3938,7 +4206,7 @@ export function createFomoCallMonitor(config, dependencies = {}) {
         continue;
       }
       const smartProfile = smartMoney.roster[wallet];
-      if (!smartProfile || !smartWalletProfileFresh(smartProfile.walletProfile, smartProfile.wallet, nowMs)) continue;
+      if (!smartProfile || !smartRosterEntryFresh(smartProfile, nowMs)) continue;
       admittedEntries.push([key, trade, smartProfile]);
     }
     if (!admittedEntries.length) return "healthy";
@@ -4056,7 +4324,7 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     }
     const qualifiedRemain = Object.values(smartMoney.pendingTrades).some((trade) => {
       const profile = smartMoney.roster[String(trade?.wallet || "").toLowerCase()];
-      return profile && smartWalletProfileFresh(profile.walletProfile, profile.wallet, nowMs);
+      return profile && smartRosterEntryUsable(profile, nowMs);
     });
     return failed || budgetExhausted || qualifiedRemain ? "partial" : "healthy";
   }
@@ -4197,7 +4465,7 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     const smartMoney = ensureSmartMoneyState(state);
     const smartWallets = chain.id === BSC_CHAIN_ID && smartMoneyEnabled
       ? new Map(Object.values(smartMoney.roster || {})
-        .filter((entry) => entry?.eoaVerified === true && smartWalletProfileFresh(entry.walletProfile, entry.wallet, nowMs))
+        .filter((entry) => smartRosterEntryFresh(entry, nowMs))
         .map((entry) => [entry.wallet.toLowerCase(), entry]))
       : new Map();
     if (!bloggers.size && !smartWallets.size) return "not_configured";
@@ -4517,11 +4785,18 @@ export function createFomoCallMonitor(config, dependencies = {}) {
       base: baseCoverage,
       bsc: effectiveBscCoverage,
       smartMoney: smartMoneyEnabled ? {
+        sourceClassification: "gmgn_public_performance_wallet",
         feed: smartMoney.feedStatus,
         stats: smartMoney.statsStatus,
+        qualification: smartMoney.qualificationCoverage?.status || "initializing",
+        fresh: Number(smartMoney.qualificationCoverage?.fresh || 0),
+        lastKnownGood: Number(smartMoney.qualificationCoverage?.lastKnownGood || 0),
         exactTrades: smartMoney.exactTradeStatus || "initializing",
         admitted: smartMoney.admittedWallets.length,
-      } : { feed: "disabled", stats: "disabled", exactTrades: "disabled", admitted: 0 },
+      } : {
+        feed: "disabled", stats: "disabled", qualification: "disabled",
+        fresh: 0, lastKnownGood: 0, exactTrades: "disabled", admitted: 0,
+      },
     };
     if (!state.publicOnchain.initializedAt) {
       state.publicOnchain.initializedAt = new Date(nowMs).toISOString();
@@ -5241,7 +5516,7 @@ export function createFomoCallMonitor(config, dependencies = {}) {
         signalKind: call.kind,
         activity: "buy",
         trade: "buy",
-        action: smartMoneyCall ? "first_buy" : "buy",
+        action: "buy",
         side: "buy",
         callId: call.callId,
         platform: smartMoneyCall
@@ -5250,6 +5525,18 @@ export function createFomoCallMonitor(config, dependencies = {}) {
         launchpad: call.launchpad || null,
         source: call.source || { id: "cope_capital", name: "Cope Capital Fomo 社交图谱链上 API", trust: "authorized_public_api", url: "https://api.cope.capital/docs" },
         sourceTrust: call.source?.trust || null,
+        ...(smartMoneyCall ? {
+          sourceClassification: call.sourceClassification || {
+            ...smartMoneySourceClassification(call.walletProfile?.tags, call.sourceTrade?.tags),
+          },
+          positionSemantics: call.positionSemantics || {
+            id: "new_position_after_previous_block_zero",
+            label: "前一区块零仓后的新建仓",
+            proofBoundary: "previous_block",
+            lifetimeFirstBuyVerified: false,
+            transactionImmediatePreBalanceVerified: false,
+          },
+        } : {}),
         chain: call.chain,
         chainId: call.chain.id,
         token: call.token,
@@ -5477,8 +5764,23 @@ export function createFomoCallMonitor(config, dependencies = {}) {
       const emittedEvents = [];
       const smartMoney = ensureSmartMoneyState(state);
       let smartFeedStatus = "disabled";
+      let smartStatsStatus = "disabled";
+      let smartStatsPreflightRan = false;
       if (smartMoneyEnabled) {
         smartFeedStatus = await refreshSmartMoneyFeed(state, Number(now()));
+        const preflightAtMs = Number(now());
+        const qualificationBeforeExact = updateSmartQualificationCoverage(smartMoney, preflightAtMs);
+        const recoverableLastKnownGood = Object.values(smartMoney.candidates || {}).some((candidate) =>
+          smartCandidateHasLastKnownGood(candidate, preflightAtMs));
+        // When every admitted profile crossed the strict freshness boundary,
+        // revalidate before exact-feed or block scanning. The LKG roster keeps
+        // cursors and candidates intact, but can never emit a stale
+        // "high-profit/high-win-rate" alert.
+        if (qualificationBeforeExact.fresh === 0
+          && (qualificationBeforeExact.admitted > 0 || recoverableLastKnownGood)) {
+          smartStatsStatus = await refreshSmartMoneyStats(state, Number(now()));
+          smartStatsPreflightRan = true;
+        }
         const feedExactStatus = await collectExactSmartMoneyFeedTrades(state, Number(now()));
         setTelemetryField(ensureSmartMoneyState(state), "exactTradeStatus", feedExactStatus);
       } else {
@@ -5501,7 +5803,7 @@ export function createFomoCallMonitor(config, dependencies = {}) {
       else if (realtimeEmitted) emittedEvents.push(realtimeEmitted);
 
       const admittedBeforeProfiles = new Set(ensureSmartMoneyState(state).admittedWallets);
-      const smartStatsStatus = smartMoneyEnabled ? await refreshSmartMoneyStats(state, Number(now())) : "disabled";
+      if (smartMoneyEnabled && !smartStatsPreflightRan) smartStatsStatus = await refreshSmartMoneyStats(state, Number(now()));
       const newlyAdmitted = new Set(ensureSmartMoneyState(state).admittedWallets
         .filter((wallet) => !admittedBeforeProfiles.has(wallet)));
       if (newlyAdmitted.size) {
@@ -5512,14 +5814,19 @@ export function createFomoCallMonitor(config, dependencies = {}) {
       }
       const finalSmartMoney = ensureSmartMoneyState(state);
       state.publicOnchain.coverage.smartMoney = {
+        sourceClassification: "gmgn_public_performance_wallet",
         feed: smartFeedStatus,
         stats: smartStatsStatus,
+        qualification: finalSmartMoney.qualificationCoverage?.status || "initializing",
+        fresh: Number(finalSmartMoney.qualificationCoverage?.fresh || 0),
+        lastKnownGood: Number(finalSmartMoney.qualificationCoverage?.lastKnownGood || 0),
         exactTrades: finalSmartMoney.exactTradeStatus,
         admitted: finalSmartMoney.admittedWallets.length,
       };
       const smartMoneyCoverage = [smartFeedStatus, smartStatsStatus, finalSmartMoney.exactTradeStatus]
         .some((status) => ["partial", "degraded", "rate_limited"].includes(status)) ? "partial" : "healthy";
-      if (smartMoneyCoverage === "partial" && coverageStatus === "healthy") coverageStatus = "partial";
+      if ((smartMoneyCoverage === "partial" || finalSmartMoney.qualificationCoverage?.status !== "healthy")
+        && coverageStatus === "healthy") coverageStatus = "partial";
       await persistDurableState(state, "smart-money-roster-exact");
       await persistCheckpoint(state, "smart-money-roster-exact");
       const postStatsEmitted = await emitBestPending(state, Number(now()));
