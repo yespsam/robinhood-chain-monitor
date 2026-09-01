@@ -1734,6 +1734,48 @@ test("unsupported non-log send methods get a long method-only cooldown", async (
   pool.destroy();
 });
 
+test("historical state capability failures do not poison the BSC host across methods", async () => {
+  for (const [index, message] of [
+    "Archive requests require a personal token",
+    "missing trie node",
+    "not supported",
+    "header not found",
+    "block not found",
+  ].entries()) {
+    let codeCalls = 0;
+    let headCalls = 0;
+    const pool = createRpcPool([`https://historical-state-${index}.test`], [], 1, {
+      providerFactory: () => ({
+        async getCode() {
+          codeCalls += 1;
+          throw new Error(message);
+        },
+        async getBlockNumber() {
+          headCalls += 1;
+          return 123;
+        },
+      }),
+    });
+
+    await assert.rejects(
+      () => pool.getCode("0x1111111111111111111111111111111111111111", 100),
+      new RegExp(message, "i"),
+    );
+    assert.equal(
+      await pool.getBlockNumber(),
+      123,
+      `${message} must cool only historical state reads, not the entire physical host`,
+    );
+    await assert.rejects(
+      () => pool.getCode("0x1111111111111111111111111111111111111111", 100),
+      /providers cooling down/,
+    );
+    assert.equal(codeCalls, 1, `${message} must retain a method cooldown`);
+    assert.equal(headCalls, 1);
+    pool.destroy();
+  }
+});
+
 test("eth_getLogs skips global-only hosts, uses PublicNode for address-scoped logs, and keeps capability failures on a long method cooldown", async () => {
   const officiallyDisabledUrls = [
     "https://bsc-dataseed-public.bnbchain.org",

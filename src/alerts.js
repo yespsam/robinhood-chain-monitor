@@ -3090,6 +3090,12 @@ function disableExpiredTelegramDelivery(config, entry, evaluatedAt = Date.now())
   const telegram = entry?.destinations?.telegram;
   if (!telegram || ["delivered", "disabled"].includes(telegram.status)) return false;
 
+  // Operational health transitions describe a still-active monitoring
+  // incident, not a time-sensitive market opportunity. Once durably queued,
+  // preserve the exact event and render bundle until the destination recovers
+  // or an explicit policy/destination decision disables it.
+  if (entry.event?.type === "fomo_monitor_health_update") return false;
+
   const isFomo = entry.event?.type === "fomo_family_top_call";
   // Fomo is useful only as an immediate signal. Anchor its five-minute TTL to
   // immutable source time whenever available; a restart or duplicate scan must

@@ -15,7 +15,7 @@ import {
   buildBilingualAlertBundle,
   renderBilingualTelegramText,
 } from "../src/bilingual-alert-renderer.js";
-import { focusNoveltyKeys, sendAlerts } from "../src/alerts.js";
+import { drainAlertOutbox, focusNoveltyKeys, sendAlerts } from "../src/alerts.js";
 
 const BASE_MS = Date.parse("2026-08-31T00:00:00.000Z");
 const asIso = (value) => new Date(value).toISOString();
@@ -624,6 +624,12 @@ test("health event schema rejects raw fields and renderer stays bilingual, two-f
   };
   const testConfig = { fomoHealthMonitorEnabled: true, alertForceLocalStructured: true };
   assert.equal(isFomoMonitorHealthUpdateAllowed(testConfig, event, nowMs), true);
+  assert.equal(isFomoMonitorHealthUpdateAllowed(testConfig, event, nowMs + 8 * 24 * 60 * 60_000), true);
+  assert.equal(
+    isFomoMonitorHealthUpdateAllowed(testConfig, event, nowMs + 10 * 366 * 24 * 60 * 60_000 + 1),
+    false,
+    "operational retry age remains explicitly bounded",
+  );
   assert.equal(isFomoMonitorHealthUpdateAllowed(testConfig, { ...event, rawError: "secret or address" }, nowMs), false);
   assert.equal(isFomoMonitorHealthUpdateAllowed(testConfig, {
     ...event,
@@ -702,6 +708,82 @@ test("health transition uses the main durable outbox and never enters market sem
     outbox.events[event.eventKey].destinations.telegram.receipt.renderVersion,
     outbox.events[event.eventKey].renderBundle.version,
   );
+});
+
+test("a queued health transition survives days of Telegram outage and delivers once with its persisted render", async (t) => {
+  const dataDir = await temporaryDataDir(t);
+  const initialMs = Date.now() - 8 * 24 * 60 * 60_000;
+  let nowMs = initialMs;
+  let telegramAvailable = false;
+  const payloads = [];
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    payloads.push(JSON.parse(options.body));
+    if (!telegramAvailable) throw new Error("simulated multi-day Telegram outage");
+    return new Response(JSON.stringify({ ok: true, result: { message_id: 808 } }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  });
+  t.mock.method(console, "error", () => {});
+  t.mock.method(console, "info", () => {});
+  const testConfig = config(dataDir, {
+    fomoSmartMoneyMonitorEnabled: false,
+    fomoPublishedCallEnabled: true,
+    monitorScope: "focus3",
+    telegramToken: "test-token",
+    telegramChatId: "test-chat",
+    webhookUrl: "",
+    alertBilingualEnabled: false,
+    alertForceLocalStructured: true,
+    alertRetryIntervalMs: 1_000,
+    alertTelegramDeliveryMaxAgeMs: 7_200_000,
+    alertNow: () => nowMs,
+  });
+  const writeBlockedThesis = () => writeJson(
+    path.join(dataDir, "fomo-thesis-state.json"),
+    thesisState(nowMs, "blocked_missing_credentials"),
+  );
+  await writeBlockedThesis();
+  const monitor = createFomoHealthMonitor(testConfig, {
+    autoStart: false,
+    now: () => nowMs,
+    sendAlertsImpl: sendAlerts,
+  });
+
+  for (let index = 0; index < 3; index += 1) {
+    nowMs = initialMs + index * 30_000;
+    await writeBlockedThesis();
+    await monitor.check();
+  }
+  assert.equal(payloads.length, 1);
+  const firstOutbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  const [eventKey] = Object.keys(firstOutbox.events);
+  const firstEntry = firstOutbox.events[eventKey];
+  const persistedRender = structuredClone(firstEntry.renderBundle);
+  assert.equal(firstEntry.status, "pending");
+  assert.equal(firstEntry.destinations.telegram.status, "failed");
+  assert.equal(isFomoMonitorHealthUpdateAllowed(testConfig, firstEntry.event, Date.now()), true);
+
+  nowMs = Date.now();
+  await writeBlockedThesis();
+  await monitor.check();
+  const watchdogBeforeDelivery = JSON.parse(await fs.readFile(monitor.stateFile, "utf8"));
+  assert.deepEqual(Object.keys(watchdogBeforeDelivery.transitions), [eventKey]);
+  assert.equal(watchdogBeforeDelivery.transitions[eventKey].status, "submitted");
+  assert.equal(payloads.length, 1, "the same active incident must not enqueue a second transition");
+
+  telegramAvailable = true;
+  assert.equal(await drainAlertOutbox(testConfig), 1);
+  assert.equal(payloads.length, 2);
+  assert.equal(payloads[1].text, payloads[0].text, "retry must reuse the exact persisted render text");
+  const finalOutbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.deepEqual(Object.keys(finalOutbox.events), [eventKey]);
+  assert.equal(finalOutbox.events[eventKey].status, "delivered");
+  assert.equal(finalOutbox.events[eventKey].destinations.telegram.status, "delivered");
+  assert.equal(finalOutbox.events[eventKey].destinations.telegram.receipt.messageId, 808);
+  assert.deepEqual(finalOutbox.events[eventKey].renderBundle, persistedRender);
+  assert.equal(finalOutbox.events[eventKey].destinations.telegram.disabledReason, undefined);
+  await monitor.stop();
 });
 
 test("stop drains an in-flight transition submission", async (t) => {

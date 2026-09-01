@@ -3695,7 +3695,17 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
   };
   const isExplicitMethodCapabilityFailure = (message, error = null) => !isGlobalRateLimit(message, error)
     && /(?:\bmethod\b.{0,100}\b(?:not found|does not exist|not supported|unsupported|not available)\b|\bunsupported method\b)/i.test(message);
+  const isHistoricalObjectCapabilityFailure = (operation, message, error = null) => [
+    "getTransaction",
+    "getTransactionReceipt",
+    "getBlock",
+    "getCode",
+    "getStorage",
+  ].includes(operation)
+    && !isGlobalRateLimit(message, error)
+    && isBscArchiveStateUnavailable(error || message);
   const isMethodScopedFailure = (operation, message, error = null) => isExplicitMethodCapabilityFailure(message, error)
+    || isHistoricalObjectCapabilityFailure(operation, message, error)
     || (operation === "eth_getLogs"
       && !isGlobalRateLimit(message, error)
       && /\blimit exceeded\b|archive requests require|missing trie node|block range|range (?:is )?too (?:large|wide)|too many (?:logs|results)|response size|header not found|block not found/i.test(message));
@@ -3713,6 +3723,8 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
       ? Number(method.failures || 0) + 1
       : Number(circuit.globalFailures || 0) + 1;
     const persistentMethodCapabilityFailure = isExplicitMethodCapabilityFailure(message, error)
+      || (isHistoricalObjectCapabilityFailure(operation, message, error)
+        && /archive requests require|missing trie node|not supported/i.test(message))
       || (operation === "eth_getLogs"
         && !rateLimited
         && /\blimit exceeded\b|archive requests require/i.test(message));

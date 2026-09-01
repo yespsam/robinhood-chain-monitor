@@ -167,6 +167,8 @@ const SMART_MONEY_FEED_BACKOFF_MS = [60_000, 2 * 60_000, 5 * 60_000];
 const SMART_MONEY_STATS_BACKOFF_MS = [60_000, 2 * 60_000, 5 * 60_000];
 const FOMO_CALL_CHECKPOINT_VERSION = 1;
 const FOMO_CALL_CHECKPOINT_EPOCH = "1970-01-01T00:00:00.000Z";
+const BSC_COVERAGE_RECOVERY_VERSION = 1;
+const MAX_COVERAGE_GAPS = 50;
 
 const finite = (value) => {
   const number = Number(value);
@@ -933,6 +935,7 @@ export function selectFreshFomoXCallRoster(payload, options = {}) {
       || profile?.protected === true
       || Number(profile?.followers) < minimumFollowers
       || !freshTimestamp(profile?.checkedAt, nowMs, maximumProofAgeMs)
+      || String(bscActivity?.wallet || "").toLowerCase() !== wallet
       || !Number.isSafeInteger(Number(bscActivity?.count)) || Number(bscActivity.count) <= 0
       || !freshTimestamp(bscActivity?.checkedAt, nowMs, maximumProofAgeMs)) continue;
 
@@ -2096,6 +2099,24 @@ function materialSourceHealthChanged(left, right) {
   return fields.some((field) => !Object.is(left?.[field], right[field]));
 }
 
+function boundedCoverageGaps(gaps, maximum = MAX_COVERAGE_GAPS) {
+  const entries = Array.isArray(gaps) ? gaps : [];
+  if (entries.length <= maximum) return entries;
+  const indexed = entries.map((gap, index) => ({ gap, index }));
+  const permanentLoss = indexed.filter(({ gap }) => gap?.reason === "backlog_exceeded_signal_window");
+  const unresolved = indexed.filter(({ gap }) => gap?.reason !== "backlog_exceeded_signal_window"
+    && !gap?.resolvedAt && gap?.status !== "resolved");
+  const resolved = indexed.filter(({ gap }) => gap?.reason !== "backlog_exceeded_signal_window"
+    && (gap?.resolvedAt || gap?.status === "resolved"));
+  const retained = new Set();
+  for (const group of [permanentLoss, unresolved, resolved]) {
+    for (let index = group.length - 1; index >= 0 && retained.size < maximum; index -= 1) {
+      retained.add(group[index].index);
+    }
+  }
+  return indexed.filter(({ index }) => retained.has(index)).map(({ gap }) => gap);
+}
+
 function pruneState(state, nowMs) {
   let durableChanged = false;
   for (const field of ["seenCalls", "seenConvergences", "alertedTokens"]) {
@@ -2122,8 +2143,8 @@ function pruneState(state, nowMs) {
     .sort(([, left], [, right]) => Number(left?.call?.timestampMs || left?.firstSeenAt || 0)
       - Number(right?.call?.timestampMs || right?.firstSeenAt || 0))
     .slice(0, 1_000));
-  if ((state.publicOnchain.coverageGaps || []).length > 50) durableChanged = true;
-  state.publicOnchain.coverageGaps = (state.publicOnchain.coverageGaps || []).slice(-50);
+  if ((state.publicOnchain.coverageGaps || []).length > MAX_COVERAGE_GAPS) durableChanged = true;
+  state.publicOnchain.coverageGaps = boundedCoverageGaps(state.publicOnchain.coverageGaps);
   const smartMoney = state.publicOnchain.smartMoney || {};
   for (const [key, timestamp] of Object.entries(smartMoney.seenTrades || {})) {
     if (nowMs - Number(timestamp || 0) > RETENTION_MS) {
@@ -2665,6 +2686,12 @@ export function createFomoCallMonitor(config, dependencies = {}) {
   let lastSmartMoneyStatsRequestWallAt = 0;
 
   function buildCoverageSummary(state, options = {}) {
+    const coverageGaps = state.publicOnchain?.coverageGaps || [];
+    const boundedGaps = boundedCoverageGaps(coverageGaps);
+    if (boundedGaps !== coverageGaps) {
+      state.publicOnchain.coverageGaps = boundedGaps;
+      markDurableState();
+    }
     const smartMoney = ensureSmartMoneyState(state);
     const topBloggers = legacyBuyEnabled ? (state.topBloggers || []) : [];
     const smartWalletCount = smartMoneyEnabled ? smartMoney.admittedWallets.length : 0;
@@ -2729,8 +2756,13 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     if (profileFreshness.stale) profileFreshness.status = "stale";
 
     const unresolvedGaps = (state.publicOnchain?.coverageGaps || []).filter((gap) => {
+      if (gap?.reason === "backlog_exceeded_signal_window") {
+        // An expired backlog is a terminal fact, not recovered coverage. Keep
+        // it visible so a later healthy realtime cursor cannot erase the lost
+        // signal/feed interval from aggregate health.
+        return true;
+      }
       if (gap?.resolvedAt) return false;
-      if (gap?.reason === "backlog_exceeded_signal_window") return false;
       const observedAt = Date.parse(gap?.observedAt || "");
       return !Number.isFinite(observedAt) || summaryNowMs - observedAt <= maximumSignalAgeMs;
     });
@@ -4457,6 +4489,119 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     return failed ? "partial" : "healthy";
   }
 
+  function bscGapSourceSnapshot(state, nowMs) {
+    const smartMoney = ensureSmartMoneyState(state);
+    const admittedWallets = [...new Set((smartMoney.admittedWallets || [])
+      .map((wallet) => String(wallet || "").toLowerCase())
+      .filter((wallet) => isAddress(wallet)))];
+    const usableRoster = Object.values(smartMoney.roster || {})
+      .filter((entry) => smartRosterEntryUsable(entry, nowMs));
+    const freshRoster = usableRoster.filter((entry) => smartRosterEntryFresh(entry, nowMs));
+    const freshWallets = new Set(freshRoster.map((entry) => String(entry.wallet || "").toLowerCase()));
+    const lastFeedSuccessAtMs = Date.parse(smartMoney.lastFeedSuccessAt || "");
+    const feedFresh = Number.isFinite(lastFeedSuccessAtMs)
+      && lastFeedSuccessAtMs <= nowMs + ATTRIBUTION_FUTURE_TOLERANCE_MS
+      && nowMs - lastFeedSuccessAtMs <= Math.max(60_000, smartMoneyDiscoveryIntervalMs * 2);
+    const qualification = smartMoney.qualificationCoverage || {};
+    const complete = smartMoneyEnabled
+      && !legacyBuyEnabled
+      && ["healthy", "empty"].includes(String(smartMoney.feedStatus || ""))
+      && feedFresh
+      && qualification.status === "healthy"
+      && admittedWallets.length > 0
+      && freshRoster.length === admittedWallets.length
+      && admittedWallets.every((wallet) => freshWallets.has(wallet));
+    return {
+      complete,
+      reason: complete ? null : (smartMoneyEnabled ? "unrecoverable_feed_gap" : "unrecoverable_roster_gap"),
+      feedStatus: smartMoney.feedStatus || null,
+      feedCheckedAt: smartMoney.feedCheckedAt || null,
+      lastFeedSuccessAt: smartMoney.lastFeedSuccessAt || null,
+      qualificationStatus: qualification.status || null,
+      admittedCount: admittedWallets.length,
+      freshCount: freshRoster.length,
+      wallets: usableRoster.map((entry) => String(entry.wallet || "").toLowerCase()),
+    };
+  }
+
+  function terminalizeBscBacklogGap(gap, nowMs, sourceCoverage = null) {
+    const fromBlock = safeCheckpointNumber(Number(gap?.fromBlock));
+    const toBlock = safeCheckpointNumber(Number(gap?.toBlock));
+    const validRange = fromBlock !== null && toBlock !== null && fromBlock <= toBlock;
+    const recovery = gap?.recovery;
+    const durableExpired = recovery?.version === BSC_COVERAGE_RECOVERY_VERSION
+      && recovery.status === "expired"
+      && recovery.nextBlock == null
+      && typeof recovery.resolutionReason === "string" && recovery.resolutionReason.length > 0
+      && strictIsoTimestamp(recovery.expiredAt || recovery.resolvedAt);
+    if (durableExpired) return false;
+    const legacyWithoutSnapshot = !sourceCoverage;
+    const source = sourceCoverage || {
+      complete: false,
+      reason: "legacy_gap_without_feed_and_roster_snapshot",
+      wallets: [],
+    };
+    const resolutionReason = !validRange
+      ? "fail_closed_invalid_gap_range"
+      : (recovery
+        ? "fail_closed_unverified_gap_resolution"
+        : (legacyWithoutSnapshot
+          ? (smartMoneyEnabled ? "unrecoverable_feed_gap" : "unrecoverable_roster_gap")
+          : (source.complete
+            ? "backlog_outside_realtime_window_not_replayed"
+            : (source.reason || "unrecoverable_feed_gap"))));
+    gap.recovery = {
+      version: BSC_COVERAGE_RECOVERY_VERSION,
+      status: "expired",
+      expiredAt: new Date(nowMs).toISOString(),
+      resolutionReason,
+      signalPolicy: "never_enqueue_or_deliver_after_max_signal_age",
+      maximumSignalAgeMs,
+      sourceCoverage: {
+        complete: source.complete === true,
+        reason: source.reason || (source.complete ? null : resolutionReason),
+        feedStatus: source.feedStatus || null,
+        feedCheckedAt: source.feedCheckedAt || null,
+        lastFeedSuccessAt: source.lastFeedSuccessAt || null,
+        qualificationStatus: source.qualificationStatus || null,
+        admittedCount: Number(source.admittedCount || 0),
+        freshCount: Number(source.freshCount || 0),
+      },
+      rosterSnapshot: Array.isArray(source.wallets) ? [...source.wallets] : [],
+    };
+    markDurableState();
+    return true;
+  }
+
+  function recordBscBacklogGap(state, fromBlock, toBlock, nowMs) {
+    state.publicOnchain.coverageGaps ||= [];
+    const existing = state.publicOnchain.coverageGaps.find((gap) => gap?.chain === "bsc"
+      && gap?.reason === "backlog_exceeded_signal_window"
+      && Number(gap.fromBlock) === fromBlock
+      && Number(gap.toBlock) === toBlock);
+    if (existing) return existing;
+    const observedAt = new Date(nowMs).toISOString();
+    const gap = {
+      chain: "bsc",
+      fromBlock,
+      toBlock,
+      reason: "backlog_exceeded_signal_window",
+      observedAt,
+    };
+    state.publicOnchain.coverageGaps.push(gap);
+    markDurableState();
+    terminalizeBscBacklogGap(gap, nowMs, bscGapSourceSnapshot(state, nowMs));
+    return gap;
+  }
+
+  function terminalizePersistedBscBacklogGaps(state, nowMs) {
+    for (const gap of state.publicOnchain.coverageGaps || []) {
+      if (gap?.chain === "bsc" && gap?.reason === "backlog_exceeded_signal_window") {
+        terminalizeBscBacklogGap(gap, nowMs);
+      }
+    }
+  }
+
   async function collectPublicEvm(state, nowMs, options) {
     const { provider, rpcUrl, chain, cursorField, confirmations, maxCatchup } = options;
     const bloggers = new Map((legacyBuyEnabled ? state.topBloggers : [])
@@ -4511,14 +4656,17 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     let skipped = false;
     const relevantStart = Math.max(0, safeHead - maxCatchup + 1);
     if (start < relevantStart) {
-      state.publicOnchain.coverageGaps ||= [];
-      state.publicOnchain.coverageGaps.push({
-        chain: chain.slug,
-        fromBlock: start,
-        toBlock: relevantStart - 1,
-        reason: "backlog_exceeded_signal_window",
-        observedAt: new Date(nowMs).toISOString(),
-      });
+      if (chain.id === BSC_CHAIN_ID) recordBscBacklogGap(state, start, relevantStart - 1, nowMs);
+      else {
+        state.publicOnchain.coverageGaps ||= [];
+        state.publicOnchain.coverageGaps.push({
+          chain: chain.slug,
+          fromBlock: start,
+          toBlock: relevantStart - 1,
+          reason: "backlog_exceeded_signal_window",
+          observedAt: new Date(nowMs).toISOString(),
+        });
+      }
       start = relevantStart;
       setOnchainCursor(state, chain, cursorField, start);
       markDurableState();
@@ -4751,6 +4899,10 @@ export function createFomoCallMonitor(config, dependencies = {}) {
   });
 
   async function collectPublicOnchain(state, nowMs) {
+    // Old backlog records had no feed/roster snapshot and therefore cannot be
+    // reconstructed honestly. Terminalize them before source work so the lost
+    // interval remains durable even when the current BSC roster is empty.
+    terminalizePersistedBscBacklogGaps(state, nowMs);
     let profileCoverage = "disabled";
     if (legacyBuyEnabled) {
       profileCoverage = "healthy";

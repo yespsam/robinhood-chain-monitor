@@ -158,6 +158,7 @@ const SMART_WALLET_SOURCE_TRUST = "public_onchain_profiled";
 const SMART_WALLET_BLOCKED_TAG = /(?:^|[_-])(?:wash(?:[_-]?trader)?|arbitrager|arbitrage|mev(?:[_-]?bot)?|sandwich|router|cex|exchange|contract)(?:$|[_-])/i;
 const FOMO_HEALTH_SOURCE_ID = "local_fomo_health_watchdog";
 const FOMO_HEALTH_SOURCE_TRUST = "local_persisted_health";
+const FOMO_HEALTH_MAX_OPERATIONAL_AGE_MS = 10 * 366 * 24 * 60 * 60_000;
 const FOMO_HEALTH_LEVELS = new Set(["healthy", "degraded", "critical", "disabled", "unknown"]);
 const FOMO_HEALTH_REASON_CODES = new Set([
   "call_state_missing",
@@ -1455,7 +1456,7 @@ function safeHealthCount(value) {
 }
 
 function safeHealthDuration(value) {
-  return Number.isSafeInteger(value) && value >= 0 && value <= 10 * 366 * 24 * 60 * 60_000;
+  return Number.isSafeInteger(value) && value >= 0 && value <= FOMO_HEALTH_MAX_OPERATIONAL_AGE_MS;
 }
 
 function validHealthLane(value, keys) {
@@ -1505,7 +1506,7 @@ export function isFomoMonitorHealthUpdateAllowed(config, source, now = Date.now(
   const observedAt = strictTelegramNewsInstant(source.observedAt);
   const openedAt = strictTelegramNewsInstant(source.openedAt);
   if (!Number.isFinite(evaluatedAt) || observedAt === null || openedAt === null
-    || observedAt > evaluatedAt + 60_000 || evaluatedAt - observedAt > 7 * 24 * 60 * 60_000
+    || observedAt > evaluatedAt + 60_000 || evaluatedAt - observedAt > FOMO_HEALTH_MAX_OPERATIONAL_AGE_MS
     || openedAt > observedAt
     || !safeHealthDuration(source.durationMs)
     || source.durationMs !== observedAt - openedAt) return false;

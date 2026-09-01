@@ -19,6 +19,8 @@ const GMGN_CANDIDATE_SOURCE = "gmgn_bsc_kol_feed";
 const FOMOSCAN_SEED_SOURCE = "fomoscan_verified_profile";
 const FX_PROFILE_SOURCE = "fxtwitter_profile";
 const FX_TIMELINE_SOURCE = "fxtwitter_timeline";
+const BSC_ACTIVITY_SOURCE = "bsc_activity";
+const TRANSPORT_SOURCES = new Set([FX_PROFILE_SOURCE, FX_TIMELINE_SOURCE, BSC_ACTIVITY_SOURCE]);
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
@@ -28,6 +30,23 @@ const TRANSPORT_BACKOFFS = Object.freeze({
   transient: Object.freeze([MINUTE_MS, 5 * MINUTE_MS, 15 * MINUTE_MS, HOUR_MS]),
   other: Object.freeze([5 * MINUTE_MS, 15 * MINUTE_MS, HOUR_MS, 6 * HOUR_MS]),
 });
+const RELIABLE_NETWORK_ERROR_CODES = new Set([
+  "EAI_AGAIN",
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "EHOSTDOWN",
+  "EHOSTUNREACH",
+  "ENETDOWN",
+  "ENETRESET",
+  "ENETUNREACH",
+  "ENOTFOUND",
+  "EPIPE",
+  "ETIMEDOUT",
+  "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_SOCKET",
+]);
 const BSC_CHAIN = Object.freeze({
   id: 56,
   chainId: 56,
@@ -100,6 +119,7 @@ function clearHandleRuntimeState(state, key) {
   delete state.cursors[key];
   delete state.transportCircuits?.[`${FX_PROFILE_SOURCE}:${key}`];
   delete state.transportCircuits?.[`${FX_TIMELINE_SOURCE}:${key}`];
+  delete state.transportCircuits?.[`${BSC_ACTIVITY_SOURCE}:${key}`];
   for (const pendingKey of Object.keys(state.pending || {})) {
     if (pendingKey.startsWith(`${key}:`)) delete state.pending[pendingKey];
   }
@@ -272,7 +292,7 @@ function pruneState(state, nowMs, maximumAttributionAgeMs, tokenDedupMs, pending
     const handle = cleanHandle(value?.handle).toLowerCase();
     const source = String(value?.source || "");
     if (!state.roster[handle] || key !== `${source}:${handle}`
-      || ![FX_PROFILE_SOURCE, FX_TIMELINE_SOURCE].includes(source)) delete state.transportCircuits[key];
+      || !TRANSPORT_SOURCES.has(source)) delete state.transportCircuits[key];
   }
 }
 
@@ -286,7 +306,7 @@ function summarizeTransportCircuits(state, nowMs) {
     const source = String(value?.source || "");
     if (!state.roster?.[handle]
       || key !== transportCircuitKey(source, handle)
-      || ![FX_PROFILE_SOURCE, FX_TIMELINE_SOURCE].includes(source)) return [];
+      || !TRANSPORT_SOURCES.has(source)) return [];
     const storedRetryAt = Number(value?.nextRetryAt || 0);
     const nextRetryAt = Number.isFinite(storedRetryAt) && storedRetryAt > 0 ? storedRetryAt : nowMs;
     return [{
@@ -324,6 +344,14 @@ function backoffAt(schedule, failureCount) {
   return schedule[Math.min(schedule.length - 1, Math.max(0, failureCount - 1))];
 }
 
+function reliableNetworkErrorCode(error) {
+  for (const current of [error, error?.cause, error?.cause?.cause]) {
+    const code = String(current?.code || "").trim().toUpperCase();
+    if (RELIABLE_NETWORK_ERROR_CODES.has(code)) return code;
+  }
+  return null;
+}
+
 function classifyTransportFailure(source, error, nowMs, failureCount = 1) {
   const status = Number(error?.httpStatus || error?.status || 0);
   if (status === 404) {
@@ -343,6 +371,14 @@ function classifyTransportFailure(source, error, nowMs, failureCount = 1) {
   const message = String(error?.message || error || "");
   if (["AbortError", "TimeoutError"].includes(error?.name) || /\b(?:timeout|timed out)\b|aborted/i.test(message)) {
     return { reason: "timeout", delayMs: backoffAt(TRANSPORT_BACKOFFS.timeout, failureCount) };
+  }
+  const networkErrorCode = reliableNetworkErrorCode(error);
+  if (networkErrorCode) {
+    return {
+      reason: "network_error",
+      networkErrorCode,
+      delayMs: backoffAt(TRANSPORT_BACKOFFS.transient, failureCount),
+    };
   }
   if (status >= 500 || status === 408 || status === 425) {
     return { reason: `http_${status}`, delayMs: backoffAt(TRANSPORT_BACKOFFS.transient, failureCount) };
@@ -437,6 +473,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
   let writeSerial = Promise.resolve();
   let verifiedSeedDiscovery = null;
   let verifiedSeedAbortController = null;
+  const activeCheckControllers = new Set();
   let timer = null;
   let started = false;
   let stopped = false;
@@ -445,6 +482,12 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     if (!state) state = await readState(stateFile, fsImpl);
     return state;
   };
+
+  function throwIfCheckCancelled(signal) {
+    if (stopped || signal?.aborted) {
+      throw Object.assign(new Error("Fomo X check cancelled"), { code: "fomo_x_check_cancelled" });
+    }
+  }
 
   const persist = (nowMs) => {
     pruneState(state, nowMs, attributionMaxAgeMs, tokenDedupMs, pendingMaxAgeMs);
@@ -481,9 +524,11 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       && nowMs - checkedAtMs <= identityGraceMs;
   }
 
-  function freshCachedBscActivity(activity, nowMs) {
+  function freshCachedBscActivity(candidate, activity, nowMs) {
     const checkedAtMs = Date.parse(activity?.checkedAt || "");
+    const recordedWallet = String(activity?.wallet || "").toLowerCase();
     return Number.isSafeInteger(Number(activity?.count)) && Number(activity.count) > 0
+      && isAddress(recordedWallet) && recordedWallet === candidate?.wallet
       && Number.isFinite(checkedAtMs) && checkedAtMs <= nowMs + FUTURE_TOLERANCE_MS
       && nowMs - checkedAtMs <= identityGraceMs;
   }
@@ -506,13 +551,18 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
 
   function hasFreshCachedIdentity(candidate, stored, nowMs) {
     return freshCachedProfile(candidate, stored?.xProfile, nowMs)
-      && freshCachedBscActivity(stored?.bscActivity, nowMs)
+      && freshCachedBscActivity(candidate, stored?.bscActivity, nowMs)
       && freshCandidateEvidence(candidate, nowMs)
       && Number(stored?.admissionRejectedUntil || 0) <= nowMs;
   }
 
   function isTransientProfileReason(reason) {
     return reason === "timeout" || reason === "http_429" || /^http_5\d\d$/.test(String(reason || ""));
+  }
+
+  function isTransientBscActivityReason(reason) {
+    return isTransientProfileReason(reason)
+      || ["http_408", "http_425", "network_error"].includes(String(reason || ""));
   }
 
   function isTransientBindingRefreshError(error) {
@@ -582,7 +632,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       }
       return result;
     } catch (error) {
-      if (error?.code === "transport_circuit_open") throw error;
+      if (["transport_circuit_open", "fomo_x_check_cancelled"].includes(error?.code)) throw error;
       const failureCount = Number(previous?.failureCount || 0) + 1;
       const classified = classifyTransportFailure(source, error, nowMs, failureCount);
       const nextRetryAt = nowMs + classified.delayMs;
@@ -596,6 +646,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
         nextRetryAt,
         lastError: String(error?.message || error).slice(0, 180),
         ...(classified.retryAfterMs ? { retryAfterMs: classified.retryAfterMs } : {}),
+        ...(classified.networkErrorCode ? { networkErrorCode: classified.networkErrorCode } : {}),
       };
       state.transportCircuits[key] = control;
       logger.warn?.(`[fomo-x-call][transport] ${source} @${handle} ${classified.reason}; circuit open until ${new Date(nextRetryAt).toISOString()}`);
@@ -630,13 +681,47 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     return { ...parsed, checkedAt: new Date(now()).toISOString() };
   }
 
-  async function fetchBscActivity(wallet) {
-    if (dependencies.getBscActivityImpl) return dependencies.getBscActivityImpl(wallet);
-    const payload = await fetchJson(bscRpcUrl, {
-      method: "POST",
-      body: { jsonrpc: "2.0", id: 1, method: "eth_getTransactionCount", params: [wallet, "latest"] },
-    });
-    if (payload?.error || !/^0x[0-9a-f]+$/i.test(String(payload?.result || ""))) throw new Error("invalid BSC activity response");
+  async function fetchBscActivity(wallet, signal) {
+    throwIfCheckCancelled(signal);
+    if (dependencies.getBscActivityImpl) {
+      const task = dependencies.getBscActivityImpl(wallet, { signal });
+      if (!signal) return task;
+      throwIfCheckCancelled(signal);
+      let onAbort;
+      const cancelled = new Promise((_, reject) => {
+        onAbort = () => reject(Object.assign(new Error("Fomo X check cancelled"), { code: "fomo_x_check_cancelled" }));
+        signal.addEventListener("abort", onAbort, { once: true });
+      });
+      try {
+        return await Promise.race([Promise.resolve(task), cancelled]);
+      } finally {
+        signal.removeEventListener("abort", onAbort);
+      }
+    }
+    let payload;
+    try {
+      payload = await fetchJson(bscRpcUrl, {
+        method: "POST",
+        body: { jsonrpc: "2.0", id: 1, method: "eth_getTransactionCount", params: [wallet, "latest"] },
+        signal,
+      });
+    } catch (error) {
+      if (signal?.aborted) throw Object.assign(new Error("Fomo X check cancelled"), { code: "fomo_x_check_cancelled" });
+      throw error;
+    }
+    if (payload?.error) {
+      const rpcCode = Number(payload.error?.code);
+      const rpcMessage = String(payload.error?.message || "");
+      if (rpcCode === 429 || rpcCode === -32005 || /\b(?:rate[ -]?limit(?:ed)?|too many requests)\b/i.test(rpcMessage)) {
+        const error = new Error("BSC activity JSON-RPC rate limited");
+        error.httpStatus = 429;
+        error.retryAfter = payload.error?.retryAfter ?? payload.error?.retry_after
+          ?? payload.error?.data?.retryAfter ?? payload.error?.data?.retry_after ?? null;
+        throw error;
+      }
+      throw new Error("invalid BSC activity response");
+    }
+    if (!/^0x[0-9a-f]+$/i.test(String(payload?.result || ""))) throw new Error("invalid BSC activity response");
     return Number(BigInt(payload.result));
   }
 
@@ -1034,6 +1119,8 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     const liveHandles = [];
     const backlogHandles = [];
     const profileFallbackHandles = [];
+    const bscActivityFallbackHandles = [];
+    const degradedSourceHandles = [];
     const effectiveCircuitHandles = [];
     const reasonsByHandle = {};
     const reasonCounts = {};
@@ -1044,11 +1131,12 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       const profile = stored.xProfile;
       const profileAt = Date.parse(profile?.checkedAt || "");
       const bscAt = Date.parse(stored.bscActivity?.checkedAt || "");
+      const exactBscActivityWallet = String(stored.bscActivity?.wallet || "").toLowerCase() === candidate.wallet;
       const cached = /^\d+$/.test(String(profile?.id || ""))
         && cleanHandle(profile?.handle).toLowerCase() === handle
         && profile?.protected !== true
         && Number(profile?.followers || 0) >= minimumFollowers
-        && Number(stored.bscActivity?.count || 0) > 0
+        && Number(stored.bscActivity?.count || 0) > 0 && exactBscActivityWallet
         && Number(stored.admissionRejectedUntil || 0) <= nowMs;
       if (cached) cachedHandles.push(handle);
       else if (Number(stored.admissionRejectedUntil || 0) > nowMs) reasons.push("admission_rejected");
@@ -1056,6 +1144,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       else if (cleanHandle(profile?.handle).toLowerCase() !== handle || profile?.protected === true
         || Number(profile?.followers || 0) < minimumFollowers) reasons.push("profile_identity_gate");
       else if (!(Number(stored.bscActivity?.count || 0) > 0)) reasons.push("bsc_identity_missing");
+      else if (!exactBscActivityWallet) reasons.push("bsc_identity_wallet_unbound");
 
       const fresh = cached && hasFreshCachedIdentity(candidate, stored, nowMs);
       if (fresh) freshHandles.push(handle);
@@ -1067,12 +1156,22 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
 
       const profileCircuit = state.transportCircuits[transportCircuitKey(FX_PROFILE_SOURCE, handle)];
       const timelineCircuit = state.transportCircuits[transportCircuitKey(FX_TIMELINE_SOURCE, handle)];
+      const bscActivityCircuit = state.transportCircuits[transportCircuitKey(BSC_ACTIVITY_SOURCE, handle)];
       const cachedFallback = Boolean(profileCircuit && fresh && isTransientProfileReason(profileCircuit.reason));
       if (cachedFallback) profileFallbackHandles.push(handle);
       const effectiveProfileCircuit = Boolean(profileCircuit && !cachedFallback);
+      const bscActivityFallback = Boolean(bscActivityCircuit && fresh
+        && isTransientBscActivityReason(bscActivityCircuit.reason));
+      if (bscActivityFallback) {
+        bscActivityFallbackHandles.push(handle);
+        degradedSourceHandles.push(handle);
+        reasons.push(`bsc_activity_${bscActivityCircuit.reason || "transport_error"}_cached_fallback`);
+      }
+      const effectiveBscActivityCircuit = Boolean(bscActivityCircuit && !bscActivityFallback);
       if (effectiveProfileCircuit) reasons.push(`profile_${profileCircuit.reason || "transport_error"}`);
       if (timelineCircuit) reasons.push(`timeline_${timelineCircuit.reason || "transport_error"}`);
-      if (effectiveProfileCircuit || timelineCircuit) effectiveCircuitHandles.push(handle);
+      if (effectiveBscActivityCircuit) reasons.push(`bsc_activity_${bscActivityCircuit.reason || "transport_error"}`);
+      if (effectiveProfileCircuit || timelineCircuit || effectiveBscActivityCircuit) effectiveCircuitHandles.push(handle);
 
       const lastTimelineSuccessAt = Date.parse(stored.timelineHealth?.lastSuccessAt || "");
       const timelineFresh = Number.isFinite(lastTimelineSuccessAt)
@@ -1084,7 +1183,8 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       const timelineFailedAfterSuccess = stored.timelineHealth?.status === "error"
         && Date.parse(stored.timelineHealth?.checkedAt || "") >= lastTimelineSuccessAt;
       if (timelineFailedAfterSuccess && !timelineCircuit) reasons.push("timeline_latest_check_failed");
-      const live = fresh && timelineFresh && !effectiveProfileCircuit && !timelineCircuit && !timelineFailedAfterSuccess;
+      const live = fresh && timelineFresh && !effectiveProfileCircuit && !timelineCircuit
+        && !effectiveBscActivityCircuit && !timelineFailedAfterSuccess;
       if (live) liveHandles.push(handle);
       else backlogHandles.push(handle);
       const uniqueReasons = [...new Set(reasons)];
@@ -1102,6 +1202,8 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       liveHandles,
       backlogHandles,
       profileFallbackHandles,
+      bscActivityFallbackHandles,
+      degradedSourceHandles: [...new Set(degradedSourceHandles)].sort(),
       effectiveCircuitHandles: [...new Set(effectiveCircuitHandles)].sort(),
       reasonsByHandle,
       reasonCounts,
@@ -1318,7 +1420,8 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     }
   }
 
-  async function processIdentity(candidate, nowMs) {
+  async function processIdentity(candidate, nowMs, signal) {
+    throwIfCheckCancelled(signal);
     const key = candidate.handle.toLowerCase();
     const stored = state.roster[key];
     if (Number(stored?.admissionRejectedUntil || 0) > nowMs) {
@@ -1328,6 +1431,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     const profileAt = Date.parse(profile?.checkedAt || "");
     if (!profile || !Number.isFinite(profileAt) || nowMs - profileAt >= profileRefreshMs) {
       try {
+        throwIfCheckCancelled(signal);
         profile = await fetchXProfile(candidate.handle);
       } catch (error) {
         const transportBackoff = transportBackoffResult(error);
@@ -1351,6 +1455,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
           return { status: "ineligible_profile", reason: error.message };
         }
       }
+      throwIfCheckCancelled(signal);
       if (profile !== stored.xProfile) {
         stored.xProfile = profile;
         delete stored.profileRefreshHealth;
@@ -1360,7 +1465,9 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
           && String(previousBinding?.wallet || "").toLowerCase() === candidate.wallet
           && cleanHandle(previousBinding?.handle || previousBinding?.twitterHandle).toLowerCase() === candidate.handle;
         try {
+          throwIfCheckCancelled(signal);
           const resolvedBinding = await resolveVerifiedBinding(candidate);
+          throwIfCheckCancelled(signal);
           if (freshVerifiedBinding(candidate, resolvedBinding, nowMs)) {
             const checkedAt = resolvedBinding.checkedAt || resolvedBinding.lastCheckedAt;
             stored.walletBinding = { ...resolvedBinding, checkedAt, lastCheckedAt: checkedAt };
@@ -1401,21 +1508,59 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
 
     let bscActivity = stored.bscActivity;
     const bscAt = Date.parse(bscActivity?.checkedAt || "");
-    if (!bscActivity || !Number.isFinite(bscAt) || nowMs - bscAt >= profileRefreshMs) {
-      const count = Number(await fetchBscActivity(candidate.wallet));
-      if (!Number.isSafeInteger(count) || count <= 0) {
-        stored.admissionRejectedUntil = nowMs + admissionRetryMs;
-        stored.admissionRejectionReason = `@${candidate.handle} wallet has no verified BSC activity`;
-        return { status: "ineligible_bsc_activity", reason: stored.admissionRejectionReason };
+    const bscActivityWallet = String(bscActivity?.wallet || "").toLowerCase();
+    const bscActivityRefreshMs = Math.min(profileRefreshMs, identityGraceMs);
+    if (!bscActivity || !Number.isFinite(bscAt) || bscAt > nowMs + FUTURE_TOLERANCE_MS
+      || bscActivityWallet !== candidate.wallet
+      || nowMs - bscAt >= bscActivityRefreshMs) {
+      let count;
+      try {
+        throwIfCheckCancelled(signal);
+        count = Number(await fetchWithTransportCircuit(BSC_ACTIVITY_SOURCE, candidate.handle,
+          async () => {
+            const value = Number(await fetchBscActivity(candidate.wallet, signal));
+            if (!Number.isSafeInteger(value) || value < 0) {
+              throw Object.assign(new Error("invalid BSC activity response"), { code: "invalid_bsc_activity_response" });
+            }
+            return value;
+          }));
+      } catch (error) {
+        if (error?.code === "fomo_x_check_cancelled") throw error;
+        const transportBackoff = transportBackoffResult(error);
+        if (transportBackoff && isTransientBscActivityReason(transportBackoff.reason)
+          && freshCachedBscActivity(candidate, stored.bscActivity, nowMs)) {
+          bscActivity = stored.bscActivity;
+          stored.bscActivityRefreshHealth = {
+            status: "cached_activity_fallback",
+            checkedAt: new Date(nowMs).toISOString(),
+            reason: transportBackoff.reason,
+            nextRetryAt: transportBackoff.nextRetryAt,
+          };
+        } else if (transportBackoff) {
+          delete stored.bscActivityRefreshHealth;
+          return transportBackoff;
+        } else {
+          throw error;
+        }
       }
-      bscActivity = { count, checkedAt: new Date(nowMs).toISOString() };
-      stored.bscActivity = bscActivity;
+      throwIfCheckCancelled(signal);
+      if (count !== undefined) {
+        bscActivity = { count, wallet: candidate.wallet, checkedAt: new Date(nowMs).toISOString() };
+        stored.bscActivity = bscActivity;
+        delete stored.bscActivityRefreshHealth;
+        if (count <= 0) {
+          stored.admissionRejectedUntil = nowMs + admissionRetryMs;
+          stored.admissionRejectionReason = `@${candidate.handle} wallet has no verified BSC activity`;
+          return { status: "ineligible_bsc_activity", reason: stored.admissionRejectionReason };
+        }
+      }
     }
     delete stored.admissionRejectedUntil;
     delete stored.admissionRejectionReason;
 
     let tweets;
     try {
+      throwIfCheckCancelled(signal);
       tweets = await fetchTimeline(profile);
     } catch (error) {
       const transportBackoff = transportBackoffResult(error);
@@ -1429,6 +1574,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       if (transportBackoff) return transportBackoff;
       throw error;
     }
+    throwIfCheckCancelled(signal);
     stored.timelineHealth = {
       status: "healthy",
       checkedAt: new Date(nowMs).toISOString(),
@@ -1439,6 +1585,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     const initialized = state.initialized[key];
     const identityChanged = initialized && (String(initialized.xUserId || "") !== String(profile.id)
       || String(initialized.wallet || "").toLowerCase() !== candidate.wallet);
+    throwIfCheckCancelled(signal);
     if (!initialized || identityChanged) {
       if (identityChanged) clearHandleRuntimeState(state, key);
       if (!tweets.length) return { status: "baseline_pending", baseline: 0, delivered: 0 };
@@ -1469,16 +1616,23 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     let delivered = 0;
     let pending = 0;
     for (const tweet of candidates) {
+      throwIfCheckCancelled(signal);
       const result = await processTweet(candidate, profile, bscActivity, stored.walletBinding || null, tweet, nowMs);
+      throwIfCheckCancelled(signal);
       if (result.status === "delivered") delivered += 1;
       if (result.status === "qualification_pending" || result.status === "pending_error") pending += 1;
     }
+    throwIfCheckCancelled(signal);
     if (latestId && (!previousCursor || compareTweetIds(latestId, previousCursor) > 0)) state.cursors[key] = latestId;
     return { status: "checked", candidates: candidates.length, delivered, pending };
   }
 
   async function runCheck() {
     await ensureState();
+    // A check may already be queued behind the active serial task when stop()
+    // begins. It must observe the stopped lifecycle before creating any source
+    // request or scheduling another state write.
+    if (stopped) return { status: "stopped" };
     const nowMs = now();
     if (config.fomoXCallEnabled !== true) {
       state.health = { ...state.health, status: "disabled", checkedAt: new Date(nowMs).toISOString() };
@@ -1486,10 +1640,29 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       return { status: "disabled" };
     }
 
-    const discoveryStatus = await refreshDiscovery(nowMs);
-    const roster = eligibleRoster(nowMs);
-    const batch = selectBatch(roster);
-    const results = await settleBounded(batch, concurrency, (candidate) => processIdentity(candidate, nowMs));
+    const durableStateBeforeCheck = structuredClone(state);
+    const stoppedResult = () => {
+      state = durableStateBeforeCheck;
+      return { status: "stopped" };
+    };
+    const controller = new AbortController();
+    activeCheckControllers.add(controller);
+    let discoveryStatus;
+    let roster;
+    let batch;
+    let results;
+    try {
+      discoveryStatus = await refreshDiscovery(nowMs);
+      if (stopped || controller.signal.aborted) return stoppedResult();
+      roster = eligibleRoster(nowMs);
+      batch = selectBatch(roster);
+      results = await settleBounded(batch, concurrency, (candidate) => processIdentity(candidate, nowMs, controller.signal));
+    } finally {
+      activeCheckControllers.delete(controller);
+    }
+    // Do not persist a partially completed check after stop. In particular,
+    // this keeps the last durable tweet cursor authoritative across restart.
+    if (stopped || controller.signal.aborted) return stoppedResult();
     const failures = results.filter((result) => result.status === "rejected");
     const batchTransportBackoffs = results.filter((result) => result.status === "fulfilled" && result.value?.transportFailure === true);
     const transportCoverage = summarizeTransportCircuits(state, nowMs);
@@ -1503,8 +1676,9 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     const discoveryLimited = discoveryStatus.gmgn === "error"
       || discoveryStatus.fomoscanSeeds === "error" || seedInFlight || seedBacklog > 0;
     const coverageLimited = coverage.liveCount < coverage.eligibleCount;
-    const sourceLimited = discoveryLimited || coverageLimited;
-    const issueCount = failures.length + coverage.effectiveCircuitHandles.length;
+    const sourceDegraded = coverage.degradedSourceHandles.length > 0;
+    const sourceLimited = discoveryLimited || coverageLimited || sourceDegraded;
+    const issueCount = failures.length + coverage.effectiveCircuitHandles.length + coverage.degradedSourceHandles.length;
     const status = sourceLimited || failures.length ? "degraded"
       : !roster.length ? "healthy_no_candidates"
         : "healthy";
@@ -1564,12 +1738,23 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
           liveHandles: coverage.liveHandles,
           backlogHandles: coverage.backlogHandles,
           profileFallbackHandles: coverage.profileFallbackHandles,
+          bscActivityFallbackHandles: coverage.bscActivityFallbackHandles,
+          degradedSourceHandles: coverage.degradedSourceHandles,
           effectiveCircuitHandles: coverage.effectiveCircuitHandles,
           coverageReasons: coverage.reasonCounts,
         },
       },
     };
-    for (const failure of failures) logger.error?.(`[fomo-x-call] ${failure.reason?.message || failure.reason}`);
+    const failureMessages = [...new Set(failures.map((failure) => String(failure.reason?.message || failure.reason).slice(0, 120)))].sort();
+    const failureDigest = failures.length ? JSON.stringify(failureMessages) : null;
+    const previousFailureDigest = state.health.batchFailureLogDigest || null;
+    if (failureDigest && failureDigest !== previousFailureDigest) {
+      logger.error?.(`[fomo-x-call][batch] ${failures.length} failure(s): ${failureMessages.slice(0, 3).join(" | ")}`);
+    } else if (!failureDigest && previousFailureDigest) {
+      logger.info?.("[fomo-x-call][batch] recovered; failures cleared");
+    }
+    state.health.batchFailureLogDigest = failureDigest;
+    if (stopped || controller.signal.aborted) return stoppedResult();
     await persist(nowMs);
     return {
       status,
@@ -1605,12 +1790,18 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     started = false;
     if (timer) clearInterval(timer);
     timer = null;
+    for (const controller of activeCheckControllers) controller.abort();
     verifiedSeedAbortController?.abort();
     await serial.catch(() => {});
     verifiedSeedAbortController?.abort();
     const discovery = verifiedSeedDiscovery;
     if (discovery) await discovery.catch(() => {});
     await writeSerial.catch(() => {});
+    // Background verified-seed discovery owns its own durable writes and may
+    // finish while an active timeline check is being rolled back. Once every
+    // producer/write is drained, reload the owner-only file so in-memory state
+    // cannot overwrite a newer durable seed result on a same-instance restart.
+    state = await readState(stateFile, fsImpl);
   }
 
   if (dependencies.autoStart !== false) start().catch((error) => logger.error?.(`[fomo-x-call] startup: ${error.message}`));

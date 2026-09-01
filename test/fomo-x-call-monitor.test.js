@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import { getEventListeners } from "node:events";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -122,6 +123,7 @@ function createHarness({
   configOverrides = {},
   discoverVerifiedSeedImpl,
   resolveBindingImpl,
+  getBscActivityImpl = async () => 7,
   sendAlertsImpl,
   fetchImpl,
   logger = quietLogger,
@@ -132,7 +134,7 @@ function createHarness({
     now: () => nowRef.value,
     logger,
     discoverCandidatesImpl: async () => rowsRef.value,
-    getBscActivityImpl: async () => 7,
+    ...(getBscActivityImpl === null ? {} : { getBscActivityImpl }),
     resolveVerifiedBindingImpl: resolveBindingImpl || (async (candidateRow) => binding || candidateRow.walletBinding || null),
     discoverVerifiedSeedImpl,
     qualifyCallImpl,
@@ -1164,6 +1166,715 @@ test("a fresh persisted numeric identity survives a transient profile timeout an
   assert.equal(state.health.freshCount, 1);
   assert.equal(state.health.liveCount, 1);
   assert.equal(requests.filter((url) => url.includes(`/2/profile/id:${X_ID}/statuses`)).length, 1);
+});
+
+test("a fresh exact-wallet BSC activity cache survives 429 across restart and a single due probe recovers", async (t) => {
+  const dataDir = await fixture(t);
+  const startedAt = Date.parse("2026-08-24T10:05:00.000Z");
+  const nowRef = { value: startedAt };
+  const rowsRef = { value: [candidate(startedAt)] };
+  const tweetsRef = { value: [timelineTweet("880", "baseline", startedAt - 1_000)] };
+  const alerts = [];
+  const requests = [];
+  let activityMode = "healthy";
+  let activityCalls = 0;
+  const getBscActivityImpl = async (wallet) => {
+    assert.equal(wallet, WALLET);
+    activityCalls += 1;
+    if (activityMode === "rate_limited") {
+      const error = new Error("BSC activity HTTP 429");
+      error.httpStatus = 429;
+      error.retryAfter = "120";
+      throw error;
+    }
+    return activityMode === "recovered" ? 9 : 7;
+  };
+  const harnessOptions = {
+    dataDir, nowRef, rowsRef, tweetsRef, alerts, requests, getBscActivityImpl,
+  };
+  let monitor = createHarness(harnessOptions);
+  await monitor.check();
+  assert.equal(activityCalls, 1);
+
+  activityMode = "rate_limited";
+  nowRef.value += 60_000;
+  const failedAt = nowRef.value;
+  tweetsRef.value = [timelineTweet("881", `I am buying through the BSC outage. CA ${TOKEN}`, nowRef.value - 500), ...tweetsRef.value];
+  let result = await monitor.check();
+  let state = await monitor.getState();
+  assert.equal(result.status, "degraded");
+  assert.equal(result.active, 1, "the timeline stays live on a fresh positive exact-wallet proof");
+  assert.equal(result.delivered, 1);
+  assert.equal(alerts.length, 1);
+  assert.equal(state.cursors.alpha, "881");
+  assert.equal(state.roster.alpha.bscActivity.wallet, WALLET);
+  assert.equal(state.roster.alpha.bscActivity.count, 7);
+  assert.equal(state.roster.alpha.bscActivityRefreshHealth.status, "cached_activity_fallback");
+  assert.equal(state.transportCircuits["bsc_activity:alpha"].reason, "http_429");
+  assert.equal(state.transportCircuits["bsc_activity:alpha"].retryAfterMs, 120_000);
+  assert.equal(state.transportCircuits["bsc_activity:alpha"].nextRetryAt, failedAt + 120_000);
+  assert.deepEqual(state.health.sources.x.bscActivityFallbackHandles, ["alpha"]);
+  assert.deepEqual(state.health.sources.x.degradedSourceHandles, ["alpha"]);
+  assert.equal(activityCalls, 2);
+  await monitor.stop();
+
+  nowRef.value = failedAt + 119_999;
+  monitor = createHarness(harnessOptions);
+  result = await monitor.check();
+  state = await monitor.getState();
+  assert.equal(result.status, "degraded");
+  assert.equal(result.active, 1);
+  assert.equal(activityCalls, 2, "restart must honor the persisted Retry-After without probing early");
+  assert.equal(state.transportCircuits["bsc_activity:alpha"].nextRetryAt, failedAt + 120_000);
+
+  activityMode = "recovered";
+  nowRef.value = failedAt + 120_000;
+  result = await monitor.check();
+  state = await monitor.getState();
+  assert.equal(activityCalls, 3, "only the due handle performs one recovery probe");
+  assert.equal(result.status, "healthy");
+  assert.equal(result.active, 1);
+  assert.equal(state.transportCircuits["bsc_activity:alpha"], undefined);
+  assert.equal(state.roster.alpha.bscActivity.count, 9);
+  assert.equal(state.roster.alpha.bscActivity.checkedAt, new Date(nowRef.value).toISOString());
+  assert.equal(state.roster.alpha.bscActivityRefreshHealth, undefined);
+  assert.deepEqual(state.health.sources.x.bscActivityFallbackHandles, []);
+});
+
+test("short-aged legacy BSC activity without a wallet requires a successful RPC refresh", async (t) => {
+  for (const exactInitializedWallet of [true, false]) {
+    await t.test(exactInitializedWallet ? "exact initialized wallet" : "mismatched initialized wallet", async () => {
+      const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "fomo-x-bsc-legacy-"));
+      try {
+        const startedAt = Date.parse("2026-08-24T10:05:30.000Z");
+        const nowRef = { value: startedAt };
+        const rowsRef = { value: [candidate(startedAt)] };
+        const tweetsRef = { value: [timelineTweet("885", "baseline", startedAt - 1_000)] };
+        const initial = createHarness({ dataDir, nowRef, rowsRef, tweetsRef, alerts: [] });
+        await initial.check();
+        await initial.stop();
+
+        const stateFile = path.join(dataDir, "fomo-x-call-state.json");
+        const legacy = JSON.parse(await fs.readFile(stateFile, "utf8"));
+        delete legacy.roster.alpha.bscActivity.wallet;
+        if (!exactInitializedWallet) legacy.initialized.alpha.wallet = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        await fs.writeFile(stateFile, `${JSON.stringify(legacy, null, 2)}\n`, { mode: 0o600 });
+
+        nowRef.value += 5_000;
+        tweetsRef.value = [timelineTweet("886", `I am buying during legacy migration. CA ${TOKEN}`, nowRef.value - 500), ...tweetsRef.value];
+        const alerts = [];
+        let activityHealthy = false;
+        const monitor = createHarness({
+          dataDir, nowRef, rowsRef, tweetsRef, alerts,
+          getBscActivityImpl: async () => {
+            if (activityHealthy) return 9;
+            const error = new Error("BSC activity timed out");
+            error.name = "TimeoutError";
+            throw error;
+          },
+        });
+        let result = await monitor.check();
+        let state = await monitor.getState();
+        assert.equal(result.delivered, 0);
+        assert.equal(result.active, 0);
+        assert.equal(alerts.length, 0);
+        assert.equal(state.cursors.alpha, "885");
+        assert.equal(state.roster.alpha.bscActivity.wallet, undefined);
+        assert.deepEqual(state.health.sources.x.bscActivityFallbackHandles, []);
+        assert.deepEqual(state.health.sources.x.effectiveCircuitHandles, ["alpha"]);
+        assert.ok(state.health.coverage.reasonsByHandle.alpha.includes("bsc_identity_wallet_unbound"));
+
+        if (exactInitializedWallet) {
+          activityHealthy = true;
+          nowRef.value = state.transportCircuits["bsc_activity:alpha"].nextRetryAt;
+          rowsRef.value = [candidate(nowRef.value)];
+          result = await monitor.check();
+          state = await monitor.getState();
+          assert.equal(result.delivered, 1);
+          assert.equal(alerts.length, 1);
+          assert.equal(state.cursors.alpha, "886");
+          assert.equal(state.roster.alpha.bscActivity.wallet, WALLET);
+          assert.equal(state.roster.alpha.bscActivity.count, 9);
+          assert.equal(state.transportCircuits["bsc_activity:alpha"], undefined);
+        }
+      } finally {
+        await fs.rm(dataDir, { recursive: true, force: true });
+      }
+    });
+  }
+});
+
+test("reliable BSC network failures plus HTTP 408 and 425 may use only a fresh positive cache", async (t) => {
+  const cases = [
+    {
+      label: "DNS failure",
+      fail: () => {
+        const error = new TypeError("fetch failed");
+        error.cause = Object.assign(new Error("getaddrinfo ENOTFOUND bsc-rpc.test"), { code: "ENOTFOUND" });
+        throw error;
+      },
+      reason: "network_error",
+      networkErrorCode: "ENOTFOUND",
+    },
+    {
+      label: "connection reset",
+      fail: () => { throw Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }); },
+      reason: "network_error",
+      networkErrorCode: "ECONNRESET",
+    },
+    {
+      label: "undici socket closed",
+      fail: () => {
+        const error = new TypeError("fetch failed");
+        error.cause = Object.assign(new Error("other side closed"), { code: "UND_ERR_SOCKET" });
+        throw error;
+      },
+      reason: "network_error",
+      networkErrorCode: "UND_ERR_SOCKET",
+    },
+    {
+      label: "undici connect timeout",
+      fail: () => {
+        const error = new TypeError("fetch failed");
+        error.cause = Object.assign(new Error("connect timeout"), { code: "UND_ERR_CONNECT_TIMEOUT" });
+        throw error;
+      },
+      reason: "network_error",
+      networkErrorCode: "UND_ERR_CONNECT_TIMEOUT",
+    },
+    {
+      label: "HTTP 408",
+      fail: () => { const error = new Error("BSC activity HTTP 408"); error.httpStatus = 408; throw error; },
+      reason: "http_408",
+    },
+    {
+      label: "HTTP 425",
+      fail: () => { const error = new Error("BSC activity HTTP 425"); error.httpStatus = 425; throw error; },
+      reason: "http_425",
+    },
+  ];
+  for (const entry of cases) {
+    await t.test(entry.label, async () => {
+      const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "fomo-x-bsc-transient-"));
+      try {
+        const startedAt = Date.parse("2026-08-24T10:06:00.000Z");
+        const nowRef = { value: startedAt };
+        const rowsRef = { value: [candidate(startedAt)] };
+        const tweetsRef = { value: [timelineTweet("890", "baseline", startedAt - 1_000)] };
+        const alerts = [];
+        let failed = false;
+        const monitor = createHarness({
+          dataDir, nowRef, rowsRef, tweetsRef, alerts,
+          getBscActivityImpl: async () => failed ? entry.fail() : 7,
+        });
+        await monitor.check();
+        failed = true;
+        nowRef.value += 60_000;
+        tweetsRef.value = [timelineTweet("891", `I am buying through a transient network failure. CA ${TOKEN}`, nowRef.value - 500), ...tweetsRef.value];
+        const result = await monitor.check();
+        const state = await monitor.getState();
+        const circuit = state.transportCircuits["bsc_activity:alpha"];
+        assert.equal(result.status, "degraded");
+        assert.equal(result.active, 1);
+        assert.equal(result.delivered, 1);
+        assert.equal(alerts.length, 1);
+        assert.equal(state.cursors.alpha, "891");
+        assert.equal(circuit.reason, entry.reason);
+        assert.equal(circuit.networkErrorCode, entry.networkErrorCode);
+        assert.deepEqual(state.health.sources.x.bscActivityFallbackHandles, ["alpha"]);
+      } finally {
+        await fs.rm(dataDir, { recursive: true, force: true });
+      }
+    });
+  }
+});
+
+test("only explicit JSON-RPC rate-limit errors receive BSC cached fallback", async (t) => {
+  const cases = [
+    {
+      label: "JSON-RPC -32005 rate limit",
+      payload: { jsonrpc: "2.0", id: 1, error: { code: -32005, message: "rate limit exceeded" } },
+      fallback: true,
+      reason: "http_429",
+    },
+    {
+      label: "unknown JSON-RPC error",
+      payload: { jsonrpc: "2.0", id: 1, error: { code: -32000, message: "execution failed" } },
+      fallback: false,
+      reason: "transport_error",
+    },
+    {
+      label: "missing JSON-RPC result",
+      payload: { jsonrpc: "2.0", id: 1 },
+      fallback: false,
+      reason: "transport_error",
+    },
+    {
+      label: "illegal JSON-RPC result hex",
+      payload: { jsonrpc: "2.0", id: 1, result: "not-hex" },
+      fallback: false,
+      reason: "transport_error",
+    },
+  ];
+  for (const entry of cases) {
+    await t.test(entry.label, async () => {
+      const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "fomo-x-bsc-rpc-"));
+      try {
+        const startedAt = Date.parse("2026-08-24T10:06:30.000Z");
+        const nowRef = { value: startedAt };
+        const rowsRef = { value: [candidate(startedAt)] };
+        const tweetsRef = { value: [timelineTweet("895", "baseline", startedAt - 1_000)] };
+        const alerts = [];
+        const requests = [];
+        let failed = false;
+        const fetchImpl = async (url) => {
+          requests.push(url);
+          if (url === "https://bsc-rpc.test") {
+            return jsonResponse(200, failed ? entry.payload : { jsonrpc: "2.0", id: 1, result: "0x7" });
+          }
+          if (url.endsWith("/2/profile/alpha")) {
+            return jsonResponse(200, { code: 200, user: { id: X_ID, screen_name: "alpha", followers: 25_000, protected: false } });
+          }
+          if (url.includes(`/2/profile/id:${X_ID}/statuses`)) {
+            return jsonResponse(200, { code: 200, results: tweetsRef.value });
+          }
+          if (url.startsWith("https://publish.x.test/oembed?")) {
+            const requested = new URL(url).searchParams.get("url");
+            const id = requested.match(/\/status\/(\d+)$/)?.[1];
+            const tweet = tweetsRef.value.find((item) => String(item.id) === id);
+            return { ok: true, status: 200, text: async () => JSON.stringify(oembed(id, tweet.text)) };
+          }
+          throw new Error(`unexpected URL ${url}`);
+        };
+        const monitor = createHarness({
+          dataDir, nowRef, rowsRef, tweetsRef, alerts, requests, fetchImpl, getBscActivityImpl: null,
+        });
+        await monitor.check();
+        failed = true;
+        nowRef.value += 60_000;
+        const failedAt = nowRef.value;
+        tweetsRef.value = [timelineTweet("896", `I am buying through a classified RPC failure. CA ${TOKEN}`, nowRef.value - 500), ...tweetsRef.value];
+        const result = await monitor.check();
+        const state = await monitor.getState();
+        const circuit = state.transportCircuits["bsc_activity:alpha"];
+        assert.equal(circuit.reason, entry.reason);
+        assert.equal(result.delivered, entry.fallback ? 1 : 0);
+        assert.equal(result.active, entry.fallback ? 1 : 0);
+        assert.equal(alerts.length, entry.fallback ? 1 : 0);
+        assert.equal(state.cursors.alpha, entry.fallback ? "896" : "895");
+        assert.equal(requests.filter((url) => url.includes("/statuses")).length, entry.fallback ? 2 : 1);
+        if (entry.fallback) {
+          assert.equal(circuit.retryAfterMs, undefined);
+          assert.equal(circuit.nextRetryAt, failedAt + 15 * 60_000,
+            "a JSON-RPC rate limit without Retry-After uses the bounded existing 429 backoff");
+          assert.deepEqual(state.health.sources.x.bscActivityFallbackHandles, ["alpha"]);
+        } else {
+          assert.deepEqual(state.health.sources.x.bscActivityFallbackHandles, []);
+          assert.deepEqual(state.health.sources.x.effectiveCircuitHandles, ["alpha"]);
+        }
+      } finally {
+        await fs.rm(dataDir, { recursive: true, force: true });
+      }
+    });
+  }
+});
+
+test("BSC activity hard failures and expired proof freeze the tweet cursor", async (t) => {
+  const cases = [
+    {
+      label: "HTTP 404 with fresh cache",
+      advanceMs: 60_000,
+      fail: async () => { const error = new Error("BSC activity HTTP 404"); error.httpStatus = 404; throw error; },
+      circuitReason: "http_404",
+    },
+    {
+      label: "malformed 200 with fresh cache",
+      advanceMs: 60_000,
+      fail: async () => "not-a-transaction-count",
+      circuitReason: "transport_error",
+    },
+    {
+      label: "zero transaction count",
+      advanceMs: 60_000,
+      fail: async () => 0,
+      circuitReason: null,
+      rejected: true,
+    },
+    {
+      label: "timeout with cache older than 24 hours",
+      advanceMs: 24 * 60 * 60_000 + 1,
+      fail: async () => { const error = new Error("BSC activity timed out"); error.name = "TimeoutError"; throw error; },
+      circuitReason: "timeout",
+      refreshCandidate: true,
+    },
+    {
+      label: "timeout with a mismatched cached wallet",
+      advanceMs: 5_000,
+      fail: async () => { const error = new Error("BSC activity timed out"); error.name = "TimeoutError"; throw error; },
+      circuitReason: "timeout",
+      tamperActivityWallet: true,
+    },
+  ];
+  for (const entry of cases) {
+    await t.test(entry.label, async () => {
+      const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "fomo-x-bsc-hard-"));
+      try {
+        const startedAt = Date.parse("2026-08-24T10:07:00.000Z");
+        const nowRef = { value: startedAt };
+        const rowsRef = { value: [candidate(startedAt)] };
+        const tweetsRef = { value: [timelineTweet("900", "baseline", startedAt - 1_000)] };
+        const alerts = [];
+        const requests = [];
+        let failed = false;
+        const harnessOptions = {
+          dataDir, nowRef, rowsRef, tweetsRef, alerts, requests,
+          configOverrides: { fomoXCallAttributionMaxAgeMs: 2 * 24 * 60 * 60_000 },
+          getBscActivityImpl: async () => failed ? entry.fail() : 7,
+        };
+        let monitor = createHarness(harnessOptions);
+        await monitor.check();
+        if (entry.tamperActivityWallet) {
+          await monitor.stop();
+          const stateFile = path.join(dataDir, "fomo-x-call-state.json");
+          const persisted = JSON.parse(await fs.readFile(stateFile, "utf8"));
+          persisted.roster.alpha.bscActivity.wallet = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+          await fs.writeFile(stateFile, `${JSON.stringify(persisted, null, 2)}\n`, { mode: 0o600 });
+          monitor = createHarness(harnessOptions);
+        }
+        failed = true;
+        nowRef.value += entry.advanceMs;
+        if (entry.refreshCandidate) rowsRef.value = [candidate(nowRef.value)];
+        tweetsRef.value = [timelineTweet("901", `I am buying but BSC proof must fail closed. CA ${TOKEN}`, nowRef.value - 500), ...tweetsRef.value];
+        const result = await monitor.check();
+        const state = await monitor.getState();
+        assert.equal(result.status, "degraded");
+        assert.equal(result.active, 0);
+        assert.equal(result.delivered, 0);
+        assert.equal(alerts.length, 0);
+        assert.equal(state.cursors.alpha, "900");
+        assert.equal(requests.filter((url) => url.includes(`/2/profile/id:${X_ID}/statuses`)).length, 1,
+          "a hard or unproven BSC identity result must not fetch the next timeline page");
+        if (entry.circuitReason) {
+          assert.equal(state.transportCircuits["bsc_activity:alpha"].reason, entry.circuitReason);
+          assert.deepEqual(state.health.sources.x.effectiveCircuitHandles, ["alpha"]);
+          assert.ok(state.health.coverage.reasonsByHandle.alpha.some((reason) => reason.startsWith("bsc_activity_")));
+        } else {
+          assert.equal(state.transportCircuits["bsc_activity:alpha"], undefined);
+          assert.equal(state.roster.alpha.bscActivity.count, 0, "a valid zero invalidates the former positive cache");
+          assert.ok(Number(state.roster.alpha.admissionRejectedUntil) > nowRef.value);
+        }
+      } finally {
+        await fs.rm(dataDir, { recursive: true, force: true });
+      }
+    });
+  }
+});
+
+test("a 36-handle BSC outage has bounded requests and transition-only logs while cached timelines continue", async (t) => {
+  const dataDir = await fixture(t);
+  const startedAt = Date.parse("2026-08-24T10:09:00.000Z");
+  const nowRef = { value: startedAt };
+  const identities = Object.fromEntries(Array.from({ length: 36 }, (_, index) => {
+    const handle = `fomo${index}`;
+    return [handle, {
+      id: String(123_456_789_000_000_000n + BigInt(index)),
+      wallet: `0x${(index + 1).toString(16).padStart(40, "0")}`,
+      tweetId: String(10_000 + index),
+    }];
+  }));
+  const rowsRef = { value: Object.entries(identities).map(([handle, identity]) => candidate(startedAt, {
+    handle,
+    wallet: identity.wallet,
+    wallets: [identity.wallet],
+    twitterHandles: [handle],
+  })) };
+  const requests = [];
+  const { logger, entries } = captureLogger();
+  let activityOutage = false;
+  let activityCalls = 0;
+  const activitySignals = [];
+  const fetchImpl = async (url) => {
+    requests.push(url);
+    for (const [handle, identity] of Object.entries(identities)) {
+      if (url.endsWith(`/2/profile/${handle}`)) {
+        return jsonResponse(200, { code: 200, user: {
+          id: identity.id, screen_name: handle, followers: 25_000, protected: false,
+        } });
+      }
+      if (url.includes(`/2/profile/id:${identity.id}/statuses`)) {
+        return jsonResponse(200, { code: 200, results: [timelineTweet(identity.tweetId, `${handle} baseline`, nowRef.value - 1_000, {
+          author: { id: identity.id, screen_name: handle, name: handle },
+          url: `https://x.com/${handle}/status/${identity.tweetId}`,
+        })] });
+      }
+    }
+    throw new Error(`unexpected URL ${url}`);
+  };
+  const monitor = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef,
+    tweetsRef: { value: [] },
+    alerts: [],
+    fetchImpl,
+    logger,
+    configOverrides: { fomoXCallBatchSize: 50, fomoXCallConcurrency: 10 },
+    getBscActivityImpl: async (_wallet, { signal }) => {
+      activityCalls += 1;
+      activitySignals.push(signal);
+      if (activityOutage) {
+        const error = new Error("BSC activity timed out");
+        error.name = "TimeoutError";
+        throw error;
+      }
+      return 7;
+    },
+  });
+  let result = await monitor.check();
+  assert.equal(result.status, "healthy");
+  assert.equal(result.active, 36);
+  assert.equal(activityCalls, 36);
+  assert.ok(activitySignals.every((signal) => getEventListeners(signal, "abort").length === 0),
+    "successful injected dependencies must not retain lifecycle listeners");
+
+  activityOutage = true;
+  nowRef.value += 60_000;
+  result = await monitor.check();
+  let state = await monitor.getState();
+  assert.equal(result.status, "degraded");
+  assert.equal(result.active, 36);
+  assert.equal(activityCalls, 72);
+  assert.equal(entries.warn.filter((message) => message.includes("bsc_activity")).length, 36);
+  assert.equal(entries.error.length, 0);
+  assert.ok(activitySignals.every((signal) => getEventListeners(signal, "abort").length === 0),
+    "failed injected dependencies must release lifecycle listeners after their race settles");
+  assert.equal(state.health.sources.x.transportBackoffs, 36);
+  assert.equal(state.health.sources.x.effectiveTransportBackoffs, 0);
+  assert.equal(state.health.sources.x.bscActivityFallbackHandles.length, 36);
+  assert.equal(state.health.sources.x.degradedSourceHandles.length, 36);
+
+  const timelineRequestsBeforeCooling = requests.filter((url) => url.includes("/statuses")).length;
+  for (let poll = 1; poll <= 10; poll += 1) {
+    nowRef.value += 5_000;
+    result = await monitor.check();
+    assert.equal(result.active, 36);
+  }
+  state = await monitor.getState();
+  assert.equal(activityCalls, 72, "all open per-handle circuits must make zero BSC requests during cooling");
+  assert.equal(entries.warn.filter((message) => message.includes("bsc_activity")).length, 36,
+    "cooling polls must not repeat per-handle outage logs");
+  assert.equal(entries.error.length, 0, "transport backoffs are summarized as health, not error spam");
+  assert.equal(requests.filter((url) => url.includes("/statuses")).length, timelineRequestsBeforeCooling + 10 * 36,
+    "fresh exact-wallet activity cache keeps every timeline in the hot loop");
+  assert.equal(state.health.status, "degraded");
+});
+
+test("stop aborts a blocked BSC activity refresh without advancing the cursor and restart resumes the gap", async (t) => {
+  const dataDir = await fixture(t);
+  const startedAt = Date.parse("2026-08-24T10:11:00.000Z");
+  const nowRef = { value: startedAt };
+  const rowsRef = { value: [candidate(startedAt)] };
+  const tweetsRef = { value: [timelineTweet("920", "baseline", startedAt - 1_000)] };
+  const alerts = [];
+  const { logger, entries } = captureLogger();
+  let blocked = false;
+  let activityStarted = false;
+  let releaseActivity;
+  const blockedActivity = new Promise((resolve) => { releaseActivity = resolve; });
+  let monitor = createHarness({
+    dataDir, nowRef, rowsRef, tweetsRef, alerts, logger,
+    getBscActivityImpl: async () => {
+      if (!blocked) return 7;
+      activityStarted = true;
+      return blockedActivity;
+    },
+  });
+  await monitor.check();
+  nowRef.value += 60_000;
+  blocked = true;
+  tweetsRef.value = [timelineTweet("921", `I am buying after a restart. CA ${TOKEN}`, nowRef.value - 500), ...tweetsRef.value];
+  const interruptedCheck = monitor.check();
+  while (!activityStarted) await new Promise((resolve) => setImmediate(resolve));
+  await Promise.race([
+    monitor.stop(),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("stop did not abort blocked BSC activity")), 250)),
+  ]);
+  await interruptedCheck;
+  let state = await monitor.getState();
+  assert.equal(state.cursors.alpha, "920");
+  assert.equal(state.transportCircuits["bsc_activity:alpha"], undefined);
+  assert.equal(alerts.length, 0);
+  assert.equal(entries.error.length, 0, "an intentional lifecycle cancellation is not logged as a source failure");
+  const stoppedState = structuredClone(state);
+  const stoppedFile = await fs.readFile(path.join(dataDir, "fomo-x-call-state.json"), "utf8");
+  releaseActivity(99);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(await monitor.getState(), stoppedState, "an ignored dependency completion must not mutate stopped state");
+  assert.equal(await fs.readFile(path.join(dataDir, "fomo-x-call-state.json"), "utf8"), stoppedFile);
+
+  blocked = false;
+  monitor = createHarness({ dataDir, nowRef, rowsRef, tweetsRef, alerts, getBscActivityImpl: async () => 9 });
+  const recovered = await monitor.check();
+  state = await monitor.getState();
+  assert.equal(recovered.delivered, 1);
+  assert.equal(alerts.length, 1);
+  assert.equal(state.cursors.alpha, "921", "restart processes the gap from the last committed cursor exactly once");
+});
+
+test("stop drains two pre-queued checks without letting the second create a late BSC request or write", async (t) => {
+  const dataDir = await fixture(t);
+  const startedAt = Date.parse("2026-08-24T10:13:00.000Z");
+  const nowRef = { value: startedAt };
+  const rowsRef = { value: [candidate(startedAt)] };
+  const tweetsRef = { value: [timelineTweet("930", "baseline", startedAt - 1_000)] };
+  const requests = [];
+  let activityCalls = 0;
+  let firstBlocked = false;
+  let releaseFirstActivity;
+  const firstActivity = new Promise((resolve) => { releaseFirstActivity = resolve; });
+  const neverSettles = new Promise(() => {});
+  const unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(reason);
+  process.on("unhandledRejection", onUnhandled);
+  t.after(() => process.off("unhandledRejection", onUnhandled));
+  const monitor = createHarness({
+    dataDir, nowRef, rowsRef, tweetsRef, alerts: [], requests,
+    getBscActivityImpl: async () => {
+      activityCalls += 1;
+      if (activityCalls === 1) return 7;
+      if (activityCalls === 2) {
+        firstBlocked = true;
+        return firstActivity;
+      }
+      return neverSettles;
+    },
+  });
+  await monitor.check();
+  const durableState = await fs.readFile(path.join(dataDir, "fomo-x-call-state.json"), "utf8");
+  nowRef.value += 60_000;
+  tweetsRef.value = [timelineTweet("931", `I am buying after queued shutdown. CA ${TOKEN}`, nowRef.value - 500), ...tweetsRef.value];
+
+  const firstQueued = monitor.check();
+  while (!firstBlocked) await new Promise((resolve) => setImmediate(resolve));
+  const requestsAtStop = requests.length;
+  const secondQueued = monitor.check();
+  await Promise.race([
+    monitor.stop(),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("stop waited for the second queued BSC dependency")), 750)),
+  ]);
+  assert.equal((await firstQueued).status, "stopped");
+  assert.equal((await secondQueued).status, "stopped");
+  assert.equal(activityCalls, 2, "the second pre-queued check must not create a BSC request after stop");
+  assert.equal(requests.length, requestsAtStop, "the second pre-queued check must not create any source request after stop");
+  assert.equal(await fs.readFile(path.join(dataDir, "fomo-x-call-state.json"), "utf8"), durableState,
+    "an aborted check and its queued successor must not replace the durable state");
+  assert.equal((await monitor.getState()).cursors.alpha, "930");
+
+  releaseFirstActivity(99);
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(activityCalls, 2);
+  assert.equal(await fs.readFile(path.join(dataDir, "fomo-x-call-state.json"), "utf8"), durableState);
+  assert.deepEqual(unhandled, []);
+});
+
+test("stop reloads a background seed write that completed while the active BSC check was blocked", async (t) => {
+  const dataDir = await fixture(t);
+  const startedAt = Date.parse("2026-08-24T10:14:00.000Z");
+  const nowRef = { value: startedAt };
+  const seedHandle = "seedone";
+  const seedWallet = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  const seedId = "223456789012345678";
+  const rowsRef = { value: [candidate(startedAt)] };
+  const requests = [];
+  let bscBlocked = true;
+  let bscStarted = false;
+  let releaseBlockedBsc;
+  const blockedBsc = new Promise((resolve) => { releaseBlockedBsc = resolve; });
+  let releaseSeed;
+  const seedDiscovery = new Promise((resolve) => { releaseSeed = resolve; });
+  const fetchImpl = async (url) => {
+    requests.push(url);
+    if (url.endsWith("/2/profile/alpha")) {
+      return jsonResponse(200, { code: 200, user: { id: X_ID, screen_name: "alpha", followers: 25_000, protected: false } });
+    }
+    if (url.endsWith(`/2/profile/${seedHandle}`)) {
+      return jsonResponse(200, { code: 200, user: { id: seedId, screen_name: seedHandle, followers: 30_000, protected: false } });
+    }
+    if (url.includes(`/2/profile/id:${X_ID}/statuses`)) {
+      return jsonResponse(200, { code: 200, results: [timelineTweet("940", "alpha baseline", nowRef.value - 1_000)] });
+    }
+    if (url.includes(`/2/profile/id:${seedId}/statuses`)) {
+      return jsonResponse(200, { code: 200, results: [timelineTweet("950", "seed baseline", nowRef.value - 1_000, {
+        author: { id: seedId, screen_name: seedHandle, name: "Seed One" },
+        url: `https://x.com/${seedHandle}/status/950`,
+      })] });
+    }
+    throw new Error(`unexpected URL ${url}`);
+  };
+  const monitor = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef,
+    tweetsRef: { value: [] },
+    alerts: [],
+    requests,
+    fetchImpl,
+    configOverrides: { fomoCallPublicHandles: [seedHandle], fomoXCallVerifiedSeedBatchSize: 1 },
+    discoverVerifiedSeedImpl: async () => seedDiscovery,
+    getBscActivityImpl: async () => {
+      if (!bscBlocked) return 7;
+      bscStarted = true;
+      return blockedBsc;
+    },
+  });
+
+  const activeCheck = monitor.check();
+  while (!bscStarted) await new Promise((resolve) => setImmediate(resolve));
+  const checkedAt = new Date(nowRef.value).toISOString();
+  releaseSeed(candidate(nowRef.value, {
+    handle: seedHandle,
+    wallet: seedWallet,
+    wallets: [seedWallet],
+    twitterHandles: [seedHandle],
+    source: "fomoscan_verified_profile",
+    origin: "fomoscan_verified_profile",
+    candidateSource: "fomoscan_verified_profile",
+    walletBinding: {
+      status: "verified",
+      verified: true,
+      proofSource: "fomoscan",
+      wallet: seedWallet,
+      handle: seedHandle,
+      twitterHandle: seedHandle,
+      checkedAt,
+      lastCheckedAt: checkedAt,
+    },
+  }));
+  await monitor.waitForDiscovery();
+  let disk = JSON.parse(await fs.readFile(path.join(dataDir, "fomo-x-call-state.json"), "utf8"));
+  assert.deepEqual(Object.keys(disk.roster).sort(), ["alpha", seedHandle], "the background seed writer durably owns the newer roster");
+
+  await Promise.race([
+    monitor.stop(),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("stop did not drain the background seed race")), 750)),
+  ]);
+  assert.equal((await activeCheck).status, "stopped");
+  disk = JSON.parse(await fs.readFile(path.join(dataDir, "fomo-x-call-state.json"), "utf8"));
+  assert.deepEqual(await monitor.getState(), disk, "stop must reload the final owner-only durable state after every writer drains");
+  assert.deepEqual(Object.keys(disk.roster).sort(), ["alpha", seedHandle]);
+  releaseBlockedBsc(99);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  bscBlocked = false;
+  await monitor.start();
+  let state = await monitor.getState();
+  assert.ok(state.roster[seedHandle], "same-instance restart must not overwrite the durable seed with a stale rollback snapshot");
+  await monitor.stop();
+  state = await monitor.getState();
+  disk = JSON.parse(await fs.readFile(path.join(dataDir, "fomo-x-call-state.json"), "utf8"));
+  assert.ok(state.roster[seedHandle]);
+  assert.deepEqual(state, disk);
 });
 
 test("profile 404 remains fail-closed even while cached identity evidence is fresh", async (t) => {

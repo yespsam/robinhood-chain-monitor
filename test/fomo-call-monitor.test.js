@@ -3399,7 +3399,7 @@ test("shared Fomo X roster admits only fresh exact bindings and clean GMGN obser
         ambiguousWallets: false,
         ambiguousHandles: false,
         xProfile: { id: "10001", handle: "fomo_kol", followers: 25_000, protected: false, checkedAt },
-        bscActivity: { count: 3, checkedAt },
+        bscActivity: { wallet: fomoWallet.toUpperCase(), count: 3, checkedAt },
         walletBinding: {
           status: "verified",
           verified: true,
@@ -3423,7 +3423,7 @@ test("shared Fomo X roster admits only fresh exact bindings and clean GMGN obser
         ambiguousWallets: false,
         ambiguousHandles: false,
         xProfile: { id: "10002", handle: "gmgn_kol", followers: 30_000, protected: false, checkedAt },
-        bscActivity: { count: 9, checkedAt },
+        bscActivity: { wallet: gmgnWallet, count: 9, checkedAt },
       },
     },
   };
@@ -3443,6 +3443,22 @@ test("shared Fomo X roster admits only fresh exact bindings and clean GMGN obser
   const observed = selected.profiles.find((profile) => profile.handle === "gmgn_kol");
   assert.equal(observed.walletBinding.status, "observed");
   assert.equal(observed.candidateSource, "gmgn_bsc_kol_feed");
+
+  const missingActivityWallet = structuredClone(payload);
+  delete missingActivityWallet.roster.fomo_kol.bscActivity.wallet;
+  assert.deepEqual(
+    selectFreshFomoXCallRoster(missingActivityWallet, options).profiles.map((profile) => profile.handle),
+    ["gmgn_kol"],
+    "legacy activity without its measured wallet must fail closed",
+  );
+
+  const wrongActivityWallet = structuredClone(payload);
+  wrongActivityWallet.roster.gmgn_kol.bscActivity.wallet = fomoWallet;
+  assert.deepEqual(
+    selectFreshFomoXCallRoster(wrongActivityWallet, options).profiles.map((profile) => profile.handle),
+    ["fomo_kol"],
+    "activity measured for another wallet must not qualify the candidate",
+  );
 
   const emptyXTimelineBaseline = structuredClone(payload);
   emptyXTimelineBaseline.initialized = {};
@@ -3472,6 +3488,7 @@ test("shared Fomo X roster admits only fresh exact bindings and clean GMGN obser
   const duplicateWallet = structuredClone(payload);
   duplicateWallet.roster.gmgn_kol.wallet = fomoWallet;
   duplicateWallet.roster.gmgn_kol.wallets = [fomoWallet];
+  duplicateWallet.roster.gmgn_kol.bscActivity.wallet = fomoWallet;
   assert.equal(selectFreshFomoXCallRoster(duplicateWallet, options).status, "empty");
 
   const staleState = structuredClone(payload);
@@ -4304,13 +4321,24 @@ test("BSC activation safety records a stale-tail gap without silent rebaseline a
   assert.equal(staleState.publicOnchain.bscNextBlock, 1001);
   assert.equal(staleState.publicOnchain.bscLookbackRequested, false);
   assert.equal(staleState.publicOnchain.bscBaseline, null);
-  assert.deepEqual(staleState.publicOnchain.coverageGaps.at(-1), {
+  const staleGap = staleState.publicOnchain.coverageGaps.at(-1);
+  assert.deepEqual({
+    chain: staleGap.chain,
+    fromBlock: staleGap.fromBlock,
+    toBlock: staleGap.toBlock,
+    reason: staleGap.reason,
+    observedAt: staleGap.observedAt,
+  }, {
     chain: "bsc",
     fromBlock: 100,
     toBlock: 980,
     reason: "backlog_exceeded_signal_window",
     observedAt: checkedAt,
   });
+  assert.equal(staleGap.recovery.status, "expired");
+  assert.equal(staleGap.recovery.resolutionReason, "unrecoverable_roster_gap");
+  assert.equal(staleGap.recovery.sourceCoverage.complete, false);
+  assert.equal(staleGap.recovery.signalPolicy, "never_enqueue_or_deliver_after_max_signal_age");
   assert.equal(staleState.health.status, "partial", "a running stale cursor gap must remain observable");
 
   const zeroLookbackDir = await fixture(t);
@@ -4382,6 +4410,283 @@ test("BSC activation safety records a stale-tail gap without silent rebaseline a
   assert.equal(zeroState.publicOnchain.bscNextBlock, 1001);
   assert.equal(zeroState.publicOnchain.bscLookbackRequested, false);
   assert.equal(zeroState.publicOnchain.lastWalletExpansion, undefined);
+});
+
+test("legacy Smart Money BSC gaps become durable unrecoverable feed losses without archive replay", async (t) => {
+  const dataDir = await fixture(t);
+  const clock = {
+    current: Date.parse("2027-01-15T00:00:00Z"),
+    head: 1_000,
+  };
+  const stateFile = path.join(dataDir, "fomo-call-state.json");
+  const initial = smartCheckpointState(clock.current, { bscNextBlock: 1_001 });
+  initial.publicOnchain.coverageGaps = [{
+    chain: "bsc",
+    fromBlock: 100,
+    toBlock: 900,
+    reason: "backlog_exceeded_signal_window",
+    observedAt: new Date(clock.current - 60 * 60_000).toISOString(),
+  }];
+  await fs.writeFile(stateFile, JSON.stringify(initial));
+  let blockRequests = 0;
+  let alerts = 0;
+  const config = {
+    dataDir,
+    fomoCallEnabled: true,
+    fomoBuyMonitorEnabled: false,
+    fomoSmartMoneyMonitorEnabled: true,
+    fomoCallBscOnly: true,
+    fomoCallBscConfirmations: 0,
+    fomoCallBscMaxCatchupBlocks: 20,
+    fomoCallBscRpcUrl: "https://bsc.example/rpc",
+    fomoSmartMoneyDiscoveryIntervalMs: 60_000,
+  };
+  const dependencies = () => checkpointBscDependencies(clock, {
+    evmRpcBatchImpl: async () => { blockRequests += 1; throw new Error("expired legacy gap must not hit archive RPC"); },
+    sendAlertsImpl: async () => { alerts += 1; return { status: "delivered" }; },
+  });
+
+  await createFomoCallMonitor(config, dependencies()).check();
+  let persisted = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  const gap = persisted.publicOnchain.coverageGaps[0];
+  assert.equal(gap.recovery.status, "expired");
+  assert.equal(gap.recovery.resolutionReason, "unrecoverable_feed_gap");
+  assert.equal(gap.recovery.sourceCoverage.reason, "legacy_gap_without_feed_and_roster_snapshot");
+  assert.deepEqual(gap.recovery.rosterSnapshot, []);
+  assert.equal(gap.recovery.signalPolicy, "never_enqueue_or_deliver_after_max_signal_age");
+  assert.equal(persisted.coverageSummary.gaps.count, 1);
+  assert.equal(persisted.coverageSummary.gaps.skippedBlocks, 801);
+  assert.equal(persisted.health.status, "partial");
+  const expiredAt = gap.recovery.expiredAt;
+
+  clock.current += 1_000;
+  await createFomoCallMonitor(config, dependencies()).check();
+  persisted = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  assert.equal(persisted.publicOnchain.coverageGaps[0].recovery.expiredAt, expiredAt,
+    "restart must preserve the same terminal gap fact instead of recreating or clearing it");
+  assert.equal(persisted.publicOnchain.bscNextBlock, 1_001);
+  assert.equal(blockRequests, 0);
+  assert.equal(alerts, 0, "an expired market interval must never be routed to Telegram");
+
+  persisted.publicOnchain.coverageGaps[0].recovery = {
+    ...persisted.publicOnchain.coverageGaps[0].recovery,
+    status: "resolved",
+    scannedBlocks: 0,
+    resolutionReason: "actionable_range_scanned_with_exact_gates",
+    sourceCoverage: { complete: true },
+    rosterSnapshot: [BASE_WALLET],
+  };
+  await fs.writeFile(stateFile, JSON.stringify(persisted));
+  clock.current += 1_000;
+  await createFomoCallMonitor(config, dependencies()).check();
+  persisted = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  assert.equal(persisted.publicOnchain.coverageGaps[0].recovery.status, "expired");
+  assert.equal(persisted.publicOnchain.coverageGaps[0].recovery.resolutionReason,
+    "fail_closed_unverified_gap_resolution", "a forged resolved cursor must not make aggregate coverage healthy");
+  assert.equal(persisted.coverageSummary.gaps.count, 1);
+  assert.equal(persisted.publicOnchain.bscNextBlock, 1_001);
+});
+
+test("a feed-outage BSC backlog preserves the known roster, never rewinds realtime, and stays visible", async (t) => {
+  const dataDir = await fixture(t);
+  const clock = {
+    current: Date.parse("2027-01-15T00:00:00Z"),
+    head: 100,
+  };
+  const stateFile = path.join(dataDir, "fomo-call-state.json");
+  const initial = smartCheckpointState(clock.current, { bscNextBlock: 97 });
+  initial.publicOnchain.smartMoney.feedStatus = "partial";
+  initial.publicOnchain.smartMoney.feedError = "simulated feed outage";
+  initial.publicOnchain.smartMoney.feedFailureCount = 1;
+  initial.publicOnchain.smartMoney.feedNextRetryAt = new Date(clock.current + 60_000).toISOString();
+  await fs.writeFile(stateFile, JSON.stringify(initial));
+  const requested = [];
+  let alerts = 0;
+  const config = {
+    dataDir,
+    fomoCallEnabled: true,
+    fomoBuyMonitorEnabled: false,
+    fomoSmartMoneyMonitorEnabled: true,
+    fomoCallBscOnly: true,
+    fomoCallBscConfirmations: 0,
+    fomoCallBscMaxCatchupBlocks: 2,
+    fomoCallBscRpcUrl: "https://bsc.example/rpc",
+    fomoSmartMoneyDiscoveryIntervalMs: 60_000,
+  };
+  const dependencies = () => checkpointBscDependencies(clock, {
+    evmRpcBatchImpl: async (_url, calls) => calls.map(({ params }) => {
+      const blockNumber = Number(BigInt(params[0]));
+      requested.push(blockNumber);
+      return {
+        number: params[0],
+        hash: testBlockHash(blockNumber),
+        timestamp: `0x${Math.floor(clock.current / 1_000).toString(16)}`,
+        transactions: [],
+      };
+    }),
+    sendAlertsImpl: async () => { alerts += 1; return { status: "delivered" }; },
+  });
+
+  await createFomoCallMonitor(config, dependencies()).check();
+  let persisted = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  const gap = persisted.publicOnchain.coverageGaps[0];
+  assert.deepEqual(requested, [99, 100], "realtime safe-head blocks must run; the skipped tail must not be replayed");
+  assert.equal(persisted.publicOnchain.bscNextBlock, 101);
+  assert.equal(gap.recovery.status, "expired");
+  assert.equal(gap.recovery.resolutionReason, "unrecoverable_feed_gap");
+  assert.equal(gap.recovery.sourceCoverage.complete, false);
+  assert.equal(gap.recovery.sourceCoverage.feedStatus, "partial");
+  assert.deepEqual(gap.recovery.rosterSnapshot, [BASE_WALLET]);
+  assert.equal(persisted.health.status, "partial");
+
+  clock.current += 1_000;
+  clock.head = 101;
+  await createFomoCallMonitor(config, dependencies()).check();
+  persisted = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  assert.deepEqual(requested, [99, 100, 101], "a continuing head must advance before any historical consideration");
+  assert.equal(persisted.publicOnchain.bscNextBlock, 102);
+  assert.equal(persisted.publicOnchain.coverageGaps.length, 1);
+  assert.equal(persisted.coverageSummary.gaps.count, 1);
+  assert.equal(persisted.health.status, "partial", "healthy realtime coverage must not erase historical lost coverage");
+  assert.equal(alerts, 0);
+});
+
+test("bounded mixed-gap pruning cannot erase a permanent BSC lost interval across restart", async (t) => {
+  const dataDir = await fixture(t);
+  const clock = {
+    current: Date.parse("2027-01-15T00:00:00Z"),
+    head: 1_000,
+  };
+  const stateFile = path.join(dataDir, "fomo-call-state.json");
+  const initial = smartCheckpointState(clock.current, { bscNextBlock: 1_001 });
+  initial.publicOnchain.coverageGaps = [{
+    chain: "bsc",
+    fromBlock: 100,
+    toBlock: 900,
+    reason: "backlog_exceeded_signal_window",
+    observedAt: new Date(clock.current - 60 * 60_000).toISOString(),
+  }, ...Array.from({ length: 60 }, (_, index) => ({
+    chain: "solana",
+    signature: `resolved-signature-${index}`,
+    reason: "transaction_detail_failed_three_polls",
+    observedAt: new Date(clock.current - 30 * 60_000 + index).toISOString(),
+    resolvedAt: new Date(clock.current - 20 * 60_000 + index).toISOString(),
+  }))];
+  await fs.writeFile(stateFile, JSON.stringify(initial));
+  let blockRequests = 0;
+  let alerts = 0;
+  const config = {
+    dataDir,
+    fomoCallEnabled: true,
+    fomoBuyMonitorEnabled: false,
+    fomoSmartMoneyMonitorEnabled: true,
+    fomoCallBscOnly: true,
+    fomoCallBscConfirmations: 0,
+    fomoCallBscMaxCatchupBlocks: 20,
+    fomoCallBscRpcUrl: "https://bsc.example/rpc",
+    fomoSmartMoneyDiscoveryIntervalMs: 60_000,
+  };
+  const dependencies = () => checkpointBscDependencies(clock, {
+    evmRpcBatchImpl: async () => { blockRequests += 1; throw new Error("a terminal gap must not request archive blocks"); },
+    sendAlertsImpl: async () => { alerts += 1; return { status: "delivered" }; },
+  });
+
+  const first = createFomoCallMonitor(config, dependencies());
+  await first.check();
+  await first.stop();
+  let persisted = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  let permanentGap = persisted.publicOnchain.coverageGaps.find((gap) => gap.chain === "bsc");
+  assert.equal(persisted.publicOnchain.coverageGaps.length, 50, "mixed gap history remains strictly bounded");
+  assert.equal(persisted.publicOnchain.coverageGaps.filter((gap) => gap.resolvedAt).length, 49);
+  assert.equal(permanentGap.recovery.status, "expired");
+  assert.equal(persisted.coverageSummary.gaps.count, 1);
+  assert.equal(persisted.coverageSummary.gaps.skippedBlocks, 801);
+  assert.equal(persisted.health.status, "partial");
+  const expiredAt = permanentGap.recovery.expiredAt;
+
+  clock.current += 1_000;
+  const restarted = createFomoCallMonitor(config, dependencies());
+  await restarted.check();
+  await restarted.stop();
+  persisted = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  permanentGap = persisted.publicOnchain.coverageGaps.find((gap) => gap.chain === "bsc");
+  assert.equal(persisted.publicOnchain.coverageGaps.length, 50);
+  assert.equal(permanentGap.recovery.expiredAt, expiredAt, "restart preserves the same terminal fact idempotently");
+  assert.equal(persisted.coverageSummary.gaps.count, 1);
+  assert.equal(persisted.coverageSummary.gaps.skippedBlocks, 801);
+  assert.equal(persisted.coverageSummary.complete, false);
+  assert.ok(persisted.coverageSummary.incompleteReasons.includes("unresolved_coverage_gaps"));
+  assert.equal(persisted.health.status, "partial");
+  assert.equal(blockRequests, 0);
+  assert.equal(alerts, 0);
+});
+
+test("more than fifty permanent BSC gaps persist a matching bounded summary idempotently", async (t) => {
+  const dataDir = await fixture(t);
+  const clock = {
+    current: Date.parse("2027-01-15T00:00:00Z"),
+    head: 1_000,
+  };
+  const stateFile = path.join(dataDir, "fomo-call-state.json");
+  const initial = smartCheckpointState(clock.current, { bscNextBlock: 1_001 });
+  initial.publicOnchain.coverageGaps = Array.from({ length: 60 }, (_, index) => ({
+    chain: "bsc",
+    fromBlock: index * 100,
+    toBlock: index * 100 + index,
+    reason: "backlog_exceeded_signal_window",
+    observedAt: new Date(clock.current - 60 * 60_000 + index).toISOString(),
+  }));
+  await fs.writeFile(stateFile, JSON.stringify(initial));
+  let blockRequests = 0;
+  let alerts = 0;
+  const config = {
+    dataDir,
+    fomoCallEnabled: true,
+    fomoBuyMonitorEnabled: false,
+    fomoSmartMoneyMonitorEnabled: true,
+    fomoCallBscOnly: true,
+    fomoCallBscConfirmations: 0,
+    fomoCallBscMaxCatchupBlocks: 20,
+    fomoCallBscRpcUrl: "https://bsc.example/rpc",
+    fomoSmartMoneyDiscoveryIntervalMs: 60_000,
+  };
+  const dependencies = () => checkpointBscDependencies(clock, {
+    evmRpcBatchImpl: async () => { blockRequests += 1; throw new Error("permanent gaps must not request archive blocks"); },
+    sendAlertsImpl: async () => { alerts += 1; return { status: "delivered" }; },
+  });
+
+  const first = createFomoCallMonitor(config, dependencies());
+  await first.check();
+  await first.stop();
+  let persisted = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  const retainedFromBlocks = Array.from({ length: 50 }, (_, index) => (index + 10) * 100);
+  const retainedSkippedBlocks = 1_775;
+  assert.equal(persisted.publicOnchain.coverageGaps.length, 50);
+  assert.deepEqual(persisted.publicOnchain.coverageGaps.map((gap) => gap.fromBlock), retainedFromBlocks);
+  assert.equal(persisted.coverageSummary.gaps.count, 50);
+  assert.equal(persisted.coverageSummary.gaps.skippedBlocks, retainedSkippedBlocks);
+  assert.deepEqual(persisted.coverageSummary.gaps.byChain.bsc, {
+    count: 50,
+    skippedBlocks: retainedSkippedBlocks,
+  });
+  assert.equal(persisted.coverageSummary.complete, false);
+  assert.ok(persisted.coverageSummary.incompleteReasons.includes("unresolved_coverage_gaps"));
+  assert.equal(persisted.health.status, "partial");
+  const firstGaps = JSON.stringify(persisted.publicOnchain.coverageGaps);
+  const firstSummary = JSON.stringify(persisted.coverageSummary);
+
+  clock.current += 1_000;
+  const restarted = createFomoCallMonitor(config, dependencies());
+  await restarted.check();
+  await restarted.stop();
+  persisted = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  assert.equal(JSON.stringify(persisted.publicOnchain.coverageGaps), firstGaps,
+    "restart must preserve the same bounded permanent-gap facts");
+  assert.equal(JSON.stringify(persisted.coverageSummary), firstSummary,
+    "restart below the telemetry interval must not create a false 60-to-50 summary transition");
+  assert.equal(persisted.health.status, "partial");
+  assert.equal(blockRequests, 0);
+  assert.equal(alerts, 0);
 });
 
 test("Base EVM batches advance the cursor through every contiguous fetched block", async (t) => {
