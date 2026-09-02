@@ -61,6 +61,7 @@ test("SIGINT and SIGTERM share one graceful durability boundary", async () => {
   assert.match(shutdown, /monitor\.stop\(\)/);
   assert.match(shutdown, /mainPromise \? \[mainPromise\] : \[\]/);
   assert.match(shutdown, /rpc\.destroy\?\.\(\)/);
+  assert.match(shutdown, /runtimeHeartbeat\?\.stop\(\)/);
   assert.match(shutdown, /process\.on\("SIGINT"/);
   assert.match(shutdown, /process\.on\("SIGTERM"/);
   assert.doesNotMatch(shutdown, /process\.exit\(/);
@@ -91,4 +92,14 @@ test("graceful shutdown covers every independently created monitor and stops new
   for (const handle of expectedHandles) assert.match(entries, new RegExp(`\\b${handle}\\b`));
   assert.match(source, /while \(!shutdownRequested && next <= safeHead\)/);
   assert.match(source, /if \(shutdownRequested\) return;\s+startIndependentMonitors\(\)/);
+});
+
+test("main starts a producer-owned runtime heartbeat independent of upstream polling", async () => {
+  const source = await fs.readFile(new URL("../src/index.js", import.meta.url), "utf8");
+  const fomoSource = await fs.readFile(new URL("../src/fomo-worker.js", import.meta.url), "utf8");
+
+  assert.match(source, /startRuntimeHeartbeat\(\{\s*file: path\.join\(config\.dataDir, "main-runtime-heartbeat\.json"\),\s*producer: "main"/);
+  assert.ok(source.indexOf("runtimeHeartbeat = startRuntimeHeartbeat") < source.indexOf("mainPromise = main()"));
+  assert.match(fomoSource, /startRuntimeHeartbeat\(\{\s*file: path\.join\(config\.dataDir, "fomo-runtime-heartbeat\.json"\),\s*producer: "fomo"/);
+  assert.match(fomoSource, /runtimeHeartbeat\.stop\(\)/);
 });

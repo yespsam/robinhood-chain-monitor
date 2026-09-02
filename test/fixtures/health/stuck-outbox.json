@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "events": {
+    "stuck-news": {
+      "id": "stuck-news",
+      "status": "pending",
+      "createdAt": "__OLD__",
+      "updatedAt": "__NOW__",
+      "destinations": {
+        "telegram": {
+          "status": "failed",
+          "attempts": 4,
+          "lastAttemptAt": "__NOW__",
+          "nextAttemptAt": "__NEXT__"
+        }
+      }
+    }
+  }
+}

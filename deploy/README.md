@@ -47,7 +47,7 @@ sudo chown root:root /etc/robinhood-chain-monitor/health.env
 sudo chmod 0600 /etc/robinhood-chain-monitor/health.env
 ```
 
-外部服务应在连续 60 秒未收到 heartbeat 时通知至少一个独立渠道。`robinhood-activate` 会拒绝没有 HTTPS heartbeat URL 的节点；健康检查只在所有本地 lane 健康时发送 heartbeat，因此主机断电、网络中断、服务退出、关键状态停滞或 outbox 积压都会停止心跳并触发外部告警。
+外部服务应在连续 60 秒未收到 heartbeat 时通知至少一个独立渠道。`robinhood-activate` 会拒绝没有 HTTPS heartbeat URL 的节点。默认 heartbeat 表示服务、文件和关键游标仍在运行（`operationalHealthy=true`）；主机断电、网络中断、服务退出或关键游标停滞会停止心跳。上游 403/429、BSC 历史缺口、X 覆盖受限、Thesis 缺凭据及普通 outbox 积压会在 `health.json` 中降低 `coverageComplete`/`deliveryComplete`，但默认不会伪装成进程死亡。若希望这些覆盖或投递问题也停止 heartbeat，可在 `health.env` 设置 `HEALTH_HEARTBEAT_REQUIRE_COVERAGE_COMPLETE=true`。
 
 ## 2. 零重复切换
 
@@ -146,6 +146,7 @@ systemctl status robinhood-monitor.target robinhood-health.timer
 健康计时器每 15 秒独立检查以下 lane，不再用“任意一个文件最新”掩盖另一条停滞链路：
 
 - Robinhood `state.json`；
+- Binance 公告进度与 WebSocket/轮询覆盖；
 - BSC 的 WAL 或权威 snapshot；
 - `github-state.json`；
 - `platform-capability-state.json`；
@@ -153,9 +154,9 @@ systemctl status robinhood-monitor.target robinhood-health.timer
 - 两个 durable outbox 的解析、失败记录与积压时间；
 - ACTIVE 标记、两个 systemd 服务，以及外部 HTTPS heartbeat。
 
-每条 lane 的 `healthy`、权威文件、文件年龄、阈值和原因都会写入 `health.json`。阈值在 `/etc/robinhood-chain-monitor/health.env`；该文件包含 heartbeat URL，必须保持 `root:root`、`0600` 且不得提交 Git。生产默认要求所有四条 Fomo lane；只有对应业务在 `monitor.env` 中被明确关闭时，才可在 `health.env` 把相应 `HEALTH_REQUIRE_FOMO_STATE`、`HEALTH_REQUIRE_FOMO_CHECKPOINT`、`HEALTH_REQUIRE_FOMO_X` 或 `HEALTH_REQUIRE_FOMO_THESIS` 改为 `false`，并在变更记录中写明原因。
+每条 lane 的 `operationalHealthy`、`coverageComplete`、权威文件、文件年龄、阈值和原因都会写入 `health.json`；顶层另有 `deliveryComplete`。阈值在 `/etc/robinhood-chain-monitor/health.env`；该文件包含 heartbeat URL，必须保持 `root:root`、`0600` 且不得提交 Git。生产默认要求所有四条 Fomo lane；只有对应业务在 `monitor.env` 中被明确关闭时，才可在 `health.env` 把相应 `HEALTH_REQUIRE_FOMO_STATE`、`HEALTH_REQUIRE_FOMO_CHECKPOINT`、`HEALTH_REQUIRE_FOMO_X` 或 `HEALTH_REQUIRE_FOMO_THESIS` 改为 `false`，并在变更记录中写明原因。
 
-健康失败会以非零状态写入 journal，停止外部 heartbeat，同时始终更新不含密钥和 heartbeat URL 的 `health.json`。**健康检查只报警，不会因状态停滞自动重启服务**；这样可以避免上游全网故障时形成重启风暴。
+运行或关键游标停滞（`operationalHealthy=false`）会以非零状态写入 journal 并停止外部 heartbeat，同时始终更新不含密钥和 heartbeat URL 的 `health.json`。默认情况下，仅覆盖不完整或投递积压会把总状态降为 `degraded`，但 CLI 仍为零且 heartbeat 继续；设置 `HEALTH_HEARTBEAT_REQUIRE_COVERAGE_COMPLETE=true` 后，`coverageComplete=false` 或 `deliveryComplete=false` 也会停止 heartbeat。**健康检查只报警，不会因状态停滞自动重启服务**；这样可以避免上游全网故障时形成重启风暴。
 
 systemd 已配置 `Restart=on-failure`、`RestartSec=5s`、`UMask=0077`、`LimitNOFILE=65536`、90 秒优雅停止窗口和只允许写入状态目录的文件系统沙箱。网络中断时进程不会被无意义地重启；网络恢复后现有重试和 durable outbox 会继续工作。若状态长期不推进，应先检查上游连通性与 RPC 限流，再人工重启，避免在全网故障时制造重启风暴。
 

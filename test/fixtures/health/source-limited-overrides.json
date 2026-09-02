@@ -1,0 +1,125 @@
+{
+  "binance-state.json": {
+    "_health": {
+      "announcementStream": {
+        "status": "polling_fallback",
+        "streamStatus": "disabled_missing_credentials",
+        "enabled": true,
+        "configured": false,
+        "connected": false,
+        "websocketObserved": false,
+        "checkedAt": "__OLD__",
+        "missingCredentials": [
+          "BINANCE_API_KEY",
+          "BINANCE_API_SECRET"
+        ],
+        "coverage": {
+          "status": "covered_by_polling",
+          "available": true,
+          "mode": "rest_cms_polling",
+          "pollingStatus": "healthy",
+          "lastPollingSuccessAt": "__NOW__"
+        },
+        "sla": {
+          "status": "best_effort_polling",
+          "mode": "polling_only",
+          "websocketAvailable": false,
+          "hardRealtime": false
+        }
+      }
+    }
+  },
+  "bsc-launchpad-state.json": {
+    "_health": {
+      "rpc": {
+        "status": "error",
+        "checkedAt": "__NOW__",
+        "lastSuccessAt": "__OLD__"
+      },
+      "nearHeadRecovery": {
+        "status": "backoff",
+        "checkedAt": "__NOW__",
+        "pendingGapCount": 3,
+        "pendingBlockCount": 100,
+        "nextRetryAt": "__NEXT__"
+      },
+      "coverage": {
+        "status": "critical",
+        "checkedAt": "__NOW__",
+        "coveredBlock": 100,
+        "unresolvedGapCount": 0,
+        "nearHeadRecoveryGapCount": 3,
+        "nearHeadRecoveryBlockCount": 100,
+        "deferredTransactionCount": 0,
+        "degradedLagBlocks": 40,
+        "criticalLagBlocks": 128
+      }
+    }
+  },
+  "github-state.json": {
+    "_health": {
+      "repositories": {
+        "flap-sh/flap-skills": {
+          "status": "degraded",
+          "lastAttemptAt": "__OLD__",
+          "lastSuccessAt": "__OLD__",
+          "nextAttemptAt": "__NEXT__",
+          "lastErrorStatus": 403
+        }
+      }
+    }
+  },
+  "platform-capability-state.json": {
+    "_health": {
+      "platforms": {
+        "fourmeme": {
+          "status": "partial",
+          "failureKind": "policy_or_source",
+          "lastAttemptAt": "__NOW__",
+          "lastSuccessAt": "__NOW__",
+          "nextAttemptAt": "__NEXT__",
+          "coverageStatus": "partial",
+          "optionalCircuitOpenCount": 6
+        }
+      }
+    }
+  },
+  "fomo-x-call-state.json": {
+    "health": {
+      "status": "degraded",
+      "checkedAt": "__NOW__",
+      "lastSuccessAt": "__OLD__",
+      "eligibleCount": 32,
+      "liveCount": 16,
+      "backlogCount": 16,
+      "coverage": {
+        "eligibleCount": 32,
+        "liveCount": 16,
+        "backlogCount": 16
+      },
+      "sources": {
+        "x": {
+          "status": "partial",
+          "coverage": "source_limited",
+          "checkedAt": "__NOW__"
+        }
+      }
+    }
+  },
+  "fomo-thesis-state.json": {
+    "health": {
+      "status": "blocked_missing_credentials",
+      "checkedAt": "__NOW__",
+      "sources": {
+        "official": {
+          "status": "blocked_missing_credentials",
+          "checkedAt": "__NOW__"
+        },
+        "relay": {
+          "status": "blocked_missing_credentials",
+          "checkedAt": "__NOW__"
+        }
+      }
+    }
+  }
+}

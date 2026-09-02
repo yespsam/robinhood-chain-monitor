@@ -1,3 +1,4 @@
+import path from "node:path";
 import { id } from "ethers";
 import { config } from "./config.js";
 import { Storage } from "./storage.js";
@@ -25,6 +26,7 @@ import { createTelegramNewsMonitor } from "./telegram-news-monitor.js";
 import { isMonitoringSourceEnabled, isThreePlatformScope } from "./source-controls.js";
 import { createRobinhoodScanPolicy, loadRobinhoodSignalCandidate } from "./robinhood-scan-policy.js";
 import { createBoundedStartupQueue, startIndependentMonitor } from "./startup-stagger.js";
+import { startRuntimeHeartbeat } from "./runtime-heartbeat.js";
 
 for (const level of ["error", "info"]) {
   const write = console[level].bind(console);
@@ -34,6 +36,7 @@ for (const level of ["error", "info"]) {
 let shutdownRequested = false;
 let shutdownPromise = null;
 let mainPromise = null;
+let runtimeHeartbeat = null;
 const sleepWakeups = new Set();
 const independentStartupTimers = new Set();
 
@@ -651,6 +654,14 @@ function gracefulShutdown(signal) {
       console.error(`[shutdown] provider: ${result.reason?.message || result.reason}`);
     });
     flapQuoteMetadataProviders.clear();
+
+    const [heartbeatResult] = await Promise.allSettled([
+      Promise.resolve().then(() => runtimeHeartbeat?.stop()),
+    ]);
+    if (heartbeatResult.status === "rejected") {
+      failed = true;
+      console.error(`[shutdown] runtime-heartbeat: ${heartbeatResult.reason?.message || heartbeatResult.reason}`);
+    }
     if (failed) process.exitCode = 1;
     console.error(`[shutdown] ${failed ? "completed with errors" : "complete"}`);
   })();
@@ -661,6 +672,10 @@ function gracefulShutdown(signal) {
 process.on("SIGINT", () => { void gracefulShutdown("SIGINT"); });
 process.on("SIGTERM", () => { void gracefulShutdown("SIGTERM"); });
 
+runtimeHeartbeat = startRuntimeHeartbeat({
+  file: path.join(config.dataDir, "main-runtime-heartbeat.json"),
+  producer: "main",
+});
 mainPromise = main();
 mainPromise.catch((error) => {
   console.error("[fatal]", error);

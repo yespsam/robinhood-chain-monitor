@@ -7,6 +7,7 @@ import {
   buildBilingualAlertBundle,
   renderBilingualTelegramText,
 } from "../src/bilingual-alert-renderer.js";
+import { withTradingPriority } from "../src/trading-priority.js";
 import { clearTranslationCache, decodeAlertDisplayEntities } from "../src/chinese-localizer.js";
 import { sendAlerts } from "../src/alerts.js";
 import {
@@ -114,8 +115,8 @@ test("bilingual rendering preserves layout, entities, and protected technical id
     assert.match(bundle.en.text, new RegExp(literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.match(rendered, new RegExp(address));
-  assert.equal(bundle.version, 15);
-  assert.equal(bundle.format, "telegram_zh_en_compact_v12");
+  assert.equal(bundle.version, 17);
+  assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.match(rendered, /^🔴 强提醒 \| STRONG ALERT\n🇨🇳 中文\n/);
   assert.match(rendered, /\n\n🇬🇧 English\n/);
   assert.equal(bundle.zh.text.split("\n").length, 2);
@@ -181,8 +182,8 @@ test("Binance connector cards state the one concrete diff and never disguise SDK
     assert.ok(bundle.en.text.includes(item.stageEn));
     assert.equal(bundle.zh.text.split("\n").length, 2);
     assert.equal(bundle.en.text.split("\n").length, 2);
-    assert.equal(bundle.version, 15);
-    assert.equal(bundle.format, "telegram_zh_en_compact_v12");
+    assert.equal(bundle.version, 17);
+    assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   }
 });
 
@@ -543,8 +544,8 @@ test("Binance Agent Native developer diff renders the new MCP entry without sign
   assert.equal(bundle.zh.status, "not_needed");
   assert.equal(bundle.en.status, "not_needed");
   assert.equal(providerCalls, 0);
-  assert.equal(bundle.version, 15);
-  assert.equal(bundle.format, "telegram_zh_en_compact_v12");
+  assert.equal(bundle.version, 17);
+  assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.equal(bundle.zh.text.split("\n").length, 2);
   assert.equal(bundle.en.text.split("\n").length, 2);
   assert.ok(rendered.length <= 600, `card is ${rendered.length} characters`);
@@ -1206,8 +1207,8 @@ test("Binance funding notices lead with the actual rule change instead of an int
   ].join("\n"));
   const rendered = renderBilingualTelegramText(bundle, false);
 
-  assert.equal(bundle.version, 15);
-  assert.equal(bundle.format, "telegram_zh_en_compact_v12");
+  assert.equal(bundle.version, 17);
+  assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.match(bundle.zh.text, /^平台：Binance/m);
   assert.match(bundle.zh.text, /更新了什么：UNITREEUSDT 永续：8小时→4小时，费率上下限 \+2\.00%\/-2\.00%/);
   assert.match(bundle.zh.text, /官方公告 · 1309b6ac/);
@@ -1257,8 +1258,8 @@ test("real hooklist registrations distinguish the Hook file address from an unre
   const rendered = renderBilingualTelegramText(bundle, true);
 
   assert.deepEqual(event, original);
-  assert.equal(bundle.version, 15);
-  assert.equal(bundle.format, "telegram_zh_en_compact_v12");
+  assert.equal(bundle.version, 17);
+  assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.match(bundle.zh.text, /^平台：Uniswap/m);
   assert.match(bundle.en.text, /^Platform: Uniswap/m);
   for (const block of [bundle.zh.text, bundle.en.text]) {
@@ -1503,7 +1504,7 @@ test("Telegram news renders the two-field bilingual template and can never becom
   const en = bundle.en.text.split("\n");
 
   assert.ok(providerCalls > 0, "the existing translation provider path must be preferred");
-  assert.equal(bundle.version, 15);
+  assert.equal(bundle.version, 17);
   assert.equal(bundle.eventType, "telegram_news_update");
   assert.equal(bundle.focusModel.telegramNews.messageUrl, event.messageUrl);
   assert.equal(zh.length, 2);
@@ -1615,8 +1616,8 @@ test("every supported Telegram event type uses the same compact bilingual envelo
     ].join("\n"));
     const rendered = renderBilingualTelegramText(bundle, false);
 
-    assert.equal(bundle.version, 15, type);
-    assert.equal(bundle.format, "telegram_zh_en_compact_v12", type);
+    assert.equal(bundle.version, 17, type);
+    assert.equal(bundle.format, "telegram_zh_en_compact_v13", type);
     assert.match(bundle.zh.text, /[\u3400-\u9fff]/, type);
     assert.match(bundle.en.text, /[A-Za-z]{3,}/, type);
     assert.match(rendered, /^🔔 监控提醒 \| MONITOR ALERT\n🇨🇳 中文\n/, type);
@@ -1643,8 +1644,8 @@ test("every bilingual alert persists a one-glance before/after model in the same
     source: { name: "Binance Wallet 官方公告" },
   }, "🚨 Binance Wallet 更新\n事件: Wallet API v2\n状态: 官方公告已确认\n时间: 2026-08-13 00:00:00");
 
-  assert.equal(bundle.version, 15);
-  assert.equal(bundle.format, "telegram_zh_en_compact_v12");
+  assert.equal(bundle.version, 17);
+  assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.equal(bundle.changeModel.basis, "exact_snapshot");
   assert.match(bundle.zh.text, /更新了什么：.*Wallet API v1.*→.*Wallet API v2/);
   assert.match(bundle.en.text, /What changed:.*Wallet API v1.*→.*Wallet API v2/i);
@@ -1794,6 +1795,89 @@ test("two-field evidence budgeting drops a lower-priority CA atomically instead 
   assert.ok(rendered.length <= 600, `atomic evidence card was ${rendered.length}`);
 });
 
+test("Binance product T1 uses a product-capital brief instead of launchpad first-token logic", async () => {
+  const observedAt = "2026-09-02T01:01:02.000Z";
+  const event = withTradingPriority({
+    type: "binance_official_update",
+    kind: "announcement",
+    eventKey: "binance-product:agent-wallet-routing",
+    project: { id: "binance-wallet", name: "Binance Wallet" },
+    signal: { category: "产品功能上线", labels: ["新功能/产品更新"], strong: true },
+    title: "Binance Wallet adds automated agent wallet routing",
+    source: {
+      id: "binance_wallet_cms",
+      url: "https://www.binance.com/en/support/announcement/agent-wallet-routing",
+    },
+    url: "https://www.binance.com/en/support/announcement/agent-wallet-routing",
+    publishedAt: "2026-09-02T01:01:00.000Z",
+    observedAt,
+  }, { nowMs: Date.parse(observedAt) });
+  assert.equal(event.tradingPriority.tier, "T1");
+  assert.equal(event.tradingPriority.category, "binance_product");
+
+  const bundle = await buildBilingualAlertBundle({}, event, [
+    "Binance Wallet product update",
+    `具体更新: ${event.title}`,
+    "状态: official source confirmed",
+    `时间: ${observedAt}`,
+  ].join("\n"));
+  const rendered = renderBilingualTelegramText(bundle, true);
+
+  assert.match(bundle.zh.text, /资金路径=产品→资金入口；入场=标的\+采用；失效=无直接资金流/);
+  assert.match(bundle.en.text, /flow=product→capital access; entry=target\+adoption; invalid=no direct flow/);
+  assert.doesNotMatch(rendered, /新模式→首币|new mode→first token/iu);
+  assert.equal(bundle.zh.text.split("\n").length, 2);
+  assert.equal(bundle.en.text.split("\n").length, 2);
+  assert.ok(rendered.length <= 600, `Binance product card was ${rendered.length}`);
+});
+
+test("T0 compaction bounds chain-controlled names while keeping CA and selector evidence readable", async () => {
+  const address = "0x4444444444444444444444444444444444444444";
+  const selector = "0x12345678";
+  const observedAt = "2026-09-02T01:16:02.000Z";
+  const longTokenName = "N".repeat(111);
+  const longModeName = `Mode-${"X".repeat(111)}`;
+  const event = withTradingPriority({
+    type: "bsc_launchpad_update",
+    kind: "new_mode",
+    eventKey: "bsc-feature-first-token:flap:long-display-stress",
+    featureFirstToken: true,
+    featureActivationKey: "flap:feature:long-display:first-token",
+    platform: { id: "flap", name: "Flap", trust: "official_verified" },
+    chainId: 56,
+    launcher: "0x1111111111111111111111111111111111111111",
+    tokens: [{ token: address, metadata: { name: longTokenName, symbol: "LONGTOKEN1" } }],
+    transactionHash: `0x${"c".repeat(64)}`,
+    blockNumber: 63_500_003,
+    blockTimestamp: "2026-09-02T01:16:00.000Z",
+    observedAt,
+    mode: { selector, componentMode: longModeName, fingerprint: "long-display-stress" },
+    structural: { eligible: true },
+    security: { decision: "pass", metrics: { liquidityConfirmed: true } },
+    strong: true,
+  }, { nowMs: Date.parse(observedAt) });
+  assert.equal(event.tradingPriority.tier, "T0");
+
+  const bundle = await buildBilingualAlertBundle({}, event, [
+    "Flap first-token activation",
+    "具体更新: chain-controlled long token and mode display names",
+    "状态: verified on-chain",
+    `时间: ${observedAt}`,
+  ].join("\n"));
+  const rendered = renderBilingualTelegramText(bundle, true);
+
+  for (const block of [bundle.zh.text, bundle.en.text]) {
+    assert.equal(block.split("\n").length, 2);
+    assert.ok(block.includes(`CA ${address}`), "CA label must remain attached to the complete address");
+    assert.ok(block.includes(`selector=${selector}`), "selector label must remain attached to the complete selector");
+    assert.ok(block.includes("security=pass"));
+    assert.ok(block.includes("liquidityConfirmed=true"));
+    assert.ok(!block.includes(longTokenName), "untrusted display prose should be compacted before exact identifiers");
+    assert.doesNotMatch(block, /0x[0-9a-f]{1,39}…/iu);
+  }
+  assert.ok(rendered.length <= 600, `long trading card was ${rendered.length}`);
+});
+
 test("Telegram retries reuse the persisted bilingual render bundle without retranslation", async (t) => {
   clearTranslationCache();
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-bilingual-retry-"));
@@ -1841,7 +1925,7 @@ test("Telegram retries reuse the persisted bilingual render bundle without retra
   assert.equal((await sendAlerts(config, event)).status, "queued");
   const firstOutbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   const entry = firstOutbox.events[Object.keys(firstOutbox.events)[0]];
-  assert.equal(entry.renderBundle.version, 15);
+  assert.equal(entry.renderBundle.version, 17);
   const callsAfterFirstRender = translationCalls;
   entry.destinations.telegram.nextAttemptAt = null;
   await fs.writeFile(path.join(dataDir, "alert-outbox.json"), `${JSON.stringify(firstOutbox, null, 2)}\n`);
@@ -1856,12 +1940,12 @@ test("Telegram retries reuse the persisted bilingual render bundle without retra
 
   const finalOutbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   const finalEntry = finalOutbox.events[Object.keys(finalOutbox.events)[0]];
-  assert.equal(finalEntry.destinations.telegram.receipt.renderVersion, 15);
+  assert.equal(finalEntry.destinations.telegram.receipt.renderVersion, 17);
   assert.equal(finalEntry.destinations.telegram.receipt.translation.zh.status, finalEntry.renderBundle.zh.status);
   assert.equal(finalEntry.destinations.telegram.receipt.translation.en.status, finalEntry.renderBundle.en.status);
 });
 
-test("a pending v14 card is rebuilt once as v15 while terminal v14 is not migrated", async (t) => {
+test("a pending v14 card is rebuilt once as v17 while terminal v14 is not migrated", async (t) => {
   clearTranslationCache();
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-bilingual-v6-migration-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -1923,13 +2007,13 @@ test("a pending v14 card is rebuilt once as v15 while terminal v14 is not migrat
 
   const migrated = JSON.parse(await fs.readFile(file, "utf8"));
   const migratedEntry = migrated.events[Object.keys(migrated.events)[0]];
-  assert.equal(migratedEntry.renderBundle.version, 15);
-  assert.equal(migratedEntry.renderBundle.format, "telegram_zh_en_compact_v12");
+  assert.equal(migratedEntry.renderBundle.version, 17);
+  assert.equal(migratedEntry.renderBundle.format, "telegram_zh_en_compact_v13");
   assert.notEqual(migratedEntry.renderBundle.sourceHash, "V14_SENTINEL_HASH");
   assert.equal(migratedEntry.renderBundle.zh.text.split("\n").length, 2);
   assert.equal(migratedEntry.renderBundle.en.text.split("\n").length, 2);
   assert.equal((await sendAlerts(config, event)).status, "delivered");
-  assert.equal(translationCalls, callsAfterMigration, "the persisted v15 bundle must not be translated again");
+  assert.equal(translationCalls, callsAfterMigration, "the persisted v17 bundle must not be translated again");
   assert.equal(telegramCalls, 2, "a terminal delivered event must not be sent again");
 
   migratedEntry.renderBundle.version = 14;

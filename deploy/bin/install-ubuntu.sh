@@ -109,6 +109,7 @@ if [[ ! -e "$CONFIG_DIR/health.env" ]]; then
   health_tmp="$(mktemp "$CONFIG_DIR/.health.env.XXXXXX")"
   {
     printf 'HEALTH_ROBINHOOD_MAX_AGE_SECONDS=180\n'
+    printf 'HEALTH_BINANCE_MAX_AGE_SECONDS=180\n'
     printf 'HEALTH_BSC_MAX_AGE_SECONDS=180\n'
     printf 'HEALTH_GITHUB_MAX_AGE_SECONDS=180\n'
     printf 'HEALTH_PLATFORM_CAPABILITY_MAX_AGE_SECONDS=180\n'
@@ -122,6 +123,7 @@ if [[ ! -e "$CONFIG_DIR/health.env" ]]; then
     printf 'HEALTH_REQUIRE_FOMO_X=true\n'
     printf 'HEALTH_REQUIRE_FOMO_THESIS=true\n'
     printf 'HEALTH_REQUIRE_EXTERNAL_HEARTBEAT=true\n'
+    printf 'HEALTH_HEARTBEAT_REQUIRE_COVERAGE_COMPLETE=false\n'
     printf 'HEALTH_HEARTBEAT_TIMEOUT_MS=5000\n'
   } > "$health_tmp"
   chown root:root "$health_tmp"

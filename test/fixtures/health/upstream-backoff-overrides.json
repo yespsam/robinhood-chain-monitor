@@ -1,0 +1,32 @@
+{
+  "binance-state.json": {
+    "scheduler": {
+      "announcementDetailCheckedAt": "__OLD__"
+    },
+    "announcements": {
+      "detailCheckedAt": "__OLD__"
+    },
+    "_health": {
+      "announcements": {
+        "status": "error",
+        "checkedAt": "__NOW__",
+        "lastAttemptAt": "__NOW__",
+        "lastSuccessAt": "__OLD__",
+        "lastErrorStatus": 429,
+        "nextRetryAt": "__NEXT__"
+      }
+    }
+  },
+  "bsc-launchpad-state.json": {
+    "_health": {
+      "realtimeTail": {
+        "status": "source_limited",
+        "checkedAt": "__NOW__",
+        "lastAttemptAt": "__NOW__",
+        "lastSuccessAt": "__OLD__",
+        "lastErrorStatus": 429,
+        "nextRetryAt": "__NEXT__"
+      }
+    }
+  }
+}

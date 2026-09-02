@@ -2158,7 +2158,7 @@ function validJournalPath(parts) {
       && part !== "__proto__" && part !== "prototype" && part !== "constructor");
 }
 
-function applyStateDeltaOperations(target, operations) {
+function applyStateDeltaOperations(target, operations, { cloneSetValues = true } = {}) {
   let result = target;
   for (const operation of operations) {
     if (!operation || !["set", "delete"].includes(operation.op) || !validJournalPath(operation.path)) {
@@ -2180,7 +2180,7 @@ function applyStateDeltaOperations(target, operations) {
       if (!Object.hasOwn(parent, key)) throw new Error(`missing BSC state WAL delete target ${operation.path.join(".")}`);
       delete parent[key];
     } else {
-      parent[key] = structuredClone(operation.value);
+      parent[key] = cloneSetValues ? structuredClone(operation.value) : operation.value;
     }
   }
   return result;
@@ -4085,6 +4085,8 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   const journalFs = dependencies.journalFsImpl || fs;
   const journalAppend = dependencies.journalAppendImpl
     || ((file, frame) => appendStateWalFrame(file, frame, journalFs));
+  const journalDetachOperations = dependencies.journalDetachOperationsImpl
+    || ((operations) => structuredClone(operations));
   const journalCompactSnapshot = dependencies.journalCompactSnapshotImpl
     || ((file, snapshot) => atomicWrite(file, snapshot, journalFs));
   const journalReset = dependencies.journalResetImpl
@@ -4370,13 +4372,16 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     }
     if (journalWritePoisonedError) throw journalWritePoisonedError;
     const stateAtSnapshot = state;
-    const candidate = structuredClone(stateAtSnapshot);
-    candidate.journalRevision = journalRevision;
-    const operations = stateDeltaOperations(durableJournalState, candidate);
-    if (!operations.length) return { wrote: false, snapshot: candidate };
+    // Freeze the root selection and durable revision synchronously, but do
+    // not clone multi-megabyte cold branches that the delta walk will prove
+    // unchanged. Some set operations can still point into live state, so
+    // detach the complete changed-op set before the first append await.
+    const snapshotRoot = { ...stateAtSnapshot, journalRevision };
+    const liveOperations = stateDeltaOperations(durableJournalState, snapshotRoot);
+    if (!liveOperations.length) return { wrote: false, snapshot: durableJournalState };
     const nextJournalRevision = journalRevision + 1;
-    candidate.journalRevision = nextJournalRevision;
-    operations.push({ op: "set", path: ["journalRevision"], value: nextJournalRevision });
+    liveOperations.push({ op: "set", path: ["journalRevision"], value: nextJournalRevision });
+    const operations = journalDetachOperations(liveOperations);
     const frame = encodeStateWalFrame(nextJournalRevision, operations);
     await runJournalIo(async () => {
       // The revision is allocated from durable state inside the single IO
@@ -4390,13 +4395,17 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         if (error?.walRollbackSafe === false) journalWritePoisonedError = error;
         throw error;
       }
+      // The frame is durable before its detached values become the new
+      // in-memory baseline. Assigning these values directly is safe: the op
+      // set no longer shares references with live state and the encoded frame
+      // is already an immutable string.
+      durableJournalState = applyStateDeltaOperations(durableJournalState, operations, { cloneSetValues: false });
       journalRevision = nextJournalRevision;
       journalWalBytes += Buffer.byteLength(frame);
-      durableJournalState = candidate;
     });
     if (state === stateAtSnapshot) state.journalRevision = nextJournalRevision;
     scheduleJournalCompaction(journalWalBytes >= journalWalMaxBytes ? 1 : null);
-    return { wrote: true, snapshot: candidate };
+    return { wrote: true, snapshot: durableJournalState };
   };
 
   async function compactStateJournal({ force = false, allowCreate = false } = {}) {

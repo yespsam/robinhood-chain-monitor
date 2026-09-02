@@ -1,0 +1,224 @@
+{
+  "state.json": {
+    "lastBlock": 100,
+    "lastBlockHash": "0xhealthy"
+  },
+  "binance-state.json": {
+    "version": 2,
+    "scheduler": {
+      "checkpointRevision": 10,
+      "checkpointUpdatedAt": "__NOW__",
+      "memeRushCursor": 0,
+      "announcementDetailCheckedAt": "__NOW__"
+    },
+    "announcements": {
+      "initializedAt": "__OLD__",
+      "detailCheckedAt": "__NOW__",
+      "articles": {}
+    },
+    "_health": {
+      "announcements": {
+        "status": "healthy",
+        "checkedAt": "__NOW__",
+        "lastSuccessAt": "__NOW__",
+        "articles": 10,
+        "pendingDetails": 0
+      },
+      "announcementStream": {
+        "status": "connected",
+        "streamStatus": "connected",
+        "enabled": true,
+        "configured": true,
+        "connected": true,
+        "websocketObserved": true,
+        "checkedAt": "__NOW__",
+        "coverage": {
+          "status": "websocket_active",
+          "available": true,
+          "mode": "official_websocket"
+        },
+        "sla": {
+          "status": "realtime_stream",
+          "mode": "websocket",
+          "websocketAvailable": true,
+          "hardRealtime": true
+        }
+      }
+    }
+  },
+  "bsc-launchpad-state.json": {
+    "version": 6,
+    "journalRevision": 0,
+    "realtimeTailNextBlock": 201,
+    "_health": {
+      "websocket": {
+        "status": "healthy",
+        "lastHeadAt": "__NOW__",
+        "blockNumber": 202
+      },
+      "rpc": {
+        "status": "healthy",
+        "checkedAt": "__NOW__",
+        "lastSuccessAt": "__NOW__"
+      },
+      "realtimeTail": {
+        "status": "healthy",
+        "checkedAt": "__NOW__",
+        "lastSuccessAt": "__NOW__",
+        "nextBlock": 201,
+        "coveredBlock": 200,
+        "confirmedHeadBlock": 202,
+        "lagBlocks": 2,
+        "degradedLagBlocks": 40,
+        "criticalLagBlocks": 128
+      },
+      "nearHeadRecovery": {
+        "status": "healthy",
+        "checkedAt": "__NOW__",
+        "pendingGapCount": 0,
+        "pendingBlockCount": 0
+      },
+      "coverage": {
+        "status": "healthy",
+        "checkedAt": "__NOW__",
+        "coveredBlock": 200,
+        "unresolvedGapCount": 0,
+        "nearHeadRecoveryGapCount": 0,
+        "nearHeadRecoveryBlockCount": 0,
+        "deferredTransactionCount": 0,
+        "degradedLagBlocks": 40,
+        "criticalLagBlocks": 128
+      }
+    }
+  },
+  "github-state.json": {
+    "_health": {
+      "schemaVersion": 1,
+      "repositories": {
+        "flap-sh/flap-skills": {
+          "repository": "flap-sh/flap-skills",
+          "priority": true,
+          "pollingClass": "core_or_configured",
+          "status": "healthy",
+          "lastAttemptAt": "__NOW__",
+          "lastSuccessAt": "__NOW__",
+          "nextAttemptAt": null,
+          "lastErrorStatus": null
+        },
+        "four-meme-community/openfour-docs": {
+          "repository": "four-meme-community/openfour-docs",
+          "priority": true,
+          "pollingClass": "core_or_configured",
+          "status": "healthy",
+          "lastAttemptAt": "__NOW__",
+          "lastSuccessAt": "__NOW__",
+          "nextAttemptAt": null,
+          "lastErrorStatus": null
+        }
+      }
+    }
+  },
+  "platform-capability-state.json": {
+    "flap": {},
+    "fourmeme": {},
+    "_health": {
+      "platforms": {
+        "flap": {
+          "status": "healthy",
+          "failureKind": null,
+          "lastAttemptAt": "__NOW__",
+          "lastSuccessAt": "__NOW__",
+          "nextAttemptAt": null,
+          "coverageStatus": "complete",
+          "optionalCircuitOpenCount": 0
+        },
+        "fourmeme": {
+          "status": "healthy",
+          "failureKind": null,
+          "lastAttemptAt": "__NOW__",
+          "lastSuccessAt": "__NOW__",
+          "nextAttemptAt": null,
+          "coverageStatus": "complete",
+          "optionalCircuitOpenCount": 0
+        }
+      }
+    }
+  },
+  "fomo-call-state.json": {
+    "version": 10,
+    "health": {
+      "status": "healthy",
+      "checkedAt": "__NOW__",
+      "lastSuccessAt": "__NOW__"
+    },
+    "coverageSummary": {
+      "complete": true,
+      "monitoredTopCount": 4,
+      "gaps": {
+        "count": 0,
+        "skippedBlocks": 0
+      },
+      "incompleteReasons": []
+    },
+    "fomoCallCheckpoint": {
+      "version": 1,
+      "revision": 10,
+      "updatedAt": "__NOW__"
+    }
+  },
+  "fomo-call-checkpoint.json": {
+    "version": 1,
+    "revision": 10,
+    "updatedAt": "__NOW__",
+    "bscNextBlock": 201,
+    "bscSilentBaselinePending": false,
+    "smartMoney": {
+      "rateLimitedUntil": null,
+      "wallets": {}
+    }
+  },
+  "fomo-x-call-state.json": {
+    "version": 3,
+    "health": {
+      "status": "healthy",
+      "checkedAt": "__NOW__",
+      "lastSuccessAt": "__NOW__",
+      "eligibleCount": 4,
+      "liveCount": 4,
+      "backlogCount": 0,
+      "coverage": {
+        "eligibleCount": 4,
+        "liveCount": 4,
+        "backlogCount": 0
+      },
+      "sources": {
+        "x": {
+          "status": "healthy",
+          "coverage": "complete",
+          "checkedAt": "__NOW__"
+        }
+      }
+    }
+  },
+  "fomo-thesis-state.json": {
+    "version": 1,
+    "health": {
+      "status": "healthy_no_updates",
+      "checkedAt": "__NOW__",
+      "sources": {
+        "official": {
+          "status": "healthy_no_updates",
+          "checkedAt": "__NOW__"
+        }
+      }
+    }
+  },
+  "alert-outbox.json": {
+    "version": 1,
+    "events": {}
+  },
+  "fomo-alerts/alert-outbox.json": {
+    "version": 1,
+    "events": {}
+  }
+}

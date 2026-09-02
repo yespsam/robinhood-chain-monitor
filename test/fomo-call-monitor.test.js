@@ -3841,6 +3841,192 @@ test("parses multi-buyer convergence and DEX sell/liquidity evidence", () => {
   assert.equal(market.tokenSymbol, "NEW");
 });
 
+test("emits only an exact BSC convergence with two distinct top wallets under strict buy provenance", async (t) => {
+  const token = "0x6666666666666666666666666666666666666666";
+  const walletAlpha = "0x7777777777777777777777777777777777777777";
+  const walletBeta = "0x8888888888888888888888888888888888888888";
+  const publicWalletOne = "0x3333333333333333333333333333333333333333";
+  const publicWalletTwo = "0x4444444444444444444444444444444444444444";
+  // The real source gate evaluates freshness against wall-clock Date.now(),
+  // so keep this deterministic clock just behind the actual test execution.
+  const currentStart = Date.now() - 60_000;
+
+  async function runScenario(convergence, expectedAlerts, profileWallets = { alpha: walletAlpha, beta: walletBeta }) {
+    const dataDir = await fixture(t);
+    let current = currentStart;
+    let stage = 0;
+    const alerts = [];
+    const monitor = createFomoCallMonitor({
+      dataDir,
+      monitorScope: "focus3",
+      fomoCallEnabled: true,
+      fomoBuyMonitorEnabled: true,
+      fomoCallStrictBuyProvenance: true,
+      copeApiKey: "cope-test-key",
+      // Keep the public discovery roster deliberately disjoint from the Cope
+      // leaderboard. Delayed convergence delivery must use the immutable Cope
+      // participant bindings captured at collection time.
+      fomoCallPublicHandles: ["publicone", "publictwo"],
+      fomoCallPublicTopLimit: 2,
+      fomoCallTopBloggerLimit: 2,
+      fomoCallMinBloggerTrades: 20,
+      fomoCallMinBloggerVolumeUsd: 100_000,
+      fomoCallMinConvergenceUsd: 5_000,
+      fomoCallMinLiquidityUsd: 10_000,
+      fomoCallMaxSignalAgeMs: 300_000,
+      fomoCallConvergencePollIntervalMs: 30_000,
+      fomoCallBscOnly: true,
+      fomoCallBscRpcUrl: "https://bsc.example/rpc",
+      fomoCallBscConfirmations: 0,
+      fomoCallBscMaxCatchupBlocks: 20,
+      fomoCallGoPlusEnabled: false,
+      blockedContracts: new Set(),
+    }, {
+      autoStart: false,
+      now: () => current,
+      fetchImpl: async (url) => {
+        const text = String(url);
+        if (text.includes("/get-user/publicone")) return ok({
+          username: "publicone",
+          social: { followers: 150_000 },
+          fomoStats: { numTrades: 200, totalVolume: 5_000_000 },
+          wallets: { evm: { status: "verified", address: publicWalletOne } },
+        });
+        if (text.includes("/get-user/publictwo")) return ok({
+          username: "publictwo",
+          social: { followers: 120_000 },
+          fomoStats: { numTrades: 180, totalVolume: 4_000_000 },
+          wallets: { evm: { status: "verified", address: publicWalletTwo } },
+        });
+        if (text.includes("/v1/leaderboard")) return ok({ leaderboard: [
+          {
+            handle: "alpha",
+            display_name: "Alpha",
+            followers: 150_000,
+            pnl: 20_000,
+            num_trades: 200,
+            total_volume: 5_000_000,
+            base_address: profileWallets.alpha,
+          },
+          {
+            handle: "beta",
+            display_name: "Beta",
+            followers: 120_000,
+            pnl: 12_000,
+            num_trades: 180,
+            total_volume: 4_000_000,
+            base_address: profileWallets.beta,
+          },
+        ] });
+        if (text.endsWith("/v1/watchlists")) return ok({ watchlists: [{ id: "wl-convergence", name: "fomo-top-traffic", handles: ["alpha", "beta"] }] });
+        if (text.includes("/v1/activity/poll")) return ok({ count: 0, latest_at: Math.floor(current / 1_000) });
+        if (text.includes("/v1/convergence")) return ok({ events: stage === 0 ? [] : [convergence(current)] });
+        if (text.includes("four.meme/meme-api/v1/public/address")) return ok({ code: 0, data: [] });
+        if (text.includes("api.dexscreener.com/token-pairs/v1/bsc/")) return ok({ pairs: [{
+          chainId: "bsc",
+          pairAddress: "0x9999999999999999999999999999999999999999",
+          dexId: "pancakeswap",
+          baseToken: { address: token, symbol: "FOMO" },
+          liquidity: { usd: 80_000 },
+          volume: { m5: 25_000 },
+          txns: { m5: { buys: 30, sells: 4 } },
+          pairCreatedAt: current - 60_000,
+          marketCap: 900_000,
+          priceUsd: "0.001",
+        }] });
+        throw new Error(`unexpected convergence producer URL ${url}`);
+      },
+      baseProvider: {},
+      bscProvider: {},
+      evmRpcImpl: async (_url, method) => {
+        assert.equal(method, "eth_blockNumber");
+        return "0x64";
+      },
+      evmRpcBatchImpl: async (_url, calls) => {
+        assert.equal(calls.length, 0, "a fixed BSC head should only establish a silent baseline");
+        return [];
+      },
+      assessEvmSecurityImpl: async () => {
+        return {
+          decision: "pass",
+          label: "pass",
+          reasons: [],
+          warnings: [],
+          metrics: { liquidityConfirmed: true },
+        };
+      },
+      sendAlertsImpl: async (runtimeConfig, event) => {
+        assert.equal(isMonitoringSourceEnabled(runtimeConfig, event), true, `valid convergence must pass the real focus3 source route: ${JSON.stringify(event)}`);
+        assert.equal(isRelevantAlert(event), true, "valid convergence must pass the real alert relevance gate");
+        alerts.push(event);
+        return { status: "delivered" };
+      },
+      logger: { error() {} },
+    });
+
+    await monitor.check();
+    stage = 1;
+    current += 31_000;
+    await monitor.check();
+    await monitor.stop();
+    const state = JSON.parse(await fs.readFile(path.join(dataDir, "fomo-call-state.json"), "utf8"));
+    assert.equal(alerts.length, expectedAlerts);
+    return { alerts, state };
+  }
+
+  const valid = await runScenario((current) => ({
+    id: "convergence-valid",
+    token: { address: token, symbol: "FOMO", chain: "bsc" },
+    wallet_count: 2,
+    wallets: [
+      { handle: "alpha", amount_usd: 3_000, win_rate: 0.71 },
+      { handle: "beta", amount_usd: 4_000, win_rate: 0.68 },
+    ],
+    total_usd_in: 7_000,
+    detected_at: new Date(current - 1_000).toISOString(),
+  }), 1);
+  assert.equal(valid.alerts[0].signalKind, "top_blogger_convergence");
+  assert.equal(valid.alerts[0].totalUsd, 7_000);
+  assert.deepEqual(
+    valid.alerts[0].callers.map((caller) => caller.walletAddress),
+    [walletAlpha, walletBeta],
+    "every emitted convergence caller must carry its exact BSC wallet address",
+  );
+  assert.deepEqual(
+    new Set(valid.alerts[0].callers.map((caller) => caller.walletAddress.toLowerCase())),
+    new Set([walletAlpha.toLowerCase(), walletBeta.toLowerCase()]),
+  );
+  assert.equal(valid.state.pending && Object.keys(valid.state.pending).length, 0);
+
+  const duplicateHandle = await runScenario((current) => ({
+    id: "convergence-duplicate-handle",
+    token: { address: token, symbol: "FOMO", chain: "bsc" },
+    wallet_count: 2,
+    wallets: [
+      { handle: "alpha", amount_usd: 3_000 },
+      { handle: "alpha", amount_usd: 4_000 },
+    ],
+    total_usd_in: 7_000,
+    detected_at: new Date(current - 1_000).toISOString(),
+  }), 0);
+  assert.equal(Object.keys(duplicateHandle.state.pending || {}).length, 0, "duplicate handles must not enter the pending queue");
+  assert.equal(duplicateHandle.state.seenConvergences["convergence-duplicate-handle"] > 0, true);
+
+  const sameWallet = await runScenario((current) => ({
+    id: "convergence-same-wallet",
+    token: { address: token, symbol: "FOMO", chain: "bsc" },
+    wallet_count: 2,
+    wallets: [
+      { handle: "alpha", amount_usd: 3_000 },
+      { handle: "beta", amount_usd: 4_000 },
+    ],
+    total_usd_in: 7_000,
+    detected_at: new Date(current - 1_000).toISOString(),
+  }), 0, { alpha: walletAlpha, beta: walletAlpha });
+  assert.equal(Object.keys(sameWallet.state.pending || {}).length, 0, "two handles mapped to one wallet must not enter the pending queue");
+  assert.equal(sameWallet.state.seenConvergences["convergence-same-wallet"] > 0, true);
+});
+
 test("missing Cope key activates the public verified-wallet baseline and never scrapes fomo.family", async (t) => {
   const dataDir = await fixture(t);
   const urls = [];

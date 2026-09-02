@@ -467,6 +467,8 @@ const INITIAL_CATCHUP_MAX_COMMITS = 8;
 const INITIAL_CATCHUP_MS = 7 * 24 * 60 * 60 * 1_000;
 const PRIORITY_POLL_CONCURRENCY = 4;
 const GITHUB_GAP_RECOVERY_MAX_PAGES = 10;
+const GITHUB_GAP_COMPACT_EVIDENCE_SCHEMA_VERSION = 1;
+const GITHUB_GAP_SELECTED_FACT_LIMIT = 2;
 const GITHUB_HEALTH_SCHEMA_VERSION = 1;
 const GITHUB_PULL_REQUEST_SCHEMA_VERSION = 1;
 const GITHUB_PUBLIC_PR_MIN_INTERVAL_MS = 10 * 60_000;
@@ -1339,6 +1341,106 @@ async function recoverCommitsThroughAnchorWithoutToken(config, repository, lastS
   };
 }
 
+function boundedGapEvidenceText(value, maximum) {
+  return typeof value === "string" && value.length > 0
+    ? value.slice(0, maximum)
+    : null;
+}
+
+function gapRecoveryCommitFact(commit, position) {
+  const committedAt = commit?.commit?.committer?.date || commit?.commit?.author?.date || null;
+  const message = String(commit?.commit?.message || "").split("\n")[0];
+  return {
+    position,
+    sha: boundedGapEvidenceText(commit?.sha, 80),
+    ...(boundedGapEvidenceText(committedAt, 64) ? { committedAt: boundedGapEvidenceText(committedAt, 64) } : {}),
+    ...(boundedGapEvidenceText(message, 160) ? { message: boundedGapEvidenceText(message, 160) } : {}),
+  };
+}
+
+function compactPersistedGapRecovery(gap, cursorSha, observedAt) {
+  const recovery = gap?.recovery;
+  if (!recovery || typeof recovery !== "object" || !Array.isArray(recovery.commits)) return gap;
+
+  // Only discard commit payloads whose lifecycle is provably over. Unknown,
+  // malformed, or partially consumed recovery records stay byte-for-byte intact
+  // so a future version can resume them without losing unprocessed commits.
+  const commitsValid = recovery.commits.every((commit) => commit
+    && typeof commit === "object"
+    && typeof commit.sha === "string"
+    && /^[a-f0-9]{4,80}$/i.test(commit.sha));
+  const pagesValid = Number.isSafeInteger(recovery.pages)
+    && recovery.pages >= 1
+    && recovery.pages <= GITHUB_GAP_RECOVERY_MAX_PAGES;
+  if (!commitsValid || !pagesValid) return gap;
+  const newestSha = recovery.commits[0]?.sha || null;
+  const oldestSha = recovery.commits.at(-1)?.sha || null;
+  const uniqueCommitCount = new Set(recovery.commits.map((commit) => commit.sha)).size;
+  const declaredFetchedCommits = Number(gap.fetchedCommits);
+  const rangeConsistent = recovery.commits.length > 0
+    && recovery.commits.length <= recovery.pages * 100
+    && uniqueCommitCount === recovery.commits.length
+    && gap.newestSha === newestSha
+    && Number.isSafeInteger(declaredFetchedCommits)
+    && declaredFetchedCommits >= 1
+    && declaredFetchedCommits <= recovery.commits.length
+    && gap.oldestFetchedSha === recovery.commits[declaredFetchedCommits - 1]?.sha;
+  if (!rangeConsistent) return gap;
+  const requestedAnchorPresent = typeof gap.previousSha === "string"
+    && recovery.commits.some((commit) => commit.sha === gap.previousSha);
+  const terminalAnchorMiss = gap.status === "anchor_not_in_bounded_history"
+    && recovery.status === "anchor_not_found_via_unauthenticated_api"
+    && recovery.anchorFound === false
+    && typeof gap.previousSha === "string"
+    && gap.previousSha === cursorSha
+    && !requestedAnchorPresent;
+  const fullyConsumed = gap.status === "anchor_not_in_bounded_history"
+    && recovery.status === "anchor_recovered_via_unauthenticated_api"
+    && recovery.anchorFound === true
+    && requestedAnchorPresent
+    && newestSha
+    && newestSha === cursorSha;
+  if (!terminalAnchorMiss && !fullyConsumed) return gap;
+
+  let serialized;
+  try {
+    serialized = JSON.stringify(recovery.commits);
+  } catch {
+    return gap;
+  }
+  const selectedFacts = [];
+  if (recovery.commits.length > 0) selectedFacts.push(gapRecoveryCommitFact(recovery.commits[0], "newest"));
+  if (recovery.commits.length > 1 && selectedFacts.length < GITHUB_GAP_SELECTED_FACT_LIMIT) {
+    selectedFacts.push(gapRecoveryCommitFact(recovery.commits.at(-1), "oldest"));
+  }
+  const compactEvidence = {
+    schemaVersion: GITHUB_GAP_COMPACT_EVIDENCE_SCHEMA_VERSION,
+    classification: terminalAnchorMiss ? "terminal_anchor_not_found" : "fully_consumed",
+    observedAt: boundedGapEvidenceText(observedAt, 64),
+    anchorRange: {
+      requestedSha: boundedGapEvidenceText(gap.previousSha, 80),
+      newestFetchedSha: boundedGapEvidenceText(newestSha, 80),
+      oldestFetchedSha: boundedGapEvidenceText(oldestSha, 80),
+      found: recovery.anchorFound === true,
+    },
+    count: recovery.commits.length,
+    rawBytes: Buffer.byteLength(serialized),
+    digest: `sha256:${createHash("sha256").update(serialized).digest("hex")}`,
+    selectedFacts,
+  };
+  return {
+    ...gap,
+    recovery: {
+      status: recovery.status,
+      anchorFound: recovery.anchorFound,
+      ...(Number.isSafeInteger(recovery.pages) && recovery.pages >= 0
+        ? { pages: Math.min(recovery.pages, GITHUB_GAP_RECOVERY_MAX_PAGES) }
+        : {}),
+      compactEvidence,
+    },
+  };
+}
+
 async function listOrganizationRepositories(config, organization) {
   const encoded = encodeURIComponent(organization);
   const request = async (pathname) => {
@@ -2029,6 +2131,15 @@ export function createGithubMonitor(config, dependencies = {}) {
       state._pullRequests.schemaVersion = GITHUB_PULL_REQUEST_SCHEMA_VERSION;
       state._pullRequests.repositories ||= {};
       state._pullRequests.effectivePollIntervalMs = pullRequestPollIntervalMs;
+      let gapRecoveryMigrated = false;
+      const migrationObservedAt = now().toISOString();
+      for (const [repository, record] of Object.entries(state)) {
+        if (repository.startsWith("_") || !record || typeof record !== "object") continue;
+        const compactGap = compactPersistedGapRecovery(record.gap, record.sha, migrationObservedAt);
+        if (compactGap === record.gap) continue;
+        state[repository] = { ...record, gap: compactGap };
+        gapRecoveryMigrated = true;
+      }
       let repositoryClassMigrated = false;
       for (const [repository, entry] of Object.entries(state._repositories)) {
         const normalized = repository.toLowerCase();
@@ -2100,7 +2211,7 @@ export function createGithubMonitor(config, dependencies = {}) {
         repositories.set(normalized, merged);
         if (merged.priority) PRIORITY_REPOSITORIES.add(normalized);
       }
-      if (repositoryClassMigrated) await writeState();
+      if (repositoryClassMigrated || gapRecoveryMigrated) await writeState();
       if (!startupTransportProbesInitialized) {
         for (const [normalized, entry] of repositories) {
           const health = state._health.repositories[normalized];
@@ -2801,6 +2912,13 @@ export function createGithubMonitor(config, dependencies = {}) {
       if (record?.gap?.newestSha !== gap.newestSha || record?.gap?.previousSha !== gap.previousSha) {
         const trust = sourceTrust(entry);
         const normalizedRepository = repository.toLowerCase();
+        const alertObservedAt = now().toISOString();
+        // Keep the complete recovery payload in monitor memory/state until the
+        // alert boundary has resolved, but never copy a proven-terminal,
+        // multi-megabyte commit history into the 30-day durable outbox. The
+        // bounded projection retains its range, count, digest, and selected
+        // facts, which are all the renderer and delivery retry path require.
+        const alertGap = compactPersistedGapRecovery(gap, lastSha, alertObservedAt);
         await alertSender(config, {
           type: "github_monitor_gap",
           eventKey: `github-gap:${repository}:${lastSha}:${commits[0].sha}`,
@@ -2814,15 +2932,19 @@ export function createGithubMonitor(config, dependencies = {}) {
           pollingClass: entry.pollingClass || (PRIORITY_REPOSITORIES.has(normalizedRepository) ? "core_priority" : "configured"),
           ...(entry.officialOrganization ? { officialOrganization: entry.officialOrganization } : {}),
           ...(entry.uniswapOfficial === true ? { uniswapOfficial: true } : {}),
-          gap,
+          gap: alertGap,
           url: `https://github.com/${repository}/commits`,
-          observedAt: now().toISOString(),
+          observedAt: alertObservedAt,
         });
       }
+      // Only after the delivery boundary resolves do we replace a proven
+      // terminal payload in durable monitor state. Active/unknown recovery
+      // payloads remain intact so a future version can resume them.
+      const persistedGap = compactPersistedGapRecovery(gap, lastSha, now().toISOString());
       state[repository] = {
         ...record,
         checkedAt: now().toISOString(),
-        gap,
+        gap: persistedGap,
         coverage: { status: "gap_unresolved", fetchedCommits: commits.length },
       };
       await writeState();

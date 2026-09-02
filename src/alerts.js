@@ -15,6 +15,12 @@ import {
   buildBilingualAlertBundle,
   renderBilingualTelegramText,
 } from "./bilingual-alert-renderer.js";
+import {
+  compareTradingPriority,
+  deriveEventLifecycle,
+  isTradingPriority,
+  withTradingPriority,
+} from "./trading-priority.js";
 
 const OFFICIAL_TOKEN_COOLDOWN_MS = 6 * 60 * 60 * 1_000;
 const DEFAULT_FRESHNESS_REALTIME_MAX_AGE_MS = 10 * 60 * 1_000;
@@ -1647,6 +1653,13 @@ export function isStrongAlert(event) {
   if (event?.type === "fomo_monitor_health_update") return false;
   if (event?.type === "telegram_news_update") return false;
   if (["late", "suppress"].includes(effectiveFreshnessDecision(event))) return false;
+  // New outbox entries carry a deterministic trading tier. The tier, rather
+  // than translated wording or an LLM summary, controls Telegram sound and
+  // the five-second critical path. Pending legacy entries are intentionally
+  // handled by the old rules below until drainAlertOutbox maps them once.
+  if (isTradingPriority(event?.tradingPriority)) {
+    return ["T0", "T1"].includes(event.tradingPriority.tier);
+  }
   // Open pull requests are useful early evidence, but only organization-owned
   // work receives a loud notification. Community and unattributed PRs still
   // pass the relevance gate and are delivered as ordinary alerts.
@@ -2133,7 +2146,7 @@ function criticalDeliveryWindow(event, pipelineStartedAtMs, { enforceSourceDeadl
 const stableValue = (value) => {
   if (Array.isArray(value)) return value.map(stableValue);
   if (value && typeof value === "object") {
-    return Object.fromEntries(Object.keys(value).sort().filter((key) => !["observedAt", "checkedAt", "deliveredAt", "deliverySla"].includes(key)).map((key) => [key, stableValue(value[key])]));
+    return Object.fromEntries(Object.keys(value).sort().filter((key) => !["observedAt", "checkedAt", "deliveredAt", "deliverySla", "tradingPriority"].includes(key)).map((key) => [key, stableValue(value[key])]));
   }
   return typeof value === "bigint" ? value.toString() : value;
 };
@@ -2414,6 +2427,19 @@ export function focusNoveltyKeys(event) {
   const keys = new Set();
   const conceptKeys = new Set();
 
+  // Product lifecycle milestones are separate semantic events even when the
+  // same legacy concept name appears in both. For example, a historical
+  // OpenFour capability must not suppress the later MEME ARENA live launch.
+  // A stable producer lifecycleKey wins; otherwise derive a conservative
+  // product+stage key from immutable event facts.
+  const lifecycle = deriveEventLifecycle(event);
+  const explicitLifecycle = Boolean(event.lifecycleKey || event.lifecycle?.key || event.productLifecycle?.key
+    || event.lifecycleStage || event.lifecycle?.stage || event.productLifecycle?.stage);
+  if (lifecycle.key
+    && (explicitLifecycle || lifecycle.product === "meme-arena" || lifecycle.stage !== "observed")) {
+    keys.add(lifecycle.key);
+  }
+
   // A human-readable mode name is shared by announcements and can also be
   // reused by later template/config revisions. On-chain first-token events
   // therefore need the exact feature activation as an additional identity:
@@ -2558,9 +2584,10 @@ function withFocusNovelty(config, event) {
 
 function fomoNoveltyKeys(event) {
   if (event?.type !== "fomo_family_top_call"
-    || !["top_blogger_first_buy", "fomo_published_call", "fomo_x_call", SMART_WALLET_SIGNAL_KIND].includes(event?.signalKind)) return [];
+    || !["top_blogger_first_buy", "top_blogger_convergence", "fomo_published_call", "fomo_x_call", SMART_WALLET_SIGNAL_KIND].includes(event?.signalKind)) return [];
   const token = String(event?.token || event?.contractAddress || "").toLowerCase();
   if (!/^0x[0-9a-f]{40}$/.test(token) || Number(event?.chain?.id ?? event?.chain?.chainId) !== 56) return [];
+  if (event.signalKind === "top_blogger_convergence") return [`fomo:convergence:bsc:${token}`];
   // The user wants the first trustworthy call for a token, not the same call
   // repeated by the official feed, a relay, and the linked public X post.
   return [`fomo:call:bsc:${token}`];
@@ -2841,17 +2868,47 @@ async function readOutbox(file) {
   }
 }
 
-async function writeOutbox(file, outbox) {
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  const temporary = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`);
+async function withClosedHandle(handle, operation) {
+  try {
+    const result = await operation(handle);
+    await handle.close();
+    return result;
+  } catch (error) {
+    // Preserve the write/sync error: a secondary close failure must not make
+    // the durability boundary look like a different, retryable operation.
+    await handle.close().catch(() => {});
+    throw error;
+  }
+}
+
+async function writeOutbox(file, outbox, fsImpl = fs) {
+  const directory = path.dirname(file);
+  await fsImpl.mkdir(directory, { recursive: true });
+  const temporary = path.join(directory, `.${path.basename(file)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`);
   try {
     // The outbox keeps the full persisted render bundle for deterministic
     // retries. Compact JSON materially reduces parse/stringify allocation for
     // that payload without changing the durable schema.
-    await fs.writeFile(temporary, `${JSON.stringify(outbox)}\n`, { mode: 0o600 });
-    await fs.rename(temporary, file);
+    const payload = `${JSON.stringify(outbox)}\n`;
+    const temporaryHandle = await fsImpl.open(temporary, "wx", 0o600);
+    await withClosedHandle(temporaryHandle, async (handle) => {
+      await handle.writeFile(payload, "utf8");
+      await handle.chmod(0o600);
+      await handle.sync();
+    });
+    await fsImpl.rename(temporary, file);
+    // Enforce the private mode even when replacing an older permissive file.
+    // The temp inode already carries 0600; this explicit post-rename chmod is
+    // also the migration boundary for historical 0644 outboxes.
+    await fsImpl.chmod(file, 0o600);
+    const directoryHandle = await fsImpl.open(directory, "r");
+    await withClosedHandle(directoryHandle, (handle) => handle.sync());
   } catch (error) {
-    await fs.rm(temporary, { force: true }).catch(() => {});
+    // A failure after rename is intentionally still reported. The visible
+    // replacement may be the new file, but mutateOutbox has not acknowledged
+    // it; the next source observation reads that state and retries idempotently
+    // instead of delivering from an unconfirmed enqueue.
+    await fsImpl.rm(temporary, { force: true }).catch(() => {});
     throw error;
   }
 }
@@ -2879,7 +2936,7 @@ async function mutateOutbox(config, mutation, { writeIf = () => true } = {}) {
     const outbox = await readOutbox(file);
     const pruned = pruneOutbox(outbox);
     const result = await mutation(outbox);
-    if (pruned > 0 || writeIf(result)) await writeOutbox(file, outbox);
+    if (pruned > 0 || writeIf(result)) await writeOutbox(file, outbox, config.alertOutboxFsImpl || fs);
     return result;
   });
 }
@@ -3207,7 +3264,7 @@ async function enqueueAlert(config, event) {
 async function claimAlertDestinations(config, eventId, force = false) {
   return mutateOutbox(config, (outbox) => {
     const entry = outbox.events[eventId];
-    if (!entry) return { event: null, destinations: [], destinationRetries: {}, createdAt: null, claimedAt: null, renderBundle: null };
+    if (!entry) return { event: null, destinations: [], destinationRetries: {}, createdAt: null, claimedAt: null, renderBundle: null, tradingPriority: null };
     const now = alertPipelineNow(config);
     if (!["delivered", "suppressed"].includes(entry.status)) {
       disableExpiredTelegramDelivery(config, entry, now);
@@ -3224,6 +3281,7 @@ async function claimAlertDestinations(config, eventId, force = false) {
         createdAt: entry.createdAt,
         claimedAt: new Date(now).toISOString(),
         renderBundle: entry.renderBundle?.version === BILINGUAL_RENDER_VERSION ? entry.renderBundle : null,
+        tradingPriority: entry.event?.tradingPriority || null,
       };
     }
     const claimed = [];
@@ -3250,6 +3308,7 @@ async function claimAlertDestinations(config, eventId, force = false) {
       createdAt: entry.createdAt,
       claimedAt: new Date(now).toISOString(),
       renderBundle: entry.renderBundle?.version === BILINGUAL_RENDER_VERSION ? entry.renderBundle : null,
+      tradingPriority: entry.event?.tradingPriority || null,
     };
   });
 }
@@ -3391,6 +3450,17 @@ export async function drainAlertOutbox(config) {
     for (const entry of Object.values(outbox.events || {})) {
       if (["delivered", "suppressed"].includes(entry.status)) continue;
       changed = true;
+      // Upgrade only active legacy work. Historical terminal archives keep
+      // their exact forensic payload; an old pending strong event maps to T1
+      // and an ordinary event to T2 without reinterpreting old prose.
+      // The watchdog health payload has a deliberately closed, aggregate-only
+      // authentication schema. It is operational telemetry rather than a
+      // news-trading event, so keep that event byte-safe and rank it through
+      // the comparator's ordinary legacy fallback without adding metadata.
+      if (entry.event?.type !== "fomo_monitor_health_update"
+        && !isTradingPriority(entry.event?.tradingPriority)) {
+        entry.event = withTradingPriority(entry.event || {}, { legacy: true });
+      }
       entry.event = withAlertFreshness(config, entry.event || {}, entry.createdAt || now);
       entry.event = refreshDeliveryFreshness(config, entry.event, now);
       // Block rules are hot-reloaded. Re-evaluate undelivered durable entries
@@ -3455,21 +3525,7 @@ export async function drainAlertOutbox(config) {
     }
     const pendingIds = Object.values(outbox.events || {})
       .filter((entry) => !["delivered", "suppressed"].includes(entry.status))
-      .sort((left, right) => {
-        const priority = (entry) => {
-          const event = entry.event || {};
-          if (event.type === "fomo_monitor_health_update") return 98;
-          if (isFocusPlatformEvent(event)) return 100;
-          if (isBscLaunchpadEvent(event)) return 95;
-          if (event.type === "fomo_family_top_call") return 92;
-          if (event.type === "ai_official_update" || event.xaiOfficial === true || event.project?.signalProfile === "ai") return 90;
-          if (isBinancePlatformEvent(event) && isStrongAlert(event)) return 90;
-          if (isImportantRobinhoodEvent(event)) return 80;
-          if (isBinancePlatformEvent(event)) return 70;
-          return 50;
-        };
-        return priority(right) - priority(left) || String(left.createdAt).localeCompare(String(right.createdAt));
-      })
+      .sort(compareTradingPriority)
       .slice(0, 100)
       .map((entry) => entry.id);
     return { pendingIds, changed };
@@ -3803,6 +3859,80 @@ function isRelevantSmartWalletBuy(event) {
     && Number(event?.market?.liquidityUsd || 0) > 0;
 }
 
+// Relevance is a config-free shape check. Configurable thresholds and
+// freshness belong to isMonitoringSourceEnabled(), which has the runtime
+// policy and can therefore decide whether this event is still actionable.
+function isStructurallyRelevantFomoConvergence(event) {
+  const lower = (value) => String(value || "").trim().toLowerCase();
+  if (event?.type !== "fomo_family_top_call"
+    || event?.signalKind !== "top_blogger_convergence"
+    || event?.qualified !== true
+    || event?.strong !== true
+    || Number(event?.chain?.id ?? event?.chain?.chainId) !== 56
+    || lower(event?.chain?.slug) !== "bsc") return false;
+
+  const source = event?.source || {};
+  let sourceUrl;
+  try {
+    sourceUrl = new URL(String(source.url || ""));
+  } catch {
+    return false;
+  }
+  if (lower(source.id) !== "cope_capital"
+    || lower(source.trust) !== "authorized_public_api"
+    || (event?.sourceTrust && lower(event.sourceTrust) !== lower(source.trust))
+    || sourceUrl.protocol !== "https:"
+    || sourceUrl.username
+    || sourceUrl.password
+    || sourceUrl.hostname.toLowerCase().replace(/\.$/, "") !== "api.cope.capital") return false;
+
+  const token = lower(event?.token || event?.contractAddress);
+  const directions = [event?.activity, event?.action, event?.side, event?.trade, event?.tradeSide, event?.transactionType]
+    .map(lower)
+    .filter(Boolean);
+  const callId = String(event?.callId || event?.stableId || "").trim();
+  const callers = Array.isArray(event?.callers) ? event.callers : [];
+  const handles = new Set();
+  const wallets = new Set();
+  const callersValid = callers.length >= 2 && callers.every((caller) => {
+    const handle = lower(caller?.handle).replace(/^@/, "");
+    const wallet = lower(caller?.walletAddress || caller?.wallet || caller?.baseAddress);
+    const valid = /^[a-z0-9_]{1,15}$/.test(handle)
+      && /^0x[0-9a-f]{40}$/.test(wallet)
+      && Number.isFinite(Number(caller?.followers))
+      && Number(caller.followers) >= 0
+      && Number.isFinite(Number(caller?.amountUsd))
+      && Number(caller.amountUsd) > 0;
+    if (valid) {
+      handles.add(handle);
+      wallets.add(wallet);
+    }
+    return valid;
+  });
+  const timestampsPresent = Number.isFinite(Date.parse(event?.publishedAt || ""))
+    && Number.isFinite(Date.parse(event?.observedAt || ""));
+  return /^0x[0-9a-f]{40}$/.test(token)
+    && (!event?.contractAddress || lower(event.contractAddress) === token)
+    && callId.length > 0
+    && directions.length > 0
+    && directions.every((value) => value === "buy")
+    && event?.ambiguousIdentity !== true
+    && event?.ambiguousWallets !== true
+    && event?.ambiguousHandles !== true
+    && event?.security?.decision === "pass"
+    && event?.security?.metrics?.liquidityConfirmed === true
+    && event?.security?.metrics?.sellObserved === true
+    && Number(event?.market?.liquidityUsd || 0) > 0
+    && Number.isFinite(Number(event?.buyerCount))
+    && Number(event.buyerCount) >= 2
+    && Number.isFinite(Number(event?.totalUsd))
+    && Number(event.totalUsd) > 0
+    && callersValid
+    && handles.size === callers.length
+    && wallets.size === callers.length
+    && timestampsPresent;
+}
+
 export function isRelevantAlert(event) {
   if (event?.type === "fomo_monitor_health_update") {
     return isFomoMonitorHealthUpdateAllowed({ fomoHealthMonitorEnabled: true }, event);
@@ -3818,6 +3948,9 @@ export function isRelevantAlert(event) {
   if (event.type === "bsc_launchpad_update") return ["new_launchpad", "new_mode", "new_factory"].includes(event.kind);
   if (event.type === "fomo_family_top_call") {
     if (event.signalKind === SMART_WALLET_SIGNAL_KIND) return isRelevantSmartWalletBuy(event);
+    if (event.signalKind === "top_blogger_convergence") {
+      return isStructurallyRelevantFomoConvergence(event);
+    }
     if (event.signalKind === "fomo_x_call") return isRelevantFomoXCall(event);
     if (event.signalKind === "fomo_published_call") {
       const sourceId = String(event.source?.id || "").toLowerCase();
@@ -3928,11 +4061,14 @@ export async function sendAlerts(config, event) {
   if (!isMonitoringSourceEnabled(config, event)) return terminalAlertSuppression(event?.type, "monitoring_source_disabled");
   if (await isEventBlocked(config, event)) return terminalAlertSuppression(event?.type, "blocked_event");
   if (!isRelevantAlert(event)) return terminalAlertSuppression(event?.type, "not_relevant");
-  const queuedEvent = withAlertFreshness(config, withFocusNovelty(config, event));
+  const pipelineStartedAtMs = alertPipelineNow(config);
+  const preparedEvent = withAlertFreshness(config, withFocusNovelty(config, event));
+  const queuedEvent = preparedEvent.type === "fomo_monitor_health_update"
+    ? preparedEvent
+    : withTradingPriority(preparedEvent, { nowMs: pipelineStartedAtMs });
   if (effectiveFreshnessDecision(queuedEvent) !== "suppress" && await isRepeatedOfficialToken(config, queuedEvent)) {
     return terminalAlertSuppression(queuedEvent.type, "repeated_official_token");
   }
-  const pipelineStartedAtMs = alertPipelineNow(config);
   const eventId = await enqueueAlert(config, queuedEvent);
   // A new pending destination is immediately due because nextAttemptAt is
   // null. Existing failed destinations must keep their persisted backoff;

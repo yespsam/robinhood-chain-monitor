@@ -1061,8 +1061,75 @@ function focus3SmartWalletBuyAllowed(config, source) {
     && Number(source?.market?.liquidityUsd || 0) > 0;
 }
 
+export function isFomoConvergenceAlertAllowed(config, source, now = Date.now()) {
+  if (source?.type !== "fomo_family_top_call"
+    || source?.signalKind !== "top_blogger_convergence"
+    || config?.fomoBuyMonitorEnabled === false
+    || source?.qualified !== true
+    || source?.strong !== true
+    || Number(source?.chain?.id ?? source?.chain?.chainId) !== 56
+    || normalized(source?.chain?.slug) !== "bsc") return false;
+
+  const sourceId = normalized(source?.source?.id);
+  const sourceTrust = normalized(source?.source?.trust);
+  const sourceUrl = parsedHttpsUrl(source?.source?.url);
+  if (sourceId !== "cope_capital"
+    || sourceTrust !== "authorized_public_api"
+    || (source?.sourceTrust && normalized(source.sourceTrust) !== sourceTrust)
+    || sourceUrl?.hostname.toLowerCase().replace(/\.$/, "") !== "api.cope.capital") return false;
+
+  const token = normalized(source?.token || source?.contractAddress);
+  const directions = [source?.activity, source?.action, source?.side, source?.trade, source?.tradeSide, source?.transactionType]
+    .map(normalized)
+    .filter(Boolean);
+  if (!/^0x[0-9a-f]{40}$/.test(token)
+    || (source?.contractAddress && normalized(source.contractAddress) !== token)
+    || !String(source?.callId || source?.stableId || "").trim()
+    || directions.length === 0
+    || !directions.every((value) => value === "buy")
+    || source?.ambiguousIdentity === true
+    || source?.ambiguousWallets === true
+    || source?.ambiguousHandles === true
+    || source?.security?.decision !== "pass"
+    || source?.security?.metrics?.liquidityConfirmed !== true
+    || source?.security?.metrics?.sellObserved !== true
+    || !(Number(source?.market?.liquidityUsd || 0) > 0)) return false;
+
+  const minimumFollowers = Math.max(0, Number(config?.fomoCallMinXFollowers || 10_000));
+  const participants = Array.isArray(source?.callers) ? source.callers : [];
+  const validParticipants = participants.filter((participant) => {
+    const handle = normalized(participant?.handle).replace(/^@/, "");
+    const wallet = normalized(participant?.walletAddress || participant?.wallet || participant?.baseAddress);
+    return /^[a-z0-9_]{1,15}$/.test(handle)
+      && /^0x[0-9a-f]{40}$/.test(wallet)
+      && Number(participant?.followers) >= minimumFollowers
+      && Number(participant?.amountUsd) > 0;
+  });
+  const uniqueHandles = new Set(validParticipants.map((participant) => normalized(participant.handle).replace(/^@/, "")));
+  const uniqueWallets = new Set(validParticipants.map((participant) => normalized(
+    participant.walletAddress || participant.wallet || participant.baseAddress,
+  )));
+  const minimumTotalUsd = Math.max(1_000, Number(config?.fomoCallMinConvergenceUsd || 5_000));
+  if (uniqueHandles.size < 2
+    || uniqueWallets.size < 2
+    || Number(source?.buyerCount) < 2
+    || Number(source?.totalUsd || 0) < minimumTotalUsd) return false;
+
+  const observedAt = Date.parse(source?.observedAt || "");
+  const publishedAt = Date.parse(source?.publishedAt || "");
+  const evaluatedAt = Number(now);
+  const maximumAgeMs = Math.max(1_000, Number(config?.fomoCallMaxSignalAgeMs || 300_000));
+  return Number.isFinite(evaluatedAt)
+    && Number.isFinite(observedAt)
+    && Number.isFinite(publishedAt)
+    && publishedAt <= observedAt + 60_000
+    && observedAt <= evaluatedAt + 60_000
+    && evaluatedAt - publishedAt <= maximumAgeMs;
+}
+
 function focus3FomoCallAllowed(config, source) {
   if (source?.signalKind === SMART_WALLET_SIGNAL_KIND) return focus3SmartWalletBuyAllowed(config, source);
+  if (source?.signalKind === "top_blogger_convergence") return isFomoConvergenceAlertAllowed(config, source);
   if (source?.signalKind === "fomo_published_call") {
     const sourceId = normalized(source?.source?.id);
     const sourceTrust = normalized(source?.source?.trust);

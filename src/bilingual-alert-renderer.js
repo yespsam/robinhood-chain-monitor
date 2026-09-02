@@ -11,8 +11,9 @@ import {
   interpretPlatformPoolChange,
   interpretTwitterWeb3Update,
 } from "./web3-alert-interpreter.js";
+import { isTradingPriority, tradingPriorityForEvent } from "./trading-priority.js";
 
-export const BILINGUAL_RENDER_VERSION = 15;
+export const BILINGUAL_RENDER_VERSION = 17;
 const MAX_CARD_LINES = 2;
 const MAX_LINE_LENGTH = 230;
 
@@ -221,6 +222,10 @@ function protectedTerms(event) {
     event?.templateId,
     event?.presetId,
     event?.poolId,
+    event?.launchAt,
+    event?.launchTime,
+    event?.tradingStartsAt,
+    event?.listingAt,
     event?.callId,
     event?.stableId,
     event?.tokenVersion,
@@ -276,11 +281,36 @@ function technicalLiterals(value) {
 }
 
 function requiredTechnicalLiterals(baseLines, event) {
-  const source = baseLines.join("\n");
-  return [...new Set([
-    ...technicalLiterals(source),
-    ...protectedTerms(event).map(String).filter((literal) => source.includes(literal)),
+  const technicalSource = baseLines.flatMap((line) => String(line).split(/｜|\s\|\s/u))
+    .filter((part) => !/^(?:交易|Trade)[:=：]/u.test(part.trim()))
+    .join("\n");
+  const chainControlledProseValues = new Set([
+    bscModeFacts(event)?.name,
+    event?.tokens?.[0]?.metadata?.name,
+  ].filter(Boolean).map(String));
+  // An ERC-20 name immediately followed by `(SYMBOL)` resembles a function call
+  // to the generic literal detector. Names and human-readable mode labels are
+  // untrusted display prose and may be shortened; the symbol itself remains an
+  // exact protected identifier.
+  const technical = technicalLiterals(technicalSource).filter((literal) => !chainControlledProseValues.has(literal));
+  const occursAsDisplayedValue = (literal) => {
+    if (!/^\d+$/u.test(literal)) return technicalSource.includes(literal);
+    return new RegExp(`(?<![A-Za-z0-9])${literal}(?![A-Za-z0-9])`, "u").test(technicalSource);
+  };
+  const candidates = [...new Set([
+    ...technical,
+    ...protectedTerms(event)
+      .map(String)
+      // Token/mode display names are chain-controlled prose, not stable
+      // technical identifiers. URLs, repositories, addresses and other
+      // detected technical literals remain byte-exact regardless of length.
+      .filter((literal) => !chainControlledProseValues.has(literal))
+      .filter((literal) => literal.length <= 80 || technical.includes(literal))
+      .filter(occursAsDisplayedValue),
   ])].sort((left, right) => right.length - left.length);
+  // A chain id such as `56` can occur accidentally inside a selector. Keep the
+  // enclosing exact identifier once instead of re-appending nested fragments.
+  return candidates.filter((literal, index) => !candidates.slice(0, index).some((parent) => parent.includes(literal)));
 }
 
 function ensureTechnicalLiterals(lines, required, language) {
@@ -1445,6 +1475,14 @@ function compactPerformanceUsd(value) {
   return `${sign}$${absolute.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
+function compactMarketUsd(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return null;
+  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (amount >= 1_000) return `$${(amount / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
+  return `$${amount.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+}
+
 function firstTokenLabel(event) {
   const token = event?.tokens?.[0] || {};
   const metadata = token?.metadata || {};
@@ -1890,6 +1928,22 @@ function focusEvidence(event) {
     const callId = event?.callId || event?.stableId || event?.thesis?.id;
     if (event?.signalKind === "high_profit_high_winrate_wallet_buy") {
       const wallet = event?.walletAddress;
+      if (event?.tradingPriority) {
+        const buyAmount = Number(event?.amountUsd) > 0 ? compactUsd(event.amountUsd) : null;
+        const liquidity = compactMarketUsd(event?.market?.liquidityUsd);
+        const marketCap = compactMarketUsd(event?.market?.marketCap);
+        const risk = event?.security?.decision || "unknown";
+        const market = [
+          buyAmount && `Buy ${buyAmount}`,
+          liquidity && `Liq ${liquidity}`,
+          marketCap && `MC ${marketCap}`,
+          `risk=${risk}`,
+        ].filter(Boolean).join(" · ");
+        return [
+          token ? { zh: `CA ${token}`, en: `CA ${token}` } : null,
+          market ? { zh: market, en: market } : null,
+        ].filter(Boolean).slice(0, 2);
+      }
       return [
         token ? { zh: `CA ${token}`, en: `CA ${token}` } : null,
         wallet ? { zh: `钱包 ${wallet}`, en: `Wallet ${wallet}` } : null,
@@ -2161,7 +2215,7 @@ function focusTime(event, sourceTime, language = "zh") {
   return englishDelay(value);
 }
 
-function buildFocusModel(event, changeModel, sourceLines) {
+function buildFocusModel(event, changeModel, sourceLines, tradingPriority, showPriority) {
   const statusLine = sourceLines.slice(1).find((line) => /^状态[:：]/u.test(line));
   const timeLine = sourceLines.slice(1).find((line) => /^时间[:：]/u.test(line));
   const sourceStatus = statusLine ? labelledValue(statusLine) : "";
@@ -2193,6 +2247,8 @@ function buildFocusModel(event, changeModel, sourceLines) {
     };
     return {
       eventType: event.type,
+      priority: tradingPriority,
+      showPriority,
       platform: { zh: "Fomo 监控 · 聚合健康", en: "Fomo Monitor · Aggregate health" },
       health: { zh: render("zh"), en: render("en") },
     };
@@ -2203,6 +2259,8 @@ function buildFocusModel(event, changeModel, sourceLines) {
     const occurredAt = event?.sourceOccurredAt || eventTime(event) || "时间未取得";
     return {
       eventType: event.type,
+      priority: tradingPriority,
+      showPriority,
       platform: {
         zh: `Telegram · @${String(event?.username || event?.channel?.username || "maxguruai").replace(/^@/, "")}`,
         en: `Telegram · @${String(event?.username || event?.channel?.username || "maxguruai").replace(/^@/, "")}`,
@@ -2230,6 +2288,8 @@ function buildFocusModel(event, changeModel, sourceLines) {
   const rawPlatform = isGithubSkillUpdate(event) ? "Binance Skills" : focusProject(event);
   const platform = rawPlatform === "监控" ? { zh: "监控", en: "Monitor" } : { zh: rawPlatform, en: rawPlatform };
   return {
+    priority: tradingPriority,
+    showPriority,
     platform,
     title: { zh: focusTitle(event, "zh"), en: focusTitle(event, "en") },
     key: { zh: focusKey(event, changeModel, "zh"), en: focusKey(event, changeModel, "en") },
@@ -2239,11 +2299,63 @@ function buildFocusModel(event, changeModel, sourceLines) {
   };
 }
 
+function tradingBrief(priority, language = "zh") {
+  const zh = language === "zh";
+  const plan = priority?.plan || {};
+  const conclusion = plan.conclusion?.[language] || (zh ? "不做" : "Do not trade");
+  if (["T0", "T1"].includes(priority?.tier)) {
+    const compact = priority.category === "binance_market_catalyst"
+      ? {
+          zh: ["现货→合约", "量价", "无承接"],
+          en: ["spot→contract", "price-volume", "no support"],
+        }
+      : priority.category === "binance_product"
+        ? {
+            zh: ["产品→资金入口", "标的+采用", "无直接资金流"],
+            en: ["product→capital access", "target+adoption", "no direct flow"],
+          }
+      : priority.category?.startsWith("fomo_")
+        ? {
+            zh: ["钱包→流动性", priority.tier === "T0" ? "共振量价" : "第二钱包", "卖出受阻"],
+            en: ["wallet→liquidity", priority.tier === "T0" ? "convergence+price-volume" : "second wallet", "sell blocked"],
+          }
+        : {
+            zh: ["新模式→首币", "安全+量价", "回滚/无首币"],
+            en: ["new mode→first token", "safety+price-volume", "rollback/no token"],
+          };
+    const [capitalPath, condition, invalidation] = compact[language];
+    return zh
+      ? `交易=${conclusion}；资金路径=${capitalPath}；入场=${condition}；失效=${invalidation}；非自动交易`
+      : `Trade=${conclusion}; flow=${capitalPath}; entry=${condition}; invalid=${invalidation}; no auto-trading`;
+  }
+  return zh
+    ? `交易：结论=${conclusion}；${priority?.tier === "T3" ? "仅摘要记录" : "等待精确标的与直接资金路径"}`
+    : `Trade: conclusion=${conclusion}; ${priority?.tier === "T3" ? "digest only" : "wait for an exact target and direct capital path"}`;
+}
+
+function priorityFlashTime(value, language = "zh", priority = null) {
+  if (priority?.category === "binance_market_catalyst"
+    && priority?.window?.basis === "launchAt"
+    && priority.window.launchAt) {
+    const launchAt = new Date(priority.window.launchAt);
+    if (!Number.isNaN(launchAt.getTime())) {
+      const iso = launchAt.toISOString();
+      return language === "zh" ? `上线 UTC=${iso}` : `Launch UTC=${iso}`;
+    }
+  }
+  const source = String(value || "");
+  const clock = source.match(/(?:^|[T\s])(\d{2}:\d{2})(?::\d{2})?/u)?.[1];
+  if (clock) return language === "zh" ? `时效=${clock}` : `Time:${clock}`;
+  return language === "zh" ? "时效=见证据" : "Time:see evidence";
+}
+
 function renderFocusLines(focusModel, language = "zh") {
   const zh = language === "zh";
+  const tier = focusModel.priority?.tier || "T2";
+  const prioritySuffix = focusModel.showPriority ? ` · ${tier}` : "";
   if (focusModel.eventType === "fomo_monitor_health_update") {
     return [
-      `${zh ? "平台：" : "Platform: "}${focusModel.platform[language]}`,
+      `${zh ? "平台：" : "Platform: "}${focusModel.platform[language]}${prioritySuffix}`,
       `${zh ? "更新了什么：" : "What changed: "}${focusModel.health[language]}`,
     ];
   }
@@ -2252,11 +2364,14 @@ function renderFocusLines(focusModel, language = "zh") {
   const changed = [
     oneLine(focusModel.key[language], 10_000),
     evidence.join(" · ") || (zh ? "官方来源" : "Official source"),
+    focusModel.showPriority ? tradingBrief(focusModel.priority, language) : null,
     oneLine(focusModel.stage[language], 10_000),
-    oneLine(focusModel.time[language], 10_000),
+    oneLine(focusModel.showPriority
+      ? priorityFlashTime(focusModel.time[language], language, focusModel.priority)
+      : focusModel.time[language], 10_000),
   ].filter(Boolean).join(separator);
   return [
-    oneLine(`${zh ? "平台：" : "Platform: "}${focusModel.platform?.[language] || focusModel.title[language]}`, 70),
+    oneLine(`${zh ? "平台：" : "Platform: "}${focusModel.platform?.[language] || focusModel.title[language]}${prioritySuffix}`, 70),
     `${zh ? "更新了什么：" : "What changed: "}${changed}`,
   ];
 }
@@ -2287,6 +2402,32 @@ function compactTextKeepingRequired(value, maximum, required = []) {
   return `${oneLine(prose, Math.max(18, room - 1))}${suffix}`.trim();
 }
 
+function compactEvidenceKeepingRequired(value, maximum, required = []) {
+  const source = String(value || "").trim();
+  if (source.length <= maximum) return source;
+  const atoms = source.split(/\s+·\s+|｜|\s\|\s/u).map((atom) => atom.trim()).filter(Boolean);
+  if (atoms.length < 2) return compactTextKeepingRequired(source, maximum, required);
+  const literals = required.filter((literal) => source.includes(literal));
+  const mandatory = new Set(atoms
+    .map((atom, index) => literals.some((literal) => atom.includes(literal)) ? index : -1)
+    .filter((index) => index >= 0));
+  if (!mandatory.size) return oneLine(source, maximum);
+
+  const render = (selected) => atoms.filter((_atom, index) => selected.has(index)).join(" · ");
+  const selected = new Set(mandatory);
+  const mandatoryText = render(selected);
+  // Never detach `CA`/`selector=` (or another evidence label) from its value.
+  // If exact evidence alone needs more room, the caller can reclaim it from
+  // prose components or from the other language block.
+  if (mandatoryText.length > maximum) return mandatoryText;
+  for (let index = 0; index < atoms.length; index += 1) {
+    if (selected.has(index)) continue;
+    const candidate = new Set([...selected, index]);
+    if (render(candidate).length <= maximum) selected.add(index);
+  }
+  return render(selected);
+}
+
 function compactTwoFieldLine(value, maximum, required = []) {
   const line = String(value || "");
   if (line.length <= maximum) return line;
@@ -2315,16 +2456,66 @@ function compactTwoFieldLine(value, maximum, required = []) {
   const key = parts.shift() || "";
   const time = parts.pop() || "";
   const stage = parts.pop() || "";
+  const tradeIndex = parts.findIndex((part) => /^(?:交易|Trade)[:=：]/u.test(part));
+  const trade = tradeIndex >= 0 ? parts.splice(tradeIndex, 1)[0] : "";
   const evidence = parts.join(separator);
-  let compacted = [key, evidence, stage, time];
+
+  // Preserve the proven v15 compaction path byte-for-byte for cards that do
+  // not carry a production trading flash. This keeps compound evidence such
+  // as repository#revision atomic while the new branch below budgets a fifth
+  // trade component.
+  if (!trade) {
+    const compacted = [key, evidence, stage, time];
+    const render = () => `${prefix}${compacted.filter(Boolean).join(separator)}`;
+    const minimums = [30, 0, 24, 20];
+    for (const index of [3, 2, 0]) {
+      if (render().length <= maximum) break;
+      const excess = render().length - maximum;
+      const nextMaximum = Math.max(minimums[index], compacted[index].length - excess);
+      compacted[index] = oneLine(compacted[index], nextMaximum);
+    }
+    let output = render();
+    const missing = required.filter((literal) => line.includes(literal) && !output.includes(literal));
+    if (missing.length) {
+      compacted[1] = [compacted[1], missing.join(" · ")].filter(Boolean).join(" · ");
+      output = render();
+    }
+    if (output.length <= maximum) return output;
+    const fixedLength = prefix.length
+      + compacted[0].length + compacted[2].length + compacted[3].length
+      + (separator.length * 3);
+    compacted[1] = compactTextKeepingRequired(
+      compacted[1],
+      Math.max(24, maximum - fixedLength),
+      required.filter((literal) => line.includes(literal)),
+    );
+    return render();
+  }
+
+  let compacted = [key, evidence, trade, stage, time];
   const render = () => `${prefix}${compacted.filter(Boolean).join(separator)}`;
 
-  const minimums = [30, 0, 24, 20];
-  for (const index of [3, 2, 0]) {
+  const compactTrade = (value) => {
+    const conclusion = String(value).match(/(?:结论|conclusion)=([^；;]+)/iu)?.[1]?.trim();
+    return value.startsWith("交易")
+      ? `交易=${conclusion || "观察"}；非自动交易`
+      : `Trade=${conclusion || "Watch"}; no auto-trading`;
+  };
+  const timeMinimum = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z/u.test(time)
+    ? time.length
+    : Math.min(time.length, 10);
+  const originals = [key, evidence, trade, stage, time];
+  const requiredFor = (index) => required.filter((literal) => originals[index].includes(literal));
+  const minimums = [40, 0, trade ? compactTrade(trade).length : 0, 24, timeMinimum];
+  for (const index of [4, 2, 3, 0]) {
     if (render().length <= maximum) break;
+    if (index === 2 && compacted[index]) {
+      compacted[index] = compactTrade(compacted[index]);
+      continue;
+    }
     const excess = render().length - maximum;
     const nextMaximum = Math.max(minimums[index], compacted[index].length - excess);
-    compacted[index] = oneLine(compacted[index], nextMaximum);
+    compacted[index] = compactTextKeepingRequired(compacted[index], nextMaximum, requiredFor(index));
   }
 
   let output = render();
@@ -2336,30 +2527,38 @@ function compactTwoFieldLine(value, maximum, required = []) {
   if (output.length <= maximum) return output;
 
   const fixedLength = prefix.length
-    + compacted[0].length + compacted[2].length + compacted[3].length
-    + (separator.length * 3);
-  compacted[1] = compactTextKeepingRequired(
+    + compacted[0].length + compacted[2].length + compacted[3].length + compacted[4].length
+    + (separator.length * compacted.filter(Boolean).length - separator.length);
+  compacted[1] = compactEvidenceKeepingRequired(
     compacted[1],
     Math.max(24, maximum - fixedLength),
     required.filter((literal) => line.includes(literal)),
   );
+  output = render();
+  if (output.length <= maximum) return output;
+
+  // Missing required evidence may have expanded the line after the first key
+  // pass. Reclaim the exact excess from chain-controlled display prose while
+  // retaining bounded symbols and every technical literal atomically.
+  const keyMaximum = Math.max(24, compacted[0].length - (output.length - maximum));
+  compacted[0] = compactTextKeepingRequired(compacted[0], keyMaximum, requiredFor(0));
   return render();
 }
 
-function fitTwoFieldBilingualLines(chineseLines, englishLines, chineseRequired = [], englishRequired = []) {
+function fitTwoFieldBilingualLines(chineseLines, englishLines, chineseRequired = [], englishRequired = [], maximum = TWO_FIELD_COMBINED_BLOCK_BUDGET) {
   const originals = [chineseLines, englishLines].map((lines) => lines.slice(0, MAX_CARD_LINES).map(String));
   const required = [chineseRequired, englishRequired];
   const length = (blocks) => blocks.reduce((total, lines) => total + lines.join("\n").length, 0);
   let blocks = originals.map((lines) => lines.slice());
-  if (length(blocks) <= TWO_FIELD_COMBINED_BLOCK_BUDGET) return blocks;
+  if (length(blocks) <= maximum) return blocks;
 
   const changedMinimum = 100;
-  while (length(blocks) > TWO_FIELD_COMBINED_BLOCK_BUDGET) {
+  while (length(blocks) > maximum) {
     const candidate = [0, 1]
       .filter((block) => blocks[block]?.[1]?.length > changedMinimum)
       .sort((left, right) => blocks[right][1].length - blocks[left][1].length)[0];
     if (candidate === undefined) break;
-    const excess = length(blocks) - TWO_FIELD_COMBINED_BLOCK_BUDGET;
+    const excess = length(blocks) - maximum;
     const previous = blocks[candidate][1];
     blocks[candidate][1] = compactTwoFieldLine(
       blocks[candidate][1],
@@ -2368,15 +2567,15 @@ function fitTwoFieldBilingualLines(chineseLines, englishLines, chineseRequired =
     );
     if (blocks[candidate][1] === previous) break;
   }
-  if (length(blocks) <= TWO_FIELD_COMBINED_BLOCK_BUDGET) return blocks;
+  if (length(blocks) <= maximum) return blocks;
 
   const platformMinimum = 24;
-  while (length(blocks) > TWO_FIELD_COMBINED_BLOCK_BUDGET) {
+  while (length(blocks) > maximum) {
     const candidate = [0, 1]
       .filter((block) => blocks[block]?.[0]?.length > platformMinimum)
       .sort((left, right) => blocks[right][0].length - blocks[left][0].length)[0];
     if (candidate === undefined) break;
-    const excess = length(blocks) - TWO_FIELD_COMBINED_BLOCK_BUDGET;
+    const excess = length(blocks) - maximum;
     blocks[candidate][0] = oneLine(
       blocks[candidate][0],
       Math.max(platformMinimum, blocks[candidate][0].length - Math.min(8, excess)),
@@ -2572,7 +2771,9 @@ export async function buildBilingualAlertBundle(config, event, baseMessage) {
       };
     }
   }
-  const focusModel = buildFocusModel(event, changeModel, sourceLines);
+  const showPriority = isTradingPriority(event?.tradingPriority);
+  const tradingPriority = tradingPriorityForEvent(event);
+  const focusModel = buildFocusModel(event, changeModel, sourceLines, tradingPriority, showPriority);
   const chineseBaseLines = renderFocusLines(focusModel, "zh");
   const englishBaseLines = renderFocusLines(focusModel, "en");
   // The compact renderer intentionally validates only the one or two identifiers selected into
@@ -2587,13 +2788,15 @@ export async function buildBilingualAlertBundle(config, event, baseMessage) {
     fetchImpl: config.alertTranslationFetchImpl,
     protectedTerms: protectedTerms(event),
   };
-  const localBilingual = config?.alertForceLocalStructured === true
+  const criticalTradingTier = showPriority && ["T0", "T1"].includes(tradingPriority.tier);
+  const localBilingual = criticalTradingTier
+    || config?.alertForceLocalStructured === true
     || usesLocalStructuredBilingualFocus(event);
   const [chinese, english] = await Promise.all([
     usesLocalStructuredChineseFocus(event) || localBilingual
       ? Promise.resolve(localStructuredResult(chineseBaseLines, {
         language: "zh",
-        deliveryBudgetFallback: config?.alertForceLocalStructured === true,
+        deliveryBudgetFallback: criticalTradingTier || config?.alertForceLocalStructured === true,
         event,
       }))
       : translateAlertLines(chineseBaseLines, { ...options, targetLanguage: "zh-CN" }),
@@ -2624,6 +2827,7 @@ export async function buildBilingualAlertBundle(config, event, baseMessage) {
     englishLines,
     chineseRequired,
     englishRequired,
+    showPriority ? TWO_FIELD_COMBINED_BLOCK_BUDGET - 12 : TWO_FIELD_COMBINED_BLOCK_BUDGET,
   );
   const sourceHash = createHash("sha256")
     .update(`${chineseBaseLines.join("\n")}\n---\n${englishBaseLines.join("\n")}`)
@@ -2631,12 +2835,13 @@ export async function buildBilingualAlertBundle(config, event, baseMessage) {
 
   return {
     version: BILINGUAL_RENDER_VERSION,
-    format: "telegram_zh_en_compact_v12",
+    format: "telegram_zh_en_compact_v13",
     ...(event?.type === "telegram_news_update" ? { eventType: event.type } : {}),
     sourceHash,
     generatedAt: new Date().toISOString(),
     changeModel,
     focusModel,
+    priority: tradingPriority,
     zh: {
       text: chineseLines.join("\n"),
       ...translationMeta(chinese),

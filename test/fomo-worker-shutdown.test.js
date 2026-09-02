@@ -46,6 +46,7 @@ test("SIGTERM and SIGINT share one Fomo stop that waits for the active outbox", 
         return realOutbox.stop();
       },
     },
+    runtimeHeartbeat: { stop: async () => { order.push("runtime-heartbeat"); } },
     processRef,
     logger: { error() {}, info() {} },
   });
@@ -77,6 +78,7 @@ test("SIGTERM and SIGINT share one Fomo stop that waits for the active outbox", 
   releaseOutbox();
   await sharedStop;
   assert.equal(settled, true);
+  assert.deepEqual(order, ["work-gate", "keep-alive", "buy", "thesis", "x-call", "outbox", "runtime-heartbeat"]);
   assert.equal(processRef.exitCode, 0);
 });
 
@@ -90,11 +92,12 @@ test("a failed lane still stops every resource and leaves a failing natural exit
     thesisMonitor: { stop: async () => { order.push("thesis"); } },
     xCallMonitor: { stop: async () => { order.push("x-call"); } },
     outbox: { stop: async () => { order.push("outbox"); } },
+    runtimeHeartbeat: { stop: async () => { order.push("runtime-heartbeat"); throw new Error("heartbeat stop failed"); } },
     processRef,
     logger: { error() {}, info() {} },
   });
 
   await shutdown.stop("SIGTERM");
-  assert.deepEqual(order, ["work-gate", "keep-alive", "buy", "thesis", "x-call", "outbox"]);
+  assert.deepEqual(order, ["work-gate", "keep-alive", "buy", "thesis", "x-call", "outbox", "runtime-heartbeat"]);
   assert.equal(processRef.exitCode, 1);
 });

@@ -30,6 +30,7 @@ import {
   summarizeGithubChange,
 } from "../src/github-monitor.js";
 import { isMonitoringSourceEnabled } from "../src/source-controls.js";
+import { sendAlerts } from "../src/alerts.js";
 
 const githubFixture = (name) => fs.readFile(new URL(`./fixtures/github/${name}`, import.meta.url), "utf8");
 
@@ -2657,6 +2658,296 @@ test("a no-token Atom gap paginates the unauthenticated API before advancing the
   assert.equal(state[repository].sha, newest.sha);
   assert.equal(state[repository].coverage.status, "continuous");
   assert.equal(state[repository].gap, null);
+});
+
+test("a real-size terminal gap keeps full in-memory evidence, durably queues only a bounded projection, and catches up after restart", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "github-large-gap-compact-"));
+  const repository = "flap-sh/flap-skills";
+  const entry = DEFAULT_REPOSITORIES.find(({ repository: candidate }) => candidate === repository);
+  const anchorSha = "a".repeat(40);
+  const shaFor = (value) => value.toString(16).padStart(40, "0");
+  const makeCommit = (sha, message, padding = "") => ({
+    sha,
+    html_url: `https://github.com/${repository}/commit/${sha}`,
+    commit: {
+      message,
+      author: { name: "xAI", date: "2026-08-20T00:00:00.000Z" },
+      committer: { date: "2026-08-20T00:00:00.000Z" },
+    },
+    evidencePadding: padding,
+  });
+  const terminalCommits = Array.from({ length: 1_000 }, (_, index) => makeCommit(
+    shaFor(2_000 - index),
+    `historical product commit ${index}`,
+    "x".repeat(4_500),
+  ));
+  const newest = makeCommit(terminalCommits[0].sha, "feat: add Grok 5 Responses API endpoint");
+  const middle = makeCommit(shaFor(999), "feat: add Grok 5 realtime Responses API endpoint");
+  const anchor = makeCommit(anchorSha, "previous cursor");
+  let phase = "terminal_gap";
+  let current = new Date("2026-08-20T00:01:00.000Z");
+  let gapAlertStoredBoundedPayload = false;
+  let terminalSuppressions = 0;
+  const deliveredCommits = [];
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(console, "error", () => {});
+  await fs.writeFile(path.join(dataDir, "github-state.json"), JSON.stringify({
+    [repository]: { sha: anchorSha, checkedAt: "2026-08-20T00:00:00.000Z" },
+  }));
+  t.mock.method(globalThis, "fetch", async (url) => {
+    const parsed = new URL(url);
+    if (parsed.hostname === "api.telegram.org") {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, result: { message_id: 4242 } }),
+      };
+    }
+    if (parsed.hostname === "github.com" && parsed.pathname.endsWith(".atom")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => `<feed><entry><id>tag:github.com,2008:Grit::Commit/${newest.sha}</id><updated>2026-08-20T00:00:03Z</updated><title>${newest.commit.message}</title></entry></feed>`,
+      };
+    }
+    if (parsed.hostname === "api.github.com") {
+      const page = Number(parsed.searchParams.get("page"));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => phase === "terminal_gap"
+          ? terminalCommits.slice((page - 1) * 100, page * 100)
+          : page === 1 ? [newest, middle, anchor] : [],
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      text: async () => "diff --git a/src/xai_sdk/responses.py b/src/xai_sdk/responses.py\n+++ b/src/xai_sdk/responses.py\n+class Grok5ResponsesApi: pass",
+    };
+  });
+  const options = {
+    autoStart: false,
+    repositories: [entry],
+    now: () => new Date(current),
+    sendAlertsImpl: async (_config, event) => {
+      if (event.type === "github_monitor_gap") {
+        assert.equal(event.gap.recovery.commits, undefined, "the durable delivery boundary must not receive raw commit history");
+        assert.equal(event.gap.recovery.compactEvidence.count, 1_000);
+        assert.ok(event.gap.recovery.compactEvidence.rawBytes > 4_000_000);
+        assert.match(event.gap.recovery.compactEvidence.digest, /^sha256:[a-f0-9]{64}$/);
+        const beforePersistence = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
+        assert.equal(beforePersistence[repository].gap, undefined, "compaction and persistence must happen after the alert resolves");
+        const delivery = await sendAlerts(_config, event);
+        assert.equal(delivery.status, "delivered");
+        const outboxFile = await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8");
+        const outbox = JSON.parse(outboxFile);
+        const queuedGap = outbox.events[event.eventKey]?.event?.gap;
+        assert.equal(queuedGap?.recovery?.commits, undefined);
+        assert.equal(queuedGap?.recovery?.compactEvidence?.count, 1_000);
+        assert.ok(Buffer.byteLength(outboxFile) < 50_000, "the durable outbox must stay bounded after a multi-megabyte gap");
+        gapAlertStoredBoundedPayload = true;
+        return delivery;
+      }
+      if (event.type === "github_module_update") {
+        terminalSuppressions += 1;
+        deliveredCommits.push(event.commit);
+        return { status: "suppressed", reason: "freshness_too_old", disposition: "terminal", terminal: true };
+      }
+      return undefined;
+    },
+  };
+
+  const monitor = createGithubMonitor({
+    dataDir,
+    githubToken: "",
+    githubRetryBaseMs: 1_000,
+    githubRetryMaxMs: 8_000,
+    blockedContracts: new Set(),
+    telegramToken: "test-bot-token-secret",
+    telegramChatId: "1234567890",
+    telegramStrongAlerts: false,
+    alertBilingualEnabled: false,
+    alertNow: () => current.getTime(),
+  }, options);
+  await monitor.check(true);
+  const compactFile = await fs.readFile(path.join(dataDir, "github-state.json"), "utf8");
+  let state = JSON.parse(compactFile);
+  const compactRecovery = state[repository].gap.recovery;
+  assert.equal(gapAlertStoredBoundedPayload, true);
+  assert.equal(state[repository].sha, anchorSha, "an unresolved gap must never move the cursor");
+  assert.equal(compactRecovery.commits, undefined);
+  assert.equal(compactRecovery.compactEvidence.classification, "terminal_anchor_not_found");
+  assert.equal(compactRecovery.compactEvidence.count, 1_000);
+  assert.equal(compactRecovery.compactEvidence.observedAt, "2026-08-20T00:01:00.000Z");
+  assert.equal(compactRecovery.compactEvidence.anchorRange.requestedSha, anchorSha);
+  assert.equal(compactRecovery.compactEvidence.anchorRange.newestFetchedSha, terminalCommits[0].sha);
+  assert.equal(compactRecovery.compactEvidence.anchorRange.oldestFetchedSha, terminalCommits.at(-1).sha);
+  assert.ok(compactRecovery.compactEvidence.rawBytes > 4_000_000);
+  assert.match(compactRecovery.compactEvidence.digest, /^sha256:[a-f0-9]{64}$/);
+  assert.equal(compactRecovery.compactEvidence.selectedFacts.length, 2);
+  assert.ok(Buffer.byteLength(JSON.stringify(compactRecovery)) < 2_048, "terminal recovery evidence must have a strict byte budget");
+  assert.ok(Buffer.byteLength(compactFile) < 20_000, "the whole state checkpoint must not retain the multi-megabyte gap payload");
+
+  phase = "resolved_gap";
+  current = new Date("2026-08-20T00:01:02.000Z");
+  const restarted = createGithubMonitor({
+    dataDir,
+    githubToken: "",
+    githubRetryBaseMs: 1_000,
+    githubRetryMaxMs: 8_000,
+    blockedContracts: new Set(),
+    telegramToken: "test-bot-token-secret",
+    telegramChatId: "1234567890",
+    telegramStrongAlerts: false,
+    alertBilingualEnabled: false,
+    alertNow: () => current.getTime(),
+  }, options);
+  await restarted.check(true);
+  state = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
+  assert.deepEqual(deliveredCommits, [middle.sha, newest.sha]);
+  assert.equal(terminalSuppressions, 2);
+  assert.equal(state[repository].sha, newest.sha);
+  assert.equal(state[repository].gap, null);
+  assert.equal(state[repository].coverage.status, "continuous");
+
+  current = new Date("2026-08-20T00:01:03.000Z");
+  const restartedAgain = createGithubMonitor({
+    dataDir,
+    githubToken: "",
+    blockedContracts: new Set(),
+    telegramToken: "test-bot-token-secret",
+    telegramChatId: "1234567890",
+    telegramStrongAlerts: false,
+    alertBilingualEnabled: false,
+    alertNow: () => current.getTime(),
+  }, options);
+  await restartedAgain.check(true);
+  assert.equal(terminalSuppressions, 2, "terminal suppressions and the recovered cursor must survive another restart");
+});
+
+test("GitHub gap-state migration compacts only proven terminal or consumed payloads and fails closed otherwise", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "github-gap-migration-"));
+  const shaFor = (value) => value.toString(16).padStart(40, "0");
+  const commits = Array.from({ length: 200 }, (_, index) => ({
+    sha: shaFor(500 - index),
+    commit: {
+      message: `bounded migration evidence ${index} ${"m".repeat(400)}`,
+      committer: { date: "2026-08-21T00:00:00.000Z" },
+    },
+    raw: "x".repeat(4_000),
+  }));
+  const terminalAnchor = "a".repeat(40);
+  const consumedAnchor = "b".repeat(40);
+  const activeAnchor = "c".repeat(40);
+  const terminalRepository = "migration/terminal";
+  const consumedRepository = "migration/consumed";
+  const activeRepository = "migration/active";
+  const unknownRepository = "migration/unknown";
+  const corruptRepository = "migration/corrupt";
+  const contradictoryRepository = "migration/contradictory";
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const terminalRecovery = {
+    status: "anchor_not_found_via_unauthenticated_api",
+    anchorFound: false,
+    pages: 10,
+    commits,
+  };
+  const recovered = {
+    status: "anchor_recovered_via_unauthenticated_api",
+    anchorFound: true,
+    pages: 2,
+    commits: [commits[0], { sha: consumedAnchor, commit: { message: "anchor" } }],
+  };
+  await fs.writeFile(path.join(dataDir, "github-state.json"), JSON.stringify({
+    [terminalRepository]: {
+      sha: terminalAnchor,
+      gap: {
+        status: "anchor_not_in_bounded_history",
+        previousSha: terminalAnchor,
+        newestSha: commits[0].sha,
+        oldestFetchedSha: commits.at(-1).sha,
+        fetchedCommits: commits.length,
+        recovery: terminalRecovery,
+      },
+    },
+    [consumedRepository]: {
+      sha: commits[0].sha,
+      gap: {
+        status: "anchor_not_in_bounded_history",
+        previousSha: consumedAnchor,
+        newestSha: recovered.commits[0].sha,
+        oldestFetchedSha: recovered.commits.at(-1).sha,
+        fetchedCommits: recovered.commits.length,
+        recovery: recovered,
+      },
+    },
+    [activeRepository]: {
+      sha: activeAnchor,
+      gap: {
+        status: "anchor_not_in_bounded_history",
+        previousSha: activeAnchor,
+        newestSha: recovered.commits[0].sha,
+        oldestFetchedSha: recovered.commits.at(-1).sha,
+        fetchedCommits: recovered.commits.length,
+        recovery: recovered,
+      },
+    },
+    [unknownRepository]: {
+      sha: terminalAnchor,
+      gap: {
+        status: "anchor_not_in_bounded_history",
+        previousSha: terminalAnchor,
+        newestSha: commits[0].sha,
+        oldestFetchedSha: commits.at(-1).sha,
+        fetchedCommits: commits.length,
+        recovery: { ...terminalRecovery, status: "future_recovery_state" },
+      },
+    },
+    [corruptRepository]: {
+      sha: terminalAnchor,
+      gap: {
+        status: "anchor_not_in_bounded_history",
+        previousSha: terminalAnchor,
+        newestSha: commits[0].sha,
+        oldestFetchedSha: commits.at(-1).sha,
+        fetchedCommits: 1,
+        recovery: { ...terminalRecovery, commits: [{ raw: "missing sha" }] },
+      },
+    },
+    [contradictoryRepository]: {
+      sha: terminalAnchor,
+      gap: {
+        status: "anchor_not_in_bounded_history",
+        previousSha: terminalAnchor,
+        newestSha: "c".repeat(40),
+        oldestFetchedSha: commits.at(-1).sha,
+        fetchedCommits: 999,
+        recovery: terminalRecovery,
+      },
+    },
+  }));
+
+  const monitor = createGithubMonitor({ dataDir, githubToken: "" }, {
+    autoStart: false,
+    repositories: [],
+    now: () => new Date("2026-08-21T00:01:00.000Z"),
+    sendAlertsImpl: async () => {},
+  });
+  await monitor.check(false);
+  const state = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
+  const migratedTerminal = state[terminalRepository].gap.recovery;
+  const migratedConsumed = state[consumedRepository].gap.recovery;
+  assert.equal(migratedTerminal.commits, undefined);
+  assert.equal(migratedTerminal.compactEvidence.classification, "terminal_anchor_not_found");
+  assert.equal(migratedTerminal.compactEvidence.count, commits.length);
+  assert.ok(Buffer.byteLength(JSON.stringify(migratedTerminal)) < 2_048);
+  assert.equal(migratedConsumed.commits, undefined);
+  assert.equal(migratedConsumed.compactEvidence.classification, "fully_consumed");
+  assert.equal(state[activeRepository].gap.recovery.commits.length, 2, "a partially consumed recovery must remain resumable");
+  assert.equal(state[unknownRepository].gap.recovery.commits.length, commits.length, "unknown lifecycle states must fail closed");
+  assert.deepEqual(state[corruptRepository].gap.recovery.commits, [{ raw: "missing sha" }], "malformed evidence must fail closed");
+  assert.equal(state[contradictoryRepository].gap.recovery.commits.length, commits.length, "contradictory range metadata must retain raw evidence");
 });
 
 test("GitHub state writes recover after a rejected queue operation without hiding that failure", async (t) => {

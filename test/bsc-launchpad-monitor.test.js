@@ -8411,6 +8411,117 @@ test("BSC WAL latest-revision coordinator uses two appends for three concurrent 
   await fs.rm(dataDir, { recursive: true, force: true });
 });
 
+test("BSC WAL detaches only changed operations and defers append-gate mutations to the next frame", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-wal-detached-hot-path-"));
+  const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
+  const coldRecords = Object.fromEntries(Array.from({ length: 2_000 }, (_, index) => [
+    `cold-${index.toString().padStart(4, "0")}`,
+    { index, evidence: "c".repeat(256) },
+  ]));
+  const coldBranch = { marker: "cold-branch-must-not-enter-delta", records: coldRecords };
+  const coldBranchBytes = Buffer.byteLength(JSON.stringify(coldBranch));
+  assert.ok(coldBranchBytes > 500_000, `cold fixture ${coldBranchBytes} bytes must exercise a large unchanged branch`);
+  await fs.writeFile(stateFile, `${JSON.stringify({
+    version: 6,
+    journalRevision: 0,
+    initializedAt: "2026-08-24T09:00:00.000Z",
+    lastFinalizedBlock: 100,
+    realtimeTailNextBlock: 101,
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    coverageGaps: [],
+    coldArchive: coldBranch,
+  })}\n`, { mode: 0o600 });
+
+  let releaseFirstAppend;
+  let signalFirstAppend;
+  const firstAppendGate = new Promise((resolve) => { releaseFirstAppend = resolve; });
+  const firstAppendStarted = new Promise((resolve) => { signalFirstAppend = resolve; });
+  const frames = [];
+  const detachedCloneBytes = [];
+  const journalAppendImpl = async (file, frame) => {
+    frames.push(frame);
+    if (frames.length === 1) {
+      signalFirstAppend();
+      await firstAppendGate;
+    }
+    const handle = await fs.open(file, "a", 0o600);
+    try {
+      await handle.writeFile(frame);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  };
+  const monitor = createBscLaunchpadMonitor({ dataDir }, {
+    autoStart: false,
+    provider: { destroy() {} },
+    logger: { error() {}, info() {} },
+    journalAppendImpl,
+    journalDetachOperationsImpl: (operations) => {
+      detachedCloneBytes.push(Buffer.byteLength(JSON.stringify(operations)));
+      return structuredClone(operations);
+    },
+    ...disabledJournalTimerDependencies(),
+  });
+  t.after(async () => {
+    releaseFirstAppend?.();
+    await monitor.stop().catch(() => {});
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+  const initialized = await monitor.getState();
+  assert.equal(Object.keys(initialized.coldArchive.records).length, 2_000);
+  assert.equal(frames.length, 0, "startup must not manufacture a delta for the unchanged cold branch");
+
+  const firstSample = observation({
+    launcher: "0x5111111111111111111111111111111111111111",
+    token: "0x6111111111111111111111111111111111111111",
+    transactionHash: `0x${"4a".repeat(32)}`,
+    blockNumber: 401,
+  });
+  const secondSample = observation({
+    launcher: "0x5222222222222222222222222222222222222222",
+    token: "0x6222222222222222222222222222222222222222",
+    transactionHash: `0x${"4b".repeat(32)}`,
+    blockNumber: 402,
+  });
+  const firstSave = monitor.observe(firstSample);
+  await firstAppendStarted;
+  const secondSave = monitor.observe(secondSample);
+  await waitUntil(async () => Boolean((await monitor.getState()).seenTransactions[secondSample.transactionHash]));
+  const liveWhileBlocked = await monitor.getState();
+  assert.equal(liveWhileBlocked.seenTransactions[secondSample.transactionHash], secondSample.blockNumber,
+    "the second mutation must reach live state while revision one is blocked in append");
+
+  const firstFrame = JSON.parse(frames[0]);
+  const firstOperations = JSON.stringify(firstFrame.ops);
+  assert.equal(firstFrame.revision, 1);
+  assert.match(firstOperations, new RegExp(firstSample.transactionHash));
+  assert.doesNotMatch(firstOperations, new RegExp(secondSample.transactionHash),
+    "a live mutation after operation detachment must not leak into the blocked frame");
+  assert.doesNotMatch(firstOperations, /cold-branch-must-not-enter-delta/);
+
+  releaseFirstAppend();
+  await Promise.all([firstSave, secondSave]);
+  assert.equal(frames.length, 2);
+  const secondFrame = JSON.parse(frames[1]);
+  assert.equal(secondFrame.revision, 2);
+  assert.match(JSON.stringify(secondFrame.ops), new RegExp(secondSample.transactionHash),
+    "the mutation made during revision one append must be persisted by revision two");
+  assert.equal(detachedCloneBytes.length, 2, "each WAL revision detaches exactly one changed-operation set");
+  const detachedBytes = detachedCloneBytes.reduce((sum, bytes) => sum + bytes, 0);
+  assert.ok(detachedBytes < coldBranchBytes * 0.1,
+    `changed-operation clones ${detachedBytes} bytes must stay below 10% of the ${coldBranchBytes}-byte cold branch`);
+
+  const recovered = await readBscLaunchpadDurableState(stateFile);
+  assert.equal(recovered.journalRevision, 2);
+  assert.equal(recovered.seenTransactions[firstSample.transactionHash], firstSample.blockNumber);
+  assert.equal(recovered.seenTransactions[secondSample.transactionHash], secondSample.blockNumber);
+  assert.equal(recovered.coldArchive.marker, coldBranch.marker);
+  assert.equal(Object.keys(recovered.coldArchive.records).length, 2_000);
+});
+
 test("BSC WAL compaction runs by 30 seconds and preserves recovery when WAL reset fails", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-wal-compaction-"));
   const stateFile = path.join(dataDir, "bsc-launchpad-state.json");

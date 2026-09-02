@@ -5,6 +5,7 @@ import { sendAlerts, startAlertOutboxWorker } from "./alerts.js";
 import { createFomoCallMonitor } from "./fomo-call-monitor.js";
 import { createFomoThesisMonitor } from "./fomo-thesis-monitor.js";
 import { createFomoXCallMonitor } from "./fomo-x-call-monitor.js";
+import { startRuntimeHeartbeat } from "./runtime-heartbeat.js";
 
 function compactError(error) {
   return String(error?.message || error || "unknown error").slice(0, 300);
@@ -17,6 +18,7 @@ export function createFomoWorkerShutdown({
   thesisMonitor = null,
   xCallMonitor = null,
   outbox = null,
+  runtimeHeartbeat = null,
   processRef = process,
   logger = console,
 } = {}) {
@@ -46,6 +48,13 @@ export function createFomoWorkerShutdown({
           Promise.resolve().then(() => outbox.stop()),
         ]);
         if (outboxResult.status === "rejected") failures.push(["outbox", outboxResult.reason]);
+      }
+
+      if (runtimeHeartbeat?.stop) {
+        const [heartbeatResult] = await Promise.allSettled([
+          Promise.resolve().then(() => runtimeHeartbeat.stop()),
+        ]);
+        if (heartbeatResult.status === "rejected") failures.push(["runtime-heartbeat", heartbeatResult.reason]);
       }
 
       for (const [label, error] of failures) logger.error?.(`[fomo-worker][shutdown] ${label}: ${compactError(error)}`);
@@ -86,6 +95,10 @@ function startFomoWorker() {
   }
 
   let stopping = false;
+  const runtimeHeartbeat = startRuntimeHeartbeat({
+    file: path.join(config.dataDir, "fomo-runtime-heartbeat.json"),
+    producer: "fomo",
+  });
   const alertConfig = { ...config, dataDir: path.join(config.dataDir, "fomo-alerts") };
   const outbox = startAlertOutboxWorker(alertConfig);
   const deliverAlert = (_config, event) => {
@@ -127,6 +140,7 @@ function startFomoWorker() {
     thesisMonitor,
     xCallMonitor,
     outbox,
+    runtimeHeartbeat,
   });
   installFomoWorkerSignalHandlers(shutdown.stop);
   return shutdown;

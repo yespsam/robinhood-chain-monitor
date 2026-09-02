@@ -5619,7 +5619,7 @@ export function createFomoCallMonitor(config, dependencies = {}) {
               && blogger?.walletBinding?.ambiguousHandles === false)
             : false)
       ));
-      if ((smartMoneyCall || strictBuyProvenance) && !exactFreshBscProvenance) {
+      if ((smartMoneyCall || (strictBuyProvenance && call.kind === "top_blogger_first_buy")) && !exactFreshBscProvenance) {
         await discardPending(state, key, "pending-provenance-rejected");
         continue;
       }
@@ -5645,10 +5645,21 @@ export function createFomoCallMonitor(config, dependencies = {}) {
         ambiguousHandles: false,
       } : null;
       const topHandles = new Set(state.topBloggers.map((entry) => entry.handle.toLowerCase()));
-      const callers = (call.wallets || []).filter((wallet) => topHandles.has(wallet.handle.toLowerCase())).map((wallet) => {
-        const profile = bloggers.get(wallet.handle.toLowerCase());
-        return { ...wallet, followers: profile?.followers || null, trafficRank: profile?.trafficRank || null };
-      });
+      // Cope collection temporarily owns state.topBloggers, then restores the
+      // independent public-onchain roster. Persist the exact qualified
+      // participant bindings with a convergence so delayed delivery cannot
+      // accidentally rebuild evidence from that unrelated restored roster.
+      const callers = call.kind === "top_blogger_convergence"
+        ? (Array.isArray(call.participantBindings) ? call.participantBindings : []).map((participant) => ({ ...participant }))
+        : (call.wallets || []).filter((wallet) => topHandles.has(wallet.handle.toLowerCase())).map((wallet) => {
+          const profile = bloggers.get(wallet.handle.toLowerCase());
+          return {
+            ...wallet,
+            followers: profile?.followers || null,
+            trafficRank: profile?.trafficRank || null,
+            walletAddress: call.chain?.slug === "solana" ? profile?.solanaAddress || null : profile?.baseAddress || null,
+          };
+        });
       const profileHandle = blogger?.source?.startsWith("fomoscan")
         ? (caller?.handle || callers[0]?.handle || thesis?.handle || null)
         : null;
@@ -5829,9 +5840,26 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     const calls = parseCopeConvergences(await api(`/v1/convergence?since=${since}&limit=50`));
     const bloggers = profileMap(state);
     for (const call of calls) {
-      const topWallets = call.wallets.filter((wallet) => bloggers.has(wallet.handle.toLowerCase()));
-      const topFollowers = Math.max(0, ...topWallets.map((wallet) => bloggers.get(wallet.handle.toLowerCase())?.followers || 0));
-      const qualified = call.totalUsd >= minimumConvergenceUsd && (topWallets.length >= 2 || (topWallets.length === 1 && call.totalUsd >= minimumConvergenceUsd * 2));
+      const topWallets = [...new Map(call.wallets
+        .filter((wallet) => bloggers.has(wallet.handle.toLowerCase()))
+        .map((wallet) => [wallet.handle.toLowerCase(), wallet])).values()];
+      const participantBindings = topWallets.map((wallet) => {
+        const profile = bloggers.get(wallet.handle.toLowerCase());
+        const walletAddress = String(call.chain?.slug === "solana" ? profile?.solanaAddress || "" : profile?.baseAddress || "");
+        if (!validToken(call.chain, walletAddress)) return null;
+        return {
+          ...wallet,
+          handle: profile.handle,
+          displayName: profile.displayName || profile.handle,
+          followers: profile.followers || null,
+          trafficRank: profile.trafficRank || null,
+          leaderboardRank: profile.leaderboardRank || null,
+          walletAddress,
+        };
+      }).filter(Boolean);
+      const topFollowers = Math.max(0, ...participantBindings.map((participant) => participant.followers || 0));
+      const distinctWallets = new Set(participantBindings.map((participant) => participant.walletAddress.toLowerCase()));
+      const qualified = call.totalUsd >= minimumConvergenceUsd && participantBindings.length >= 2 && distinctWallets.size >= 2;
       if (!state.convergenceInitializedAt) {
         state.seenConvergences[call.callId] = nowMs;
         markDurableState();
@@ -5842,7 +5870,7 @@ export function createFomoCallMonitor(config, dependencies = {}) {
       markDurableState();
       if (!qualified || !fresh(call, nowMs, maximumSignalAgeMs)) continue;
       const key = `convergence:${call.callId}`;
-      state.pending[key] = { call: { ...call, topFollowers }, firstSeenAt: nowMs };
+      state.pending[key] = { call: { ...call, topFollowers, participantBindings }, firstSeenAt: nowMs };
       markDurableState();
     }
     if (!state.convergenceInitializedAt) {

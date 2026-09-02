@@ -1,0 +1,148 @@
+{
+  "marscoin": {
+    "type": "binance_official_update",
+    "kind": "announcement",
+    "eventKey": "binance-announcement:marscoin-fixture",
+    "project": { "id": "binance", "name": "Binance" },
+    "signal": { "scope": "exchange", "category": "新合约上线", "labels": ["新合约上线"], "strong": true },
+    "title": "Binance Futures Will Launch MARSCOINUSDT USDⓈ-Margined Perpetual Contract",
+    "launchAt": "2026-09-02T03:00:00.000Z",
+    "publishedAt": "2026-09-02T01:00:00.000Z",
+    "observedAt": "2026-09-02T01:01:00.000Z",
+    "source": {
+      "id": "binance_announcement_websocket",
+      "name": "Binance official announcement stream",
+      "url": "https://developers.binance.com/en/docs/products/announcements/announcement"
+    },
+    "url": "https://www.binance.com/en/support/announcement/detail/marscoin-fixture"
+  },
+  "hk0625": {
+    "type": "binance_official_update",
+    "kind": "announcement",
+    "eventKey": "binance-announcement:hk0625-fixture",
+    "project": { "id": "binance", "name": "Binance" },
+    "signal": { "scope": "exchange", "category": "新合约上线", "labels": ["新合约上线"], "strong": true },
+    "title": "Binance Futures Will Launch HK0625USDT Perpetual Contract",
+    "launchAt": "2026-09-02T04:00:00.000Z",
+    "publishedAt": "2026-09-02T01:05:00.000Z",
+    "observedAt": "2026-09-02T01:05:20.000Z",
+    "source": {
+      "id": "binance_exchange_cms",
+      "name": "Binance official announcements",
+      "url": "https://www.binance.com/en/support/announcement/detail/hk0625-fixture"
+    },
+    "url": "https://www.binance.com/en/support/announcement/detail/hk0625-fixture"
+  },
+  "memeArena": {
+    "type": "twitter_update",
+    "eventKey": "fourmeme-x:meme-arena-live",
+    "project": {
+      "id": "fourmeme",
+      "name": "Four.Meme",
+      "handle": "four_meme_",
+      "match": "official_x"
+    },
+    "tweet": {
+      "id": "2100000000000000001",
+      "handle": "four_meme_",
+      "createdAt": "2026-09-02T01:10:00.000Z",
+      "url": "https://x.com/four_meme_/status/2100000000000000001",
+      "text": "MEME ARENA is LIVE on Four.Meme / OpenFour. Trade eligible Tax Tokens and climb the daily leaderboard."
+    },
+    "signal": {
+      "relevant": true,
+      "strong": true,
+      "platformStructural": true,
+      "labels": ["擂台/赛事新玩法"]
+    },
+    "observedAt": "2026-09-02T01:10:02.000Z"
+  },
+  "flapUpgrade": {
+    "type": "bsc_launchpad_update",
+    "kind": "new_mode",
+    "eventKey": "bsc-official-upgrade:flap:fixture",
+    "platform": { "id": "flap", "name": "Flap", "trust": "official_verified" },
+    "chainId": 56,
+    "launcher": "0x1111111111111111111111111111111111111111",
+    "transactionHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "blockNumber": 63500001,
+    "blockTimestamp": "2026-09-02T01:15:00.000Z",
+    "observedAt": "2026-09-02T01:15:02.000Z",
+    "mode": {
+      "selector": "proxy-upgrade",
+      "selectorName": "Upgraded",
+      "componentMode": "Vault V2",
+      "fingerprint": "flap-vault-v2-fixture"
+    },
+    "structural": { "eligible": true },
+    "strong": true
+  },
+  "flapFirstToken": {
+    "type": "bsc_launchpad_update",
+    "kind": "new_mode",
+    "eventKey": "bsc-feature-first-token:flap:fixture",
+    "featureFirstToken": true,
+    "featureActivationKey": "flap:feature:vault-v2:first-token",
+    "platform": { "id": "flap", "name": "Flap", "trust": "official_verified" },
+    "chainId": 56,
+    "launcher": "0x1111111111111111111111111111111111111111",
+    "tokens": [{
+      "token": "0x4444444444444444444444444444444444444444",
+      "metadata": { "name": "Flap First", "symbol": "FLAP1" }
+    }],
+    "transactionHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "blockNumber": 63500003,
+    "blockTimestamp": "2026-09-02T01:16:00.000Z",
+    "observedAt": "2026-09-02T01:16:02.000Z",
+    "mode": {
+      "selector": "0x12345678",
+      "componentMode": "Vault V2",
+      "fingerprint": "flap-vault-v2-first-token-fixture"
+    },
+    "structural": { "eligible": true },
+    "security": {
+      "decision": "pass",
+      "metrics": { "liquidityConfirmed": true }
+    },
+    "strong": true
+  },
+  "fomoBuy": {
+    "type": "fomo_family_top_call",
+    "signalKind": "high_profit_high_winrate_wallet_buy",
+    "eventKey": "fomo-smart-wallet:fixture",
+    "qualified": true,
+    "strong": true,
+    "activity": "buy",
+    "token": "0x2222222222222222222222222222222222222222",
+    "contractAddress": "0x2222222222222222222222222222222222222222",
+    "tokenSymbol": "FOMO",
+    "walletAddress": "0x3333333333333333333333333333333333333333",
+    "transactionHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "blockNumber": 63500002,
+    "amountUsd": 1250,
+    "chain": { "id": 56, "chainId": 56, "slug": "bsc", "name": "BNB Smart Chain" },
+    "source": {
+      "id": "gmgn_profitable_wallet_onchain",
+      "trust": "public_onchain_profiled"
+    },
+    "walletProfile": {
+      "qualified": true,
+      "windows": {
+        "30d": { "realizedProfitUsd": 17458.42, "winRate": 0.63172, "tokenCount": 510 }
+      }
+    },
+    "market": {
+      "liquidityUsd": 65000,
+      "marketCap": 720000,
+      "volumeM5": 18000,
+      "sellsM5": 8
+    },
+    "security": {
+      "decision": "pass",
+      "metrics": { "liquidityConfirmed": true, "sellObserved": true },
+      "risk": { "honeypot": false, "sellTaxUnknown": true }
+    },
+    "publishedAt": "2026-09-02T01:20:00.000Z",
+    "observedAt": "2026-09-02T01:20:02.000Z"
+  }
+}
