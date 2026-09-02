@@ -699,6 +699,48 @@ function explicitSnapshotModel(event) {
   });
 }
 
+function ponFunUpdateModel(event) {
+  const pairs = Object.entries(event?.changes || {})
+    .filter(([, value]) => objectPair(value))
+    .map(([field, value]) => ({ field, before: value.before, after: value.after }));
+  const before = pairs
+    .filter((item) => item.before != null)
+    .map((item) => namedValue(item.field, item.before))
+    .filter(Boolean);
+  const after = pairs
+    .filter((item) => item.after != null)
+    .map((item) => namedValue(item.field, item.after))
+    .filter(Boolean);
+  if (!after.length && event.currentSnapshot) {
+    after.push(...Object.entries(event.currentSnapshot)
+      .map(([field, value]) => namedValue(field, value))
+      .filter(Boolean));
+  }
+  const addition = ["market_created", "stock_listing"].includes(event.kind)
+    && !pairs.some((item) => item.before != null);
+  return model({
+    kind: addition ? "addition" : "modification",
+    basis: "exact_snapshot",
+    before: before.length ? { state: "known", items: before } : { state: "not_observed" },
+    after: { state: "known", items: after.length ? after : [event.title || "pon.fun 更新已确认"] },
+    evidence: [
+      event.transactionHash && `${event.transactionHash}${event.blockNumber != null ? `#${event.blockNumber}` : ""}`,
+      event.factory && `Factory ${event.factory}`,
+      event.source?.url,
+    ].filter(Boolean),
+    deltas: pairs.map((item) => ({
+      category: ["factory_config", "curve_params"].includes(event.kind) ? "config" : "state",
+      action: item.before == null ? "added" : item.after == null ? "removed" : "modified",
+      kind: "config_value",
+      file: null,
+      subject: item.field,
+      before: item.before ?? null,
+      after: item.after ?? null,
+      basis: "exact_snapshot",
+    })),
+  });
+}
+
 function developerUpdateModel(event) {
   const added = array(event.addedSignals).map((value) => oneLine(value, 180)).filter(Boolean);
   const removed = array(event.removedSignals).map((value) => oneLine(value, 180)).filter(Boolean);
@@ -824,6 +866,7 @@ function genericPublishedModel(event) {
 }
 
 export function deriveAlertChangeModel(event = {}) {
+  if (event.type === "pon_fun_update") return ponFunUpdateModel(event);
   if (event.type === "platform_capability_update") return platformChangeModel(event);
   if (event.type === "bsc_launchpad_update" && event.mode?.selector === "official-template") return fourMemeTemplateModel(event);
   if (event.type === "binance_official_update" && event.kind === "developer_update") return developerUpdateModel(event);

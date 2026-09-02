@@ -50,6 +50,230 @@ const AI_OFFICIAL_X_TARGETS = new Map([
   ["grok", { id: "grok", xUserId: "1720665183188922368", website: "https://grok.com", docs: "https://docs.x.ai" }],
   ["api", { id: "x-api", xUserId: "6253282", website: "https://docs.x.com", docs: "https://docs.x.com/changelog" }],
 ]);
+
+// pon.fun is deliberately isolated from both the legacy Pons monitor and the
+// broad focus3 identity matcher.  Its stock/RWA catalogue is an explicit,
+// project-scoped exception, so no ticker, headline or generic RWA wording can
+// authenticate an event.
+const PON_FUN_EVENT_TYPE = "pon_fun_update";
+const PON_FUN_SOURCE_ID = "pon_fun_official_api_onchain";
+const PON_FUN_SOURCE_TRUST = "official_site_bound_onchain_fingerprinted";
+const PON_FUN_CHAIN_ID = 4663;
+const PON_FUN_FACTORY = "0xf698d13348686c1529c2dc54847c123424d9dae0";
+const PON_FUN_FACTORY_RUNTIME_HASH = "0x4cb9795396b800a4b1e46f2e91a690ecf004ac0d52b059a7ef0e6b190af17384";
+const PON_FUN_PLATFORM_TOKEN = "0x7673dc6d2357bdc2e04fd80c169f2bef56622d9a";
+const PON_FUN_ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const PON_FUN_PLATFORM_MODEL = "stock-backed penny meme launchpad; the coin is not the stock";
+const PON_FUN_RISK = "PON coins are not the referenced stocks; backing, oracle, liquidity, sellability and admin controls remain risks.";
+const PON_FUN_X_HANDLE = "pondotfun";
+const PON_FUN_X_USER_ID = "2094048312772993024";
+const PON_FUN_X_DELAYED_RECOVERY_VERSION = 1;
+const PON_FUN_X_DELAYED_RECOVERY_REASON = "monitoring_gap_recovery";
+const PON_FUN_X_REALTIME_MAX_AGE_MS = 10 * 60 * 1_000;
+const PON_FUN_DELAYED_RECOVERY_MAX_LAG_MS = 7 * 24 * 60 * 60 * 1_000;
+const PON_FUN_ADDRESS = /(?<![a-fA-F0-9])0x[a-fA-F0-9]{40}(?![a-fA-F0-9])/g;
+const PON_FUN_TRANSACTION = /(?<![a-fA-F0-9])0x[a-fA-F0-9]{64}(?![a-fA-F0-9])/g;
+const PON_FUN_MARKET_ACTION = /(?:\b(?:new\s+)?(?:stock|equity|ticker|market)\b[^.!?\n]{0,90}\b(?:list(?:s|ed|ing)?|launch(?:es|ed|ing)?|add(?:s|ed|ing)?|is\s+(?:now\s+)?live)\b|\b(?:list(?:s|ed|ing)?|launch(?:es|ed|ing)?|add(?:s|ed|ing)?)\b[^.!?\n]{0,90}\b(?:stock|equity|ticker|market)\b)/i;
+const PON_FUN_STRUCTURAL_OBJECT = /\b(?:factory|config(?:uration)?|curve\s+params?|oracle|swap\s+router|position\s+manager|treasury|owner(?:ship)?|admin|pause|emergency\s+stop|upgrade|implementation|escrow|vault|redemption|backing|fee\s+model|protocol)\b/i;
+const PON_FUN_STRUCTURAL_ACTION = /\b(?:set|sets|updated?|changed?|migrat(?:e|es|ed|ing)|transfer(?:s|red|ring)?|paus(?:e|es|ed|ing)|halt(?:s|ed|ing)?|upgrad(?:e|es|ed|ing)|deploy(?:s|ed|ing)?|launch(?:es|ed|ing)?|introduc(?:e|es|ed|ing)|enabl(?:e|es|ed|ing)|replac(?:e|es|ed|ing))\b/i;
+const PON_FUN_RECOVERY = /\b(?:unpaus(?:e|es|ed|ing)|resum(?:e|es|ed|ing)|recover(?:s|ed|ing|y)|restor(?:e|es|ed|ing)|back\s+online)\b/i;
+const PON_FUN_LP_DEPLOYED = /\b(?:lp|liquidity\s+pool)\b[^.!?\n]{0,80}\bdeploy(?:s|ed|ing)?\b|\bdeploy(?:s|ed|ing)?\b[^.!?\n]{0,80}\b(?:lp|liquidity\s+pool)\b/i;
+const PON_FUN_GRADUATED = /\b(?:market|coin|token)\b[^.!?\n]{0,80}\bgraduat(?:e|es|ed|ing)\b|\bgraduat(?:e|es|ed|ing)\b[^.!?\n]{0,80}\b(?:market|coin|token)\b/i;
+const PON_FUN_MARKETING_NOISE = /\b(?:giveaway|airdrop|contest|competition|join\s+us|follow\s+us|community|gm|good\s+morning|learn\s+more|how\s+(?:it|pon)\s+works|built\s+for\s+the\s+people)\b/i;
+const PON_FUN_X_SIGNAL_RULES = new Map([
+  ["platform_token_live", { kind: "platform_token_update", priority: "T1", major: true, address: true }],
+  ["supply_burned", { kind: "platform_token_update", priority: "T1", major: true, transaction: true }],
+  ["factory_config", { kind: "factory_config", priority: "T1", major: true }],
+  ["paused", { kind: "factory_paused", priority: "T1", major: true }],
+  ["ownership_transfer_started", { kind: "ownership_transfer_started", priority: "T1", major: true }],
+  ["ownership_transferred", { kind: "ownership_transferred", priority: "T1", major: true }],
+  ["recovered", { kind: "factory_unpaused", priority: "T2", major: false }],
+  ["created", { kind: "market_created", priority: "T2", major: false }],
+  ["stock_listed", { kind: "stock_listing", priority: "T2", major: false }],
+  ["graduated", { kind: "market_lifecycle", priority: "T2", major: false }],
+  ["lp_deployed", { kind: "market_lifecycle", priority: "T2", major: false }],
+]);
+
+// One canonical classifier core is shared by the X producer and the final
+// source gate. Presentation-only claims are added by twitter-monitor after
+// this decision; security-sensitive kind/stage/evidence can never drift.
+export function classifyPonFunSignalCore(text = "") {
+  const source = String(text || "").replace(/&amp;/gi, "&");
+  const addresses = [...new Set(source.match(PON_FUN_ADDRESS) || [])];
+  const transactions = [...new Set(source.match(PON_FUN_TRANSACTION) || [])];
+  const platformTokenLive = /(?=.*\$?PONFUN\b)(?=.*\b(?:is\s+(?:now\s+)?live|launch(?:es|ed)?|trading\s+(?:is\s+)?live)\b)/is.test(source)
+    && addresses.length === 1;
+  if (platformTokenLive) return {
+    relevant: true,
+    strong: true,
+    labels: ["pon.fun 平台币重大事件"],
+    ponFunOfficial: true,
+    ponKind: "platform_token_update",
+    ponStage: "platform_token_live",
+    ponAsset: "PONFUN",
+    tokenAddress: addresses[0],
+    ponPriority: "T1",
+    platformStructural: true,
+    majorProductUpdate: true,
+    reason: "official_platform_token_launch_with_exact_ca",
+  };
+
+  const supplyBurn = /\b(?:dev(?:eloper)?|team|platform)\s+(?:token\s+)?supply\b[^.!?\n]{0,80}\bburn(?:s|ed|t|ing)?\b|\bburn(?:s|ed|t|ing)?\b[^.!?\n]{0,80}\b(?:dev(?:eloper)?|team|platform)\s+(?:token\s+)?supply\b/i.test(source);
+  if (supplyBurn && transactions.length === 1) return {
+    relevant: true,
+    strong: true,
+    labels: ["pon.fun 平台币供应结构"],
+    ponFunOfficial: true,
+    ponKind: "platform_token_update",
+    ponStage: "supply_burned",
+    ponAsset: "PONFUN",
+    transactionHash: transactions[0],
+    ponPriority: "T1",
+    platformStructural: true,
+    majorProductUpdate: true,
+    reason: "official_platform_supply_burn_with_transaction",
+  };
+
+  const lifecycleStage = PON_FUN_LP_DEPLOYED.test(source)
+    ? "lp_deployed"
+    : PON_FUN_GRADUATED.test(source) ? "graduated" : null;
+  if (lifecycleStage) return {
+    relevant: true,
+    strong: false,
+    labels: ["pon.fun 市场生命周期"],
+    ponFunOfficial: true,
+    ponKind: "market_lifecycle",
+    ponStage: lifecycleStage,
+    ...(addresses.length === 1 ? { ponAsset: addresses[0], tokenAddress: addresses[0] } : {}),
+    ponPriority: "T2",
+    platformStructural: false,
+    majorProductUpdate: false,
+    reason: lifecycleStage === "lp_deployed"
+      ? "official_market_lp_deployed"
+      : "official_market_graduated",
+  };
+
+  if (PON_FUN_RECOVERY.test(source) && /\b(?:pon\.fun|factory|platform|protocol|operations?)\b/i.test(source)) {
+    return {
+      relevant: true,
+      strong: false,
+      labels: ["pon.fun 运行恢复"],
+      ponFunOfficial: true,
+      ponKind: "factory_unpaused",
+      ponStage: "recovered",
+      ponAsset: "PONFUN",
+      ponPriority: "T2",
+      platformStructural: false,
+      majorProductUpdate: false,
+      reason: "official_factory_or_platform_recovery",
+    };
+  }
+
+  const structural = PON_FUN_STRUCTURAL_OBJECT.test(source) && PON_FUN_STRUCTURAL_ACTION.test(source);
+  if (structural) {
+    const paused = /\b(?:paus(?:e|es|ed|ing)|halt(?:s|ed|ing)?|emergency\s+stop)\b/i.test(source);
+    const ownership = /\b(?:owner(?:ship)?|admin)\b/i.test(source) && /\btransfer(?:s|red|ring)?\b/i.test(source);
+    const ownershipStarted = ownership
+      && /\b(?:start(?:s|ed|ing)?|initiat(?:e|es|ed|ing)|pending|propos(?:e|es|ed|ing))\b/i.test(source);
+    const ownershipCompleted = ownership
+      && /\b(?:accept(?:s|ed|ing)?|complet(?:e|es|ed|ing)|finaliz(?:e|es|ed|ing)|transferred)\b/i.test(source);
+    if (ownership && !ownershipStarted && !ownershipCompleted) {
+      return {
+        relevant: false,
+        strong: false,
+        labels: [],
+        ponFunOfficial: true,
+        reason: "ambiguous_ownership_transfer_stage",
+      };
+    }
+    const kind = paused
+      ? "factory_paused"
+      : ownershipStarted ? "ownership_transfer_started" : ownershipCompleted ? "ownership_transferred" : "factory_config";
+    const stage = paused
+      ? "paused"
+      : ownershipStarted ? "ownership_transfer_started" : ownershipCompleted ? "ownership_transferred" : "factory_config";
+    return {
+      relevant: true,
+      strong: true,
+      labels: ["pon.fun 重大结构更新"],
+      ponFunOfficial: true,
+      ponKind: kind,
+      ponStage: stage,
+      ponAsset: "PONFUN",
+      ...(kind === "factory_config" && addresses.length === 1 ? { tokenAddress: addresses[0] } : {}),
+      ...(kind === "factory_config" && transactions.length === 1 ? { transactionHash: transactions[0] } : {}),
+      ponPriority: "T1",
+      platformStructural: true,
+      majorProductUpdate: true,
+      reason: "official_factory_config_or_major_product_change",
+    };
+  }
+
+  if (PON_FUN_MARKET_ACTION.test(source)) return {
+    relevant: true,
+    strong: false,
+    labels: ["pon.fun 市场/RWA 更新"],
+    ponFunOfficial: true,
+    ponKind: /\bstock|equity|ticker\b/i.test(source) ? "stock_listing" : "market_created",
+    ponStage: /\bstock|equity|ticker\b/i.test(source) ? "stock_listed" : "created",
+    ...(addresses.length === 1 ? { ponAsset: addresses[0], tokenAddress: addresses[0] } : {}),
+    ponPriority: "T2",
+    platformStructural: false,
+    majorProductUpdate: false,
+    reason: "official_market_or_stock_information",
+  };
+
+  return {
+    relevant: false,
+    strong: false,
+    labels: [],
+    ponFunOfficial: true,
+    ponPriority: "T2",
+    reason: PON_FUN_MARKETING_NOISE.test(source) ? "mechanism_explainer_or_marketing" : "no_explicit_pon_fun_change",
+  };
+}
+const PON_FUN_KINDS = new Set([
+  "market_created",
+  "market_lifecycle",
+  "factory_config",
+  "curve_params",
+  "stock_listing",
+  "factory_paused",
+  "factory_unpaused",
+  "ownership_transfer_started",
+  "ownership_transferred",
+  "platform_token_update",
+]);
+const PON_FUN_CHAIN_EVENT_KINDS = new Set([
+  "market_created",
+  "factory_config",
+  "curve_params",
+  "stock_listing",
+  "factory_paused",
+  "factory_unpaused",
+  "ownership_transfer_started",
+  "ownership_transferred",
+]);
+const PON_FUN_DELAYED_CHAIN_KINDS = new Set([
+  "factory_config",
+  "curve_params",
+  "stock_listing",
+  "factory_paused",
+  "factory_unpaused",
+  "ownership_transfer_started",
+  "ownership_transferred",
+]);
+const PON_FUN_API_PATHS = new Set(["", "/", "/api/health", "/api/markets", "/api/ponfun", "/tokenlist.json"]);
+const PON_FUN_KIND_TOPICS = new Map([
+  ["factory_config", "0x8d4f9022ab10978259dead0fa01463e75fda43dfe57f0445e69b010074c016fd"],
+  ["curve_params", "0x25482d70bd81eb7de3dfac5c42283fda45887a7d1fb434a68c2a13e45baf29f3"],
+  ["market_created", "0x8ada27e0afa58f4d4be8c4edbf4bfd49d9d586ce8a714938b12f51b7855893bb"],
+  ["stock_listing", "0x7740fd3f56c396ca150bbd7ec72ee92798920ea8eb3f25f9a03582dc9bb564b1"],
+  ["ownership_transfer_started", "0x38d16b8cac22d99fc7c124b9cd0de2d3fa1faef420bfe791d8c362d765e22700"],
+  ["ownership_transferred", "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0"],
+  ["factory_paused", "0x62e78cea01bee320cd4e420270b5ea74000d11b0c9f74754ebdbfc544b05a258"],
+  ["factory_unpaused", "0x5db9ee0a495bf2e6ff9c91a7834c1ba4fdd244a5e8aa4e537bd38aeae4b073aa"],
+]);
 const AI_GROK_PRODUCT = Object.freeze({ id: "grok", name: "xai / grok", launchpad: "xai / grok" });
 const AI_X_PRODUCT = Object.freeze({ id: "x", name: "x", launchpad: "x" });
 const AI_X_API_PRODUCT = Object.freeze({ id: "x-api", name: "x api / developer platform", launchpad: "x" });
@@ -235,6 +459,919 @@ function parsedHttpsUrl(value) {
   } catch {
     return null;
   }
+}
+
+function strictPonFunUrl(value, { xStatus = false } = {}) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  const authority = raw.match(/^https:\/\/([^/?#]+)/i)?.[1] || "";
+  if (/\:\d+$/.test(authority.replace(/^.*@/, ""))) return false;
+  const url = parsedHttpsUrl(raw);
+  if (!url || url.port || url.search || url.hash) return false;
+  const host = url.hostname.toLowerCase().replace(/^www\./, "");
+  if (host === "pon.fun") return PON_FUN_API_PATHS.has(url.pathname);
+  if (host !== "x.com") return false;
+  const segments = url.pathname.split("/").filter(Boolean);
+  if (normalized(segments[0]) !== PON_FUN_X_HANDLE) return false;
+  if (segments.length === 1) return true;
+  return xStatus
+    && segments.length === 3
+    && normalized(segments[1]) === "status"
+    && /^\d+$/.test(segments[2]);
+}
+
+function exactPonFunPlatform(platform) {
+  const keys = new Set(["id", "name", "website", "twitter", "chainId", "model"]);
+  return Boolean(platform
+    && typeof platform === "object"
+    && !Array.isArray(platform)
+    && Object.keys(platform).length === keys.size
+    && Object.keys(platform).every((key) => keys.has(key))
+    && platform.id === "ponfun"
+    && platform.name === "pon.fun"
+    && platform.chainId === PON_FUN_CHAIN_ID
+    && platform.website === "https://www.pon.fun/"
+    && platform.twitter === "https://x.com/pondotfun"
+    && platform.model === PON_FUN_PLATFORM_MODEL);
+}
+
+function strictPonFunExplorerUrl(value, transactionHash) {
+  const url = parsedHttpsUrl(value);
+  return Boolean(url
+    && !url.port
+    && !url.search
+    && !url.hash
+    && url.hostname.toLowerCase() === "robinhoodchain.blockscout.com"
+    && url.pathname.toLowerCase() === `/tx/${String(transactionHash || "").toLowerCase()}`);
+}
+
+function validPonFunChainEvidence(event) {
+  const evidenceKeys = new Set([
+    "chainId", "factory", "factoryCodeHash", "topic0", "logIndex", "receiptVerified", "api",
+  ]);
+  return Object.keys(event?.evidence || {}).length === evidenceKeys.size
+    && Object.keys(event.evidence).every((key) => evidenceKeys.has(key))
+    && /^0x[a-f0-9]{64}$/i.test(String(event.transactionHash || ""))
+    && Number.isSafeInteger(event.blockNumber)
+    && event.blockNumber > 0
+    && /^0x[a-f0-9]{64}$/i.test(String(event.blockHash || ""))
+    && strictTelegramNewsInstant(event.blockTimestamp) !== null
+    && Number.isSafeInteger(event.evidence?.logIndex)
+    && event.evidence.logIndex >= 0
+    && normalized(event.evidence?.topic0) === PON_FUN_KIND_TOPICS.get(event.kind)
+    && event.evidence?.receiptVerified === true;
+}
+
+function ponFunRecord(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function exactPonFunKeys(value, keys) {
+  if (!ponFunRecord(value)) return false;
+  const actual = Object.keys(value);
+  return actual.length === keys.length && actual.every((key) => keys.includes(key));
+}
+
+function samePonFunValue(left, right) {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right)
+      && left.length === right.length
+      && left.every((value, index) => samePonFunValue(value, right[index]));
+  }
+  if (!ponFunRecord(left) || !ponFunRecord(right)) return false;
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length
+    && leftKeys.every((key) => Object.hasOwn(right, key) && samePonFunValue(left[key], right[key]));
+}
+
+function validPonFunText(value, maximum) {
+  return typeof value === "string"
+    && value.length > 0
+    && value.length <= maximum
+    && value === value.replace(/\s+/g, " ").trim()
+    && !/[\u0000-\u001f\u007f]/u.test(value);
+}
+
+function validPonFunTicker(value) {
+  return validPonFunText(value, 24)
+    && !new Set(["__proto__", "prototype", "constructor", "tostring", "valueof", "hasownproperty", "__definegetter__", "__definesetter__", "__lookupgetter__", "__lookupsetter__"]).has(value.toLowerCase());
+}
+
+function validPonFunAddress(value, { allowZero = false } = {}) {
+  return typeof value === "string"
+    && /^0x[a-f0-9]{40}$/i.test(value)
+    && (allowZero || normalized(value) !== PON_FUN_ZERO_ADDRESS);
+}
+
+function samePonFunAddress(left, right) {
+  return validPonFunAddress(left, { allowZero: true })
+    && validPonFunAddress(right, { allowZero: true })
+    && normalized(left) === normalized(right);
+}
+
+function validPonFunInteger(value, maximum = Number.MAX_SAFE_INTEGER, minimum = 0) {
+  return Number.isSafeInteger(value) && value >= minimum && value <= maximum;
+}
+
+function expectedPonFunChanges(previous, current) {
+  const changes = {};
+  for (const [key, after] of Object.entries(current || {})) {
+    const before = previous?.[key] ?? null;
+    if (!samePonFunValue(before, after)) changes[key] = { before, after };
+  }
+  return changes;
+}
+
+function exactPonFunChanges(changes, expected) {
+  if (!ponFunRecord(changes) || !ponFunRecord(expected)) return false;
+  const changeKeys = Object.keys(changes);
+  const expectedKeys = Object.keys(expected);
+  return changeKeys.length === expectedKeys.length
+    && changeKeys.every((key) => exactPonFunKeys(changes[key], ["before", "after"])
+      && Object.hasOwn(expected, key)
+      && samePonFunValue(changes[key], expected[key]));
+}
+
+const PON_FUN_MARKET_KEYS = [
+  "ticker", "symbol", "name", "coin", "vault", "curve", "creator", "creatorFeeBps",
+  "createdAt", "stockToken", "poolFee", "graduated", "lpDeployed", "backingPct",
+  "progressBps", "marketCap", "reserve", "vol24",
+];
+const PON_FUN_MARKET_CORE_KEYS = [
+  "ticker", "symbol", "name", "coin", "vault", "curve", "creator", "creatorFeeBps", "createdAt",
+];
+const PON_FUN_MARKET_CREATION_KEYS = [
+  "ticker", "symbol", "name", "coin", "vault", "curve", "creator", "creatorFeeBps",
+];
+const PON_FUN_LISTING_KEYS = ["ticker", "stockToken", "poolFee", "active"];
+const PON_FUN_CURVE_KEYS = ["p0", "slope", "curveCap", "lpPoolFee", "maxSlippageBps", "autoAcquire"];
+const PON_FUN_CONFIG_KEYS = ["oracle", "swapRouter", "positionManager", "protocolTreasury"];
+
+function validPonFunMarket(market) {
+  return exactPonFunKeys(market, PON_FUN_MARKET_KEYS)
+    && validPonFunTicker(market.ticker)
+    && validPonFunText(market.symbol, 32)
+    && validPonFunText(market.name, 160)
+    && ["coin", "vault", "curve", "creator", "stockToken"].every((key) => validPonFunAddress(market[key]))
+    && validPonFunInteger(market.creatorFeeBps, 10_000)
+    && validPonFunInteger(market.createdAt, Number.MAX_SAFE_INTEGER, 1)
+    && validPonFunInteger(market.poolFee, 1_000_000)
+    && typeof market.graduated === "boolean"
+    && typeof market.lpDeployed === "boolean"
+    && ["backingPct", "progressBps", "marketCap", "reserve", "vol24"]
+      .every((key) => market[key] === null || (typeof market[key] === "number" && Number.isFinite(market[key])));
+}
+
+function validPonFunTrackedMarket(market) {
+  if (!ponFunRecord(market)) return false;
+  const metadataKeys = new Set(["baseline", "firstSeenAt", "lastSeenAt", "creationProof"]);
+  const marketPart = Object.fromEntries(PON_FUN_MARKET_KEYS.map((key) => [key, market[key]]));
+  if (!validPonFunMarket(marketPart)
+    || Object.keys(market).some((key) => !PON_FUN_MARKET_KEYS.includes(key) && !metadataKeys.has(key))
+    || (market.baseline !== undefined && market.baseline !== true)
+    || (market.firstSeenAt !== undefined && strictTelegramNewsInstant(market.firstSeenAt) === null)
+    || (market.lastSeenAt !== undefined && strictTelegramNewsInstant(market.lastSeenAt) === null)) return false;
+  if (market.creationProof !== undefined) {
+    const proof = market.creationProof;
+    if (!exactPonFunKeys(proof, ["transactionHash", "blockNumber", "blockHash", "blockTimestamp", "logIndex", "topic0"])
+      || !/^0x[a-f0-9]{64}$/i.test(String(proof.transactionHash || ""))
+      || !validPonFunInteger(proof.blockNumber, Number.MAX_SAFE_INTEGER, 1)
+      || !/^0x[a-f0-9]{64}$/i.test(String(proof.blockHash || ""))
+      || strictTelegramNewsInstant(proof.blockTimestamp) === null
+      || !validPonFunInteger(proof.logIndex)
+      || normalized(proof.topic0) !== PON_FUN_KIND_TOPICS.get("market_created")) return false;
+  }
+  return market.baseline === true || ponFunRecord(market.creationProof);
+}
+
+function ponFunMarketCore(market) {
+  return Object.fromEntries(PON_FUN_MARKET_CORE_KEYS.map((key) => [key, market[key]]));
+}
+
+function validPonFunMarketCreated(event) {
+  const market = event.market;
+  const creation = event.creation;
+  return validPonFunMarket(market)
+    && samePonFunValue(event.currentSnapshot, market)
+    && exactPonFunKeys(creation, PON_FUN_MARKET_CREATION_KEYS)
+    && samePonFunValue(creation, Object.fromEntries(PON_FUN_MARKET_CREATION_KEYS.map((key) => [key, market[key]])))
+    && event.ticker === market.ticker
+    && event.symbol === market.symbol
+    && samePonFunAddress(event.token, market.coin)
+    && samePonFunAddress(event.contractAddress, market.coin)
+    && exactPonFunChanges(event.changes, { market: { before: null, after: ponFunMarketCore(market) } })
+    && event.title === `pon.fun 新市场：${market.symbol} / ${market.ticker}`
+    && event.summary === "A new pon.fun MarketCreated event matches the official markets API, token list and Factory getters.";
+}
+
+function validPonFunConfigSnapshot(snapshot) {
+  return exactPonFunKeys(snapshot, PON_FUN_CONFIG_KEYS)
+    && PON_FUN_CONFIG_KEYS.every((key) => validPonFunAddress(snapshot[key]));
+}
+
+function validPonFunCurveSnapshot(snapshot) {
+  return exactPonFunKeys(snapshot, PON_FUN_CURVE_KEYS)
+    && ["p0", "slope", "curveCap"].every((key) => typeof snapshot[key] === "string" && /^(?:0|[1-9]\d*)$/.test(snapshot[key]))
+    && validPonFunInteger(snapshot.lpPoolFee, 1_000_000)
+    && validPonFunInteger(snapshot.maxSlippageBps, 10_000)
+    && typeof snapshot.autoAcquire === "boolean";
+}
+
+function validPonFunInfrastructureSnapshot(snapshot) {
+  if (!ponFunRecord(snapshot)) return false;
+  const addressKeys = new Set([
+    "owner", "pendingOwner", "oracle", "usdg", "swapRouter", "positionManager",
+    "protocolTreasury", "coinImpl", "vaultImpl", "curveImpl",
+  ]);
+  const integerKeys = new Set(["marketCount", "listingCount"]);
+  const allowed = new Set([...addressKeys, ...integerKeys, "paused"]);
+  return Object.keys(snapshot).length > 0
+    && Object.keys(snapshot).every((key) => allowed.has(key))
+    && [...addressKeys].every((key) => !Object.hasOwn(snapshot, key)
+      || validPonFunAddress(snapshot[key], { allowZero: true }))
+    && [...integerKeys].every((key) => !Object.hasOwn(snapshot, key) || validPonFunInteger(snapshot[key]))
+    && (!Object.hasOwn(snapshot, "paused") || typeof snapshot.paused === "boolean");
+}
+
+function validPonFunListingSnapshot(snapshot) {
+  return exactPonFunKeys(snapshot, PON_FUN_LISTING_KEYS)
+    && validPonFunTicker(snapshot.ticker)
+    && validPonFunAddress(snapshot.stockToken, { allowZero: snapshot.active === false })
+    && validPonFunInteger(snapshot.poolFee, 1_000_000)
+    && typeof snapshot.active === "boolean";
+}
+
+function validPonFunFactoryConfig(event) {
+  return (event.previousSnapshot === null || validPonFunInfrastructureSnapshot(event.previousSnapshot))
+    && validPonFunConfigSnapshot(event.currentSnapshot)
+    && exactPonFunChanges(event.changes, expectedPonFunChanges(event.previousSnapshot, event.currentSnapshot))
+    && event.title === "pon.fun Factory 配置更新"
+    && event.summary === "Factory emitted ConfigSet; oracle/router/position manager/treasury values are shown exactly.";
+}
+
+function validPonFunCurveParams(event) {
+  return (event.previousSnapshot === null || validPonFunCurveSnapshot(event.previousSnapshot))
+    && validPonFunCurveSnapshot(event.currentSnapshot)
+    && exactPonFunChanges(event.changes, expectedPonFunChanges(event.previousSnapshot, event.currentSnapshot))
+    && event.title === "pon.fun 曲线参数更新"
+    && event.summary === "Factory emitted CurveParamsSet; launch pricing and LP parameters changed.";
+}
+
+function validPonFunStockListing(event) {
+  const current = event.currentSnapshot;
+  return (event.previousSnapshot === null || validPonFunListingSnapshot(event.previousSnapshot))
+    && validPonFunListingSnapshot(current)
+    && event.ticker === current.ticker
+    && samePonFunAddress(event.contractAddress, current.stockToken)
+    && exactPonFunChanges(event.changes, expectedPonFunChanges(event.previousSnapshot, current))
+    && event.title === `pon.fun 股票映射更新：${current.ticker}`
+    && event.summary === "Factory emitted StockListed for a stock-token oracle mapping.";
+}
+
+function validPonFunPause(event) {
+  const paused = event.kind === "factory_paused";
+  const previous = event.previousSnapshot;
+  const current = event.currentSnapshot;
+  return exactPonFunKeys(previous, ["paused"])
+    && (typeof previous.paused === "boolean" || previous.paused === null)
+    && exactPonFunKeys(current, ["paused", "account"])
+    && current.paused === paused
+    && validPonFunAddress(current.account)
+    && exactPonFunChanges(event.changes, { paused: { before: previous.paused, after: paused } })
+    && event.title === `pon.fun Factory ${paused ? "已暂停" : "已恢复"}`
+    && event.summary === `Factory emitted ${paused ? "Paused" : "Unpaused"}; ${paused ? "new launches may be unavailable" : "factory operations were unpaused"}.`;
+}
+
+function validPonFunOwnership(event) {
+  const previous = event.previousSnapshot;
+  const current = event.currentSnapshot;
+  if (!exactPonFunKeys(previous, ["owner", "pendingOwner"])
+    || !exactPonFunKeys(current, ["owner", "pendingOwner"])
+    || ![previous.owner, previous.pendingOwner, current.owner, current.pendingOwner]
+      .every((value) => validPonFunAddress(value, { allowZero: true }))) return false;
+  if (event.kind === "ownership_transfer_started") {
+    return samePonFunAddress(previous.owner, current.owner)
+      && normalized(current.pendingOwner) !== PON_FUN_ZERO_ADDRESS
+      && exactPonFunChanges(event.changes, {
+        pendingOwner: { before: previous.pendingOwner, after: current.pendingOwner },
+      })
+      && event.title === "pon.fun Factory 所有权转移已发起"
+      && event.summary === "Factory emitted OwnershipTransferStarted; a pending admin authority was nominated.";
+  }
+  return normalized(current.owner) !== PON_FUN_ZERO_ADDRESS
+    && normalized(current.pendingOwner) === PON_FUN_ZERO_ADDRESS
+    && exactPonFunChanges(event.changes, {
+      owner: { before: previous.owner, after: current.owner },
+      pendingOwner: { before: previous.pendingOwner, after: current.pendingOwner },
+    })
+    && event.title === "pon.fun Factory 所有权已转移"
+    && event.summary === "Factory emitted OwnershipTransferred; admin authority changed and the pending owner was cleared.";
+}
+
+function validPonFunChainSemantics(event) {
+  if (event.kind === "market_created") return validPonFunMarketCreated(event);
+  if (event.kind === "factory_config") return validPonFunFactoryConfig(event);
+  if (event.kind === "curve_params") return validPonFunCurveParams(event);
+  if (event.kind === "stock_listing") return validPonFunStockListing(event);
+  if (event.kind === "factory_paused" || event.kind === "factory_unpaused") return validPonFunPause(event);
+  return validPonFunOwnership(event);
+}
+
+function validPonFunApiEvidence(api, kind) {
+  if (!api || typeof api !== "object" || Array.isArray(api)) return false;
+  if (api.healthUrl !== "https://www.pon.fun/api/health") return false;
+  if (kind === "platform_token_update") {
+    return Object.keys(api).length === 2
+      && Object.keys(api).every((key) => ["healthUrl", "platformTokenUrl"].includes(key))
+      && api.platformTokenUrl === "https://www.pon.fun/api/ponfun";
+  }
+  return Object.keys(api).length === 3
+    && Object.keys(api).every((key) => ["healthUrl", "marketsUrl", "tokenListUrl"].includes(key))
+    && api.marketsUrl === "https://www.pon.fun/api/markets"
+    && api.tokenListUrl === "https://www.pon.fun/tokenlist.json";
+}
+
+function exactPonFunSnapshotEventKey(event) {
+  const token = normalized(event?.token);
+  const evidence = event?.evidence;
+  const revision = evidence?.transitionRevision;
+  const apiHealthBlock = evidence?.apiHealthBlock;
+  const bindingBlock = evidence?.bindingVerifiedAtBlock;
+  if (!/^0x[a-f0-9]{40}$/.test(token)
+    || !Number.isSafeInteger(revision) || revision <= 0
+    || !Number.isSafeInteger(apiHealthBlock) || apiHealthBlock < 0
+    || !Number.isSafeInteger(bindingBlock) || bindingBlock <= 0) return null;
+  if (event.kind === "market_lifecycle") {
+    return `pon-fun:market-lifecycle:${token}:rev:${revision}:api:${apiHealthBlock}:binding:${bindingBlock}`;
+  }
+  if (event.kind === "platform_token_update") {
+    return `pon-fun:platform-token:${token}:rev:${revision}:api:${apiHealthBlock}:binding:${bindingBlock}`;
+  }
+  return null;
+}
+
+function validPonFunApiRevisionEvidence(event) {
+  const evidence = event?.evidence;
+  const expectedEvidenceKeys = event.kind === "platform_token_update"
+    ? new Set([
+        "chainId", "factory", "factoryCodeHash", "bindingVerifiedAtBlock",
+        "bindingVerifiedAtBlockHash", "apiHealthBlock", "transitionRevision", "platformToken", "api",
+      ])
+    : new Set([
+        "chainId", "factory", "factoryCodeHash", "bindingVerifiedAtBlock",
+        "bindingVerifiedAtBlockHash", "apiHealthBlock", "transitionRevision", "api",
+      ]);
+  return Boolean(evidence
+    && typeof evidence === "object"
+    && !Array.isArray(evidence)
+    && Object.keys(evidence).length === expectedEvidenceKeys.size
+    && Object.keys(evidence).every((key) => expectedEvidenceKeys.has(key))
+    && Number.isSafeInteger(evidence.bindingVerifiedAtBlock)
+    && evidence.bindingVerifiedAtBlock > 0
+    && /^0x[a-f0-9]{64}$/i.test(String(evidence.bindingVerifiedAtBlockHash || ""))
+    && Number.isSafeInteger(evidence.apiHealthBlock)
+    && evidence.apiHealthBlock > 0
+    && Number.isSafeInteger(evidence.transitionRevision)
+    && evidence.transitionRevision > 0
+    && event.eventKey === exactPonFunSnapshotEventKey(event));
+}
+
+function exactDecimalSupplyRaw(value, decimals) {
+  const source = String(value ?? "");
+  if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(source)) return null;
+  const [whole, fraction = ""] = source.split(".");
+  if (fraction.length > decimals) return null;
+  try { return BigInt(`${whole}${fraction.padEnd(decimals, "0")}`).toString(); }
+  catch { return null; }
+}
+
+function validPonFunPlatformTokenProof(event) {
+  const proof = event?.evidence?.platformToken;
+  const current = event?.currentSnapshot;
+  const allowed = new Set([
+    "token", "codePresent", "codeHash", "name", "symbol", "decimals",
+    "totalSupplyRaw", "verifiedBlock", "verifiedBlockHash",
+  ]);
+  if (!proof || typeof proof !== "object" || Array.isArray(proof)
+    || Object.keys(proof).length !== allowed.size
+    || Object.keys(proof).some((key) => !allowed.has(key))
+    || normalized(event?.token) !== PON_FUN_PLATFORM_TOKEN
+    || normalized(event?.contractAddress) !== PON_FUN_PLATFORM_TOKEN
+    || normalized(current?.address) !== PON_FUN_PLATFORM_TOKEN
+    || normalized(proof.token) !== PON_FUN_PLATFORM_TOKEN
+    || proof.codePresent !== true
+    || !/^0x[a-f0-9]{64}$/i.test(String(proof.codeHash || ""))
+    || typeof proof.name !== "string" || proof.name !== current?.name
+    || typeof proof.symbol !== "string" || proof.symbol !== current?.symbol
+    || !Number.isSafeInteger(proof.decimals)
+    || proof.decimals < 0 || proof.decimals > 255
+    || typeof proof.totalSupplyRaw !== "string"
+    || !/^(?:0|[1-9]\d*)$/.test(proof.totalSupplyRaw)
+    || !Number.isSafeInteger(proof.verifiedBlock)
+    || proof.verifiedBlock !== event.evidence.bindingVerifiedAtBlock
+    || !/^0x[a-f0-9]{64}$/i.test(String(proof.verifiedBlockHash || ""))
+    || String(proof.verifiedBlockHash).toLowerCase() !== String(event.evidence.bindingVerifiedAtBlockHash).toLowerCase()) return false;
+  return exactDecimalSupplyRaw(current?.supply, proof.decimals) === String(proof.totalSupplyRaw);
+}
+
+function validPonFunLifecycleChanges(event) {
+  const allowed = new Set(["graduated", "lpDeployed", "stockToken", "poolFee"]);
+  const changes = event?.changes;
+  const previous = event?.previousSnapshot;
+  const current = event?.currentSnapshot;
+  if (!ponFunRecord(changes) || Object.keys(changes).length === 0
+    || Object.keys(changes).some((key) => !allowed.has(key))) return false;
+  const expected = {};
+  for (const key of allowed) {
+    if (!samePonFunValue(previous[key], current[key])) {
+      expected[key] = { before: previous[key], after: current[key] };
+    }
+  }
+  return exactPonFunChanges(changes, expected);
+}
+
+function validPonFunMarketLifecycle(event) {
+  const previous = event.previousSnapshot;
+  const current = event.currentSnapshot;
+  return validPonFunTrackedMarket(previous)
+    && validPonFunMarket(current)
+    && samePonFunValue(event.market, current)
+    && event.ticker === current.ticker
+    && event.symbol === current.symbol
+    && samePonFunAddress(event.token, current.coin)
+    && samePonFunAddress(event.contractAddress, current.coin)
+    && validPonFunLifecycleChanges(event)
+    && event.title === `pon.fun 市场状态更新：${current.symbol}`
+    && event.summary === "The official market lifecycle changed after its Factory identity was re-verified on-chain.";
+}
+
+function validPonFunPlatformSnapshot(snapshot) {
+  if (!exactPonFunKeys(snapshot, ["address", "symbol", "name", "supply"])
+    || normalized(snapshot.address) !== PON_FUN_PLATFORM_TOKEN
+    || snapshot.symbol !== "PONFUN"
+    || snapshot.name !== "Ponfun"
+    || typeof snapshot.supply !== "string"
+    || !/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(snapshot.supply)) return false;
+  const digits = snapshot.supply.replace(".", "");
+  try { return BigInt(digits) > 0n; }
+  catch { return false; }
+}
+
+function validPonFunPlatformTokenUpdate(event) {
+  return validPonFunPlatformSnapshot(event.previousSnapshot)
+    && validPonFunPlatformSnapshot(event.currentSnapshot)
+    && samePonFunAddress(event.token, PON_FUN_PLATFORM_TOKEN)
+    && samePonFunAddress(event.contractAddress, PON_FUN_PLATFORM_TOKEN)
+    && event.symbol === event.currentSnapshot.symbol
+    && exactPonFunChanges(event.changes, expectedPonFunChanges(event.previousSnapshot, event.currentSnapshot))
+    && Object.keys(event.changes).length > 0
+    && event.title === "pon.fun 平台代币资料更新"
+    && event.summary === "The official PONFUN token metadata changed while the platform Factory identity remained verified.";
+}
+
+function ponFunChainDisplay(event) {
+  if (event.kind === "factory_config") return {
+    title: "pon.fun Factory 配置更新",
+    summary: "Factory emitted ConfigSet; oracle/router/position manager/treasury values are shown exactly.",
+  };
+  if (event.kind === "curve_params") return {
+    title: "pon.fun 曲线参数更新",
+    summary: "Factory emitted CurveParamsSet; launch pricing and LP parameters changed.",
+  };
+  if (event.kind === "stock_listing") return {
+    title: `pon.fun 股票映射更新：${event.currentSnapshot?.ticker || ""}`,
+    summary: "Factory emitted StockListed for a stock-token oracle mapping.",
+  };
+  if (event.kind === "factory_paused" || event.kind === "factory_unpaused") {
+    const paused = event.kind === "factory_paused";
+    return {
+      title: `pon.fun Factory ${paused ? "已暂停" : "已恢复"}`,
+      summary: `Factory emitted ${paused ? "Paused" : "Unpaused"}; ${paused ? "new launches may be unavailable" : "factory operations were unpaused"}.`,
+    };
+  }
+  if (event.kind === "ownership_transfer_started") return {
+    title: "pon.fun Factory 所有权转移已发起",
+    summary: "Factory emitted OwnershipTransferStarted; a pending admin authority was nominated.",
+  };
+  if (event.kind === "ownership_transferred") return {
+    title: "pon.fun Factory 所有权已转移",
+    summary: "Factory emitted OwnershipTransferred; admin authority changed and the pending owner was cleared.",
+  };
+  return null;
+}
+
+const PON_FUN_BASE_EVENT_KEYS = [
+  "type", "kind", "platform", "source", "sourceTrust", "chainId", "factory",
+  "observedAt", "strong", "risk",
+];
+const PON_FUN_CHAIN_EVENT_KEYS = [
+  ...PON_FUN_BASE_EVENT_KEYS,
+  "eventKey", "transactionHash", "blockNumber", "blockHash", "blockTimestamp",
+  "explorerUrl", "evidence", "title", "summary",
+];
+const PON_FUN_CHAIN_KIND_KEYS = new Map([
+  ["market_created", ["token", "contractAddress", "ticker", "symbol", "market", "currentSnapshot", "changes", "creation"]],
+  ["factory_config", ["previousSnapshot", "currentSnapshot", "changes"]],
+  ["curve_params", ["previousSnapshot", "currentSnapshot", "changes"]],
+  ["stock_listing", ["ticker", "contractAddress", "previousSnapshot", "currentSnapshot", "changes"]],
+  ["factory_paused", ["previousSnapshot", "currentSnapshot", "changes"]],
+  ["factory_unpaused", ["previousSnapshot", "currentSnapshot", "changes"]],
+  ["ownership_transfer_started", ["previousSnapshot", "currentSnapshot", "changes"]],
+  ["ownership_transferred", ["previousSnapshot", "currentSnapshot", "changes"]],
+]);
+const PON_FUN_API_KIND_KEYS = new Map([
+  ["market_lifecycle", [
+    ...PON_FUN_BASE_EVENT_KEYS,
+    "eventKey", "title", "summary", "token", "contractAddress", "ticker", "symbol",
+    "market", "previousSnapshot", "currentSnapshot", "changes", "evidence",
+  ]],
+  ["platform_token_update", [
+    ...PON_FUN_BASE_EVENT_KEYS,
+    "eventKey", "title", "summary", "token", "contractAddress", "symbol",
+    "previousSnapshot", "currentSnapshot", "changes", "evidence",
+  ]],
+]);
+
+function validPonFunOrphanKeys(value) {
+  return Array.isArray(value)
+    && value.length <= 500
+    && new Set(value).size === value.length
+    && value.every((key) => typeof key === "string" && key.startsWith("pon-fun:") && key.length <= 512);
+}
+
+function validPonFunDerivedAlertFields(event) {
+  if (Object.hasOwn(event, "alertQueuedAt") && strictTelegramNewsInstant(event.alertQueuedAt) === null) return false;
+  const hasCanonicalId = Object.hasOwn(event, "canonicalSignalId");
+  const hasCanonicalIds = Object.hasOwn(event, "canonicalSignalIds");
+  if (hasCanonicalId !== hasCanonicalIds) return false;
+  if (hasCanonicalId) {
+    if (typeof event.canonicalSignalId !== "string"
+      || !event.canonicalSignalId.startsWith("pon:")
+      || !Array.isArray(event.canonicalSignalIds)
+      || event.canonicalSignalIds.length < 1
+      || event.canonicalSignalIds.length > 16
+      || new Set(event.canonicalSignalIds).size !== event.canonicalSignalIds.length
+      || event.canonicalSignalIds[0] !== event.canonicalSignalId
+      || event.canonicalSignalIds.some((value) => typeof value !== "string" || !value.startsWith("pon:") || value.length > 512)) return false;
+  }
+  if (Object.hasOwn(event, "freshness")) {
+    const freshness = event.freshness;
+    const expectedOccurredAt = event.delayedRecovery?.recoveredAt
+      || event.blockTimestamp
+      || event.observedAt;
+    const expectedScope = event.delayedRecovery ? "pon_delayed_recovery" : "robinhood_chain";
+    const expectedBasis = event.delayedRecovery
+      ? "delayedRecovery.recoveredAt_continuous_recovery"
+      : event.blockTimestamp ? "blockTimestamp" : "observedAt_continuous_coverage";
+    const occurredMs = strictTelegramNewsInstant(expectedOccurredAt);
+    const discoveredMs = strictTelegramNewsInstant(freshness?.discoveredAt);
+    if (!ponFunRecord(freshness)
+      || freshness.version !== 1
+      || freshness.scope !== expectedScope
+      || freshness.basis !== expectedBasis
+      || freshness.sourceOccurredAt !== expectedOccurredAt
+      || occurredMs === null
+      || discoveredMs === null
+      || freshness.sourceTimeReliable !== true
+      || !validPonFunInteger(freshness.realtimeMaxAgeMs)
+      || !validPonFunInteger(freshness.telegramMaxAgeMs)
+      || freshness.telegramMaxAgeMs < freshness.realtimeMaxAgeMs
+      || freshness.lagMs !== Math.max(0, discoveredMs - occurredMs)
+      || !["realtime", "late", "suppress"].includes(freshness.decision)) return false;
+    const expectedDecision = freshness.lagMs <= freshness.realtimeMaxAgeMs
+      ? "realtime"
+      : freshness.lagMs <= freshness.telegramMaxAgeMs ? "late" : "suppress";
+    if (freshness.decision !== expectedDecision) return false;
+    if (event.delayedRecovery
+      && (freshness.realtimeMaxAgeMs !== PON_FUN_X_REALTIME_MAX_AGE_MS
+        || freshness.telegramMaxAgeMs !== PON_FUN_DELAYED_RECOVERY_MAX_LAG_MS)) return false;
+    const hasDelivery = ["deliveryEvaluatedAt", "deliveryLagMs", "deliveryDecision"]
+      .some((key) => Object.hasOwn(freshness, key));
+    if (hasDelivery) {
+      const deliveryMs = strictTelegramNewsInstant(freshness.deliveryEvaluatedAt);
+      if (deliveryMs === null
+        || freshness.deliveryLagMs !== Math.max(0, deliveryMs - occurredMs)
+        || !["realtime", "late", "suppress"].includes(freshness.deliveryDecision)) return false;
+      const deliveryDecision = freshness.deliveryLagMs <= freshness.realtimeMaxAgeMs
+        ? "realtime"
+        : freshness.deliveryLagMs <= freshness.telegramMaxAgeMs ? "late" : "suppress";
+      if (freshness.deliveryDecision !== deliveryDecision) return false;
+    }
+  }
+  if (Object.hasOwn(event, "tradingPriority")) {
+    const priority = event.tradingPriority;
+    const expectedTier = event.delayedRecovery
+      || ["market_created", "market_lifecycle", "stock_listing", "factory_unpaused"].includes(event.kind)
+      ? "T2"
+      : "T1";
+    if (!ponFunRecord(priority)
+      || priority.version !== 1
+      || !["news_trading_priority_v1", "news_trading_priority_v1:legacy"].includes(priority.schema)
+      || priority.deterministic !== true
+      || priority.tier !== expectedTier
+      || priority.rank !== ({ T1: 3, T2: 2 })[expectedTier]
+      || priority.plan?.automaticExecution !== false) return false;
+  }
+  return true;
+}
+
+function validPonFunEnvelope(event) {
+  const required = PON_FUN_CHAIN_EVENT_KINDS.has(event?.kind)
+    ? [...PON_FUN_CHAIN_EVENT_KEYS, ...(PON_FUN_CHAIN_KIND_KEYS.get(event.kind) || [])]
+    : PON_FUN_API_KIND_KEYS.get(event?.kind);
+  if (!required) return false;
+  const optional = [
+    ...(event.reorgOrphanedEventKeys === undefined ? [] : ["reorgOrphanedEventKeys"]),
+    ...(event.delayedRecovery === undefined ? [] : ["originalEventKey", "delayedRecovery"]),
+    ...["canonicalSignalId", "canonicalSignalIds", "freshness", "tradingPriority"]
+      .filter((key) => Object.hasOwn(event, key)),
+    ...(Object.hasOwn(event, "alertQueuedAt") ? ["alertQueuedAt"] : []),
+  ];
+  const allowed = [...required, ...optional];
+  return exactPonFunKeys(event, allowed)
+    && required.every((key) => Object.hasOwn(event, key))
+    && (event.reorgOrphanedEventKeys === undefined || validPonFunOrphanKeys(event.reorgOrphanedEventKeys))
+    && validPonFunDerivedAlertFields(event);
+}
+
+/**
+ * Authenticate the monitor's closed pon.fun producer schema.  The trust label
+ * means the public site was bound to the observed on-chain factory fingerprint;
+ * it is not a source-code audit or a general "verified source" assertion.
+ */
+export function isOfficialPonFunUpdate(event) {
+  if (event && Object.hasOwn(event, "delayedRecovery")) {
+    if (event.delayedRecovery == null) return false;
+    if (!validPonFunEnvelope(event) || !isStrictPonFunChainDelayedRecovery(event)) return false;
+    const display = ponFunChainDisplay(event);
+    if (!display
+      || event.title !== `pon.fun 延迟恢复摘要：${display.title}`
+      || event.summary !== "A still-relevant structural change was recovered after a monitoring gap; the original finalized proof and change are preserved.") return false;
+    const original = {
+      ...event,
+      eventKey: event.originalEventKey,
+      title: display.title,
+      summary: display.summary,
+    };
+    delete original.delayedRecovery;
+    delete original.originalEventKey;
+    delete original.canonicalSignalId;
+    delete original.canonicalSignalIds;
+    delete original.freshness;
+    delete original.tradingPriority;
+    delete original.alertQueuedAt;
+    return isOfficialPonFunUpdate(original);
+  }
+  if (!event || typeof event !== "object" || Array.isArray(event)
+    || event.type !== PON_FUN_EVENT_TYPE
+    || !PON_FUN_KINDS.has(event.kind)
+    || !validPonFunEnvelope(event)
+    || !exactPonFunPlatform(event.platform)
+    || event.chainId !== PON_FUN_CHAIN_ID
+    || normalized(event.factory) !== PON_FUN_FACTORY
+    || typeof event.eventKey !== "string"
+    || !event.eventKey.trim()
+    || event.eventKey.length > 512
+    || strictTelegramNewsInstant(event.observedAt) === null
+    || event.strong !== true
+    || event.risk !== PON_FUN_RISK
+    || event.sourceTrust !== PON_FUN_SOURCE_TRUST) return false;
+  const source = event.source;
+  const evidence = event.evidence;
+  const sourceKeys = new Set(["id", "name", "url", "official", "trust"]);
+  if (!source || typeof source !== "object" || Array.isArray(source)
+    || Object.keys(source).length !== sourceKeys.size
+    || Object.keys(source).some((key) => !sourceKeys.has(key))
+    || source.id !== PON_FUN_SOURCE_ID
+    || source.name !== "pon.fun official API + fingerprinted Factory"
+    || source.trust !== PON_FUN_SOURCE_TRUST
+    || source.official !== true
+    || !evidence || typeof evidence !== "object" || Array.isArray(evidence)
+    || evidence.chainId !== PON_FUN_CHAIN_ID
+    || normalized(evidence.factory) !== PON_FUN_FACTORY
+    || normalized(evidence.factoryCodeHash) !== PON_FUN_FACTORY_RUNTIME_HASH
+    || !validPonFunApiEvidence(evidence.api, event.kind)) return false;
+  if (PON_FUN_CHAIN_EVENT_KINDS.has(event.kind)) {
+    return validPonFunChainEvidence(event)
+      && validPonFunChainSemantics(event)
+      && strictPonFunExplorerUrl(event.explorerUrl, event.transactionHash)
+      && source.url === event.explorerUrl
+      && event.eventKey === `pon-fun:${event.kind}:${PON_FUN_CHAIN_ID}:${String(event.transactionHash).toLowerCase()}:${event.evidence.logIndex}`;
+  }
+  if (event.kind === "market_lifecycle") {
+    return source.url === "https://www.pon.fun/api/markets"
+      && validPonFunApiRevisionEvidence(event)
+      && /^0x[a-f0-9]{40}$/i.test(String(event.token || ""))
+      && normalized(event.contractAddress) === normalized(event.token)
+      && event.eventKey === exactPonFunSnapshotEventKey(event)
+      && validPonFunMarketLifecycle(event);
+  }
+  return source.url === "https://www.pon.fun/api/ponfun"
+    && validPonFunApiRevisionEvidence(event)
+    && validPonFunPlatformTokenProof(event)
+    && /^0x[a-f0-9]{40}$/i.test(String(event.token || ""))
+    && normalized(event.contractAddress) === normalized(event.token)
+    && event.eventKey === exactPonFunSnapshotEventKey(event)
+    && validPonFunPlatformTokenUpdate(event);
+}
+
+function strictPonFunInstant(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value ? parsed : null;
+}
+
+function isStrictPonFunChainDelayedRecovery(event) {
+  const recovery = event?.delayedRecovery;
+  const cursor = recovery?.cursor;
+  const allowedRecovery = new Set([
+    "version", "reason", "gapSince", "sourceOccurredAt", "recoveredAt", "lagMs", "cursor",
+  ]);
+  const allowedCursor = new Set(["nextBlockAtRecovery", "eventBlock"]);
+  if (!recovery || typeof recovery !== "object" || Array.isArray(recovery)
+    || !cursor || typeof cursor !== "object" || Array.isArray(cursor)
+    || Object.keys(recovery).length !== allowedRecovery.size
+    || Object.keys(recovery).some((key) => !allowedRecovery.has(key))
+    || Object.keys(cursor).length !== allowedCursor.size
+    || Object.keys(cursor).some((key) => !allowedCursor.has(key))
+    || recovery.version !== PON_FUN_X_DELAYED_RECOVERY_VERSION
+    || recovery.reason !== PON_FUN_X_DELAYED_RECOVERY_REASON
+    || !PON_FUN_DELAYED_CHAIN_KINDS.has(event?.kind)
+    || typeof event.originalEventKey !== "string"
+    || !event.originalEventKey
+    || event.eventKey !== `${event.originalEventKey}:delayed-recovery:v1`
+    || !Number.isSafeInteger(cursor.nextBlockAtRecovery)
+    || cursor.nextBlockAtRecovery <= 0
+    || !Number.isSafeInteger(cursor.eventBlock)
+    || cursor.eventBlock !== event.blockNumber) return false;
+  const sourceOccurredAt = strictPonFunInstant(recovery.sourceOccurredAt);
+  const gapSince = strictPonFunInstant(recovery.gapSince);
+  const recoveredAt = strictPonFunInstant(recovery.recoveredAt);
+  const observedAt = strictPonFunInstant(event?.observedAt);
+  const blockTimestamp = strictPonFunInstant(event?.blockTimestamp);
+  const lagMs = recovery.lagMs;
+  return sourceOccurredAt !== null
+    && gapSince !== null
+    && recoveredAt !== null
+    && observedAt !== null
+    && blockTimestamp !== null
+    && Number.isSafeInteger(lagMs)
+    && lagMs > 2 * 60 * 60 * 1_000
+    && lagMs <= PON_FUN_DELAYED_RECOVERY_MAX_LAG_MS
+    && sourceOccurredAt === blockTimestamp
+    && recoveredAt === observedAt
+    && gapSince <= recoveredAt
+    && lagMs === Math.max(0, recoveredAt - sourceOccurredAt);
+}
+
+function isStrictPonFunDelayedRecovery(source, classified) {
+  const recovery = source?.delayedRecovery;
+  if (!recovery || typeof recovery !== "object" || Array.isArray(recovery)) return false;
+  const cursor = recovery.cursor;
+  const allowed = new Set([
+    "version", "reason", "gapSince", "sourceOccurredAt", "recoveredAt", "lagMs", "cursor",
+  ]);
+  const allowedCursor = new Set(["latestIdAtRecovery", "tweetId"]);
+  if (!cursor || typeof cursor !== "object" || Array.isArray(cursor)
+    || Object.keys(recovery).length !== allowed.size
+    || Object.keys(recovery).some((key) => !allowed.has(key))
+    || Object.keys(cursor).length !== allowedCursor.size
+    || Object.keys(cursor).some((key) => !allowedCursor.has(key))
+    || recovery.version !== PON_FUN_X_DELAYED_RECOVERY_VERSION
+    || recovery.reason !== PON_FUN_X_DELAYED_RECOVERY_REASON
+    || classified?.ponPriority !== "T1"
+    || classified?.majorProductUpdate !== true
+    || classified?.platformStructural !== true
+    || source.deliverySla != null
+    || typeof cursor.latestIdAtRecovery !== "string"
+    || !/^[1-9]\d{5,}$/.test(cursor.latestIdAtRecovery)
+    || typeof cursor.tweetId !== "string"
+    || cursor.tweetId !== source.tweet?.id) return false;
+  const sourceOccurredAt = strictPonFunInstant(recovery.sourceOccurredAt);
+  const gapSince = strictPonFunInstant(recovery.gapSince);
+  const recoveredAt = strictPonFunInstant(recovery.recoveredAt);
+  const observedAt = strictPonFunInstant(source.observedAt);
+  const createdAt = strictPonFunInstant(source.tweet?.createdAt);
+  const lagMs = recovery.lagMs;
+  if (sourceOccurredAt === null || gapSince === null || recoveredAt === null
+    || observedAt === null || createdAt === null
+    || !Number.isSafeInteger(lagMs)
+    || lagMs <= PON_FUN_X_REALTIME_MAX_AGE_MS
+    || lagMs > PON_FUN_DELAYED_RECOVERY_MAX_LAG_MS
+    || sourceOccurredAt !== createdAt
+    || recoveredAt !== observedAt
+    || lagMs !== Math.max(0, recoveredAt - sourceOccurredAt)
+    || gapSince > recoveredAt) return false;
+  try {
+    return BigInt(cursor.latestIdAtRecovery) < BigInt(source.tweet.id);
+  } catch {
+    return false;
+  }
+}
+
+function isOfficialPonFunXSource(source) {
+  if (!source || typeof source !== "object" || Array.isArray(source)) return false;
+  if (source.type && source.type !== "twitter_update") return false;
+  const target = source.type === "twitter_update" ? source.project : source;
+  if (!target || typeof target !== "object" || Array.isArray(target)
+    || normalized(target.id) !== "ponfun"
+    || normalized(target.name) !== "pon.fun"
+    || normalized(target.handle).replace(/^@/, "") !== PON_FUN_X_HANDLE
+    || target.xUserId !== PON_FUN_X_USER_ID
+    || normalized(target.match) !== "official_x"
+    || normalized(target.signalProfile) !== "pon_fun"
+    || target.website !== "https://www.pon.fun"
+    || target.twitter !== "https://x.com/pondotfun") return false;
+  if (source.type !== "twitter_update") return true;
+  const tweet = source.tweet;
+  if (!tweet || typeof tweet !== "object" || Array.isArray(tweet)
+    || typeof tweet.id !== "string"
+    || !/^[1-9]\d{5,}$/.test(tweet.id)
+    || normalized(tweet.handle).replace(/^@/, "") !== PON_FUN_X_HANDLE
+    || !strictPonFunUrl(tweet.url, { xStatus: true })
+    || tweet.url !== `https://x.com/pondotfun/status/${tweet.id}`
+    || tweet.sourceVerifiedBy !== "official_x_oembed"
+    || tweet.identityVerifiedBy !== "fxtwitter_exact_numeric_id"
+    || typeof tweet.text !== "string"
+    || tweet.text !== tweet.text.trim()
+    || tweet.text.length < 1
+    || tweet.text.length > 20_000
+    || /[\u0000\u0008\u000B\u000C\u000E-\u001F\u007F]/u.test(tweet.text)
+    || strictPonFunInstant(tweet.createdAt) === null
+    || strictPonFunInstant(source.observedAt) === null) return false;
+  if (strictPonFunInstant(tweet.createdAt) > strictPonFunInstant(source.observedAt) + 5 * 60 * 1_000) return false;
+  const expandedUrls = tweet.expandedUrls == null ? [] : tweet.expandedUrls;
+  if (!Array.isArray(expandedUrls)
+    || expandedUrls.length > 16
+    || new Set(expandedUrls).size !== expandedUrls.length
+    || !expandedUrls.every((value) => {
+      if (typeof value !== "string" || value !== value.trim() || value.length > 2_048) return false;
+      const url = parsedHttpsUrl(value);
+      return Boolean(url && !url.port && !url.hash);
+    })) return false;
+  if (tweet.xUserId !== PON_FUN_X_USER_ID
+    || tweet.authorId !== PON_FUN_X_USER_ID
+    || (tweet.userId != null && tweet.userId !== PON_FUN_X_USER_ID)) return false;
+  const signal = source.signal;
+  const signalRule = PON_FUN_X_SIGNAL_RULES.get(String(signal?.ponStage || ""));
+  const classified = classifyPonFunSignalCore([tweet.text, ...expandedUrls].join("\n"));
+  const exactFields = [
+    "relevant", "strong", "ponFunOfficial", "ponKind", "ponStage", "ponAsset",
+    "tokenAddress", "transactionHash", "ponPriority", "majorProductUpdate",
+    "platformStructural", "reason",
+  ];
+  const exactClassification = exactFields.every((field) => Object.is(signal?.[field], classified?.[field]))
+    && JSON.stringify(signal?.labels) === JSON.stringify(classified?.labels);
+  const delayedRecoveryValid = source.delayedRecovery == null
+    ? true
+    : isStrictPonFunDelayedRecovery(source, classified);
+  return Boolean(signal?.ponFunOfficial === true
+    && signal?.relevant === true
+    && signalRule
+    && classified?.relevant === true
+    && exactClassification
+    && signal?.ponKind === signalRule.kind
+    && signal?.ponPriority === signalRule.priority
+    && signal?.majorProductUpdate === signalRule.major
+    && signal?.platformStructural === signalRule.major
+    && signal?.strong === signalRule.major
+    && (!signalRule.address || /^0x[a-f0-9]{40}$/i.test(String(signal?.tokenAddress || "")))
+    && (!signalRule.transaction || /^0x[a-f0-9]{64}$/i.test(String(signal?.transactionHash || "")))
+    && delayedRecoveryValid);
+}
+
+function claimsPonFunIdentity(source, seen = new Set()) {
+  if (!source || typeof source !== "object" || Array.isArray(source) || seen.has(source)) return false;
+  seen.add(source);
+  if (source.type === PON_FUN_EVENT_TYPE) return true;
+  for (const key of ["id", "name", "handle", "projectId", "platformId", "launchpadId"]) {
+    const value = normalized(source[key]).replace(/^@/, "");
+    if (["ponfun", "pon.fun", PON_FUN_X_HANDLE].includes(value)) return true;
+  }
+  for (const key of ["website", "twitter", "url"]) {
+    const url = parsedHttpsUrl(source[key]);
+    const host = url?.hostname.toLowerCase().replace(/^www\./, "");
+    const handle = url?.pathname.split("/").filter(Boolean)[0]?.toLowerCase();
+    if (host === "pon.fun" || (host === "x.com" && handle === PON_FUN_X_HANDLE)) return true;
+  }
+  for (const key of ["source", "project", "platform", "launchpad", "evidence"]) {
+    if (claimsPonFunIdentity(source[key], seen)) return true;
+  }
+  return false;
+}
+
+export function isPonFunSource(source) {
+  return claimsPonFunIdentity(source);
+}
+
+export function isPonFunMonitoringEnabled(config) {
+  return config?.ponMonitorEnabled === true;
+}
+
+function focus3PonFunOfficialSourceAllowed(config, source) {
+  return isPonFunMonitoringEnabled(config)
+    && (isOfficialPonFunUpdate(source) || isOfficialPonFunXSource(source));
 }
 
 function telegramNewsMessageId(value) {
@@ -1615,6 +2752,10 @@ export function isMonitoringSourceEnabled(config, source) {
   if (source?.type === "telegram_news_update") {
     return config?.telegramNewsMonitorEnabled === true && isTelegramNewsUpdateAllowed(source);
   }
+  // pon.fun is an explicit opt-in lane in every scope.  Evaluate it before the
+  // generic focus3 stock/RWA exclusion, while keeping legacy Pons and ordinary
+  // RWA/token events on their existing paths.
+  if (claimsPonFunIdentity(source)) return focus3PonFunOfficialSourceAllowed(config, source);
   if (!isPonsMonitoringEnabled(config) && isPonsSource(source)) return false;
   if (source?.type === "fomo_family_top_call") {
     if (config?.fomoCallEnabled === false) return false;

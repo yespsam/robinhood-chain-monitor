@@ -27,6 +27,7 @@ const DEFAULT_FRESHNESS_REALTIME_MAX_AGE_MS = 10 * 60 * 1_000;
 const DEFAULT_FRESHNESS_TELEGRAM_MAX_AGE_MS = 2 * 60 * 60 * 1_000;
 const DEFAULT_TELEGRAM_DELIVERY_MAX_AGE_MS = 2 * 60 * 60 * 1_000;
 const FOMO_TELEGRAM_DELIVERY_MAX_AGE_MS = 5 * 60 * 1_000;
+const PON_DELAYED_RECOVERY_DELIVERY_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 const SMART_WALLET_SIGNAL_KIND = "high_profit_high_winrate_wallet_buy";
 const SMART_WALLET_SOURCE_ID = "gmgn_profitable_wallet_onchain";
 const SMART_WALLET_SOURCE_TRUST = "public_onchain_profiled";
@@ -36,6 +37,20 @@ const ALERT_RENDER_VERSION = BILINGUAL_RENDER_VERSION;
 const LEGACY_ALERT_RENDER_VERSION = 2;
 const FOCUS_PLATFORMS = new Set(["flap", "fourmeme"]);
 const BINANCE_PLATFORMS = new Set(["binance", "binancewallet", "binancefutures"]);
+const PON_FUN_ALLOWED_KINDS = new Set([
+  "market_created", "market_lifecycle", "factory_config", "curve_params", "stock_listing",
+  "factory_paused", "factory_unpaused", "ownership_transfer_started", "ownership_transferred",
+  "platform_token_update",
+]);
+const PON_FUN_STRONG_KINDS = new Set([
+  "factory_config", "curve_params", "factory_paused", "ownership_transfer_started",
+  "ownership_transferred", "platform_token_update",
+]);
+const PON_FUN_REVISIONED_PLATFORM_KINDS = new Set([
+  "factory_config", "curve_params", "factory_paused", "factory_unpaused",
+  "ownership_transfer_started", "ownership_transferred", "platform_token_update",
+  "stock_listing", "market_lifecycle",
+]);
 const PLATFORM_TWITTER_SIGNALS = new Set([
   "新发射/新模式",
   "合约/部署",
@@ -145,6 +160,23 @@ export function isBinancePlatformEvent(event) {
 export function isUniswapPlatformEvent(event) {
   const platform = eventPlatform(event);
   return event?.uniswapOfficial === true || platform === "uniswap" || platform === "uniswappools" || platform.startsWith("uniswap");
+}
+
+function isPonFunEvent(event) {
+  return event?.type === "pon_fun_update" && eventPlatform(event) === "ponfun";
+}
+
+function isPonFunTwitterEvent(event) {
+  return event?.type === "twitter_update"
+    && eventPlatform(event) === "ponfun"
+    && event?.project?.signalProfile === "pon_fun"
+    && event?.signal?.ponFunOfficial === true;
+}
+
+function isPonFunDelayedRecoveryEvent(event) {
+  return (isPonFunEvent(event) || isPonFunTwitterEvent(event))
+    && event?.delayedRecovery?.version === 1
+    && event.delayedRecovery?.reason === "monitoring_gap_recovery";
 }
 
 export function isBscLaunchpadEvent(event) {
@@ -299,6 +331,21 @@ function freshnessSource(event) {
     const value = firstValue(event.blockTimestamp, event.timestamp);
     return { scope: "bsc_chain", basis: hasValue(event.blockTimestamp) ? "blockTimestamp" : "timestamp", value };
   }
+  if (isPonFunDelayedRecoveryEvent(event)) {
+    return {
+      scope: "pon_delayed_recovery",
+      basis: "delayedRecovery.recoveredAt_continuous_recovery",
+      value: event.delayedRecovery.recoveredAt || event.observedAt,
+    };
+  }
+  if (isPonFunEvent(event)) {
+    const chainTime = event.blockTimestamp;
+    return {
+      scope: "robinhood_chain",
+      basis: hasValue(chainTime) ? "blockTimestamp" : "observedAt_continuous_coverage",
+      value: chainTime || event.observedAt,
+    };
+  }
   if (isMorphLaunchpadEvent(event)) {
     const value = firstValue(event.blockTimestamp, event.timestamp, event.observedAt);
     return { scope: "morph_chain", basis: hasValue(event.blockTimestamp) ? "blockTimestamp" : "observedAt", value };
@@ -360,6 +407,12 @@ function freshnessSource(event) {
 }
 
 function freshnessLimits(config, scope) {
+  if (scope === "pon_delayed_recovery") {
+    return {
+      realtimeMaxAgeMs: DEFAULT_FRESHNESS_REALTIME_MAX_AGE_MS,
+      telegramMaxAgeMs: PON_DELAYED_RECOVERY_DELIVERY_MAX_AGE_MS,
+    };
+  }
   const names = {
     bsc_chain: ["alertBscRealtimeMaxAgeMs", "alertBscTelegramMaxAgeMs"],
     morph_chain: ["alertMorphRealtimeMaxAgeMs", "alertMorphTelegramMaxAgeMs"],
@@ -950,6 +1003,37 @@ function twitterStageText(event) {
   return "官方 X 已宣布；代码与链上启用状态尚未确认";
 }
 
+function ponFunChangeFacts(event) {
+  const facts = Object.entries(event?.changes || {}).map(([field, change]) => {
+    const value = (item) => {
+      if (item == null) return "未设置";
+      if (["string", "number", "boolean"].includes(typeof item)) return String(item);
+      if (typeof item === "object") {
+        return [item.symbol, item.ticker, item.address, item.coin, item.stockToken]
+          .filter(Boolean).join("/") || "结构化值";
+      }
+      return String(item);
+    };
+    return `${field}: ${value(change?.before)} → ${value(change?.after)}`;
+  });
+  return facts.length ? facts.slice(0, 3).join("；") : event.summary || event.title || "已确认更新";
+}
+
+function ponFunKindLabel(kind) {
+  return ({
+    market_created: "新市场创建",
+    market_lifecycle: "市场生命周期更新",
+    factory_config: "Factory 配置更新",
+    curve_params: "曲线参数更新",
+    stock_listing: "股票映射更新",
+    factory_paused: "Factory 暂停",
+    factory_unpaused: "Factory 恢复",
+    ownership_transfer_started: "所有权转移发起",
+    ownership_transferred: "所有权已转移",
+    platform_token_update: "平台币资料更新",
+  })[kind] || "官方更新";
+}
+
 const compact = (event) => {
   if (event.type === "fomo_monitor_health_update") {
     const label = event.transition === "recovered" ? "聚合监控恢复"
@@ -970,6 +1054,17 @@ const compact = (event) => {
       `分类: ${oneLine(event.news?.category || "未分类", 70)}${externalHosts.length ? ` · 外链 ${compactList(externalHosts, 3)}` : ""}`,
       "来源: @maxguruai 公共频道观察；非官方来源，需以原始项目公告为准",
       compactAlertEventTime(event, event.sourceOccurredAt, event.alertQueuedAt || event.observedAt),
+    ]);
+  }
+  if (isPonFunEvent(event)) {
+    const market = event.market || event.currentSnapshot || {};
+    const asset = market.symbol || event.symbol || market.ticker || event.ticker || "PONFUN";
+    return compactCard(`📍 pon.fun ${ponFunKindLabel(event.kind)}`, [
+      `具体更新: ${ponFunChangeFacts(event)}`,
+      event.token || event.contractAddress ? `标的: ${asset} · CA ${event.token || event.contractAddress}` : `标的: ${asset}`,
+      `证据: Factory ${event.factory}${event.transactionHash ? ` · Tx ${event.transactionHash}#${event.blockNumber}` : " · 官方 API 与 Factory 指纹绑定"}`,
+      "风险: PON coin/股票映射不是股票；预言机、背书、流动性、可卖性与管理员权限仍需核验",
+      compactAlertEventTime(event, event.blockTimestamp || event.observedAt, event.observedAt),
     ]);
   }
   if (isMorphLaunchpadEvent(event)) {
@@ -1660,6 +1755,9 @@ export function isStrongAlert(event) {
   if (isTradingPriority(event?.tradingPriority)) {
     return ["T0", "T1"].includes(event.tradingPriority.tier);
   }
+  if (isPonFunEvent(event)) return PON_FUN_STRONG_KINDS.has(event.kind);
+  if (isPonFunTwitterEvent(event)) return event.signal?.ponPriority === "T1"
+    && event.signal?.majorProductUpdate === true;
   // Open pull requests are useful early evidence, but only organization-owned
   // work receives a loud notification. Community and unattributed PRs still
   // pass the relevance gate and are delivered as ordinary alerts.
@@ -1808,6 +1906,19 @@ export function telegramButtons(event) {
       && String(numericMessageId) === messageId
       && event.messageUrl === expectedUrl;
     return { inline_keyboard: validMessage ? [[{ text: "查看原消息", url: expectedUrl }]] : [] };
+  }
+  if (isPonFunEvent(event)) {
+    const rows = [
+      [copyButton(event.token || event.contractAddress, "📋 复制 Pon 标的")].filter(Boolean),
+      [copyButton(event.factory, "📋 复制 pon.fun Factory")].filter(Boolean),
+    ];
+    const evidence = [];
+    if (httpsUrl(event.explorerUrl)) evidence.push({ text: "🔍 查看链上证据", url: event.explorerUrl });
+    else if (httpsUrl(event.source?.url)) evidence.push({ text: "📡 查看官方 API", url: event.source.url });
+    evidence.push({ text: "🌐 pon.fun", url: "https://www.pon.fun/" });
+    if (evidence.length) rows.push(evidence.slice(0, 2));
+    rows.push([{ text: "𝕏 @pondotfun", url: "https://x.com/pondotfun" }]);
+    return { inline_keyboard: rows.filter((row) => row.length) };
   }
   const token = event.type === "token_launch" ? event.tokens?.[0]?.token : null;
   if (event.type === "early_activity_alert") {
@@ -2563,6 +2674,175 @@ export function focusNoveltyKeys(event) {
   return [...keys].sort();
 }
 
+function ponFunLifecycleStage(event) {
+  const explicit = String(event?.signal?.ponStage || event?.ponStage || "").trim().toLowerCase();
+  if (/^[a-z0-9][a-z0-9_-]{0,63}$/.test(explicit)) return explicit;
+  if (event?.kind === "platform_token_update") {
+    const supply = event?.changes?.supply;
+    const before = Number(supply?.before);
+    const after = Number(supply?.after);
+    if (Number.isFinite(before) && Number.isFinite(after) && after < before) return "supply_burned";
+    if (event?.changes?.address) return "platform_token_address_updated";
+  }
+  if (event?.kind === "market_lifecycle") {
+    const changes = event.changes || {};
+    if (changes.lpDeployed?.after === true) return "lp_deployed";
+    if (changes.graduated?.after === true) return "graduated";
+    if (changes.backingPct) return "backing_updated";
+    if (changes.stockToken) return "stock_mapped";
+    return `lifecycle_${noveltySlug(Object.keys(changes).sort().join("_")) || "updated"}`;
+  }
+  return ({
+    market_created: "created",
+    stock_listing: event?.currentSnapshot?.active === false || event?.changes?.active?.after === false
+      ? "stock_delisted"
+      : "stock_listed",
+    factory_config: "factory_config",
+    curve_params: "curve_params",
+    factory_paused: "paused",
+    factory_unpaused: "recovered",
+    ownership_transfer_started: "ownership_transfer_started",
+    ownership_transferred: "ownership_transferred",
+    platform_token_update: "platform_token_updated",
+  })[event?.kind] || null;
+}
+
+function ponFunNoveltyAsset(event) {
+  const platformWide = new Set([
+    "factory_config", "curve_params", "factory_paused", "factory_unpaused",
+    "ownership_transfer_started", "ownership_transferred", "platform_token_update",
+  ]).has(event?.kind) || String(event?.signal?.ponAsset || "").toUpperCase() === "PONFUN";
+  if (platformWide) return "PONFUN";
+  const address = [
+    event?.signal?.tokenAddress,
+    event?.market?.coin,
+    event?.currentSnapshot?.coin,
+    event?.currentSnapshot?.stockToken,
+    event?.token,
+    event?.contractAddress,
+  ].map((value) => String(value || "").trim()).find((value) => /^0x[a-f0-9]{40}$/i.test(value));
+  if (address) return address.toLowerCase();
+  const symbol = String(event?.signal?.ponAsset || event?.symbol || event?.ticker || event?.market?.symbol || event?.market?.ticker || "")
+    .trim().toUpperCase();
+  return /^[A-Z0-9][A-Z0-9._-]{0,23}$/.test(symbol) ? symbol : null;
+}
+
+function normalizedPonFunChangeValue(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "bigint") return `number:${value}`;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return String(value);
+    return `number:${Object.is(value, -0) ? 0 : value}`;
+  }
+  if (typeof value === "string") {
+    const normalized = value.normalize("NFKC").replace(/\s+/g, " ").trim();
+    if (/^0x[a-f0-9]+$/i.test(normalized)) return normalized.toLowerCase();
+    if (/^-?(?:0|[1-9]\d*)$/.test(normalized)) {
+      try { return `number:${BigInt(normalized)}`; } catch { /* retain the normalized string */ }
+    }
+    return normalized;
+  }
+  if (Array.isArray(value)) return value.map(normalizedPonFunChangeValue);
+  if (typeof value === "object") {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [
+      key.normalize("NFKC").trim(),
+      normalizedPonFunChangeValue(value[key]),
+    ]));
+  }
+  return value;
+}
+
+function ponFunExactEvidenceAddresses(event) {
+  const addresses = new Set();
+  const addValue = (value) => {
+    if (typeof value === "string") {
+      for (const match of value.matchAll(/(?<![a-f0-9])0x[a-f0-9]{40}(?![a-f0-9])/gi)) addresses.add(match[0].toLowerCase());
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) addValue(item);
+      return;
+    }
+    if (value && typeof value === "object") {
+      for (const item of Object.values(value)) addValue(item);
+    }
+  };
+  for (const value of [
+    event?.signal?.tokenAddress,
+    event?.token,
+    event?.contractAddress,
+    event?.market?.coin,
+    event?.currentSnapshot?.coin,
+    event?.currentSnapshot?.address,
+    event?.tweet?.text,
+    event?.signal?.headline,
+    event?.signal?.claims,
+    event?.signal?.keyChanges,
+  ]) addValue(value);
+  for (const change of Object.values(event?.changes || {})) addValue(change?.after);
+  return [...addresses].sort();
+}
+
+function ponFunPlatformRevisionKeys(event, asset, stage) {
+  const kind = String(event?.kind || event?.signal?.ponKind || "").trim().toLowerCase();
+  if (!PON_FUN_REVISIONED_PLATFORM_KINDS.has(kind)) return [];
+  if (kind === "market_lifecycle") {
+    const repeatableFields = new Set(["stockToken", "poolFee", "backingPct", "creatorFeeBps"]);
+    const hasRepeatableChange = Object.keys(event?.changes || {}).some((field) => repeatableFields.has(field));
+    if (!hasRepeatableChange) return [];
+  }
+  const prefix = `pon:${asset}:${stage}`;
+  const keys = [];
+  const transactionHash = String(event?.transactionHash || event?.signal?.transactionHash || "").trim().toLowerCase();
+  const logIndex = Number(event?.evidence?.logIndex ?? event?.signal?.logIndex);
+  if (/^0x[a-f0-9]{64}$/.test(transactionHash)) {
+    keys.push(`${prefix}:tx:${transactionHash}`);
+    if (Number.isSafeInteger(logIndex) && logIndex >= 0) keys.push(`${prefix}:tx-log:${transactionHash}:${logIndex}`);
+  }
+  const exactAddresses = ponFunExactEvidenceAddresses(event);
+  for (const address of exactAddresses) keys.push(`${prefix}:ca:${address}`);
+  if (event?.changes && typeof event.changes === "object" && !Array.isArray(event.changes)
+    && Object.keys(event.changes).length > 0) {
+    keys.push(`${prefix}:changes:${digest(normalizedPonFunChangeValue(event.changes)).slice(0, 24)}`);
+  }
+  if (event?.type === "pon_fun_update"
+    && !/^0x[a-f0-9]{64}$/.test(transactionHash)
+    && ["market_lifecycle", "platform_token_update"].includes(kind)
+    && typeof event?.eventKey === "string"
+    && event.eventKey.length > 0) {
+    keys.push(`${prefix}:revision:${digest(event.eventKey).slice(0, 24)}`);
+  }
+  if (event?.type === "twitter_update" && !/^0x[a-f0-9]{64}$/.test(transactionHash) && exactAddresses.length === 0) {
+    const tweetId = String(event?.tweet?.id || "").trim();
+    if (/^\d+$/.test(tweetId)) keys.push(`${prefix}:x-tweet:${tweetId}`);
+    else {
+      const claims = [
+        event?.signal?.headline,
+        ...(event?.signal?.claims || []),
+        ...(event?.signal?.keyChanges || []),
+        event?.tweet?.text,
+      ].filter(Boolean).map(normalizedPonFunChangeValue);
+      if (claims.length) keys.push(`${prefix}:x-claim:${digest(claims).slice(0, 24)}`);
+    }
+  }
+  return keys;
+}
+
+// A separate Pon namespace prevents the stock-backed exception from sharing
+// broad focus3 concept keys.  X/API/chain observations of one lifecycle stage
+// collapse, while creation, graduation and LP deployment remain distinct.
+export function ponFunNoveltyKeys(event) {
+  const officialPon = isPonFunEvent(event) || isPonFunTwitterEvent(event);
+  if (!officialPon) return [];
+  const asset = ponFunNoveltyAsset(event);
+  const stage = ponFunLifecycleStage(event);
+  if (!asset || !stage) return [];
+  return [...new Set([
+    `pon:${asset}:${stage}`,
+    ...ponFunPlatformRevisionKeys(event, asset, stage),
+  ])].sort();
+}
+
 function withFocusNovelty(config, event) {
   if (event?.type === "telegram_news_update") {
     // Public-channel observations are exact message revisions only. Strip any
@@ -2571,12 +2851,14 @@ function withFocusNovelty(config, event) {
     return { ...event, canonicalSignalId: null, canonicalSignalIds: [] };
   }
   const fomoKeys = fomoNoveltyKeys(event);
-  if (!isThreePlatformScope(config) && !fomoKeys.length) return event;
+  const ponKeys = ponFunNoveltyKeys(event);
+  if (!isThreePlatformScope(config) && !fomoKeys.length && !ponKeys.length) return event;
   const canonicalSignalIds = [...new Set([
     ...(isThreePlatformScope(config) ? focusNoveltyKeys(event) : []),
     ...(isThreePlatformScope(config) ? binanceNoveltyKeys(event) : []),
     ...(isThreePlatformScope(config) ? aiNoveltyKeys(event) : []),
     ...(isThreePlatformScope(config) ? githubSemanticNoveltyKeys(event) : []),
+    ...ponKeys,
     ...fomoKeys,
   ])].sort();
   return canonicalSignalIds.length ? { ...event, canonicalSignalId: canonicalSignalIds[0], canonicalSignalIds } : event;
@@ -2741,7 +3023,8 @@ function semanticDuplicate(outbox, eventId, event, now = Date.now()) {
   const binanceSignal = [...incoming].every((key) => key.startsWith("binance:"));
   const aiSignal = [...incoming].every((key) => key.startsWith("ai:"));
   const fomoSignal = [...incoming].every((key) => key.startsWith("fomo:call:bsc:"));
-  const dedupWindowMs = binanceSignal ? 6 * 60 * 60 * 1_000 : aiSignal ? 24 * 60 * 60 * 1_000 : FOCUS_NOVELTY_DEDUP_MS;
+  const ponSignal = [...incoming].every((key) => key.startsWith("pon:"));
+  const dedupWindowMs = binanceSignal || ponSignal ? 6 * 60 * 60 * 1_000 : aiSignal ? 24 * 60 * 60 * 1_000 : FOCUS_NOVELTY_DEDUP_MS;
   const incomingIsActivation = isFocusOnchainTokenActivation(event);
   const coverage = new Map();
   for (const entry of Object.values(outbox.events || {})) {
@@ -2756,7 +3039,7 @@ function semanticDuplicate(outbox, eventId, event, now = Date.now()) {
     // are separate milestones. Keep cross-source dedup within each lane so a
     // GitHub/X announcement cannot hide the first on-chain activation, while
     // repeated observations of that same activation are still suppressed.
-    if (isFocusOnchainTokenActivation(entry.event) !== incomingIsActivation) continue;
+    if (!ponSignal && isFocusOnchainTokenActivation(entry.event) !== incomingIsActivation) continue;
     // Older outbox entries predate canonicalSignalIds. Derive their identity
     // lazily so a restart or rollout cannot make an already announced feature
     // look new merely because its first source used the previous schema.
@@ -2766,6 +3049,7 @@ function semanticDuplicate(outbox, eventId, event, now = Date.now()) {
       ...binanceNoveltyKeys(entry.event || {}),
       ...aiNoveltyKeys(entry.event || {}),
       ...githubSemanticNoveltyKeys(entry.event || {}),
+      ...ponFunNoveltyKeys(entry.event || {}),
       ...fomoNoveltyKeys(entry.event || {}),
     ];
     // Early focus3 entries collapsed every unversioned Flap Vault into one
@@ -3154,6 +3438,7 @@ function disableExpiredTelegramDelivery(config, entry, evaluatedAt = Date.now())
   if (entry.event?.type === "fomo_monitor_health_update") return false;
 
   const isFomo = entry.event?.type === "fomo_family_top_call";
+  const isPonDelayedRecovery = isPonFunDelayedRecoveryEvent(entry.event);
   // Fomo is useful only as an immediate signal. Anchor its five-minute TTL to
   // immutable source time whenever available; a restart or duplicate scan must
   // never turn an old buy/call into a fresh Telegram delivery. Other alerts
@@ -3170,7 +3455,9 @@ function disableExpiredTelegramDelivery(config, entry, evaluatedAt = Date.now())
   if (queuedAtMs === null) return false;
   const maxAgeMs = isFomo
     ? FOMO_TELEGRAM_DELIVERY_MAX_AGE_MS
-    : nonNegativeLimit(config, "alertTelegramDeliveryMaxAgeMs", DEFAULT_TELEGRAM_DELIVERY_MAX_AGE_MS);
+    : isPonDelayedRecovery
+      ? PON_DELAYED_RECOVERY_DELIVERY_MAX_AGE_MS
+      : nonNegativeLimit(config, "alertTelegramDeliveryMaxAgeMs", DEFAULT_TELEGRAM_DELIVERY_MAX_AGE_MS);
   const ageMs = Math.max(0, evaluatedAtMs - queuedAtMs);
   if (ageMs <= maxAgeMs) return false;
 
@@ -3938,6 +4225,7 @@ export function isRelevantAlert(event) {
     return isFomoMonitorHealthUpdateAllowed({ fomoHealthMonitorEnabled: true }, event);
   }
   if (event?.type === "telegram_news_update") return isTelegramNewsUpdateAllowed(event);
+  if (isPonFunEvent(event)) return PON_FUN_ALLOWED_KINDS.has(event.kind);
   if (isMorphLaunchpadEvent(event)) {
     const platform = eventPlatform(event);
     return ["flap", "long"].includes(platform)
@@ -4010,6 +4298,8 @@ export function isRelevantAlert(event) {
     return isFocusPlatformEvent(event) || isUniswapPlatformEvent(event) || Boolean(event.newContracts?.length || event.newKeywords?.length || event.newFeatures?.length || event.newPages?.length || event.newAssets?.length || event.newChains?.length);
   }
   if (event.type === "twitter_update") {
+    if (isPonFunTwitterEvent(event)) return event.signal?.relevant === true
+      && ["T1", "T2"].includes(event.signal?.ponPriority);
     if (event.project?.signalProfile === "ai") return event.signal?.relevant === true && event.signal?.strong === true;
     if (isBinancePlatformEvent(event)) {
       return event.signal?.relevant === true || binanceAgentNativeNovelty(event)?.stage === "launch";

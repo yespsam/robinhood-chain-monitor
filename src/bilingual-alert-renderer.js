@@ -32,6 +32,7 @@ const EVENT_TITLES = {
   github_repository_verified: "GitHub repository verified",
   launchpad_site_update: "Official website capability update",
   binance_official_update: "Binance official update",
+  pon_fun_update: "pon.fun official update",
   pons_v2_factory_discovered: "Pons v2 factory discovery",
   pons_v2_factory_status_update: "Pons v2 factory status update",
   early_activity_alert: "Early activity signal",
@@ -56,6 +57,7 @@ const EVENT_TITLES_ZH = {
   github_repository_verified: "GitHub 仓库认证更新",
   launchpad_site_update: "发射台官网能力更新",
   binance_official_update: "Binance 官方更新",
+  pon_fun_update: "pon.fun 官方更新",
   pons_v2_factory_discovered: "Pons v2 Factory 发现",
   pons_v2_factory_status_update: "Pons v2 Factory 状态更新",
   early_activity_alert: "早期量能信号",
@@ -212,8 +214,10 @@ function protectedTerms(event) {
     event?.repositoryMetadata?.fullName,
     event?.commit,
     event?.transactionHash,
+    event?.signal?.transactionHash,
     event?.contract,
     event?.token,
+    event?.signal?.tokenAddress,
     event?.factory,
     event?.launcher,
     event?.walletAddress,
@@ -820,7 +824,140 @@ function fallbackChineseLines(event, baseLines, changeModel = deriveAlertChangeM
   });
 }
 
+function isPonFunRenderEvent(event) {
+  return event?.type === "pon_fun_update"
+    || (event?.type === "twitter_update"
+      && String(event?.project?.id || "").toLowerCase() === "ponfun"
+      && event?.signal?.ponFunOfficial === true);
+}
+
+function ponFunKind(event) {
+  return event?.type === "twitter_update" ? event?.signal?.ponKind : event?.kind;
+}
+
+function ponFunSnapshotValue(value) {
+  if (value == null) return "∅";
+  if (["string", "number", "boolean", "bigint"].includes(typeof value)) return String(value);
+  if (typeof value === "object") {
+    return [value.symbol, value.ticker, value.address, value.coin, value.stockToken]
+      .filter(Boolean).map(String).join("/") || "structured-value";
+  }
+  return String(value);
+}
+
+function ponFunChangePairs(event, language = "zh", maximum = 3) {
+  const zh = language === "zh";
+  return Object.entries(event?.changes || {})
+    .filter(([, value]) => value && typeof value === "object" && "before" in value && "after" in value)
+    .slice(0, maximum)
+    .map(([field, value]) => {
+      const before = ponFunSnapshotValue(value.before);
+      const after = ponFunSnapshotValue(value.after);
+      const longIdentifierTransition = [before, after].some((item) => /^0x[a-f0-9]{40,64}$/i.test(item))
+        || before.length + after.length > 96;
+      return longIdentifierTransition
+        ? `${field} ${zh ? "已变更" : "changed"}`
+        : `${field} ${before}→${after}`;
+    });
+}
+
+function ponFunRecoveryLag(value, language = "zh") {
+  const milliseconds = Number(value);
+  if (!Number.isFinite(milliseconds) || milliseconds < 0) return language === "zh" ? "未知" : "unknown";
+  const minutes = Math.floor(milliseconds / 60_000);
+  if (minutes < 60) return language === "zh" ? `${minutes}分钟` : `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return language === "zh" ? `${hours}小时` : `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return language === "zh" ? `${days}天${hours % 24 ? `${hours % 24}小时` : ""}` : `${days}d${hours % 24 ? `${hours % 24}h` : ""}`;
+}
+
+function ponFunFocusKey(event, language = "zh") {
+  const zh = language === "zh";
+  if (event?.delayedRecovery?.version === 1
+    && event.delayedRecovery?.reason === "monitoring_gap_recovery") {
+    const original = { ...event };
+    delete original.delayedRecovery;
+    return `${zh ? "监控恢复补报" : "Delayed recovery"} · ${ponFunFocusKey(original, language)}`;
+  }
+  const kind = ponFunKind(event);
+  const market = event?.market || event?.currentSnapshot || {};
+  const symbol = market.symbol || event?.symbol || market.ticker || event?.ticker || "?";
+  const ticker = market.ticker || event?.ticker;
+  const changes = ponFunChangePairs(event, language).join(" · ");
+  if (event?.type === "twitter_update") {
+    const stage = event?.signal?.ponStage;
+    if (stage === "platform_token_live") return zh ? "$PONFUN 正式上线" : "$PONFUN is live";
+    if (stage === "supply_burned") return zh ? "$PONFUN Dev supply 已销毁" : "$PONFUN dev supply burned";
+    if (stage === "paused") return zh ? "Factory/协议已暂停" : "Factory/protocol paused";
+    if (stage === "recovered") return zh ? "Factory/平台运行已恢复" : "Factory/platform operations recovered";
+    const claim = event?.signal?.headline || event?.signal?.keyChanges?.[0] || event?.tweet?.text;
+    return firstFocusClause(claim || (zh ? "官方 X 更新" : "Official X update"));
+  }
+  if (kind === "market_created") return zh
+    ? `新市场 ${symbol}${ticker && ticker !== symbol ? ` / ${ticker}` : ""}`
+    : `New market ${symbol}${ticker && ticker !== symbol ? ` / ${ticker}` : ""}`;
+  if (kind === "stock_listing") return `${zh ? "股票映射" : "Stock mapping"} ${ticker || symbol}${changes ? ` · ${changes}` : ""}`;
+  if (kind === "market_lifecycle") return `${zh ? "市场生命周期" : "Market lifecycle"} ${symbol} · ${changes || (zh ? "状态已更新" : "state updated")}`;
+  const labels = {
+    factory_config: { zh: "Factory 配置", en: "Factory config" },
+    curve_params: { zh: "曲线参数", en: "Curve params" },
+    factory_paused: { zh: "Factory 已暂停", en: "Factory paused" },
+    factory_unpaused: { zh: "Factory 已恢复", en: "Factory recovered" },
+    ownership_transfer_started: { zh: "所有权转移已发起", en: "Ownership transfer started" },
+    ownership_transferred: { zh: "所有权已转移", en: "Ownership transferred" },
+    platform_token_update: { zh: "$PONFUN 资料", en: "$PONFUN metadata" },
+  };
+  const label = labels[kind]?.[language] || (zh ? "官方更新" : "Official update");
+  return `${label}${changes ? ` · ${changes}` : ""}`;
+}
+
+function ponFunFocusEvidence(event) {
+  const token = event?.signal?.tokenAddress || event?.token || event?.contractAddress;
+  const transactionHash = event?.signal?.transactionHash || event?.transactionHash;
+  const transaction = transactionHash
+    ? `Tx ${transactionHash}${event?.blockNumber != null ? `#${event.blockNumber}` : ""}`
+    : null;
+  if (event?.type === "twitter_update") {
+    const post = event?.tweet?.id ? `@pondotfun · X#${event.tweet.id}` : "@pondotfun";
+    return [
+      token ? { zh: `CA ${token}`, en: `CA ${token}` } : null,
+      transaction ? { zh: transaction, en: transaction } : { zh: post, en: post },
+    ].filter(Boolean);
+  }
+  return [
+    token ? { zh: `CA ${token}`, en: `CA ${token}` } : null,
+    transaction
+      ? { zh: transaction, en: transaction }
+      : event?.factory ? { zh: `Factory ${event.factory}`, en: `Factory ${event.factory}` } : null,
+    !token && event?.factory && transaction
+      ? { zh: `Factory ${event.factory}`, en: `Factory ${event.factory}` } : null,
+  ].filter(Boolean).slice(0, 2);
+}
+
+function ponFunFocusStage(event, language = "zh") {
+  const zh = language === "zh";
+  if (event?.delayedRecovery?.version === 1
+    && event.delayedRecovery?.reason === "monitoring_gap_recovery") {
+    const lag = ponFunRecoveryLag(event.delayedRecovery.lagMs, language);
+    return zh
+      ? `监控缺口恢复后补报 · 延迟 ${lag} · 勿追价；原始证据已保留；非自动交易`
+      : `Recovered after a monitoring gap · ${lag} late · do not chase; original proof retained; no auto-trading`;
+  }
+  const stockLinked = ["market_created", "market_lifecycle", "stock_listing"].includes(ponFunKind(event));
+  if (event?.type === "twitter_update") return zh
+    ? `官方 X 身份已核；${event?.signal?.transactionHash ? "交易仍需链上复核" : "链上结果待确认"}；非自动交易`
+    : `Official X identity checked; ${event?.signal?.transactionHash ? "transaction still needs on-chain review" : "on-chain result pending"}; no auto-trading`;
+  if (event?.transactionHash) return zh
+    ? `Factory receipt 已核；${stockLinked ? "coin 不是股票；" : ""}非自动交易`
+    : `Factory receipt checked; ${stockLinked ? "coin is not a share; " : ""}no auto-trading`;
+  return zh
+    ? `官方 API 与 Factory 指纹绑定；${stockLinked ? "coin 不是股票；" : ""}非自动交易`
+    : `Official API bound to Factory fingerprint; ${stockLinked ? "coin is not a share; " : ""}no auto-trading`;
+}
+
 function focusProject(event) {
+  if (isPonFunRenderEvent(event)) return "pon.fun";
   return eventProject(event)
     || event?.product?.name
     || (event?.type === "uniswap_official_update" ? "Uniswap" : null)
@@ -985,6 +1122,7 @@ function flapAgenticFirstTokenCandidate(event) {
 
 function focusTitle(event, language = "zh") {
   const zh = language === "zh";
+  if (isPonFunRenderEvent(event)) return `pon.fun｜${zh ? "官方更新" : "Official update"}`;
   if (event?.type === "telegram_news_update") return zh ? "频道线索" : "Channel lead";
   if (flapAgenticFirstTokenCandidate(event)) return zh
     ? "Flap｜Skill首币候选"
@@ -1634,6 +1772,7 @@ function uniswapGithubReleaseFocus(event, language = "zh") {
 
 function focusKey(event, changeModel, language = "zh") {
   const zh = language === "zh";
+  if (isPonFunRenderEvent(event)) return ponFunFocusKey(event, language);
   if (flapAgenticFirstTokenCandidate(event)) {
     const token = firstTokenLabel(event) || "chAIn";
     const quoteAmount = String(event?.mode?.quoteAmountDisplay || "1.283 NVDAB");
@@ -1804,6 +1943,7 @@ function fomoPositionProofEvidence(event) {
 }
 
 function focusEvidence(event) {
+  if (isPonFunRenderEvent(event)) return ponFunFocusEvidence(event);
   const pool = event?.type === "platform_capability_update" ? poolEvidence(event) : [];
   if (pool.length) return pool.slice(0, 2);
 
@@ -2118,6 +2258,7 @@ function bscStage(event, language) {
 
 function focusStage(event, language = "zh", sourceStatus = "") {
   const zh = language === "zh";
+  if (isPonFunRenderEvent(event)) return ponFunFocusStage(event, language);
   if (flapAgenticFirstTokenCandidate(event)) {
     const block = Number.isSafeInteger(Number(event?.blockNumber)) ? Number(event.blockNumber) : "?";
     return zh
@@ -2304,7 +2445,12 @@ function tradingBrief(priority, language = "zh") {
   const plan = priority?.plan || {};
   const conclusion = plan.conclusion?.[language] || (zh ? "不做" : "Do not trade");
   if (["T0", "T1"].includes(priority?.tier)) {
-    const compact = priority.category === "binance_market_catalyst"
+    const compact = priority.category === "pon_structural"
+      ? {
+          zh: ["平台注意力→后续市场", "标的+流动性+可卖性", "回滚/无承接"],
+          en: ["platform attention→markets", "target+liquidity+sellability", "rollback/no support"],
+        }
+      : priority.category === "binance_market_catalyst"
       ? {
           zh: ["现货→合约", "量价", "无承接"],
           en: ["spot→contract", "price-volume", "no support"],
@@ -2688,6 +2834,7 @@ function usesLocalStructuredChineseFocus(event) {
 
 function usesLocalStructuredBilingualFocus(event) {
   return event?.type === "fomo_monitor_health_update"
+    || isPonFunRenderEvent(event)
     || event?.type === "github_module_update"
     || event?.type === "uniswap_official_update"
     || Boolean(binanceAgentNativeDetails(event))
@@ -2779,8 +2926,22 @@ export async function buildBilingualAlertBundle(config, event, baseMessage) {
   // The compact renderer intentionally validates only the one or two identifiers selected into
   // the focus card. The immutable event and Telegram buttons retain the full
   // evidence set without re-expanding it into the notification body.
-  const chineseRequired = requiredTechnicalLiterals(chineseBaseLines, event);
-  const englishRequired = requiredTechnicalLiterals(englishBaseLines, event);
+  const delayedPonRecovery = isPonFunRenderEvent(event)
+    && event?.delayedRecovery?.version === 1
+    && event.delayedRecovery?.reason === "monitoring_gap_recovery";
+  const delayedRequiredLiterals = (lines) => requiredTechnicalLiterals(lines, event)
+    .filter((literal) => !delayedPonRecovery
+      || event?.type !== "pon_fun_update"
+      || !new Set(["factory", String(event?.factory || "").toLowerCase()])
+        .has(String(literal).toLowerCase()));
+  const chineseRequired = [
+    ...delayedRequiredLiterals(chineseBaseLines),
+    ...(delayedPonRecovery ? ["监控恢复补报", "勿追价"] : []),
+  ];
+  const englishRequired = [
+    ...delayedRequiredLiterals(englishBaseLines),
+    ...(delayedPonRecovery ? ["Delayed recovery", "do not chase"] : []),
+  ];
   const options = {
     endpoint: config.alertTranslationUrl,
     fallbackEndpoint: config.alertTranslationFallbackUrl,
@@ -2827,7 +2988,9 @@ export async function buildBilingualAlertBundle(config, event, baseMessage) {
     englishLines,
     chineseRequired,
     englishRequired,
-    showPriority ? TWO_FIELD_COMBINED_BLOCK_BUDGET - 12 : TWO_FIELD_COMBINED_BLOCK_BUDGET,
+    showPriority
+      ? TWO_FIELD_COMBINED_BLOCK_BUDGET - (delayedPonRecovery ? 48 : 12)
+      : TWO_FIELD_COMBINED_BLOCK_BUDGET,
   );
   const sourceHash = createHash("sha256")
     .update(`${chineseBaseLines.join("\n")}\n---\n${englishBaseLines.join("\n")}`)

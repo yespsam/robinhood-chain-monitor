@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { OFFICIAL_TWITTER_TARGETS, atomicWriteTwitterState, classifyAiOfficialText, classifyBinanceCriticalProductText, classifyFocusLaunchpadText, classifyTweet, classifyTwitterAlertDelivery, classifyUniswapOfficialText, createTwitterMonitor, parseCriticalXDirectDiscovery, parseFxTwitterExactStatus, parseFxTwitterTimeline, parseJinaReaderPayload, parseOfficialXOembed, parseTimelineHtml, twitterHandle, twitterStateControlKey } from "../src/twitter-monitor.js";
+import { OFFICIAL_TWITTER_TARGETS, atomicWriteTwitterState, classifyAiOfficialText, classifyBinanceCriticalProductText, classifyFocusLaunchpadText, classifyPonFunOfficialText, classifyTweet, classifyTwitterAlertDelivery, classifyUniswapOfficialText, createTwitterMonitor, parseCriticalXDirectDiscovery, parseFxTwitterExactStatus, parseFxTwitterTimeline, parseJinaReaderPayload, parseOfficialXOembed, parseTimelineHtml, twitterHandle, twitterStateControlKey } from "../src/twitter-monitor.js";
 
 function timelineHtml(handle, tweets = []) {
   const entries = tweets.map((tweet) => ({
@@ -2668,6 +2668,14 @@ test("structured alert delivery receipts accept only durable outcomes", () => {
   assert.equal(classifyTwitterAlertDelivery({ status: "suppressed", reason: "blocked_event" }), "accepted");
   assert.equal(classifyTwitterAlertDelivery({ status: "suppressed", reason: "unknown" }), "retry");
   assert.equal(classifyTwitterAlertDelivery(false), "retry");
+  assert.equal(classifyTwitterAlertDelivery({ status: "queued" }, { strictPonFun: true }), "accepted");
+  assert.equal(classifyTwitterAlertDelivery({ status: "suppressed", reason: "blocked_event", terminal: true }, { strictPonFun: true }), "accepted");
+  assert.equal(classifyTwitterAlertDelivery({ status: "suppressed", reason: "freshness_too_old", terminal: true }, { strictPonFun: true }), "retry");
+  assert.equal(classifyTwitterAlertDelivery({ status: "suppressed", reason: "delivery_ttl_expired", terminal: true }, { strictPonFun: true }), "retry");
+  assert.equal(classifyTwitterAlertDelivery({ status: "suppressed", reason: "not_relevant", terminal: true }, { strictPonFun: true }), "retry");
+  assert.equal(classifyTwitterAlertDelivery({ status: "suppressed", reason: "monitoring_source_disabled", terminal: true }, { strictPonFun: true }), "retry");
+  assert.equal(classifyTwitterAlertDelivery({ status: "suppressed", reason: "policy_suppressed", terminal: true }, { strictPonFun: true }), "retry");
+  assert.equal(classifyTwitterAlertDelivery(undefined, { strictPonFun: true }), "retry");
 });
 
 test("a normally filtered Four.Meme alert advances its cursor without a delivery retry", async (t) => {
@@ -2814,4 +2822,344 @@ test("parses X embed timeline JSON", () => {
   const payload = { props: { pageProps: { timeline: { entries: [{ type: "tweet", entry_id: "tweet-123", content: { tweet: { id_str: "123", full_text: "Factory deployed", created_at: "now", favorite_count: 2, retweet_count: 1, reply_count: 0, user: { name: "Pad", screen_name: "padfun" } } } }] } } } };
   const html = `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify(payload)}</script>`;
   assert.deepEqual(parseTimelineHtml(html, "padfun")[0], { id: "123", text: "Factory deployed", createdAt: "now", authorName: "Pad", handle: "padfun", replies: 0, reposts: 1, likes: 2, url: "https://x.com/padfun/status/123", isReply: false });
+});
+
+test("pon.fun classifier uses Blockscout evidence links and filters mechanism marketing", () => {
+  const token = "0x1111111111111111111111111111111111111111";
+  const tx = `0x${"a".repeat(64)}`;
+  const live = classifyPonFunOfficialText(`$PONFUN is live\nhttps://robinhoodchain.blockscout.com/address/${token}`);
+  assert.equal(live.relevant, true);
+  assert.equal(live.ponKind, "platform_token_update");
+  assert.equal(live.ponStage, "platform_token_live");
+  assert.equal(live.tokenAddress, token);
+  assert.equal(live.ponPriority, "T1");
+
+  const burn = classifyPonFunOfficialText(`Dev supply is burned\nhttps://robinhoodchain.blockscout.com/tx/${tx}`);
+  assert.equal(burn.relevant, true);
+  assert.equal(burn.ponStage, "supply_burned");
+  assert.equal(burn.transactionHash, tx);
+  assert.equal(burn.ponPriority, "T1");
+
+  const graduated = classifyPonFunOfficialText(`The market graduated\nhttps://robinhoodchain.blockscout.com/address/${token}`);
+  assert.equal(graduated.relevant, true);
+  assert.equal(graduated.ponKind, "market_lifecycle");
+  assert.equal(graduated.ponStage, "graduated");
+
+  const transferStarted = classifyPonFunOfficialText("Factory ownership transfer initiated and pending to 0x1111111111111111111111111111111111111111");
+  assert.equal(transferStarted.relevant, true);
+  assert.equal(transferStarted.ponKind, "ownership_transfer_started");
+  assert.equal(transferStarted.ponStage, "ownership_transfer_started");
+
+  const transferred = classifyPonFunOfficialText("Factory ownership transfer completed and accepted by 0x1111111111111111111111111111111111111111");
+  assert.equal(transferred.relevant, true);
+  assert.equal(transferred.ponKind, "ownership_transferred");
+  assert.equal(transferred.ponStage, "ownership_transferred");
+
+  const ambiguousOwnership = classifyPonFunOfficialText("Factory ownership transfer update for 0x1111111111111111111111111111111111111111");
+  assert.equal(ambiguousOwnership.relevant, false);
+  assert.equal(ambiguousOwnership.reason, "ambiguous_ownership_transfer_stage");
+  assert.equal(graduated.ponPriority, "T2");
+
+  for (const message of [
+    `Learn more about how pon.fun works\nhttps://robinhoodchain.blockscout.com/address/${token}`,
+    "Built for the people. Join the pon.fun community.",
+    "Pons launches a generic RWA token called PON.",
+  ]) assert.equal(classifyPonFunOfficialText(message).relevant, false, message);
+});
+
+test("PON alone schedules only @pondotfun, silently baselines history, then verifies a link-only proof", async (t) => {
+  const dataDir = await fixture(t);
+  const account = { handle: "pondotfun", name: "pon.fun", userId: "2094048312772993024" };
+  const tx = `0x${"b".repeat(64)}`;
+  let clock = Date.parse("2026-09-02T04:00:00.000Z");
+  let tweets = [1, 2, 3, 4].map((offset) => ({
+    id: `209410000000000000${offset}`,
+    text: `pon.fun historical platform post ${offset}`,
+    createdTimestamp: clock / 1_000 - (10 - offset) * 60,
+    expandedUrls: [],
+  }));
+  const requests = [];
+  const delivered = [];
+  const fetchImpl = async (url) => {
+    const value = String(url);
+    requests.push(value);
+    if (value.includes(`/2/profile/id:${account.userId}/statuses`)) {
+      return textResponse({
+        code: 200,
+        results: tweets.map((tweet) => ({
+          id: tweet.id,
+          text: tweet.text,
+          raw_text: {
+            text: tweet.text,
+            facets: tweet.expandedUrls.map((replacement) => ({ type: "url", replacement })),
+          },
+          created_timestamp: tweet.createdTimestamp,
+          author: { id: account.userId, name: account.name, screen_name: account.handle },
+          url: `https://x.com/${account.handle}/status/${tweet.id}`,
+          replying_to: null,
+          reposted_by: null,
+          replies: 0,
+          reposts: 0,
+          likes: 0,
+        })),
+      });
+    }
+    const exactId = value.match(/^https:\/\/api\.fxtwitter\.test\/pondotfun\/status\/(\d+)$/)?.[1];
+    if (exactId) {
+      const tweet = tweets.find((candidate) => candidate.id === exactId);
+      if (!tweet) return textResponse("", 404);
+      return textResponse({
+        code: 200,
+        tweet: {
+          id: tweet.id,
+          text: tweet.text,
+          raw_text: {
+            text: tweet.text,
+            facets: tweet.expandedUrls.map((replacement) => ({ type: "url", replacement })),
+          },
+          created_timestamp: tweet.createdTimestamp,
+          author: { id: account.userId, name: account.name, screen_name: account.handle },
+          url: `https://x.com/${account.handle}/status/${tweet.id}`,
+          replying_to: null,
+          reposted_by: null,
+          replies: 0,
+          reposts: 0,
+          likes: 0,
+        },
+      });
+    }
+    if (value.startsWith("https://publish.x.com/oembed")) {
+      const requested = new URL(value).searchParams.get("url");
+      const id = requested?.match(/\/status\/(\d+)$/)?.[1];
+      const tweet = tweets.find((candidate) => candidate.id === id);
+      if (!tweet) return textResponse("", 404);
+      return textResponse({
+        url: requested,
+        author_url: `https://x.com/${account.handle}`,
+        author_name: account.name,
+        html: `<blockquote><p>${tweet.text}</p><a href="${requested}">September 2, 2026</a></blockquote>`,
+      });
+    }
+    return textResponse("", 404);
+  };
+  const monitor = createTwitterMonitor(criticalOnlyConfig(dataDir, {
+    twitterMonitorEnabled: false,
+    binanceCriticalXMonitorEnabled: false,
+    focusCriticalXMonitorEnabled: false,
+    ponMonitorEnabled: true,
+    focusCriticalXMaxAgeMs: 10 * 60_000,
+  }), {
+    autoStart: false,
+    now: () => clock,
+    logger: { error() {} },
+    fetchImpl,
+    sendAlertsImpl: async (_config, event) => {
+      delivered.push(event);
+      return { status: "queued", eventId: `twitter:${event.tweet.id}` };
+    },
+  });
+  t.after(() => monitor.stop());
+
+  await monitor.check();
+  assert.equal(delivered.length, 0, "the four existing posts form a silent baseline");
+  let state = JSON.parse(await fs.readFile(path.join(dataDir, "twitter-state.json"), "utf8"));
+  assert.equal(state.pondotfun.latestId, "2094100000000000004");
+  assert.deepEqual(Object.keys(state).filter((key) => !key.startsWith("_")), ["pondotfun"]);
+
+  clock += 6_000;
+  tweets = [{
+    id: "2095100000000000000",
+    text: "Dev supply is burned",
+    createdTimestamp: clock / 1_000 - 1,
+    expandedUrls: [`https://robinhoodchain.blockscout.com/tx/${tx}`],
+  }, ...tweets];
+  await monitor.check();
+
+  assert.equal(delivered.length, 1);
+  assert.equal(delivered[0].project.id, "ponfun");
+  assert.equal(delivered[0].project.criticalProfile, "pon_fun");
+  assert.equal(delivered[0].tweet.sourceVerifiedBy, "official_x_oembed");
+  assert.equal(delivered[0].tweet.identityVerifiedBy, "fxtwitter_exact_numeric_id");
+  assert.deepEqual(delivered[0].tweet.expandedUrls, [`https://robinhoodchain.blockscout.com/tx/${tx}`]);
+  assert.equal(delivered[0].signal.ponStage, "supply_burned");
+  assert.equal(delivered[0].signal.transactionHash, tx);
+  assert.equal(requests.some((url) => url.includes("ordinary-x-must-not-run.test")), false);
+  state = JSON.parse(await fs.readFile(path.join(dataDir, "twitter-state.json"), "utf8"));
+  assert.equal(state.pondotfun.latestId, "2095100000000000000");
+});
+
+test("pon.fun recovers a real source gap one exact oldest structural tweet per cycle", async (t) => {
+  const cursorId = "2096100000000000000";
+  const firstId = "2096100000000000001";
+  const secondId = "2096100000000000002";
+  const dataDir = await fixture(t, {
+    pondotfun: {
+      latestId: cursorId,
+      checkedAt: "2026-09-02T04:00:00.000Z",
+      profile: { name: "pon.fun", handle: "pondotfun" },
+    },
+    _health: {
+      pondotfun: {
+        status: "error",
+        consecutiveFailures: 1,
+        gapSince: "2026-09-02T04:01:00.000Z",
+        sources: {},
+      },
+    },
+  });
+  let clock = Date.parse("2026-09-02T04:20:00.000Z");
+  const account = { handle: "pondotfun", name: "pon.fun", userId: "2094048312772993024" };
+  const tweets = [
+    { id: secondId, text: "pon.fun Factory protocol paused", createdTimestamp: Date.parse("2026-09-02T04:03:00.000Z") / 1_000, expandedUrls: [] },
+    { id: firstId, text: "pon.fun Factory treasury configuration updated", createdTimestamp: Date.parse("2026-09-02T04:02:00.000Z") / 1_000, expandedUrls: [] },
+    { id: cursorId, text: "pon.fun baseline", createdTimestamp: Date.parse("2026-09-02T04:00:00.000Z") / 1_000, expandedUrls: [] },
+  ];
+  const exactRequests = [];
+  const delivered = [];
+  const fetchImpl = async (url) => {
+    const value = String(url);
+    if (value.includes(`/2/profile/id:${account.userId}/statuses`)) {
+      return textResponse({
+        code: 200,
+        results: tweets.map((tweet) => ({
+          id: tweet.id,
+          text: tweet.text,
+          raw_text: { text: tweet.text, facets: [] },
+          created_timestamp: tweet.createdTimestamp,
+          author: { id: account.userId, name: account.name, screen_name: account.handle },
+          url: `https://x.com/${account.handle}/status/${tweet.id}`,
+          replying_to: null,
+          reposted_by: null,
+          replies: 0,
+          reposts: 0,
+          likes: 0,
+        })),
+      });
+    }
+    const exactId = value.match(/^https:\/\/api\.fxtwitter\.test\/pondotfun\/status\/(\d+)$/)?.[1];
+    if (exactId) {
+      exactRequests.push(exactId);
+      const tweet = tweets.find((candidate) => candidate.id === exactId);
+      return textResponse({
+        code: 200,
+        tweet: {
+          id: tweet.id,
+          text: tweet.text,
+          raw_text: { text: tweet.text, facets: [] },
+          created_timestamp: tweet.createdTimestamp,
+          author: { id: account.userId, name: account.name, screen_name: account.handle },
+          url: `https://x.com/${account.handle}/status/${tweet.id}`,
+          replying_to: null,
+          reposted_by: null,
+          replies: 0,
+          reposts: 0,
+          likes: 0,
+        },
+      });
+    }
+    if (value.startsWith("https://publish.x.com/oembed")) {
+      const id = new URL(value).searchParams.get("url")?.match(/\/status\/(\d+)$/)?.[1];
+      const tweet = tweets.find((candidate) => candidate.id === id);
+      return textResponse({
+        url: `https://x.com/${account.handle}/status/${id}`,
+        author_url: `https://x.com/${account.handle}`,
+        author_name: account.name,
+        html: `<blockquote><p>${tweet.text}</p><a href="https://x.com/${account.handle}/status/${id}">September 2, 2026</a></blockquote>`,
+      });
+    }
+    return textResponse("", 404);
+  };
+  const monitor = createTwitterMonitor(criticalOnlyConfig(dataDir, {
+    binanceCriticalXMonitorEnabled: false,
+    focusCriticalXMonitorEnabled: false,
+    ponMonitorEnabled: true,
+    focusCriticalXMaxAgeMs: 24 * 60 * 60_000,
+  }), {
+    autoStart: false,
+    now: () => clock,
+    logger: { error() {} },
+    fetchImpl,
+    sendAlertsImpl: async (_config, event) => {
+      delivered.push(event);
+      return { status: "queued", eventId: `twitter:${event.tweet.id}` };
+    },
+  });
+  t.after(() => monitor.stop());
+
+  await monitor.check();
+  assert.deepEqual(exactRequests, [firstId]);
+  assert.deepEqual(delivered.map((event) => event.tweet.id), [firstId]);
+  assert.equal(delivered[0].delayedRecovery.reason, "monitoring_gap_recovery");
+  assert.deepEqual(delivered[0].delayedRecovery.cursor, { latestIdAtRecovery: cursorId, tweetId: firstId });
+  assert.equal(delivered[0].deliverySla, undefined);
+  let state = JSON.parse(await fs.readFile(path.join(dataDir, "twitter-state.json"), "utf8"));
+  assert.equal(state.pondotfun.latestId, firstId);
+  assert.equal(state._health.pondotfun.coverage.delayedRecovery.status, "in_progress");
+  assert.equal(state._health.pondotfun.gapSince, "2026-09-02T04:01:00.000Z");
+
+  clock += 6_000;
+  await monitor.check();
+  assert.deepEqual(exactRequests, [firstId, secondId]);
+  assert.deepEqual(delivered.map((event) => event.tweet.id), [firstId, secondId]);
+  state = JSON.parse(await fs.readFile(path.join(dataDir, "twitter-state.json"), "utf8"));
+  assert.equal(state.pondotfun.latestId, secondId);
+  assert.equal(state._health.pondotfun.coverage.delayedRecovery.status, "complete");
+  assert.equal(state._health.pondotfun.gapSince, undefined);
+});
+
+test("pon.fun freezes its cursor and persists incomplete coverage when Fx omits the durable ID", async (t) => {
+  const cursorId = "2096200000000000000";
+  const newerId = "2096200000000000001";
+  const dataDir = await fixture(t, {
+    pondotfun: {
+      latestId: cursorId,
+      checkedAt: "2026-09-02T04:19:59.000Z",
+      profile: { name: "pon.fun", handle: "pondotfun" },
+    },
+    _health: { pondotfun: { status: "healthy", consecutiveFailures: 0, sources: {} } },
+  });
+  const clock = Date.parse("2026-09-02T04:20:00.000Z");
+  const fetchImpl = async (url) => {
+    const value = String(url);
+    if (value.includes("/2/profile/id:2094048312772993024/statuses")) {
+      return textResponse({
+        code: 200,
+        results: [{
+          id: newerId,
+          text: "pon.fun historical community recap",
+          raw_text: { text: "pon.fun historical community recap", facets: [] },
+          created_timestamp: Date.parse("2026-09-02T04:05:00.000Z") / 1_000,
+          author: { id: "2094048312772993024", name: "pon.fun", screen_name: "pondotfun" },
+          url: `https://x.com/pondotfun/status/${newerId}`,
+          replying_to: null,
+          reposted_by: null,
+        }],
+      });
+    }
+    return textResponse("", 404);
+  };
+  const delivered = [];
+  const monitor = createTwitterMonitor(criticalOnlyConfig(dataDir, {
+    binanceCriticalXMonitorEnabled: false,
+    focusCriticalXMonitorEnabled: false,
+    ponMonitorEnabled: true,
+  }), {
+    autoStart: false,
+    now: () => clock,
+    logger: { error() {} },
+    fetchImpl,
+    sendAlertsImpl: async (_config, event) => {
+      delivered.push(event);
+      return { status: "queued", eventId: `twitter:${event.tweet.id}` };
+    },
+  });
+  t.after(() => monitor.stop());
+
+  await monitor.check();
+  const state = JSON.parse(await fs.readFile(path.join(dataDir, "twitter-state.json"), "utf8"));
+  assert.equal(state.pondotfun.latestId, cursorId);
+  assert.equal(delivered.length, 0);
+  assert.equal(state._health.pondotfun.coverage.cursorGap.status, "incomplete");
+  assert.equal(state._health.pondotfun.coverage.cursorGap.cursorId, cursorId);
+  assert.match(state._health.pondotfun.lastError, /does not cover the durable cursor/);
 });

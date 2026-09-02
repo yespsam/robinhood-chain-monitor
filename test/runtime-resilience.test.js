@@ -29,6 +29,7 @@ test("ordinary Twitter monitoring has an independent kill switch while narrow cr
   assert.match(configSource, /twitterMonitorEnabled:.*TWITTER_MONITOR_ENABLED/);
   assert.match(configSource, /binanceCriticalXMonitorEnabled:.*BINANCE_CRITICAL_X_MONITOR_ENABLED/);
   assert.match(configSource, /focusCriticalXMonitorEnabled:.*FOCUS_CRITICAL_X_MONITOR_ENABLED/);
+  assert.match(configSource, /ponMonitorEnabled:.*PON_MONITOR_ENABLED/);
   assert.match(configSource, /focusCriticalXMaxAgeMs:.*FOCUS_CRITICAL_X_MAX_AGE_MS/);
   assert.match(configSource, /binanceCriticalXSchedulerIntervalMs:.*BINANCE_CRITICAL_X_SCHEDULER_INTERVAL_MS/);
   assert.match(configSource, /binanceCriticalXDiscoveryIntervalMs:.*BINANCE_CRITICAL_X_DISCOVERY_INTERVAL_MS/);
@@ -36,7 +37,7 @@ test("ordinary Twitter monitoring has an independent kill switch while narrow cr
   assert.match(configSource, /binanceCriticalXDiscoveryTimeoutMs:.*BINANCE_CRITICAL_X_DISCOVERY_TIMEOUT_MS/);
   assert.match(configSource, /binanceCriticalXVerifyTimeoutMs:.*BINANCE_CRITICAL_X_VERIFY_TIMEOUT_MS/);
   assert.match(configSource, /binanceCriticalXLocalBudgetMs:.*BINANCE_CRITICAL_X_LOCAL_BUDGET_MS/);
-  assert.match(indexSource, /if \(config\.twitterMonitorEnabled \|\| config\.binanceCriticalXMonitorEnabled \|\| config\.focusCriticalXMonitorEnabled\) startMonitor\("twitter"/);
+  assert.match(indexSource, /if \(config\.twitterMonitorEnabled \|\| config\.binanceCriticalXMonitorEnabled \|\| config\.focusCriticalXMonitorEnabled \|\| config\.ponMonitorEnabled\) startMonitor\("twitter"/);
   assert.match(indexSource, /config\.fomoXCallEnabled/);
 });
 

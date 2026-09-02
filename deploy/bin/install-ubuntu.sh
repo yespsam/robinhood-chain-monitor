@@ -70,6 +70,7 @@ readonly GMGN_PATH="/usr/local/bin/gmgn-cli"
 [[ -x "$GMGN_PATH" ]] || fail "$GMGN_PATH was not installed"
 [[ "$(PATH=/usr/bin:/bin "$GMGN_PATH" --version)" == "1.5.4" ]] || fail "gmgn-cli version verification failed"
 
+install -o root -g root -m 0755 "$REPO_DIR/deploy/bin/read-env-setting.sh" "$LIBEXEC_DIR/read-env-setting.sh"
 install -o root -g root -m 0755 "$REPO_DIR/deploy/bin/assert-active.sh" "$LIBEXEC_DIR/assert-active.sh"
 install -o root -g root -m 0755 "$REPO_DIR/deploy/bin/release.sh" /usr/local/sbin/robinhood-release
 install -o root -g root -m 0755 "$REPO_DIR/deploy/bin/switch-release.sh" /usr/local/sbin/robinhood-switch-release
@@ -113,11 +114,13 @@ if [[ ! -e "$CONFIG_DIR/health.env" ]]; then
     printf 'HEALTH_BSC_MAX_AGE_SECONDS=180\n'
     printf 'HEALTH_GITHUB_MAX_AGE_SECONDS=180\n'
     printf 'HEALTH_PLATFORM_CAPABILITY_MAX_AGE_SECONDS=180\n'
+    printf 'HEALTH_PON_MAX_AGE_SECONDS=180\n'
     printf 'HEALTH_FOMO_STATE_MAX_AGE_SECONDS=180\n'
     printf 'HEALTH_FOMO_CHECKPOINT_MAX_AGE_SECONDS=900\n'
     printf 'HEALTH_FOMO_X_MAX_AGE_SECONDS=180\n'
     printf 'HEALTH_FOMO_THESIS_MAX_AGE_SECONDS=180\n'
     printf 'HEALTH_OUTBOX_MAX_PENDING_AGE_SECONDS=60\n'
+    printf 'HEALTH_REQUIRE_PON=false\n'
     printf 'HEALTH_REQUIRE_FOMO_STATE=true\n'
     printf 'HEALTH_REQUIRE_FOMO_CHECKPOINT=true\n'
     printf 'HEALTH_REQUIRE_FOMO_X=true\n'

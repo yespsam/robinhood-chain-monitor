@@ -6,7 +6,7 @@ import { PLATFORM_CAPABILITY_TARGETS } from "./platform-capability-monitor.js";
 import { extractGithubRepositories } from "./github-monitor.js";
 import { classifyBinanceOfficialText } from "./binance-monitor.js";
 import { parseXDirectTimeline } from "./x-direct-timeline.js";
-import { isMonitoringSourceEnabled, isThreePlatformScope } from "./source-controls.js";
+import { classifyPonFunSignalCore, isMonitoringSourceEnabled, isThreePlatformScope } from "./source-controls.js";
 import { extractChainSupportSignals } from "./chain-support.js";
 
 const SIGNALS = [
@@ -219,6 +219,12 @@ export function classifyAiOfficialText(text = "") {
   }, source);
 }
 
+export function classifyPonFunOfficialText(text = "") {
+  const source = String(text || "").replace(/&amp;/gi, "&");
+  const signal = classifyPonFunSignalCore(source);
+  return signal.relevant ? appendOfficialClaims(signal, source) : signal;
+}
+
 const BINANCE_CRITICAL_X_MAX_AGE_MS = 2 * 60 * 60 * 1_000;
 const FOCUS_CRITICAL_X_MAX_AGE_MS = 10 * 60 * 1_000;
 const CRITICAL_X_TARGET_PROFILES = new Map([
@@ -226,6 +232,7 @@ const CRITICAL_X_TARGET_PROFILES = new Map([
   ["binancewallet", "binance_product"],
   ["flapdotsh", "focus_launchpad"],
   ["fourdotmemezh", "focus_launchpad"],
+  ["pondotfun", "pon_fun"],
 ]);
 const BINANCE_CRITICAL_AGENT_PRODUCT = /\b(?:binance\s+)?(?:agent\s*os|agent[- ]native|mcp(?:\s+server)?|model\s+context\s+protocol)\b/i;
 const BINANCE_CRITICAL_PRODUCT_ACTION = /\b(?:meet|introduc(?:e|es|ed|ing)|launch(?:es|ed|ing)?|unveil(?:s|ed|ing)?|releas(?:e|es|ed|ing)|roll(?:s|ed|ing)?\s+out|deploy(?:s|ed|ing)?|debut(?:s|ed|ing)?|is\s+now\s+(?:live|available)|now\s+(?:live|available)|general(?:ly)?\s+available|public\s+(?:beta|preview))\b/i;
@@ -331,6 +338,27 @@ export const OFFICIAL_TWITTER_TARGETS = [
     fallbackOfficialSources: [
       { name: "Four.Meme 公告", url: "https://four.meme/en/announcement", coveredBy: "platform-capability-monitor" },
       { name: "Four.Meme 产品配置", url: "https://four.meme/meme-api/v1/public/config", coveredBy: "platform-capability-monitor" },
+    ],
+  },
+  {
+    id: "ponfun",
+    name: "pon.fun",
+    website: "https://www.pon.fun",
+    twitter: "https://x.com/pondotfun",
+    handle: "pondotfun",
+    xUserId: "2094048312772993024",
+    match: "official_x",
+    signalProfile: "pon_fun",
+    priority: true,
+    criticalFastLane: true,
+    criticalProfile: "pon_fun",
+    // The existing four posts establish identity and history only. Never replay
+    // them during rollout; alert only tweets newer than this durable cursor.
+    baselineOnFirstSeen: true,
+    backfillOnFirstSeen: false,
+    fallbackOfficialSources: [
+      { name: "pon.fun official API", url: "https://www.pon.fun/api/health", coveredBy: "pon-monitor" },
+      { name: "pon.fun Factory", url: "https://robinhoodchain.blockscout.com/address/0xF698d13348686C1529c2DC54847C123424d9DAE0", coveredBy: "pon-monitor" },
     ],
   },
   {
@@ -747,12 +775,15 @@ export function classifyFocusLaunchpadText(text = "") {
   }, source);
 }
 
-function classifyProjectTweet(text, project, config) {
+function classifyProjectTweet(text, project, config, expandedUrls = []) {
+  const ponEvidenceText = [text, ...(Array.isArray(expandedUrls) ? expandedUrls : [])].filter(Boolean).join("\n");
   if (project?.criticalFastLane) {
     if (project.criticalProfile === "binance_product") return classifyBinanceCriticalProductText(text);
     if (project.criticalProfile === "focus_launchpad") return classifyFocusLaunchpadText(text);
+    if (project.criticalProfile === "pon_fun") return classifyPonFunOfficialText(ponEvidenceText);
     return { relevant: false, strong: false, labels: [], reason: "unknown_critical_x_profile" };
   }
+  if (project?.id === "ponfun") return classifyPonFunOfficialText(ponEvidenceText);
   if (isThreePlatformScope(config) && ["flap", "fourmeme", "long"].includes(project?.id)) {
     return classifyFocusLaunchpadText(text);
   }
@@ -1132,10 +1163,54 @@ function isCriticalFastLane(project) {
   return project?.criticalFastLane === true;
 }
 
+function isPonFunFastLane(project) {
+  return project?.id === "ponfun" && project?.criticalProfile === "pon_fun";
+}
+
+function isCanonicalXStatusId(value) {
+  return /^[1-9]\d{5,}$/.test(String(value || ""));
+}
+
+function ponFunRecoveryGapSince(health, previous, currentTime, maximumAgeMs) {
+  const explicitGap = Date.parse(health?.gapSince || "");
+  if (Number.isFinite(explicitGap)) return new Date(explicitGap).toISOString();
+  const checkpoint = Date.parse(health?.lastSuccessAt || previous?.checkedAt || "");
+  if (!Number.isFinite(checkpoint) || currentTime - checkpoint <= maximumAgeMs) return null;
+  return new Date(checkpoint).toISOString();
+}
+
+function ponFunDelayedRecovery(signal, tweet, previous, gapSince, observedAt, maximumAgeMs) {
+  const sourceOccurredAtMs = Date.parse(tweet?.createdAt || "");
+  const recoveredAtMs = Date.parse(observedAt || "");
+  const lagMs = Number.isFinite(sourceOccurredAtMs) && Number.isFinite(recoveredAtMs)
+    ? Math.max(0, recoveredAtMs - sourceOccurredAtMs)
+    : null;
+  if (!gapSince
+    || !Number.isSafeInteger(lagMs)
+    || lagMs <= Math.max(maximumAgeMs, FOCUS_CRITICAL_X_MAX_AGE_MS)
+    || signal?.ponPriority !== "T1"
+    || signal?.majorProductUpdate !== true
+    || signal?.platformStructural !== true
+    || !isCanonicalXStatusId(previous?.latestId)) return null;
+  return {
+    version: 1,
+    reason: "monitoring_gap_recovery",
+    gapSince,
+    sourceOccurredAt: tweet.createdAt,
+    recoveredAt: observedAt,
+    lagMs,
+    cursor: {
+      latestIdAtRecovery: previous.latestId,
+      tweetId: tweet.id,
+    },
+  };
+}
+
 function criticalTweetMaxAgeMs(config, project) {
-  return project?.criticalProfile === "focus_launchpad"
-    ? positiveInteger(config.focusCriticalXMaxAgeMs, FOCUS_CRITICAL_X_MAX_AGE_MS)
-    : positiveInteger(config.binanceCriticalXMaxAgeMs, BINANCE_CRITICAL_X_MAX_AGE_MS);
+  if (isPonFunFastLane(project)) return FOCUS_CRITICAL_X_MAX_AGE_MS;
+  return project?.criticalProfile === "binance_product"
+    ? positiveInteger(config.binanceCriticalXMaxAgeMs, BINANCE_CRITICAL_X_MAX_AGE_MS)
+    : positiveInteger(config.focusCriticalXMaxAgeMs, FOCUS_CRITICAL_X_MAX_AGE_MS);
 }
 
 function timestamp(now) {
@@ -1152,17 +1227,24 @@ function compareTweetIds(left, right) {
   }
 }
 
-export function classifyTwitterAlertDelivery(result) {
+export function classifyTwitterAlertDelivery(result, { strictPonFun = false } = {}) {
   // A large body of monitor unit tests predates structured delivery receipts.
   // Keep undefined/truthy primitive mocks compatible; production sendAlerts
   // always returns a status object and therefore follows the strict branches.
-  if (result === undefined) return "accepted";
+  if (result === undefined) return strictPonFun ? "retry" : "accepted";
   if (result === false || result === null) return "retry";
-  if (typeof result !== "object") return result ? "accepted" : "retry";
+  if (typeof result !== "object") return strictPonFun ? "retry" : result ? "accepted" : "retry";
   if (["delivered", "queued"].includes(String(result.status || "").toLowerCase())) return "accepted";
   const reason = String(result.reason || result.disabledReason || "").toLowerCase();
   if (String(result.status || "").toLowerCase() === "suppressed" && /semantic[_ -]duplicate/.test(reason)) {
     return "semantic_duplicate";
+  }
+  if (strictPonFun) {
+    return String(result.status || "").toLowerCase() === "suppressed"
+      && reason === "blocked_event"
+      && isTerminalAlertSuppression(result)
+      ? "accepted"
+      : "retry";
   }
   if (isTerminalAlertSuppression(result)) return "accepted";
   return "retry";
@@ -1302,12 +1384,16 @@ function updateCriticalSlaStatus(config, project, health, currentTime) {
 function targetList(dynamic, siteState, config) {
   const targets = new Map();
   const criticalOnly = config.twitterMonitorEnabled === false
-    && (config.binanceCriticalXMonitorEnabled === true || config.focusCriticalXMonitorEnabled === true);
+    && (config.binanceCriticalXMonitorEnabled === true
+      || config.focusCriticalXMonitorEnabled === true
+      || config.ponMonitorEnabled === true);
   const enabledCriticalProfiles = new Map(
     [...CRITICAL_X_TARGET_PROFILES].filter(([handle, profile]) => (
       profile === "binance_product"
         ? config.binanceCriticalXMonitorEnabled === true
-        : config.focusCriticalXMonitorEnabled === true
+        : profile === "pon_fun"
+          ? config.ponMonitorEnabled === true
+          : config.focusCriticalXMonitorEnabled === true
     )),
   );
   const projects = criticalOnly
@@ -1877,8 +1963,8 @@ export function createTwitterMonitor(config, dependencies = {}) {
     catch (error) { if (error.code === "ENOENT") return fallback; throw error; }
   }
 
-  async function isDurablyAcceptedAlert(result) {
-    const classification = classifyTwitterAlertDelivery(result);
+  async function isDurablyAcceptedAlert(result, { strictPonFun = false } = {}) {
+    const classification = classifyTwitterAlertDelivery(result, { strictPonFun });
     if (classification === "accepted") return true;
     if (classification === "semantic_duplicate" && (result?.persisted === true || result?.terminal === true)) return true;
     if (!result?.eventId || String(result.status || "").toLowerCase() !== "suppressed") return false;
@@ -2058,13 +2144,30 @@ export function createTwitterMonitor(config, dependencies = {}) {
       if (!criticalDiscoveryResult) criticalDiscoveryResult = await criticalDiscoveryPromise;
       return criticalDiscoveryResult;
     };
-    const discoveryFetchResult = (discovery, inheritedErrors = []) => ({
-      tweets: discovery.tweets,
-      source: discovery.source,
-      sourceId: "critical_verified_discovery",
-      degraded: inheritedErrors.length > 0 || discovery.degraded,
-      errors: [...inheritedErrors, ...discovery.errors],
-    });
+    const discoveryFetchResult = (discovery, inheritedErrors = []) => {
+      if (isPonFunFastLane(project) && previousLatestId) {
+        health.coverage ||= {};
+        health.coverage.cursorGap = {
+          status: "incomplete",
+          reason: "discovery_only_cannot_prove_durable_cursor_continuity",
+          cursorId: previousLatestId,
+          newestSeenId: discovery.tweets[0]?.id || null,
+          oldestSeenId: discovery.tweets.at(-1)?.id || null,
+          detectedAt: timestamp(now),
+          source: discovery.source || "critical_verified_discovery",
+        };
+        const error = new Error("Pon discovery-only fallback cannot prove the durable cursor");
+        error.code = "TWITTER_PON_CURSOR_GAP";
+        throw error;
+      }
+      return {
+        tweets: discovery.tweets,
+        source: discovery.source,
+        sourceId: "critical_verified_discovery",
+        degraded: inheritedErrors.length > 0 || discovery.degraded,
+        errors: [...inheritedErrors, ...discovery.errors],
+      };
+    };
     const auxiliaryFetchResult = (discovery) => ({
       tweets: [],
       source: primaryBase,
@@ -2152,13 +2255,17 @@ export function createTwitterMonitor(config, dependencies = {}) {
           if (!previousLatestId || relevantForCursor.length) {
             const verifyCandidates = isCriticalFastLane(project)
               ? (previousLatestId
-                  ? relevantForCursor.filter((tweet) => {
-                      return isCriticalTweetFresh(
-                        tweet,
-                        now(),
-                        criticalTweetMaxAgeMs(config, project),
-                      );
-                    })
+                  ? (isPonFunFastLane(project) && health.gapSince
+                      ? [...relevantForCursor]
+                        .sort((left, right) => compareTweetIds(left.id, right.id))
+                        .slice(0, 1)
+                      : relevantForCursor.filter((tweet) => {
+                        return isCriticalTweetFresh(
+                          tweet,
+                          now(),
+                          criticalTweetMaxAgeMs(config, project),
+                        );
+                      }))
                   : parsedTweets.slice(0, 1))
               : (relevantForCursor.length ? relevantForCursor : parsedTweets.slice(0, 1));
             if (verifyCandidates.length) {
@@ -2168,7 +2275,9 @@ export function createTwitterMonitor(config, dependencies = {}) {
               if (isCriticalFastLane(project) && verifyBudgetMs <= 0) {
                 throw new Error("critical X delivery SLA exhausted before primary verification");
               }
-              const verifiedCandidates = await verifyThirdPartyTweets(project, verifyCandidates, verifyBudgetMs);
+              const verifiedCandidates = isPonFunFastLane(project)
+                ? await verifyCriticalJinaTweets(project, verifyCandidates, verifyBudgetMs)
+                : await verifyThirdPartyTweets(project, verifyCandidates, verifyBudgetMs);
               if (isCriticalFastLane(project)) {
                 health.criticalVerification = {
                   status: "healthy",
@@ -2176,7 +2285,9 @@ export function createTwitterMonitor(config, dependencies = {}) {
                   lastSuccessAt: timestamp(now),
                   verifiedCandidates: verifiedCandidates.length,
                   timeoutBudgetMs: verifyBudgetMs,
-                  identity: "fxtwitter_numeric_id+official_x_oembed",
+                  identity: isPonFunFastLane(project)
+                    ? "fxtwitter_exact_numeric_id+official_x_oembed"
+                    : "fxtwitter_numeric_id+official_x_oembed",
                 };
               }
               const verifiedById = new Map(verifiedCandidates.map((tweet) => [tweet.id, tweet]));
@@ -2197,6 +2308,22 @@ export function createTwitterMonitor(config, dependencies = {}) {
         if (directX && previousLatestId && !isCriticalFastLane(project) && !tweets.some((tweet) => compareTweetIds(tweet.id, previousLatestId) === 0)) {
           throw new Error("X direct timeline does not cover the durable cursor");
         }
+        if (fxTwitter && previousLatestId && isPonFunFastLane(project)
+          && !tweets.some((tweet) => compareTweetIds(tweet.id, previousLatestId) === 0)) {
+          health.coverage ||= {};
+          health.coverage.cursorGap = {
+            status: "incomplete",
+            reason: "durable_cursor_not_in_numeric_id_timeline",
+            cursorId: previousLatestId,
+            newestSeenId: tweets[0]?.id || null,
+            oldestSeenId: tweets.at(-1)?.id || null,
+            detectedAt: timestamp(now),
+            source: base,
+          };
+          const error = new Error("Pon FxTwitter timeline does not cover the durable cursor");
+          error.code = "TWITTER_PON_CURSOR_GAP";
+          throw error;
+        }
         if (fxTwitter && previousLatestId && !isCriticalFastLane(project) && tweets[0]
           && compareTweetIds(tweets[0].id, previousLatestId) > 0
           && !tweets.some((tweet) => compareTweetIds(tweet.id, previousLatestId) === 0)) {
@@ -2204,7 +2331,7 @@ export function createTwitterMonitor(config, dependencies = {}) {
         }
         const sourcePollCompletedAt = now();
         const checkedAt = new Date(sourcePollCompletedAt).toISOString();
-        const configuredFxTwitterPollIntervalMs = ["flap", "fourmeme"].includes(project.id)
+        const configuredFxTwitterPollIntervalMs = ["flap", "fourmeme", "ponfun"].includes(project.id)
           ? positiveInteger(config.twitterCriticalFxTwitterMinIntervalMs, MIN_FXTWITTER_POLL_INTERVAL_MS)
           : positiveInteger(config.twitterFxTwitterMinIntervalMs, MIN_FXTWITTER_POLL_INTERVAL_MS);
         const fxTwitterPollIntervalMs = Math.max(MIN_FXTWITTER_POLL_INTERVAL_MS, configuredFxTwitterPollIntervalMs);
@@ -2244,7 +2371,9 @@ export function createTwitterMonitor(config, dependencies = {}) {
             : null,
         });
         const retryAfter = health.sources[base].circuitUntil;
+        if (error.code === "TWITTER_PON_CURSOR_GAP") error.retryAfter = retryAfter;
         errors.push({ source: base, message: error.message, retryAfter });
+        if (error.code === "TWITTER_PON_CURSOR_GAP") throw error;
         if (isCriticalFastLane(project)) {
           const discovery = await criticalDiscovery();
           if (discovery.tweets.length) return discoveryFetchResult(discovery, errors);
@@ -2355,6 +2484,25 @@ export function createTwitterMonitor(config, dependencies = {}) {
     }
 
     try {
+      const priorCursor = state[key];
+      if (isPonFunFastLane(project) && priorCursor?.latestId && !health.gapSince) {
+        const inferredGapSince = ponFunRecoveryGapSince(
+          health,
+          priorCursor,
+          now(),
+          criticalTweetMaxAgeMs(config, project),
+        );
+        if (inferredGapSince) {
+          health.gapSince = inferredGapSince;
+          health.coverage ||= {};
+          health.coverage.delayedRecovery = {
+            status: "in_progress",
+            reason: "stale_durable_coverage_checkpoint",
+            gapSince: inferredGapSince,
+            startedAt: timestamp(now),
+          };
+        }
+      }
       const result = await fetchTweets(
         project,
         health,
@@ -2371,7 +2519,7 @@ export function createTwitterMonitor(config, dependencies = {}) {
         delete health.retryAfter;
         delete health.lastError;
         delete health.lastErrorAt;
-        delete health.gapSince;
+        if (!isPonFunFastLane(project)) delete health.gapSince;
         closeAggregateFailureLog(health, project);
         refreshCriticalSlaStatus();
         await persistState(state);
@@ -2401,6 +2549,39 @@ export function createTwitterMonitor(config, dependencies = {}) {
         }
       } else {
         candidates = tweets[0] ? [tweets[0]] : [];
+      }
+
+      const ponRecoveryGap = isPonFunFastLane(project) && previous?.latestId
+        ? health.gapSince || null
+        : null;
+      let ponRecoveryRemaining = false;
+      if (ponRecoveryGap && candidates.length) {
+        const firstRecoveryTweet = candidates[0];
+        const firstRecoveryCreatedAt = Date.parse(firstRecoveryTweet?.createdAt || "");
+        const backfillMaxAgeMs = Math.min(
+          positiveInteger(config.twitterBackfillMaxAgeMs, DEFAULT_BACKFILL_MAX_AGE_MS),
+          DEFAULT_BACKFILL_MAX_AGE_MS,
+        );
+        if (!Number.isFinite(firstRecoveryCreatedAt) || now() - firstRecoveryCreatedAt > backfillMaxAgeMs) {
+          health.coverage ||= {};
+          health.coverage.delayedRecovery = {
+            ...(health.coverage.delayedRecovery || {}),
+            status: "incomplete",
+            reason: "oldest_unprocessed_tweet_outside_bounded_recovery_window",
+            gapSince: ponRecoveryGap,
+            cursorId: previous.latestId,
+            blockedTweetId: firstRecoveryTweet?.id || null,
+            checkedAt: timestamp(now),
+          };
+          const error = new Error(`Pon delayed recovery exceeds bounded backfill window at status/${firstRecoveryTweet?.id || "unknown"}`);
+          error.code = "TWITTER_PON_RECOVERY_WINDOW_EXCEEDED";
+          throw error;
+        }
+        ponRecoveryRemaining = candidates.length > 1;
+        // Exact-status + oEmbed verification is intentionally bounded to one
+        // oldest item per cycle. Advancing in ID order makes restart safe and
+        // prevents a newer alert from skipping an unverified predecessor.
+        candidates = candidates.slice(0, 1);
       }
 
       let detailRequests = 0;
@@ -2454,13 +2635,25 @@ export function createTwitterMonitor(config, dependencies = {}) {
         const criticalMaxAgeMs = criticalTweetMaxAgeMs(config, project);
         const criticalFresh = !isCriticalFastLane(project)
           || isCriticalTweetFresh(tweet, now(), criticalMaxAgeMs);
-        const signal = criticalFresh
-          ? classifyProjectTweet(tweet.text, project, config)
+        const classifiedSignal = classifyProjectTweet(tweet.text, project, config, tweet.expandedUrls);
+        const observedAt = timestamp(now);
+        const delayedRecovery = !criticalFresh && isPonFunFastLane(project)
+          ? ponFunDelayedRecovery(
+              classifiedSignal,
+              tweet,
+              previous,
+              ponRecoveryGap,
+              observedAt,
+              criticalMaxAgeMs,
+            )
+          : null;
+        const signal = criticalFresh || delayedRecovery
+          ? classifiedSignal
           : { relevant: false, strong: false, labels: [], reason: "outside_critical_x_freshness_window" };
         if (signal.relevant) {
           let delivery;
           try {
-            if (isCriticalFastLane(project) && now() >= criticalDeadlineAtMs) {
+            if (isCriticalFastLane(project) && !delayedRecovery && now() >= criticalDeadlineAtMs) {
               const error = new Error(`critical X shared delivery SLA expired before sendAlerts for @${project.handle}/status/${tweet.id}`);
               error.code = "TWITTER_CRITICAL_SLA_EXHAUSTED";
               throw error;
@@ -2470,10 +2663,11 @@ export function createTwitterMonitor(config, dependencies = {}) {
               project,
               tweet,
               signal,
-              observedAt: timestamp(now),
-              ...(deliverySla ? { deliverySla } : {}),
+              observedAt,
+              ...(delayedRecovery ? { delayedRecovery } : {}),
+              ...(deliverySla && !delayedRecovery ? { deliverySla } : {}),
             });
-            if (isCriticalFastLane(project) && now() > criticalDeadlineAtMs) {
+            if (isCriticalFastLane(project) && !delayedRecovery && now() > criticalDeadlineAtMs) {
               const error = new Error(`critical X shared delivery SLA exceeded by sendAlerts for @${project.handle}/status/${tweet.id}`);
               error.code = "TWITTER_CRITICAL_SLA_EXHAUSTED";
               throw error;
@@ -2484,7 +2678,7 @@ export function createTwitterMonitor(config, dependencies = {}) {
             error.cause = cause;
             throw error;
           }
-          if (!await isDurablyAcceptedAlert(delivery)) {
+          if (!await isDurablyAcceptedAlert(delivery, { strictPonFun: isPonFunFastLane(project) })) {
             const error = new Error(`alert was not durably accepted for @${project.handle}/status/${tweet.id}`);
             error.code = "TWITTER_ALERT_NOT_DURABLE";
             error.delivery = delivery;
@@ -2512,8 +2706,26 @@ export function createTwitterMonitor(config, dependencies = {}) {
         health.coverage.firstSeenBackfill.completedAt = timestamp(now);
       }
       const priorGap = health.gapSince;
+      if (health.coverage?.cursorGap?.status === "incomplete") {
+        health.coverage.cursorGap = {
+          ...health.coverage.cursorGap,
+          status: "complete",
+          resolvedAt: timestamp(now),
+        };
+      }
+      if (priorGap) {
+        health.coverage ||= {};
+        health.coverage.delayedRecovery = {
+          ...(health.coverage.delayedRecovery || {}),
+          status: ponRecoveryRemaining ? "in_progress" : "complete",
+          gapSince: priorGap,
+          cursorId: state[key]?.latestId || null,
+          ...(ponRecoveryRemaining ? { checkedAt: timestamp(now) } : { completedAt: timestamp(now) }),
+        };
+      }
       refreshCriticalSlaStatus();
       health.status = result.degraded || detailDegraded
+        || ponRecoveryRemaining
         || (isCriticalFastLane(project) && health.slaStatus === "source_limited")
         ? "degraded"
         : "healthy";
@@ -2528,8 +2740,8 @@ export function createTwitterMonitor(config, dependencies = {}) {
       delete health.lastError;
       delete health.lastErrorAt;
       delete health.deliveryRetryAfter;
-      delete health.gapSince;
-      if (priorGap) health.lastGapResolvedAt = timestamp(now);
+      if (!ponRecoveryRemaining) delete health.gapSince;
+      if (priorGap && !ponRecoveryRemaining) health.lastGapResolvedAt = timestamp(now);
       closeAggregateFailureLog(health, project);
       await persistState(state);
       return { ok: true };
@@ -2673,7 +2885,9 @@ export function createTwitterMonitor(config, dependencies = {}) {
 
   if (autoStart) void check().catch((error) => logger.error(`[twitter][scheduler] ${error.message}`));
   const criticalOnly = config.twitterMonitorEnabled === false
-    && (config.binanceCriticalXMonitorEnabled === true || config.focusCriticalXMonitorEnabled === true);
+    && (config.binanceCriticalXMonitorEnabled === true
+      || config.focusCriticalXMonitorEnabled === true
+      || config.ponMonitorEnabled === true);
   const schedulerIntervalMs = criticalOnly
     ? criticalLatencySettings(config).schedulerIntervalMs
     : config.twitterPollIntervalMs;

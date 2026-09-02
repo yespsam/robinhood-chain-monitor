@@ -558,3 +558,136 @@ test("outbox drain orders T0>T1>T2>T3 and maps legacy strong/ordinary safely", a
   assert.equal(legacyTradingPriority({ strong: false }).tier, "T2");
   assert.equal(withTradingPriority({ strong: true }, { legacy: true }).tradingPriority.tier, "T1");
 });
+
+test("pon.fun structural updates are T1, market/recovery updates are T2, and none can become T0", () => {
+  const nowMs = Date.parse("2026-09-02T04:00:30.000Z");
+  const factory = "0xF698d13348686C1529c2DC54847C123424d9DAE0";
+  const coin = "0x1111111111111111111111111111111111111111";
+  const base = {
+    type: "pon_fun_update",
+    platform: { id: "ponfun", name: "pon.fun", chainId: 4663 },
+    source: {
+      id: "pon_fun_official_api_onchain",
+      trust: "official_site_bound_onchain_fingerprinted",
+      official: true,
+      url: "https://www.pon.fun/api/markets",
+    },
+    sourceTrust: "official_site_bound_onchain_fingerprinted",
+    factory,
+    token: coin,
+    contractAddress: coin,
+    observedAt: "2026-09-02T04:00:00.000Z",
+    evidence: {
+      factoryCodeHash: "0x4cb9795396b800a4b1e46f2e91a690ecf004ac0d52b059a7ef0e6b190af17384",
+    },
+  };
+  const expected = new Map([
+    ["factory_config", "T1"],
+    ["curve_params", "T1"],
+    ["factory_paused", "T1"],
+    ["ownership_transfer_started", "T1"],
+    ["ownership_transferred", "T1"],
+    ["platform_token_update", "T1"],
+    ["market_created", "T2"],
+    ["market_lifecycle", "T2"],
+    ["stock_listing", "T2"],
+    ["factory_unpaused", "T2"],
+  ]);
+  for (const [kind, tier] of expected) {
+    const priority = deriveTradingPriority({ ...base, kind }, { nowMs });
+    assert.equal(priority.tier, tier, kind);
+    assert.equal(priority.hardGates.t0Eligible, false, kind);
+    assert.equal(priority.confirmation.kind, "official_site_bound_onchain_fingerprint", kind);
+    assert.equal(priority.plan.automaticExecution, false, kind);
+  }
+
+  const officialX = (signal) => ({
+    type: "twitter_update",
+    project: {
+      id: "ponfun",
+      name: "pon.fun",
+      handle: "pondotfun",
+      xUserId: "2094048312772993024",
+      match: "official_x",
+      signalProfile: "pon_fun",
+      website: "https://www.pon.fun",
+      twitter: "https://x.com/pondotfun",
+    },
+    tweet: {
+      id: "2095100000000000000",
+      authorId: "2094048312772993024",
+      xUserId: "2094048312772993024",
+      sourceVerifiedBy: "official_x_oembed",
+      identityVerifiedBy: "fxtwitter_exact_numeric_id",
+      url: "https://x.com/pondotfun/status/2095100000000000000",
+      createdAt: "2026-09-02T04:00:00.000Z",
+    },
+    signal,
+  });
+  const major = deriveTradingPriority(officialX({
+    relevant: true,
+    ponPriority: "T1",
+    majorProductUpdate: true,
+    ponStage: "supply_burned",
+  }), { nowMs });
+  const ordinary = deriveTradingPriority(officialX({
+    relevant: true,
+    ponPriority: "T2",
+    majorProductUpdate: false,
+    ponStage: "recovered",
+  }), { nowMs });
+  assert.equal(major.tier, "T1");
+  assert.equal(ordinary.tier, "T2");
+  assert.equal(major.confirmation.kind, "official_x_numeric_id_oembed");
+  assert.equal(major.hardGates.t0Eligible, false);
+  assert.equal(ordinary.hardGates.t0Eligible, false);
+  const delayedRecovery = {
+    version: 1,
+    reason: "monitoring_gap_recovery",
+    gapSince: "2026-09-02T03:30:00.000Z",
+    sourceOccurredAt: "2026-09-02T03:00:00.000Z",
+    recoveredAt: "2026-09-02T04:00:30.000Z",
+    lagMs: 60 * 60_000 + 30_000,
+    cursor: { latestIdAtRecovery: "2095099999999999999", tweetId: "2095100000000000000" },
+  };
+  const delayedX = deriveTradingPriority({
+    ...officialX({
+      relevant: true,
+      ponPriority: "T1",
+      majorProductUpdate: true,
+      ponStage: "supply_burned",
+    }),
+    delayedRecovery,
+  }, { nowMs });
+  const delayedChain = deriveTradingPriority({
+    ...base,
+    kind: "factory_config",
+    delayedRecovery: {
+      ...delayedRecovery,
+      cursor: { nextBlockAtRecovery: 52_000_100, eventBlock: 52_000_001 },
+    },
+  }, { nowMs });
+  assert.equal(delayedX.tier, "T2");
+  assert.equal(delayedChain.tier, "T2");
+  assert.equal(delayedX.hardGates.t0Eligible, false);
+  assert.equal(delayedChain.hardGates.t0Eligible, false);
+
+  for (const mutate of [
+    (event) => { event.project.xUserId = "2094048312772993025"; },
+    (event) => { event.tweet.authorId = "2094048312772993025"; },
+    (event) => { delete event.tweet.sourceVerifiedBy; },
+    (event) => { event.tweet.url = `https://x.com/pondotfun_/status/${event.tweet.id}`; },
+  ]) {
+    const spoof = officialX({
+      relevant: true,
+      ponPriority: "T1",
+      majorProductUpdate: true,
+      ponStage: "supply_burned",
+    });
+    mutate(spoof);
+    const priority = deriveTradingPriority(spoof, { nowMs });
+    assert.equal(priority.confirmation.trusted, false);
+    assert.equal(priority.tier, "T2");
+    assert.equal(priority.hardGates.t0Eligible, false);
+  }
+});

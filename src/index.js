@@ -13,6 +13,7 @@ import { createEarlyActivityMonitor } from "./early-activity-monitor.js";
 import { createTwitterMonitor } from "./twitter-monitor.js";
 import { contractDiscoveryChainId, createPlatformCapabilityMonitor } from "./platform-capability-monitor.js";
 import { createPonsVersionMonitor, PONS_V2_TOKEN_LAUNCHED_TOPIC } from "./pons-version-monitor.js";
+import { createPonMonitor } from "./pon-monitor.js";
 import { createBinanceMonitor } from "./binance-monitor.js";
 import { createBscLaunchpadMonitor } from "./bsc-launchpad-monitor.js";
 import { createAbortableJsonRpcProvider, createMorphLaunchpadMonitor, mapWithConcurrency } from "./morph-launchpad-monitor.js";
@@ -93,6 +94,7 @@ let earlyActivityMonitor;
 let twitterMonitor;
 let platformCapabilityMonitor;
 let ponsVersionMonitor;
+let ponMonitor;
 let binanceMonitor;
 let bscLaunchpadMonitor;
 let morphLaunchpadMonitor;
@@ -437,7 +439,7 @@ function startIndependentMonitors() {
     });
     flushPending(pendingBscSiteCandidates, deliverSiteCandidate, "site-watch");
   });
-  if (config.twitterMonitorEnabled || config.binanceCriticalXMonitorEnabled || config.focusCriticalXMonitorEnabled) startMonitor("twitter", () => {
+  if (config.twitterMonitorEnabled || config.binanceCriticalXMonitorEnabled || config.focusCriticalXMonitorEnabled || config.ponMonitorEnabled) startMonitor("twitter", () => {
     twitterMonitor = createTwitterMonitor(config, {
       onOfficialRepository: (repository, evidence) => githubMonitor?.confirmOfficialRepository(repository, evidence),
     });
@@ -507,6 +509,9 @@ function startIndependentMonitors() {
       },
     });
   }
+  if (config.ponMonitorEnabled) startMonitor("pon", () => {
+    ponMonitor = createPonMonitor(config, { provider });
+  });
 }
 
 async function runChainMonitor() {
@@ -612,6 +617,7 @@ function createdMonitorEntries() {
     ["twitter", twitterMonitor],
     ["platform-capability", platformCapabilityMonitor],
     ["pons-version", ponsVersionMonitor],
+    ["pon", ponMonitor],
     ["binance", binanceMonitor],
     ["bsc", bscLaunchpadMonitor],
     ["morph", morphLaunchpadMonitor],

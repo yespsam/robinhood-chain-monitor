@@ -91,6 +91,199 @@
       }
     }
   },
+  "pon-state.json": {
+    "version": 1,
+    "initialized": true,
+    "initializedAt": "__OLD__",
+    "cursor": {
+      "nextBlock": 51900001,
+      "lastScannedBlock": 51900000,
+      "lastScannedBlockHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "baselineEstablishedAt": "__OLD__",
+      "marketCountAtCursor": 4,
+      "listingCountAtCursor": 3,
+      "stockListingEventsSinceSnapshot": 0
+    },
+    "identity": {
+      "chainId": 4663,
+      "factory": "0xF698d13348686C1529c2DC54847C123424d9DAE0",
+      "factoryCodeHash": "0x4cb9795396b800a4b1e46f2e91a690ecf004ac0d52b059a7ef0e6b190af17384",
+      "deploymentTransaction": "0x6bf0d084d6b69090a3a4e5c7b68f51fcb1dfd0485f5f0c28f2d59b4d6809654c",
+      "deploymentBlock": 51808655,
+      "deploymentVerified": true
+    },
+    "infrastructure": {},
+    "curveParams": {},
+    "listings": {},
+    "markets": {},
+    "pendingMarketEvents": {},
+    "unmatchedApiMarkets": {},
+    "reorgBaselineMarketRechecks": {},
+    "retiredMarkets": {},
+    "processedEventKeys": [],
+    "alertOrigins": {},
+    "reorgOrphanedEventKeys": [],
+    "missedCriticalChanges": [],
+    "finalizedCheckpoints": [
+      {
+        "blockNumber": 51900000,
+        "blockHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "marketCount": 4,
+        "listingCount": 3,
+        "recordedAt": "__NOW__"
+      }
+    ],
+    "apiTransitionRevisions": {},
+    "pendingApiTransitions": {},
+    "platformToken": {
+      "address": "0x7673dc6d2357bdc2e04fd80c169f2bef56622d9a",
+      "symbol": "PONFUN",
+      "name": "Ponfun",
+      "supply": 1000000000
+    },
+    "platformTokenVerification": {
+      "token": "0x7673dc6d2357bdc2e04fd80c169f2bef56622d9a",
+      "codePresent": true,
+      "codeHash": "0xa9c7ddf1ae0410c3a502ed7c7152ebd190fad85ab7fe3497c68869d5079c5219",
+      "name": "Ponfun",
+      "symbol": "PONFUN",
+      "decimals": 18,
+      "totalSupplyRaw": "1000000000000000000000000000",
+      "verifiedBlock": 51900000,
+      "verifiedBlockHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "checkedAt": "__NOW__",
+    "_health": {
+      "status": "healthy",
+      "checkedAt": "__NOW__",
+      "lastSuccessAt": "__NOW__",
+      "lastErrorAt": null,
+      "lastError": null,
+      "lastErrorCode": null,
+      "consecutiveFailures": 0,
+      "failureSince": null,
+      "recoveryConsecutive": 0,
+      "recoverySince": null,
+      "nextAttemptAt": "__NEXT__",
+      "sources": {
+        "api_health": {
+          "status": "healthy",
+          "lastAttemptAt": "__NOW__",
+          "lastSuccessAt": "__NOW__",
+          "lastErrorCode": null,
+          "nextAttemptAt": "__NEXT__"
+        },
+        "api_markets": {
+          "status": "healthy",
+          "lastAttemptAt": "__NOW__",
+          "lastSuccessAt": "__NOW__",
+          "lastErrorCode": null,
+          "nextAttemptAt": "__NEXT__"
+        },
+        "api_platform_token": {
+          "status": "healthy",
+          "lastAttemptAt": "__NOW__",
+          "lastSuccessAt": "__NOW__",
+          "lastErrorCode": null,
+          "nextAttemptAt": "__NEXT__"
+        },
+        "api_token_list": {
+          "status": "healthy",
+          "lastAttemptAt": "__NOW__",
+          "lastSuccessAt": "__NOW__",
+          "lastErrorCode": null,
+          "nextAttemptAt": "__NEXT__"
+        },
+        "chain": {
+          "status": "healthy",
+          "lastAttemptAt": "__NOW__",
+          "lastSuccessAt": "__NOW__",
+          "lastErrorCode": null,
+          "nextAttemptAt": "__NEXT__"
+        },
+        "delivery": {
+          "status": "healthy",
+          "lastAttemptAt": "__NOW__",
+          "lastSuccessAt": "__NOW__",
+          "lastErrorCode": null,
+          "nextAttemptAt": "__NEXT__"
+        }
+      },
+      "identity": {
+        "expectedChainId": 4663,
+        "expectedFactory": "0xF698d13348686C1529c2DC54847C123424d9DAE0",
+        "expectedFactoryCodeHash": "0x4cb9795396b800a4b1e46f2e91a690ecf004ac0d52b059a7ef0e6b190af17384",
+        "observedChainId": 4663,
+        "observedFactory": "0xF698d13348686C1529c2DC54847C123424d9DAE0",
+        "observedFactoryCodeHash": "0x4cb9795396b800a4b1e46f2e91a690ecf004ac0d52b059a7ef0e6b190af17384"
+      },
+      "apiCoverage": {
+        "reportedBlock": 51900000,
+        "finalizedBlock": 51900000,
+        "blockLag": 0,
+        "maxBlockLag": 128,
+        "highWaterBlock": 51900000,
+        "lastVerifiedAt": "__NOW__"
+      },
+      "missedCriticalChangeCount": 0,
+      "lastMissedCriticalChangeAt": null,
+      "reorg": {
+        "count": 0,
+        "lastDetectedAt": null,
+        "rewindFrom": null,
+        "rewindTo": null,
+        "commonAncestorBlock": null,
+        "commonAncestorProven": null,
+        "orphanedAlertCount": 0,
+        "lastOrphanedAt": null,
+        "lastOrphanedEventKeys": [],
+        "midCycleAnchorFailures": 0,
+        "recoveryPending": false
+      }
+    }
+  },
+  "twitter-state.json": {
+    "pondotfun": {
+      "latestId": "2095100000000000000",
+      "checkedAt": "__NOW__",
+      "profile": {
+        "name": "pon.fun",
+        "handle": "pondotfun"
+      }
+    },
+    "_health": {
+      "pondotfun": {
+        "status": "degraded",
+        "checkedAt": "__NOW__",
+        "lastSuccessAt": "__NOW__",
+        "activeSource": "https://api.fxtwitter.test/2/profile/id:{userId}/statuses?count=40",
+        "activeSourceId": "fxtwitter_numeric_id",
+        "scheduledUntil": "__NEXT__",
+        "timelineItems": 5,
+        "consecutiveFailures": 0,
+        "slaStatus": "source_limited",
+        "sources": {
+          "https://api.fxtwitter.test/2/profile/id:{userId}/statuses?count=40": {
+            "status": "healthy",
+            "source": "fxtwitter_numeric_id",
+            "checkedAt": "__NOW__",
+            "lastSuccessAt": "__NOW__",
+            "timelineItems": 5,
+            "nextPollAt": "__NEXT__",
+            "circuitState": "closed"
+          }
+        },
+        "criticalVerification": {
+          "status": "healthy",
+          "checkedAt": "__NOW__",
+          "lastSuccessAt": "__NOW__",
+          "verifiedCandidates": 1,
+          "identity": "fxtwitter_exact_numeric_id+official_x_oembed"
+        },
+        "coverage": {}
+      }
+    }
+  },
   "github-state.json": {
     "_health": {
       "schemaVersion": 1,

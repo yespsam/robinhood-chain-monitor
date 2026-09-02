@@ -148,6 +148,7 @@ systemctl status robinhood-monitor.target robinhood-health.timer
 - Robinhood `state.json`；
 - Binance 公告进度与 WebSocket/轮询覆盖；
 - BSC 的 WAL 或权威 snapshot；
+- 可选的 pon.fun 复合 lane：`pon-state.json` 中的固定链、Factory 代码指纹、链上游标、检查点/告警来源、PONFUN 链上闭环与四个官方 API，以及 `twitter-state.json` 中 `@pondotfun` 的 numeric-ID 时间线、exact-status/oEmbed 双重验证和连续游标；
 - `github-state.json`；
 - `platform-capability-state.json`；
 - Fomo 状态、checkpoint、X 状态和 Thesis 状态；
@@ -155,6 +156,8 @@ systemctl status robinhood-monitor.target robinhood-health.timer
 - ACTIVE 标记、两个 systemd 服务，以及外部 HTTPS heartbeat。
 
 每条 lane 的 `operationalHealthy`、`coverageComplete`、权威文件、文件年龄、阈值和原因都会写入 `health.json`；顶层另有 `deliveryComplete`。阈值在 `/etc/robinhood-chain-monitor/health.env`；该文件包含 heartbeat URL，必须保持 `root:root`、`0600` 且不得提交 Git。生产默认要求所有四条 Fomo lane；只有对应业务在 `monitor.env` 中被明确关闭时，才可在 `health.env` 把相应 `HEALTH_REQUIRE_FOMO_STATE`、`HEALTH_REQUIRE_FOMO_CHECKPOINT`、`HEALTH_REQUIRE_FOMO_X` 或 `HEALTH_REQUIRE_FOMO_THESIS` 改为 `false`，并在变更记录中写明原因。
+
+Pon lane 默认是可选的，因为 health oneshot 不读取含密钥的 `monitor.env`。Linux 节点只要在 `monitor.env` 启用了 `PON_MONITOR_ENABLED=true`，就必须同时在 `health.env` 显式设置 `HEALTH_REQUIRE_PON=true`；可用 `HEALTH_PON_MAX_AGE_SECONDS=180` 调整链上状态与官方 X 游标阈值。启用后链上与 X 两部分都必须完成基线和连续性验证：首次 X 基线尚未建立、可信上游退避、身份验证暂时不可用、真实 cursor gap 或 oldest-first 延迟恢复会明确令 `coverageComplete=false`，但可选公共 discovery 源缺失只记 warning；无退避保护的本地 worker/游标停滞，以及 Factory、chain ID、运行时代码哈希、PONFUN 最终确认态或持久检查点不匹配，均被视为运行故障并停止 heartbeat。已由持久检查点证明共同祖先的有界重组只降级覆盖，无共同祖先证据则按运行故障处理。健康检查不会因此自动重启服务。
 
 运行或关键游标停滞（`operationalHealthy=false`）会以非零状态写入 journal 并停止外部 heartbeat，同时始终更新不含密钥和 heartbeat URL 的 `health.json`。默认情况下，仅覆盖不完整或投递积压会把总状态降为 `degraded`，但 CLI 仍为零且 heartbeat 继续；设置 `HEALTH_HEARTBEAT_REQUIRE_COVERAGE_COMPLETE=true` 后，`coverageComplete=false` 或 `deliveryComplete=false` 也会停止 heartbeat。**健康检查只报警，不会因状态停滞自动重启服务**；这样可以避免上游全网故障时形成重启风暴。
 

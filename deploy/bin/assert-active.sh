@@ -28,6 +28,16 @@ env_owner="$(stat -c '%U' -- "$CONFIG_DIR/monitor.env")"
 env_mode="$(stat -c '%a' -- "$CONFIG_DIR/monitor.env")"
 [[ "$env_owner" == "root" ]] || fail "monitor.env must be owned by root"
 [[ "$env_mode" == "600" ]] || fail "monitor.env must have mode 0600"
+# EnvironmentFile values are loaded by systemd before this preflight runs as
+# the unprivileged service user. Do not attempt to read either root-only env
+# file here; the root-run activation command verifies their effective values.
+if [[ "${PON_MONITOR_ENABLED:-false}" =~ ^[Tt][Rr][Uu][Ee]$ ]]; then
+  [[ -f "$CONFIG_DIR/health.env" ]] || fail "$CONFIG_DIR/health.env is missing while pon.fun monitoring is enabled"
+  health_env_owner="$(stat -c '%U' -- "$CONFIG_DIR/health.env")"
+  health_env_mode="$(stat -c '%a' -- "$CONFIG_DIR/health.env")"
+  [[ "$health_env_owner" == "root" ]] || fail "health.env must be owned by root while pon.fun monitoring is enabled"
+  [[ "$health_env_mode" == "600" ]] || fail "health.env must have mode 0600 while pon.fun monitoring is enabled"
+fi
 
 [[ -d "$CURRENT_DIR" && -f "$CURRENT_DIR/package-lock.json" ]] || fail "no valid current release"
 [[ -d "$STATE_DIR" && -w "$STATE_DIR" ]] || fail "$STATE_DIR is not writable"

@@ -356,3 +356,40 @@ test("official address activity names the transaction delta without inventing a 
   assert.match(activity.evidence.join(" "), /0xtx/);
   assert.doesNotMatch(renderAlertChangeLines(activity, { locale: "en" }).join("\n"), /[\u3400-\u9fff]/);
 });
+
+test("pon.fun changes retain exact before/after values and fingerprinted Factory evidence", () => {
+  const factory = "0xF698d13348686C1529c2DC54847C123424d9DAE0";
+  const tx = `0x${"a".repeat(64)}`;
+  const model = deriveAlertChangeModel({
+    type: "pon_fun_update",
+    kind: "factory_config",
+    factory,
+    transactionHash: tx,
+    blockNumber: 52_000_001,
+    source: { url: `https://robinhoodchain.blockscout.com/tx/${tx}` },
+    previousSnapshot: { oracle: "0x1111111111111111111111111111111111111111" },
+    currentSnapshot: { oracle: "0x2222222222222222222222222222222222222222" },
+    changes: {
+      oracle: {
+        before: "0x1111111111111111111111111111111111111111",
+        after: "0x2222222222222222222222222222222222222222",
+      },
+    },
+  });
+  assert.equal(model.kind, "modification");
+  assert.equal(model.basis, "exact_snapshot");
+  assert.deepEqual(model.before.items, ["oracle: 0x1111111111111111111111111111111111111111"]);
+  assert.deepEqual(model.after.items, ["oracle: 0x2222222222222222222222222222222222222222"]);
+  assert.deepEqual(model.deltas[0], {
+    category: "config",
+    action: "modified",
+    kind: "config_value",
+    file: null,
+    subject: "oracle",
+    before: "0x1111111111111111111111111111111111111111",
+    after: "0x2222222222222222222222222222222222222222",
+    basis: "exact_snapshot",
+  });
+  assert.ok(model.evidence.includes(`${tx}#52000001`));
+  assert.ok(model.evidence.includes(`Factory ${factory}`));
+});

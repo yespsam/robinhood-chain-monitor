@@ -33,6 +33,20 @@ const BINANCE_T0_LABELS = new Set([
   "整币下架",
   "安全/紧急公告",
 ]);
+const PON_STRUCTURAL_KINDS = new Set([
+  "factory_config",
+  "curve_params",
+  "factory_paused",
+  "ownership_transfer_started",
+  "ownership_transferred",
+  "platform_token_update",
+]);
+const PON_INFORMATION_KINDS = new Set([
+  "market_created",
+  "market_lifecycle",
+  "stock_listing",
+  "factory_unpaused",
+]);
 
 const clean = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
 const lower = (value) => clean(value).toLowerCase();
@@ -109,6 +123,7 @@ function exactTarget(event = {}, text = eventText(event)) {
   if (["flap", "fourmeme", "openfour", "long"].includes(platform)) {
     addressCandidates.push(event.launcher, event.factory, ...list(event.officialRoots));
   }
+  if (platform === "ponfun") addressCandidates.push(event.factory);
   const address = addressCandidates.find(validAddress);
   if (address) return { type: "CA", value: clean(address), exact: true };
 
@@ -158,8 +173,63 @@ function onchainEvidence(event = {}) {
     && Number(event.blockNumber) > 0;
 }
 
+function officialPonFunEvidence(event = {}) {
+  return event.type === "pon_fun_update"
+    && normalizedPlatform(event) === "ponfun"
+    && lower(event.source?.id) === "pon_fun_official_api_onchain"
+    && lower(event.source?.trust) === "official_site_bound_onchain_fingerprinted"
+    && lower(event.sourceTrust) === "official_site_bound_onchain_fingerprinted"
+    && event.source?.official === true
+    && lower(event.factory) === "0xf698d13348686c1529c2dc54847c123424d9dae0"
+    && lower(event.evidence?.factoryCodeHash) === "0x4cb9795396b800a4b1e46f2e91a690ecf004ac0d52b059a7ef0e6b190af17384";
+}
+
+function officialPonFunTwitterEvidence(event = {}) {
+  if (event.type !== "twitter_update"
+    || normalizedPlatform(event) !== "ponfun"
+    || lower(event.project?.id) !== "ponfun"
+    || lower(event.project?.name) !== "pon.fun"
+    || lower(event.project?.handle).replace(/^@/, "") !== "pondotfun"
+    || String(event.project?.xUserId || "") !== "2094048312772993024"
+    || lower(event.project?.match) !== "official_x"
+    || lower(event.project?.signalProfile) !== "pon_fun"
+    || event.project?.website !== "https://www.pon.fun"
+    || event.project?.twitter !== "https://x.com/pondotfun"
+    || event.tweet?.sourceVerifiedBy !== "official_x_oembed"
+    || event.tweet?.identityVerifiedBy !== "fxtwitter_exact_numeric_id"
+    || String(event.tweet?.authorId || "") !== "2094048312772993024"
+    || String(event.tweet?.xUserId || "") !== "2094048312772993024"
+    || !/^\d+$/.test(String(event.tweet?.id || ""))) return false;
+  try {
+    const url = new URL(String(event.tweet?.url || ""));
+    return url.protocol === "https:"
+      && !url.username
+      && !url.password
+      && !url.port
+      && !url.search
+      && !url.hash
+      && url.hostname.toLowerCase() === "x.com"
+      && url.pathname.toLowerCase() === `/pondotfun/status/${event.tweet.id}`.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
 function trustedConfirmation(event = {}) {
   if (officialBinanceEvidence(event)) return { trusted: true, kind: "official", value: event.source.id };
+  if (officialPonFunEvidence(event)) return {
+    trusted: true,
+    kind: "official_site_bound_onchain_fingerprint",
+    value: event.source.id,
+  };
+  if (officialPonFunTwitterEvidence(event)) return {
+    trusted: true,
+    kind: "official_x_numeric_id_oembed",
+    value: event.tweet.url,
+  };
+  if (event.type === "twitter_update" && normalizedPlatform(event) === "ponfun") {
+    return { trusted: false, kind: null, value: null };
+  }
   if (onchainEvidence(event)) return {
     trusted: true,
     kind: "onchain",
@@ -384,6 +454,20 @@ function category(event = {}, text = eventText(event)) {
     return "fomo_signal";
   }
   const platform = normalizedPlatform(event);
+  if (event.type === "pon_fun_update" || platform === "ponfun") {
+    if (event?.delayedRecovery?.version === 1
+      && event.delayedRecovery?.reason === "monitoring_gap_recovery") return "pon_information";
+    if (event.type === "twitter_update") {
+      return officialPonFunTwitterEvidence(event)
+        && event.signal?.ponPriority === "T1"
+        && event.signal?.majorProductUpdate === true
+        ? "pon_structural"
+        : "pon_information";
+    }
+    if (PON_STRUCTURAL_KINDS.has(event.kind)) return "pon_structural";
+    if (PON_INFORMATION_KINDS.has(event.kind)) return "pon_information";
+    return "pon_information";
+  }
   const labels = binanceLabels(event);
   const isBinance = event.type === "binance_official_update" || platform.startsWith("binance");
   if (isBinance) {
@@ -415,6 +499,8 @@ function category(event = {}, text = eventText(event)) {
 }
 
 function catalystScore(eventCategory) {
+  if (eventCategory === "pon_structural") return 3;
+  if (eventCategory === "pon_information") return 1;
   if (["binance_market_catalyst", "focus_onchain", "fomo_cluster", "fomo_official_exact"].includes(eventCategory)) return 5;
   if (["binance_product", "focus_official", "fomo_single", "fomo_signal"].includes(eventCategory)) return 3;
   if (eventCategory === "binance_information") return 1;
@@ -422,6 +508,8 @@ function catalystScore(eventCategory) {
 }
 
 function capitalFlowScore(eventCategory) {
+  if (eventCategory === "pon_structural") return 1;
+  if (eventCategory === "pon_information") return 0;
   if (["binance_market_catalyst", "fomo_cluster", "fomo_official_exact"].includes(eventCategory)) return 3;
   if (["focus_onchain", "fomo_single"].includes(eventCategory)) return 2;
   if (["binance_product", "focus_official"].includes(eventCategory)) return 1;
@@ -464,6 +552,20 @@ export function deriveEventLifecycle(event = {}) {
 function tradePlan(event, eventCategory, tier, target) {
   const noAutoZh = "仅作决策支持，非自动交易";
   const noAutoEn = "Decision support only; no automatic trading";
+  if (["pon_structural", "pon_information"].includes(eventCategory)) {
+    const structural = eventCategory === "pon_structural";
+    return {
+      conclusion: { zh: structural ? "观察" : "不做", en: structural ? "Watch" : "Do not trade" },
+      mainline: {
+        zh: structural ? "pon.fun 结构/平台币变化→关注平台流量与后续市场" : "pon.fun 市场/RWA 信息→仅记录",
+        en: structural ? "pon.fun structure/platform-token change→watch platform flow and subsequent markets" : "pon.fun market/RWA information→record only",
+      },
+      capitalPath: { zh: structural ? "平台注意力→后续市场流动性" : "未形成直接可执行资金路径", en: structural ? "Platform attention→subsequent market liquidity" : "No direct executable capital path" },
+      entryCondition: { zh: "等待精确标的、流动性、可卖性与量价确认", en: "Wait for an exact target, liquidity, sellability, and price-volume confirmation" },
+      invalidation: { zh: "配置回滚、预言机/背书风险或无真实承接", en: "Config rollback, oracle/backing risk, or no real support" },
+      risk: { zh: `平台币/股票映射不等于股票；${noAutoZh}`, en: `Platform coins/stock mappings are not shares; ${noAutoEn}` },
+    };
+  }
   if (eventCategory === "binance_market_catalyst") {
     const delist = /delist|下架/iu.test(eventText(event));
     return {
@@ -585,6 +687,8 @@ export function deriveTradingPriority(event = {}, { nowMs = null } = {}) {
   let tier;
   if (hardGates.t0Eligible && score >= 10) tier = "T0";
   else if (eventCategory === "developer_maintenance") tier = "T3";
+  else if (eventCategory === "pon_structural") tier = "T1";
+  else if (eventCategory === "pon_information") tier = "T2";
   else if (eventCategory === "binance_information" || eventCategory === "information") tier = "T2";
   else if (eventCategory.startsWith("focus_") && riskBlocked && confirmation.trusted) tier = "T1";
   else if (eventCategory.startsWith("focus_")) tier = "T1";

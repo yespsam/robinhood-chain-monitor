@@ -5,7 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import { drainAlertOutbox, isTerminalAlertSuppression, sendAlerts } from "../src/alerts.js";
 import {
+  isOfficialPonFunUpdate,
   isMonitoringSourceEnabled,
+  isPonFunSource,
   isTelegramNewsUpdateAllowed,
   isThreePlatformSource,
 } from "../src/source-controls.js";
@@ -14,6 +16,7 @@ import { createTwitterMonitor } from "../src/twitter-monitor.js";
 const focusConfig = { monitorScope: "focus3", ponsMonitorEnabled: false };
 const binanceFocusConfig = { ...focusConfig, binanceMonitorEnabled: true };
 const aiFocusConfig = { ...focusConfig, xaiOfficialMonitorEnabled: true };
+const ponFocusConfig = { ...focusConfig, ponMonitorEnabled: true };
 
 const aiXTargets = [
   { id: "x", name: "X", website: "https://x.com", docs: "https://help.x.com/en/using-x", twitter: "https://x.com/X", handle: "X", xUserId: "783214", match: "official_x", signalProfile: "ai" },
@@ -1025,4 +1028,529 @@ test("public Telegram news is an opt-in fail-closed lane with exact provenance a
   live.sourceOccurredAt = new Date().toISOString();
   assert.equal(isMonitoringSourceEnabled({ ...focusConfig, telegramNewsMonitorEnabled: false }, live), false);
   assert.equal(isMonitoringSourceEnabled({ ...focusConfig, telegramNewsMonitorEnabled: true }, live), true);
+});
+
+test("focus3 admits only the exact pon.fun producer and immutable official-X identity", () => {
+  const tx = `0x${"a".repeat(64)}`;
+  const coin = "0x1111111111111111111111111111111111111111";
+  const stockToken = "0x2222222222222222222222222222222222222222";
+  const vault = "0x3333333333333333333333333333333333333333";
+  const curve = "0x4444444444444444444444444444444444444444";
+  const creator = "0x5555555555555555555555555555555555555555";
+  const factory = "0xF698d13348686C1529c2DC54847C123424d9DAE0";
+  const risk = "PON coins are not the referenced stocks; backing, oracle, liquidity, sellability and admin controls remain risks.";
+  const market = {
+    ticker: "NVDA",
+    symbol: "NVDAx",
+    name: "NVIDIA Pon Market",
+    coin,
+    vault,
+    curve,
+    creator,
+    creatorFeeBps: 200,
+    createdAt: 1_788_277_484,
+    stockToken,
+    poolFee: 3_000,
+    graduated: false,
+    lpDeployed: false,
+    backingPct: 95.8,
+    progressBps: 100,
+    marketCap: 15,
+    reserve: 10,
+    vol24: 5,
+  };
+  const marketCore = Object.fromEntries([
+    "ticker", "symbol", "name", "coin", "vault", "curve", "creator", "creatorFeeBps", "createdAt",
+  ].map((key) => [key, market[key]]));
+  const creation = Object.fromEntries([
+    "ticker", "symbol", "name", "coin", "vault", "curve", "creator", "creatorFeeBps",
+  ].map((key) => [key, market[key]]));
+  const event = {
+    type: "pon_fun_update",
+    kind: "market_created",
+    eventKey: `pon-fun:market_created:4663:${tx}:7`,
+    platform: {
+      id: "ponfun",
+      name: "pon.fun",
+      website: "https://www.pon.fun/",
+      twitter: "https://x.com/pondotfun",
+      chainId: 4663,
+      model: "stock-backed penny meme launchpad; the coin is not the stock",
+    },
+    source: {
+      id: "pon_fun_official_api_onchain",
+      name: "pon.fun official API + fingerprinted Factory",
+      url: `https://robinhoodchain.blockscout.com/tx/${tx}`,
+      official: true,
+      trust: "official_site_bound_onchain_fingerprinted",
+    },
+    sourceTrust: "official_site_bound_onchain_fingerprinted",
+    chainId: 4663,
+    factory,
+    title: "pon.fun 新市场：NVDAx / NVDA",
+    summary: "A new pon.fun MarketCreated event matches the official markets API, token list and Factory getters.",
+    observedAt: "2026-09-02T04:00:01.000Z",
+    strong: true,
+    risk,
+    transactionHash: tx,
+    blockNumber: 52_000_001,
+    blockHash: `0x${"b".repeat(64)}`,
+    blockTimestamp: "2026-09-02T04:00:00.000Z",
+    explorerUrl: `https://robinhoodchain.blockscout.com/tx/${tx}`,
+    token: coin,
+    contractAddress: coin,
+    ticker: market.ticker,
+    symbol: market.symbol,
+    market,
+    currentSnapshot: structuredClone(market),
+    changes: { market: { before: null, after: marketCore } },
+    creation,
+    evidence: {
+      chainId: 4663,
+      factory,
+      factoryCodeHash: "0x4cb9795396b800a4b1e46f2e91a690ecf004ac0d52b059a7ef0e6b190af17384",
+      topic0: "0x8ada27e0afa58f4d4be8c4edbf4bfd49d9d586ce8a714938b12f51b7855893bb",
+      logIndex: 7,
+      receiptVerified: true,
+      api: {
+        healthUrl: "https://www.pon.fun/api/health",
+        marketsUrl: "https://www.pon.fun/api/markets",
+        tokenListUrl: "https://www.pon.fun/tokenlist.json",
+      },
+    },
+  };
+  assert.equal(isOfficialPonFunUpdate(event), true);
+  assert.equal(isMonitoringSourceEnabled(ponFocusConfig, event), true, "the exact Pon RWA event is the only stock/RWA exception");
+  assert.equal(isMonitoringSourceEnabled({ ...ponFocusConfig, ponMonitorEnabled: false }, event), false);
+
+  const reject = (mutate, label) => {
+    const candidate = structuredClone(event);
+    mutate(candidate);
+    assert.equal(isMonitoringSourceEnabled(ponFocusConfig, candidate), false, label);
+  };
+  reject((candidate) => { candidate.platform.id = "pon-fun"; }, "platform id is exact");
+  reject((candidate) => { candidate.source.id = "pon_fun_api"; }, "source id is exact");
+  reject((candidate) => { candidate.source.trust = "official_verified"; }, "trust must preserve its narrow meaning");
+  reject((candidate) => { candidate.evidence.factoryCodeHash = `0x${"c".repeat(64)}`; }, "factory fingerprint is pinned");
+  reject((candidate) => { candidate.evidence.topic0 = `0x${"d".repeat(64)}`; }, "kind and topic must agree");
+  reject((candidate) => { candidate.source.url = `https://evil.example/tx/${tx}`; }, "chain evidence URL is exact");
+  reject((candidate) => { candidate.chainId = "4663"; }, "numeric chain fields do not accept coercible strings");
+  reject((candidate) => { candidate.blockNumber = "52000001"; }, "blockNumber is an integer, not numeric text");
+  reject((candidate) => { candidate.evidence.chainId = "4663"; }, "evidence chainId is typed");
+  reject((candidate) => { candidate.evidence.logIndex = "7"; }, "logIndex is typed");
+  reject((candidate) => { candidate.source.untrusted = true; }, "source provenance has a closed schema");
+  reject((candidate) => { candidate.evidence.api.untrusted = true; }, "API provenance has a closed schema");
+  reject((candidate) => { candidate.untrusted = true; }, "top-level producer schema is closed");
+  reject((candidate) => { candidate.platform.model = "generic launchpad"; }, "platform model is pinned");
+  reject((candidate) => { candidate.risk = "risk-free"; }, "risk framing is pinned");
+  reject((candidate) => { candidate.currentSnapshot.name = "Forged market"; }, "MarketCreated current snapshot must equal the verified market");
+  reject((candidate) => { candidate.creation.creatorFeeBps += 1; }, "MarketCreated creation proof must equal the market core");
+  reject((candidate) => { candidate.changes.market.after.symbol = "FAKE"; }, "MarketCreated changes must equal the verified market core");
+  reject((candidate) => { candidate.contractAddress = stockToken; }, "MarketCreated contract address must equal its coin");
+
+  const controlEvent = (kind, topic0, title, summary, fields) => {
+    const candidate = structuredClone(event);
+    for (const key of ["token", "contractAddress", "ticker", "symbol", "market", "currentSnapshot", "changes", "creation"]) {
+      delete candidate[key];
+    }
+    candidate.kind = kind;
+    candidate.eventKey = `pon-fun:${kind}:4663:${tx}:7`;
+    candidate.evidence.topic0 = topic0;
+    candidate.title = title;
+    candidate.summary = summary;
+    return Object.assign(candidate, fields);
+  };
+  const zero = "0x0000000000000000000000000000000000000000";
+  const oracleBefore = "0x6666666666666666666666666666666666666666";
+  const oracleAfter = "0x7777777777777777777777777777777777777777";
+  const configBefore = {
+    oracle: oracleBefore,
+    swapRouter: vault,
+    positionManager: curve,
+    protocolTreasury: creator,
+  };
+  const configAfter = { ...configBefore, oracle: oracleAfter };
+  const configEvent = controlEvent(
+    "factory_config",
+    "0x8d4f9022ab10978259dead0fa01463e75fda43dfe57f0445e69b010074c016fd",
+    "pon.fun Factory 配置更新",
+    "Factory emitted ConfigSet; oracle/router/position manager/treasury values are shown exactly.",
+    { previousSnapshot: configBefore, currentSnapshot: configAfter, changes: { oracle: { before: oracleBefore, after: oracleAfter } } },
+  );
+  const curveBefore = {
+    p0: "200000000000000",
+    slope: "7250000000000000000000000",
+    curveCap: "800000000000000000000000000",
+    lpPoolFee: 10_000,
+    maxSlippageBps: 300,
+    autoAcquire: true,
+  };
+  const curveAfter = { ...curveBefore, lpPoolFee: 3_000 };
+  const curveEvent = controlEvent(
+    "curve_params",
+    "0x25482d70bd81eb7de3dfac5c42283fda45887a7d1fb434a68c2a13e45baf29f3",
+    "pon.fun 曲线参数更新",
+    "Factory emitted CurveParamsSet; launch pricing and LP parameters changed.",
+    { previousSnapshot: curveBefore, currentSnapshot: curveAfter, changes: { lpPoolFee: { before: 10_000, after: 3_000 } } },
+  );
+  const listingBefore = { ticker: "NVDA", stockToken, poolFee: 3_000, active: true };
+  const listingAfter = { ...listingBefore, poolFee: 10_000 };
+  const listingEvent = controlEvent(
+    "stock_listing",
+    "0x7740fd3f56c396ca150bbd7ec72ee92798920ea8eb3f25f9a03582dc9bb564b1",
+    "pon.fun 股票映射更新：NVDA",
+    "Factory emitted StockListed for a stock-token oracle mapping.",
+    {
+      ticker: "NVDA",
+      contractAddress: stockToken,
+      previousSnapshot: listingBefore,
+      currentSnapshot: listingAfter,
+      changes: { poolFee: { before: 3_000, after: 10_000 } },
+    },
+  );
+  const retiredListingEvent = structuredClone(listingEvent);
+  retiredListingEvent.contractAddress = zero;
+  retiredListingEvent.currentSnapshot = { ...listingAfter, stockToken: zero, active: false };
+  retiredListingEvent.changes = {
+    stockToken: { before: stockToken, after: zero },
+    poolFee: { before: 3_000, after: 10_000 },
+    active: { before: true, after: false },
+  };
+  const pauseEvent = controlEvent(
+    "factory_paused",
+    "0x62e78cea01bee320cd4e420270b5ea74000d11b0c9f74754ebdbfc544b05a258",
+    "pon.fun Factory 已暂停",
+    "Factory emitted Paused; new launches may be unavailable.",
+    {
+      previousSnapshot: { paused: false },
+      currentSnapshot: { paused: true, account: creator },
+      changes: { paused: { before: false, after: true } },
+    },
+  );
+  const unpauseEvent = controlEvent(
+    "factory_unpaused",
+    "0x5db9ee0a495bf2e6ff9c91a7834c1ba4fdd244a5e8aa4e537bd38aeae4b073aa",
+    "pon.fun Factory 已恢复",
+    "Factory emitted Unpaused; factory operations were unpaused.",
+    {
+      previousSnapshot: { paused: true },
+      currentSnapshot: { paused: false, account: creator },
+      changes: { paused: { before: true, after: false } },
+    },
+  );
+  const ownershipStartedEvent = controlEvent(
+    "ownership_transfer_started",
+    "0x38d16b8cac22d99fc7c124b9cd0de2d3fa1faef420bfe791d8c362d765e22700",
+    "pon.fun Factory 所有权转移已发起",
+    "Factory emitted OwnershipTransferStarted; a pending admin authority was nominated.",
+    {
+      previousSnapshot: { owner: creator, pendingOwner: zero },
+      currentSnapshot: { owner: creator, pendingOwner: oracleAfter },
+      changes: { pendingOwner: { before: zero, after: oracleAfter } },
+    },
+  );
+  const ownershipTransferredEvent = controlEvent(
+    "ownership_transferred",
+    "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
+    "pon.fun Factory 所有权已转移",
+    "Factory emitted OwnershipTransferred; admin authority changed and the pending owner was cleared.",
+    {
+      previousSnapshot: { owner: creator, pendingOwner: oracleAfter },
+      currentSnapshot: { owner: oracleAfter, pendingOwner: zero },
+      changes: {
+        owner: { before: creator, after: oracleAfter },
+        pendingOwner: { before: oracleAfter, after: zero },
+      },
+    },
+  );
+  const exactControlEvents = [
+    configEvent,
+    curveEvent,
+    listingEvent,
+    retiredListingEvent,
+    pauseEvent,
+    unpauseEvent,
+    ownershipStartedEvent,
+    ownershipTransferredEvent,
+  ];
+  for (const candidate of exactControlEvents) {
+    assert.equal(isOfficialPonFunUpdate(candidate), true, `${candidate.kind} producer schema is accepted`);
+    const badTitle = structuredClone(candidate);
+    badTitle.title += "!";
+    assert.equal(isOfficialPonFunUpdate(badTitle), false, `${candidate.kind} title is closed`);
+  }
+  const configAfterReorg = structuredClone(configEvent);
+  configAfterReorg.previousSnapshot = null;
+  configAfterReorg.changes = Object.fromEntries(Object.entries(configAfter).map(([key, after]) => [key, { before: null, after }]));
+  assert.equal(isOfficialPonFunUpdate(configAfterReorg), true, "a reorg-cleared config snapshot stays explicit and fail closed");
+  const curveAfterReorg = structuredClone(curveEvent);
+  curveAfterReorg.previousSnapshot = null;
+  curveAfterReorg.changes = Object.fromEntries(Object.entries(curveAfter).map(([key, after]) => [key, { before: null, after }]));
+  assert.equal(isOfficialPonFunUpdate(curveAfterReorg), true, "a reorg-cleared curve snapshot stays explicit and fail closed");
+  for (const [label, source, mutate] of [
+    ["config before/after", configEvent, (candidate) => { candidate.currentSnapshot.oracle = coin; }],
+    ["curve before/after", curveEvent, (candidate) => { candidate.changes.lpPoolFee.after = 5_000; }],
+    ["listing ticker", listingEvent, (candidate) => { candidate.ticker = "AAPL"; }],
+    ["active listing zero token", listingEvent, (candidate) => { candidate.currentSnapshot.stockToken = zero; candidate.contractAddress = zero; }],
+    ["pause kind/state", pauseEvent, (candidate) => { candidate.currentSnapshot.paused = false; }],
+    ["unpause change", unpauseEvent, (candidate) => { candidate.changes.paused.before = false; }],
+    ["pending owner", ownershipStartedEvent, (candidate) => { candidate.currentSnapshot.owner = oracleAfter; }],
+    ["completed owner", ownershipTransferredEvent, (candidate) => { candidate.currentSnapshot.pendingOwner = creator; }],
+  ]) {
+    const candidate = structuredClone(source);
+    mutate(candidate);
+    assert.equal(isOfficialPonFunUpdate(candidate), false, label);
+  }
+
+  const lifecyclePrevious = { ...market, baseline: true, firstSeenAt: "2026-09-02T03:00:00.000Z" };
+  const lifecycleCurrent = { ...market, graduated: true, lpDeployed: true };
+  const lifecycleEvent = {
+    ...structuredClone(event),
+    kind: "market_lifecycle",
+    eventKey: `pon-fun:market-lifecycle:${coin}:rev:1:api:52000008:binding:52000010`,
+    title: "pon.fun 市场状态更新：NVDAx",
+    summary: "The official market lifecycle changed after its Factory identity was re-verified on-chain.",
+    source: { ...event.source, url: "https://www.pon.fun/api/markets" },
+    market: lifecycleCurrent,
+    previousSnapshot: lifecyclePrevious,
+    currentSnapshot: structuredClone(lifecycleCurrent),
+    changes: {
+      graduated: { before: false, after: true },
+      lpDeployed: { before: false, after: true },
+    },
+    evidence: {
+      chainId: 4663,
+      factory,
+      factoryCodeHash: event.evidence.factoryCodeHash,
+      bindingVerifiedAtBlock: 52_000_010,
+      bindingVerifiedAtBlockHash: `0x${"c".repeat(64)}`,
+      apiHealthBlock: 52_000_008,
+      transitionRevision: 1,
+      api: structuredClone(event.evidence.api),
+    },
+  };
+  for (const key of ["transactionHash", "blockNumber", "blockHash", "blockTimestamp", "explorerUrl", "creation"]) delete lifecycleEvent[key];
+  assert.equal(isOfficialPonFunUpdate(lifecycleEvent), true, "market lifecycle schema is exact");
+  for (const [label, mutate] of [
+    ["unsupported lifecycle change", (candidate) => { candidate.changes.marketCap = { before: 15, after: 20 }; }],
+    ["lifecycle before mismatch", (candidate) => { candidate.changes.graduated.before = true; }],
+    ["lifecycle snapshot mismatch", (candidate) => { candidate.currentSnapshot.lpDeployed = false; }],
+    ["lifecycle revision mismatch", (candidate) => { candidate.evidence.transitionRevision = 2; }],
+  ]) {
+    const candidate = structuredClone(lifecycleEvent);
+    mutate(candidate);
+    assert.equal(isOfficialPonFunUpdate(candidate), false, label);
+  }
+
+  const ponfunToken = "0x7673dc6d2357bdc2e04fd80c169f2bef56622d9a";
+  const platformPrevious = { address: ponfunToken, symbol: "PONFUN", name: "Ponfun", supply: "1000000000" };
+  const platformCurrent = { ...platformPrevious, supply: "900000000" };
+  const platformEvent = {
+    ...structuredClone(lifecycleEvent),
+    kind: "platform_token_update",
+    eventKey: `pon-fun:platform-token:${ponfunToken}:rev:2:api:52000008:binding:52000010`,
+    title: "pon.fun 平台代币资料更新",
+    summary: "The official PONFUN token metadata changed while the platform Factory identity remained verified.",
+    source: { ...event.source, url: "https://www.pon.fun/api/ponfun" },
+    token: ponfunToken,
+    contractAddress: ponfunToken,
+    symbol: "PONFUN",
+    previousSnapshot: platformPrevious,
+    currentSnapshot: platformCurrent,
+    changes: { supply: { before: "1000000000", after: "900000000" } },
+    evidence: {
+      chainId: 4663,
+      factory,
+      factoryCodeHash: event.evidence.factoryCodeHash,
+      bindingVerifiedAtBlock: 52_000_010,
+      bindingVerifiedAtBlockHash: `0x${"c".repeat(64)}`,
+      apiHealthBlock: 52_000_008,
+      transitionRevision: 2,
+      platformToken: {
+        token: ponfunToken,
+        codePresent: true,
+        codeHash: `0x${"d".repeat(64)}`,
+        name: "Ponfun",
+        symbol: "PONFUN",
+        decimals: 18,
+        totalSupplyRaw: "900000000000000000000000000",
+        verifiedBlock: 52_000_010,
+        verifiedBlockHash: `0x${"c".repeat(64)}`,
+      },
+      api: {
+        healthUrl: "https://www.pon.fun/api/health",
+        platformTokenUrl: "https://www.pon.fun/api/ponfun",
+      },
+    },
+  };
+  for (const key of ["ticker", "market"]) delete platformEvent[key];
+  assert.equal(isOfficialPonFunUpdate(platformEvent), true, "platform token snapshot and ERC-20 proof are exact");
+  for (const [label, mutate] of [
+    ["platform before mismatch", (candidate) => { candidate.changes.supply.before = "1"; }],
+    ["platform snapshot identity", (candidate) => { candidate.previousSnapshot.symbol = "PON"; }],
+    ["platform unsupported change", (candidate) => { candidate.changes.decimals = { before: 18, after: 9 }; }],
+    ["platform proof mismatch", (candidate) => { candidate.evidence.platformToken.name = "Fake"; }],
+  ]) {
+    const candidate = structuredClone(platformEvent);
+    mutate(candidate);
+    assert.equal(isOfficialPonFunUpdate(candidate), false, label);
+  }
+
+  const xTarget = {
+    id: "ponfun",
+    name: "pon.fun",
+    website: "https://www.pon.fun",
+    twitter: "https://x.com/pondotfun",
+    handle: "pondotfun",
+    xUserId: "2094048312772993024",
+    match: "official_x",
+    signalProfile: "pon_fun",
+  };
+  const xEvent = {
+    type: "twitter_update",
+    project: xTarget,
+    tweet: {
+      id: "2095000000000000000",
+      handle: "pondotfun",
+      xUserId: "2094048312772993024",
+      authorId: "2094048312772993024",
+      sourceVerifiedBy: "official_x_oembed",
+      identityVerifiedBy: "fxtwitter_exact_numeric_id",
+      url: "https://x.com/pondotfun/status/2095000000000000000",
+      createdAt: "2026-09-02T04:00:00.000Z",
+      text: `$PONFUN is live\nhttps://robinhoodchain.blockscout.com/address/${coin}`,
+    },
+    signal: {
+      relevant: true,
+      strong: true,
+      labels: ["pon.fun 平台币重大事件"],
+      ponFunOfficial: true,
+      ponKind: "platform_token_update",
+      ponStage: "platform_token_live",
+      ponAsset: "PONFUN",
+      ponPriority: "T1",
+      tokenAddress: coin,
+      majorProductUpdate: true,
+      platformStructural: true,
+      reason: "official_platform_token_launch_with_exact_ca",
+    },
+    observedAt: "2026-09-02T04:00:01.000Z",
+  };
+  assert.equal(isMonitoringSourceEnabled(ponFocusConfig, xTarget), true, "the exact target can be scheduled");
+  assert.equal(isMonitoringSourceEnabled(ponFocusConfig, xEvent), true, "numeric ID plus oEmbed can publish");
+  const ownershipStarted = structuredClone(xEvent);
+  ownershipStarted.signal = {
+    ...ownershipStarted.signal,
+    ponKind: "ownership_transfer_started",
+    ponStage: "ownership_transfer_started",
+    labels: ["pon.fun 重大结构更新"],
+    reason: "official_factory_config_or_major_product_change",
+  };
+  ownershipStarted.tweet.text = "Factory ownership transfer initiated and pending to 0x1111111111111111111111111111111111111111";
+  delete ownershipStarted.signal.tokenAddress;
+  assert.equal(isMonitoringSourceEnabled(ponFocusConfig, ownershipStarted), true, "a pending owner is not mislabeled as a completed transfer");
+
+  const delayedX = structuredClone(xEvent);
+  delayedX.tweet.createdAt = "2026-09-02T03:40:00.000Z";
+  delayedX.observedAt = "2026-09-02T04:00:01.000Z";
+  delayedX.delayedRecovery = {
+    version: 1,
+    reason: "monitoring_gap_recovery",
+    gapSince: "2026-09-02T03:45:00.000Z",
+    sourceOccurredAt: delayedX.tweet.createdAt,
+    recoveredAt: delayedX.observedAt,
+    lagMs: 20 * 60_000 + 1_000,
+    cursor: {
+      latestIdAtRecovery: "2094999999999999999",
+      tweetId: delayedX.tweet.id,
+    },
+  };
+  assert.equal(isMonitoringSourceEnabled(ponFocusConfig, delayedX), true, "an exact old T1 post can use the bounded delayed-recovery schema");
+  const delayedMarket = structuredClone(delayedX);
+  delayedMarket.tweet.text = `A new market is live: ${coin}`;
+  delayedMarket.signal = {
+    relevant: true,
+    strong: false,
+    labels: ["pon.fun 市场/RWA 更新"],
+    ponFunOfficial: true,
+    ponKind: "market_created",
+    ponStage: "created",
+    ponAsset: coin,
+    tokenAddress: coin,
+    ponPriority: "T2",
+    platformStructural: false,
+    majorProductUpdate: false,
+    reason: "official_market_or_stock_information",
+  };
+  assert.equal(isMonitoringSourceEnabled(ponFocusConfig, delayedMarket), false, "ordinary markets cannot borrow delayed-recovery freshness");
+
+  const delayedChain = structuredClone(pauseEvent);
+  delayedChain.title = "pon.fun 延迟恢复摘要：pon.fun Factory 已暂停";
+  delayedChain.summary = "A still-relevant structural change was recovered after a monitoring gap; the original finalized proof and change are preserved.";
+  delayedChain.originalEventKey = `pon-fun:factory_paused:4663:${tx.toLowerCase()}:7`;
+  delayedChain.eventKey = `${delayedChain.originalEventKey}:delayed-recovery:v1`;
+  delayedChain.blockTimestamp = "2026-09-02T01:00:00.000Z";
+  delayedChain.observedAt = "2026-09-02T04:00:01.000Z";
+  delayedChain.delayedRecovery = {
+    version: 1,
+    reason: "monitoring_gap_recovery",
+    gapSince: "2026-09-02T01:15:00.000Z",
+    sourceOccurredAt: delayedChain.blockTimestamp,
+    recoveredAt: delayedChain.observedAt,
+    lagMs: 3 * 60 * 60_000 + 1_000,
+    cursor: { nextBlockAtRecovery: 52_000_100, eventBlock: delayedChain.blockNumber },
+  };
+  assert.equal(isMonitoringSourceEnabled(ponFocusConfig, delayedChain), true, "a proven chain control event can publish one bounded recovery summary");
+  const delayedCreated = structuredClone(delayedChain);
+  delayedCreated.kind = "market_created";
+  delayedCreated.evidence.topic0 = "0x8ada27e0afa58f4d4be8c4edbf4bfd49d9d586ce8a714938b12f51b7855893bb";
+  delayedCreated.originalEventKey = `pon-fun:market_created:4663:${tx.toLowerCase()}:7`;
+  delayedCreated.eventKey = `${delayedCreated.originalEventKey}:delayed-recovery:v1`;
+  assert.equal(isMonitoringSourceEnabled(ponFocusConfig, delayedCreated), false, "ordinary MarketCreated never enters delayed recovery");
+  for (const [label, mutate] of [
+    ["wrong numeric ID", (candidate) => { candidate.tweet.authorId = "2094048312772993025"; }],
+    ["lookalike handle", (candidate) => { candidate.tweet.handle = "pondotfun_"; }],
+    ["lookalike URL", (candidate) => { candidate.tweet.url = `https://x.com/pondotfun_/status/${candidate.tweet.id}`; }],
+    ["different status ID with the same prefix", (candidate) => { candidate.tweet.url += "1"; }],
+    ["missing oEmbed", (candidate) => { delete candidate.tweet.sourceVerifiedBy; }],
+    ["missing exact numeric verifier", (candidate) => { delete candidate.tweet.identityVerifiedBy; }],
+    ["missing complete text", (candidate) => { delete candidate.tweet.text; }],
+    ["signal not reproducible from text", (candidate) => { candidate.signal.ponStage = "paused"; candidate.signal.ponKind = "factory_paused"; }],
+    ["missing source timestamp", (candidate) => { delete candidate.tweet.createdAt; }],
+    ["missing observation timestamp", (candidate) => { delete candidate.observedAt; }],
+    ["numeric rather than string tweet ID", (candidate) => { candidate.tweet.id = 209500; candidate.tweet.url = "https://x.com/pondotfun/status/209500"; }],
+    ["coercible numeric author identity", (candidate) => { candidate.tweet.authorId = 2094048312772993024n; }],
+  ]) {
+    const candidate = structuredClone(xEvent);
+    mutate(candidate);
+    assert.equal(isMonitoringSourceEnabled(ponFocusConfig, candidate), false, label);
+  }
+
+  for (const [label, mutate] of [
+    ["string lag", (candidate) => { candidate.delayedRecovery.lagMs = String(candidate.delayedRecovery.lagMs); }],
+    ["string cursor ID", (candidate) => { candidate.delayedRecovery.cursor.latestIdAtRecovery = 2094999999999999999n; }],
+    ["recovery older than seven days", (candidate) => {
+      candidate.tweet.createdAt = "2026-08-24T04:00:00.000Z";
+      candidate.delayedRecovery.sourceOccurredAt = candidate.tweet.createdAt;
+      candidate.delayedRecovery.lagMs = Date.parse(candidate.observedAt) - Date.parse(candidate.tweet.createdAt);
+    }],
+  ]) {
+    const candidate = structuredClone(delayedX);
+    mutate(candidate);
+    assert.equal(isMonitoringSourceEnabled(ponFocusConfig, candidate), false, label);
+  }
+
+  for (const [label, mutate] of [
+    ["string lag", (candidate) => { candidate.delayedRecovery.lagMs = String(candidate.delayedRecovery.lagMs); }],
+    ["string recovery cursor", (candidate) => { candidate.delayedRecovery.cursor.nextBlockAtRecovery = "52000100"; }],
+    ["extra recovery field", (candidate) => { candidate.delayedRecovery.untrusted = true; }],
+  ]) {
+    const candidate = structuredClone(delayedChain);
+    mutate(candidate);
+    assert.equal(isMonitoringSourceEnabled(ponFocusConfig, candidate), false, label);
+  }
+
+  assert.equal(isPonFunSource({ type: "token_launch", tokenSymbol: "PON", title: "ordinary RWA stock token" }), false);
+  assert.equal(isMonitoringSourceEnabled(ponFocusConfig, { type: "token_launch", tokenSymbol: "PON", title: "ordinary RWA stock token" }), false);
+  assert.equal(isMonitoringSourceEnabled(ponFocusConfig, { id: "pons", website: "https://ponsfamily.com" }), false, "legacy Pons stays independently disabled");
 });

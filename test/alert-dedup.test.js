@@ -16,10 +16,12 @@ import {
   isStrongAlert,
   isTerminalAlertSuppression,
   officialTokenDedupKey,
+  ponFunNoveltyKeys,
   sendAlerts,
   startAlertOutboxWorker,
   telegramButtons,
 } from "../src/alerts.js";
+import { isMonitoringSourceEnabled } from "../src/source-controls.js";
 
 function publicTelegramNewsEvent({
   messageId = "271828",
@@ -1177,6 +1179,135 @@ const alertConfig = (dataDir) => ({
   alertTelegramDeliveryMaxAgeMs: 7_200_000,
   webhookUrl: "",
 });
+
+function ponDelayedPausedEvent({
+  recoveredAtMs = Date.now(),
+  transactionHash = `0x${"a".repeat(64)}`,
+  blockNumber = 52_000_001,
+} = {}) {
+  const sourceOccurredAt = new Date(recoveredAtMs - 3 * 60 * 60_000).toISOString();
+  const recoveredAt = new Date(recoveredAtMs).toISOString();
+  const gapSince = new Date(recoveredAtMs - 2 * 60 * 60_000).toISOString();
+  const factory = "0xf698d13348686c1529c2dc54847c123424d9dae0";
+  const originalEventKey = `pon-fun:factory_paused:4663:${transactionHash}:0`;
+  const explorerUrl = `https://robinhoodchain.blockscout.com/tx/${transactionHash}`;
+  return {
+    type: "pon_fun_update",
+    kind: "factory_paused",
+    eventKey: `${originalEventKey}:delayed-recovery:v1`,
+    originalEventKey,
+    platform: {
+      id: "ponfun",
+      name: "pon.fun",
+      website: "https://www.pon.fun/",
+      twitter: "https://x.com/pondotfun",
+      chainId: 4663,
+      model: "stock-backed penny meme launchpad; the coin is not the stock",
+    },
+    source: {
+      id: "pon_fun_official_api_onchain",
+      name: "pon.fun official API + fingerprinted Factory",
+      url: explorerUrl,
+      official: true,
+      trust: "official_site_bound_onchain_fingerprinted",
+    },
+    sourceTrust: "official_site_bound_onchain_fingerprinted",
+    chainId: 4663,
+    factory,
+    title: "pon.fun 延迟恢复摘要：pon.fun Factory 已暂停",
+    summary: "A still-relevant structural change was recovered after a monitoring gap; the original finalized proof and change are preserved.",
+    observedAt: recoveredAt,
+    strong: true,
+    risk: "PON coins are not the referenced stocks; backing, oracle, liquidity, sellability and admin controls remain risks.",
+    previousSnapshot: { paused: false },
+    currentSnapshot: { paused: true, account: "0x1111111111111111111111111111111111111111" },
+    changes: { paused: { before: false, after: true } },
+    transactionHash,
+    blockNumber,
+    blockHash: `0x${"b".repeat(64)}`,
+    blockTimestamp: sourceOccurredAt,
+    explorerUrl,
+    evidence: {
+      chainId: 4663,
+      factory,
+      factoryCodeHash: "0x4cb9795396b800a4b1e46f2e91a690ecf004ac0d52b059a7ef0e6b190af17384",
+      topic0: "0x62e78cea01bee320cd4e420270b5ea74000d11b0c9f74754ebdbfc544b05a258",
+      logIndex: 0,
+      receiptVerified: true,
+      api: {
+        healthUrl: "https://www.pon.fun/api/health",
+        marketsUrl: "https://www.pon.fun/api/markets",
+        tokenListUrl: "https://www.pon.fun/tokenlist.json",
+      },
+    },
+    delayedRecovery: {
+      version: 1,
+      reason: "monitoring_gap_recovery",
+      gapSince,
+      sourceOccurredAt,
+      recoveredAt,
+      lagMs: 3 * 60 * 60_000,
+      cursor: { nextBlockAtRecovery: blockNumber + 10, eventBlock: blockNumber },
+    },
+  };
+}
+
+function ponDelayedOfficialXEvent({ recoveredAtMs = Date.now() } = {}) {
+  const sourceOccurredAt = new Date(recoveredAtMs - 20 * 60_000).toISOString();
+  const recoveredAt = new Date(recoveredAtMs).toISOString();
+  const text = "pon.fun Factory configuration updated";
+  return {
+    type: "twitter_update",
+    project: {
+      id: "ponfun",
+      name: "pon.fun",
+      website: "https://www.pon.fun",
+      twitter: "https://x.com/pondotfun",
+      handle: "pondotfun",
+      xUserId: "2094048312772993024",
+      match: "official_x",
+      signalProfile: "pon_fun",
+    },
+    tweet: {
+      id: "2095100000000000100",
+      handle: "pondotfun",
+      authorId: "2094048312772993024",
+      xUserId: "2094048312772993024",
+      sourceVerifiedBy: "official_x_oembed",
+      identityVerifiedBy: "fxtwitter_exact_numeric_id",
+      url: "https://x.com/pondotfun/status/2095100000000000100",
+      createdAt: sourceOccurredAt,
+      text,
+      expandedUrls: [],
+    },
+    signal: {
+      relevant: true,
+      strong: true,
+      labels: ["pon.fun 重大结构更新"],
+      ponFunOfficial: true,
+      ponKind: "factory_config",
+      ponStage: "factory_config",
+      ponAsset: "PONFUN",
+      ponPriority: "T1",
+      platformStructural: true,
+      majorProductUpdate: true,
+      reason: "official_factory_config_or_major_product_change",
+    },
+    observedAt: recoveredAt,
+    delayedRecovery: {
+      version: 1,
+      reason: "monitoring_gap_recovery",
+      gapSince: new Date(recoveredAtMs - 15 * 60_000).toISOString(),
+      sourceOccurredAt,
+      recoveredAt,
+      lagMs: 20 * 60_000,
+      cursor: {
+        latestIdAtRecovery: "2095100000000000000",
+        tweetId: "2095100000000000100",
+      },
+    },
+  };
+}
 
 async function mutateOutboxEntry(dataDir, eventId, mutation) {
   const file = path.join(dataDir, "alert-outbox.json");
@@ -2640,6 +2771,170 @@ test("freshness classification uses absolute instants across timezones and exact
   assert.equal(classifyAlertFreshness({}, { type: "launchpad_site_update", observedAt: "2020-01-01T00:00:00Z" }, Date.now()), null);
 });
 
+test("pon.fun delayed recovery uses the verified recovery instant while retaining original lag", () => {
+  const recoveredAt = "2026-09-02T04:00:00.000Z";
+  const sourceOccurredAt = "2026-09-02T01:00:00.000Z";
+  const delayedRecovery = {
+    version: 1,
+    reason: "monitoring_gap_recovery",
+    gapSince: "2026-09-02T01:10:00.000Z",
+    sourceOccurredAt,
+    recoveredAt,
+    lagMs: 3 * 60 * 60_000,
+    cursor: { nextBlockAtRecovery: 52_000_100, eventBlock: 52_000_001 },
+  };
+  const chain = classifyAlertFreshness({}, {
+    type: "pon_fun_update",
+    kind: "factory_config",
+    platform: { id: "ponfun" },
+    blockTimestamp: sourceOccurredAt,
+    observedAt: recoveredAt,
+    delayedRecovery,
+  }, Date.parse(recoveredAt) + 1_000);
+  const twitter = classifyAlertFreshness({}, {
+    type: "twitter_update",
+    project: { id: "ponfun", signalProfile: "pon_fun" },
+    signal: { ponFunOfficial: true },
+    tweet: { createdAt: sourceOccurredAt },
+    observedAt: recoveredAt,
+    delayedRecovery: {
+      ...delayedRecovery,
+      cursor: { latestIdAtRecovery: "2095099999999999999", tweetId: "2095100000000000000" },
+    },
+  }, Date.parse(recoveredAt) + 1_000);
+  assert.equal(chain.scope, "pon_delayed_recovery");
+  assert.equal(twitter.scope, "pon_delayed_recovery");
+  assert.equal(chain.basis, "delayedRecovery.recoveredAt_continuous_recovery");
+  assert.equal(twitter.basis, "delayedRecovery.recoveredAt_continuous_recovery");
+  assert.equal(chain.decision, "realtime");
+  assert.equal(twitter.decision, "realtime");
+  assert.equal(chain.sourceOccurredAt, recoveredAt);
+  assert.equal(twitter.sourceOccurredAt, recoveredAt);
+  assert.equal(delayedRecovery.lagMs, 3 * 60 * 60_000);
+});
+
+test("pon.fun chain and X delayed recoveries pass the closed gate as T2 bilingual do-not-chase alerts", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-pon-delayed-e2e-"));
+  const payloads = [];
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    payloads.push(JSON.parse(options.body));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: payloads.length } }) };
+  });
+  t.mock.method(console, "info", () => {});
+  const recoveredAtMs = Date.parse("2026-09-02T04:00:00.000Z");
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    ponMonitorEnabled: true,
+    telegramStrongAlerts: true,
+    alertBilingualEnabled: true,
+    alertChineseTranslationEnabled: false,
+    alertNow: () => recoveredAtMs,
+  };
+  const chainRecovery = ponDelayedPausedEvent({ recoveredAtMs });
+  const staleOriginal = structuredClone(chainRecovery);
+  staleOriginal.eventKey = staleOriginal.originalEventKey;
+  delete staleOriginal.originalEventKey;
+  delete staleOriginal.delayedRecovery;
+  staleOriginal.title = "pon.fun Factory 已暂停";
+  staleOriginal.summary = "Factory emitted Paused; new launches may be unavailable.";
+
+  assert.equal(isMonitoringSourceEnabled(config, staleOriginal), true);
+  const originalResult = await sendAlerts(config, staleOriginal);
+  assert.equal(originalResult.status, "suppressed");
+  assert.equal(originalResult.reason, "freshness_too_old");
+  assert.equal(payloads.length, 0);
+
+  assert.equal(isMonitoringSourceEnabled(config, chainRecovery), true);
+  const chainResult = await sendAlerts(config, chainRecovery);
+  assert.equal(chainResult.status, "delivered");
+  const xRecovery = ponDelayedOfficialXEvent({ recoveredAtMs });
+  assert.equal(isMonitoringSourceEnabled(config, xRecovery), true);
+  const xResult = await sendAlerts(config, xRecovery);
+  assert.equal(xResult.status, "delivered");
+  assert.equal(payloads.length, 2);
+
+  for (const payload of payloads) {
+    assert.equal(payload.disable_notification, true);
+    assert.ok(payload.text.length <= 600, `delayed recovery card is ${payload.text.length} characters: ${payload.text}`);
+    assert.match(payload.text, /^平台：pon\.fun · T2/m);
+    assert.match(payload.text, /^Platform: pon\.fun · T2/m);
+    assert.match(payload.text, /监控恢复补报/);
+    assert.match(payload.text, /勿追价/);
+    assert.match(payload.text, /Delayed recovery/);
+    assert.match(payload.text, /do not chase/);
+  }
+
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(outbox.events[chainResult.eventId].event.tradingPriority.tier, "T2");
+  assert.equal(outbox.events[xResult.eventId].event.tradingPriority.tier, "T2");
+  assert.equal(outbox.events[chainResult.eventId].event.freshness.basis, "delayedRecovery.recoveredAt_continuous_recovery");
+  assert.equal(outbox.events[xResult.eventId].event.freshness.basis, "delayedRecovery.recoveredAt_continuous_recovery");
+});
+
+test("pon.fun delayed recovery stays deliverable after the generic two-hour TTL but expires after seven days", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-pon-delayed-ttl-"));
+  let clockMs = Date.parse("2026-09-02T04:00:00.000Z");
+  let deliveryOnline = false;
+  let fetchCalls = 0;
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(Date, "now", () => clockMs);
+  t.mock.method(globalThis, "fetch", async () => {
+    fetchCalls += 1;
+    if (!deliveryOnline) throw new Error("simulated Telegram outage");
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: fetchCalls } }) };
+  });
+  t.mock.method(console, "error", () => {});
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    ponMonitorEnabled: true,
+    alertBilingualEnabled: true,
+    alertChineseTranslationEnabled: false,
+    alertNow: () => clockMs,
+  };
+
+  const delayed = ponDelayedPausedEvent({ recoveredAtMs: clockMs });
+  assert.equal((await sendAlerts(config, delayed)).status, "queued");
+  assert.equal(fetchCalls, 1);
+  deliveryOnline = true;
+  clockMs += 3 * 60 * 60_000;
+  const pendingOutbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(
+    isMonitoringSourceEnabled(config, pendingOutbox.events[delayed.eventKey].event),
+    true,
+    JSON.stringify(pendingOutbox.events[delayed.eventKey].event, null, 2),
+  );
+  assert.equal(await drainAlertOutbox(config), 1);
+  assert.equal(fetchCalls, 2, "the recovery summary remains deliverable after the ordinary two-hour queue TTL");
+  let outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(outbox.events[delayed.eventKey].status, "delivered");
+
+  deliveryOnline = false;
+  const expired = ponDelayedPausedEvent({
+    recoveredAtMs: clockMs,
+    transactionHash: `0x${"c".repeat(64)}`,
+    blockNumber: 52_000_101,
+  });
+  assert.equal((await sendAlerts(config, expired)).status, "queued");
+  assert.equal(fetchCalls, 3);
+  await mutateOutboxEntry(dataDir, expired.eventKey, (entry) => {
+    entry.createdAt = new Date(clockMs - 7 * 24 * 60 * 60_000 - 1).toISOString();
+    entry.destinations.telegram.nextAttemptAt = null;
+  });
+  deliveryOnline = true;
+  assert.equal(await drainAlertOutbox(config), 0);
+  assert.equal(fetchCalls, 3, "an over-seven-day recovery summary is not sent");
+  outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(outbox.events[expired.eventKey].status, "suppressed");
+  assert.equal(outbox.events[expired.eventKey].destinations.telegram.disabledReason, "delivery_ttl_expired");
+  assert.equal(outbox.events[expired.eventKey].destinations.telegram.deliveryMaxAgeMs, 7 * 24 * 60 * 60_000);
+});
+
 test("GitHub repository discovery uses repository creation time instead of pretending recovery is realtime", () => {
   const stale = classifyAlertFreshness({}, {
     type: "github_repository_discovered",
@@ -3351,4 +3646,516 @@ test("the outbox worker stop is idempotent, drains its active run, and prevents 
   const readsAtStop = outboxReads;
   assert.equal(await worker.run({ force: true }), 0);
   assert.equal(outboxReads, readsAtStop, "a stopped worker cannot begin another delivery drain");
+});
+
+test("pon.fun producer events pass the closed gate, render durably, and deduplicate by lifecycle stage", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-pon-shared-e2e-"));
+  const payloads = [];
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    payloads.push(JSON.parse(options.body));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: payloads.length } }) };
+  });
+  t.mock.method(console, "info", () => {});
+  const now = new Date().toISOString();
+  const factory = "0xF698d13348686C1529c2DC54847C123424d9DAE0";
+  const coin = "0x1111111111111111111111111111111111111111";
+  const stockToken = "0x2222222222222222222222222222222222222222";
+  const vault = "0x3333333333333333333333333333333333333333";
+  const curve = "0x4444444444444444444444444444444444444444";
+  const creator = "0x5555555555555555555555555555555555555555";
+  const tx = `0x${"a".repeat(64)}`;
+  const ponRisk = "PON coins are not the referenced stocks; backing, oracle, liquidity, sellability and admin controls remain risks.";
+  const platform = {
+    id: "ponfun",
+    name: "pon.fun",
+    website: "https://www.pon.fun/",
+    twitter: "https://x.com/pondotfun",
+    chainId: 4663,
+    model: "stock-backed penny meme launchpad; the coin is not the stock",
+  };
+  const source = (url) => ({
+    id: "pon_fun_official_api_onchain",
+    name: "pon.fun official API + fingerprinted Factory",
+    url,
+    official: true,
+    trust: "official_site_bound_onchain_fingerprinted",
+  });
+  const api = {
+    healthUrl: "https://www.pon.fun/api/health",
+    marketsUrl: "https://www.pon.fun/api/markets",
+    tokenListUrl: "https://www.pon.fun/tokenlist.json",
+  };
+  const marketSnapshot = {
+    ticker: "NVDA",
+    symbol: "NVDAx",
+    name: "NVIDIA Pon Market",
+    coin,
+    vault,
+    curve,
+    creator,
+    creatorFeeBps: 200,
+    createdAt: 1_788_277_484,
+    stockToken,
+    poolFee: 3_000,
+    graduated: false,
+    lpDeployed: false,
+    backingPct: 95.8,
+    progressBps: 100,
+    marketCap: 15,
+    reserve: 10,
+    vol24: 5,
+  };
+  const marketCore = Object.fromEntries([
+    "ticker", "symbol", "name", "coin", "vault", "curve", "creator", "creatorFeeBps", "createdAt",
+  ].map((key) => [key, marketSnapshot[key]]));
+  const creation = Object.fromEntries([
+    "ticker", "symbol", "name", "coin", "vault", "curve", "creator", "creatorFeeBps",
+  ].map((key) => [key, marketSnapshot[key]]));
+  const market = {
+    type: "pon_fun_update",
+    kind: "market_created",
+    eventKey: `pon-fun:market_created:4663:${tx}:7`,
+    platform,
+    source: source(`https://robinhoodchain.blockscout.com/tx/${tx}`),
+    sourceTrust: "official_site_bound_onchain_fingerprinted",
+    chainId: 4663,
+    factory,
+    title: "pon.fun 新市场：NVDAx / NVDA",
+    summary: "A new pon.fun MarketCreated event matches the official markets API, token list and Factory getters.",
+    observedAt: now,
+    strong: true,
+    risk: ponRisk,
+    token: coin,
+    contractAddress: coin,
+    ticker: "NVDA",
+    symbol: "NVDAx",
+    market: marketSnapshot,
+    currentSnapshot: structuredClone(marketSnapshot),
+    changes: { market: { before: null, after: marketCore } },
+    creation,
+    transactionHash: tx,
+    blockNumber: 52_000_001,
+    blockHash: `0x${"b".repeat(64)}`,
+    blockTimestamp: now,
+    explorerUrl: `https://robinhoodchain.blockscout.com/tx/${tx}`,
+    evidence: {
+      chainId: 4663,
+      factory,
+      factoryCodeHash: "0x4cb9795396b800a4b1e46f2e91a690ecf004ac0d52b059a7ef0e6b190af17384",
+      topic0: "0x8ada27e0afa58f4d4be8c4edbf4bfd49d9d586ce8a714938b12f51b7855893bb",
+      logIndex: 7,
+      receiptVerified: true,
+      api,
+    },
+  };
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    ponMonitorEnabled: true,
+    alertBilingualEnabled: true,
+    alertChineseTranslationEnabled: false,
+  };
+
+  assert.equal(isMonitoringSourceEnabled(config, market), true);
+  assert.deepEqual(ponFunNoveltyKeys(market), [`pon:${coin}:created`]);
+  assert.deepEqual(focusNoveltyKeys(market), [], "Pon never enters the generic focus novelty namespace");
+  const first = await sendAlerts(config, market);
+  assert.equal(first.status, "delivered");
+  assert.equal(payloads.length, 1);
+  assert.equal(payloads[0].disable_notification, true, "ordinary MarketCreated is T2");
+  assert.ok(payloads[0].text.length <= 600);
+  assert.match(payloads[0].text, /^🔔 监控提醒 \| MONITOR ALERT/m);
+  assert.match(payloads[0].text, /^平台：pon\.fun · T2/m);
+  assert.match(payloads[0].text, /^更新了什么：/m);
+  assert.match(payloads[0].text, /^Platform: pon\.fun · T2/m);
+  assert.match(payloads[0].text, /^What changed: /m);
+
+  const officialX = {
+    type: "twitter_update",
+    project: {
+      id: "ponfun",
+      name: "pon.fun",
+      website: "https://www.pon.fun",
+      twitter: "https://x.com/pondotfun",
+      handle: "pondotfun",
+      xUserId: "2094048312772993024",
+      match: "official_x",
+      signalProfile: "pon_fun",
+    },
+    tweet: {
+      id: "2095100000000000000",
+      handle: "pondotfun",
+      authorId: "2094048312772993024",
+      xUserId: "2094048312772993024",
+      sourceVerifiedBy: "official_x_oembed",
+      identityVerifiedBy: "fxtwitter_exact_numeric_id",
+      url: "https://x.com/pondotfun/status/2095100000000000000",
+      createdAt: now,
+      text: `A new market is live: ${coin}`,
+    },
+    signal: {
+      relevant: true,
+      strong: false,
+      labels: ["pon.fun 市场/RWA 更新"],
+      ponFunOfficial: true,
+      ponKind: "market_created",
+      ponStage: "created",
+      ponAsset: coin,
+      tokenAddress: coin,
+      ponPriority: "T2",
+      platformStructural: false,
+      majorProductUpdate: false,
+      reason: "official_market_or_stock_information",
+    },
+    observedAt: now,
+  };
+  assert.equal(isMonitoringSourceEnabled(config, officialX), true);
+  assert.deepEqual(ponFunNoveltyKeys(officialX), [`pon:${coin}:created`]);
+  const duplicate = await sendAlerts(config, officialX);
+  assert.equal(duplicate.status, "suppressed");
+  assert.equal(duplicate.reason, "semantic_duplicate");
+  assert.equal(payloads.length, 1);
+
+  let lifecycleRevision = 0;
+  const lifecycle = (stage, changes) => {
+    const transitionRevision = ++lifecycleRevision;
+    const apiHealthBlock = 52_000_000 + transitionRevision;
+    const bindingVerifiedAtBlock = 52_000_001;
+    const previousSnapshot = {
+      ...marketSnapshot,
+      ...Object.fromEntries(Object.entries(changes).map(([field, value]) => [field, value.before])),
+      baseline: true,
+      firstSeenAt: now,
+    };
+    const currentSnapshot = {
+      ...marketSnapshot,
+      ...Object.fromEntries(Object.entries(changes).map(([field, value]) => [field, value.after])),
+    };
+    return {
+      type: "pon_fun_update",
+      kind: "market_lifecycle",
+      eventKey: `pon-fun:market-lifecycle:${coin.toLowerCase()}:rev:${transitionRevision}:api:${apiHealthBlock}:binding:${bindingVerifiedAtBlock}`,
+      platform,
+      source: source("https://www.pon.fun/api/markets"),
+      sourceTrust: "official_site_bound_onchain_fingerprinted",
+      chainId: 4663,
+      factory,
+      title: "pon.fun 市场状态更新：NVDAx",
+      summary: "The official market lifecycle changed after its Factory identity was re-verified on-chain.",
+      observedAt: now,
+      strong: true,
+      risk: ponRisk,
+      token: coin,
+      contractAddress: coin,
+      ticker: "NVDA",
+      symbol: "NVDAx",
+      market: currentSnapshot,
+      previousSnapshot,
+      currentSnapshot: structuredClone(currentSnapshot),
+      changes,
+      evidence: {
+        chainId: 4663,
+        factory,
+        factoryCodeHash: "0x4cb9795396b800a4b1e46f2e91a690ecf004ac0d52b059a7ef0e6b190af17384",
+        bindingVerifiedAtBlock,
+        bindingVerifiedAtBlockHash: `0x${"7".repeat(64)}`,
+        apiHealthBlock,
+        transitionRevision,
+        api,
+      },
+    };
+  };
+  const graduated = lifecycle("graduated", { graduated: { before: false, after: true } });
+  const lpDeployed = lifecycle("lp-deployed", { lpDeployed: { before: false, after: true } });
+  assert.equal(isMonitoringSourceEnabled(config, graduated), true);
+  for (const [label, mutate] of [
+    ["revision key", (candidate) => { candidate.eventKey = candidate.eventKey.replace(":rev:1:", ":rev:2:"); }],
+    ["typed revision", (candidate) => { candidate.evidence.transitionRevision = "1"; }],
+    ["typed API block", (candidate) => { candidate.evidence.apiHealthBlock = String(candidate.evidence.apiHealthBlock); }],
+    ["binding hash", (candidate) => { candidate.evidence.bindingVerifiedAtBlockHash = "0x1234"; }],
+    ["extra evidence", (candidate) => { candidate.evidence.untrusted = true; }],
+  ]) {
+    const candidate = structuredClone(graduated);
+    mutate(candidate);
+    assert.equal(isMonitoringSourceEnabled(config, candidate), false, `market lifecycle rejects ${label} mismatch`);
+  }
+  assert.deepEqual(ponFunNoveltyKeys(graduated), [`pon:${coin}:graduated`]);
+  assert.deepEqual(ponFunNoveltyKeys(lpDeployed), [`pon:${coin}:lp_deployed`]);
+  assert.equal((await sendAlerts(config, graduated)).status, "delivered");
+  assert.equal((await sendAlerts(config, lpDeployed)).status, "delivered");
+  assert.equal(payloads.length, 3, "created, graduated and LP deployed remain independent stages");
+
+  const poolFeeFirst = {
+    ...lifecycle("pool-fee", { poolFee: { before: 3_000, after: 10_000 } }),
+  };
+  const poolFeeRepeated = {
+    ...lifecycle("pool-fee", { poolFee: { before: 3_000, after: 10_000 } }),
+  };
+  assert.notDeepEqual(
+    ponFunNoveltyKeys(poolFeeFirst),
+    ponFunNoveltyKeys(poolFeeRepeated),
+    "a later repeat of the same mutable lifecycle transition needs its own durable revision identity",
+  );
+
+  const delisted = {
+    ...market,
+    kind: "stock_listing",
+    eventKey: `pon-fun:stock-listing:4663:${`0x${"9".repeat(64)}`}:0`,
+    transactionHash: `0x${"9".repeat(64)}`,
+    currentSnapshot: { ticker: "NVDA", stockToken: coin, poolFee: 3_000, active: false },
+    changes: { active: { before: true, after: false } },
+    evidence: {
+      ...market.evidence,
+      topic0: "0x7740fd3f56c396ca150bbd7ec72ee92798920ea8eb3f25f9a03582dc9bb564b1",
+      logIndex: 0,
+      receiptVerified: true,
+    },
+  };
+  assert.equal(ponFunNoveltyKeys(delisted).some((key) => key.includes(":stock_delisted")), true);
+  assert.equal(ponFunNoveltyKeys(delisted).some((key) => key.includes(":tx:")), true);
+
+  const factoryConfig = ({ transactionHash, logIndex, changes }) => {
+    const defaults = {
+      oracle: `0x${"1".repeat(40)}`,
+      swapRouter: vault,
+      positionManager: curve,
+      protocolTreasury: creator,
+    };
+    const previousSnapshot = {
+      ...defaults,
+      ...Object.fromEntries(Object.entries(changes).map(([field, value]) => [field, value.before])),
+    };
+    const currentSnapshot = {
+      ...defaults,
+      ...Object.fromEntries(Object.entries(changes).map(([field, value]) => [field, value.after])),
+    };
+    return {
+      type: "pon_fun_update",
+      kind: "factory_config",
+      eventKey: `pon-fun:factory_config:4663:${transactionHash.toLowerCase()}:${logIndex}`,
+      platform,
+      source: source(`https://robinhoodchain.blockscout.com/tx/${transactionHash}`),
+      sourceTrust: "official_site_bound_onchain_fingerprinted",
+      chainId: 4663,
+      factory,
+      title: "pon.fun Factory 配置更新",
+      summary: "Factory emitted ConfigSet; oracle/router/position manager/treasury values are shown exactly.",
+      observedAt: now,
+      strong: true,
+      risk: ponRisk,
+      previousSnapshot,
+      currentSnapshot,
+      changes,
+      transactionHash,
+      blockNumber: 52_000_010 + logIndex,
+      blockHash: `0x${String(logIndex + 1).repeat(64)}`,
+      blockTimestamp: now,
+      explorerUrl: `https://robinhoodchain.blockscout.com/tx/${transactionHash}`,
+      evidence: {
+        chainId: 4663,
+        factory,
+        factoryCodeHash: "0x4cb9795396b800a4b1e46f2e91a690ecf004ac0d52b059a7ef0e6b190af17384",
+        topic0: "0x8d4f9022ab10978259dead0fa01463e75fda43dfe57f0445e69b010074c016fd",
+        logIndex,
+        receiptVerified: true,
+        api,
+      },
+    };
+  };
+  const configA = factoryConfig({
+    transactionHash: `0x${"c".repeat(64)}`,
+    logIndex: 0,
+    changes: { oracle: { before: `0x${"1".repeat(40)}`, after: `0x${"2".repeat(40)}` } },
+  });
+  const configB = factoryConfig({
+    transactionHash: `0x${"d".repeat(64)}`,
+    logIndex: 1,
+    changes: { oracle: { before: `0x${"1".repeat(40)}`, after: `0x${"2".repeat(40)}` } },
+  });
+  const configBChanged = factoryConfig({
+    transactionHash: configB.transactionHash,
+    logIndex: configB.evidence.logIndex,
+    changes: { oracle: { before: `0x${"2".repeat(40)}`, after: `0x${"3".repeat(40)}` } },
+  });
+  const configC = factoryConfig({
+    transactionHash: `0x${"e".repeat(64)}`,
+    logIndex: 2,
+    changes: configBChanged.changes,
+  });
+  assert.notDeepEqual(ponFunNoveltyKeys(configA), ponFunNoveltyKeys(configB), "different tx/log proofs need distinct control-event identities");
+  assert.notDeepEqual(ponFunNoveltyKeys(configB), ponFunNoveltyKeys(configBChanged), "different normalized changes need distinct control-event identities");
+  assert.equal((await sendAlerts(config, configA)).status, "delivered");
+  assert.equal((await sendAlerts(config, configB)).status, "delivered");
+  assert.equal((await sendAlerts(config, configC)).status, "delivered");
+  assert.equal(payloads.length, 6, "three independently proven config revisions remain alertable inside six hours");
+
+  const platformToken = "0x7673dc6d2357bdc2e04fd80c169f2bef56622d9a";
+  let platformRevision = 0;
+  const platformTokenUpdate = (before, after) => {
+    const beforeSupply = String(before);
+    const afterSupply = String(after);
+    const changes = { supply: { before: beforeSupply, after: afterSupply } };
+    const transitionRevision = ++platformRevision;
+    const apiHealthBlock = 52_000_010 + transitionRevision;
+    const bindingVerifiedAtBlock = 52_000_020;
+    const bindingVerifiedAtBlockHash = `0x${"8".repeat(64)}`;
+    return {
+      type: "pon_fun_update",
+      kind: "platform_token_update",
+      eventKey: `pon-fun:platform-token:${platformToken}:rev:${transitionRevision}:api:${apiHealthBlock}:binding:${bindingVerifiedAtBlock}`,
+      platform,
+      source: source("https://www.pon.fun/api/ponfun"),
+      sourceTrust: "official_site_bound_onchain_fingerprinted",
+      chainId: 4663,
+      factory,
+      title: "pon.fun 平台代币资料更新",
+      summary: "The official PONFUN token metadata changed while the platform Factory identity remained verified.",
+      observedAt: now,
+      strong: true,
+      risk: ponRisk,
+      token: platformToken,
+      contractAddress: platformToken,
+      symbol: "PONFUN",
+      previousSnapshot: { address: platformToken, name: "Ponfun", symbol: "PONFUN", supply: beforeSupply },
+      currentSnapshot: { address: platformToken, name: "Ponfun", symbol: "PONFUN", supply: afterSupply },
+      changes,
+      evidence: {
+        chainId: 4663,
+        factory,
+        factoryCodeHash: "0x4cb9795396b800a4b1e46f2e91a690ecf004ac0d52b059a7ef0e6b190af17384",
+        bindingVerifiedAtBlock,
+        bindingVerifiedAtBlockHash,
+        apiHealthBlock,
+        transitionRevision,
+        platformToken: {
+          token: platformToken,
+          codePresent: true,
+          codeHash: `0x${"6".repeat(64)}`,
+          name: "Ponfun",
+          symbol: "PONFUN",
+          decimals: 18,
+          totalSupplyRaw: (BigInt(after) * 10n ** 18n).toString(),
+          verifiedBlock: bindingVerifiedAtBlock,
+          verifiedBlockHash: bindingVerifiedAtBlockHash,
+        },
+        api: { healthUrl: "https://www.pon.fun/api/health", platformTokenUrl: "https://www.pon.fun/api/ponfun" },
+      },
+    };
+  };
+  const firstBurn = platformTokenUpdate(1_000_000_000, 900_000_000);
+  const secondBurn = platformTokenUpdate(900_000_000, 800_000_000);
+  assert.equal(isMonitoringSourceEnabled(config, firstBurn), true);
+  for (const [label, mutate] of [
+    ["total supply", (candidate) => { candidate.evidence.platformToken.totalSupplyRaw = "1"; }],
+    ["code hash", (candidate) => { candidate.evidence.platformToken.codeHash = "0x1234"; }],
+    ["verified block hash", (candidate) => { candidate.evidence.platformToken.verifiedBlockHash = `0x${"9".repeat(64)}`; }],
+    ["typed decimals", (candidate) => { candidate.evidence.platformToken.decimals = "18"; }],
+    ["fixed token", (candidate) => { candidate.evidence.platformToken.token = coin; }],
+  ]) {
+    const candidate = structuredClone(firstBurn);
+    mutate(candidate);
+    assert.equal(isMonitoringSourceEnabled(config, candidate), false, `platform token rejects ${label} mismatch`);
+  }
+  assert.notDeepEqual(ponFunNoveltyKeys(firstBurn), ponFunNoveltyKeys(secondBurn), "separate normalized supply deltas need distinct identities");
+  assert.deepEqual(
+    ponFunNoveltyKeys({ ...firstBurn, changes: { supply: { after: "900000000", before: "1000000000" } } }),
+    ponFunNoveltyKeys(firstBurn),
+    "equivalent field ordering and numeric representations normalize to one change identity",
+  );
+  assert.equal((await sendAlerts(config, firstBurn)).status, "delivered");
+  assert.equal((await sendAlerts(config, secondBurn)).status, "delivered");
+  assert.equal(payloads.length, 8, "separate supply revisions remain alertable inside six hours");
+
+  const laterStageObservation = {
+    ...officialX,
+    tweet: {
+      ...officialX.tweet,
+      id: "2095100000000000001",
+      text: "pon.fun Factory configuration updated",
+      url: "https://x.com/pondotfun/status/2095100000000000001",
+    },
+    signal: {
+      ...officialX.signal,
+      ponKind: "factory_config",
+      ponStage: "factory_config",
+      ponAsset: "PONFUN",
+      tokenAddress: undefined,
+      ponPriority: "T1",
+      labels: ["pon.fun 重大结构更新"],
+      platformStructural: true,
+      majorProductUpdate: true,
+      strong: true,
+      reason: "official_factory_config_or_major_product_change",
+    },
+  };
+  assert.match(ponFunNoveltyKeys(laterStageObservation).join("\n"), /:x-tweet:2095100000000000001$/m);
+  const laterStageResult = await sendAlerts(config, laterStageObservation);
+  assert.equal(laterStageResult.status, "delivered", `a stage-only X post remains independently alertable without shared exact evidence: ${JSON.stringify(laterStageResult)}`);
+  const separateStageObservation = {
+    ...laterStageObservation,
+    tweet: {
+      ...laterStageObservation.tweet,
+      id: "2095100000000000002",
+      text: "pon.fun Factory treasury configuration migrated",
+      url: "https://x.com/pondotfun/status/2095100000000000002",
+    },
+    signal: {
+      ...laterStageObservation.signal,
+      claims: ["pon.fun Factory treasury configuration migrated"],
+      keyChanges: ["pon.fun Factory treasury configuration migrated"],
+    },
+  };
+  assert.notDeepEqual(ponFunNoveltyKeys(laterStageObservation), ponFunNoveltyKeys(separateStageObservation));
+  assert.equal((await sendAlerts(config, separateStageObservation)).status, "delivered", "two distinct official X control updates cannot collapse to their shared stage");
+  assert.equal(payloads.length, 10);
+
+  const claimFallbackObservation = {
+    ...separateStageObservation,
+    tweet: { ...separateStageObservation.tweet, id: null },
+  };
+  assert.match(ponFunNoveltyKeys(claimFallbackObservation).join("\n"), /:x-claim:[a-f0-9]{24}$/m, "a normalized claim digest is the fallback when a tweet ID is unavailable");
+
+  const exactTxObservation = {
+    ...laterStageObservation,
+    tweet: {
+      ...laterStageObservation.tweet,
+      id: "2095100000000000003",
+      text: `pon.fun Factory configuration updated in ${configA.transactionHash}`,
+      url: "https://x.com/pondotfun/status/2095100000000000003",
+    },
+    signal: {
+      ...laterStageObservation.signal,
+      transactionHash: configA.transactionHash,
+    },
+  };
+  assert.equal((await sendAlerts(config, exactTxObservation)).status, "suppressed", "a shared exact transaction still folds an X observation into its chain event");
+  assert.equal(payloads.length, 10);
+
+  const configAddress = configA.changes.oracle.after;
+  const exactCaObservation = {
+    ...laterStageObservation,
+    tweet: {
+      ...laterStageObservation.tweet,
+      id: "2095100000000000004",
+      text: `pon.fun Factory oracle configuration updated to ${configAddress}`,
+      url: "https://x.com/pondotfun/status/2095100000000000004",
+    },
+    signal: {
+      ...laterStageObservation.signal,
+      tokenAddress: configAddress,
+    },
+  };
+  const sharedCaKey = `pon:PONFUN:factory_config:ca:${configAddress.toLowerCase()}`;
+  assert.equal(ponFunNoveltyKeys(configA).includes(sharedCaKey), true);
+  assert.equal(ponFunNoveltyKeys(exactCaObservation).includes(sharedCaKey), true);
+  assert.equal((await sendAlerts(config, exactCaObservation)).status, "suppressed", "a shared exact CA still folds an X observation into its chain event");
+  assert.equal(payloads.length, 10);
+
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(outbox.events[first.eventId].event.tradingPriority.tier, "T2");
+  assert.deepEqual(outbox.events[first.eventId].event.canonicalSignalIds, [`pon:${coin}:created`]);
+  assert.equal(outbox.events[first.eventId].renderBundle.version, 17);
+  assert.equal(outbox.events[duplicate.eventId].semanticDuplicateOf, first.eventId);
 });

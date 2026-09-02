@@ -2,13 +2,13 @@
 
 ## 当前生产范围（focus3）
 
-当前 `.env` 使用 `MONITOR_SCOPE=focus3`。Telegram 的发射台结构性更新只允许以下 3 个核心平台进入告警队列；Morph 另有一条只接受 Long 官方身份和 Flap 官方链上入口的窄通道，Binance 以及 X/xAI/Grok 也保留固定官方身份白名单：
+当前 `.env` 使用 `MONITOR_SCOPE=focus3`。Telegram 的通用发射台结构性更新只允许以下 3 个核心平台进入告警队列；pon.fun 采用独立、显式启用的官方身份通道，Morph 另有一条只接受 Long 官方身份和 Flap 官方链上入口的窄通道，Binance 以及 X/xAI/Grok 也保留固定官方身份白名单：
 
 - Flap（含官方 `flap-sh` 代码、官网能力和链上新模式）；
 - Four.Meme / OpenFour（含官方配置、模板、平台能力和已认证代码源）；
 - Uniswap / Pools.trade（Liquidity Launcher、官方发布、X、官网及限定的 launch/hook/pool 仓库）。
 
-“新东西”限定为首次出现的新 Factory/入口、新模式或新机制、新合约/部署地址、新功能/版本、官方新仓库，以及明确发布这些变化的官方公告或 X。普通代币、普通底池、交易/转账、量能、营销活动、GitHub 的修复/回滚/测试/文档提交、站点单独出现的 V2/V3 关键词均不推送。Pons、其他 BSC/Robinhood 发射台、官方地址买卖和早期量能监控均已停用；Binance/Binance Wallet/Binance Futures 作为独立的严格官方白名单通道启用，Fomo 使用独立 worker。历史状态和游标保留，不会因重启清空或回放。
+“新东西”限定为首次出现的新 Factory/入口、新模式或新机制、新合约/部署地址、新功能/版本、官方新仓库，以及明确发布这些变化的官方公告或 X。普通代币、普通底池、交易/转账、量能、营销活动、GitHub 的修复/回滚/测试/文档提交、站点单独出现的 V2/V3 关键词均不推送。Pons 与其他未获准的 BSC/Robinhood 发射台、官方地址买卖和早期量能监控均已停用；pon.fun、Binance/Binance Wallet/Binance Futures 使用各自独立的严格官方白名单通道，Fomo 使用独立 worker。历史状态和游标保留，不会因重启清空或回放。
 
 链上首次出现的未知模式先只写入后台候选，第二个独立样本确认同一结构后才进入 Telegram；这份首样本、区块、Factory、模式指纹与证据会保留，作为后续狙击工具的数据基础。GitHub、官网、X 与链上会生成统一语义 ID，30 天内同一个新功能只播报最早捕获到的来源；如果一条更新同时包含“已见功能 + 未见功能”，仍会播报一次，不会把未见功能误删。
 
@@ -31,7 +31,7 @@
 - 发射第一枚币之前的疑似 Factory/实现合约部署；
 - Telegram 与通用 Webhook 告警。
 
-Robinhood Chain 的主链循环按 1 秒调度。BSC 与 Morph 同样使用 1 秒 HTTP 区块头兜底，并由 WebSocket 负责低延迟唤醒；BSC 官方配置/API 每 5 秒检查。Flap/Four.meme 平台能力、核心 GitHub 仓库和重点官方 X 账号均进入 5 秒优先通道，其中 X 调度器每 1 秒检查一次到期账号。官网、Uniswap 博客/治理、X API Changelog、xAI Release Notes、Binance 公告详情/开发者源和 Morph 官方页面等主要官方源统一按 10 秒检查；xAI News 保留 30 秒，X 的 Jina 降级源保留 5 分钟最短间隔以避免限流。以上是本地调度目标，实际发现时间仍受上游发布时间、缓存和网络响应影响。
+Robinhood Chain 的主链循环按 1 秒调度。BSC 与 Morph 同样使用 1 秒 HTTP 区块头兜底，并由 WebSocket 负责低延迟唤醒；BSC 官方配置/API 每 5 秒检查。pon.fun Factory 默认每 3 秒进入一次单飞检查，官网 API 的单请求上限为 10 秒；Factory 事件、官网快照和最终区块锚在同一个事务周期内闭环，任一证据暂不可用都会保留原游标并重试，不会把未闭环变化提前当成已确认更新。Flap/Four.meme 平台能力、核心 GitHub 仓库和重点官方 X 账号均进入 5 秒优先通道，其中 X 调度器每 1 秒检查一次到期账号。官网、Uniswap 博客/治理、X API Changelog、xAI Release Notes、Binance 公告详情/开发者源和 Morph 官方页面等主要官方源统一按 10 秒检查；xAI News 保留 30 秒，X 的 Jina 降级源保留 5 分钟最短间隔以避免限流。以上是本地调度目标，实际发现时间仍受上游发布时间、缓存和网络响应影响。
 
 ## 快速开始
 
@@ -80,6 +80,12 @@ docker compose logs -f monitor
 截至本项目最近一次同步，GMGN Robinhood 返回的平台标签包括 `bankr`、`noxa`、`virtuals_v2`、`pool_uniswap_v2`、`pool_uniswap_v3`、`pool_uniswap_v4`。
 
 系统为每个 launcher 记录模式指纹，包含入口函数 selector、池类型、铸币数量、日志/发射器数量及事件 topic 集合。已有 launcher 首次出现不同指纹时标记为 `new_mode_candidate`。模式指纹比单纯比较工厂地址更适合发现 V2→V3/V4、直接建池→曲线毕业、代理升级后事件变化等情况。
+
+### pon.fun 官方更新
+
+`PON_MONITOR_ENABLED=true` 启用完全独立的 pon.fun 通道；它与 Pons / pons.family 没有身份、地址、状态或开关继承关系。监控固定 Robinhood Chain `chainId=4663`、Factory `0xF698d13348686C1529c2DC54847C123424d9DAE0`、Factory runtime hash、部署交易，以及官网 `api/health`、`api/markets`、`api/ponfun`、`tokenlist.json` 和官方 X `@pondotfun` 的 numeric user ID。该信任等级表示“官网绑定 + 链上代码指纹”，不表示源码已验证或合约已经审计。
+
+首次启用只静默记录现有市场和 X 游标，不回放历史。之后播报 Factory 配置、曲线、暂停/恢复、所有权、股票映射、平台币资料和市场生命周期变化；新市场必须同时通过 Factory 精确事件、成功交易回执、区块、官网 markets/token list 与 Factory getter 对账。官网暂未收录时事件会先进入持久待核队列，绝不因 API 缺项猜测删除或错误推进告警状态。PON coin 是股票锚定的链上代币，不是股票本身；当前所有 pon.fun 事件最高只到 T1，普通市场/RWA 更新为 T2，不会自动交易。
 
 ### Pons 类早期发现
 
@@ -228,11 +234,11 @@ ALERT_TRANSLATION_TIMEOUT_MS=3000
 npm run test:telegram
 ```
 
-Telegram 当前只推送 Flap/Four.meme 平台结构变化、Uniswap/Pools.trade 的发射/策略/底池/Hook/部署/Release/限定 GitHub，以及 Morph 上经官方证实的 Flap/Long 结构变化。Robinhood 链上只允许 3 个核心平台已知入口首次出现不同结构模式的证据通过；普通合约部署、普通发币/底池、量能、官方地址行为和被动转账不推送，但历史数据仍保留在 `data/`。
+Telegram 当前推送 Flap/Four.meme 平台结构变化、Uniswap/Pools.trade 的发射/策略/底池/Hook/部署/Release/限定 GitHub、Morph 上经官方证实的 Flap/Long 结构变化，以及独立验证的 pon.fun Factory/API/X 更新。Robinhood 链上的通用发现仍只允许 3 个核心平台已知入口首次出现不同结构模式的证据通过；pon.fun 只能走其固定 Factory 和官方身份门，普通 PON 同名代币、普通股票/RWA、合约部署、普通发币/底池、量能、官方地址行为和被动转账不会借此进入队列，但历史数据仍保留在 `data/`。
 
 所有进入 Telegram 的事件在最终发送层统一排成一条双语差异卡片：先显示 `🇨🇳 中文`，再显示 `🇬🇧 English`，每块固定按“变化类型 → 原有 → 更新后 → 对比依据”展示，随后最多保留状态/风险和时间。旧状态严格区分“已知旧值”“此前监控基线未记录”和“旧值暂不可得”，不会把取不到旧值伪装成此前不存在；新增、修改、移除、发布、升级和状态变化使用不同颜色标记。合约、钱包、交易哈希、Git SHA、仓库、函数名、版本、URL 和 X 账号不会被翻译或截断。Google GTX 与 [MyMemory 官方免费 REST API](https://mymemory.translated.net/doc/spec.php) 在同一个 3 秒总预算内竞争，先通过语言和技术标识校验的结果生效；MyMemory 匿名额度以其[官方使用限制](https://mymemory.translated.net/doc/usagelimits.php)为准。差异模型和双语结果先持久化到 outbox，发送失败重试时直接复用，不会重复调用翻译服务，也不会改变原始事件、去重键、安全门、强提醒级别或按钮。两个接口都不可用时仍会按固定双语结构发送，中文区明确标记保留的英文原文，英文区改用可验证的结构化事实兜底；单条消息最多 18 行，避免 Telegram 卡片过长。
 
-X/Twitter 使用公开时间线接口，无需 API Key 或登录。focus3 轮询 Flap `@flapdotsh`、Four.Meme `@fourdotmemezh`、Uniswap `@Uniswap`、Pools.trade `@TradePools`，Morph 窄通道另固定轮询 Long `@longdotxyz`；官网临时出现的其他账号不会被动态加入。只推送 6 小时内、明确包含平台新模式、Factory/合约部署、新底池/Hook、报价机制、新功能或 Morph 上线的推文；普通代币宣传和过期补抓不会进入 Telegram。
+X/Twitter 使用公开时间线接口，无需 API Key 或登录。focus3 轮询 Flap `@flapdotsh`、Four.Meme `@fourdotmemezh`、Uniswap `@Uniswap`、Pools.trade `@TradePools`，Morph 窄通道另固定轮询 Long `@longdotxyz`；启用 pon.fun 时还会独立轮询 `@pondotfun`。重点账号必须同时通过固定 numeric user ID、精确状态页作者和 X 官方 oEmbed 验证，官网临时出现的其他账号不会被动态加入。只推送有效时间窗内、明确包含平台新模式、Factory/合约部署、新底池/Hook、报价机制、新功能、Morph 上线或 pon.fun 结构变化的推文；普通代币宣传和过期补抓不会进入 Telegram。
 
 带合约地址的 TG 提醒底部包含 Telegram 原生“📋 一键复制合约”按钮；代币提醒同时提供无返佣的“📈 一键打开 GMGN”Robinhood Token 深链和 Blockscout 交易按钮。平台能力或官网一次发现多个新合约时，会分别提供最多 3 个复制按钮。
 

@@ -5,6 +5,7 @@ readonly CONFIG_DIR="/etc/robinhood-chain-monitor"
 readonly STATE_DIR="/var/lib/robinhood-chain-monitor"
 readonly CURRENT_LINK="/opt/robinhood-chain-monitor/current"
 readonly SERVICE_USER="robinhood-monitor"
+readonly ENV_SETTING_READER="/usr/local/libexec/robinhood-monitor/read-env-setting.sh"
 
 fail() {
   printf 'activation failed: %s\n' "$*" >&2
@@ -26,6 +27,15 @@ health_env_mode="$(stat -c '%a' -- "$CONFIG_DIR/health.env")"
 [[ "$health_env_mode" == "600" ]] || fail "health.env must have mode 0600"
 grep -Eq '^HEALTH_HEARTBEAT_URL=https://[^[:space:]]+$' "$CONFIG_DIR/health.env" \
   || fail "configure an HTTPS HEALTH_HEARTBEAT_URL in health.env before activation"
+[[ -x "$ENV_SETTING_READER" ]] || fail "$ENV_SETTING_READER is missing"
+pon_monitor_setting="$("$ENV_SETTING_READER" "$CONFIG_DIR/monitor.env" PON_MONITOR_ENABLED)" \
+  || fail "could not read PON_MONITOR_ENABLED from monitor.env"
+if [[ "$pon_monitor_setting" == "true" ]]; then
+  pon_health_setting="$("$ENV_SETTING_READER" "$CONFIG_DIR/health.env" HEALTH_REQUIRE_PON)" \
+    || fail "could not read HEALTH_REQUIRE_PON from health.env"
+  [[ "$pon_health_setting" == "true" || "$pon_health_setting" == "1" || "$pon_health_setting" == "yes" ]] \
+    || fail "PON_MONITOR_ENABLED=true requires HEALTH_REQUIRE_PON=true in health.env"
+fi
 [[ -r "$CONFIG_DIR/node-id" ]] || fail "node-id is missing"
 [[ -d "$STATE_DIR" ]] || fail "state directory is missing"
 

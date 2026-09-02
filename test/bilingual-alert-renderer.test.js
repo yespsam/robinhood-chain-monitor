@@ -2060,3 +2060,117 @@ test("an unknown Binance official kind is suppressed before rendering", async (t
   assert.equal(result.reason, "not_relevant");
   assert.equal(payload, undefined);
 });
+
+test("pon.fun structural and official-X cards keep the two-field bilingual contract under 600", async () => {
+  const nowMs = Date.parse("2026-09-02T04:00:30.000Z");
+  const factory = "0xF698d13348686C1529c2DC54847C123424d9DAE0";
+  const tx = `0x${"a".repeat(64)}`;
+  const before = "0x1111111111111111111111111111111111111111";
+  const after = "0x2222222222222222222222222222222222222222";
+  const structural = withTradingPriority({
+    type: "pon_fun_update",
+    kind: "factory_config",
+    platform: { id: "ponfun", name: "pon.fun", chainId: 4663 },
+    source: {
+      id: "pon_fun_official_api_onchain",
+      trust: "official_site_bound_onchain_fingerprinted",
+      official: true,
+      url: `https://robinhoodchain.blockscout.com/tx/${tx}`,
+    },
+    sourceTrust: "official_site_bound_onchain_fingerprinted",
+    factory,
+    transactionHash: tx,
+    blockNumber: 52_000_001,
+    blockTimestamp: "2026-09-02T04:00:00.000Z",
+    observedAt: "2026-09-02T04:00:01.000Z",
+    evidence: {
+      factoryCodeHash: "0x4cb9795396b800a4b1e46f2e91a690ecf004ac0d52b059a7ef0e6b190af17384",
+    },
+    previousSnapshot: { oracle: before },
+    currentSnapshot: { oracle: after },
+    changes: { oracle: { before, after } },
+  }, { nowMs });
+  const token = "0x3333333333333333333333333333333333333333";
+  const officialX = withTradingPriority({
+    type: "twitter_update",
+    project: {
+      id: "ponfun",
+      name: "pon.fun",
+      handle: "pondotfun",
+      xUserId: "2094048312772993024",
+      match: "official_x",
+      signalProfile: "pon_fun",
+      website: "https://www.pon.fun",
+      twitter: "https://x.com/pondotfun",
+    },
+    tweet: {
+      id: "2095100000000000000",
+      handle: "pondotfun",
+      authorId: "2094048312772993024",
+      xUserId: "2094048312772993024",
+      sourceVerifiedBy: "official_x_oembed",
+      identityVerifiedBy: "fxtwitter_exact_numeric_id",
+      url: "https://x.com/pondotfun/status/2095100000000000000",
+      createdAt: "2026-09-02T04:00:00.000Z",
+      text: "$PONFUN is live",
+    },
+    signal: {
+      relevant: true,
+      strong: true,
+      ponFunOfficial: true,
+      ponKind: "platform_token_update",
+      ponStage: "platform_token_live",
+      ponAsset: "PONFUN",
+      tokenAddress: token,
+      ponPriority: "T1",
+      majorProductUpdate: true,
+      platformStructural: true,
+    },
+  }, { nowMs });
+
+  for (const [event, identifiers] of [
+    [structural, [factory, `${tx}#52000001`]],
+    [officialX, [token, "@pondotfun", "2095100000000000000"]],
+  ]) {
+    const bundle = await buildBilingualAlertBundle({}, event, "pon.fun official update");
+    const rendered = renderBilingualTelegramText(bundle, true);
+    assert.equal(bundle.zh.text.split("\n").length, 2);
+    assert.equal(bundle.en.text.split("\n").length, 2);
+    assert.match(bundle.zh.text, /^平台：pon\.fun/m);
+    assert.match(bundle.zh.text, /^更新了什么：/m);
+    assert.match(bundle.en.text, /^Platform: pon\.fun/m);
+    assert.match(bundle.en.text, /^What changed: /m);
+    assert.doesNotMatch(bundle.en.text, /[\u3400-\u9fff]/u);
+    assert.ok(rendered.length <= 600, `pon.fun card is ${rendered.length} characters`);
+    for (const identifier of identifiers) {
+      assert.ok(bundle.zh.text.includes(identifier), `Chinese card lost ${identifier}`);
+      assert.ok(bundle.en.text.includes(identifier), `English card lost ${identifier}`);
+    }
+  }
+  assert.deepEqual(structural.tradingPriority.tier, "T1");
+  assert.deepEqual(structural.tradingPriority.plan.automaticExecution, false);
+  const { tradingPriority: _originalPriority, ...officialXWithoutPriority } = officialX;
+  const delayedX = withTradingPriority({
+    ...officialXWithoutPriority,
+    observedAt: "2026-09-02T04:00:30.000Z",
+    tweet: { ...officialX.tweet, createdAt: "2026-09-02T03:40:00.000Z" },
+    delayedRecovery: {
+      version: 1,
+      reason: "monitoring_gap_recovery",
+      gapSince: "2026-09-02T03:45:00.000Z",
+      sourceOccurredAt: "2026-09-02T03:40:00.000Z",
+      recoveredAt: "2026-09-02T04:00:30.000Z",
+      lagMs: 20 * 60_000 + 30_000,
+      cursor: { latestIdAtRecovery: "2095099999999999999", tweetId: officialX.tweet.id },
+    },
+  }, { nowMs });
+  const delayedBundle = await buildBilingualAlertBundle({}, delayedX, "pon.fun delayed recovery");
+  const delayedRendered = renderBilingualTelegramText(delayedBundle, true);
+  assert.equal(delayedX.tradingPriority.tier, "T2");
+  assert.match(delayedBundle.zh.text, /监控恢复补报/);
+  assert.match(delayedBundle.zh.text, /勿追价/);
+  assert.match(delayedBundle.en.text, /Delayed recovery/);
+  assert.match(delayedBundle.en.text, /do not chase/);
+  assert.doesNotMatch(delayedBundle.en.text, /[\u3400-\u9fff]/u);
+  assert.ok(delayedRendered.length <= 600, `delayed pon.fun card is ${delayedRendered.length} characters`);
+});
