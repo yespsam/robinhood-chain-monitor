@@ -121,11 +121,88 @@ test("news classifier accepts substantive verticals and rejects politics, market
   assert.equal(classify(parseTelegramPublicPreview(preview(messageCard({ id: 3, textHtml: AI_PRODUCT_TEXT })))[0].text).news.category, "ai");
   assert.equal(classify(parseTelegramPublicPreview(preview(messageCard({ id: 4, textHtml: POLITICAL_TEXT })))[0].text).accepted, false);
   assert.equal(classify(parseTelegramPublicPreview(preview(messageCard({ id: 5, textHtml: CRYPTO_POLICY_TEXT })))[0].text).accepted, true, "substantive crypto policy is not discarded as generic politics");
+  assert.equal(classify(parseTelegramPublicPreview(preview(messageCard({ id: 5, textHtml: CRYPTO_POLICY_TEXT })))[0].text).news.category, "macro");
+  assert.equal(classify("Uniswap 单日交易笔数首次突破 700 万\nUniswap 链上交易活动创下新的单日纪录，成交与流动性数据仍需结合后续区块确认。 ").news.category, "market");
+  assert.equal(classify("Binance Futures Will Launch 牛来USDT Perpetual Contract\nThe official exchange announcement schedules a new perpetual market and publishes an exact opening time for traders. ").news.category, "listing");
   assert.equal(classify("交易所发布限时优惠活动，关注并转发即可参加抽奖，点击领取注册链接和邀请码，更多产品信息将在频道公布。\n所有参与用户都会获得奖励。 ").accepted, false);
   assert.equal(classify("新代币已经上线交易，立即买入这只 100x gem，目标价十倍，止损位置稍后公布。\n这是今天最强喊单信号，请不要错过。 ").accepted, false);
   assert.equal(classify("AI 产品更新：Translation failed，等待翻译。新功能已经发布但暂无翻译内容，后续将补充完整产品说明。 ").accepted, false);
   assert.equal(classify("您好，您提供的链接我无法访问，因此看不到需要重写的具体内容。请直接粘贴原文，我会保持原有格式并重新翻译全部内容。 ").accepted, false);
   assert.equal(classify("以太坊更新。 ").reason, "insufficient_content");
+});
+
+test("roundups, cards, rankings, SEO listicles, and multi-topic collections fail closed", () => {
+  const rejected = [
+    ["本周新鲜洞察如下 ↓\n比特币 ETF 资金流出，某协议发布产品升级，另一个项目完成融资；以下内容为本周市场摘要。", []],
+    ["Quick look at what moved across crypto today\nBitcoin fell, an exchange launched a product, and a protocol passed a governance proposal in today's digest.", []],
+    ["每周加密卡摘要：产品、奖励与事件更新\n本周多张加密支付卡更新返现、年化收益和用户奖励规则，详情汇总如下。", []],
+    ["Ethena Pay 卡片发布详情\n新的消费卡现已发布，包含返现、支付与会员权益，本文整理完整使用指南。", []],
+    ["Top 10 crypto rankings this week\nThis ranked list reviews the best tokens, products, and market moves published during the week.", []],
+    ["三项加密市场重大更新\n一个协议被攻击，另一个交易所上线合约，第三个项目完成融资。", [
+      "https://one.example/story", "https://two.example/story", "https://three.example/story",
+    ]],
+  ];
+  for (const [text, externalUrls] of rejected) {
+    assert.equal(classifyTelegramNews({ text, externalUrls }).accepted, false, text.split("\n")[0]);
+  }
+});
+
+test("story identity uses semantic headline and lifecycle stage instead of the first URL", () => {
+  const base = {
+    text: "Optimism 通过 OP 生态基金重新分配提案\n治理投票已经通过，将部分 OP 代币重新分配给战略生态基金，并公布后续执行安排。",
+  };
+  const first = classifyTelegramNews({ ...base, externalUrls: ["https://one.example/story"] });
+  const mirror = classifyTelegramNews({ ...base, externalUrls: ["https://mirror.example/copied"] });
+  const other = classifyTelegramNews({
+    text: "Arbitrum 通过 ARB 生态基金重新分配提案\n治理投票已经通过，将部分 ARB 代币重新分配给战略生态基金，并公布后续执行安排。",
+    externalUrls: ["https://one.example/story"],
+  });
+  assert.equal(first.news.stage, "approved");
+  assert.equal(first.news.storyKey, mirror.news.storyKey, "mirror URLs do not split one story");
+  assert.notEqual(first.news.storyKey, other.news.storyKey, "reusing one URL cannot merge different stories");
+});
+
+test("market, funding, and security story identity preserves significant numeric facts", () => {
+  const story = (text) => {
+    const result = classifyTelegramNews({ text, externalUrls: [] });
+    assert.equal(result.accepted, true, text.split("\n")[0]);
+    return result.news;
+  };
+  const market = story("Bitcoin ETF inflows rise to $236.5 million\nThe daily fund-flow update confirms sustained institutional demand across the largest spot products.");
+  const marketFormattingMirror = story("Bitcoin ETF inflows rise to $236.5M\nA mirrored report confirms sustained institutional demand across the largest spot products today.");
+  const marketChanged = story("Bitcoin ETF inflows rise to $250M\nThe daily fund-flow update confirms sustained institutional demand across the largest spot products.");
+  assert.equal(market.storyKey, marketFormattingMirror.storyKey, "equivalent numeric formatting keeps one identity");
+  assert.notEqual(market.storyKey, marketChanged.storyKey, "a material flow amount change is a new story identity");
+  const barePrice77 = story("Bitcoin price hits 77,000 after ETF inflows accelerate\nThe move is confirmed across liquid venues while traders monitor depth, funding, and follow-through volume.");
+  const barePrice78 = story("Bitcoin price hits 78,000 after ETF inflows accelerate\nThe move is confirmed across liquid venues while traders monitor depth, funding, and follow-through volume.");
+  assert.notEqual(barePrice77.storyKey, barePrice78.storyKey, "a bare quoted price change cannot be normalized away");
+
+  const funding49 = story("Protocol raises $49 million in Series B funding\nThe team says the capital will fund audited infrastructure and expand its institutional market access.");
+  const funding50 = story("Protocol raises $50M in Series B funding\nThe team says the capital will fund audited infrastructure and expand its institutional market access.");
+  assert.notEqual(funding49.storyKey, funding50.storyKey, "funding amount changes cannot be normalized away");
+
+  const security35 = story("Bridge exploit drains 3.5% of protocol TVL\nThe team paused affected contracts and began tracing funds while preparing a verified remediation plan.");
+  const security40 = story("Bridge exploit drains 4.0% of protocol TVL\nThe team paused affected contracts and began tracing funds while preparing a verified remediation plan.");
+  assert.notEqual(security35.storyKey, security40.storyKey, "security loss percentage changes cannot be normalized away");
+});
+
+test("version, alphanumeric ticker, and proposal identifiers remain part of story identity", () => {
+  const story = (text) => {
+    const result = classifyTelegramNews({ text, externalUrls: [] });
+    assert.equal(result.accepted, true, text.split("\n")[0]);
+    return result.news;
+  };
+  const mainnetV2 = story("Protocol launches V2 mainnet upgrade\nThe verified deployment introduces a new execution path and publishes complete migration guidance for existing users.");
+  const mainnetV3 = story("Protocol launches V3 mainnet upgrade\nThe verified deployment introduces a new execution path and publishes complete migration guidance for existing users.");
+  assert.notEqual(mainnetV2.storyKey, mainnetV3.storyKey);
+
+  const token1 = story("Binance Will List TOKEN1 and Open Spot Trading\nThe official announcement confirms the new market and provides its scheduled opening details for exchange users.");
+  const token2 = story("Binance Will List TOKEN2 and Open Spot Trading\nThe official announcement confirms the new market and provides its scheduled opening details for exchange users.");
+  assert.notEqual(token1.storyKey, token2.storyKey);
+
+  const proposal123 = story("DAO approves proposal 123 for treasury allocation\nThe completed governance vote reallocates protocol reserves and publishes the execution conditions for delegates.");
+  const proposal124 = story("DAO approves proposal 124 for treasury allocation\nThe completed governance vote reallocates protocol reserves and publishes the execution conditions for delegates.");
+  assert.notEqual(proposal123.storyKey, proposal124.storyKey);
 });
 
 test("unsafe external links are dropped while a mixed message remains deliverable", () => {
@@ -145,7 +222,7 @@ test("unsafe external links are dropped while a mixed message remains deliverabl
   assert.deepEqual(classification.news.externalUrls, ["https://security.example.com/report"]);
 });
 
-test("first non-empty feed is a silent baseline; new messages and qualified edits emit exact revisions", async (t) => {
+test("first feed is silent; same-stage edits stay silent and only lifecycle transitions emit", async (t) => {
   const stateFile = await temporaryStateFile(t);
   let current = Date.parse("2026-08-24T06:00:02Z");
   const requests = [];
@@ -158,6 +235,10 @@ test("first non-empty feed is a silent baseline; new messages and qualified edit
     preview(
       messageCard({ id: 2953, textHtml: GOVERNANCE_TEXT, datetime: "2026-08-24T06:00:00Z" }),
       messageCard({ id: 2954, textHtml: `${SECURITY_TEXT}<br/>官方随后补充，受影响的验证模块已经完成第二轮审计。`, datetime: "2026-08-24T06:00:03Z" }),
+    ),
+    preview(
+      messageCard({ id: 2953, textHtml: GOVERNANCE_TEXT, datetime: "2026-08-24T06:00:00Z" }),
+      messageCard({ id: 2954, textHtml: `<b>DeFi 协议跨链桥攻击事件已恢复</b><br/><br/>项目方确认主网服务已经恢复并重新开放，链上验证模块完成修复，受影响资产核查与后续安全审计仍在继续，团队将公布完整事件报告。`, datetime: "2026-08-24T06:00:03Z" }),
     ),
   ];
   const events = [];
@@ -179,9 +260,12 @@ test("first non-empty feed is a silent baseline; new messages and qualified edit
   assert.equal(events.length, 1);
   current += 4_000;
   assert.equal((await monitor.check()).ok, true);
-  assert.equal(events.length, 2, "an edited qualifying message becomes a new digest revision");
+  assert.equal(events.length, 1, "same-message editorial additions in the same stage do not replay");
+  current += 4_000;
+  assert.equal((await monitor.check()).ok, true);
+  assert.equal(events.length, 2, "a lifecycle transition remains alertable");
 
-  const [created, edited] = events;
+  const [created, transitioned] = events;
   assert.equal(created.type, "telegram_news_update");
   assert.equal(created.strong, false);
   assert.equal(created.source.id, "telegram_public_channel");
@@ -200,16 +284,19 @@ test("first non-empty feed is a silent baseline; new messages and qualified edit
   assert.equal(created.sourceOccurredAt, "2026-08-24T06:00:03.000Z");
   assert.equal(created.news.confidence, "observed");
   assert.equal(created.news.category, "security");
+  assert.equal(created.news.stage, "patched");
   assert.ok(created.news.headline.length <= 180);
   assert.ok(created.news.summary.length <= 320);
   assert.match(created.contentDigest, /^[a-f0-9]{64}$/);
   assert.equal(created.eventKey, `telegram-news:${TELEGRAM_NEWS_CHAT_ID}:2954:${created.contentDigest.slice(0, 16)}`);
-  assert.notEqual(created.contentDigest, edited.contentDigest);
-  assert.notEqual(created.eventKey, edited.eventKey);
+  assert.equal(transitioned.news.stage, "resumed");
+  assert.notEqual(created.contentDigest, transitioned.contentDigest);
+  assert.notEqual(created.eventKey, transitioned.eventKey);
   assert.match(requests[1].headers["if-none-match"], /revision-1/);
 
   const persisted = JSON.parse(await fs.readFile(stateFile, "utf8"));
-  assert.equal(persisted.messages["2954"].digest, edited.contentDigest);
+  assert.equal(persisted.messages["2954"].digest, transitioned.contentDigest);
+  assert.equal(persisted.messages["2954"].stage, "resumed");
   assert.ok(persisted.messages["2954"].summary.length <= 320);
   assert.equal("text" in persisted.messages["2954"], false);
   assert.equal("rawHtml" in persisted, false);
@@ -307,6 +394,45 @@ test("the same external story is kept to its first observed message even if a re
   assert.equal(calls, 0);
   const story = Object.values(monitor.state().stories)[0];
   assert.equal(story.messageId, 50);
+});
+
+test("producer story dedup expires after 24 hours and replaces the anchor", async (t) => {
+  const stateFile = await temporaryStateFile(t);
+  const startedAt = Date.parse("2026-08-24T06:00:02.000Z");
+  let current = startedAt;
+  const storyText = `<b>Optimism 通过 OP 生态基金重新分配提案</b><br/><br/>治理投票已经通过，将部分 OP 代币重新分配给战略生态基金，并公布后续执行安排。`;
+  const pages = [
+    preview(messageCard({ id: 60, textHtml: storyText, datetime: "2026-08-24T06:00:00.000Z" })),
+    preview(
+      messageCard({ id: 60, textHtml: storyText, datetime: "2026-08-24T06:00:00.000Z" }),
+      messageCard({ id: 61, textHtml: storyText, datetime: "2026-08-25T05:00:02.000Z" }),
+    ),
+    preview(
+      messageCard({ id: 60, textHtml: storyText, datetime: "2026-08-24T06:00:00.000Z" }),
+      messageCard({ id: 61, textHtml: storyText, datetime: "2026-08-25T05:00:02.000Z" }),
+      messageCard({ id: 62, textHtml: storyText, datetime: "2026-08-25T06:00:02.001Z" }),
+    ),
+  ];
+  const events = [];
+  const monitor = createTelegramNewsMonitor({ dataDir: path.dirname(stateFile), telegramNewsPollIntervalMs: 3_000 }, {
+    stateFile,
+    autoStart: false,
+    now: () => current,
+    fetchImpl: async () => response(pages.shift()),
+    sendAlertsImpl: async (_config, event) => { events.push(event); },
+  });
+
+  await monitor.check();
+  current = startedAt + 23 * 60 * 60_000;
+  await monitor.check();
+  assert.equal(events.length, 0, "a matching story inside 24 hours stays deduplicated");
+  current = startedAt + 24 * 60 * 60_000 + 1;
+  await monitor.check();
+  assert.equal(events.length, 1, "the same story after more than 24 hours is observable again");
+  assert.equal(events[0].messageId, 62);
+  const [anchor] = Object.values(monitor.state().stories);
+  assert.equal(anchor.messageId, 62);
+  assert.equal(anchor.lastSeenAt, new Date(current).toISOString());
 });
 
 test("ETag and Last-Modified are conditional and a 304 advances health without parsing a body", async (t) => {

@@ -249,12 +249,21 @@ test("smart wallet card extracts performance and omits purchase amount and Fomo/
   const rendered = renderBilingualTelegramText(bundle, true);
   assert.equal(bundle.zh.text.split("\n").length, 2);
   assert.equal(bundle.en.text.split("\n").length, 2);
-  assert.equal(rendered.split("\n").length, 8);
-  assert.ok(rendered.length <= 600, `card is ${rendered.length} characters`);
+  assert.ok(rendered.split("\n").length <= 18);
+  assert.ok(rendered.length < 3_800, `card is ${rendered.length} characters`);
+  const languageBlocks = rendered.match(/🇨🇳 中文\n([\s\S]*?)\n\n🇬🇧 English\n([\s\S]*)$/u);
+  assert.ok(languageBlocks);
+  for (const block of languageBlocks.slice(1)) {
+    const lines = block.split("\n").filter(Boolean);
+    assert.ok(lines.length >= 4 && lines.length <= 7, `Fomo language block has ${lines.length} lines`);
+    assert.ok(lines.every((line) => line.length <= 150));
+  }
   assert.match(bundle.zh.text, /^平台：/m);
   assert.match(bundle.zh.text, /^更新了什么：/m);
   assert.match(bundle.en.text, /^Platform: /m);
   assert.match(bundle.en.text, /^What changed: /m);
+  assert.match(rendered, /Platform: High-profit\/high-win-rate public wallet/u);
+  assert.doesNotMatch(languageBlocks[2], /高收益高胜率公开钱包/u);
   assert.match(bundle.zh.text, /30D \+\$17\.5K · 胜率63\.2%\/510币 · ABC/);
   assert.match(bundle.en.text, /30d \+\$17\.5K · win 63\.2%\/510 tokens · ABC/);
   assert.match(rendered, new RegExp(TOKEN, "i"));
@@ -263,6 +272,8 @@ test("smart wallet card extracts performance and omits purchase amount and Fomo/
   assert.equal(event.transactionHash, TX, "the immutable event and transaction button retain the full hash");
   assert.doesNotMatch(rendered, /\$0\.01|Fomo|KOL|喊单|X call|绑定钱包|linked wallet/i);
   assert.match(rendered, /前一区块代币零仓位|Token zero position at previous block/);
+  assert.match(languageBlocks[2], /Verification: .*wallet ownership unverified/u);
+  assert.match(languageBlocks[2], /Risk: Safety screened; not a buy recommendation/u);
   assert.doesNotMatch(rendered, /交易前仓位|首仓|first.position|lifetime first/i);
 });
 

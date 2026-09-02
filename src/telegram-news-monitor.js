@@ -17,23 +17,45 @@ const MAX_STORIES = 1_000;
 const MAX_HEADLINE_LENGTH = 180;
 const MAX_SUMMARY_LENGTH = 320;
 const MAX_EXTERNAL_URLS = 6;
+const STORY_DEDUP_WINDOW_MS = 24 * 60 * 60 * 1_000;
+const STORY_ANCHOR_FUTURE_TOLERANCE_MS = 60_000;
 
+// The first line is the editorial claim. Classify it before looking at any
+// explanatory prose so a summary mentioning an API/product cannot steal a
+// market, macro, listing, or security story through first-match ordering.
 const CATEGORY_PATTERNS = [
-  ["security", /\b(?:hack(?:ed|ing)?|exploit(?:ed)?|vulnerabilit(?:y|ies)|breach(?:ed)?|attack(?:ed)?|drain(?:ed)?|stolen|compromis(?:e|ed)|phishing|malware)\b|黑客|攻击|漏洞|被盗|盗取|入侵|安全事件|钓鱼|恶意软件/i],
-  ["funding", /\b(?:funding|fundraise|fundraising|raises?|raised|seed round|series [a-f]|investment|acquisition|acquires?|acquired)\b|融资|募资|筹集|投资|收购|并购|种子轮|[A-F]轮/i],
+  ["security", /\b(?:hack(?:ed|ing)?|exploit(?:ed|ing)?|vulnerabilit(?:y|ies)|breach(?:ed)?|attack(?:ed)?|drain(?:ed)?|stolen|theft|compromis(?:e|ed)|phishing|malware|incident|quantum[- ]resistant)\b|黑客|攻击|漏洞|被盗|盗取|入侵|安全事件|钓鱼|恶意软件|宕机|抗量子/i],
+  ["listing", /\b(?:will\s+(?:list|delist)|list(?:s|ed|ing)?\s+(?:on|at)|delist(?:s|ed|ing)?|trading\s+(?:is\s+)?(?:now\s+)?live|opens?\s+trading|spot\s+listing|perpetual\s+contract)\b|(?:上币|下架|退市|开放交易|上线交易|合约上线|现货上市)/i],
+  ["market", /\b(?:etf\s+(?:inflow|outflow)|inflows?|outflows?|trading\s+volume|transaction\s+count|open\s+interest|liquidations?|market\s+cap|tvl|price\s+(?:breaks?|falls?|rises?|hits?)|all[- ]time\s+high|record\s+(?:high|low)|supply\s+(?:burn|unlock))\b|资金流入|资金流出|交易量|交易笔数|未平仓|清算|市值|锁仓量|价格突破|跌破|创下.{0,12}(?:新高|新低|纪录)|供应量.{0,12}(?:销毁|解锁)/i],
+  ["macro", /\b(?:federal reserve|\bfed\b|fomc|central bank|interest rates?|rate (?:cut|hike)|cpi|inflation|payrolls?|gdp|treasur(?:y|ies)|congress|senate|regulat(?:or|ion|ory)|legislation|stablecoin (?:bill|law)|sec|cftc)\b|美联储|央行|利率|降息|加息|通胀|非农|国内生产总值|国会|参议院|监管|法案|立法/i],
   ["governance", /\b(?:governance|proposal|vote|voting|dao|quorum|delegate)\b|治理|提案|投票|法定人数|代表票|重新分配/i],
-  ["ai", /\b(?:artificial intelligence|AI|LLM|agentic|AI agents?|machine learning|GPT|Claude|Gemini|Grok)\b|人工智能|大模型|智能体|机器学习/i],
+  ["funding", /\b(?:funding|fundraise|fundraising|raises?|raised|seed round|series [a-f]|investment|acquisition|acquires?|acquired|credit facility)\b|融资|募资|筹集|投资|收购|并购|种子轮|[A-F]轮|信贷额度/i],
   ["on_chain", /\b(?:on[ -]?chain|mainnet|testnet|smart contract|contract deployment|validator|rollup|layer[ -]?2|\bL2\b)\b|链上|主网|测试网|智能合约|验证者|部署合约|二层网络/i],
-  ["product", /\b(?:product|feature|wallet|exchange|api|sdk|protocol|integration|upgrade|release|launch)\b|产品|功能|钱包|交易所|接口|协议|集成|升级|发布|推出|上线/i],
+  ["ai", /\b(?:artificial intelligence|AI|LLM|agentic|AI agents?|agent\s+os|machine learning|GPT|Claude|Gemini|Grok)\b|人工智能|大模型|智能体|机器学习/i],
+  ["product", /\b(?:product|feature|wallet|exchange|api|sdk|protocol|integration|upgrade|release|launch)\b|产品|功能|钱包|交易所|接口|协议|集成|升级|发布|推出/i],
   ["crypto", /\b(?:crypto|bitcoin|btc|ethereum|eth|solana|sol|blockchain|token|stablecoin|defi|dex|cex|layer[ -]?1|web3|optimism|arbitrum|bnb chain)\b|加密货币|比特币|以太坊|区块链|代币|稳定币|去中心化金融|公链|币安链/i],
 ];
 
-const SUBSTANTIVE_ACTION = /\b(?:announce(?:d|s)?|launch(?:ed|es)?|release(?:d|s)?|deploy(?:ed|s)?|upgrade(?:d|s)?|update(?:d|s)?|integrat(?:e|ed|es)|support(?:s|ed)?|approve(?:d|s)?|pass(?:ed|es)?|vote(?:d|s)?|propos(?:e|ed|al)|rais(?:e|ed|es)|fund(?:ed|ing)?|acquir(?:e|ed|es)|exploit(?:ed)?|hack(?:ed)?|breach(?:ed)?|patch(?:ed|es)?|migrat(?:e|ed|es)|reallocat(?:e|ed|es)|suspend(?:ed|s)?|resume(?:d|s)?|enable(?:d|s)?|disable(?:d|s)?|partner(?:ed|s)?|add(?:ed|s)?|remov(?:e|ed|es)|chang(?:e|ed|es))\b|发布|推出|上线|部署|升级|更新|集成|支持|通过|批准|投票|提案|融资|募资|筹集|投资|收购|攻击|漏洞|被盗|修复|迁移|重新分配|暂停|恢复|启用|禁用|合作|新增|移除|改变|主网|测试网/i;
+const SUBSTANTIVE_ACTION = /\b(?:announce(?:d|s)?|launch(?:ed|es)?|release(?:d|s)?|deploy(?:ed|s)?|upgrade(?:d|s)?|update(?:d|s)?|integrat(?:e|ed|es)|support(?:s|ed)?|approve(?:d|s)?|pass(?:ed|es)?|vote(?:d|s)?|propos(?:e|ed|al)|rais(?:e|ed|es)|fund(?:ed|ing)?|acquir(?:e|ed|es)|exploit(?:ed|ing)?|hack(?:ed)?|breach(?:ed)?|patch(?:ed|es)?|migrat(?:e|ed|es)|reallocat(?:e|ed|es)|suspend(?:ed|s)?|resume(?:d|s)?|enable(?:d|s)?|disable(?:d|s)?|partner(?:ed|s)?|add(?:ed|s)?|remov(?:e|ed|es)|chang(?:e|ed|es)|list(?:s|ed|ing)?|delist(?:s|ed|ing)?|opens?|closes?|halts?|falls?|rises?|hits?|breaks?|exceeds?|provides?)\b|发布|推出|上线|下架|退市|开放交易|部署|升级|更新|集成|支持|通过|批准|投票|提案|融资|募资|筹集|投资|收购|攻击|漏洞|被盗|盗走|修复|迁移|重新分配|暂停|宕机|恢复|启用|禁用|合作|新增|移除|改变|突破|跌破|流入|流出|提供|主网|测试网/i;
 const POLITICAL_CONTENT = /\b(?:president|prime minister|trump|biden|election|congress|senate|democrat|republican|geopolitic|tariffs?|ukraine|russia|israel|hamas|war)\b|总统|总理|特朗普|拜登|选举|国会|参议院|民主党|共和党|关税|乌克兰|俄罗斯|以色列|哈马斯|战争|地缘政治/i;
 const MARKETING_CONTENT = /\b(?:giveaway|promo(?:tion)?|promo code|discount|limited offer|referral|affiliate|subscribe now|join (?:our|the) (?:group|channel)|follow and retweet|like and share|click here)\b|抽奖|赠品|优惠|折扣|促销码|邀请码|返佣|限时(?:优惠|活动)|关注.{0,12}转发|点赞.{0,12}转发|加入.{0,12}(?:群|频道)|点击领取/i;
 const TOKEN_CALL_CONTENT = /\b(?:ape in|buy now|entry price|target price|take profit|stop loss|100x|gem call|pump signal|moonshot)\b|立即买入|现在买入|梭哈|冲土狗|百倍币|目标价|止盈|止损|喊单|金狗|合约地址.{0,8}0x[a-f0-9]{40}|稳赚/i;
 const TRANSLATION_FAILURE = /\b(?:translation (?:failed|unavailable|pending)|unable to translate|original text pending)\b|翻译失败|无法翻译|暂无翻译|等待翻译|原文待翻译|无法(?:直接)?访问.{0,20}链接|没有可翻译的(?:文本|内容)|看不到需要(?:翻译|重写)的内容/i;
 const CRYPTO_OR_AI_ENTITY = /\b(?:crypto|bitcoin|btc|ethereum|eth|solana|blockchain|token|stablecoin|defi|web3|optimism|arbitrum|bnb chain|artificial intelligence|AI|LLM|agentic|AI agents?|GPT|Claude|Gemini|Grok)\b|加密货币|比特币|以太坊|区块链|代币|稳定币|去中心化金融|公链|人工智能|大模型|智能体/i;
+const EDITORIAL_COLLECTION_HEADLINE = /\b(?:daily|weekly|monthly|roundup|recap|digest|newsletter|today(?:'s)?|this\s+week|week\s+in\s+review|quick\s+look|what\s+moved|top\s+\d+|best\s+\d*|rankings?|listicle|seo|aeo|guide|explainer|review|comparison|everything\s+you\s+need\s+to\s+know)\b|(?:每日|日报|日更|每周|周报|本周|月报|今日|今天|速览|一览|摘要|回顾|盘点|合集|榜单|排行|排名|新鲜洞察|隔夜|导读|指南|科普|测评|对比|最佳|SEO|AEO)/i;
+const PAYMENT_CARD_HEADLINE = /\b(?:(?:crypto|debit|credit|payment|consumer|bank)\s+)?cards?\b|(?:加密卡|支付卡|借记卡|信用卡|消费卡|银行卡|卡片)/i;
+const BULLET_LINE = /^(?:[-*•▪◦‣→]|\d{1,2}[.)、]|[一二三四五六七八九十]+[、.])/u;
+const STAGE_PATTERNS = [
+  ["patched", /\b(?:patch(?:ed)?|fixed|remediat(?:ed|ion))\b|修复|补丁/i],
+  ["resumed", /\b(?:resum(?:e|ed)|restor(?:e|ed)|back\s+online|reopen(?:ed)?)\b|恢复|重新开放/i],
+  ["paused", /\b(?:paus(?:e|ed)|suspend(?:ed)?|halt(?:ed)?|outage|offline)\b|暂停|中止|宕机|停止/i],
+  ["rejected", /\b(?:reject(?:ed)?|fail(?:ed)?\s+(?:to\s+)?pass|veto(?:ed)?)\b|否决|驳回|未通过/i],
+  ["approved", /\b(?:approv(?:e|ed)|pass(?:ed)?|adopt(?:ed)?)\b|通过|批准|获批/i],
+  ["scheduled", /\b(?:will\s+(?:launch|list|delist|open)|scheduled|upcoming|set\s+to|plans?\s+to)\b|将于|计划|预定|拟于/i],
+  ["live", /\b(?:is\s+(?:now\s+)?live|goes?\s+live|launched|released|deployed|available\s+now|opens?\s+trading)\b|正式上线|已上线|现已开放|已经发布|完成部署/i],
+  ["proposed", /\b(?:propos(?:e|ed|al)|draft|consultation)\b|提案|草案|征求意见/i],
+  ["incident", /\b(?:hack(?:ed)?|exploit(?:ed|ing)?|breach(?:ed)?|attack(?:ed)?|drain(?:ed)?|stolen|theft|incident)\b|黑客|攻击|被盗|盗走|安全事件/i],
+];
 
 const nowMilliseconds = (now) => {
   const value = typeof now === "function" ? now() : now;
@@ -219,11 +241,63 @@ const splitHeadlineAndSummary = (text) => {
   return { headline: truncate(headline, MAX_HEADLINE_LENGTH), summary };
 };
 
-const categoryFor = (text) => CATEGORY_PATTERNS.find(([, pattern]) => pattern.test(text))?.[0] || null;
+const categoryFor = (headline) => CATEGORY_PATTERNS.find(([, pattern]) => pattern.test(headline))?.[0] || null;
 
-const storyKeyFor = (category, headline, externalUrls) => {
-  const evidence = externalUrls[0] || headline.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-  return `telegram-news:${category}:${createHash("sha256").update(evidence).digest("hex").slice(0, 24)}`;
+const stageFor = (headline) => STAGE_PATTERNS.find(([, pattern]) => pattern.test(headline))?.[0] || "observed";
+
+const semanticHeadline = (headline) => String(headline || "")
+  .normalize("NFKC")
+  .toLowerCase()
+  .replace(/https?:\/\/\S+/g, " ")
+  .replace(/\b(?:19|20)\d{2}[-/.]\d{1,2}[-/.]\d{1,2}\b/g, " # ")
+  .replace(/(?:[$€£¥]|usd|usdt|usdc|btc|eth)?\s*\d[\d,.]*(?:\s*(?:million|billion|trillion|m|bn|k|万|亿|%))?/gi, " # ")
+  .replace(/(?:链接|link|source|原文)$/i, " ")
+  .replace(/[^\p{L}\p{N}#]+/gu, " ")
+  .replace(/\s+/g, " ")
+  .trim();
+
+const NUMERIC_STORY_CATEGORIES = new Set([
+  "market", "macro", "funding", "security", "listing", "on_chain", "product", "governance", "ai", "crypto",
+]);
+const SIGNIFICANT_NUMERIC_FACT = /(?:(?:[$€£¥]|usd|usdt|usdc|fdusd|tusd|cny|rmb|eur|gbp|jpy|btc|eth|bnb|sol)\s*)?[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*(?:%|percent(?:age)?|pct|basis\s+points?|bps?|k|m|b|bn|tn|million|billion|trillion|万|亿|万亿|usd|usdt|usdc|fdusd|tusd|cny|rmb|eur|gbp|jpy|btc|eth|bnb|sol|dollars?|美元|美金|人民币|元|枚(?:代币)?|个代币))?/giu;
+
+const numericStorySignature = (category, headline) => {
+  if (!NUMERIC_STORY_CATEGORIES.has(category)) return "";
+  // Calendar formatting is distribution metadata; amounts, percentages,
+  // version digits, proposal IDs, and alphanumeric ticker suffixes are story
+  // identity. Strip full dates before extracting every remaining number.
+  const numericSource = String(headline || "").normalize("NFKC")
+    .replace(/\b(?:19|20)\d{2}[-/.]\d{1,2}[-/.]\d{1,2}\b/g, " ");
+  const facts = numericSource.match(SIGNIFICANT_NUMERIC_FACT) || [];
+  return [...new Set(facts.map((fact) => fact
+    .toLowerCase()
+    .replace(/percentage|percent|pct/g, "%")
+    .replace(/basis\s+points?|bps?/g, "bp")
+    .replace(/trillion/g, "tn")
+    .replace(/billion/g, "bn")
+    .replace(/million/g, "m")
+    .replace(/dollars?|美元|美金/g, "usd")
+    .replace(/人民币/g, "cny")
+    .replace(/[\s,]+/g, "")))].join("|");
+};
+
+const storyKeyFor = (category, stage, headline) => {
+  // URLs are mutable distribution metadata, not story identity. Key the
+  // subject/action wording plus lifecycle stage so mirrors collapse while a
+  // genuine proposed→approved or incident→patched transition stays distinct.
+  const numericSignature = numericStorySignature(category, headline);
+  const evidence = `${category}:${stage}:${semanticHeadline(headline)}${numericSignature ? `:numbers:${numericSignature}` : ""}`;
+  return `telegram-news:${category}:${stage}:${createHash("sha256").update(evidence).digest("hex").slice(0, 24)}`;
+};
+
+const collectionReason = (text, headline, externalUrls) => {
+  if (PAYMENT_CARD_HEADLINE.test(headline)) return "card_content";
+  if (EDITORIAL_COLLECTION_HEADLINE.test(headline)) return "editorial_collection";
+  if (externalUrls.length >= 3) return "multi_topic_collection";
+  const bulletCount = normalizeLines(text).split("\n").filter((line) => BULLET_LINE.test(line)).length;
+  const numberedItems = (text.match(/(?:^|\n)\s*(?:\d{1,2}[.)、]|[一二三四五六七八九十]+[、.])/gu) || []).length;
+  if (bulletCount >= 3 || numberedItems >= 3) return "multi_topic_collection";
+  return null;
 };
 
 export function classifyTelegramNews(record) {
@@ -236,20 +310,24 @@ export function classifyTelegramNews(record) {
   if (POLITICAL_CONTENT.test(text) && !CRYPTO_OR_AI_ENTITY.test(text)) return { accepted: false, reason: "politics" };
   if (MARKETING_CONTENT.test(text)) return { accepted: false, reason: "marketing" };
   if (TOKEN_CALL_CONTENT.test(text)) return { accepted: false, reason: "token_call" };
-  const category = categoryFor(text);
-  if (!category || !SUBSTANTIVE_ACTION.test(text)) return { accepted: false, reason: "not_substantive_news" };
   const { headline, summary } = splitHeadlineAndSummary(text);
+  const rejectedCollection = collectionReason(text, headline, externalUrls);
+  if (rejectedCollection) return { accepted: false, reason: rejectedCollection };
+  const category = categoryFor(headline);
+  if (!category || !SUBSTANTIVE_ACTION.test(headline)) return { accepted: false, reason: "not_substantive_news" };
   if (headline.length < 8 || summary.length < 24 || headline.toLowerCase() === summary.toLowerCase()) {
     return { accepted: false, reason: "insufficient_story_fields" };
   }
+  const stage = stageFor(headline);
   return {
     accepted: true,
     news: {
       category,
+      stage,
       headline,
       summary,
       externalUrls,
-      storyKey: storyKeyFor(category, headline, externalUrls),
+      storyKey: storyKeyFor(category, stage, headline),
       confidence: "observed",
     },
   };
@@ -282,6 +360,14 @@ const emptyState = () => ({
 
 const validDigest = (value) => /^[a-f0-9]{64}$/.test(String(value || ""));
 
+const recentStoryAnchor = (record, observedAt) => {
+  const anchorAt = Date.parse(record?.lastSeenAt || "");
+  const current = Date.parse(observedAt || "");
+  if (!Number.isFinite(anchorAt) || !Number.isFinite(current)) return false;
+  const ageMs = current - anchorAt;
+  return ageMs >= -STORY_ANCHOR_FUTURE_TOLERANCE_MS && ageMs <= STORY_DEDUP_WINDOW_MS;
+};
+
 const boundedMap = (object, maximum, keySelector) => Object.fromEntries(Object.entries(object || {})
   .sort((left, right) => keySelector(right).localeCompare(keySelector(left)))
   .slice(0, maximum));
@@ -296,6 +382,8 @@ const normalizeState = (loaded) => {
     sourceOccurredAt: strictIso(record.sourceOccurredAt),
     accepted: record.accepted === true,
     ...(record.category ? { category: truncate(record.category, 40) } : {}),
+    ...(record.stage ? { stage: truncate(record.stage, 40) }
+      : record.accepted === true && record.headline ? { stage: stageFor(record.headline) } : {}),
     ...(record.headline ? { headline: truncate(record.headline, MAX_HEADLINE_LENGTH) } : {}),
     ...(record.summary ? { summary: truncate(record.summary, MAX_SUMMARY_LENGTH) } : {}),
     ...(record.storyKey ? { storyKey: truncate(record.storyKey, 100) } : {}),
@@ -391,13 +479,16 @@ export function createTelegramNewsMonitor(config = {}, dependencies = {}) {
       accepted: classification?.accepted === true,
       ...(classification?.news ? {
         category: classification.news.category,
+        stage: classification.news.stage,
         headline: classification.news.headline,
         summary: classification.news.summary,
         storyKey: classification.news.storyKey,
       } : {}),
     };
     const existingStory = classification?.news ? state.stories[classification.news.storyKey] : null;
-    if (classification?.news && (!existingStory || existingStory.messageId === record.messageId)) {
+    if (classification?.news && (!existingStory
+      || existingStory.messageId === record.messageId
+      || !recentStoryAnchor(existingStory, observedAt))) {
       state.stories[classification.news.storyKey] = {
         messageId: record.messageId,
         digest: record.contentDigest,
@@ -523,8 +614,11 @@ export function createTelegramNewsMonitor(config = {}, dependencies = {}) {
             await save();
             continue;
           }
-          const duplicateStory = state.stories[classification.news.storyKey];
-          if (!duplicateStory || duplicateStory.messageId === record.messageId) {
+          const sameMessageStage = previous?.accepted === true
+            && previous.stage === classification.news.stage;
+          const storyAnchor = state.stories[classification.news.storyKey];
+          const duplicateStory = recentStoryAnchor(storyAnchor, observedAt) ? storyAnchor : null;
+          if (!sameMessageStage && !duplicateStory) {
             await alertSender(config, eventFor(record, classification.news, observedAt));
           }
           remember(record, classification, observedAt);

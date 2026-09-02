@@ -29,6 +29,7 @@ import {
   parseBinanceAnnouncements,
   parseBinanceSquarePosts,
 } from "../src/binance-monitor.js";
+import { deriveTradingPriority } from "../src/trading-priority.js";
 
 const article = (code, title, releaseDate = Date.parse("2026-08-02T00:00:00Z")) => ({ id: Number.parseInt(code.slice(0, 6), 16), code, title, releaseDate, type: 1 });
 
@@ -53,6 +54,18 @@ function announcementDetail(code, title, overrides = {}) {
       body: "{}",
       ...overrides,
     },
+  };
+}
+
+function announcementTableRow(cells) {
+  return {
+    node: "element",
+    tag: "tr",
+    child: cells.map((value) => ({
+      node: "element",
+      tag: "td",
+      child: [{ node: "element", tag: "p", child: [{ node: "text", text: value }] }],
+    })),
   };
 }
 
@@ -349,6 +362,29 @@ test("announcement body navigation cannot hide a valid title or turn Square prog
     "Watch Trading Live Daily. Interested to stream? Sign up for our Binance Square Live Trading Incubation Group and join the group.",
   );
   assert.equal(squareProgramming.relevant, false);
+
+  const governanceTitle = "Binance Square Community Governance Announcement (Aug 24 – Aug 30)";
+  const governance = classifyBinanceAnnouncement({ title: governanceTitle }, {
+    title: governanceTitle,
+    body: JSON.stringify({
+      node: "root",
+      child: [{
+        node: "element",
+        tag: "p",
+        child: [{
+          node: "text",
+          text: "Based on user reports and platform review conducted last week, creators violated the Binance Square Community Guidelines. Enforcement Actions included suspending permission to post and comment.",
+        }],
+      }],
+    }),
+  });
+  assert.equal(governance.relevant, false);
+
+  const separatedSignals = classifyBinanceOfficialText(
+    "Binance Square discusses trade sharing with creators. New community badges are now live.",
+  );
+  assert.equal(separatedSignals.relevant, false, "feature object and launch action must occur in the same sentence");
+  assert.equal(classifyBinanceOfficialText("Binance Square Weekly Report: Copy Trading is now live").relevant, false);
 });
 
 test("classifies Binance Square KOL sharing, Futures product features, and new contracts", () => {
@@ -367,7 +403,7 @@ test("classifies Binance Square KOL sharing, Futures product features, and new c
 
 test("extracts concrete announcement facts while dropping boilerplate", () => {
   const facts = extractBinanceAnnouncementFacts({
-    seoDesc: "This is a general announcement. Products may not be available in your region.",
+    seoDesc: "This is a general Binance Exchange Notice. Products and services referred to here may not be available in your region.",
     body: JSON.stringify({ text: "Fellow Binancians. Binance Wallet now supports Base and adds a new Web3 API endpoint. The update takes effect on August 12, 2026." }),
   }, "Binance Wallet Product Update");
   assert.deepEqual(facts, [
@@ -396,6 +432,230 @@ test("extracts exact funding interval, effective time, and rate limits from an o
     fundingRateCap: "+2.00%",
     fundingRateFloor: "-2.00%",
   });
+});
+
+test("extracts every contract and UTC launch from the real seven-contract TradFi table without truncation", () => {
+  const title = "Binance Futures Will Launch Multiple USDⓈ-Margined TradFi Perpetual Contracts (2026-09-02)";
+  const symbols = ["NVDLUSDT", "TSLLUSDT", "DDOGUSDT", "TEAMUSDT", "MDBUSDT", "ZSUSDT", "GTLBUSDT"];
+  const launches = ["10:00", "10:05", "10:10", "10:15", "10:20", "10:25", "10:30"];
+  const detail = {
+    seoDesc: "This is a general Binance Exchange Notice. Products and services referred to here may not be available in your region.",
+    body: JSON.stringify({
+      node: "root",
+      child: [
+        { node: "element", tag: "p", child: [{ node: "text", text: "Fellow Binancians," }] },
+        { node: "element", tag: "table", child: [
+          announcementTableRow(["Contract Type", ...symbols.map(() => "USDT-Priced")]),
+          announcementTableRow(["USDⓈ-M Perpetual Contract", ...symbols]),
+          announcementTableRow(["Launch Time", ...launches.map((time) => `2026-09-02 ${time} (UTC)`)]),
+        ] },
+        { node: "element", tag: "p", child: [{ node: "text", text: "There may be discrepancies between this original content in English and translated versions." }] },
+      ],
+    }),
+  };
+
+  const details = extractBinanceAnnouncementDetails(detail, title);
+  assert.deepEqual(details, {
+    kind: "instrument_change",
+    action: "launch",
+    market: "usd_m_perpetual",
+    timezone: "UTC",
+    instrument: "NVDLUSDT",
+    launchAt: "2026-09-02T10:00:00.000Z",
+    instruments: symbols.map((symbol, index) => ({
+      symbol,
+      launchAt: `2026-09-02T${launches[index]}:00.000Z`,
+    })),
+  });
+  const facts = extractBinanceAnnouncementFacts(detail, title);
+  assert.ok(facts[0].includes("GTLBUSDT"));
+  assert.ok(facts[1].includes("GTLBUSDT=2026-09-02T10:30:00.000Z"));
+  assert.doesNotMatch(facts.join(" "), /may not be available|discrepancies|…/i);
+});
+
+test("title fallback cannot overwrite distinct per-contract table launch times", () => {
+  const title = "Binance Futures Will Launch ABCUSDT and XYZUSDT USDⓈ-Margined Perpetual Contracts (2026-09-04)";
+  const details = extractBinanceAnnouncementDetails({
+    body: JSON.stringify({
+      node: "root",
+      child: [{ node: "element", tag: "table", child: [
+        announcementTableRow(["USDⓈ-M Perpetual Contract", "ABCUSDT", "XYZUSDT"]),
+        announcementTableRow(["Launch Time", "2026-09-04 10:00 (UTC)", "2026-09-04 11:00 (UTC)"]),
+      ] }],
+    }),
+  }, title);
+
+  assert.deepEqual(details.instruments, [
+    { symbol: "ABCUSDT", launchAt: "2026-09-04T10:00:00.000Z" },
+    { symbol: "XYZUSDT", launchAt: "2026-09-04T11:00:00.000Z" },
+  ]);
+  assert.equal(details.launchAt, "2026-09-04T10:00:00.000Z");
+});
+
+test("unrelated withdrawal, deposit, or funding timestamps cannot become trading schedules", () => {
+  const perpetual = extractBinanceAnnouncementDetails({
+    body: "Funding fee settlement begins at 2026-09-04 09:00 (UTC). The ABCUSDT contract launch time is TBA.",
+  }, "Binance Futures Will Launch ABCUSDT Perpetual Contract");
+  assert.deepEqual(perpetual.instruments, [{ symbol: "ABCUSDT" }]);
+  assert.equal(perpetual.launchAt, undefined);
+
+  const fullDelist = extractBinanceAnnouncementDetails({
+    body: "Withdrawals for ABC close at 2026-09-04 03:00 (UTC). The trading stop time is TBA.",
+  }, "Binance Will Delist ABC on 2026-09-03");
+  assert.deepEqual(fullDelist.instruments, [{ symbol: "ABC" }]);
+  assert.equal(fullDelist.effectiveAt, undefined);
+
+  const newPair = extractBinanceAnnouncementDetails({
+    body: "Deposits open at 2026-09-04 02:00 (UTC). New Spot Trading Pairs: ABC/USDT. Trading time is TBA.",
+  }, "Binance Adds New Spot Trading Pairs");
+  assert.deepEqual(newPair.instruments, [{ symbol: "ABC/USDT" }]);
+  assert.equal(newPair.launchAt, undefined);
+
+  for (const [title, details] of [
+    ["Binance Futures Will Launch ABCUSDT Perpetual Contract", perpetual],
+    ["Binance Will Delist ABC on 2026-09-03", fullDelist],
+    ["Binance Adds New Spot Trading Pairs", newPair],
+  ]) {
+    const priority = deriveTradingPriority({
+      type: "binance_official_update",
+      kind: "announcement",
+      title,
+      signal: { scope: "exchange", category: "新合约上线", labels: ["新合约上线"], strong: true },
+      announcementDetails: details,
+      source: { id: "binance_announcement_cms", trust: "official" },
+      publishedAt: "2026-09-03T10:00:00.000Z",
+      observedAt: "2026-09-03T10:00:01.000Z",
+    }, { nowMs: Date.parse("2026-09-03T10:00:02.000Z") });
+    assert.equal(priority.tier, "T2", `${title} must not become realtime without an action-bound schedule`);
+    assert.equal(priority.hardGates.completeTargetSet, false);
+  }
+});
+
+test("keeps a Unicode futures ticker and extracts spot-listing and delisting instruments with UTC times", () => {
+  const unicodeTitle = "Binance Futures Will Launch USDⓈ-Margined 牛来USDT Perpetual Contract (2026-08-30)";
+  const unicodeDetails = extractBinanceAnnouncementDetails({
+    body: JSON.stringify({
+      node: "root",
+      child: [{ node: "element", tag: "table", child: [
+        announcementTableRow(["USDⓈ-M Perpetual Contract", "牛来USDT"]),
+        announcementTableRow(["Launch Time", "2026-08-30 11:30 (UTC)"]),
+      ] }],
+    }),
+  }, unicodeTitle);
+  assert.equal(unicodeDetails.instrument, "牛来USDT");
+  assert.deepEqual(unicodeDetails.instruments, [{ symbol: "牛来USDT", launchAt: "2026-08-30T11:30:00.000Z" }]);
+
+  const spotTitle = "Binance Will List Aerodrome (AERO) with Seed Tag Applied";
+  const spotDetails = extractBinanceAnnouncementDetails({
+    body: "Binance will list Aerodrome (AERO) and open trading for the following spot trading pairs at 2026-07-17 11:00 (UTC). New Spot Trading Pairs: AERO/USDT, AERO/USDC, and AERO/TRY. Products and services referred to here may not be available in your region.",
+  }, spotTitle);
+  assert.deepEqual(spotDetails, {
+    kind: "instrument_change",
+    action: "list",
+    market: "spot",
+    timezone: "UTC",
+    instrument: "AERO",
+    launchAt: "2026-07-17T11:00:00.000Z",
+    instruments: [{
+      symbol: "AERO",
+      name: "Aerodrome",
+      pairs: ["AERO/USDT", "AERO/USDC", "AERO/TRY"],
+      launchAt: "2026-07-17T11:00:00.000Z",
+    }],
+  });
+
+  const delistTitle = "Binance Will Delist ICX, SCRT, STORJ on 2026-09-03";
+  const delistDetails = extractBinanceAnnouncementDetails({
+    body: "Based on our reviews, we have decided to delist and cease trading on all spot trading pairs for the following tokens at 2026-09-03 03:00 (UTC): ICON (ICX), Secret (SCRT), Storj (STORJ).",
+  }, delistTitle);
+  assert.deepEqual(delistDetails.instruments, ["ICX", "SCRT", "STORJ"].map((symbol) => ({
+    symbol,
+    effectiveAt: "2026-09-03T03:00:00.000Z",
+  })));
+  assert.equal(delistDetails.effectiveAt, "2026-09-03T03:00:00.000Z");
+});
+
+test("fails closed on a real Alpha plus Futures announcement and only structures a complete Alpha-only listing", () => {
+  const code = "13776254000000000000000000000000";
+  const title = "DeLorean (DMC) Will Be Available on Binance Alpha and Binance Futures (2025-06-24)";
+  const payload = announcementDetail(code, title, {
+    publishDate: Date.parse("2025-06-21T00:15:00Z"),
+    body: JSON.stringify({
+      node: "root",
+      child: [{
+        node: "element",
+        tag: "p",
+        child: [{
+          node: "text",
+          text: "Binance is excited to announce that DeLorean (DMC) will open for trading on Binance Alpha starting 2025-06-24 11:00 (UTC). In addition, Binance Futures will launch DMCUSDT Perpetual Contract at 2025-06-24 13:00 (UTC).",
+        }],
+      }],
+    }),
+  });
+  const detail = parseBinanceAnnouncementDetail(payload, code);
+
+  assert.equal(extractBinanceAnnouncementDetails(detail, title), null,
+    "a single-market schema cannot claim completeness for the Alpha leg while omitting DMCUSDT");
+  const combinedSignal = classifyBinanceAnnouncement({ title }, detail);
+  assert.equal(deriveTradingPriority({
+    type: "binance_official_update",
+    kind: "announcement",
+    project: { id: "binance-wallet", name: "Binance Wallet" },
+    signal: combinedSignal,
+    title,
+    source: { id: "binance_wallet_cms" },
+    publishedAt: "2026-09-03T10:00:00.000Z",
+    observedAt: "2026-09-03T10:00:00.000Z",
+  }, { nowMs: Date.parse("2026-09-03T10:00:01Z") }).tier, "T2");
+
+  const alphaOnlyTitle = "Infinex (INX) Will Be Available on Binance Alpha (2026-01-30)";
+  assert.deepEqual(extractBinanceAnnouncementDetails({
+    body: "Binance Alpha will list Infinex (INX), and Alpha trading will open at 2026-01-30 19:00 (UTC).",
+  }, alphaOnlyTitle), {
+    kind: "instrument_change",
+    action: "list",
+    market: "spot",
+    timezone: "UTC",
+    instrument: "INX",
+    launchAt: "2026-01-30T19:00:00.000Z",
+    instruments: [{
+      symbol: "INX",
+      name: "Infinex",
+      launchAt: "2026-01-30T19:00:00.000Z",
+    }],
+  });
+  assert.equal(extractBinanceAnnouncementDetails({
+    body: "Binance Alpha will be the first platform to feature Infinex (INX). Trading will open at a time to be announced.",
+  }, alphaOnlyTitle), null, "a date in the title is not an actual UTC trading time");
+  assert.equal(extractBinanceAnnouncementDetails({
+    body: "Another Token (OTHER) will open for trading on Binance Alpha starting 2025-06-24 11:00 (UTC).",
+  }, alphaOnlyTitle), null, "a body that does not confirm the title ticker fails closed");
+});
+
+test("cross-checks every multi-asset spot title ticker against the complete pair set", () => {
+  const code = "aabbccdd000000000000000000000000";
+  const title = "Binance Will List Alpha (AAA) and Beta (BBB) with Seed Tag Applied";
+  const body = "Binance will list Alpha (AAA) and Beta (BBB) and open trading for the following spot trading pairs at 2026-09-03 12:00 (UTC). New Spot Trading Pairs: AAA/USDT, AAA/USDC, BBB/USDT, and BBB/TRY. Deposits are now open.";
+  const detail = parseBinanceAnnouncementDetail(announcementDetail(code, title, { body }), code);
+
+  assert.deepEqual(extractBinanceAnnouncementDetails(detail, title), {
+    kind: "instrument_change",
+    action: "list",
+    market: "spot",
+    timezone: "UTC",
+    instrument: "AAA",
+    launchAt: "2026-09-03T12:00:00.000Z",
+    instruments: [
+      { symbol: "AAA", name: "Alpha", pairs: ["AAA/USDT", "AAA/USDC"], launchAt: "2026-09-03T12:00:00.000Z" },
+      { symbol: "BBB", name: "Beta", pairs: ["BBB/USDT", "BBB/TRY"], launchAt: "2026-09-03T12:00:00.000Z" },
+    ],
+  });
+  assert.equal(extractBinanceAnnouncementDetails({
+    body: body.replace(", BBB/USDT, and BBB/TRY", ""),
+  }, title), null, "a title asset missing from the pair list fails closed");
+  assert.equal(extractBinanceAnnouncementDetails({
+    body: body.replace(", and BBB/TRY", ", BBB/TRY, and CCC/USDT"),
+  }, title), null, "an unaccounted pair base fails closed");
 });
 
 test("parses the official announcement stream, Square identity, and Developer semantic lines", () => {
@@ -998,6 +1258,69 @@ test("isolates a detail 429 so a later conclusive exchange alert is not blocked"
   assert.equal(state.announcements.articles[spotCode].relevant, true);
   assert.equal(state._health.announcements.status, "degraded");
   assert.equal(state._health.announcements.detailFailures, 1);
+});
+
+test("a transient listing-detail failure recovers once with a stable complete-details revision", async (t) => {
+  const dataDir = await fixture(t);
+  let stage = 0;
+  let detailReady = false;
+  let current = Date.parse("2026-09-03T10:00:00Z");
+  const delivered = [];
+  const baseCode = "64000000000000000000000000000000";
+  const listingCode = "65000000000000000000000000000000";
+  const listingTitle = "Binance Will List Alpha (AAA) and Beta (BBB) with Seed Tag Applied";
+  const listingArticle = article(listingCode, listingTitle, current - 60_000);
+  const listingBody = "Binance will list Alpha (AAA) and Beta (BBB) and open trading for the following spot trading pairs at 2026-09-03 12:00 (UTC). New Spot Trading Pairs: AAA/USDT and BBB/USDT. Deposits are now open.";
+  const fetchImpl = async (url) => {
+    if (BINANCE_ANNOUNCEMENT_URLS.includes(url)) return ok(announcements(stage === 0
+      ? [article(baseCode, "Existing baseline article", current - 120_000)]
+      : [article(baseCode, "Existing baseline article", current - 120_000), listingArticle]));
+    const detailCode = detailRequestCode(url);
+    if (detailCode === listingCode) {
+      if (!detailReady) return { ok: false, status: 503, text: async () => "detail not ready" };
+      return ok(announcementDetail(listingCode, listingTitle, {
+        publishDate: listingArticle.releaseDate,
+        body: listingBody,
+      }));
+    }
+    if (BINANCE_LAUNCHPOOL_URLS.includes(url)) return ok(launchpool([]));
+    if (url === BINANCE_MEME_RUSH_URL) return ok(memeRush([item()]));
+    throw new Error(`unexpected URL ${url}`);
+  };
+  const monitor = createBinanceMonitor(monitorConfig(dataDir), {
+    autoStart: false,
+    memeRushTargets: [{ chainId: "56", rankType: 10 }],
+    fetchImpl,
+    now: () => current,
+    sendAlertsImpl: async (_config, event) => delivered.push(event),
+    logger: { error() {} },
+  });
+
+  await monitor.check();
+  stage = 1;
+  current += 1_000;
+  await monitor.check();
+  assert.equal(delivered.length, 1);
+  assert.equal(delivered[0].announcementDetails, undefined);
+  assert.equal(deriveTradingPriority(delivered[0], { nowMs: current }).tier, "T2");
+
+  detailReady = true;
+  current += 1_000;
+  await monitor.check();
+  current += 1_000;
+  await monitor.check();
+
+  assert.equal(delivered.length, 2, "the complete detail recovery is emitted exactly once");
+  const recovered = delivered[1];
+  assert.equal(recovered.changeType, "revised");
+  assert.equal(recovered.detailRecovery, true);
+  assert.equal(recovered.recoveryReason, "complete_instrument_details");
+  assert.match(recovered.eventKey, new RegExp(`^binance-announcement:${listingCode}:detail-recovered:[a-f0-9]+$`));
+  assert.deepEqual(recovered.announcementDetails.instruments.map((item) => item.symbol), ["AAA", "BBB"]);
+  assert.equal(deriveTradingPriority(recovered, { nowMs: current }).tier, "T0");
+  const state = JSON.parse(await fs.readFile(path.join(dataDir, "binance-state.json"), "utf8"));
+  assert.equal(state.announcements.articles[listingCode].detailPending, false);
+  assert.ok(state.announcements.articles[listingCode].contentHash);
 });
 
 test("detects one semantic same-title revision and ignores body-only copy churn", async (t) => {

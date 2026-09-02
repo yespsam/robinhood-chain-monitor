@@ -598,7 +598,7 @@ test("a legacy mode-0644 state is migrated and retained transitions stay bounded
   await monitor.stop();
 });
 
-test("health event schema rejects raw fields and renderer stays bilingual, two-field, and compact", async () => {
+test("health event schema rejects raw fields and renderer stays bilingual with six short fact fields", async () => {
   const nowMs = BASE_MS;
   const event = {
     type: "fomo_monitor_health_update",
@@ -639,10 +639,12 @@ test("health event schema rejects raw fields and renderer stays bilingual, two-f
   const bundle = await buildBilingualAlertBundle(testConfig, event, "Fomo health transition");
   const rendered = renderBilingualTelegramText(bundle, false);
   assert.match(rendered, /平台：Fomo 监控 · 聚合健康/u);
-  assert.match(rendered, /更新了什么：持续严重降级已确认/u);
+  assert.match(rendered, /状态：持续严重降级已确认/u);
+  assert.match(rendered, /Smart Money 正常（准入 1 \/ 新鲜 1 \/ LKG 0）/u);
+  assert.match(rendered, /时间：08-31 08:00 CST \(08-31 00:00 UTC\)/u);
   assert.match(rendered, /Platform: Fomo Monitor · Aggregate health/u);
-  assert.match(rendered, /What changed: Sustained critical degradation confirmed/u);
-  assert.equal(rendered.split("\n").length, 8);
+  assert.match(rendered, /Status: Sustained critical degradation confirmed/u);
+  assert.equal(rendered.split("\n").length, 16);
   assert.ok(rendered.length <= 600, `rendered health alert is ${rendered.length} chars`);
   assert.doesNotMatch(rendered, /rawError|secret|0x[a-f0-9]{40}/iu);
 });

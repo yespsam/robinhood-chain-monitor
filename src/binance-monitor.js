@@ -106,6 +106,8 @@ const WALLET_CONTEXT = /\b(?:binance\s+(?:(?:web3\s+)?wallet|alpha)|web3\s+walle
 const EXPLICIT_WALLET_MODE = /\b(?:meme\s+rush|alpha\s+(?:2\.0|box|earn\s+hub)|pre[- ]tge\s+prime\s+sale|buildkey\s+tge|bonding\s+curve(?:-based)?\s+(?:token\s+generation\s+event|tge)|dex\s+pro|agentic\s+wallet|prediction\s+markets?(?:\s+api)?|web3\s+api|event\s+rush|security\s+(?:center|scan)|multiple\s+keyless\s+wallets?|web3\s+loan|wallet\s+extension)\b/i;
 const BINANCE_SOCIAL_TRADING_CONTEXT = /\b(?:binance\s+square|square\s+(?:creator|kol|call|signal)|kol\s+(?:buy|call|signal)|creator\s+(?:buy|call|signal)|smart\s+money\s+(?:signal|copy)|trade\s+sharing|share\s+(?:a\s+)?trade|social\s+trading|signal\s+(?:copy|sharing)|copy\s+(?:a\s+)?(?:signal|trade)|follow\s+(?:a\s+)?(?:kol|creator|trader))\b/i;
 const BINANCE_SOCIAL_TRADING_ACTION = /\b(?:introduc(?:e|es|ed|ing)|launch(?:es|ed|ing)?|rolls?\s+out|releas(?:e|es|ed|ing)|enabl(?:e|es|ed|ing)|add(?:s|ed|ing)?|support(?:s|ed|ing)?|available|live|coming\s+soon|beta)\b/i;
+const BINANCE_SOCIAL_TRADING_FEATURE_OBJECT = /\b(?:trade\s+sharing|share\s+copy\s+trading|social\s+trading|copy\s+trading(?:\s+(?:feature|mode|tool|service|functionality))?|copy\s+(?:a\s+)?(?:signal|trade)|signal\s+(?:copy|sharing)|follow\s+(?:a\s+)?(?:kol|creator|trader)|kol\s+(?:call|signal|trade)|creator\s+(?:call|signal|trade))\b/i;
+const BINANCE_SQUARE_GOVERNANCE_OR_REPORT = /\b(?:community\s+governance|governance\s+announcement|community\s+guidelines?|enforcement\s+actions?|policy\s+enforcement|content\s+moderation|violations?|weekly\s+(?:report|roundup|review)|community\s+watch|bounty\s+reporting|report(?:ing)?\s+campaign|permission\s+to\s+(?:post|comment)\s+has\s+been\s+suspended)\b/i;
 const BINANCE_SQUARE_CONTENT_PROMOTION = /\b(?:watch\s+trading\s+live|live\s+(?:trading|stream|interview)|stream(?:ing)?|incubation\s+group|sign\s+up|join\s+(?:the\s+)?group|set\s+a\s+reminder|ama\b|interview|episode|schedule)\b/i;
 const STOCK_OR_SECURITIES = /\b(?:bstocks?|binance\s+stocks?|stock\s+trading|tokenized\s+securit(?:y|ies)|tokenized\s+stocks?|tradfi\s+(?:perpetual|contract)|equity|dividend)\b/i;
 const MARKETING_OR_REWARD = [
@@ -232,12 +234,79 @@ function nearbySignals(text, left, right, maximumDistance = 180) {
   return leftIndexes.some((leftIndex) => rightIndexes.some((rightIndex) => Math.abs(leftIndex - rightIndex) <= maximumDistance));
 }
 
-function bodyText(body) {
-  let value = body;
-  if (typeof value === "string") {
-    try { value = JSON.parse(value); }
-    catch { return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(); }
+function socialTradingFeatureSentence(text) {
+  const value = String(text || "").replace(/\\n/g, "\n");
+  if (BINANCE_SQUARE_GOVERNANCE_OR_REPORT.test(value)) return null;
+  return value
+    .split(/(?<=[.!?。！？])\s+|\n+/u)
+    .map((sentence) => sentence.replace(/\s+/g, " ").trim())
+    .find((sentence) => sentence
+      && BINANCE_SOCIAL_TRADING_CONTEXT.test(sentence)
+      && BINANCE_SOCIAL_TRADING_FEATURE_OBJECT.test(sentence)
+      && BINANCE_SOCIAL_TRADING_ACTION.test(sentence)
+      && !BINANCE_SQUARE_CONTENT_PROMOTION.test(sentence)) || null;
+}
+
+function parseAnnouncementBody(body) {
+  if (body && typeof body === "object") return body;
+  if (typeof body !== "string") return null;
+  try {
+    const parsed = JSON.parse(body);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
   }
+}
+
+function cleanAnnouncementText(value) {
+  return String(value || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function announcementNodeText(node) {
+  if (node == null) return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return cleanAnnouncementText(node.map(announcementNodeText).join(""));
+  if (typeof node !== "object") return "";
+  const fragments = [];
+  if (typeof node.text === "string") fragments.push(node.text);
+  if (node.child != null) fragments.push(announcementNodeText(node.child));
+  return cleanAnnouncementText(fragments.join(""));
+}
+
+function announcementTableRows(body) {
+  const document = parseAnnouncementBody(body);
+  if (!document) return [];
+  const rows = [];
+  const visit = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    if (String(node.tag || "").toLowerCase() === "tr") {
+      const cells = (Array.isArray(node.child) ? node.child : [])
+        .filter((child) => ["td", "th"].includes(String(child?.tag || "").toLowerCase()))
+        .map(announcementNodeText)
+        .filter(Boolean);
+      if (cells.length) rows.push(cells);
+      return;
+    }
+    for (const [key, child] of Object.entries(node)) if (key !== "attr") visit(child);
+  };
+  visit(document);
+  return rows;
+}
+
+function bodyText(body) {
+  const value = parseAnnouncementBody(body);
+  if (!value) return cleanAnnouncementText(body);
   const fragments = [];
   const visit = (node) => {
     if (!node || fragments.length >= 5_000) return;
@@ -250,12 +319,15 @@ function bodyText(body) {
     for (const [key, child] of Object.entries(node)) if (key !== "attr" && key !== "text") visit(child);
   };
   visit(value);
-  return fragments.join(" ").replace(/\s+/g, " ").trim();
+  return cleanAnnouncementText(fragments.join(" "));
 }
 
 const MATERIAL_ANNOUNCEMENT_FACT = /\b(?:security\s+(?:incident|breach|risk|alert)|exploit|emergency|suspend(?:s|ed|ing)?|resume(?:s|d|ing)?|maintenance|upgrade|hard\s+fork|migration|deprecat(?:e|es|ed|ion)|sunset|api|endpoint|websocket|tick\s+size|collateral\s+ratio|leverage|margin\s+tier|funding\s+rate|position\s+limit|will\s+list|will\s+delist|meme\s+rush|bonding\s+curve|launchpad|new\s+(?:chain|network|protocol|mode)|takes?\s+effect|effective\s+(?:at|on)|affected)\b/i;
 const ANNOUNCEMENT_FACT_SIGNAL = /\b(?:will|now|new|adds?|added|introduc(?:e|es|ed|ing)|launch(?:es|ed|ing)?|support(?:s|ed|ing)?|upgrad(?:e|es|ed|ing)|migrat(?:e|es|ed|ing|ion)|suspend(?:s|ed|ing)?|resume(?:s|d|ing)?|deprecat(?:e|es|ed|ing|ion)|remove(?:s|d|ing)?|available|effective|takes?\s+effect|api|endpoint|network|chain|wallet|square|kol|signal|copy\s+trad(?:e|ing))\b/i;
-const ANNOUNCEMENT_FACT_BOILERPLATE = /^(?:fellow\s+binancians|note\b|notes?\b|disclaimer\b|risk\s+warning\b|this\s+is\s+a\s+general\s+announcement|where\s+any\s+discrepancy|terms\s+and\s+conditions\s+apply|products?\s+may\s+not\s+be\s+available\s+in\s+your\s+region|binance\s+reserves\s+the\s+right)\b/i;
+const ANNOUNCEMENT_FACT_BOILERPLATE = /^(?:fellow\s+binancians|please\s+note\b|note\b|notes?\b|disclaimer\b|risk\s+warning\b|this\s+is\s+a\s+general\s+(?:binance\s+exchange\s+)?(?:announcement|notice)|this\s+information\s+is\s+released\s+as\s+a\s+notice|where\s+any\s+discrepancy|there\s+may\s+be\s+discrepancies|terms\s+and\s+conditions\s+apply|products?(?:\s+and\s+services\s+referred\s+to\s+here)?\s+may\s+not\s+be\s+available\s+in\s+your\s+region|binance\s+reserves\s+the\s+right|trading\s+of\s+the\s+aforementioned.+subject\s+to\s+eligibility|thank\s+you\s+for\s+your\s+support|binance\s+team)\b/i;
+const CONTRACT_QUOTE_SUFFIX = "(?:USDT|USDC|FDUSD|TUSD|USD1|USD|BTC|ETH|BNB)";
+const CONTRACT_SYMBOL_SOURCE = `[\\p{L}\\p{N}\\p{M}][\\p{L}\\p{N}\\p{M}._-]{0,63}${CONTRACT_QUOTE_SUFFIX}`;
+const SPOT_PAIR_SOURCE = `[\\p{L}\\p{N}\\p{M}][\\p{L}\\p{N}\\p{M}._-]{0,47}\\s*\\/\\s*(?:USDT|USDC|FDUSD|TUSD|USD1|USD|BTC|ETH|BNB|TRY|EUR|BRL|AUD|JPY)`;
 
 function materialAnnouncementHash(body) {
   const text = bodyText(body);
@@ -293,6 +365,11 @@ function changedSnapshotFields(previousSnapshot, currentSnapshot) {
 export function extractBinanceAnnouncementFacts(detail = null, title = "", maximum = 3) {
   const content = [detail?.seoDesc, bodyText(detail?.body)].filter(Boolean).join(" ");
   if (!content) return [];
+  const structured = extractBinanceAnnouncementDetails(detail, title);
+  const structuredFacts = structured?.kind === "instrument_change"
+    ? instrumentChangeFacts(structured)
+    : [];
+  if (structuredFacts.length) return structuredFacts.slice(0, Math.max(0, maximum));
   const normalizedTitle = String(title || detail?.title || "").toLowerCase().replace(/[^a-z0-9\u3400-\u9fff]+/g, " ").trim();
   const candidates = content
     .replace(/(?:<br\s*\/?\s*>|<\/p>|<\/li>)/gi, ". ")
@@ -328,25 +405,267 @@ function intervalHours(value) {
   return Number.isInteger(parsed) && parsed > 0 && parsed <= 24 ? parsed : null;
 }
 
-export function extractBinanceAnnouncementDetails(detail = null, title = "") {
-  const content = [title || detail?.title, detail?.seoDesc, bodyText(detail?.body)].filter(Boolean).join(" ");
-  if (!content) return null;
-  const interval = content.match(/funding\s+interval\s+of\s+([A-Z0-9Ⓢ._-]+)\s+Perpetual\s+Contract\s+from\s+every\s+([a-z0-9-]+)\s+hours?\s+to\s+every\s+([a-z0-9-]+)\s+hours?/iu);
-  if (!interval) return null;
-  const previousHours = intervalHours(interval[2]);
-  const currentHours = intervalHours(interval[3]);
-  if (!previousHours || !currentHours) return null;
-  const effective = content.match(/Effective\s+from\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})(?:\s*\(UTC\))?/iu);
-  const effectiveAt = effective ? new Date(`${effective[1]}T${effective[2]}:00Z`) : null;
-  const fundingRate = content.match(/Max\s+Funding\s+Rate\s+.*?([+-]\d+(?:\.\d+)?%)\s*\/\s*([+-]\d+(?:\.\d+)?%)/iu);
+function utcInstant(value) {
+  const match = String(value || "").match(/(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})(?::(\d{2}))?\s*\(UTC\)/iu);
+  if (!match) return null;
+  const hourMinute = match[2].padStart(5, "0");
+  const parsed = new Date(`${match[1]}T${hourMinute}:${match[3] || "00"}Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function announcementSentences(value) {
+  return String(value || "")
+    .split(/(?<=[.!?。！？])\s+|\n+/u)
+    .map((sentence) => sentence.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+function canonicalInstrument(value) {
+  return cleanAnnouncementText(value)
+    .normalize("NFC")
+    .replace(/^[^\p{L}\p{N}\p{M}]+|[^\p{L}\p{N}\p{M}._\-/]+$/gu, "")
+    .replace(/\s*\/\s*/g, "/")
+    .toUpperCase();
+}
+
+function contractSymbols(value) {
+  const matches = [...String(value || "").matchAll(new RegExp(`(${CONTRACT_SYMBOL_SOURCE})`, "giu"))]
+    .map((match) => canonicalInstrument(match[1]))
+    .filter(Boolean);
+  return [...new Set(matches)];
+}
+
+function spotPairs(value) {
+  const matches = [...String(value || "").matchAll(new RegExp(`(${SPOT_PAIR_SOURCE})`, "giu"))]
+    .map((match) => canonicalInstrument(match[1]))
+    .filter(Boolean);
+  return [...new Set(matches)];
+}
+
+function uniqueInstrumentRecords(records) {
+  const instruments = new Map();
+  for (const record of records) {
+    const symbol = canonicalInstrument(record?.symbol);
+    if (!symbol) continue;
+    const previous = instruments.get(symbol) || {};
+    instruments.set(symbol, {
+      ...record,
+      ...previous,
+      symbol,
+      ...(previous.pairs || record?.pairs
+        ? { pairs: [...new Set([...(previous.pairs || []), ...(record?.pairs || [])])] }
+        : {}),
+    });
+  }
+  return [...instruments.values()];
+}
+
+function instrumentChangeDetails(action, market, records) {
+  const instruments = uniqueInstrumentRecords(records);
+  if (!instruments.length) return null;
+  const timeField = action === "delist" ? "effectiveAt" : "launchAt";
   return {
-    kind: "funding_interval",
-    instrument: interval[1],
-    previousHours,
-    currentHours,
-    ...(effectiveAt && !Number.isNaN(effectiveAt.getTime()) ? { effectiveAt: effectiveAt.toISOString() } : {}),
-    ...(fundingRate ? { fundingRateCap: fundingRate[1], fundingRateFloor: fundingRate[2] } : {}),
+    kind: "instrument_change",
+    action,
+    market,
+    timezone: "UTC",
+    instrument: instruments[0].symbol,
+    ...(instruments[0][timeField] ? { [timeField]: instruments[0][timeField] } : {}),
+    instruments,
   };
+}
+
+function titleAssetSymbols(value) {
+  return String(value || "")
+    .split(/\s*(?:,|&|\band\b)\s*/iu)
+    .map((part) => {
+      const parenthetical = part.match(/\(([\p{L}\p{N}\p{M}._-]{1,32})\)/u)?.[1];
+      const bare = part.match(/([\p{L}\p{N}\p{M}][\p{L}\p{N}\p{M}._-]{0,31})/u)?.[1];
+      return canonicalInstrument(parenthetical || bare);
+    })
+    .filter(Boolean);
+}
+
+function parentheticalAssetRecords(value) {
+  const pattern = /(?:^|\s*(?:,|&|\band\b)\s*)([^()]{1,120}?)\s*\(([\p{L}\p{N}\p{M}._-]{1,32})\)/giu;
+  return uniqueInstrumentRecords([...String(value || "").matchAll(pattern)].map((match) => ({
+    symbol: match[2],
+    name: cleanAnnouncementText(match[1]),
+  })).filter((record) => record.name && !/^UTC$/iu.test(record.symbol)));
+}
+
+function sameValues(left, right) {
+  const first = new Set(left);
+  const second = new Set(right);
+  return first.size === second.size && [...first].every((value) => second.has(value));
+}
+
+function instrumentChangeFacts(details) {
+  const instruments = Array.isArray(details?.instruments) ? details.instruments : [];
+  if (!instruments.length) return [];
+  const action = details.action === "delist" ? "Delist" : details.action === "list" ? "List" : "Launch";
+  const market = {
+    spot: "spot assets",
+    spot_pair: "spot pairs",
+    usd_m_perpetual: "USDⓈ-M perpetual contracts",
+    coin_m_perpetual: "COIN-M perpetual contracts",
+  }[details.market] || "instruments";
+  const facts = [`${action} ${market}: ${instruments.map((item) => item.symbol).join(", ")}.`];
+  const timeField = details.action === "delist" ? "effectiveAt" : "launchAt";
+  const scheduled = instruments.filter((item) => item?.[timeField]);
+  if (scheduled.length) facts.push(`${details.action === "delist" ? "Effective" : "Launch"} schedule (UTC): ${scheduled.map((item) => `${item.symbol}=${item[timeField]}`).join("; ")}.`);
+  const pairs = [...new Set(instruments.flatMap((item) => item.pairs || []))];
+  if (pairs.length) facts.push(`Spot trading pairs: ${pairs.join(", ")}.`);
+  return facts;
+}
+
+function perpetualInstrumentDetails(title, content, rows) {
+  const launch = /\bbinance\s+futures\b[^.!?]{0,120}\b(?:will\s+launch|launches?|will\s+list)\b[^.!?]{0,180}\bperpetual\s+contracts?\b/iu.test(title);
+  const delist = /\bbinance\s+futures\b[^.!?]{0,120}\bdelist\b[^.!?]{0,180}\bperpetual\s+contracts?\b/iu.test(title);
+  if (!launch && !delist) return null;
+  const action = delist ? "delist" : "launch";
+  const market = /COIN[- ]M|COIN[- ]Margined/iu.test(`${title} ${content}`) ? "coin_m_perpetual" : "usd_m_perpetual";
+  const timeField = action === "delist" ? "effectiveAt" : "launchAt";
+  const records = [];
+
+  const symbolRow = rows.find((row) => /perpetual\s+contract/iu.test(row[0] || "") && row.length > 1);
+  const timeRowLabel = action === "delist"
+    ? /^(?:delisting|effective|trading\s+(?:stop|end))\s+time$/iu
+    : /^(?:launch|listing|trading\s+(?:start|open))\s+time$/iu;
+  const timeRow = rows.find((row) => timeRowLabel.test(row[0] || "") && row.length > 1);
+  if (symbolRow) {
+    for (let index = 1; index < symbolRow.length; index += 1) {
+      const symbol = contractSymbols(symbolRow[index])[0];
+      if (!symbol) continue;
+      const instant = utcInstant(timeRow?.[index]);
+      records.push({ symbol, ...(instant ? { [timeField]: instant } : {}) });
+    }
+  }
+
+  const actionSentencePattern = action === "delist"
+    ? /(?:\b(?:delist|cease|stop)\b[^.!?]{0,180}\bperpetual\b|\bperpetual\b[^.!?]{0,180}\b(?:delist|cease|stop)\b)/iu
+    : /(?:\b(?:launch|list|open)\b[^.!?]{0,180}\bperpetual\b|\bperpetual\b[^.!?]{0,180}\b(?:launch|list|open)\b)/iu;
+  for (const sentence of announcementSentences(content)) {
+    const instant = actionSentencePattern.test(sentence) ? utcInstant(sentence) : null;
+    if (!instant) continue;
+    for (const symbol of contractSymbols(sentence)) records.push({ symbol, [timeField]: instant });
+  }
+
+  for (const symbol of contractSymbols(title)) {
+    // A title proves the target, not the schedule. Missing action-bound times
+    // stay missing so the trading-priority hard gate can fail closed.
+    records.push({ symbol });
+  }
+  const instruments = uniqueInstrumentRecords(records);
+  return instrumentChangeDetails(action, market, instruments);
+}
+
+function alphaListingDetails(title, content) {
+  const available = title.match(/^(.+?)(?=\s+(?:will\s+be|is|are|was|were|has\s+been|have\s+been)\s+(?:now\s+)?(?:available|added|listed|featured)\s+(?:on|in|to)\s+Binance\s+Alpha\b)/iu);
+  const alphaLed = title.match(/^Binance\s+Alpha\s+(?:will\s+)?(?:add|adds|list|lists|launch|launches|feature|features)\s+(.+?)(?=\s+(?:at|on)\s+\d{4}-\d{2}-\d{2}\b|\s+\(\d{4}-\d{2}-\d{2}\)|$)/iu);
+  const titleAssets = parentheticalAssetRecords(available?.[1] || alphaLed?.[1]);
+  if (!titleAssets.length) return null;
+
+  const evidence = String(content || "")
+    .split(/(?<=[.!?。！？])\s+|\n+/u)
+    .map((sentence) => sentence.replace(/\s+/g, " ").trim())
+    .find((sentence) => /Binance\s+Alpha/iu.test(sentence)
+      && /(?:open(?:s|ed|ing)?\s+for\s+trading|trading\s+(?:will\s+)?open|start(?:s|ed|ing)?\s+trading|(?:available|listed|added|featured)\s+(?:on|in|to))/iu.test(sentence)
+      && utcInstant(sentence)
+      && titleAssets.every((asset) => {
+        const symbols = [...sentence.matchAll(/\(([\p{L}\p{N}\p{M}._-]{1,32})\)/gu)]
+          .map((match) => canonicalInstrument(match[1]));
+        return symbols.includes(asset.symbol);
+      }));
+  const launchAt = utcInstant(evidence);
+  if (!evidence || !launchAt) return null;
+  return instrumentChangeDetails("list", "spot", titleAssets.map((asset) => ({ ...asset, launchAt })));
+}
+
+function spotListingDetails(title, content) {
+  const match = title.match(/^\s*Binance\s+Will\s+List\s+(.+?)(?=\s+with\s+(?:the\s+)?(?:Seed|Monitoring)\s+Tag\b|\s+on\s+Binance\s+Spot\b|\s+\(\d{4}-\d{2}-\d{2}\)|\s*$)/iu);
+  const titleAssets = parentheticalAssetRecords(match?.[1]);
+  if (!titleAssets.length || !/\b(?:spot|open\s+trading)\b/iu.test(content)) return null;
+  const pairStart = content.search(/new\s+spot\s+trading\s+pairs?\s*:/iu);
+  const pairWindow = pairStart >= 0 ? content.slice(pairStart, pairStart + 600).split(/\b(?:users\s+can|deposits?|withdrawals?|listing\s+fee|please\s+note)\b/iu)[0] : "";
+  const pairs = spotPairs(pairWindow);
+  const titleSymbols = titleAssets.map((asset) => asset.symbol);
+  const pairSymbols = [...new Set(pairs.map((pair) => pair.split("/")[0]).filter(Boolean))];
+  const tradingSentence = content.match(/open\s+trading[^.!?]{0,240}\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}(?::\d{2})?\s*\(UTC\)/iu)?.[0];
+  const launchAt = utcInstant(tradingSentence);
+  if (!launchAt || !pairs.length || !sameValues(titleSymbols, pairSymbols)) return null;
+  return instrumentChangeDetails("list", "spot", titleAssets.map((asset) => ({
+    ...asset,
+    pairs: pairs.filter((pair) => pair.startsWith(`${asset.symbol}/`)),
+    launchAt,
+  })));
+}
+
+function fullTokenDelistingDetails(title, content) {
+  const match = title.match(/^Binance\s+Will\s+Delist\s+(.+?)\s+on\s+\d{4}-\d{2}-\d{2}\b/iu);
+  if (!match) return null;
+  const symbols = titleAssetSymbols(match[1]);
+  if (!symbols.length) return null;
+  const effectiveSentence = content.match(/delist\s+and\s+cease\s+trading[^.!?]{0,260}\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}(?::\d{2})?\s*\(UTC\)/iu)?.[0];
+  const effectiveAt = utcInstant(effectiveSentence);
+  return instrumentChangeDetails("delist", "spot", symbols.map((symbol) => ({ symbol, ...(effectiveAt ? { effectiveAt } : {}) })));
+}
+
+function spotPairChangeDetails(title, content) {
+  const delist = /removal\s+of\s+spot\s+trading\s+pairs?|remove\s+and\s+cease\s+trading[^.!?]{0,80}spot\s+trading\s+pairs?/iu.test(`${title} ${content}`);
+  const launch = /new\s+spot\s+trading\s+pairs?|add(?:s|ing)?[^.!?]{0,80}spot\s+trading\s+pairs?/iu.test(title);
+  if (!delist && !launch) return null;
+  const marker = delist ? /following\s+spot\s+trading\s+pairs?\s*:/iu : /new\s+spot\s+trading\s+pairs?\s*:/iu;
+  const start = content.search(marker);
+  const window = start >= 0 ? content.slice(start, start + 1_200).split(/\b(?:please\s+note|users\s+can|deposits?|withdrawals?|listing\s+fee)\b/iu)[0] : content.slice(0, 1_200);
+  const pairs = spotPairs(window);
+  if (!pairs.length) return null;
+  const actionTimePattern = delist
+    ? /(?:\b(?:remove|cease|stop)\b[^.!?]{0,180}\bspot\s+trading\s+pairs?\b|\bspot\s+trading\s+pairs?\b[^.!?]{0,180}\b(?:remove|cease|stop)\b)/iu
+    : /(?:\b(?:add|launch|list|open)\b[^.!?]{0,180}\bspot\s+trading\s+pairs?\b|\bspot\s+trading\s+pairs?\b[^.!?]{0,180}\b(?:add|launch|list|open)\b)/iu;
+  const actionTimeSentence = announcementSentences(content)
+    .find((sentence) => actionTimePattern.test(sentence) && utcInstant(sentence));
+  const effectiveAt = utcInstant(actionTimeSentence);
+  const timeField = delist ? "effectiveAt" : "launchAt";
+  return instrumentChangeDetails(
+    delist ? "delist" : "launch",
+    "spot_pair",
+    pairs.map((symbol) => ({ symbol, ...(effectiveAt ? { [timeField]: effectiveAt } : {}) })),
+  );
+}
+
+export function extractBinanceAnnouncementDetails(detail = null, title = "") {
+  const detailBody = bodyText(detail?.body);
+  const actionContent = [detail?.seoDesc, detailBody].filter(Boolean).join(". ");
+  const content = [title || detail?.title, actionContent].filter(Boolean).join(". ");
+  if (!content) return null;
+  const normalizedTitle = String(title || detail?.title || "").replace(/\s+/g, " ").trim();
+  if (/Binance\s+Alpha/iu.test(normalizedTitle) && /Binance\s+Futures/iu.test(normalizedTitle)) return null;
+  const interval = content.match(/funding\s+interval\s+of\s+([A-Z0-9Ⓢ._-]+)\s+Perpetual\s+Contract\s+from\s+every\s+([a-z0-9-]+)\s+hours?\s+to\s+every\s+([a-z0-9-]+)\s+hours?/iu);
+  if (interval) {
+    const previousHours = intervalHours(interval[2]);
+    const currentHours = intervalHours(interval[3]);
+    if (previousHours && currentHours) {
+      const effective = content.match(/Effective\s+from\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})(?:\s*\(UTC\))?/iu);
+      const effectiveAt = effective ? new Date(`${effective[1]}T${effective[2]}:00Z`) : null;
+      const fundingRate = content.match(/Max\s+Funding\s+Rate\s+.*?([+-]\d+(?:\.\d+)?%)\s*\/\s*([+-]\d+(?:\.\d+)?%)/iu);
+      return {
+        kind: "funding_interval",
+        instrument: interval[1],
+        previousHours,
+        currentHours,
+        ...(effectiveAt && !Number.isNaN(effectiveAt.getTime()) ? { effectiveAt: effectiveAt.toISOString() } : {}),
+        ...(fundingRate ? { fundingRateCap: fundingRate[1], fundingRateFloor: fundingRate[2] } : {}),
+      };
+    }
+  }
+  const rows = announcementTableRows(detail?.body);
+  return perpetualInstrumentDetails(normalizedTitle, actionContent, rows)
+    || alphaListingDetails(normalizedTitle, detailBody)
+    || spotListingDetails(normalizedTitle, actionContent)
+    || fullTokenDelistingDetails(normalizedTitle, actionContent)
+    || spotPairChangeDetails(normalizedTitle, actionContent)
+    || null;
 }
 
 function announcementDisplaySnapshot(article = {}, detail = null, signal = null) {
@@ -408,7 +727,7 @@ function signalHash(signal) {
 export function classifyBinanceAnnouncement(article = {}, detail = null) {
   const title = String(detail?.title || article.title || "").replace(/\s+/g, " ").trim();
   const seo = [detail?.seoKeywords, detail?.seoDesc].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
-  const body = typeof detail?.body === "string" ? detail.body : detail?.body ? JSON.stringify(detail.body) : "";
+  const body = bodyText(detail?.body);
   const headline = `${title} ${seo}`.trim();
   const analysisText = `${headline} ${body.slice(0, 20_000)}`.trim();
   if (!headline) return { relevant: false, labels: [] };
@@ -471,9 +790,7 @@ export function classifyBinanceAnnouncement(article = {}, detail = null) {
 
   const exchangeWalletMaintenance = /^wallet\s+maintenance\b/i.test(title);
   const walletContext = !exchangeWalletMaintenance && (WALLET_CONTEXT.test(analysisText) || explicitWalletMode);
-  const socialTradingFeature = BINANCE_SOCIAL_TRADING_CONTEXT.test(analysisText)
-    && BINANCE_SOCIAL_TRADING_ACTION.test(analysisText)
-    && !BINANCE_SQUARE_CONTENT_PROMOTION.test(analysisText);
+  const socialTradingFeature = Boolean(socialTradingFeatureSentence(analysisText));
   if (socialTradingFeature) {
     return classified(["Square/KOL 喊单与跟单功能"], {
       project: walletContext ? "binance-wallet" : "binance",
@@ -2308,6 +2625,7 @@ export function createBinanceMonitor(config, dependencies = {}) {
     detailSource,
     nowValue,
     revisionHash = null,
+    detailRecovery = false,
     revisionRealtimeTrusted = false,
     previousSnapshot = null,
     currentSnapshot = announcementDisplaySnapshot(article, detail, signal),
@@ -2320,7 +2638,7 @@ export function createBinanceMonitor(config, dependencies = {}) {
       type: "binance_official_update",
       kind: "announcement",
       eventKey: changeType === "revised"
-        ? `binance-announcement:${article.code}:${revisionHash || hash(article.title)}`
+        ? `binance-announcement:${article.code}:${detailRecovery ? "detail-recovered:" : ""}${revisionHash || hash(article.title)}`
         : `binance-announcement:${article.code}`,
       project,
       signal,
@@ -2348,6 +2666,7 @@ export function createBinanceMonitor(config, dependencies = {}) {
       publishedAt: publishedAt ? new Date(publishedAt).toISOString() : null,
       updatedAt: detail?.lastUpdateTime ? new Date(detail.lastUpdateTime).toISOString() : null,
       ...(changeType === "revised" ? { revisionRealtimeTrusted } : {}),
+      ...(detailRecovery ? { detailRecovery: true, recoveryReason: "complete_instrument_details" } : {}),
       ...(detailSource ? { detailSource } : {}),
       ...(signal.category === "agent_native" ? {
         deliverySla: criticalSourceDeliverySla(nowValue, agentNativePollIntervalMs),
@@ -2489,12 +2808,21 @@ export function createBinanceMonitor(config, dependencies = {}) {
               const actualRevision = semanticRevision || titleRevision || materialRevision || classificationRevision;
               const previousSnapshot = announcementSnapshotFromRecord(previous);
               const currentSnapshot = announcementDisplaySnapshot(effectiveArticle, detail, signal);
-              if (previous.contentHash && signal.relevant && actualRevision) {
+              const recoveredDetails = extractBinanceAnnouncementDetails(detail, effectiveArticle.title);
+              const recoveredCompleteInstrumentDetails = previous.detailPending === true
+                && !previous.contentHash
+                && recoveredDetails?.kind === "instrument_change"
+                && Array.isArray(recoveredDetails.instruments)
+                && recoveredDetails.instruments.length > 0
+                && recoveredDetails.instruments.every((instrument) => instrument?.symbol
+                  && (instrument.launchAt || instrument.effectiveAt));
+              if (signal.relevant && ((previous.contentHash && actualRevision) || recoveredCompleteInstrumentDetails)) {
                 await deliver(announcementEvent(effectiveArticle, detail, signal, {
                   changeType: "revised",
                   detailSource,
                   nowValue,
                   revisionHash: detail.contentHash,
+                  detailRecovery: recoveredCompleteInstrumentDetails,
                   revisionRealtimeTrusted,
                   previousSnapshot,
                   currentSnapshot,

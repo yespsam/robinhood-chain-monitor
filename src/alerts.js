@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   isMonitoringSourceEnabled,
   isFomoMonitorHealthUpdateAllowed,
+  isOfficialPonFunUpdate,
   isTelegramNewsUpdateAllowed,
   isThreePlatformScope,
 } from "./source-controls.js";
@@ -2546,8 +2547,12 @@ export function focusNoveltyKeys(event) {
   const lifecycle = deriveEventLifecycle(event);
   const explicitLifecycle = Boolean(event.lifecycleKey || event.lifecycle?.key || event.productLifecycle?.key
     || event.lifecycleStage || event.lifecycle?.stage || event.productLifecycle?.stage);
+  const lifecycleProductSpecific = isSpecificModeAlias(
+    event.mode?.officialName || event.mode?.componentMode || event.mode?.selectorName || lifecycle.product,
+  );
   if (lifecycle.key
-    && (explicitLifecycle || lifecycle.product === "meme-arena" || lifecycle.stage !== "observed")) {
+    && (explicitLifecycle || lifecycle.product === "meme-arena"
+      || (lifecycle.stage !== "observed" && lifecycleProductSpecific))) {
     keys.add(lifecycle.key);
   }
 
@@ -2843,12 +2848,25 @@ export function ponFunNoveltyKeys(event) {
   ])].sort();
 }
 
+function telegramNewsNoveltyKeys(event) {
+  if (event?.type !== "telegram_news_update") return [];
+  const storyKey = String(event?.news?.storyKey || "").trim();
+  const stage = String(event?.news?.stage || "").trim().toLowerCase();
+  if (!storyKey || !stage) return [];
+  return [`telegram:story:${digest({ storyKey, stage }).slice(0, 24)}`];
+}
+
 function withFocusNovelty(config, event) {
   if (event?.type === "telegram_news_update") {
-    // Public-channel observations are exact message revisions only. Strip any
-    // producer-supplied semantic identity so they can neither suppress nor be
-    // suppressed by an official source covering the same story.
-    return { ...event, canonicalSignalId: null, canonicalSignalIds: [] };
+    // Keep public-channel identity in its own namespace. It can collapse the
+    // same observed story/stage across message revisions, but can never cover
+    // (or be covered by) an authenticated first-party source.
+    const canonicalSignalIds = telegramNewsNoveltyKeys(event);
+    return {
+      ...event,
+      canonicalSignalId: canonicalSignalIds[0] || null,
+      canonicalSignalIds,
+    };
   }
   const fomoKeys = fomoNoveltyKeys(event);
   const ponKeys = ponFunNoveltyKeys(event);
@@ -3024,13 +3042,15 @@ function semanticDuplicate(outbox, eventId, event, now = Date.now()) {
   const aiSignal = [...incoming].every((key) => key.startsWith("ai:"));
   const fomoSignal = [...incoming].every((key) => key.startsWith("fomo:call:bsc:"));
   const ponSignal = [...incoming].every((key) => key.startsWith("pon:"));
-  const dedupWindowMs = binanceSignal || ponSignal ? 6 * 60 * 60 * 1_000 : aiSignal ? 24 * 60 * 60 * 1_000 : FOCUS_NOVELTY_DEDUP_MS;
+  const telegramSignal = [...incoming].every((key) => key.startsWith("telegram:story:"));
+  const dedupWindowMs = binanceSignal || ponSignal ? 6 * 60 * 60 * 1_000
+    : aiSignal || telegramSignal ? 24 * 60 * 60 * 1_000 : FOCUS_NOVELTY_DEDUP_MS;
   const incomingIsActivation = isFocusOnchainTokenActivation(event);
   const coverage = new Map();
   for (const entry of Object.values(outbox.events || {})) {
-    if (entry.event?.type === "telegram_news_update") continue;
+    if (telegramSignal !== (entry.event?.type === "telegram_news_update")) continue;
     const eligibleStatus = ["pending", "delivered"].includes(entry.status)
-      || (fomoSignal && entry.status === "suppressed" && !entry.semanticDuplicateOf);
+      || ((fomoSignal || telegramSignal) && entry.status === "suppressed" && !entry.semanticDuplicateOf);
     if (entry.id === eventId || !eligibleStatus) continue;
     if (orphanedEventKeys.has(entry.id)) continue;
     const createdAt = Date.parse(entry.createdAt || "");
@@ -3051,6 +3071,7 @@ function semanticDuplicate(outbox, eventId, event, now = Date.now()) {
       ...githubSemanticNoveltyKeys(entry.event || {}),
       ...ponFunNoveltyKeys(entry.event || {}),
       ...fomoNoveltyKeys(entry.event || {}),
+      ...telegramNewsNoveltyKeys(entry.event || {}),
     ];
     // Early focus3 entries collapsed every unversioned Flap Vault into one
     // `vault` key. Refine that legacy identity from the immutable forensic
@@ -3412,6 +3433,82 @@ function outboxEntryStatus(destinationState) {
   return "pending";
 }
 
+const PON_FUN_REALTIME_T2_CHAIN_KINDS = new Set(["market_created", "stock_listing", "factory_unpaused"]);
+
+function isRealtimeExactPonT2(event, priority) {
+  const commonProof = isPonFunEvent(event)
+    && !isPonFunDelayedRecoveryEvent(event)
+    && effectiveFreshnessDecision(event) === "realtime"
+    && priority?.confirmation?.kind === "official_site_bound_onchain_fingerprint"
+    && priority?.hardGates?.exactTarget === true
+    && priority?.hardGates?.trustedConfirmation === true
+    && priority?.hardGates?.validWindow === true;
+  if (!commonProof) return false;
+  if (event.kind === "market_lifecycle") {
+    // API transitions are realtime only when the closed producer envelope
+    // proves the exact official endpoints and a fresh on-chain Factory
+    // binding. A trust string or a free-form snapshot is insufficient.
+    return event.freshness?.basis === "observedAt_continuous_coverage"
+      && isOfficialPonFunUpdate(event);
+  }
+  return PON_FUN_REALTIME_T2_CHAIN_KINDS.has(String(event.kind || ""))
+    && /^0x[a-f0-9]{64}$/i.test(String(event.transactionHash || ""))
+    && Number.isSafeInteger(Number(event.blockNumber))
+    && Number(event.blockNumber) > 0
+    && event.evidence?.receiptVerified === true
+    && event.freshness?.basis === "blockTimestamp";
+}
+
+/**
+ * Pure delivery policy. Producers may persist anything admitted by source and
+ * relevance gates, but only these explicit lanes are allowed to fan out now.
+ */
+export function alertDeliveryDisposition(event = {}) {
+  if (event.type === "fomo_monitor_health_update") {
+    return Object.freeze({ mode: "immediate", deliverImmediately: true, tier: null, reason: "fomo_health_realtime" });
+  }
+  const priority = isTradingPriority(event.tradingPriority) ? event.tradingPriority : null;
+  const tier = priority?.tier || null;
+  if (isPonFunDelayedRecoveryEvent(event)) {
+    return Object.freeze({ mode: "audit_only", deliverImmediately: false, tier, reason: "pon_delayed_recovery" });
+  }
+  const hardGateEligible = tier === "T0"
+    ? priority?.hardGates?.t0Eligible === true
+    : tier === "T1" ? priority?.hardGates?.t1Eligible === true : false;
+  if ((tier === "T0" || tier === "T1") && hardGateEligible) {
+    return Object.freeze({ mode: "immediate", deliverImmediately: true, tier, reason: "priority_realtime" });
+  }
+  if (tier === "T2" && isRealtimeExactPonT2(event, priority)) {
+    return Object.freeze({ mode: "immediate", deliverImmediately: true, tier, reason: "pon_exact_onchain_realtime" });
+  }
+  return Object.freeze({
+    mode: "audit_only",
+    deliverImmediately: false,
+    tier,
+    reason: tier ? `${tier.toLowerCase()}_default_audit` : "trading_priority_missing",
+  });
+}
+
+function disablePolicySuppressedDestinations(destinationState, disposition, now) {
+  if (disposition.deliverImmediately) return false;
+  let changed = false;
+  for (const [name, destination] of Object.entries(destinationState || {})) {
+    if (destination.status === "delivered") continue;
+    if (destination.status === "disabled" && destination.disabledReason) continue;
+    destinationState[name] = {
+      ...destination,
+      status: "disabled",
+      disabledReason: "policy_suppressed",
+      policyReason: disposition.reason,
+      updatedAt: now,
+      leaseUntil: null,
+      nextAttemptAt: null,
+    };
+    changed = true;
+  }
+  return changed;
+}
+
 function disableFreshnessSuppressedTelegram(destinationState, event, now) {
   if (effectiveFreshnessDecision(event) !== "suppress") return false;
   const telegram = destinationState.telegram;
@@ -3480,7 +3577,8 @@ function disableExpiredTelegramDelivery(config, entry, evaluatedAt = Date.now())
 async function enqueueAlert(config, event) {
   const destinations = configuredDestinations(config);
   const freshnessSuppressesTelegram = effectiveFreshnessDecision(event) === "suppress";
-  if (!destinations.length && !freshnessSuppressesTelegram) {
+  const initialDisposition = alertDeliveryDisposition(event);
+  if (!destinations.length && !freshnessSuppressesTelegram && initialDisposition.deliverImmediately) {
     throw new AlertDeliveryError(event.type, [{ destination: "configuration", message: "no alert destinations configured" }]);
   }
   const eventId = alertEventKey(event);
@@ -3488,6 +3586,17 @@ async function enqueueAlert(config, event) {
     const now = new Date(alertPipelineNow(config)).toISOString();
     const existing = outbox.events[eventId];
     const semanticDuplicateOf = !existing ? semanticDuplicate(outbox, eventId, event, Date.parse(now)) : null;
+    const activeExisting = existing && !["delivered", "suppressed"].includes(existing.status);
+    let queuedEvent = existing?.event || { ...event, alertQueuedAt: event.alertQueuedAt || now };
+    if (activeExisting && queuedEvent.type !== "fomo_monitor_health_update") {
+      // A valid schema is not a timeless eligibility grant. Re-score active
+      // retries at the duplicate observation time so a formerly fresh T1
+      // cannot be delivered after its trading window has closed.
+      queuedEvent = withTradingPriority(queuedEvent, { nowMs: Date.parse(now) });
+    }
+    const deliveryDisposition = activeExisting
+      ? alertDeliveryDisposition(queuedEvent)
+      : existing?.deliveryDisposition || alertDeliveryDisposition(queuedEvent);
     const destinationState = { ...(existing?.destinations || {}) };
     for (const destination of destinations) {
       destinationState[destination] ||= { status: "pending", attempts: 0, nextAttemptAt: null, receipt: null, lastError: null };
@@ -3511,12 +3620,12 @@ async function enqueueAlert(config, event) {
         };
       }
     }
-    const queuedEvent = existing?.event || { ...event, alertQueuedAt: event.alertQueuedAt || now };
     const createdAt = existing?.createdAt || now;
     // A duplicate is audit evidence only. It must never revoke (or restore) the
     // delivery eligibility established by the first payload for this event key.
     disableFreshnessSuppressedTelegram(destinationState, queuedEvent, now);
     disableExpiredTelegramDelivery(config, { createdAt, event: queuedEvent, destinations: destinationState }, now);
+    disablePolicySuppressedDestinations(destinationState, deliveryDisposition, now);
     const status = outboxEntryStatus(destinationState);
     const duplicateObservation = existing ? {
       receivedAt: now,
@@ -3543,6 +3652,7 @@ async function enqueueAlert(config, event) {
         : existing?.duplicateObservations || [],
       sideEffectsCommitted: Boolean(existing?.sideEffectsCommitted),
       semanticDuplicateOf: existing?.semanticDuplicateOf || semanticDuplicateOf?.id || null,
+      deliveryDisposition,
     };
   });
   return eventId;
@@ -3732,21 +3842,21 @@ async function deliverOutboxEvent(config, eventId, { force = false, pipelineStar
 
 export async function drainAlertOutbox(config) {
   const snapshot = await mutateOutbox(config, async (outbox) => {
-    const now = Date.now();
+    const now = alertPipelineNow(config);
     let changed = false;
     for (const entry of Object.values(outbox.events || {})) {
       if (["delivered", "suppressed"].includes(entry.status)) continue;
       changed = true;
-      // Upgrade only active legacy work. Historical terminal archives keep
-      // their exact forensic payload; an old pending strong event maps to T1
-      // and an ordinary event to T2 without reinterpreting old prose.
+      // Re-evaluate only active work under the current priority contract.
+      // Historical terminal archives keep their exact forensic payload, while
+      // a pending campaign or incomplete T1 cannot bypass a newly tightened
+      // hard gate merely because it entered the durable queue pre-rollout.
       // The watchdog health payload has a deliberately closed, aggregate-only
       // authentication schema. It is operational telemetry rather than a
       // news-trading event, so keep that event byte-safe and rank it through
       // the comparator's ordinary legacy fallback without adding metadata.
-      if (entry.event?.type !== "fomo_monitor_health_update"
-        && !isTradingPriority(entry.event?.tradingPriority)) {
-        entry.event = withTradingPriority(entry.event || {}, { legacy: true });
+      if (entry.event?.type !== "fomo_monitor_health_update") {
+        entry.event = withTradingPriority(entry.event || {}, { nowMs: now });
       }
       entry.event = withAlertFreshness(config, entry.event || {}, entry.createdAt || now);
       entry.event = refreshDeliveryFreshness(config, entry.event, now);
@@ -3788,6 +3898,12 @@ export async function drainAlertOutbox(config) {
       }
       disableFreshnessSuppressedTelegram(entry.destinations || {}, entry.event, new Date(now).toISOString());
       disableExpiredTelegramDelivery(config, entry, now);
+      entry.deliveryDisposition = alertDeliveryDisposition(entry.event || {});
+      disablePolicySuppressedDestinations(
+        entry.destinations || {},
+        entry.deliveryDisposition,
+        new Date(now).toISOString(),
+      );
       entry.status = outboxEntryStatus(entry.destinations);
       if (entry.status === "suppressed") {
         entry.suppressedAt ||= new Date(now).toISOString();
@@ -4352,7 +4468,11 @@ export async function sendAlerts(config, event) {
   if (await isEventBlocked(config, event)) return terminalAlertSuppression(event?.type, "blocked_event");
   if (!isRelevantAlert(event)) return terminalAlertSuppression(event?.type, "not_relevant");
   const pipelineStartedAtMs = alertPipelineNow(config);
-  const preparedEvent = withAlertFreshness(config, withFocusNovelty(config, event));
+  // Keep freshness, priority, enqueue, and delivery on the same injectable
+  // clock. Production defaults to Date.now; deterministic producer tests can
+  // explicitly share their monitor clock without trusting event.observedAt as
+  // a way around the stale-news gate.
+  const preparedEvent = withAlertFreshness(config, withFocusNovelty(config, event), pipelineStartedAtMs);
   const queuedEvent = preparedEvent.type === "fomo_monitor_health_update"
     ? preparedEvent
     : withTradingPriority(preparedEvent, { nowMs: pipelineStartedAtMs });

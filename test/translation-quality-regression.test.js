@@ -56,6 +56,331 @@ test("canonical English terminology overrides literal public-provider mistransla
   assert.doesNotMatch(bundle.en.text, /\b(?:official ability update|new pot|warehouse|transmitter)\b/i);
 });
 
+test("line translation rejects changed monetary magnitudes and falls back without copying the wrong prose", async () => {
+  clearTranslationCache();
+  const source = "事件：Bullish 向 USD.AI 提供1亿美元信贷，并锁定2.25亿美元储备";
+  const wrong = await translateAlertLines([source], {
+    targetLanguage: "en",
+    timeoutMs: 200,
+    fetchImpl: async (url) => googleResponse((new URL(url).searchParams.get("q") || "")
+      .replace("事件：", "Event: ")
+      .replace(" 向 ", " provided ")
+      .replace(" 提供1亿美元信贷，并锁定2.25亿美元储备", " with $1 million in credit and locked $2.25 billion in reserves")),
+  });
+
+  assert.equal(wrong.status, "fallback_source");
+  assert.match(wrong.lines[0], /English translation unavailable; see verified Chinese facts/);
+  assert.doesNotMatch(wrong.lines[0], /\$1 million|\$2\.25 billion/);
+  assert.match(wrong.error, /monetary amount/);
+
+  clearTranslationCache();
+  const correct = await translateAlertLines([source], {
+    targetLanguage: "en",
+    timeoutMs: 200,
+    fetchImpl: async (url) => googleResponse((new URL(url).searchParams.get("q") || "")
+      .replace("事件：", "Event: ")
+      .replace(" 向 ", " provided ")
+      .replace(" 提供1亿美元信贷，并锁定2.25亿美元储备", " with $100 million in credit and locked $225 million in reserves")),
+  });
+  assert.equal(correct.status, "translated");
+  assert.match(correct.lines[0], /\$100 million/);
+  assert.match(correct.lines[0], /\$225 million/);
+});
+
+test("monetary direction signs survive translation and cannot flip an outflow into a gain", async () => {
+  const source = "事件：基金净流出-1亿美元，资金费率+0.25%";
+  clearTranslationCache();
+  const wrong = await translateAlertLines([source], {
+    targetLanguage: "en",
+    timeoutMs: 200,
+    fetchImpl: async () => googleResponse("Event: Fund gained $100 million; funding rate 0.25%"),
+  });
+  assert.equal(wrong.status, "fallback_source");
+  assert.match(wrong.error, /monetary amount|percentage/);
+
+  clearTranslationCache();
+  const correct = await translateAlertLines([source], {
+    targetLanguage: "en",
+    timeoutMs: 200,
+    fetchImpl: async () => googleResponse("Event: Fund net outflow -$100 million; funding rate +0.25%"),
+  });
+  assert.equal(correct.status, "translated");
+  assert.match(correct.lines[0], /-\$100 million/);
+  assert.match(correct.lines[0], /\+0\.25%/);
+});
+
+test("financial flow words cannot flip an unsigned net outflow into an inflow", async () => {
+  const source = "事件：基金净流出1亿美元";
+  clearTranslationCache();
+  const wrong = await translateAlertLines([source], {
+    targetLanguage: "en",
+    timeoutMs: 200,
+    fetchImpl: async () => googleResponse("Event: fund net inflow $100 million"),
+  });
+  assert.equal(wrong.status, "fallback_source");
+  assert.match(wrong.error, /financial flow direction/);
+
+  clearTranslationCache();
+  const correct = await translateAlertLines([source], {
+    targetLanguage: "en",
+    timeoutMs: 200,
+    fetchImpl: async () => googleResponse("Event: fund net outflow $100 million"),
+  });
+  assert.equal(correct.status, "translated");
+  assert.match(correct.lines[0], /net outflow \$100 million/);
+
+  clearTranslationCache();
+  const firstOutflow = await translateAlertLines(["Event: first outflow in 9 days"], {
+    targetLanguage: "zh-CN",
+    timeoutMs: 200,
+    fetchImpl: async () => googleResponse("事件：9天来首次净流出"),
+  });
+  assert.equal(firstOutflow.status, "translated");
+
+  clearTranslationCache();
+  const flippedFirstOutflow = await translateAlertLines(["Event: first outflow in 9 days"], {
+    targetLanguage: "zh-CN",
+    timeoutMs: 200,
+    fetchImpl: async () => googleResponse("事件：9天来首次净流入"),
+  });
+  assert.equal(flippedFirstOutflow.status, "fallback_source");
+  assert.match(flippedFirstOutflow.error, /financial flow direction/);
+});
+
+test("numeric market directions cannot flip while contextless up remains ordinary prose", async () => {
+  for (const [source, mistranslation] of [
+    ["事件：比特币价格上涨10%", "Event: Bitcoin price fell 10%"],
+    ["事件：代币供应量减少20%", "Event: token supply increased 20%"],
+    ["事件：资金费率下降0.25%", "Event: funding rate rose 0.25%"],
+  ]) {
+    clearTranslationCache();
+    const result = await translateAlertLines([source], {
+      targetLanguage: "en",
+      timeoutMs: 200,
+      fetchImpl: async () => googleResponse(mistranslation),
+    });
+    assert.equal(result.status, "fallback_source");
+    assert.match(result.error, /numeric direction/);
+    assert.doesNotMatch(result.lines[0], new RegExp(mistranslation.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+
+  clearTranslationCache();
+  const correct = await translateAlertLines(["事件：比特币价格上涨10%"], {
+    targetLanguage: "en",
+    timeoutMs: 200,
+    fetchImpl: async () => googleResponse("Event: Bitcoin price rose 10%"),
+  });
+  assert.equal(correct.status, "translated");
+
+  for (const [directionSource, translation] of [
+    ["事件：比特币价格上涨10%", "Event: Bitcoin price rose 10%"],
+    ["事件：比特币价格增加10%", "Event: Bitcoin price increased 10%"],
+    ["事件：利率上调10%", "Event: interest rate gained 10%"],
+    ["事件：比特币价格上涨10%", "Event: Bitcoin price was up 10%"],
+    ["事件：比特币价格下跌10%", "Event: Bitcoin price fell 10%"],
+    ["事件：供应量减少10%", "Event: supply decreased 10%"],
+    ["事件：利率下调10%", "Event: interest rate dropped 10%"],
+    ["事件：比特币价格下跌10%", "Event: Bitcoin price was down 10%"],
+  ]) {
+    clearTranslationCache();
+    const synonym = await translateAlertLines([directionSource], {
+      targetLanguage: "en",
+      timeoutMs: 200,
+      fetchImpl: async () => googleResponse(translation),
+    });
+    assert.equal(synonym.status, "translated");
+  }
+
+  clearTranslationCache();
+  const setup = await translateAlertLines(["Event: Set up routing for 10 validator nodes"], {
+    targetLanguage: "zh-CN",
+    timeoutMs: 200,
+    fetchImpl: async () => googleResponse("事件：为10个验证节点设置路由"),
+  });
+  assert.equal(setup.status, "translated");
+});
+
+test("opposite moves stay bound to their own metric and numeric value", async () => {
+  const source = "事件：比特币价格上涨10%；代币供应量减少20%";
+  clearTranslationCache();
+  const swapped = await translateAlertLines([source], {
+    targetLanguage: "en",
+    timeoutMs: 200,
+    fetchImpl: async () => googleResponse("Event: Bitcoin price fell 10%; token supply increased 20%"),
+  });
+  assert.equal(swapped.status, "fallback_source");
+  assert.match(swapped.error, /numeric direction/);
+
+  clearTranslationCache();
+  const correct = await translateAlertLines([source], {
+    targetLanguage: "en",
+    timeoutMs: 200,
+    fetchImpl: async () => googleResponse("Event: Bitcoin price rose 10%; token supply decreased 20%"),
+  });
+  assert.equal(correct.status, "translated");
+});
+
+test("asset price threshold verbs preserve direction without treating ordinary above or below as a market move", async () => {
+  const source = "事件：BTC跌破7.7万美元";
+  for (const [translation, expectedStatus] of [
+    ["Event: BTC rose above $77,000", "fallback_source"],
+    ["Event: BTC fell below $77,000", "translated"],
+  ]) {
+    clearTranslationCache();
+    const result = await translateAlertLines([source], {
+      targetLanguage: "en",
+      timeoutMs: 200,
+      fetchImpl: async (url) => googleResponse((new URL(url).searchParams.get("q") || "")
+        .replace("事件：", "Event: ")
+        .replace("跌破7.7万美元", translation.replace("Event: BTC", ""))),
+    });
+    assert.equal(result.status, expectedStatus);
+    if (expectedStatus === "fallback_source") assert.match(result.error, /numeric direction/);
+  }
+
+  clearTranslationCache();
+  const ordinaryComparison = await translateAlertLines(["事件：阈值高于10，文件位于第20行下方"], {
+    targetLanguage: "en",
+    timeoutMs: 200,
+    fetchImpl: async () => googleResponse("Event: threshold is above 10, and the file is below line 20"),
+  });
+  assert.equal(ordinaryComparison.status, "translated");
+});
+
+test("each asset keeps its nearest price direction when English joins two facts with and", async () => {
+  const source = "事件：BTC跌至77,520、ETH跌至2,412";
+  const provider = (secondMove) => async (url) => googleResponse((new URL(url).searchParams.get("q") || "")
+    .replace("事件：", "Event: ")
+    .replace("跌至77,520、", " fell to $77,520 and ")
+    .replace("跌至2,412", ` ${secondMove} $2,412`));
+
+  clearTranslationCache();
+  const correct = await translateAlertLines([source], {
+    targetLanguage: "en",
+    timeoutMs: 200,
+    fetchImpl: provider("fell to"),
+  });
+  assert.equal(correct.status, "translated");
+  assert.match(correct.lines[0], /BTC fell to \$77,520 and ETH fell to \$2,412/);
+
+  clearTranslationCache();
+  const flipped = await translateAlertLines([source], {
+    targetLanguage: "en",
+    timeoutMs: 200,
+    fetchImpl: provider("rose above"),
+  });
+  assert.equal(flipped.status, "fallback_source");
+  assert.match(flipped.error, /numeric direction/);
+});
+
+test("dates, plain USD suffixes, CNY quantities, and token counts keep equivalent values", async () => {
+  const source = "事件：截至9月1日，基金净流出1.2亿元人民币；比特币价格为77,520美元，以太坊价格为2,412美金；解锁3万枚代币";
+  const correctEnglish = "Event: As of September 1, the fund recorded a net outflow of CNY 120 million; Bitcoin price was $77,520 and Ethereum price was $2,412; 30,000 tokens were unlocked";
+
+  clearTranslationCache();
+  const correct = await translateAlertLines([source], {
+    targetLanguage: "en",
+    timeoutMs: 200,
+    fetchImpl: async () => googleResponse(correctEnglish),
+  });
+  assert.equal(correct.status, "translated");
+  assert.match(correct.lines[0], /September 1/);
+  assert.match(correct.lines[0], /CNY 120 million/);
+  assert.match(correct.lines[0], /\$77,520/);
+  assert.match(correct.lines[0], /\$2,412/);
+  assert.match(correct.lines[0], /30,000 tokens/);
+
+  for (const [mistranslation, expectedError] of [
+    [correctEnglish.replace("$77,520", "$77,521"), /monetary amount/],
+    [correctEnglish.replace("net outflow", "net inflow"), /financial flow direction/],
+    [correctEnglish.replace("CNY 120 million", "CNY 119 million"), /monetary amount/],
+    [correctEnglish.replace("30,000 tokens", "29,999 tokens"), /token count/],
+    [correctEnglish.replace("September 1", "September 2"), /date/],
+  ]) {
+    clearTranslationCache();
+    const rejected = await translateAlertLines([source], {
+      targetLanguage: "en",
+      timeoutMs: 200,
+      fetchImpl: async () => googleResponse(mistranslation),
+    });
+    assert.equal(rejected.status, "fallback_source");
+    assert.match(rejected.error, expectedError);
+  }
+
+  clearTranslationCache();
+  const reverse = await translateAlertLines([correctEnglish], {
+    targetLanguage: "zh-CN",
+    timeoutMs: 200,
+    fetchImpl: async () => googleResponse(source),
+  });
+  assert.equal(reverse.status, "translated");
+
+  clearTranslationCache();
+  const plainUsdSuffix = await translateAlertLines(["Event: Bitcoin price was 77,520 USD"], {
+    targetLanguage: "zh-CN",
+    timeoutMs: 200,
+    fetchImpl: async () => googleResponse("事件：比特币价格为$77,520"),
+  });
+  assert.equal(plainUsdSuffix.status, "translated");
+});
+
+test("translation failure preserves only the matching source-language facts", async () => {
+  const chineseSource = "事件：比特币价格上涨10%，并保留 verified market context";
+  clearTranslationCache();
+  const chinese = await translateAlertLines([chineseSource], {
+    targetLanguage: "zh-CN",
+    timeoutMs: 50,
+    fetchImpl: async (url) => googleResponse(new URL(url).searchParams.get("q")),
+  });
+  assert.equal(chinese.status, "fallback_source");
+  assert.match(chinese.lines[0], /比特币价格上涨10%/);
+
+  clearTranslationCache();
+  const unavailableEnglish = await translateAlertLines([chineseSource], {
+    targetLanguage: "en",
+    timeoutMs: 25,
+    fetchImpl: async () => new Promise(() => {}),
+  });
+  assert.equal(unavailableEnglish.status, "fallback_source");
+  assert.match(unavailableEnglish.lines[0], /English translation unavailable/);
+  assert.doesNotMatch(unavailableEnglish.lines[0], /比特币价格上涨/);
+
+  const englishSource = "Event: Bitcoin price rose 10%; the verified market move remains intact；官方市场数据已经确认";
+  clearTranslationCache();
+  const english = await translateAlertLines([englishSource], {
+    targetLanguage: "en",
+    timeoutMs: 50,
+    fetchImpl: async (url) => googleResponse(new URL(url).searchParams.get("q")),
+  });
+  assert.equal(english.status, "fallback_source");
+  assert.match(english.lines[0], /Bitcoin price rose 10%/);
+
+  clearTranslationCache();
+  const unavailableChinese = await translateAlertLines([englishSource], {
+    targetLanguage: "zh-CN",
+    timeoutMs: 25,
+    fetchImpl: async () => new Promise(() => {}),
+  });
+  assert.equal(unavailableChinese.status, "fallback_source");
+  assert.match(unavailableChinese.lines[0], /中文翻译暂不可用/);
+  assert.doesNotMatch(unavailableChinese.lines[0], /Bitcoin price rose/);
+});
+
+test("an unchanged English provider response cannot masquerade as a Chinese translation", async () => {
+  clearTranslationCache();
+  const source = "Event: Binance launches a new perpetual contract for TESTUSDT";
+  const result = await translateAlertLines([source], {
+    targetLanguage: "zh-CN",
+    timeoutMs: 200,
+    protectedTerms: ["Binance", "TESTUSDT"],
+    fetchImpl: async (url) => googleResponse(new URL(url).searchParams.get("q")),
+  });
+
+  assert.equal(result.status, "fallback_source");
+  assert.match(result.lines[0], /中文翻译暂不可用；请看英文原文/);
+  assert.doesNotMatch(result.lines[0], /Binance launches a new perpetual contract/);
+});
+
 test("the Chinese block removes a duplicated slash NEW POOL label", async () => {
   clearTranslationCache();
   const address = "0x1111111111111111111111111111111111111111";
@@ -132,8 +457,8 @@ test("source-only platform fallback replaces the unresolved placeholder and mirr
     assert.equal(block.split("\n").length, 2, "the compact card must keep exactly two fields per language");
     assert.equal((block.match(/Factory/g) || []).length, 1, "Factory evidence must appear exactly once per language");
     assert.doesNotMatch(block, /能力快照变化|Capability snapshot changed|字段尚未解析|exact field unresolved/i);
-    assert.match(block, /2026-08-18 17:30:00/);
-    assert.equal((block.match(/2026-08-18 17:30:00/g) || []).length, 1, "source timestamp must be mirrored once per language");
+    assert.match(block, /08-18 17:30 CST/);
+    assert.equal((block.match(/08-18 17:30 CST/g) || []).length, 1, "source CST timestamp must be mirrored once per language");
     assert.doesNotMatch(block, new RegExp(observedAt.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.match(bundle.zh.text, /延迟7秒/);

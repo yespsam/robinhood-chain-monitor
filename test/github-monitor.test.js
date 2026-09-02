@@ -2739,7 +2739,8 @@ test("a real-size terminal gap keeps full in-memory evidence, durably queues onl
         const beforePersistence = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
         assert.equal(beforePersistence[repository].gap, undefined, "compaction and persistence must happen after the alert resolves");
         const delivery = await sendAlerts(_config, event);
-        assert.equal(delivery.status, "delivered");
+        assert.equal(delivery.status, "suppressed");
+        assert.equal(delivery.reason, "policy_suppressed", "an operational coverage gap is audit-only in the trading channel");
         const outboxFile = await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8");
         const outbox = JSON.parse(outboxFile);
         const queuedGap = outbox.events[event.eventKey]?.event?.gap;

@@ -42,6 +42,23 @@ function translationStub(url) {
     .trim());
 }
 
+function renderedLanguageBlocks(rendered) {
+  const match = String(rendered).match(/🇨🇳 中文\n([\s\S]*?)\n\n🇬🇧 English\n([\s\S]*)$/u);
+  assert.ok(match, "rendered alert must contain one Chinese block and one English block");
+  return {
+    zh: match[1].split("\n").filter(Boolean),
+    en: match[2].split("\n").filter(Boolean),
+  };
+}
+
+function assertShortFieldLayout(rendered) {
+  const blocks = renderedLanguageBlocks(rendered);
+  for (const [language, lines] of Object.entries(blocks)) {
+    assert.ok(lines.length >= 4 && lines.length <= 7, `${language} block has ${lines.length} lines`);
+    assert.ok(lines.every((line) => line.length <= 150), `${language} block contains an overlong line`);
+  }
+}
+
 async function binanceGithubFixtureEvent(fixture, commit) {
   const patch = await fs.readFile(new URL(`./fixtures/github/${fixture}`, import.meta.url), "utf8");
   const repository = "binance/binance-connector-go";
@@ -115,13 +132,14 @@ test("bilingual rendering preserves layout, entities, and protected technical id
     assert.match(bundle.en.text, new RegExp(literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.match(rendered, new RegExp(address));
-  assert.equal(bundle.version, 17);
+  assert.equal(bundle.version, 18);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.match(rendered, /^🔴 强提醒 \| STRONG ALERT\n🇨🇳 中文\n/);
   assert.match(rendered, /\n\n🇬🇧 English\n/);
+  assertShortFieldLayout(rendered);
   assert.equal(bundle.zh.text.split("\n").length, 2);
   assert.equal(bundle.en.text.split("\n").length, 2);
-  assert.ok(rendered.split("\n").length <= 12);
+  assert.ok(rendered.split("\n").length <= 18);
   assert.ok(rendered.length <= 600);
   assert.equal(decodeAlertDisplayEntities("Vault &amp; Router &gt; V2"), "Vault & Router > V2");
 });
@@ -182,7 +200,7 @@ test("Binance connector cards state the one concrete diff and never disguise SDK
     assert.ok(bundle.en.text.includes(item.stageEn));
     assert.equal(bundle.zh.text.split("\n").length, 2);
     assert.equal(bundle.en.text.split("\n").length, 2);
-    assert.equal(bundle.version, 17);
+    assert.equal(bundle.version, 18);
     assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   }
 });
@@ -386,7 +404,7 @@ test("real Binance Skills Hub PRs keep skill semantics, immutable revision evide
     assert.match(bundle.en.text, /External PR; unmerged \|/);
     assert.doesNotMatch(bundle.zh.text.split("\n")[1], /…/);
     assert.doesNotMatch(bundle.en.text.split("\n")[1], /…/);
-    assert.ok(rendered.split("\n").length <= 12, `PR${fixture.number} lines=${rendered.split("\n").length}`);
+    assert.ok(rendered.split("\n").length <= 18, `PR${fixture.number} lines=${rendered.split("\n").length}`);
     assert.ok(rendered.length <= 600, `PR${fixture.number} length=${rendered.length}`);
   }
 });
@@ -490,7 +508,8 @@ test("Binance connector cards keep local Chinese facts and mirrored production t
     assert.doesNotMatch(rendered, /2026-08-19T13:/);
     assert.equal(bundle.zh.text.split("\n").length, 2);
     assert.equal(bundle.en.text.split("\n").length, 2);
-    assert.ok(rendered.length <= 600, `card is ${rendered.length} characters`);
+    assertShortFieldLayout(rendered);
+    assert.ok(rendered.length <= 900, `card is ${rendered.length} characters`);
   }
   assert.equal(providerCalls, 0, "locally structured Binance facts must not depend on either translation provider");
 });
@@ -538,13 +557,13 @@ test("Binance Agent Native developer diff renders the new MCP entry without sign
   assert.match(bundle.en.text, /What changed: Agent Native added a Binance MCP Server docs entry/);
   assert.match(bundle.zh.text, /官方 Developer 文档 · llms\.txt/);
   assert.match(bundle.en.text, /Official Developer docs · llms\.txt/);
-  assert.match(bundle.zh.text, /官方文档入口已出现；产品可用范围待确认｜2026-08-20 16:16:14 · 延迟4秒/);
-  assert.match(bundle.en.text, /Official docs entry published; product availability unconfirmed \| 2026-08-20 16:16:14 · 4s delay/);
+  assert.match(bundle.zh.text, /官方文档入口已出现；产品可用范围待确认｜08-20 16:16 CST · 延迟4秒/);
+  assert.match(bundle.en.text, /Official docs entry published; product availability unconfirmed \| 08-20 16:16 CST · 4s delay/);
   assert.doesNotMatch(rendered, /signalDigest|官方已发布|Officially published|英文原文|Translation pending/iu);
   assert.equal(bundle.zh.status, "not_needed");
   assert.equal(bundle.en.status, "not_needed");
   assert.equal(providerCalls, 0);
-  assert.equal(bundle.version, 17);
+  assert.equal(bundle.version, 18);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.equal(bundle.zh.text.split("\n").length, 2);
   assert.equal(bundle.en.text.split("\n").length, 2);
@@ -597,8 +616,8 @@ test("official Binance X Agent OS launch renders the exact capability and releas
   assert.match(bundle.en.text, /What changed: AI agents can access market intelligence, payments, on-chain data, and trading/);
   assert.match(bundle.zh.text, /@binance · X#2090380033013764166/);
   assert.match(bundle.en.text, /@binance · X#2090380033013764166/);
-  assert.match(bundle.zh.text, /官方已发布｜2026-08-20 18:06:51 · 延迟1小时13分/);
-  assert.match(bundle.en.text, /Officially published \| 2026-08-20 18:06:51 · 1h13m delay/);
+  assert.match(bundle.zh.text, /官方已发布｜08-20 18:06 CST · 延迟1小时13分/);
+  assert.match(bundle.en.text, /Officially published \| 08-20 18:06 CST · 1h13m delay/);
   assert.doesNotMatch(rendered, /链上已确认|安全|代币|on-chain confirmed|token safety|英文原文|Translation pending/iu);
   assert.equal(bundle.zh.status, "not_needed");
   assert.equal(bundle.en.status, "not_needed");
@@ -647,8 +666,8 @@ test("official Flap Agentic Wallet skill update renders the concrete launch flow
   assert.match(bundle.zh.text, /更新了什么：接入 Binance Agentic Wallet；Flap token-launch skill 可对话发币，支持 BStock 报价/);
   assert.match(bundle.en.text, /What changed: Binance Agentic Wallet now supports chat-based launches through the Flap token-launch skill with BStock quotes/);
   assert.match(bundle.zh.text, /@flapdotsh · Post 2091136006741500374/);
-  assert.match(bundle.zh.text, /官方 X 已发布；首个链上实币待确认｜2026-08-22 20:10:50 · 延迟3秒/);
-  assert.match(bundle.en.text, /Official X post published; first live on-chain token unconfirmed \| 2026-08-22 20:10:50 · 3s delay/);
+  assert.match(bundle.zh.text, /官方 X 已发布；首个链上实币待确认｜08-22 20:10 CST · 延迟3秒/);
+  assert.match(bundle.en.text, /Official X post published; first live on-chain token unconfirmed \| 08-22 20:10 CST · 3s delay/);
   assert.doesNotMatch(rendered, /英文原文|translation pending/iu);
   assert.equal(bundle.zh.status, "not_needed");
   assert.equal(bundle.en.status, "not_needed");
@@ -780,11 +799,110 @@ test("Fomo inferred first-buy card says on-chain inference, preserves the zero-p
   assert.match(bundle.en.text, new RegExp(`CA ${token} · Position proof verified`));
   assert.match(bundle.zh.text, /链上推断，非 Fomo 官方喊单；前一区块代币零仓位；安全初筛通过，非买入建议/);
   assert.match(bundle.en.text, /On-chain inference, not an official Fomo call; Token zero position at previous block; Safety screened; not a buy recommendation/);
+  assert.match(rendered, /风险：安全初筛通过，非买入建议/u);
+  assert.match(rendered, /Risk: Safety screened; not a buy recommendation/u);
+  assertShortFieldLayout(rendered);
   assert.doesNotMatch(rendered, new RegExp(transactionHash));
   assert.equal(event.transactionHash, transactionHash, "the immutable event retains the full Tx for its Telegram button");
   assert.equal(bundle.zh.text.split("\n").length, 2);
   assert.equal(bundle.en.text.split("\n").length, 2);
   assert.ok(rendered.length <= 600, `card is ${rendered.length} characters`);
+});
+
+test("Fomo published and linked-X T0/T1 cards persist a bounded source thesis without online translation", async () => {
+  clearTranslationCache();
+  const token = "0x2222222222222222222222222222222222222222";
+  const observedAt = "2026-09-03T01:00:02.000Z";
+  const common = {
+    type: "fomo_family_top_call",
+    qualified: true,
+    strong: true,
+    chain: { id: 56, chainId: 56, slug: "bsc", name: "BNB Smart Chain" },
+    token,
+    contractAddress: token,
+    tokenSymbol: "CALL",
+    symbol: "CALL",
+    caller: { handle: "alpha", followers: 125_000 },
+    handle: "alpha",
+    market: { liquidityUsd: 65_000, volumeM5: 18_000, sellsM5: 8 },
+    security: { decision: "pass", metrics: { liquidityConfirmed: true, sellObserved: true } },
+    publishedAt: "2026-09-03T01:00:00.000Z",
+    observedAt,
+  };
+  const publishedText = "Accumulating CALL while BSC liquidity is expanding.";
+  const published = withTradingPriority({
+    ...common,
+    eventKey: "fomo-published-call:thesis-1001",
+    signalKind: "fomo_published_call",
+    callId: "thesis-1001",
+    body: publishedText,
+    thesis: { id: "thesis-1001", text: publishedText, handle: "alpha" },
+    source: { id: "fomo_family_official_thesis", trust: "official_authenticated_api" },
+    sourceTrust: "official_authenticated_api",
+  }, { nowMs: Date.parse(observedAt) });
+  const chineseBody = "CALL 突破后继续观察成交量，流动性扩张才是确认信号。";
+  const xCall = withTradingPriority({
+    ...common,
+    eventKey: "fomo-x-call:1777777777777777777:2090:CALL",
+    signalKind: "fomo_x_call",
+    callId: "x:1777777777777777777:2090:CALL",
+    body: chineseBody,
+    thesis: { id: "2090", handle: "alpha" },
+    walletAddress: "0x1111111111111111111111111111111111111111",
+    walletAttribution: { status: "observed", verified: false },
+    tweet: {
+      id: "2090",
+      handle: "alpha",
+      text: chineseBody,
+      createdAt: "2026-09-03T01:00:00.000Z",
+      url: "https://x.com/alpha/status/2090",
+      sourceVerifiedBy: "official_x_oembed",
+    },
+    source: { id: "fomo_linked_x_post", trust: "public_x_identity_linked" },
+    sourceTrust: "public_x_identity_linked",
+  }, { nowMs: Date.parse(observedAt) });
+  assert.equal(published.tradingPriority.tier, "T0");
+  assert.equal(xCall.tradingPriority.tier, "T1");
+
+  let providerCalls = 0;
+  for (const [event, sourceField, sourceText, zhLabel, enLabel] of [
+    [published, "thesis.text", publishedText, "英文原文：", "Thesis: "],
+    [xCall, "body", chineseBody, "观点：", "Chinese original: "],
+  ]) {
+    const bundle = await buildBilingualAlertBundle({
+      alertTranslationFetchImpl: async () => {
+        providerCalls += 1;
+        throw new Error("translation must not run for a published Fomo call");
+      },
+    }, event, `Fomo update\n状态: verified\n时间: ${event.publishedAt}`);
+    const rendered = renderBilingualTelegramText(bundle, true);
+
+    assert.equal(bundle.focusModel.callThesis.sourceField, sourceField);
+    assert.equal(bundle.focusModel.callThesis.source, sourceText);
+    assert.ok(bundle.focusModel.callThesis.source.length <= 112);
+    assert.ok(bundle.zh.text.includes(`${zhLabel}${sourceText}`), bundle.zh.text);
+    assert.ok(bundle.en.text.includes(`${enLabel}${sourceText}`), bundle.en.text);
+    assert.match(rendered, new RegExp(zhLabel));
+    assert.match(rendered, new RegExp(enLabel));
+    assert.ok(rendered.includes(sourceText));
+    assert.notEqual(bundle.zh.text, bundle.en.text);
+    const blocks = renderedLanguageBlocks(rendered);
+    for (const lines of Object.values(blocks)) {
+      assert.ok(lines.length >= 4 && lines.length <= 7);
+      assert.ok(lines.every((line) => line.length <= 150));
+    }
+    assert.ok(rendered.includes(`CA ${token}`));
+    assert.match(rendered, /非买入建议/u);
+    assert.match(rendered, /not a buy recommendation/iu);
+    if (event.signalKind === "fomo_x_call") {
+      assert.ok(rendered.includes("0x1111111111111111111111111111111111111111"));
+      assert.ok(rendered.includes("X#2090"));
+    } else {
+      assert.ok(rendered.includes("callId=thesis-1001"));
+    }
+    assert.doesNotMatch(rendered, /translation unavailable|翻译暂不可用/iu);
+  }
+  assert.equal(providerCalls, 0);
 });
 
 test("BSC feature-first-token card prioritizes mode and token over addresses and keeps chain, security, and liquidity facts", async () => {
@@ -988,7 +1106,7 @@ test("Flap quote-pool timeout fallback stays bilingual, structured, JSON-free, a
   for (const block of [bundle.zh.text, bundle.en.text]) {
     assert.equal(block.split("\n").length, 2);
   }
-  assert.ok(rendered.split("\n").length <= 12);
+  assert.ok(rendered.split("\n").length <= 18);
 });
 
 test("official repository discovery keeps one repository identifier without metadata walls", async () => {
@@ -1021,18 +1139,18 @@ test("official repository discovery keeps one repository identifier without meta
   for (const block of [bundle.zh.text, bundle.en.text]) {
     assert.equal(block.split(repository).length - 1, 1);
     assert.doesNotMatch(block, new RegExp(url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-    assert.match(block, /TaxToken9 charity donation module/);
     assert.doesNotMatch(block, /Solidity/);
   }
   assert.match(bundle.zh.text, /^平台：Four\.Meme/m);
   assert.match(bundle.en.text, /^Platform: Four\.Meme/m);
-  assert.match(bundle.zh.text, /更新了什么：英文原文: 仓库描述：TaxToken9 charity donation module/);
+  assert.match(bundle.zh.text, /更新了什么：中文翻译暂不可用；请看英文原文/);
+  assert.doesNotMatch(bundle.zh.text, /charity donation module/);
   assert.match(bundle.en.text, /What changed: Repository description: TaxToken9 charity donation module/);
   assert.doesNotMatch(rendered, /Translation unavailable|see Chinese block|\[object Object\]|[\[{]\s*"[^"\n]+"\s*:/i);
   for (const block of [bundle.zh.text, bundle.en.text]) {
     assert.equal(block.split("\n").length, 2);
   }
-  assert.ok(rendered.split("\n").length <= 12);
+  assert.ok(rendered.split("\n").length <= 18);
 });
 
 test("representative Flap, Four.Meme, X, and Binance Wallet cards use concise canonical bilingual facts", async () => {
@@ -1141,7 +1259,7 @@ test("representative Flap, Four.Meme, X, and Binance Wallet cards use concise ca
     for (const block of [bundle.zh.text, bundle.en.text]) {
       assert.equal(block.split("\n").length, 2, name);
     }
-    assert.ok(rendered.split("\n").length <= 12, name);
+    assert.ok(rendered.split("\n").length <= 18, name);
     assert.ok(rendered.length <= (["github", "flap"].includes(name) ? 600 : 450), name);
     assert.doesNotMatch(rendered, /Translation unavailable|see Chinese block|\[object Object\]|[\[{]\s*"[^"\n]+"\s*:/i, name);
   }
@@ -1207,7 +1325,7 @@ test("Binance funding notices lead with the actual rule change instead of an int
   ].join("\n"));
   const rendered = renderBilingualTelegramText(bundle, false);
 
-  assert.equal(bundle.version, 17);
+  assert.equal(bundle.version, 18);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.match(bundle.zh.text, /^平台：Binance/m);
   assert.match(bundle.zh.text, /更新了什么：UNITREEUSDT 永续：8小时→4小时，费率上下限 \+2\.00%\/-2\.00%/);
@@ -1218,6 +1336,242 @@ test("Binance funding notices lead with the actual rule change instead of an int
   assert.equal(bundle.zh.text.split("\n").length, 2);
   assert.equal(bundle.en.text.split("\n").length, 2);
   assert.ok(rendered.length <= 600);
+});
+
+test("real multi-contract Binance notice renders every target and the first launch in CST plus UTC", async () => {
+  const symbols = ["NVDLUSDT", "TSLLUSDT", "DDOGUSDT", "TEAMUSDT", "MDBUSDT", "ZSUSDT", "GTLBUSDT"];
+  const event = {
+    type: "binance_official_update",
+    kind: "announcement",
+    project: { id: "binance", name: "Binance" },
+    signal: { category: "新合约上线", labels: ["新合约上线"] },
+    title: "Binance Futures Will Launch Multiple USDⓈ-Margined TradFi Perpetual Contracts (2026-09-02)",
+    announcementDetails: {
+      kind: "instrument_change",
+      action: "launch",
+      market: "usd_m_perpetual",
+      timezone: "UTC",
+      instrument: symbols[0],
+      launchAt: "2026-09-02T10:00:00.000Z",
+      instruments: symbols.map((symbol, index) => ({
+        symbol,
+        launchAt: `2026-09-02T10:${String(index * 5).padStart(2, "0")}:00.000Z`,
+      })),
+    },
+    source: { id: "binance_cms", trust: "official_verified" },
+    sourceTrust: "official_verified",
+    publishedAt: "2026-09-02T09:30:00.000Z",
+    observedAt: "2026-09-02T09:30:05.000Z",
+  };
+  const prioritizedEvent = withTradingPriority(event, { nowMs: Date.parse(event.observedAt) });
+  assert.equal(prioritizedEvent.tradingPriority.tier, "T0");
+  const bundle = await buildBilingualAlertBundle({}, prioritizedEvent, [
+    "Binance official announcement",
+    "状态: 官方公告已发布",
+    "时间: 2026-09-02T09:30:00.000Z",
+  ].join("\n"));
+  const rendered = renderBilingualTelegramText(bundle, true);
+  const blocks = renderedLanguageBlocks(rendered);
+
+  assertShortFieldLayout(rendered);
+  assert.equal(blocks.zh.length, 6);
+  assert.equal(blocks.en.length, 6);
+  assert.match(rendered, /事件：上线 7个 USDⓈ-M 永续合约/u);
+  assert.match(rendered, new RegExp(`标的：${symbols.join("、")}`));
+  assert.match(rendered, new RegExp(`Targets: ${symbols.join(", ")}`));
+  assert.match(rendered, /验证：.*入场=.*失效=.*官方时间表；待开盘核验/u);
+  assert.match(rendered, /Verification: .*entry=.*invalid=.*Official schedule; verify at launch/u);
+  assert.match(rendered, /时间：首批开盘=09-02 18:00 CST（09-02 10:00 UTC）/u);
+  assert.match(rendered, /Time: First launch=09-02 18:00 CST \(09-02 10:00 UTC\)/u);
+  assert.match(rendered, /永续→深度\/持仓\/资金费率\/基差/u);
+  assert.match(rendered, /perpetual→depth\/OI\/funding\/basis/u);
+  assert.match(rendered, /永续≠股票/u);
+  assert.match(rendered, /perpetual≠stock/u);
+  assert.doesNotMatch(rendered, /现货→合约|spot→contract/iu);
+  assert.ok(rendered.length <= 900, `multi-contract card is ${rendered.length} characters`);
+});
+
+test("Binance Alpha, spot, and spot-delist cards use the structured market plan without inventing perpetual exposure", async () => {
+  const base = {
+    type: "binance_official_update",
+    kind: "announcement",
+    project: { id: "binance", name: "Binance" },
+    source: { id: "binance_exchange_cms", trust: "official_verified" },
+    sourceTrust: "official_verified",
+    publishedAt: "2026-09-03T01:00:00.000Z",
+    observedAt: "2026-09-03T01:00:02.000Z",
+  };
+  const cases = [
+    {
+      name: "Alpha listing",
+      event: {
+        ...base,
+        eventKey: "binance-alpha:list:MARSCOIN",
+        signal: { category: "Alpha 上新", labels: ["Alpha 上新"], strong: true },
+        title: "MARSCOIN (MARSCOIN) Is Now Available on Binance Alpha",
+        announcementDetails: {
+          kind: "instrument_change",
+          action: "list",
+          market: "spot",
+          instrument: "MARSCOIN",
+          launchAt: "2026-09-03T02:00:00.000Z",
+          instruments: [{ symbol: "MARSCOIN", launchAt: "2026-09-03T02:00:00.000Z" }],
+        },
+      },
+      expected: /Alpha开盘→成交深度与价格发现/u,
+      expectedEn: /Alpha launch→trading depth and price discovery/u,
+    },
+    {
+      name: "spot listing",
+      event: {
+        ...base,
+        eventKey: "binance-spot:list:AERO",
+        signal: { category: "现货首次上币", labels: ["现货首次上币"], strong: true },
+        title: "Binance Will List Aerodrome (AERO) and Open Spot Trading",
+        announcementDetails: {
+          kind: "instrument_change",
+          action: "list",
+          market: "spot",
+          instrument: "AERO",
+          launchAt: "2026-09-03T02:05:00.000Z",
+          instruments: [{ symbol: "AERO", launchAt: "2026-09-03T02:05:00.000Z" }],
+        },
+      },
+      expected: /现货开盘→成交深度与价格发现/u,
+      expectedEn: /Spot launch→trading depth and price discovery/u,
+    },
+    {
+      name: "spot delisting",
+      event: {
+        ...base,
+        eventKey: "binance-spot:delist:ICX",
+        signal: { category: "整币下架", labels: ["整币下架"], strong: true },
+        title: "Binance Will Delist ICX and Open Order Cancellation",
+        announcementDetails: {
+          kind: "instrument_change",
+          action: "delist",
+          market: "spot",
+          instrument: "ICX",
+          effectiveAt: "2026-09-03T03:00:00.000Z",
+          instruments: [{ symbol: "ICX", effectiveAt: "2026-09-03T03:00:00.000Z" }],
+        },
+      },
+      expected: /现货下架→订单、退出与流动性/u,
+      expectedEn: /Spot delisting→orders, exits, and liquidity/u,
+    },
+  ];
+
+  for (const item of cases) {
+    const event = withTradingPriority(item.event, { nowMs: Date.parse(item.event.observedAt) });
+    assert.equal(event.tradingPriority.tier, "T0", item.name);
+    const bundle = await buildBilingualAlertBundle({}, event, [
+      "Binance official announcement",
+      `具体更新: ${event.title}`,
+      "状态: official source confirmed",
+      `时间: ${event.publishedAt}`,
+    ].join("\n"));
+    const rendered = renderBilingualTelegramText(bundle, true);
+    assert.match(rendered, item.expected, item.name);
+    assert.match(rendered, item.expectedEn, item.name);
+    assert.doesNotMatch(rendered, /永续|perpetual/iu, item.name);
+    if (item.event.announcementDetails.action === "delist") {
+      assert.match(rendered, /不新增仓位/u);
+      assert.match(rendered, /Do not add positions/u);
+      assert.match(rendered, /待生效核验|verify at effective time/u);
+    }
+    assertShortFieldLayout(rendered);
+  }
+});
+
+test("details-null Alpha and Futures audit card uses an honest language-local unresolved target", async () => {
+  const observedAt = "2026-09-03T01:00:05.000Z";
+  const event = withTradingPriority({
+    type: "binance_official_update",
+    kind: "announcement",
+    project: { id: "binance", name: "Binance" },
+    signal: { category: "Alpha 上新", labels: ["Alpha 上新", "新合约上线"], strong: true },
+    title: "Binance Alpha and Futures Product Update",
+    currentSnapshot: { details: null },
+    source: { id: "binance_exchange_cms", trust: "official_verified", url: "https://www.binance.com/en/support/announcement/unresolved" },
+    sourceTrust: "official_verified",
+    url: "https://www.binance.com/en/support/announcement/unresolved",
+    publishedAt: "2026-09-03T01:00:00.000Z",
+    observedAt,
+  }, { nowMs: Date.parse(observedAt) });
+  assert.equal(event.tradingPriority.tier, "T2");
+  let providerCalls = 0;
+  const bundle = await buildBilingualAlertBundle({
+    alertTranslationFetchImpl: async () => {
+      providerCalls += 1;
+      throw new Error("structured unresolved target must stay local");
+    },
+  }, event, [
+    "Binance official announcement",
+    `具体更新: ${event.title}`,
+    "状态: official source confirmed",
+    `时间: ${event.publishedAt}`,
+  ].join("\n"));
+  const rendered = renderBilingualTelegramText(bundle, false);
+  const blocks = renderedLanguageBlocks(rendered);
+
+  assert.equal(providerCalls, 0);
+  assert.match(blocks.zh.join("\n"), /Binance Alpha 上新；标的待解析/u);
+  assert.match(blocks.en.join("\n"), /Binance Alpha listing; unresolved target/u);
+  assert.doesNotMatch(rendered, /新代币/u);
+  assert.doesNotMatch(blocks.en.join("\n"), /[\u3400-\u9fff]/u);
+  assertShortFieldLayout(rendered);
+});
+
+test("large Binance batches preserve every exact target across bounded continuation lines", async () => {
+  const symbols = Array.from({ length: 18 }, (_value, index) => `LONGTOKEN${String(index + 1).padStart(2, "0")}USDT`);
+  const observedAt = "2026-09-03T01:00:05.000Z";
+  const event = withTradingPriority({
+    type: "binance_official_update",
+    kind: "announcement",
+    project: { id: "binance", name: "Binance" },
+    signal: { category: "新合约上线", labels: ["新合约上线"], strong: true },
+    title: "Binance Futures Will Launch Multiple USDⓈ-Margined Perpetual Contracts",
+    announcementDetails: {
+      kind: "instrument_change",
+      action: "launch",
+      market: "usd_m_perpetual",
+      timezone: "UTC",
+      instrument: symbols[0],
+      launchAt: "2026-09-03T02:00:00.000Z",
+      instruments: symbols.map((symbol, index) => ({
+        symbol,
+        launchAt: `2026-09-03T02:${String(index).padStart(2, "0")}:00.000Z`,
+      })),
+    },
+    source: { id: "binance_exchange_cms", trust: "official_verified", url: "https://www.binance.com/en/support/announcement/batch" },
+    sourceTrust: "official_verified",
+    url: "https://www.binance.com/en/support/announcement/batch",
+    publishedAt: "2026-09-03T01:00:00.000Z",
+    observedAt,
+  }, { nowMs: Date.parse(observedAt) });
+  assert.equal(event.tradingPriority.tier, "T0");
+
+  const bundle = await buildBilingualAlertBundle({}, event, [
+    "Binance official announcement",
+    "状态: 官方公告已发布",
+    `时间: ${observedAt}`,
+  ].join("\n"));
+  const rendered = renderBilingualTelegramText(bundle, true);
+  const blocks = renderedLanguageBlocks(rendered);
+  assert.equal(blocks.zh.length, 7);
+  assert.equal(blocks.en.length, 7);
+  const zhTargetLines = blocks.zh.filter((line) => /^标的(?:续)?：/u.test(line));
+  const enTargetLines = blocks.en.filter((line) => /^Targets(?: cont\.)?:/u.test(line));
+  assert.equal(zhTargetLines.length, 3);
+  assert.equal(enTargetLines.length, 3);
+  assert.ok([...zhTargetLines, ...enTargetLines].every((line) => line.length <= 120));
+  for (const symbol of symbols) {
+    assert.ok(blocks.zh.join("\n").includes(symbol), `Chinese block lost ${symbol}`);
+    assert.ok(blocks.en.join("\n").includes(symbol), `English block lost ${symbol}`);
+  }
+  assert.match(rendered, /标的续：/u);
+  assert.match(rendered, /Targets cont\.:/u);
+  assert.ok(rendered.length < 3_800, `batch card is ${rendered.length} characters`);
 });
 
 test("real hooklist registrations distinguish the Hook file address from an unresolved related address", async (t) => {
@@ -1258,7 +1612,7 @@ test("real hooklist registrations distinguish the Hook file address from an unre
   const rendered = renderBilingualTelegramText(bundle, true);
 
   assert.deepEqual(event, original);
-  assert.equal(bundle.version, 17);
+  assert.equal(bundle.version, 18);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.match(bundle.zh.text, /^平台：Uniswap/m);
   assert.match(bundle.en.text, /^Platform: Uniswap/m);
@@ -1318,10 +1672,9 @@ test("real hooklist registrations distinguish the Hook file address from an unre
     alertTelegramDeliveryMaxAgeMs: 7_200_000,
     webhookUrl: "",
   }, event);
-  assert.equal(result.status, "delivered");
-  assert.ok(payload.reply_markup.inline_keyboard.flat().some((button) => button.url === url));
-  assert.match(payload.text, /#ec570ace/);
-  assert.doesNotMatch(payload.text, new RegExp(commit));
+  assert.equal(result.status, "suppressed");
+  assert.equal(result.reason, "policy_suppressed");
+  assert.equal(payload, undefined, "a T3 repository update must remain audit-only");
   assert.deepEqual(event, original, "rendering and delivery must not mutate the immutable source event");
 });
 
@@ -1491,7 +1844,12 @@ test("Telegram news renders the two-field bilingual template and can never becom
       providerCalls += 1;
       const parsed = new URL(url);
       const source = parsed.searchParams.get("q") || "";
-      return googleResponse(source.replace("adds guarded routing through", "新增受保护路由，调用"));
+      return googleResponse(source
+        .replace("Headline copied from the producer", "生产方标题")
+        .replace("Summary:", "摘要：")
+        .replace("adds guarded routing through", "新增受保护路由，调用")
+        .replace("Type:", "类型：")
+        .replace("Public-channel observation; awaiting official verification", "公开频道观察，待官方核实"));
     },
     alertTranslationTimeoutMs: 500,
   }, event, [
@@ -1504,18 +1862,22 @@ test("Telegram news renders the two-field bilingual template and can never becom
   const en = bundle.en.text.split("\n");
 
   assert.ok(providerCalls > 0, "the existing translation provider path must be preferred");
-  assert.equal(bundle.version, 17);
+  assert.equal(bundle.version, 18);
   assert.equal(bundle.eventType, "telegram_news_update");
   assert.equal(bundle.focusModel.telegramNews.messageUrl, event.messageUrl);
   assert.equal(zh.length, 2);
   assert.equal(en.length, 2);
   assert.equal(zh[0], "平台：Telegram · @maxguruai");
   assert.equal(en[0], "Platform: Telegram · @maxguruai");
-  assert.match(zh[1], /^更新了什么：分类: AI Agent · .*MCP v2\.1.*triggerFeeUpdate\(\).*@maxguruai#4821.*公开频道观察，待官方核实.*2026-08-24T02:03:04\.000Z/u);
-  assert.match(en[1], /^What changed: Classification: AI Agent · .*MCP v2\.1.*triggerFeeUpdate\(\).*@maxguruai#4821.*Public-channel observation; awaiting official verification.*2026-08-24T02:03:04\.000Z/u);
+  assert.match(zh[1], /^更新了什么：生产方标题｜摘要：.*MCP v2\.1.*triggerFeeUpdate\(\).*类型：AI Agent.*@maxguruai#4821.*公开频道观察，待官方核实.*08-24 10:03 CST/u);
+  assert.match(en[1], /^What changed: Headline copied from the producer \| Summary: .*MCP v2\.1.*triggerFeeUpdate\(\).*Type: AI Agent.*@maxguruai#4821.*Public-channel observation; awaiting official verification.*08-24 10:03 CST/u);
   assert.match(rendered, /^🔔 监控提醒 \| MONITOR ALERT\n/u);
+  assert.match(rendered, /事件：生产方标题/u);
+  assert.match(rendered, /Event: Headline copied from the producer/u);
+  assert.match(rendered, /时间：08-24 10:03 CST/u);
+  assertShortFieldLayout(rendered);
   assert.doesNotMatch(rendered, /STRONG ALERT|RAW TELEGRAM|UNTRUSTED CHANNEL|unverified_author/);
-  assert.ok(rendered.length <= 600, `Telegram news card length=${rendered.length}`);
+  assert.ok(rendered.length <= 900, `Telegram news card length=${rendered.length}`);
   assert.deepEqual(event, snapshot, "rendering must not mutate the Telegram event");
 });
 
@@ -1543,34 +1905,316 @@ test("Telegram news falls back honestly in either direction when both translatio
     ...common,
     news: {
       category: "Protocol",
+      headline: "Protocol launches MCP v2.1 guarded routing",
       summary: "MCP v2.1 adds triggerFeeUpdate() support",
       confidence: "observed",
     },
   }, "Telegram channel observation");
-  assert.match(englishSource.zh.text.split("\n")[1], /^更新了什么：.*翻译暂不可用，原文: .*MCP v2\.1.*triggerFeeUpdate\(\)/u);
-  assert.match(englishSource.en.text.split("\n")[1], /^What changed: Classification:/u);
+  assert.equal(englishSource.focusModel.telegramNews.sourceLanguage, "en");
+  assert.match(englishSource.zh.text.split("\n")[1], /^更新了什么：中文翻译暂不可用；英文原文已保留在下方英文区/u);
+  assert.doesNotMatch(englishSource.zh.text, /English 区/u);
+  assert.doesNotMatch(englishSource.zh.text, /adds triggerFeeUpdate/u);
+  assert.match(englishSource.en.text.split("\n")[1], /^What changed: Protocol launches MCP v2\.1 guarded routing \| Summary: MCP v2\.1 adds triggerFeeUpdate\(\) support/u);
 
   clearTranslationCache();
   const chineseSource = await buildBilingualAlertBundle(unavailableConfig, {
     ...common,
     news: {
       category: "协议更新",
+      headline: "协议发布 MCP v2.1 受保护路由",
       summary: "MCP v2.1 新增 triggerFeeUpdate() 支持",
       confidence: "observed",
     },
   }, "Telegram 公开频道观察");
   const rendered = renderBilingualTelegramText(chineseSource, true);
-  assert.match(chineseSource.en.text.split("\n")[1], /^What changed: Translation unavailable; source: .*MCP v2\.1.*triggerFeeUpdate\(\)/u);
+  assert.equal(chineseSource.focusModel.telegramNews.sourceLanguage, "zh");
+  assert.match(chineseSource.zh.text.split("\n")[1], /^更新了什么：协议发布 MCP v2\.1 受保护路由｜摘要：MCP v2\.1 新增 triggerFeeUpdate\(\) 支持/u);
+  assert.match(chineseSource.en.text.split("\n")[1], /^What changed: English translation unavailable; Chinese source retained in the Chinese section above/u);
+  assert.doesNotMatch(chineseSource.en.text, /新增.*支持/u);
+  assert.doesNotMatch(chineseSource.en.text, /[\u3400-\u9fff]/u);
   for (const block of [englishSource, chineseSource]) {
     assert.equal(block.zh.status === "fallback_source" || block.en.status === "fallback_source", true);
     assert.match(`${block.zh.provider} ${block.en.provider}`, /google_gtx_public\+mymemory_public/u);
-    assert.match(block.zh.text.split("\n")[1], /@maxguruai#4822.*公开频道观察，待官方核实/u);
-    assert.match(block.en.text.split("\n")[1], /@maxguruai#4822.*Public-channel observation; awaiting official verification/u);
     assert.equal(block.zh.text.split("\n").length, 2);
     assert.equal(block.en.text.split("\n").length, 2);
-    assert.ok(renderBilingualTelegramText(block, true).length <= 600);
+    const fallbackRendered = renderBilingualTelegramText(block, true);
+    assert.match(fallbackRendered, /@maxguruai#4822/u);
+    assert.match(fallbackRendered, /公开频道观察，待官方核实/u);
+    assert.match(fallbackRendered, /Public-channel observation; awaiting official verification/u);
+    assert.doesNotMatch(fallbackRendered, /请看下方英文原文[\s\S]*see verified Chinese facts above/iu);
+    assertShortFieldLayout(fallbackRendered);
+    assert.ok(fallbackRendered.length <= 900);
   }
   assert.match(rendered, /^🔔 监控提醒 \| MONITOR ALERT\n/u);
+});
+
+test("Telegram translates only narrative fragments and preserves #3191 financial meaning without marker collision", async () => {
+  clearTranslationCache();
+  const headline = "截至9月1日，基金净流出2.365亿美元，单日净流出860万美元";
+  const summary = "比特币价格为77,520美元，以太坊价格为2,412美元";
+  const providerQueries = [];
+  const event = {
+    type: "telegram_news_update",
+    eventKey: "telegram-news:-1002540748528:3191:financial-flow",
+    sourceTrust: "public_telegram_observed",
+    channel: { username: "maxguruai", visibility: "public" },
+    messageId: 3191,
+    messageUrl: "https://t.me/maxguruai/3191",
+    sourceOccurredAt: "2026-09-01T02:03:04.000Z",
+    observedAt: "2026-09-01T02:03:05.000Z",
+    priority: { version: 1 },
+    freshness: { version: 2 },
+    news: { category: "market", headline, summary, confidence: "observed" },
+  };
+  const bundle = await buildBilingualAlertBundle({
+    alertTranslationFetchImpl: async (url) => {
+      const source = new URL(url).searchParams.get("q") || "";
+      providerQueries.push(source);
+      if (source.includes("基金净流出")) {
+        return googleResponse("As of September 1, fund net outflow reached $236.5 million, including a $8.6 million daily net outflow");
+      }
+      if (source.includes("比特币价格")) {
+        return googleResponse("Bitcoin traded at $77,520 and Ethereum at $2,412");
+      }
+      throw new Error(`unexpected translation fragment: ${source}`);
+    },
+    alertTranslationTimeoutMs: 500,
+  }, event, "Telegram public-channel observation");
+  const rendered = renderBilingualTelegramText(bundle, false);
+
+  assert.equal(bundle.focusModel.telegramNews.sourceLanguage, "zh");
+  assert.equal(bundle.en.status, "translated");
+  assert.equal(bundle.en.provider, "google_gtx_public");
+  assert.match(bundle.en.text, /net outflow/iu);
+  assert.match(bundle.en.text, /\$236\.5 million/u);
+  assert.match(bundle.en.text, /\$8\.6 million/u);
+  assert.match(bundle.en.text, /\$77,520/u);
+  assert.match(bundle.en.text, /\$2,412/u);
+  assert.ok(providerQueries.length === 2);
+  assert.ok(providerQueries.every((query) => !/@maxguruai|CST|public.channel|公开频道|Type:|类型：/iu.test(query)));
+  assert.ok(providerQueries.every((query) => !/ZXQKEEP[A-Z]+QXZ/iu.test(query)), providerQueries.join("\n"));
+  assert.match(bundle.en.text, /@maxguruai#3191/u);
+  assert.match(bundle.en.text, /Public-channel observation; awaiting official verification/u);
+  assert.doesNotMatch(bundle.en.text, /translation unavailable|fallback/iu);
+  assert.doesNotMatch(bundle.en.text, /[\u3400-\u9fff]/u);
+  assertShortFieldLayout(rendered);
+});
+
+test("real Telegram #3160, #3163, and #3191 cards keep numeric catalysts and source IDs atomic", async () => {
+  const fixtures = [
+    {
+      id: 3160,
+      category: "security",
+      sourceOccurredAt: "2026-09-01T06:30:40.000Z",
+      observedAt: "2026-09-01T06:30:42.837Z",
+      headline: "Cronos 网络在约 7500 万美元 Tectonic 漏洞利用后暂停",
+      summary: "与 Crypto.com 相关联的 Cronos 区块链在借贷协议 Tectonic 遭受明显的价格操纵攻击后暂停了运营。一位链上研究人员估计，攻击者将流动性不足的 TONIC 代币价格抬高约 100 倍，从而借入约 7500 万美元的其他资产；在暂停之前，只有约 600 万美元被桥接出去。 重要性在于：预言机（Oracle）和价格操纵风险对较小的 DeFi 借贷市场仍然是现实威胁。",
+      headlineEn: "Cronos network pauses after an approximately $75 million Tectonic exploit",
+      summaryEn: "The Crypto.com-linked Cronos blockchain paused after an apparent price manipulation attack on lending protocol Tectonic. An on-chain researcher estimated that the attacker raised the illiquid TONIC token price by about 100 times, allowing roughly $75 million of other assets to be borrowed; only about $6 million was bridged out before the pause. Oracle and price manipulation risks remain real threats to smaller DeFi lending markets.",
+      atoms: ["$75m", "$6m", "100x"],
+      time: "09-01 14:30 CST (09-01 06:30 UTC)",
+    },
+    {
+      id: 3163,
+      category: "funding",
+      sourceOccurredAt: "2026-09-01T10:15:32.000Z",
+      observedAt: "2026-09-01T10:15:33.056Z",
+      headline: "Bullish 向 USD.AI 提供 1 亿美元信贷额度，用于 GPU 抵押贷款",
+      summary: "加密货币交易所 Bullish 向稳定币协议 USD.AI（由 Permian Labs 构建）提供了 1 亿美元的债务融资额度，以支持 GPU 抵押贷款。USD.AI 目前已锁定超过 2.25 亿美元的加密资产，Bullish 计划上线其 sUSDai 代币并新增交易对。 重要性：这表明 DeFi 信贷市场与 AI 基础设施融资之间的融合日益加深，这一新兴领域值得关注，未来或有更多机构资本涌入。",
+      headlineEn: "Bullish provides USD.AI with a $100 million credit facility for GPU-backed loans",
+      summaryEn: "Crypto exchange Bullish provided stablecoin protocol USD.AI, built by Permian Labs, with a $100 million debt facility for GPU-backed loans. USD.AI now has more than $225 million in crypto assets locked. Bullish plans to list sUSDai and add trading pairs. This shows growing convergence between DeFi credit and AI infrastructure financing.",
+      atoms: ["$100m", "$225m"],
+      time: "09-01 18:15 CST (09-01 10:15 UTC)",
+    },
+    {
+      id: 3191,
+      category: "product",
+      sourceOccurredAt: "2026-09-02T16:15:41.000Z",
+      observedAt: "2026-09-02T16:15:48.528Z",
+      headline: "比特币ETF在9天内首次出现资金流出（2.365亿美元），BTC跌破7.7万美元",
+      summary: "现货比特币ETF在9月1日净流出2.365亿美元，结束了连续九天的资金流入。现货以太坊ETF仍录得适度流入860万美元，而由于伊朗局势升级冲击风险资产，BTC跌至约77,520美元，ETH跌至约2,412美元。 重要原因：BTC/ETH的分化表明是轮动而非全面退出加密货币，但资金流入连续趋势的结束可能预示着在9月FOMC会议前机构短期持谨慎态度。",
+      headlineEn: "Bitcoin ETFs see their first fund outflow in 9 days ($236.5 million), while BTC falls below $77,000",
+      summaryEn: "Spot Bitcoin ETFs recorded a net outflow of $236.5 million on September 1, ending nine consecutive days of inflows. Spot Ethereum ETFs still recorded an $8.6 million inflow, while BTC fell to about $77,520 and ETH fell to about $2,412 as escalation involving Iran hit risk assets. The BTC/ETH divergence suggests rotation rather than a broad crypto exit, but the end of the inflow streak may signal short-term institutional caution before the September (month 9) FOMC meeting.",
+      atoms: ["$236.5m", "$8.6m"],
+      time: "09-03 00:15 CST (09-02 16:15 UTC)",
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    clearTranslationCache();
+    const providerQueries = [];
+    const event = {
+      type: "telegram_news_update",
+      eventKey: `telegram-news:-1002540748528:${fixture.id}:real-fixture`,
+      sourceTrust: "public_telegram_observed",
+      channel: { username: "maxguruai", visibility: "public" },
+      messageId: fixture.id,
+      messageUrl: `https://t.me/maxguruai/${fixture.id}`,
+      sourceOccurredAt: fixture.sourceOccurredAt,
+      observedAt: fixture.observedAt,
+      news: {
+        category: fixture.category,
+        headline: fixture.headline,
+        summary: fixture.summary,
+        confidence: "observed",
+      },
+    };
+    const bundle = await buildBilingualAlertBundle({
+      alertTranslationFetchImpl: async (url) => {
+        const source = new URL(url).searchParams.get("q") || "";
+        providerQueries.push(source);
+        const translated = source.includes(fixture.headline.slice(-8))
+          || (!source.includes("重要") && providerQueries.length % 2 === 1)
+          ? fixture.headlineEn
+          : fixture.summaryEn;
+        const markers = source.match(/ZXQKEEP[A-Z]+QXZ/gu) || [];
+        return googleResponse(`${translated}${markers.length ? ` ${markers.join(" ")}` : ""}`);
+      },
+      alertTranslationTimeoutMs: 500,
+    }, event, "Telegram public-channel observation");
+    const rendered = renderBilingualTelegramText(bundle, false);
+    const blocks = renderedLanguageBlocks(rendered);
+
+    assert.equal(bundle.en.status, "translated", `#${fixture.id}: ${bundle.en.error || "no error"}`);
+    assert.equal(providerQueries.length, 2, `#${fixture.id}`);
+    assert.ok(providerQueries.every((query) => !/@maxguruai|CST|公开频道|Type:|类型：/iu.test(query)), `#${fixture.id}`);
+    for (const language of ["zh", "en"]) {
+      const text = blocks[language].join("\n");
+      assert.match(text, new RegExp(`@maxguruai#${fixture.id}`), `#${fixture.id} ${language}`);
+      for (const atom of fixture.atoms) assert.ok(text.includes(atom), `#${fixture.id} ${language} lost ${atom}`);
+      const numericLines = blocks[language].filter((line) => /^(?:数字(?:续)?：|Numbers(?: cont\.)?:)/u.test(line));
+      assert.ok(numericLines.length >= 1 && numericLines.length <= 2, `#${fixture.id} ${language}`);
+      assert.ok(numericLines.every((line) => line.length <= 120), `#${fixture.id} ${language} numeric line too long`);
+      assert.ok(text.includes(fixture.time), `#${fixture.id} ${language} lost source time`);
+    }
+    if (fixture.id === 3160) {
+      assert.match(blocks.zh.join("\n"), /100x/u);
+      assert.match(blocks.en.join("\n"), /100x/u);
+    }
+    if (fixture.id === 3191) {
+      assert.match(blocks.zh.join("\n"), /净流出 \$236\.5m/u);
+      assert.match(blocks.en.join("\n"), /outflow \$236\.5m/iu);
+      assert.match(blocks.zh.join("\n"), /BTC 下跌 77,520/u);
+      assert.match(blocks.zh.join("\n"), /ETH 下跌 2,412/u);
+      assert.match(blocks.en.join("\n"), /BTC down 77,520/iu);
+      assert.match(blocks.en.join("\n"), /ETH down 2,412/iu);
+      assert.doesNotMatch(blocks.zh.join("\n"), /净流出 \$77k/iu);
+      assert.doesNotMatch(blocks.en.join("\n"), /outflow \$77k/iu);
+    }
+    assertShortFieldLayout(rendered);
+    assert.ok(rendered.length < 3_800, `#${fixture.id} card length=${rendered.length}`);
+  }
+});
+
+test("live-provider partial fallback derives target-language Numbers from the persisted source narrative", async () => {
+  const fixtures = [
+    {
+      id: 3163,
+      category: "funding",
+      sourceOccurredAt: "2026-09-01T10:15:32.000Z",
+      headline: "Bullish 向 USD.AI 提供 1 亿美元信贷额度，用于 GPU 抵押贷款",
+      summary: "加密货币交易所 Bullish 向稳定币协议 USD.AI（由 Permian Labs 构建）提供了 1 亿美元的债务融资额度，以支持 GPU 抵押贷款。USD.AI 目前已锁定超过 2.25 亿美元的加密资产，Bullish 计划上线其 sUSDai 代币并新增交易对。",
+      headlineNeedle: "信贷额度",
+      headlineEn: "Bullish provides USD.AI with a $100 million credit facility for GPU-backed loans",
+      atoms: [/\$100m/u, /\$225m/u],
+    },
+    {
+      id: 3191,
+      category: "product",
+      sourceOccurredAt: "2026-09-02T16:15:41.000Z",
+      headline: "比特币ETF在9天内首次出现资金流出（2.365亿美元），BTC跌破7.7万美元",
+      summary: "现货比特币ETF在9月1日净流出2.365亿美元，结束了连续九天的资金流入。现货以太坊ETF仍录得适度流入860万美元，而由于伊朗局势升级冲击风险资产，BTC跌至约77,520美元，ETH跌至约2,412美元。",
+      headlineNeedle: "首次出现资金流出",
+      headlineEn: "Bitcoin ETFs see their first outflow in 9 days ($236.5 million), while BTC falls below $77,000",
+      atoms: [/outflow \$236\.5m/iu, /inflow \$8\.6m/iu, /BTC down \$?77,520/iu, /ETH down \$?2,412/iu],
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    clearTranslationCache();
+    const event = {
+      type: "telegram_news_update",
+      eventKey: `telegram-news:-1002540748528:${fixture.id}:live-partial-fallback`,
+      sourceTrust: "public_telegram_observed",
+      channel: { username: "maxguruai", visibility: "public" },
+      messageId: fixture.id,
+      messageUrl: `https://t.me/maxguruai/${fixture.id}`,
+      sourceOccurredAt: fixture.sourceOccurredAt,
+      observedAt: fixture.sourceOccurredAt,
+      news: {
+        category: fixture.category,
+        headline: fixture.headline,
+        summary: fixture.summary,
+        confidence: "observed",
+      },
+    };
+    const bundle = await buildBilingualAlertBundle({
+      alertTranslationFetchImpl: async (url) => {
+        const source = new URL(url).searchParams.get("q") || "";
+        if (!source.includes(fixture.headlineNeedle)) {
+          return { ok: false, status: 503, text: async () => "temporary provider failure" };
+        }
+        const markers = source.match(/ZXQKEEP[A-Z]+QXZ/gu) || [];
+        return googleResponse(`${fixture.headlineEn}${markers.length ? ` ${markers.join(" ")}` : ""}`);
+      },
+      alertTranslationTimeoutMs: 500,
+    }, event, "Telegram public-channel observation");
+    const rendered = renderBilingualTelegramText(bundle, false);
+    const blocks = renderedLanguageBlocks(rendered);
+    const english = blocks.en.join("\n");
+
+    assert.equal(bundle.en.status, "partial_fallback", `#${fixture.id}: ${bundle.en.error || "no error"}`);
+    assert.equal(bundle.focusModel.telegramNews.localized.en.unavailable, true, `#${fixture.id}`);
+    assert.match(english, /English translation unavailable; Chinese source retained in the Chinese section above/u);
+    assert.match(english, new RegExp(`@maxguruai#${fixture.id}`), `#${fixture.id}`);
+    for (const atom of fixture.atoms) assert.match(english, atom, `#${fixture.id} lost ${atom}`);
+    if (fixture.id === 3191) {
+      assert.doesNotMatch(english, /outflow \$77k/iu);
+      assert.doesNotMatch(english, /inflow \$77k/iu);
+    }
+    assertShortFieldLayout(rendered);
+  }
+});
+
+test("Chinese price boundary verbs render as asset prices and never as flow amounts", async () => {
+  const cases = [
+    ["BTC跌破7.7万美元", "BTC down $77k"],
+    ["BTC涨破8.1万美元", "BTC up $81k"],
+    ["BTC升至8.2万美元", "BTC up $82k"],
+    ["BTC下探7.5万美元", "BTC down $75k"],
+    ["BTC上探8.3万美元", "BTC up $83k"],
+  ];
+  const unavailable = async () => ({ ok: false, status: 503, text: async () => "provider unavailable" });
+
+  for (const [headline, expected] of cases) {
+    clearTranslationCache();
+    const messageId = 5000 + cases.findIndex((item) => item[0] === headline);
+    const bundle = await buildBilingualAlertBundle({
+      alertTranslationFetchImpl: unavailable,
+      alertTranslationTimeoutMs: 100,
+    }, {
+      type: "telegram_news_update",
+      eventKey: `telegram-news:-1002540748528:${messageId}:price-boundary`,
+      sourceTrust: "public_telegram_observed",
+      channel: { username: "maxguruai", visibility: "public" },
+      messageId,
+      messageUrl: `https://t.me/maxguruai/${messageId}`,
+      sourceOccurredAt: "2026-09-02T16:15:41.000Z",
+      observedAt: "2026-09-02T16:15:42.000Z",
+      news: {
+        category: "market",
+        headline,
+        summary: "价格阈值来自公开频道观察，仍待官方核实。",
+        confidence: "observed",
+      },
+    }, "Telegram public-channel observation");
+    const rendered = renderBilingualTelegramText(bundle, false);
+    const english = renderedLanguageBlocks(rendered).en.join("\n");
+
+    assert.match(english, new RegExp(expected.replace("$", "\\$"), "u"));
+    assert.doesNotMatch(english, /(?:outflow|inflow) \$\d/iu);
+    assertShortFieldLayout(rendered);
+  }
 });
 
 test("every supported Telegram event type uses the same compact bilingual envelope", async () => {
@@ -1616,27 +2260,35 @@ test("every supported Telegram event type uses the same compact bilingual envelo
     ].join("\n"));
     const rendered = renderBilingualTelegramText(bundle, false);
 
-    assert.equal(bundle.version, 17, type);
+    assert.equal(bundle.version, 18, type);
     assert.equal(bundle.format, "telegram_zh_en_compact_v13", type);
     assert.match(bundle.zh.text, /[\u3400-\u9fff]/, type);
     assert.match(bundle.en.text, /[A-Za-z]{3,}/, type);
     assert.match(rendered, /^🔔 监控提醒 \| MONITOR ALERT\n🇨🇳 中文\n/, type);
     assert.match(rendered, /\n\n🇬🇧 English\n/, type);
+    assertShortFieldLayout(rendered);
     assert.equal(bundle.zh.text.split("\n").length, 2, type);
     assert.equal(bundle.en.text.split("\n").length, 2, type);
-    assert.ok(rendered.split("\n").length <= 12, type);
+    assert.ok(rendered.split("\n").length <= 18, type);
     assert.ok(rendered.length <= 600, type);
   }
 });
 
-test("every bilingual alert persists a one-glance before/after model in the same order", async () => {
+test("every bilingual alert persists a one-glance before/after model and fails over honestly", async () => {
   clearTranslationCache();
   const bundle = await buildBilingualAlertBundle({
-    alertTranslationFetchImpl: translationStub,
+    alertTranslationFetchImpl: async (url) => {
+      const parsed = new URL(url);
+      const source = parsed.searchParams.get("q") || "";
+      return googleResponse(parsed.searchParams.get("tl") === "zh-CN"
+        ? source.replaceAll("Wallet API", "钱包 API")
+        : source);
+    },
     alertTranslationTimeoutMs: 3_000,
   }, {
     type: "binance_official_update",
     kind: "announcement",
+    project: { id: "binance", name: "Binance" },
     previousSnapshot: { title: "Wallet API v1", facts: ["One route"] },
     currentSnapshot: { title: "Wallet API v2", facts: ["Two routes"] },
     changedFields: ["title", "facts"],
@@ -1644,15 +2296,16 @@ test("every bilingual alert persists a one-glance before/after model in the same
     source: { name: "Binance Wallet 官方公告" },
   }, "🚨 Binance Wallet 更新\n事件: Wallet API v2\n状态: 官方公告已确认\n时间: 2026-08-13 00:00:00");
 
-  assert.equal(bundle.version, 17);
+  assert.equal(bundle.version, 18);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.equal(bundle.changeModel.basis, "exact_snapshot");
-  assert.match(bundle.zh.text, /更新了什么：.*Wallet API v1.*→.*Wallet API v2/);
+  assert.match(bundle.zh.text, /更新了什么：中文翻译暂不可用；请看英文原文/);
   assert.match(bundle.en.text, /What changed:.*Wallet API v1.*→.*Wallet API v2/i);
   assert.doesNotMatch(bundle.zh.text, /变化类型:|原有:|更新后:|对比依据:/);
   assert.doesNotMatch(bundle.en.text, /Change type:|Before:|After:|Comparison basis:/i);
-  assert.match(bundle.zh.text, /Wallet API v1/);
-  assert.match(bundle.zh.text, /Wallet API v2/);
+  assert.doesNotMatch(bundle.zh.text, /Wallet API|One route|Two routes/);
+  assert.match(bundle.changeModel.before.text, /title: Wallet API v1/);
+  assert.match(bundle.changeModel.after.text, /title: Wallet API v2/);
 });
 
 test("translation outage keeps the same before/after model in the English fallback", async () => {
@@ -1759,7 +2412,7 @@ test("line compaction preserves every selected GitHub identifier without re-expa
     assert.ok(bundle.en.text.includes(literal), `English block lost ${literal}`);
   }
   assert.match(renderBilingualTelegramText(bundle, true), new RegExp(address));
-  assert.ok(renderBilingualTelegramText(bundle, true).split("\n").length <= 12);
+  assert.ok(renderBilingualTelegramText(bundle, true).split("\n").length <= 18);
   assert.ok(renderBilingualTelegramText(bundle, true).length <= 600);
 });
 
@@ -1803,6 +2456,8 @@ test("Binance product T1 uses a product-capital brief instead of launchpad first
     eventKey: "binance-product:agent-wallet-routing",
     project: { id: "binance-wallet", name: "Binance Wallet" },
     signal: { category: "产品功能上线", labels: ["新功能/产品更新"], strong: true },
+    productFeature: true,
+    binanceChange: { classification: "product_feature", productFeature: true, substantive: true },
     title: "Binance Wallet adds automated agent wallet routing",
     source: {
       id: "binance_wallet_cms",
@@ -1829,6 +2484,45 @@ test("Binance product T1 uses a product-capital brief instead of launchpad first
   assert.equal(bundle.zh.text.split("\n").length, 2);
   assert.equal(bundle.en.text.split("\n").length, 2);
   assert.ok(rendered.length <= 600, `Binance product card was ${rendered.length}`);
+});
+
+test("Binance venue security T0 renders risk containment instead of a listing trade plan", async () => {
+  const observedAt = "2026-09-03T01:10:05.000Z";
+  const event = withTradingPriority({
+    type: "binance_official_update",
+    kind: "announcement",
+    eventKey: "binance-security:withdrawals-paused",
+    project: { id: "binance", name: "Binance" },
+    signal: { scope: "exchange", category: "安全/紧急公告", labels: ["安全/紧急公告"], strong: true },
+    title: "Binance confirms a security breach and suspends all withdrawals",
+    source: {
+      id: "binance_exchange_cms",
+      trust: "official_verified",
+      url: "https://www.binance.com/en/support/announcement/security-withdrawals-paused",
+    },
+    sourceTrust: "official_verified",
+    url: "https://www.binance.com/en/support/announcement/security-withdrawals-paused",
+    publishedAt: "2026-09-03T01:10:00.000Z",
+    observedAt,
+  }, { nowMs: Date.parse(observedAt) });
+  assert.equal(event.tradingPriority.tier, "T0");
+  assert.equal(event.tradingPriority.category, "binance_security_emergency");
+
+  const bundle = await buildBilingualAlertBundle({}, event, [
+    "Binance official security announcement",
+    `具体更新: ${event.title}`,
+    "状态: 官方公告已确认",
+    `时间: ${observedAt}`,
+  ].join("\n"));
+  const rendered = renderBilingualTelegramText(bundle, true);
+  assert.match(rendered, /事件：Binance 确认安全事件并暂停提现/u);
+  assert.match(rendered, /路径=平台风险→充提\/交易\/流动性/u);
+  assert.match(rendered, /入场=核对范围\+链上异常\+恢复条件/u);
+  assert.match(rendered, /Event: Binance confirmed a security incident and suspended withdrawals/u);
+  assert.match(rendered, /flow=venue risk→funding\/trading\/liquidity/u);
+  assert.doesNotMatch(rendered, /现货\/Alpha|spot\/Alpha|开盘量价|opening price-volume/iu);
+  assertShortFieldLayout(rendered);
+  assert.ok(rendered.length < 900, `security card was ${rendered.length}`);
 });
 
 test("T0 compaction bounds chain-controlled names while keeping CA and selector evidence readable", async () => {
@@ -1875,7 +2569,8 @@ test("T0 compaction bounds chain-controlled names while keeping CA and selector 
     assert.ok(!block.includes(longTokenName), "untrusted display prose should be compacted before exact identifiers");
     assert.doesNotMatch(block, /0x[0-9a-f]{1,39}…/iu);
   }
-  assert.ok(rendered.length <= 600, `long trading card was ${rendered.length}`);
+  assertShortFieldLayout(rendered);
+  assert.ok(rendered.length <= 900, `long trading card was ${rendered.length}`);
 });
 
 test("Telegram retries reuse the persisted bilingual render bundle without retranslation", async (t) => {
@@ -1914,9 +2609,13 @@ test("Telegram retries reuse the persisted bilingual render bundle without retra
     kind: "announcement",
     strong: true,
     project: { id: "binance-wallet", name: "Binance Wallet", website: "https://www.binance.com", twitter: "https://x.com/BinanceWallet" },
-    signal: { scope: "wallet", labels: ["Wallet 新发射功能"] },
+    signal: { scope: "wallet", category: "产品功能上线", labels: ["新功能/产品更新"], strong: true },
+    productFeature: true,
+    binanceChange: { classification: "product_feature", productFeature: true, substantive: true },
     title: "Binance Wallet introduces a new launch API",
     url: "https://www.binance.com/en/support/announcement/example",
+    source: { id: "binance_wallet_cms", trust: "official_verified", url: "https://www.binance.com/en/support/announcement/example" },
+    sourceTrust: "official_verified",
     publishedAt: new Date(Date.now() - 30_000).toISOString(),
     observedAt: new Date().toISOString(),
   };
@@ -1925,7 +2624,7 @@ test("Telegram retries reuse the persisted bilingual render bundle without retra
   assert.equal((await sendAlerts(config, event)).status, "queued");
   const firstOutbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   const entry = firstOutbox.events[Object.keys(firstOutbox.events)[0]];
-  assert.equal(entry.renderBundle.version, 17);
+  assert.equal(entry.renderBundle.version, 18);
   const callsAfterFirstRender = translationCalls;
   entry.destinations.telegram.nextAttemptAt = null;
   await fs.writeFile(path.join(dataDir, "alert-outbox.json"), `${JSON.stringify(firstOutbox, null, 2)}\n`);
@@ -1940,12 +2639,12 @@ test("Telegram retries reuse the persisted bilingual render bundle without retra
 
   const finalOutbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   const finalEntry = finalOutbox.events[Object.keys(finalOutbox.events)[0]];
-  assert.equal(finalEntry.destinations.telegram.receipt.renderVersion, 17);
+  assert.equal(finalEntry.destinations.telegram.receipt.renderVersion, 18);
   assert.equal(finalEntry.destinations.telegram.receipt.translation.zh.status, finalEntry.renderBundle.zh.status);
   assert.equal(finalEntry.destinations.telegram.receipt.translation.en.status, finalEntry.renderBundle.en.status);
 });
 
-test("a pending v14 card is rebuilt once as v17 while terminal v14 is not migrated", async (t) => {
+test("a pending v14 card is rebuilt once as v18 while terminal v14 is not migrated", async (t) => {
   clearTranslationCache();
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-bilingual-v6-migration-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -1977,12 +2676,18 @@ test("a pending v14 card is rebuilt once as v17 while terminal v14 is not migrat
     webhookUrl: "",
   };
   const event = {
-    type: "github_module_update",
-    launchpad: "Four.Meme",
-    repository: "four-meme-community/fourmeme-docs",
-    commit: "6748033c63e3f68b9ef6fba709783181c9a95792",
-    message: "feat: add TaxToken9 charity donation feature",
+    type: "binance_official_update",
+    kind: "announcement",
+    strong: true,
+    project: { id: "binance-wallet", name: "Binance Wallet" },
+    signal: { scope: "wallet", category: "产品功能上线", labels: ["新功能/产品更新"], strong: true },
+    productFeature: true,
+    binanceChange: { classification: "product_feature", productFeature: true, substantive: true },
+    title: "Binance Wallet adds a verified wallet execution feature",
+    url: "https://www.binance.com/en/support/announcement/wallet-execution-feature",
+    source: { id: "binance_wallet_cms", trust: "official_verified", url: "https://www.binance.com/en/support/announcement/wallet-execution-feature" },
     sourceTrust: "official_verified",
+    publishedAt: new Date(Date.now() - 30_000).toISOString(),
     observedAt: new Date().toISOString(),
   };
 
@@ -2003,17 +2708,17 @@ test("a pending v14 card is rebuilt once as v17 while terminal v14 is not migrat
   const callsAfterMigration = translationCalls;
   assert.equal(telegramCalls, 2);
   assert.doesNotMatch(deliveredPayload.text, /V14_LONG_CARD_SENTINEL/);
-  assert.ok(deliveredPayload.text.split("\n").length <= 12);
+  assert.ok(deliveredPayload.text.split("\n").length <= 18);
 
   const migrated = JSON.parse(await fs.readFile(file, "utf8"));
   const migratedEntry = migrated.events[Object.keys(migrated.events)[0]];
-  assert.equal(migratedEntry.renderBundle.version, 17);
+  assert.equal(migratedEntry.renderBundle.version, 18);
   assert.equal(migratedEntry.renderBundle.format, "telegram_zh_en_compact_v13");
   assert.notEqual(migratedEntry.renderBundle.sourceHash, "V14_SENTINEL_HASH");
   assert.equal(migratedEntry.renderBundle.zh.text.split("\n").length, 2);
   assert.equal(migratedEntry.renderBundle.en.text.split("\n").length, 2);
   assert.equal((await sendAlerts(config, event)).status, "delivered");
-  assert.equal(translationCalls, callsAfterMigration, "the persisted v17 bundle must not be translated again");
+  assert.equal(translationCalls, callsAfterMigration, "the persisted v18 bundle must not be translated again");
   assert.equal(telegramCalls, 2, "a terminal delivered event must not be sent again");
 
   migratedEntry.renderBundle.version = 14;
@@ -2061,7 +2766,46 @@ test("an unknown Binance official kind is suppressed before rendering", async (t
   assert.equal(payload, undefined);
 });
 
-test("pon.fun structural and official-X cards keep the two-field bilingual contract under 600", async () => {
+test("pon.fun official API plus Factory lifecycle card keeps the stock boundary and no-trading warning atomic", async () => {
+  const nowMs = Date.parse("2026-09-02T04:00:30.000Z");
+  const factory = "0xF698d13348686C1529c2DC54847C123424d9DAE0";
+  const stockToken = "0x3333333333333333333333333333333333333333";
+  const event = withTradingPriority({
+    type: "pon_fun_update",
+    kind: "market_lifecycle",
+    platform: { id: "ponfun", name: "pon.fun", chainId: 4663 },
+    source: {
+      id: "pon_fun_official_api_onchain",
+      trust: "official_site_bound_onchain_fingerprinted",
+      official: true,
+      url: "https://www.pon.fun/api/markets",
+    },
+    sourceTrust: "official_site_bound_onchain_fingerprinted",
+    factory,
+    token: stockToken,
+    market: { symbol: "RWA", ticker: "RWA", stockToken, graduated: true, lpDeployed: true },
+    currentSnapshot: { symbol: "RWA", ticker: "RWA", stockToken, graduated: true, lpDeployed: true },
+    changes: {
+      graduated: { before: false, after: true },
+      lpDeployed: { before: false, after: true },
+    },
+    evidence: { apiVerified: true, factoryFingerprintVerified: true },
+    blockTimestamp: "2026-09-02T04:00:00.000Z",
+    observedAt: "2026-09-02T04:00:01.000Z",
+  }, { nowMs });
+  const bundle = await buildBilingualAlertBundle({}, event, "pon.fun official API and Factory lifecycle update");
+  const rendered = renderBilingualTelegramText(bundle, false);
+  const blocks = renderedLanguageBlocks(rendered);
+
+  assert.match(blocks.zh.join("\n"), /验证：官方 API 与 Factory 指纹绑定/u);
+  assert.match(blocks.zh.join("\n"), /风险：coin 不是股票；非自动交易/u);
+  assert.match(blocks.en.join("\n"), /Verification: Official API bound to Factory fingerprint/u);
+  assert.match(blocks.en.join("\n"), /Risk: coin is not the stock; no automatic trading/u);
+  assert.doesNotMatch(blocks.en.join("\n"), /[\u3400-\u9fff]/u);
+  assertShortFieldLayout(rendered);
+});
+
+test("pon.fun structural and official-X cards keep a clear bounded bilingual fact layout", async () => {
   const nowMs = Date.parse("2026-09-02T04:00:30.000Z");
   const factory = "0xF698d13348686C1529c2DC54847C123424d9DAE0";
   const tx = `0x${"a".repeat(64)}`;
@@ -2141,7 +2885,8 @@ test("pon.fun structural and official-X cards keep the two-field bilingual contr
     assert.match(bundle.en.text, /^Platform: pon\.fun/m);
     assert.match(bundle.en.text, /^What changed: /m);
     assert.doesNotMatch(bundle.en.text, /[\u3400-\u9fff]/u);
-    assert.ok(rendered.length <= 600, `pon.fun card is ${rendered.length} characters`);
+    assertShortFieldLayout(rendered);
+    assert.ok(rendered.length < 3_800, `pon.fun card is ${rendered.length} characters`);
     for (const identifier of identifiers) {
       assert.ok(bundle.zh.text.includes(identifier), `Chinese card lost ${identifier}`);
       assert.ok(bundle.en.text.includes(identifier), `English card lost ${identifier}`);
@@ -2172,5 +2917,6 @@ test("pon.fun structural and official-X cards keep the two-field bilingual contr
   assert.match(delayedBundle.en.text, /Delayed recovery/);
   assert.match(delayedBundle.en.text, /do not chase/);
   assert.doesNotMatch(delayedBundle.en.text, /[\u3400-\u9fff]/u);
-  assert.ok(delayedRendered.length <= 600, `delayed pon.fun card is ${delayedRendered.length} characters`);
+  assertShortFieldLayout(delayedRendered);
+  assert.ok(delayedRendered.length < 3_800, `delayed pon.fun card is ${delayedRendered.length} characters`);
 });

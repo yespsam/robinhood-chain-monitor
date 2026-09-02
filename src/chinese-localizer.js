@@ -45,6 +45,295 @@ function contextualTechnicalNumbers(text) {
   return [...source.matchAll(pattern)].map((match) => match[1]);
 }
 
+function canonicalDecimal(value, multiplier = 1) {
+  const numeric = Number(String(value || "").replace(/,/g, ""));
+  if (!Number.isFinite(numeric)) return null;
+  const scaled = numeric * multiplier;
+  if (!Number.isFinite(scaled)) return null;
+  return scaled.toLocaleString("en-US", {
+    useGrouping: false,
+    maximumSignificantDigits: 15,
+  });
+}
+
+function canonicalSignedDecimal(value, multiplier = 1, explicitSign = "") {
+  const raw = String(value || "").trim();
+  const embeddedSign = /^[+-]/u.test(raw) ? raw[0] : "";
+  const sign = explicitSign || embeddedSign;
+  const magnitude = canonicalDecimal(raw.replace(/^[+-]/u, ""), multiplier);
+  if (magnitude === null) return null;
+  return sign === "-" ? `-${magnitude}` : sign === "+" ? `+${magnitude}` : magnitude;
+}
+
+function amountSign(...candidates) {
+  const signs = candidates.filter((value) => value === "+" || value === "-");
+  // A malformed double-sign amount must remain distinguishable instead of
+  // being silently normalized into an unsigned value.
+  return signs.length > 1 ? "invalid" : signs[0] || "";
+}
+
+function quantityMultiplier(value) {
+  const unit = String(value || "").toLowerCase();
+  if (unit === "万") return 10_000;
+  if (unit === "thousand" || unit === "k") return 1_000;
+  if (unit === "亿") return 100_000_000;
+  if (["million", "mn", "m"].includes(unit)) return 1_000_000;
+  if (["billion", "bn", "b"].includes(unit)) return 1_000_000_000;
+  return 1;
+}
+
+const ENGLISH_MONTH_NUMBER = new Map([
+  ["january", 1], ["jan", 1], ["february", 2], ["feb", 2], ["march", 3], ["mar", 3],
+  ["april", 4], ["apr", 4], ["may", 5], ["june", 6], ["jun", 6], ["july", 7], ["jul", 7],
+  ["august", 8], ["aug", 8], ["september", 9], ["sept", 9], ["sep", 9], ["october", 10],
+  ["oct", 10], ["november", 11], ["nov", 11], ["december", 12], ["dec", 12],
+]);
+
+function canonicalMonthDay(monthValue, dayValue) {
+  const month = Number(monthValue);
+  const day = Number(dayValue);
+  if (!Number.isInteger(month) || !Number.isInteger(day)) return null;
+  const date = new Date(Date.UTC(2000, month - 1, day));
+  if (date.getUTCMonth() + 1 !== month || date.getUTCDate() !== day) return null;
+  return `${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/**
+ * Translation providers are allowed to localize units (for example
+ * `1亿美元` -> `$100 million`) but never to change their value.  Keep a
+ * language-neutral multiset of monetary amounts, percentages and remaining
+ * numeric facts so a fluent-looking mistranslation cannot pass validation.
+ */
+function numericMeaning(value) {
+  const source = oneLine(value);
+  const masked = source.split("");
+  const occupied = Array(source.length).fill(false);
+  const amounts = [];
+  const percentages = [];
+  const tokenCounts = [];
+  const dates = [];
+  const mask = (match) => {
+    const start = match.index || 0;
+    for (let index = start; index < start + match[0].length; index += 1) {
+      masked[index] = " ";
+      occupied[index] = true;
+    }
+  };
+  const record = (pattern, output, normalize) => {
+    for (const match of source.matchAll(pattern)) {
+      const start = match.index || 0;
+      if (occupied.slice(start, start + match[0].length).some(Boolean)) continue;
+      const normalized = normalize(match);
+      if (!normalized) continue;
+      output.push(normalized);
+      mask(match);
+    }
+  };
+
+  record(/(\d{1,2})月(\d{1,2})日/gu, dates, (match) => canonicalMonthDay(match[1], match[2]));
+  record(
+    /\b(January|February|March|April|May|June|July|August|September|Sept|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b/giu,
+    dates,
+    (match) => canonicalMonthDay(ENGLISH_MONTH_NUMBER.get(match[1].toLowerCase()), match[2]),
+  );
+  record(
+    /\b(\d{1,2})(?:st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|Sept|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\b/giu,
+    dates,
+    (match) => canonicalMonthDay(ENGLISH_MONTH_NUMBER.get(match[2].toLowerCase()), match[1]),
+  );
+
+  record(
+    /([+-]?)(?:US\$|\$|USD\s*)?([+-]?)(\d[\d,]*(?:\.\d+)?)\s*(万|亿)\s*(?:美元|美金|USD|USDT|USDC)/giu,
+    amounts,
+    (match) => {
+      const sign = amountSign(match[1], match[2]);
+      return `USD:${sign === "invalid" ? "invalid-sign" : canonicalSignedDecimal(match[3], quantityMultiplier(match[4]), sign)}`;
+    },
+  );
+  record(
+    /([+-]?)(?:CNY\s*|RMB\s*)?([+-]?)(\d[\d,]*(?:\.\d+)?)\s*(万|亿)\s*(?:元?人民币|CNY|RMB|元)(?![A-Za-z0-9])/giu,
+    amounts,
+    (match) => {
+      const sign = amountSign(match[1], match[2]);
+      return `CNY:${sign === "invalid" ? "invalid-sign" : canonicalSignedDecimal(match[3], quantityMultiplier(match[4]), sign)}`;
+    },
+  );
+  record(
+    /([+-]?)(?:US\$|\$|USD\s*)([+-]?)(\d[\d,]*(?:\.\d+)?)\s*(thousand|million|billion|mn|bn|[kmb])?\b/giu,
+    amounts,
+    (match) => {
+      const sign = amountSign(match[1], match[2]);
+      return `USD:${sign === "invalid" ? "invalid-sign" : canonicalSignedDecimal(match[3], quantityMultiplier(match[4]), sign)}`;
+    },
+  );
+  record(
+    /([+-]?)(?:CNY|RMB)\s*([+-]?)(\d[\d,]*(?:\.\d+)?)\s*(thousand|million|billion|mn|bn|[kmb])?\b/giu,
+    amounts,
+    (match) => {
+      const sign = amountSign(match[1], match[2]);
+      return `CNY:${sign === "invalid" ? "invalid-sign" : canonicalSignedDecimal(match[3], quantityMultiplier(match[4]), sign)}`;
+    },
+  );
+  record(
+    /([+-]?)(\d[\d,]*(?:\.\d+)?)\s*(thousand|million|billion)\s+(?:US\s+dollars?|USD)\b/giu,
+    amounts,
+    (match) => {
+      return `USD:${canonicalSignedDecimal(match[2], quantityMultiplier(match[3]), match[1])}`;
+    },
+  );
+  record(
+    /([+-]?)(\d[\d,]*(?:\.\d+)?)\s*(thousand|million|billion)\s+(?:Chinese\s+yuan|yuan|renminbi|CNY|RMB)\b/giu,
+    amounts,
+    (match) => `CNY:${canonicalSignedDecimal(match[2], quantityMultiplier(match[3]), match[1])}`,
+  );
+  record(
+    /([+-]?)(\d[\d,]*(?:\.\d+)?)\s*(?:美元|美金|USD)(?![A-Za-z0-9])/giu,
+    amounts,
+    (match) => `USD:${canonicalSignedDecimal(match[2], 1, match[1])}`,
+  );
+  record(
+    /([+-]?)(\d[\d,]*(?:\.\d+)?)\s*(?:元?人民币|CNY|RMB|元)(?![A-Za-z0-9])/giu,
+    amounts,
+    (match) => `CNY:${canonicalSignedDecimal(match[2], 1, match[1])}`,
+  );
+  record(
+    /(?:\b[A-Z][A-Z0-9]{0,11}\b|比特币|以太坊|索拉纳|狗狗币)\s*(?:的?价格)?\s*(?:跌破|跌至|下探|涨破|升至|上探)\s*([+-]?)(\d[\d,]*(?:\.\d+)?)\s*(万|亿)?(?![\d,.万亿]|\s*(?:%|％|bps?\b|基点|元?人民币|CNY|RMB|元|美元|美金|USD))/gu,
+    amounts,
+    (match) => `USD:${canonicalSignedDecimal(match[2], quantityMultiplier(match[3]), match[1])}`,
+  );
+  record(
+    /(?:(?:\$[A-Z][A-Z0-9]{0,11}|\b[A-Z][A-Z0-9]{0,11})\b|\b(?:[Bb]itcoin|[Ee]thereum|[Ss]olana|[Dd]ogecoin)\b)(?:'s)?\s+(?:(?:price|trades?|trading|is|was|remains?|moves?|moved|now)\s+){0,3}(?:fell|falls?|fallen|falling|dropped|drops?|dropping|rose|rises?|risen|rising|climbed|climbs?|climbing|above|below)\s*(?:by|to|at)?\s*([+-]?)(\d[\d,]*(?:\.\d+)?)\s*(thousand|million|billion|mn|bn|[kmb])?(?![\d,.A-Za-z]|\s*(?:%|％|bps?\b))/gu,
+    amounts,
+    (match) => `USD:${canonicalSignedDecimal(match[2], quantityMultiplier(match[3]), match[1])}`,
+  );
+  record(
+    /([+-]?)(\d[\d,]*(?:\.\d+)?)\s*(万|亿)\s*(?:枚|个)?代币/giu,
+    tokenCounts,
+    (match) => canonicalSignedDecimal(match[2], quantityMultiplier(match[3]), match[1]),
+  );
+  record(
+    /([+-]?)(\d[\d,]*(?:\.\d+)?)\s*(thousand|million|billion|[kmb])?\s*(?:tokens?|枚代币|个代币)(?![A-Za-z])/giu,
+    tokenCounts,
+    (match) => canonicalSignedDecimal(match[2], quantityMultiplier(match[3]), match[1]),
+  );
+  record(
+    /([+-]?\d+(?:\.\d+)?)\s*(%|％|bps?\b|基点)/giu,
+    percentages,
+    (match) => {
+      const unit = /bps?|基点/iu.test(match[2]) ? "bps" : "%";
+      return `${unit}:${canonicalSignedDecimal(match[1])}`;
+    },
+  );
+
+  const numbers = (masked.join("").match(/(?<![A-Za-z0-9])[-+]?\d+(?:[,.]\d+)*(?![A-Za-z0-9])/g) || [])
+    .map((number) => canonicalSignedDecimal(number))
+    .filter(Boolean);
+  const sorted = (items) => items.sort((left, right) => left.localeCompare(right));
+  return {
+    amounts: sorted(amounts),
+    percentages: sorted(percentages),
+    tokenCounts: sorted(tokenCounts),
+    dates: sorted(dates),
+    numbers: sorted(numbers),
+  };
+}
+
+function financialFlowMeaning(value) {
+  const source = oneLine(value);
+  const count = (pattern) => [...source.matchAll(pattern)].length;
+  return {
+    outflow: count(/(?:净\s*)?流出|资金外流|(?:net\s+)?outflows?|\bflows?\s+out\b/giu),
+    inflow: count(/(?:净\s*)?流入|资金流入|(?:net\s+)?inflows?|\bflows?\s+in\b/giu),
+  };
+}
+
+const NUMERIC_DIRECTION_CONTEXTS = [
+  ["price", /\bprices?\b|价格/iu],
+  ["market_cap", /\bmarket\s+cap(?:italization)?\b|市值/iu],
+  ["supply", /\b(?:token\s+)?supply\b|供应量/iu],
+  ["funding_rate", /\bfunding\s+rate\b|资金费率/iu],
+  ["interest_rate", /\binterest\s+rate\b|利率/iu],
+  ["rate", /\brate\b|比率/iu],
+  ["volume", /\b(?:trading\s+)?volume\b|交易量/iu],
+  ["open_interest", /\bopen\s+interest\b|未平仓/iu],
+  ["tvl", /\btvl\b|锁仓量/iu],
+  ["liquidity", /\bliquidity\b|流动性/iu],
+  ["revenue", /\brevenue\b|收入/iu],
+  ["fees", /\bfees?\b|费用/iu],
+  ["reserves", /\breserves?\b|储备/iu],
+  ["balance", /\bbalance\b|余额/iu],
+  ["value", /\bvalue\b|价值/iu],
+  ["cost", /\bcost\b|成本/iu],
+  ["yield", /\byield\b|收益率/iu],
+  ["apr", /\bapr\b/iu],
+  ["apy", /\bapy\b/iu],
+  ["inflation", /\binflation\b|通胀/iu],
+];
+const ENGLISH_NUMERIC_UP = /\b(?:ris(?:e|es|ing|en)|rose|climb(?:s|ed|ing)?|increas(?:e|es|ed|ing)|gain(?:s|ed|ing)?)\b/iu;
+const ENGLISH_NUMERIC_DOWN = /\b(?:fall(?:s|ing|en)?|fell|decreas(?:e|es|ed|ing)|drop(?:s|ped|ping)?)\b/iu;
+const ENGLISH_CONTEXTUAL_UP = /(?:\bup\b\s*(?:by|to)?\s*[+$€£¥-]?\d|[+$€£¥-]?\d[\d,.]*\s*(?:%|percent(?:age)?|pct|bps?)?\s+\bup\b)/iu;
+const ENGLISH_CONTEXTUAL_DOWN = /(?:\bdown\b\s*(?:by|to)?\s*[+$€£¥-]?\d|[+$€£¥-]?\d[\d,.]*\s*(?:%|percent(?:age)?|pct|bps?)?\s+\bdown\b)/iu;
+const CHINESE_ASSET_PRICE_DIRECTION = /(?:\b[A-Z][A-Z0-9]{0,11}\b|比特币|以太坊|索拉纳|狗狗币)\s*(?:的?价格)?\s*(?:跌破|跌至|下探|涨破|升至|上探)/u;
+const ENGLISH_ASSET_PRICE_DIRECTION = /(?:\b[A-Z][A-Z0-9]{0,11}\b|\b(?:[Bb]itcoin|[Ee]thereum|[Ss]olana|[Dd]ogecoin)\b)(?:'s)?\s+(?:(?:price|trades?|trading|is|was|remains?|moves?|moved|now)\s+){0,3}(?:fell|falls?|fallen|falling|dropped|drops?|dropping|rose|rises?|risen|rising|climbed|climbs?|climbing|above|below)\b/u;
+
+function numericDirectionMeaning(value) {
+  const meanings = [];
+  const clauses = oneLine(value).split(/[；;。！？!?，、]|(?<!\d),|,(?!\d)|(?<=\.)\s+(?=[A-Z])|\s+(?:and|while|whereas)\s+(?=(?:the\s+)?(?:(?:\$[A-Z][A-Z0-9]{0,11}|\b[A-Z][A-Z0-9]{0,11})\b|\b(?:[Bb]itcoin|[Ee]thereum|[Ss]olana|[Dd]ogecoin)\b)(?:'s)?\s+(?:(?:price|trades?|trading|is|was|remains?|moves?|moved|now)\s+){0,3}(?:fell|falls?|fallen|falling|dropped|drops?|dropping|rose|rises?|risen|rising|climbed|climbs?|climbing|above|below)\b)|(?:并且|且)\s*(?=(?:(?:\$[A-Z][A-Z0-9]{0,11}|\b[A-Z][A-Z0-9]{0,11})\b|比特币|以太坊|索拉纳|狗狗币)\s*(?:的?价格)?\s*(?:跌破|跌至|下探|涨破|升至|上探))/u);
+  for (const clause of clauses) {
+    if (!/\d/u.test(clause)) continue;
+    const facts = numericMeaning(clause);
+    const assetPriceContext = facts.amounts.length > 0
+      && (CHINESE_ASSET_PRICE_DIRECTION.test(clause) || ENGLISH_ASSET_PRICE_DIRECTION.test(clause));
+    const matchedContexts = NUMERIC_DIRECTION_CONTEXTS
+      .filter(([, pattern]) => pattern.test(clause))
+      .map(([context]) => context);
+    if (assetPriceContext && !matchedContexts.includes("price")) matchedContexts.push("price");
+    const contexts = matchedContexts
+      .filter((context) => context !== "rate"
+        || (!matchedContexts.includes("funding_rate") && !matchedContexts.includes("interest_rate")))
+      .sort();
+    if (!contexts.length) continue;
+    const directions = [];
+    if (/(?:上涨|上升|增加|上调|涨破|升至|上探)/u.test(clause)
+      || ENGLISH_NUMERIC_UP.test(clause)
+      || ENGLISH_CONTEXTUAL_UP.test(clause)
+      || (assetPriceContext && /\babove\b/iu.test(clause))) directions.push("up");
+    if (/(?:下跌|下降|减少|下调|跌破|跌至|下探)/u.test(clause)
+      || ENGLISH_NUMERIC_DOWN.test(clause)
+      || ENGLISH_CONTEXTUAL_DOWN.test(clause)
+      || (assetPriceContext && /\bbelow\b/iu.test(clause))) directions.push("down");
+    if (!directions.length) continue;
+    meanings.push(JSON.stringify({
+      contexts,
+      directions,
+      amounts: facts.amounts,
+      percentages: facts.percentages,
+      tokenCounts: facts.tokenCounts,
+      numbers: facts.numbers,
+    }));
+  }
+  return meanings.sort((left, right) => left.localeCompare(right));
+}
+
+function assertNumericMeaningUnchanged(source, translated) {
+  const before = numericMeaning(source);
+  const after = numericMeaning(translated);
+  for (const field of ["amounts", "percentages", "tokenCounts", "dates", "numbers"]) {
+    if (JSON.stringify(before[field]) !== JSON.stringify(after[field])) {
+      throw new Error(`translation changed ${field === "amounts" ? "a monetary amount" : field === "percentages" ? "a percentage" : field === "tokenCounts" ? "a token count" : field === "dates" ? "a date" : "a numeric fact"}`);
+    }
+  }
+  const beforeFlow = financialFlowMeaning(source);
+  if ((beforeFlow.outflow > 0 || beforeFlow.inflow > 0)
+    && JSON.stringify(beforeFlow) !== JSON.stringify(financialFlowMeaning(translated))) {
+    throw new Error("translation changed a financial flow direction");
+  }
+  const beforeDirection = numericDirectionMeaning(source);
+  if (JSON.stringify(beforeDirection) !== JSON.stringify(numericDirectionMeaning(translated))) {
+    throw new Error("translation changed a numeric direction");
+  }
+}
+
 function isTechnicalScalarKey(key, parentKey) {
   const normalized = String(key || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
   const parent = String(parentKey || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
@@ -73,8 +362,17 @@ export function collectTechnicalEventLiterals(event) {
 
 function importantLiterals(text, protectedTerms = []) {
   const source = oneLine(text);
-  const slashLiterals = (source.match(/\b[A-Za-z][A-Za-z0-9_.-]*(?:\/[A-Za-z][A-Za-z0-9_.-]*)+\b/g) || [])
-    .filter((value) => !/^(?:buy\/sell|input\/output|read\/write|and\/or)$/i.test(value));
+  const slashLiterals = (source.match(/\b[A-Za-z][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9][A-Za-z0-9_.-]*)+\b/g) || [])
+    .filter((value) => !/^(?:buy\/sell|input\/output|read\/write|and\/or)$/i.test(value))
+    .filter((value) => {
+      const parts = value.split("/");
+      return parts.length >= 3
+        || /^(?:src|lib|test|tests|docs|api|packages?|apps?|deploy)\//i.test(value)
+        || value.includes("-")
+        || /\.[a-z0-9]{1,8}$/i.test(parts.at(-1) || "");
+    });
+  const hexadecimalLiterals = (source.match(/\b[a-fA-F0-9]{7,40}\b/g) || [])
+    .filter((value) => /[a-f]/i.test(value) && /\d/.test(value));
   const literals = [
     ...(source.match(/https?:\/\/[^\s<>"']+/gi) || []).map((value) => value.replace(/[),.;!?]+$/, "")),
     ...(source.match(/\b0x[a-fA-F0-9]{8,}\b/g) || []),
@@ -82,9 +380,10 @@ function importantLiterals(text, protectedTerms = []) {
     ...(source.match(/@[A-Za-z0-9_]{1,15}\b/g) || []),
     ...(source.match(/#[A-Za-z][A-Za-z0-9_]{1,63}\b/g) || []),
     ...(source.match(/\$[A-Z][A-Z0-9]{1,11}\b/g) || []),
-    ...(source.match(/\b(?:v\d+(?:\.\d+){0,3}|\d+\.\d+(?:\.\d+){0,2})(?:-[A-Za-z0-9.-]+)?\b/gi) || []),
-    ...(source.match(/\b[a-fA-F0-9]{7,40}\b/g) || []),
-    ...(source.match(/\b[A-Z][A-Z0-9]{1,11}\b/g) || []),
+    ...(source.match(/\b(?:v\d+(?:\.\d+){0,3}|\d+\.\d+\.\d+(?:\.\d+)?)(?:-[A-Za-z0-9.-]+)?\b/gi) || []),
+    ...hexadecimalLiterals,
+    ...(source.match(/\b[A-Z][A-Z0-9]{1,11}\b/g) || [])
+      .filter((value) => !/^(?:USD|CNY|RMB)$/u.test(value)),
     ...slashLiterals,
     ...(source.match(/\b(?:[A-Za-z0-9]+_[A-Za-z0-9_]+|[A-Za-z0-9]*[a-z][A-Z][A-Za-z0-9]*)\b/g) || []),
     ...(source.match(/\b[A-Za-z_$][A-Za-z0-9_$]*(?=\s*\()/g) || []),
@@ -491,20 +790,45 @@ function validateAlertLanguage(source, translated, targetLanguage, protectedTerm
   for (const literal of importantLiterals(source, protectedTerms)) narrative = narrative.replaceAll(literal, " ");
   const chineseCount = (narrative.match(/[\u3400-\u9fff]/g) || []).length;
   const latinCount = (narrative.match(/[A-Za-z]/g) || []).length;
+  assertNumericMeaningUnchanged(source, translated);
   if (targetLanguage === "en") {
     if (latinCount < 3) throw new Error("translation did not return English text");
     if (chineseCount > Math.max(4, Math.floor(latinCount * 0.18))) {
       throw new Error("translation left too much Chinese narrative");
     }
-  } else if (chineseCount < 1) {
-    throw new Error("translation did not return Chinese text");
+  } else {
+    if (chineseCount < 1) throw new Error("translation did not return Chinese text");
+    const sourceLatinCount = (source.match(/[A-Za-z]/g) || []).length;
+    if (sourceLatinCount >= 12
+      && oneLine(source).toLowerCase() === oneLine(translated).toLowerCase()) {
+      throw new Error("translation returned the source text unchanged");
+    }
+    if (latinCount > Math.max(12, Math.floor(chineseCount * 1.25))) {
+      throw new Error("translation left too much English narrative");
+    }
   }
 }
 
 function fallbackAlertLine(plan, targetLanguage, protectedTerms) {
-  const source = normalizeCanonicalAlertTranslation(plan.line, plan.fragment, targetLanguage, protectedTerms);
-  if (targetLanguage === "zh-CN") return `${plan.prefix}英文原文: ${source}`.trim();
-  return `${plan.prefix}Source fact (translation pending): ${source}`.trim();
+  const factParts = String(plan.fragment || "").split(/｜|\s\|\s/u).map(oneLine).filter(Boolean);
+  const firstFact = /^(?:标题|Headline)[:：]?\s*(?:未取得|unavailable)$/iu.test(factParts[0] || "")
+    ? factParts[1] || factParts[0]
+    : factParts[0] || plan.fragment;
+  let narrative = oneLine(firstFact);
+  for (const literal of importantLiterals(narrative, protectedTerms)) narrative = narrative.replaceAll(literal, " ");
+  narrative = narrative.replace(/\b(?:commit|sha|pr|ca|tx|factory|contract|quote|post|launcher|chain\s*id|x\s*post|block|position\s*proof|true|false)\b/gi, " ");
+  const chineseCharacters = (narrative.match(/[\u3400-\u9fff]/g) || []).length;
+  const englishWords = (narrative.match(/[A-Za-z][A-Za-z'-]*/g) || []).length;
+  const sourceLanguage = chineseCharacters >= 2 && chineseCharacters / 2 >= englishWords
+    ? "zh-CN"
+    : englishWords >= 3 && englishWords > chineseCharacters / 2 ? "en" : null;
+  if (sourceLanguage === targetLanguage) return `${plan.prefix}${plan.fragment}`.trim();
+  const literals = importantLiterals(plan.fragment, protectedTerms)
+    .filter((literal) => !/^(?:CST|UTC|GMT)$/iu.test(literal))
+    .slice(0, 6);
+  const evidence = literals.length ? ` · ${literals.join(" · ")}` : "";
+  if (targetLanguage === "zh-CN") return `${plan.prefix}中文翻译暂不可用；请看英文原文${evidence}`.trim();
+  return `${plan.prefix}English translation unavailable; see verified Chinese facts${evidence}`.trim();
 }
 
 export async function translateAlertLines(values, options = {}) {

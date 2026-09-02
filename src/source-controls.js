@@ -423,6 +423,12 @@ const TELEGRAM_NEWS_SOURCE_URL = "https://t.me/s/maxguruai";
 const TELEGRAM_NEWS_MAX_SOURCE_AGE_MS = 2 * 60 * 60 * 1_000;
 const TELEGRAM_NEWS_FUTURE_TOLERANCE_MS = 60_000;
 const TELEGRAM_NEWS_DISALLOWED_TEXT_CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
+const TELEGRAM_NEWS_CATEGORIES = new Set([
+  "security", "listing", "market", "macro", "governance", "funding", "on_chain", "ai", "product", "crypto",
+]);
+const TELEGRAM_NEWS_STAGES = new Set([
+  "observed", "proposed", "approved", "rejected", "scheduled", "live", "incident", "paused", "patched", "resumed",
+]);
 
 function focus3Repository(value) {
   const repository = normalized(value);
@@ -1066,8 +1072,8 @@ function validPonFunDerivedAlertFields(event) {
       ? "T2"
       : "T1";
     if (!ponFunRecord(priority)
-      || priority.version !== 1
-      || !["news_trading_priority_v1", "news_trading_priority_v1:legacy"].includes(priority.schema)
+      || priority.version !== 2
+      || priority.schema !== "news_trading_priority_v2"
       || priority.deterministic !== true
       || priority.tier !== expectedTier
       || priority.rank !== ({ T1: 3, T2: 2 })[expectedTier]
@@ -1418,7 +1424,8 @@ function safeTelegramNewsExternalUrl(value) {
 
 function validTelegramNewsPayload(news) {
   if (!news || typeof news !== "object" || Array.isArray(news)) return false;
-  if (!boundedTelegramNewsText(news.category, 80)
+  if (!TELEGRAM_NEWS_CATEGORIES.has(news.category)
+    || !TELEGRAM_NEWS_STAGES.has(news.stage)
     || !boundedTelegramNewsText(news.headline, 300)
     || !boundedTelegramNewsText(news.summary, 2_000)
     || !boundedTelegramNewsText(news.storyKey, 256)

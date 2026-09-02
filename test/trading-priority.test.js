@@ -5,11 +5,13 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  TRADING_PRIORITY_VERSION,
   deriveTradingPriority,
   legacyTradingPriority,
   withTradingPriority,
 } from "../src/trading-priority.js";
 import {
+  alertDeliveryDisposition,
   drainAlertOutbox,
   focusNoveltyKeys,
   isRelevantAlert,
@@ -24,10 +26,32 @@ import {
 const fixtureFile = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures/trading-priority/events.json");
 const fixtures = JSON.parse(await fs.readFile(fixtureFile, "utf8"));
 const copy = (value) => structuredClone(value);
+const withInstrumentChange = (source, {
+  action = "launch",
+  market = "usd_m_perpetual",
+  instruments = null,
+  instrument = null,
+  launchAt = source.launchAt,
+  effectiveAt = null,
+} = {}) => {
+  const event = copy(source);
+  const fallback = instrument || event.marketSymbol || event.title?.match(/([\p{L}\p{N}._-]+USDT)/u)?.[1];
+  event.announcementDetails = {
+    kind: "instrument_change",
+    action,
+    market,
+    ...(fallback ? { instrument: fallback } : {}),
+    ...(launchAt ? { launchAt } : {}),
+    ...(effectiveAt ? { effectiveAt } : {}),
+    ...(instruments ? { instruments } : {}),
+  };
+  return event;
+};
 
 test("Binance MARSCOIN launchAt and HK0625 satisfy every deterministic T0 hard gate", () => {
   for (const [name, expectedTarget] of [["marscoin", "MARSCOINUSDT"], ["hk0625", "HK0625USDT"]]) {
-    const priority = deriveTradingPriority(fixtures[name]);
+    const event = withInstrumentChange(fixtures[name], { instrument: expectedTarget });
+    const priority = deriveTradingPriority(event);
     assert.equal(priority.tier, "T0", name);
     assert.equal(priority.target.type, "market", name);
     assert.equal(priority.target.value, expectedTarget, name);
@@ -35,13 +59,85 @@ test("Binance MARSCOIN launchAt and HK0625 satisfy every deterministic T0 hard g
     assert.equal(priority.window.basis, "launchAt", name);
     assert.deepEqual(priority.hardGates, {
       exactTarget: true,
+      completeTargetSet: true,
       trustedConfirmation: true,
       validWindow: true,
       safetyPassed: true,
+      explicitPath: true,
       t0Eligible: true,
+      t1Eligible: true,
     });
+    assert.deepEqual(priority.targets.map((target) => target.value), [expectedTarget]);
     assert.equal(priority.plan.automaticExecution, false);
   }
+});
+
+test("crypto perpetual and perpetual-delist cards use action-aware derivatives paths", async () => {
+  const config = { alertTranslationTimeoutMs: 50 };
+  const launch = withTradingPriority(withInstrumentChange(fixtures.marscoin, {
+    action: "launch",
+    market: "usd_m_perpetual",
+    instrument: "MARSCOINUSDT",
+  }));
+  const launchBundle = await buildBilingualAlertBundle(config, launch, `official monitoring update\n具体更新: ${launch.title}\n状态: verified source\n时间: ${launch.observedAt}`);
+  const launchCard = renderBilingualTelegramText(launchBundle, true);
+  assert.match(launchCard, /永续→深度\/持仓\/资金费率/u);
+  assert.match(launchCard, /perpetual→depth\/OI\/funding/u);
+  assert.doesNotMatch(launchCard, /现货\/Alpha→|spot\/Alpha→/iu);
+
+  const delistSource = withInstrumentChange(fixtures.marscoin, {
+    action: "delist",
+    market: "usd_m_perpetual",
+    instrument: "MARSCOINUSDT",
+    launchAt: null,
+    effectiveAt: fixtures.marscoin.launchAt,
+  });
+  delistSource.title = "Binance Futures Will Delist MARSCOINUSDT Perpetual Contract";
+  delistSource.signal = { category: "整币下架", labels: ["整币下架"], strong: true };
+  const delist = withTradingPriority(delistSource);
+  const delistBundle = await buildBilingualAlertBundle(config, delist, `official monitoring update\n具体更新: ${delist.title}\n状态: verified source\n时间: ${delist.observedAt}`);
+  const delistCard = renderBilingualTelegramText(delistBundle, true);
+  assert.match(delist.tradingPriority.plan.entryCondition.zh, /不新增仓位.*结算时间/u);
+  assert.match(delistCard, /永续下架→仓位\/保证金\/结算/u);
+  assert.match(delistCard, /不新增仓位/u);
+  assert.match(delistCard, /settlement/iu);
+  assert.doesNotMatch(delistCard, /现货\/Alpha→|spot\/Alpha→/iu);
+});
+
+test("structured Binance targets preserve Unicode and validate every multi-instrument time", () => {
+  const event = withInstrumentChange(fixtures.marscoin, {
+    instrument: "牛来USDT",
+    instruments: [
+      { symbol: "牛来USDT", launchAt: "2026-09-02T03:00:00.000Z", pairs: ["牛来/USDT"] },
+      { symbol: "HK0625USDT", launchAt: "2026-09-02T03:05:00.000Z" },
+    ],
+  });
+  event.title = "Binance Futures Will Launch Multiple USDⓈ-Margined TradFi Perpetual Contracts";
+  const priority = deriveTradingPriority(event);
+  assert.equal(priority.tier, "T0");
+  assert.equal(priority.target.value, "牛来USDT");
+  assert.deepEqual(priority.targets.map((target) => target.value), ["牛来USDT", "HK0625USDT"]);
+  assert.equal(priority.window.launchAt, "2026-09-02T03:00:00.000Z");
+  assert.match(priority.plan.mainline.zh, /新永续入口/);
+  assert.match(priority.plan.risk.zh, /永续合约不等于现货股票/);
+
+  const malformed = copy(event);
+  malformed.announcementDetails.instruments[1].symbol = "BAD\u0007USDT";
+  assert.equal(deriveTradingPriority(malformed).tier, "T2");
+  assert.equal(deriveTradingPriority(malformed).hardGates.completeTargetSet, false);
+
+  const singleCharacterSpot = withInstrumentChange(fixtures.marscoin, {
+    action: "list",
+    market: "spot",
+    instrument: "O",
+    instruments: [{ symbol: "O", launchAt: fixtures.marscoin.launchAt, pairs: ["O/USDT"] }],
+  });
+  singleCharacterSpot.title = "Binance Will List O (O) and Open Spot Trading";
+  singleCharacterSpot.signal = { category: "现货首次上币", labels: ["现货首次上币"], strong: true };
+  const singleCharacterPriority = deriveTradingPriority(singleCharacterSpot);
+  assert.equal(singleCharacterPriority.tier, "T0");
+  assert.equal(singleCharacterPriority.target.value, "O");
+  assert.deepEqual(singleCharacterPriority.targets[0].pairs, ["O/USDT"]);
 });
 
 test("Binance spot, Alpha, perpetual, full-delist, and emergency catalysts share the T0 gates", () => {
@@ -50,18 +146,34 @@ test("Binance spot, Alpha, perpetual, full-delist, and emergency catalysts share
     ["Alpha 上新", "MARSCOIN (MARSCOIN) Is Now Available on Binance Alpha"],
     ["新合约上线", "Binance Futures Will Launch MARSCOINUSDT Perpetual Contract"],
     ["整币下架", "Binance Will Delist MARSCOIN (MARSCOIN) on All Spot Trading Pairs"],
-    ["安全/紧急公告", "Emergency Notice for MARSCOINUSDT Market"],
   ];
   for (const [label, title] of cases) {
-    const event = copy(fixtures.marscoin);
+    let event = copy(fixtures.marscoin);
     event.title = title;
     event.signal = { scope: "exchange", category: label, labels: [label], strong: true };
+    const action = label === "整币下架" ? "delist" : label === "新合约上线" ? "launch" : "list";
+    const market = label === "新合约上线" ? "usd_m_perpetual" : "spot_pair";
+    event = withInstrumentChange(event, { action, market, instrument: "MARSCOINUSDT" });
     const priority = deriveTradingPriority(event);
     assert.equal(priority.tier, "T0", label);
     assert.equal(priority.hardGates.t0Eligible, true, label);
+    if (label === "Alpha 上新") {
+      assert.match(priority.plan.capitalPath.zh, /Alpha开盘→成交深度与价格发现/u);
+      assert.match(priority.plan.capitalPath.en, /Alpha launch→trading depth and price discovery/u);
+      assert.doesNotMatch(priority.plan.capitalPath.zh, /永续/u);
+      assert.doesNotMatch(priority.plan.capitalPath.en, /perpetual/iu);
+    }
+    if (label === "现货首次上币") {
+      assert.match(priority.plan.capitalPath.zh, /现货开盘→成交深度与价格发现/u);
+      assert.doesNotMatch(priority.plan.capitalPath.en, /perpetual/iu);
+    }
+    if (label === "整币下架") {
+      assert.match(priority.plan.capitalPath.zh, /下架→订单、退出与流动性/u);
+      assert.match(priority.plan.entryCondition.zh, /不新增仓位.*撤单.*提现安排/u);
+    }
   }
 
-  const listingWithContract = copy(fixtures.marscoin);
+  const listingWithContract = withInstrumentChange(fixtures.marscoin, { instrument: "MARSCOINUSDT" });
   listingWithContract.token = "0x4444444444444444444444444444444444444444";
   assert.equal(deriveTradingPriority(listingWithContract).tier, "T0", "Binance does not inherit launchpad token-safety gates");
 
@@ -69,6 +181,22 @@ test("Binance spot, Alpha, perpetual, full-delist, and emergency catalysts share
   product.title = "Binance Agent OS Adds a New Wallet Execution Feature";
   product.signal = { scope: "wallet", category: "产品功能上线", labels: ["新功能/产品更新"], strong: true };
   assert.equal(deriveTradingPriority(product).tier, "T1", "a product feature remains monitored below a market catalyst");
+
+  const venueEmergency = copy(fixtures.marscoin);
+  venueEmergency.title = "Binance suspends all withdrawals after a confirmed security breach";
+  venueEmergency.signal = { scope: "exchange", category: "安全/紧急公告", labels: ["安全/紧急公告"], strong: true };
+  delete venueEmergency.launchAt;
+  const emergencyPriority = deriveTradingPriority(venueEmergency);
+  assert.equal(emergencyPriority.tier, "T0");
+  assert.equal(emergencyPriority.category, "binance_security_emergency");
+  assert.deepEqual(emergencyPriority.target, { type: "venue", value: "Binance", exact: true });
+  assert.match(emergencyPriority.plan.capitalPath.zh, /平台风险→充提\/交易\/相关资产流动性/u);
+  assert.match(emergencyPriority.plan.entryCondition.en, /affected scope.*on-chain anomalies.*recovery/iu);
+
+  const vagueSecurity = copy(venueEmergency);
+  vagueSecurity.title = "Emergency Notice for MARSCOINUSDT Market";
+  assert.equal(deriveTradingPriority(vagueSecurity).tier, "T2", "a vague emergency label cannot bypass the explicit-action gate");
+  assert.equal(deriveTradingPriority(vagueSecurity).category, "binance_information");
 });
 
 test("T0 fails closed when target, trusted evidence, or the trading window is missing", () => {
@@ -77,15 +205,32 @@ test("T0 fails closed when target, trusted evidence, or the trading window is mi
   assert.notEqual(deriveTradingPriority(noTarget).tier, "T0");
   assert.equal(deriveTradingPriority(noTarget).hardGates.exactTarget, false);
 
-  const copiedSource = copy(fixtures.marscoin);
+  const copiedSource = withInstrumentChange(fixtures.marscoin, { instrument: "MARSCOINUSDT" });
   copiedSource.source.url = "https://binance.com.evil.example/copied";
   assert.notEqual(deriveTradingPriority(copiedSource).tier, "T0");
   assert.equal(deriveTradingPriority(copiedSource).hardGates.trustedConfirmation, false);
 
-  const stale = copy(fixtures.marscoin);
+  const stale = withInstrumentChange(fixtures.marscoin, { instrument: "MARSCOINUSDT" });
   stale.observedAt = "2026-09-02T04:00:01.000Z";
   assert.notEqual(deriveTradingPriority(stale).tier, "T0");
   assert.equal(deriveTradingPriority(stale).hardGates.validWindow, false);
+
+  const missingDetails = copy(fixtures.marscoin);
+  assert.equal(deriveTradingPriority(missingDetails).tier, "T2");
+  assert.equal(deriveTradingPriority(missingDetails).hardGates.completeTargetSet, false);
+
+  const incompleteTimes = withInstrumentChange(fixtures.marscoin, {
+    // Real producer shape: the top-level time mirrors instruments[0] and is
+    // not a common schedule for a later target whose time is missing.
+    launchAt: fixtures.marscoin.launchAt,
+    instruments: [
+      { symbol: "MARSCOINUSDT", launchAt: fixtures.marscoin.launchAt },
+      { symbol: "HK0625USDT" },
+    ],
+  });
+  delete incompleteTimes.launchAt;
+  assert.equal(deriveTradingPriority(incompleteTimes).tier, "T2");
+  assert.equal(deriveTradingPriority(incompleteTimes).hardGates.completeTargetSet, false);
 });
 
 test("Flap infrastructure stays T1, only a safe first-token CA reaches T0, and Fomo uses independent confirmation", () => {
@@ -107,7 +252,7 @@ test("Flap infrastructure stays T1, only a safe first-token CA reaches T0, and F
   const missingLiquidityGate = copy(fixtures.flapFirstToken);
   missingLiquidityGate.security.metrics.liquidityConfirmed = false;
   const unsafeFirstToken = deriveTradingPriority(missingLiquidityGate);
-  assert.equal(unsafeFirstToken.tier, "T1");
+  assert.equal(unsafeFirstToken.tier, "T2");
   assert.equal(unsafeFirstToken.hardGates.safetyPassed, false);
 
   const single = deriveTradingPriority(fixtures.fomoBuy);
@@ -149,21 +294,21 @@ test("Flap infrastructure stays T1, only a safe first-token CA reaches T0, and F
   unsafeFlapToken.security = { decision: "block", metrics: { liquidityConfirmed: false } };
   const blocked = deriveTradingPriority(unsafeFlapToken);
   assert.equal(blocked.hardGates.safetyPassed, false);
-  assert.equal(blocked.tier, "T1", "a local safety rejection remains a loud risk warning without becoming T0");
+  assert.equal(blocked.tier, "T2", "a local safety rejection cannot pass the T1 safety gate");
   assert.equal(blocked.plan.conclusion.zh, "不做");
   assert.equal(blocked.plan.automaticExecution, false);
 });
 
-test("Binance activities and ordinary announcements remain T2 while routine code is T3", () => {
+test("Binance campaigns are forced to T3, ordinary announcements stay T2, and routine code is T3", () => {
   const activity = copy(fixtures.marscoin);
   activity.signal = { scope: "exchange", category: "活动公告", labels: ["活动/奖励公告"], strong: false };
   activity.title = "Binance Alpha Trading Campaign: Trade ABC and Share Rewards";
   delete activity.launchAt;
-  assert.equal(deriveTradingPriority(activity).tier, "T2");
+  assert.equal(deriveTradingPriority(activity).tier, "T3");
 
   const activityWithListingWords = copy(activity);
   activityWithListingWords.title = "Binance Alpha Campaign: Add FOOUSDT to Watchlist and Earn Rewards";
-  assert.equal(deriveTradingPriority(activityWithListingWords).tier, "T2",
+  assert.equal(deriveTradingPriority(activityWithListingWords).tier, "T3",
     "structured campaign labels outrank ambiguous listing words in marketing copy");
 
   const ordinary = copy(activity);
@@ -178,6 +323,7 @@ test("Binance activities and ordinary announcements remain T2 while routine code
     commit: "abcdef1234567890abcdef1234567890abcdef12",
     sourceTrust: "official_verified",
     message: "docs: clarify integration example",
+    committedAt: "2026-09-02T01:29:59.000Z",
     observedAt: "2026-09-02T01:30:00.000Z",
   };
   assert.equal(deriveTradingPriority(code).tier, "T3");
@@ -218,6 +364,105 @@ test("Binance activities and ordinary announcements remain T2 while routine code
   assert.equal(deriveTradingPriority(telegramNews).tier, "T2", "Telegram news can never self-promote to T0");
 });
 
+test("recent 24h Binance noise shapes are T3 and Square governance cannot become T1", () => {
+  const titles = [
+    "Binance Academy Bitcoin Page: Complete Quiz to Earn BTC Rewards This September 2026!",
+    "Altcoin Trading Festival: Trade to Share Up to 300,000 USDC Token Vouchers",
+    "APAC Exclusive: Celebrating Mid-Autumn - Upgrade or Trade to Claim Your VIP Suitcase",
+    "CIS New User Exclusive: Subscribe to USDT Simple Earn to Enjoy 35% APR During the Promotion Period!",
+    "Binance Alpha Trading Competition: Trade Collect on Fanable (COLLECT) and Share $200K Worth of Rewards",
+    "Become a Binance P2P Merchant in CIS & CEE and Get 100 USDT in Token Vouchers",
+    "Pakistan Exclusive: Road to Skardu KOL Challenge - Bring Qualified Referrals, Earn Your Spot!",
+    "Complete Your First Trade and Earn Up to 20 USDC in Token Voucher Rewards",
+  ];
+  for (const title of titles) {
+    const event = copy(fixtures.marscoin);
+    event.title = title;
+    event.signal = { category: "活动公告", labels: ["活动/奖励公告"], strong: false };
+    delete event.launchAt;
+    assert.equal(deriveTradingPriority(event).tier, "T3", title);
+  }
+  const square = copy(fixtures.marscoin);
+  square.source = { id: "binance_square_cms", url: "https://www.binance.com/en/square/post/123" };
+  square.url = square.source.url;
+  square.title = "Binance Square Community Governance Announcement (Aug 24 – Aug 30)";
+  square.signal = { category: "产品功能上线", labels: ["功能/产品更新"], strong: true };
+  delete square.launchAt;
+  const squarePriority = deriveTradingPriority(square);
+  assert.equal(squarePriority.category, "binance_low_value");
+  assert.equal(squarePriority.tier, "T3");
+});
+
+test("delivery disposition is fail-closed with only explicit realtime exceptions", () => {
+  const t0 = withTradingPriority(withInstrumentChange(fixtures.marscoin, { instrument: "MARSCOINUSDT" }));
+  const t1 = withTradingPriority(fixtures.flapUpgrade);
+  const t2 = withTradingPriority({ type: "telegram_news_update", sourceOccurredAt: "2026-09-02T01:00:00.000Z", observedAt: "2026-09-02T01:00:01.000Z" });
+  const campaign = copy(fixtures.marscoin);
+  campaign.signal = { category: "活动公告", labels: ["活动/奖励公告"] };
+  campaign.title = "Trade ABC and Share Rewards";
+  delete campaign.launchAt;
+  const t3 = withTradingPriority(campaign);
+  assert.equal(alertDeliveryDisposition(t0).mode, "immediate");
+  assert.equal(alertDeliveryDisposition(t1).mode, "immediate");
+  assert.equal(alertDeliveryDisposition(t2).mode, "audit_only");
+  assert.equal(alertDeliveryDisposition(t3).mode, "audit_only");
+  assert.equal(alertDeliveryDisposition({ type: "fomo_monitor_health_update" }).mode, "immediate");
+  const legacyStrong = withTradingPriority({ type: "legacy_pending", strong: true }, { legacy: true });
+  assert.equal(legacyStrong.tradingPriority.tier, "T1");
+  assert.equal(alertDeliveryDisposition(legacyStrong).mode, "audit_only", "a legacy T1 cannot bypass current hard gates");
+
+  const now = "2026-09-02T04:00:00.000Z";
+  const pon = {
+    type: "pon_fun_update",
+    kind: "market_created",
+    platform: { id: "ponfun" },
+    source: { id: "pon_fun_official_api_onchain", trust: "official_site_bound_onchain_fingerprinted", official: true },
+    sourceTrust: "official_site_bound_onchain_fingerprinted",
+    factory: "0xf698d13348686c1529c2dc54847c123424d9dae0",
+    token: "0x1111111111111111111111111111111111111111",
+    transactionHash: `0x${"a".repeat(64)}`,
+    blockNumber: 52_000_001,
+    blockTimestamp: now,
+    observedAt: now,
+    evidence: {
+      factoryCodeHash: "0x4cb9795396b800a4b1e46f2e91a690ecf004ac0d52b059a7ef0e6b190af17384",
+      receiptVerified: true,
+    },
+    freshness: { version: 1, basis: "blockTimestamp", decision: "realtime", sourceOccurredAt: now, discoveredAt: now },
+  };
+  pon.tradingPriority = deriveTradingPriority(pon, { nowMs: Date.parse(now) });
+  assert.equal(pon.tradingPriority.tier, "T2");
+  assert.equal(alertDeliveryDisposition(pon).reason, "pon_exact_onchain_realtime");
+  const provenanceSpoof = structuredClone(pon);
+  provenanceSpoof.source = { id: "copied_feed", trust: "public_onchain", official: false };
+  provenanceSpoof.sourceTrust = "public_onchain";
+  provenanceSpoof.tradingPriority = deriveTradingPriority(provenanceSpoof, { nowMs: Date.parse(now) });
+  assert.equal(provenanceSpoof.tradingPriority.confirmation.kind, "onchain");
+  assert.equal(alertDeliveryDisposition(provenanceSpoof).mode, "audit_only", "generic on-chain proof is not the pon.fun exception");
+  const delayed = {
+    ...pon,
+    delayedRecovery: { version: 1, reason: "monitoring_gap_recovery" },
+  };
+  assert.equal(alertDeliveryDisposition(delayed).reason, "pon_delayed_recovery");
+  const apiLifecycle = {
+    ...pon,
+    kind: "market_lifecycle",
+    transactionHash: undefined,
+    blockNumber: undefined,
+    freshness: { ...pon.freshness, basis: "observedAt_continuous_coverage" },
+  };
+  apiLifecycle.tradingPriority = deriveTradingPriority(apiLifecycle, { nowMs: Date.parse(now) });
+  assert.equal(alertDeliveryDisposition(apiLifecycle).mode, "audit_only");
+  const unpaused = {
+    ...pon,
+    kind: "factory_unpaused",
+    token: undefined,
+  };
+  unpaused.tradingPriority = deriveTradingPriority(unpaused, { nowMs: Date.parse(now) });
+  assert.equal(unpaused.tradingPriority.target.value, pon.factory);
+  assert.equal(alertDeliveryDisposition(unpaused).reason, "pon_exact_onchain_realtime");
+});
+
 test("structured Binance product features are T1 while SDK and schema maintenance stay T3", () => {
   const githubFeature = {
     type: "github_module_update",
@@ -241,11 +486,16 @@ test("structured Binance product features are T1 while SDK and schema maintenanc
     addedSignals: ["[Binance MCP Server](/en/docs/agent-native/mcp-server/agentic.md)"],
     source: { id: "binance_developer_docs", url: "https://developers.binance.com/en/docs/llms.txt" },
     url: "https://developers.binance.com/en/docs/llms.txt",
+    publishedAt: "2026-09-02T01:30:00.000Z",
     observedAt: "2026-09-02T01:30:01.000Z",
   };
   const developerPriority = deriveTradingPriority(developerFeature);
   assert.equal(developerPriority.category, "binance_product");
   assert.equal(developerPriority.tier, "T1");
+
+  const missingSourceTime = copy(developerFeature);
+  delete missingSourceTime.publishedAt;
+  assert.equal(deriveTradingPriority(missingSourceTime).tier, "T2", "T1 requires a reliable fresh source time");
 
   const sdkMaintenance = {
     ...githubFeature,
@@ -389,7 +639,7 @@ test("MEME ARENA live lifecycle cannot be covered by an old OpenFour concept key
   assert.ok(focusNoveltyKeys(explicit).includes(producerKey), "a producer lifecycle key remains byte-stable");
 });
 
-test("T0/T1 cards are local deterministic two-field bilingual bundles and never wait for translation", async () => {
+test("T0/T1 cards are local deterministic compact bilingual bundles and never wait for translation", async () => {
   let translationCalls = 0;
   const config = {
     alertTranslationFetchImpl: async () => {
@@ -398,7 +648,7 @@ test("T0/T1 cards are local deterministic two-field bilingual bundles and never 
     },
     alertTranslationTimeoutMs: 50,
   };
-  for (const sourceEvent of [fixtures.marscoin, fixtures.fomoBuy]) {
+  for (const sourceEvent of [withInstrumentChange(fixtures.marscoin, { instrument: "MARSCOINUSDT" }), fixtures.fomoBuy]) {
     const event = withTradingPriority(sourceEvent);
     const bundle = await buildBilingualAlertBundle(config, event, [
       "official monitoring update",
@@ -408,13 +658,13 @@ test("T0/T1 cards are local deterministic two-field bilingual bundles and never 
     ].join("\n"));
     const rendered = renderBilingualTelegramText(bundle, true);
     assert.ok(["T0", "T1"].includes(bundle.priority.tier));
-    if (sourceEvent === fixtures.marscoin) {
+    if (sourceEvent.type === "binance_official_update") {
       assert.equal(bundle.priority.label.zh, "最高优先催化");
       assert.equal(bundle.priority.label.en, "Top-priority catalyst");
-      assert.match(bundle.zh.text, /上线 UTC=2026-09-02T03:00:00\.000Z/);
-      assert.match(bundle.en.text, /Launch UTC=2026-09-02T03:00:00\.000Z/);
+      assert.match(bundle.zh.text, /09-02 03:00 UTC/);
+      assert.match(bundle.en.text, /09-02 03:00 UTC/);
     }
-    if (sourceEvent === fixtures.fomoBuy) {
+    if (sourceEvent.type === "fomo_family_top_call") {
       assert.match(bundle.zh.text, /Buy \$1,250/);
       assert.match(bundle.en.text, /Buy \$1,250/);
     }
@@ -429,17 +679,18 @@ test("T0/T1 cards are local deterministic two-field bilingual bundles and never 
     assert.match(bundle.en.text, /^What changed: /m);
     assert.match(bundle.zh.text, /非自动交易/);
     assert.match(bundle.en.text, /no auto-trading/);
-    assert.ok(rendered.length <= 600, `card=${rendered.length}`);
+    assert.ok(rendered.length < 3_800, `card=${rendered.length}`);
+    assert.ok(rendered.split("\n").length <= 18, `card lines=${rendered.split("\n").length}`);
   }
   assert.equal(translationCalls, 0);
 });
 
-test("outbox drain orders T0>T1>T2>T3 and maps legacy strong/ordinary safely", async (t) => {
+test("outbox drain migrates old active priority and delivers only T0/T1 plus health", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "trading-priority-outbox-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
   const now = new Date();
   const iso = (offsetMs) => new Date(now.getTime() + offsetMs).toISOString();
-  const t0 = copy(fixtures.marscoin);
+  const t0 = withInstrumentChange(fixtures.marscoin, { instrument: "MARSCOINUSDT", launchAt: iso(60_000) });
   t0.publishedAt = iso(-2_000);
   t0.observedAt = iso(-1_000);
   t0.launchAt = iso(60_000);
@@ -449,16 +700,25 @@ test("outbox drain orders T0>T1>T2>T3 and maps legacy strong/ordinary safely", a
     platform: { id: "flap", name: "Flap" },
     changes: { newModules: ["Vault V3"] },
     strong: true,
+    publishedAt: iso(-950),
     observedAt: iso(-900),
   };
   const t2Legacy = copy(fixtures.marscoin);
   t2Legacy.eventKey = "priority-fixture:t2";
-  t2Legacy.signal = { scope: "exchange", category: "活动公告", labels: ["活动/奖励公告"], strong: false };
-  t2Legacy.title = "Binance Trading Campaign: Trade ABC and Share Rewards";
+  t2Legacy.signal = { scope: "exchange", category: "普通公告", labels: ["普通官方公告"], strong: false };
+  t2Legacy.title = "Binance Publishes an Ordinary Service Notice";
   t2Legacy.strong = false;
   t2Legacy.publishedAt = iso(-800);
   t2Legacy.observedAt = iso(-700);
   delete t2Legacy.launchAt;
+  t2Legacy.tradingPriority = {
+    version: 1,
+    schema: "news_trading_priority_v1",
+    deterministic: true,
+    tier: "T1",
+    rank: 3,
+    plan: { automaticExecution: false },
+  };
   const t3 = {
     type: "github_module_update",
     eventKey: "priority-fixture:t3",
@@ -545,15 +805,20 @@ test("outbox drain orders T0>T1>T2>T3 and maps legacy strong/ordinary safely", a
     telegramChatId: "",
     alertTelegramDeliveryMaxAgeMs: 7_200_000,
   });
-  assert.equal(count, 6);
+  assert.equal(count, 4);
   assert.deepEqual(
     delivered.map((event) => event.type === "fomo_monitor_health_update" ? "HEALTH" : event.tradingPriority.tier),
-    ["T0", "HEALTH", "T1", "T1", "T2", "T3"],
+    ["T0", "HEALTH", "T1", "T1"],
   );
   assert.equal(delivered[1].tradingPriority, undefined, "health keeps its closed non-trading schema");
   assert.deepEqual(delivered.slice(2, 4).map((event) => event.eventKey), ["priority-fixture:t1-older", "priority-fixture:t1"]);
-  assert.equal(delivered[2].tradingPriority.schema.endsWith(":legacy"), true);
-  assert.equal(delivered[4].tradingPriority.schema.endsWith(":legacy"), true);
+  assert.equal(delivered[2].tradingPriority.version, TRADING_PRIORITY_VERSION);
+  const persisted = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(persisted.events.t2.event.tradingPriority.version, TRADING_PRIORITY_VERSION);
+  assert.equal(persisted.events.t2.event.tradingPriority.tier, "T2", "old v1 T1 is recomputed instead of trusted");
+  assert.equal(persisted.events.t2.status, "suppressed");
+  assert.equal(persisted.events.t2.destinations.webhook.disabledReason, "policy_suppressed");
+  assert.equal(persisted.events.t3.status, "suppressed");
   assert.equal(legacyTradingPriority({ strong: true }).tier, "T1");
   assert.equal(legacyTradingPriority({ strong: false }).tier, "T2");
   assert.equal(withTradingPriority({ strong: true }, { legacy: true }).tradingPriority.tier, "T1");
@@ -576,6 +841,7 @@ test("pon.fun structural updates are T1, market/recovery updates are T2, and non
     factory,
     token: coin,
     contractAddress: coin,
+    blockTimestamp: "2026-09-02T04:00:00.000Z",
     observedAt: "2026-09-02T04:00:00.000Z",
     evidence: {
       factoryCodeHash: "0x4cb9795396b800a4b1e46f2e91a690ecf004ac0d52b059a7ef0e6b190af17384",
@@ -628,6 +894,7 @@ test("pon.fun structural updates are T1, market/recovery updates are T2, and non
     relevant: true,
     ponPriority: "T1",
     majorProductUpdate: true,
+    platformStructural: true,
     ponStage: "supply_burned",
   }), { nowMs });
   const ordinary = deriveTradingPriority(officialX({
@@ -655,6 +922,7 @@ test("pon.fun structural updates are T1, market/recovery updates are T2, and non
       relevant: true,
       ponPriority: "T1",
       majorProductUpdate: true,
+      platformStructural: true,
       ponStage: "supply_burned",
     }),
     delayedRecovery,
@@ -682,6 +950,7 @@ test("pon.fun structural updates are T1, market/recovery updates are T2, and non
       relevant: true,
       ponPriority: "T1",
       majorProductUpdate: true,
+      platformStructural: true,
       ponStage: "supply_burned",
     });
     mutate(spoof);

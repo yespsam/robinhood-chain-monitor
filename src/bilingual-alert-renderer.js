@@ -13,9 +13,12 @@ import {
 } from "./web3-alert-interpreter.js";
 import { isTradingPriority, tradingPriorityForEvent } from "./trading-priority.js";
 
-export const BILINGUAL_RENDER_VERSION = 17;
+export const BILINGUAL_RENDER_VERSION = 18;
 const MAX_CARD_LINES = 2;
 const MAX_LINE_LENGTH = 230;
+const MAX_DISPLAY_LINE_LENGTH = 138;
+const MAX_TARGET_LINE_LENGTH = 118;
+const MAX_TELEGRAM_NARRATIVE_LENGTH = 800;
 
 const EVENT_TITLES = {
   bsc_launchpad_update: "BSC launchpad structural update",
@@ -197,6 +200,7 @@ function normalizeTwoFieldLines(lines, language) {
 
 function protectedTerms(event) {
   const repositoryName = typeof event?.repository === "string" ? event.repository.split("/").filter(Boolean).at(-1) : null;
+  const atom = (label, value) => value == null || value === "" ? null : `${label}=${value}`;
   return [
     event?.project?.name,
     event?.project?.id,
@@ -206,8 +210,7 @@ function protectedTerms(event) {
     typeof event?.launchpad === "string" ? event.launchpad : null,
     event?.chain?.name,
     event?.chain?.slug,
-    event?.chain?.id,
-    event?.chainId,
+    atom("chainId", event?.chain?.id ?? event?.chainId),
     event?.tokenSymbol,
     event?.repository,
     repositoryName,
@@ -223,21 +226,21 @@ function protectedTerms(event) {
     event?.walletAddress,
     event?.selector,
     event?.entrySelector,
-    event?.templateId,
-    event?.presetId,
-    event?.poolId,
+    atom("templateId", event?.templateId),
+    atom("presetId", event?.presetId),
+    atom("poolId", event?.poolId),
     event?.launchAt,
     event?.launchTime,
     event?.tradingStartsAt,
     event?.listingAt,
     event?.callId,
     event?.stableId,
-    event?.tokenVersion,
-    event?.mode?.id,
-    event?.mode?.templateId,
-    event?.mode?.presetId,
-    event?.signal?.modeId,
-    event?.signal?.tokenVersion,
+    atom("tokenVersion", event?.tokenVersion),
+    atom("modeId", event?.mode?.id),
+    atom("templateId", event?.mode?.templateId),
+    atom("presetId", event?.mode?.presetId),
+    atom("modeId", event?.signal?.modeId),
+    atom("tokenVersion", event?.signal?.tokenVersion),
     bscModeFacts(event)?.name,
     event?.tokens?.[0]?.metadata?.name,
     event?.tokens?.[0]?.metadata?.symbol,
@@ -253,7 +256,12 @@ function protectedTerms(event) {
     ...collectTechnicalEventLiterals(event),
     "Factory", "VaultFactory", "Hook", "CREATE", "CREATE2", "BSC", "BNB", "GMGN", "Fomo", "Flap", "Four.Meme", "Uniswap", "Robinhood",
     "Binance Wallet", "Binance Charity", "Giggle", "Giggle Academy", "Trade Thesis", "TaxToken9",
-  ].filter(Boolean);
+  ]
+    .map((value) => String(value || "").trim())
+    // A bare scalar such as version=1 collected as just `1` can replace every
+    // digit in an amount or date with a translation marker. Numeric semantics
+    // are validated separately; protect only contextual technical atoms.
+    .filter((value) => value.length >= 2 && !/^[+-]?\d+(?:[.,]\d+)*$/u.test(value));
 }
 
 function technicalNumericLiterals(value) {
@@ -264,6 +272,16 @@ function technicalNumericLiterals(value) {
 
 function technicalLiterals(value) {
   const source = String(value || "");
+  const slashLiterals = (source.match(/\b[A-Za-z][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9][A-Za-z0-9_.-]*)+\b/g) || [])
+    .filter((literal) => {
+      const parts = literal.split("/");
+      return parts.length >= 3
+        || /^(?:src|lib|test|tests|docs|api|packages?|apps?|deploy)\//i.test(literal)
+        || literal.includes("-")
+        || /\.[a-z0-9]{1,8}$/i.test(parts.at(-1) || "");
+    });
+  const hexadecimalLiterals = (source.match(/\b[a-fA-F0-9]{7,40}\b/g) || [])
+    .filter((literal) => /[a-f]/i.test(literal) && /\d/.test(literal));
   const patterns = [
     /https?:\/\/[^\s<>"']+/gi,
     /\b0x[a-fA-F0-9]{8,}\b/g,
@@ -271,13 +289,14 @@ function technicalLiterals(value) {
     /#[A-Za-z][A-Za-z0-9_]{1,63}\b/g,
     /\$[A-Z][A-Z0-9]{1,11}\b/g,
     /\bv\d+(?:\.\d+){0,3}(?:-[A-Za-z0-9.-]+)?\b/gi,
-    /\b[a-fA-F0-9]{7,40}\b/g,
-    /\b[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\b/g,
+    /\b\d+\.\d+\.\d+(?:\.\d+)?(?:-[A-Za-z0-9.-]+)?\b/g,
     /\b[A-Za-z_$][A-Za-z0-9_$]*\s*\(\)/g,
     /\b[A-Za-z_$][A-Za-z0-9_$]*(?=\s*\()/g,
   ];
   const literals = [...new Set([
     ...patterns.flatMap((pattern) => source.match(pattern) || []),
+    ...hexadecimalLiterals,
+    ...slashLiterals,
     ...technicalNumericLiterals(source),
   ])]
     .sort((left, right) => right.length - left.length);
@@ -408,12 +427,69 @@ function telegramNewsSourceMarker(event) {
   return `@${telegramNewsUsername(event)}#${telegramNewsMessageId(event)}`;
 }
 
+function telegramNewsCategoryLabel(value, language = "zh") {
+  const source = oneLine(value, 42);
+  const key = source.toLowerCase().replace(/[\s_-]+/g, " ").trim();
+  const labels = {
+    governance: ["治理", "Governance"],
+    security: ["安全", "Security"],
+    ai: ["AI", "AI"],
+    macro: ["宏观", "Macro"],
+    market: ["市场", "Market"],
+    funding: ["融资", "Funding"],
+    product: ["产品", "Product"],
+    listing: ["上币/下架", "Listing/delisting"],
+    protocol: ["协议", "Protocol"],
+    "协议更新": ["协议更新", "Protocol update"],
+    "ai agent": ["AI Agent", "AI Agent"],
+  };
+  const mapped = labels[key];
+  if (mapped) return mapped[language === "zh" ? 0 : 1];
+  if (!source) return language === "zh" ? "未分类" : "Unclassified";
+  if (language === "en" && /[\u3400-\u9fff]/u.test(source)) return "Unclassified";
+  return source;
+}
+
+function dominantNarrativeLanguage(...values) {
+  const source = values.flat().map((value) => String(value || "")).join(" ");
+  const chinese = (source.match(/[\u3400-\u9fff]/g) || []).length;
+  const latin = (source.match(/[A-Za-z]/g) || []).length;
+  if (chinese >= 2 && chinese >= Math.max(2, Math.floor(latin * 0.18))) return "zh";
+  if (latin >= 4) return "en";
+  return chinese ? "zh" : "en";
+}
+
+function publishedFomoCallDetails(event) {
+  if (event?.type !== "fomo_family_top_call"
+    || !["fomo_published_call", "fomo_x_call"].includes(event?.signalKind)) return null;
+  const rawSource = event?.thesis?.text || event?.body;
+  const source = oneLine(rawSource, 112);
+  if (!source) return null;
+  const sourceLanguage = dominantNarrativeLanguage(source);
+  const target = [event?.tokenSymbol, event?.marketSymbol, event?.symbol, event?.token, event?.contractAddress]
+    .map((value) => String(value || "").trim())
+    .find(Boolean) || null;
+  return {
+    source,
+    sourceLanguage,
+    target,
+    sourceField: event?.thesis?.text ? "thesis.text" : "body",
+    zh: sourceLanguage === "zh" ? `观点：${source}` : `英文原文：${source}`,
+    en: sourceLanguage === "en" ? `Thesis: ${source}` : `Chinese original: ${source}`,
+  };
+}
+
 function telegramNewsFacts(event, language = "zh") {
   const zh = language === "zh";
+  const headline = oneLine(event?.news?.headline, MAX_TELEGRAM_NARRATIVE_LENGTH)
+    || (zh ? "标题未取得" : "Headline unavailable");
+  const summary = oneLine(event?.news?.summary, MAX_TELEGRAM_NARRATIVE_LENGTH);
   return {
-    category: oneLine(event?.news?.category, 42) || (zh ? "未分类" : "Unclassified"),
-    summary: oneLine(event?.news?.summary || event?.news?.headline, 112)
-      || (zh ? "摘要未取得" : "Summary unavailable"),
+    category: telegramNewsCategoryLabel(event?.news?.category, language),
+    headline,
+    summary: summary && summary !== headline
+      ? summary
+      : (zh ? "暂无独立摘要" : "No separate summary"),
     sourceMarker: telegramNewsSourceMarker(event),
   };
 }
@@ -935,25 +1011,38 @@ function ponFunFocusEvidence(event) {
   ].filter(Boolean).slice(0, 2);
 }
 
-function ponFunFocusStage(event, language = "zh") {
+function ponFunRiskBoundary(event, language = "zh") {
+  const zh = language === "zh";
+  const stockLinked = ["market_created", "market_lifecycle", "stock_listing"].includes(ponFunKind(event));
+  if (stockLinked) return zh
+    ? "coin 不是股票；非自动交易"
+    : "coin is not the stock; no automatic trading";
+  return zh ? "非自动交易" : "no automatic trading";
+}
+
+function ponFunVerificationFact(event, language = "zh") {
   const zh = language === "zh";
   if (event?.delayedRecovery?.version === 1
     && event.delayedRecovery?.reason === "monitoring_gap_recovery") {
     const lag = ponFunRecoveryLag(event.delayedRecovery.lagMs, language);
     return zh
-      ? `监控缺口恢复后补报 · 延迟 ${lag} · 勿追价；原始证据已保留；非自动交易`
-      : `Recovered after a monitoring gap · ${lag} late · do not chase; original proof retained; no auto-trading`;
+      ? `监控缺口恢复后补报 · 延迟 ${lag} · 勿追价；原始证据已保留`
+      : `Recovered after a monitoring gap · ${lag} late · do not chase; original proof retained`;
   }
-  const stockLinked = ["market_created", "market_lifecycle", "stock_listing"].includes(ponFunKind(event));
   if (event?.type === "twitter_update") return zh
-    ? `官方 X 身份已核；${event?.signal?.transactionHash ? "交易仍需链上复核" : "链上结果待确认"}；非自动交易`
-    : `Official X identity checked; ${event?.signal?.transactionHash ? "transaction still needs on-chain review" : "on-chain result pending"}; no auto-trading`;
+    ? `官方 X 身份已核；${event?.signal?.transactionHash ? "交易仍需链上复核" : "链上结果待确认"}`
+    : `Official X identity checked; ${event?.signal?.transactionHash ? "transaction still needs on-chain review" : "on-chain result pending"}`;
   if (event?.transactionHash) return zh
-    ? `Factory receipt 已核；${stockLinked ? "coin 不是股票；" : ""}非自动交易`
-    : `Factory receipt checked; ${stockLinked ? "coin is not a share; " : ""}no auto-trading`;
+    ? "Factory receipt 已核"
+    : "Factory receipt checked";
   return zh
-    ? `官方 API 与 Factory 指纹绑定；${stockLinked ? "coin 不是股票；" : ""}非自动交易`
-    : `Official API bound to Factory fingerprint; ${stockLinked ? "coin is not a share; " : ""}no auto-trading`;
+    ? "官方 API 与 Factory 指纹绑定"
+    : "Official API bound to Factory fingerprint";
+}
+
+function ponFunFocusStage(event, language = "zh") {
+  return [ponFunVerificationFact(event, language), ponFunRiskBoundary(event, language)]
+    .filter(Boolean).join(language === "zh" ? "；" : "; ");
 }
 
 function focusProject(event) {
@@ -1019,6 +1108,8 @@ function binanceIntervalHours(value) {
 function binanceAnnouncementDetails(event) {
   if (event?.type !== "binance_official_update" || event?.kind !== "announcement") return null;
   const persisted = event?.announcementDetails || event?.currentSnapshot?.details;
+  if (persisted?.kind === "instrument_change" && Array.isArray(persisted?.instruments)
+    && persisted.instruments.some((item) => String(item?.symbol || "").trim())) return persisted;
   if (persisted?.kind === "funding_interval" && persisted?.instrument
     && Number(persisted?.previousHours) > 0 && Number(persisted?.currentHours) > 0) return persisted;
   const content = [
@@ -1112,6 +1203,40 @@ function beijingMinute(value) {
     hourCycle: "h23",
   }).formatToParts(date).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
   return `${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+}
+
+function utcMinute(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(5, 16).replace("T", " ");
+}
+
+function localizedCstTime(value, language = "zh") {
+  const source = String(value || "").trim();
+  if (!source) return language === "zh" ? "时间未取得" : "Time unavailable";
+  if (/时间未取得|未取得|unavailable/iu.test(source)) {
+    return language === "zh" ? "时间未取得" : "Time unavailable";
+  }
+  if (/\bCST\b|北京时间/iu.test(source)) {
+    const rendered = source.replace(/北京时间/gu, "CST");
+    return language === "en" ? englishDelay(rendered) : rendered;
+  }
+  const zoned = source.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:?\d{2})/u)?.[0];
+  if (zoned) {
+    const cst = beijingMinute(zoned);
+    const utc = utcMinute(zoned);
+    const suffix = source.replace(zoned, "").replace(/^\s*[·|｜]\s*/u, "").trim();
+    const base = cst && utc ? `${cst} CST (${utc} UTC)` : source;
+    const localizedSuffix = language === "en" ? englishDelay(suffix) : suffix;
+    return [base, localizedSuffix].filter(Boolean).join(" · ");
+  }
+  const local = source.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?/u);
+  if (local) {
+    const suffix = source.slice((local.index || 0) + local[0].length).replace(/^\s*[·|｜]\s*/u, "").trim();
+    const localizedSuffix = language === "en" ? englishDelay(suffix) : suffix;
+    return [`${local[2]}-${local[3]} ${local[4]}:${local[5]} CST`, localizedSuffix].filter(Boolean).join(" · ");
+  }
+  return language === "en" ? englishDelay(source) : source;
 }
 
 function flapAgenticFirstTokenCandidate(event) {
@@ -1770,8 +1895,19 @@ function uniswapGithubReleaseFocus(event, language = "zh") {
     : `${version || "This release"}: release details unavailable`;
 }
 
-function focusKey(event, changeModel, language = "zh") {
+function focusKey(event, changeModel, language = "zh", priority = null) {
   const zh = language === "zh";
+  if (priority?.category === "binance_security_emergency") {
+    const text = [event?.title, event?.signal?.headline, event?.message].filter(Boolean).join(" ");
+    const actions = [
+      /withdraw|提现/iu.test(text) ? (zh ? "提现" : "withdrawals") : null,
+      /deposit|充值/iu.test(text) ? (zh ? "充值" : "deposits") : null,
+      /trading|交易/iu.test(text) ? (zh ? "交易" : "trading") : null,
+    ].filter(Boolean);
+    return zh
+      ? `Binance 确认安全事件${actions.length ? `并暂停${actions.join("/")}` : ""}`
+      : `Binance confirmed a security incident${actions.length ? ` and suspended ${actions.join("/")}` : ""}`;
+  }
   if (isPonFunRenderEvent(event)) return ponFunFocusKey(event, language);
   if (flapAgenticFirstTokenCandidate(event)) {
     const token = firstTokenLabel(event) || "chAIn";
@@ -1822,8 +1958,12 @@ function focusKey(event, changeModel, language = "zh") {
       const label = event?.signalKind === "fomo_x_call"
         ? (zh ? "X 喊单" : "X call")
         : (zh ? "新喊单" : "New call");
-      const source = firstFocusClause(event?.thesis?.text || event?.body || (zh ? "发布新喊单" : "Published a new call"));
-      return `${handle ? `@${handle} ` : ""}${label}${zh ? "：" : ": "}${source}`;
+      const target = [event?.tokenSymbol, event?.marketSymbol, event?.symbol, event?.token, event?.contractAddress]
+        .map((value) => String(value || "").trim())
+        .find(Boolean);
+      return zh
+        ? `${handle ? `@${handle} ` : ""}${label}${target ? ` · 标的 ${target}` : ""}`
+        : `${handle ? `@${handle} ` : ""}${label}${target ? ` · target ${target}` : ""}`;
     }
     return fomoInferredKey(event, language);
   }
@@ -1851,7 +1991,15 @@ function focusKey(event, changeModel, language = "zh") {
     : "KOL can publish a post-buy Trade Thesis";
 
   const binanceOfficial = interpretBinanceOfficialUpdate(event, language);
-  if (binanceOfficial) return binanceOfficial;
+  if (binanceOfficial) {
+    // The interpreter's legacy Alpha fallback is Chinese in both directions.
+    // With no structured target, state the unresolved boundary locally rather
+    // than leaking 新代币 into English or implying that an asset was parsed.
+    if (/新代币/u.test(binanceOfficial)) {
+      return zh ? "Binance Alpha 上新；标的待解析" : "Binance Alpha listing; unresolved target";
+    }
+    return binanceOfficial;
+  }
 
   const snapshotBefore = event?.previousSnapshot;
   const snapshotAfter = event?.currentSnapshot;
@@ -2185,8 +2333,8 @@ function fomoSafetyBoundary(event, language) {
   const zh = language === "zh";
   const security = securityDecision(event);
   if (security === "pass") return zh ? "安全初筛通过，非买入建议" : "Safety screened; not a buy recommendation";
-  if (security === "block") return zh ? "本地安全门已拦截" : "Blocked by local safety gate";
-  return zh ? "安全状态待核" : "Safety pending";
+  if (security === "block") return zh ? "本地安全门已拦截，非买入建议" : "Blocked by local safety gate; not a buy recommendation";
+  return zh ? "安全状态待核，非买入建议" : "Safety pending; not a buy recommendation";
 }
 
 function fomoPositionTier(event, language) {
@@ -2206,39 +2354,45 @@ function fomoPositionTier(event, language) {
   return zh ? "来源仓位摘要已核验" : "Source position summary verified";
 }
 
-function fomoStage(event, language) {
+function fomoVerificationFact(event, language) {
   const zh = language === "zh";
   const separator = zh ? "；" : "; ";
-  const safety = fomoSafetyBoundary(event, language);
   if (event?.signalKind === "high_profit_high_winrate_wallet_buy") {
-    const position = fomoPositionTier(event, language);
-    return zh
-      ? `链上买入确认${separator}${position}${separator}GMGN公开画像，归属未证${separator}${safety}`
-      : `On-chain buy confirmed${separator}${position}${separator}public GMGN profile, owner unverified${separator}${safety}`;
+    return [
+      zh ? "链上买入确认" : "On-chain buy confirmed",
+      fomoPositionTier(event, language),
+      zh ? "GMGN 公开画像；钱包归属未验证" : "Public GMGN profile; wallet ownership unverified",
+    ].join(separator);
   }
   if (event?.signalKind === "fomo_x_call") {
     const observed = event?.walletAttribution?.status === "observed" && event?.walletAttribution?.verified === false;
     const identity = observed
-      ? (zh ? "GMGN 观测关联" : "GMGN link observed")
+      ? (zh ? "GMGN 钱包关联仅观测" : "GMGN wallet link observed")
       : (zh ? "FomoScan 资料绑定" : "FomoScan profile link");
-    const compactSafety = securityDecision(event) === "pass"
-      ? (zh ? "安全通过，非买入建议" : "Safety passed; not a buy recommendation")
-      : safety;
-    return `${zh ? "X 核验，非 Fomo 官方" : "X verified, not Fomo-official"}${separator}${identity}${separator}${compactSafety}`;
+    return [
+      zh ? "X 已核；非 Fomo 官方" : "X verified; not Fomo-official",
+      identity,
+    ].join(separator);
   }
   if (event?.signalKind === "fomo_published_call") {
     const official = event?.source?.trust === "official_authenticated_api";
-    const source = official
-      ? (zh ? "Fomo 官方认证 Feed 发布" : "Published by the authenticated Fomo feed")
-      : (zh ? "FomoScan 可信中继发布，非 Fomo 官方 Feed" : "Published by the trusted FomoScan relay, not the official Fomo feed");
-    return `${source}${separator}${safety}`;
+    return official
+      ? (zh ? "Fomo 认证 Feed 发布" : "Authenticated Fomo feed")
+      : (zh ? "FomoScan 可信中继；非 Fomo 官方" : "Trusted FomoScan relay; not Fomo-official");
   }
   const convergence = /convergence/i.test(String(event?.signalKind || ""));
-  const inference = zh ? "链上推断，非 Fomo 官方喊单" : "On-chain inference, not an official Fomo call";
-  const tier = convergence
-    ? (zh ? "多钱包链上聚合" : "Multi-wallet on-chain aggregate")
-    : fomoPositionTier(event, language);
-  return `${inference}${separator}${tier}${separator}${safety}`;
+  return [
+    zh ? "链上推断，非 Fomo 官方喊单" : "On-chain inference, not an official Fomo call",
+    convergence
+      ? (zh ? "多钱包链上聚合" : "Multi-wallet on-chain aggregate")
+      : fomoPositionTier(event, language),
+  ].join(separator);
+}
+
+function fomoStage(event, language) {
+  const zh = language === "zh";
+  const separator = zh ? "；" : "; ";
+  return `${fomoVerificationFact(event, language)}${separator}${fomoSafetyBoundary(event, language)}`;
 }
 
 function bscStage(event, language) {
@@ -2352,8 +2506,7 @@ function focusTime(event, sourceTime, language = "zh") {
     return language === "zh" ? "原文时间未取得" : "Source publication time unavailable";
   }
   const value = labelledValue(sourceTime) || eventTime(event) || (language === "zh" ? "时间未取得" : "Time unavailable");
-  if (language !== "en") return value;
-  return englishDelay(value);
+  return localizedCstTime(value, language);
 }
 
 function buildFocusModel(event, changeModel, sourceLines, tradingPriority, showPriority) {
@@ -2370,7 +2523,7 @@ function buildFocusModel(event, changeModel, sourceLines, tradingPriority, showP
     };
     const recovered = event.transition === "recovered";
     const updated = event.transition === "updated";
-    const render = (language) => {
+    const renderFacts = (language) => {
       const zh = language === "zh";
       const smart = summary.smartMoney || {};
       const x = summary.x || {};
@@ -2380,23 +2533,36 @@ function buildFocusModel(event, changeModel, sourceLines, tradingPriority, showP
         : updated
           ? (zh ? "严重降级范围已扩大" : "Critical degradation scope expanded")
           : (zh ? "持续严重降级已确认" : "Sustained critical degradation confirmed");
-      const separator = zh ? "｜" : " | ";
       const open = zh ? "（" : " (";
       const close = zh ? "）" : ")";
-      const colon = zh ? "：" : ": ";
-      return `${prefix}${colon}Smart Money ${healthLabel(smart.status, language)}${open}admitted ${Number(smart.admitted || 0)} / fresh ${Number(smart.fresh || 0)} / LKG ${Number(smart.lastKnownGood || 0)}${close}${separator}BSC ${healthLabel(summary.bsc?.status, language)}${separator}X ${healthLabel(x.status, language)}${open}live ${Number(x.live || 0)}/${Number(x.eligible || 0)}${close}${separator}Thesis ${healthLabel(summary.thesis?.status, language)}${separator}Fomo outbox ${healthLabel(outbox.status, language)}${open}pending ${Number(outbox.pending || 0)} / failed ${Number(outbox.failed || 0)}${close}`;
+      return {
+        transition: prefix,
+        smartMoney: `Smart Money ${healthLabel(smart.status, language)}${open}${zh ? "准入" : "admitted"} ${Number(smart.admitted || 0)} / ${zh ? "新鲜" : "fresh"} ${Number(smart.fresh || 0)} / LKG ${Number(smart.lastKnownGood || 0)}${close}`,
+        network: `BSC ${healthLabel(summary.bsc?.status, language)} · X ${healthLabel(x.status, language)}${open}${zh ? "在线" : "live"} ${Number(x.live || 0)}/${Number(x.eligible || 0)}${close}`,
+        pipeline: `Thesis ${healthLabel(summary.thesis?.status, language)} · Fomo outbox ${healthLabel(outbox.status, language)}${open}${zh ? "待发" : "pending"} ${Number(outbox.pending || 0)} / ${zh ? "失败" : "failed"} ${Number(outbox.failed || 0)}${close}`,
+      };
     };
+    const zhHealth = renderFacts("zh");
+    const enHealth = renderFacts("en");
+    const healthText = (facts, language) => [facts.transition, facts.smartMoney, facts.network, facts.pipeline]
+      .join(language === "zh" ? "｜" : " | ");
     return {
       eventType: event.type,
       priority: tradingPriority,
       showPriority,
       platform: { zh: "Fomo 监控 · 聚合健康", en: "Fomo Monitor · Aggregate health" },
-      health: { zh: render("zh"), en: render("en") },
+      health: { zh: healthText(zhHealth, "zh"), en: healthText(enHealth, "en") },
+      healthFacts: { zh: zhHealth, en: enHealth },
+      time: {
+        zh: focusTime(event, timeLine, "zh"),
+        en: focusTime(event, timeLine, "en"),
+      },
     };
   }
   if (event?.type === "telegram_news_update") {
     const zhFacts = telegramNewsFacts(event, "zh");
     const enFacts = telegramNewsFacts(event, "en");
+    const sourceLanguage = dominantNarrativeLanguage(event?.news?.headline, event?.news?.summary);
     const occurredAt = event?.sourceOccurredAt || eventTime(event) || "时间未取得";
     return {
       eventType: event.type,
@@ -2408,35 +2574,80 @@ function buildFocusModel(event, changeModel, sourceLines, tradingPriority, showP
       },
       title: { zh: "频道线索", en: "Channel lead" },
       key: {
-        zh: `分类: ${zhFacts.category} · ${zhFacts.summary}`,
-        en: `Classification: ${enFacts.category} · ${enFacts.summary}`,
+        zh: zhFacts.headline,
+        en: enFacts.headline,
       },
-      evidence: [{ zh: zhFacts.sourceMarker, en: enFacts.sourceMarker }],
+      evidence: [
+        { zh: `摘要：${zhFacts.summary}`, en: `Summary: ${enFacts.summary}` },
+        { zh: `类型：${zhFacts.category} · ${zhFacts.sourceMarker}`, en: `Type: ${enFacts.category} · ${enFacts.sourceMarker}` },
+      ],
       stage: {
         zh: "公开频道观察，待官方核实",
         en: "Public-channel observation; awaiting official verification",
       },
       time: {
-        zh: occurredAt,
-        en: occurredAt === "时间未取得" ? "Time unavailable" : englishDelay(occurredAt),
+        zh: localizedCstTime(occurredAt, "zh"),
+        en: localizedCstTime(occurredAt, "en"),
       },
       telegramNews: {
         sourceMarker: zhFacts.sourceMarker,
         messageUrl: String(event?.messageUrl || ""),
+        sourceLanguage,
+        headline: { zh: zhFacts.headline, en: enFacts.headline },
+        summary: { zh: zhFacts.summary, en: enFacts.summary },
+        category: { zh: zhFacts.category, en: enFacts.category },
       },
     };
   }
   const rawPlatform = isGithubSkillUpdate(event) ? "Binance Skills" : focusProject(event);
-  const platform = rawPlatform === "监控" ? { zh: "监控", en: "Monitor" } : { zh: rawPlatform, en: rawPlatform };
+  const profitableWallet = event?.type === "fomo_family_top_call"
+    && event?.signalKind === "high_profit_high_winrate_wallet_buy";
+  const platform = profitableWallet
+    ? { zh: rawPlatform, en: "High-profit/high-win-rate public wallet" }
+    : rawPlatform === "监控" ? { zh: "监控", en: "Monitor" } : { zh: rawPlatform, en: rawPlatform };
+  const announcementDetails = binanceAnnouncementDetails(event);
+  const callThesis = publishedFomoCallDetails(event);
+  const fomo = event?.type === "fomo_family_top_call"
+    ? {
+        verification: {
+          zh: fomoVerificationFact(event, "zh"),
+          en: fomoVerificationFact(event, "en"),
+        },
+        risk: {
+          zh: fomoSafetyBoundary(event, "zh"),
+          en: fomoSafetyBoundary(event, "en"),
+        },
+      }
+    : null;
+  const pon = isPonFunRenderEvent(event)
+    ? {
+        verification: {
+          zh: ponFunVerificationFact(event, "zh"),
+          en: ponFunVerificationFact(event, "en"),
+        },
+        risk: {
+          zh: ponFunRiskBoundary(event, "zh"),
+          en: ponFunRiskBoundary(event, "en"),
+        },
+      }
+    : null;
   return {
+    eventType: event?.type,
     priority: tradingPriority,
     showPriority,
     platform,
     title: { zh: focusTitle(event, "zh"), en: focusTitle(event, "en") },
-    key: { zh: focusKey(event, changeModel, "zh"), en: focusKey(event, changeModel, "en") },
+    key: {
+      zh: focusKey(event, changeModel, "zh", tradingPriority),
+      en: focusKey(event, changeModel, "en", tradingPriority),
+    },
     evidence: selectEvidenceForCard(focusEvidence(event)),
     stage: { zh: focusStage(event, "zh", sourceStatus), en: focusStage(event, "en", sourceStatus) },
     time: { zh: focusTime(event, timeLine, "zh"), en: focusTime(event, timeLine, "en") },
+    ...(announcementDetails?.kind === "instrument_change" ? { instrumentChange: announcementDetails } : {}),
+    ...(callThesis ? { callThesis } : {}),
+    ...(fomo ? { fomo } : {}),
+    ...(pon ? { pon } : {}),
   };
 }
 
@@ -2445,16 +2656,53 @@ function tradingBrief(priority, language = "zh") {
   const plan = priority?.plan || {};
   const conclusion = plan.conclusion?.[language] || (zh ? "不做" : "Do not trade");
   if (["T0", "T1"].includes(priority?.tier)) {
+    const perpetualMarket = priority.category === "binance_market_catalyst"
+      && /(?:永续盘口|永续下架|资金费率|基差|Perpetual order book|Perpetual delisting|funding|basis)/iu.test([
+        plan.capitalPath?.zh,
+        plan.capitalPath?.en,
+      ].filter(Boolean).join(" "));
+    const tradFiPerpetual = perpetualMarket
+      && /(?:现货股票|cash equity)/iu.test([plan.risk?.zh, plan.risk?.en].filter(Boolean).join(" "));
+    const perpetualDelist = perpetualMarket
+      && /(?:永续下架|perpetual delisting)/iu.test([plan.mainline?.zh, plan.mainline?.en].filter(Boolean).join(" "));
     const compact = priority.category === "pon_structural"
       ? {
           zh: ["平台注意力→后续市场", "标的+流动性+可卖性", "回滚/无承接"],
           en: ["platform attention→markets", "target+liquidity+sellability", "rollback/no support"],
         }
+      : priority.category === "binance_security_emergency"
+        ? {
+            zh: ["平台风险→充提/交易/流动性", "核对范围+链上异常+恢复条件", "未恢复/风险扩大"],
+            en: ["venue risk→funding/trading/liquidity", "verify scope+on-chain anomalies+recovery", "not recovered/risk expands"],
+          }
       : priority.category === "binance_market_catalyst"
-      ? {
-          zh: ["现货→合约", "量价", "无承接"],
-          en: ["spot→contract", "price-volume", "no support"],
-        }
+      ? perpetualMarket
+        ? perpetualDelist
+          ? {
+              zh: ["永续下架→仓位/保证金/结算", "不新增仓位+核对生效", "未平仓/结算异常"],
+              en: ["perpetual delist→position/margin/settlement", "no new position+verify timing", "open positions/settlement risk"],
+            }
+          : tradFiPerpetual
+            ? {
+                zh: ["永续→深度/持仓/资金费率/基差", "开盘深度+成交+持仓", "永续≠股票/深度不足"],
+                en: ["perpetual→depth/OI/funding/basis", "depth+volume+OI", "perpetual≠stock/weak depth"],
+              }
+            : {
+                zh: ["永续→深度/持仓/资金费率", "开盘深度+成交+持仓", "深度不足/费率失真"],
+                en: ["perpetual→depth/OI/funding", "depth+volume+OI", "weak depth/distorted funding"],
+              }
+        : {
+            zh: [
+              oneLine(plan.capitalPath?.zh || "现货开盘→成交深度与价格发现", 70),
+              oneLine(plan.entryCondition?.zh || "核对成交深度与价格发现", 70),
+              oneLine(plan.invalidation?.zh || "深度不足或价格失真", 58),
+            ],
+            en: [
+              oneLine(plan.capitalPath?.en || "Spot launch→trading depth and price discovery", 70),
+              oneLine(plan.entryCondition?.en || "Verify trading depth and price discovery", 70),
+              oneLine(plan.invalidation?.en || "Weak depth or distorted pricing", 58),
+            ],
+          }
       : priority.category === "binance_product"
         ? {
             zh: ["产品→资金入口", "标的+采用", "无直接资金流"],
@@ -2485,11 +2733,30 @@ function priorityFlashTime(value, language = "zh", priority = null) {
     && priority.window.launchAt) {
     const launchAt = new Date(priority.window.launchAt);
     if (!Number.isNaN(launchAt.getTime())) {
-      const iso = launchAt.toISOString();
-      return language === "zh" ? `上线 UTC=${iso}` : `Launch UTC=${iso}`;
+      const cst = beijingMinute(launchAt);
+      const utc = launchAt.toISOString().slice(5, 16).replace("T", " ");
+      return language === "zh"
+        ? `开盘=${cst} CST（${utc} UTC）`
+        : `Launch=${cst} CST (${utc} UTC)`;
     }
   }
   const source = String(value || "");
+  // focusTime() may already have converted the source instant to an explicit
+  // CST/UTC pair. Preserve that date and zone instead of reducing it to a
+  // bare HH:mm clock below.
+  if (/\bCST\b|北京时间/iu.test(source)) {
+    return language === "zh" ? `发生=${source}` : `Occurred=${source}`;
+  }
+  const isoInstant = source.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})/u)?.[0];
+  if (isoInstant) {
+    const cst = beijingMinute(isoInstant);
+    if (cst) return language === "zh" ? `发生=${cst} CST` : `Occurred=${cst} CST`;
+  }
+  const localMinute = source.match(/(?:^|\s)(\d{4})-(\d{2})-(\d{2})\s+(\d{2}:\d{2})/u);
+  if (localMinute) {
+    const cst = `${localMinute[2]}-${localMinute[3]} ${localMinute[4]}`;
+    return language === "zh" ? `发生=${cst} CST` : `Occurred=${cst} CST`;
+  }
   const clock = source.match(/(?:^|[T\s])(\d{2}:\d{2})(?::\d{2})?/u)?.[1];
   if (clock) return language === "zh" ? `时效=${clock}` : `Time:${clock}`;
   return language === "zh" ? "时效=见证据" : "Time:see evidence";
@@ -2509,6 +2776,7 @@ function renderFocusLines(focusModel, language = "zh") {
   const separator = zh ? "｜" : " | ";
   const changed = [
     oneLine(focusModel.key[language], 10_000),
+    focusModel.callThesis?.[language] ? oneLine(focusModel.callThesis[language], 10_000) : null,
     evidence.join(" · ") || (zh ? "官方来源" : "Official source"),
     focusModel.showPriority ? tradingBrief(focusModel.priority, language) : null,
     oneLine(focusModel.stage[language], 10_000),
@@ -2522,9 +2790,10 @@ function renderFocusLines(focusModel, language = "zh") {
   ];
 }
 
-// The bilingual envelope plus both internal body line breaks stays below 600
-// when the two localized blocks together remain within this budget.
-const TWO_FIELD_COMBINED_BLOCK_BUDGET = 549;
+// Keep the persisted retry bundle compact, but do not sacrifice the event
+// mechanism or an exact target merely to preserve the retired 600-character
+// display contract. Telegram delivery expands this into bounded fact lines.
+const TWO_FIELD_COMBINED_BLOCK_BUDGET = 620;
 
 function compactTextKeepingRequired(value, maximum, required = []) {
   const source = String(value || "");
@@ -2742,7 +3011,12 @@ function normalizePublishedCallChineseFallback(lines, baseLines, event, status) 
         .replace(/^英文原文\s*[:：]\s*/u, "");
     }
     if (!publishedCall) return value;
-    if (/英文原文[:：]/u.test(value)) return value.replace(/英文原文\s*[:：]\s*/u, "原文：");
+    // Published/X calls are rendered locally. Their explicit 原文 label is a
+    // fact about provenance, not a translation-failure wrapper around the
+    // whole card, so keep it attached to the bounded thesis.
+    if (/(?:英文原文|观点)[:：]/u.test(value)) {
+      return value.replace(/英文原文\s*:\s*/u, "英文原文：");
+    }
     const sourceNarrative = String(event?.thesis?.text || event?.body || "").trim();
     const sourceFocus = firstFocusClause(sourceNarrative);
     const sourceLatin = (sourceNarrative.match(/[A-Za-z]/g) || []).length;
@@ -2789,32 +3063,202 @@ function telegramNewsLeadWithRequiredLiterals(line, required, fixedLines, maximu
   return output;
 }
 
-function finalizeTelegramNewsLines(lines, baseLines, language, status, required) {
+function telegramSourceNarrativeResult(focusModel, language) {
+  const sourceLanguage = focusModel.telegramNews?.sourceLanguage || "en";
+  return {
+    lines: [
+      focusModel.telegramNews?.headline?.[sourceLanguage] || focusModel.key?.[sourceLanguage],
+      focusModel.telegramNews?.summary?.[sourceLanguage],
+    ].map((value) => String(value || "").trim()),
+    status: "not_needed",
+    provider: "telegram_source_narrative",
+    latencyMs: 0,
+    error: null,
+    language,
+  };
+}
+
+async function translateTelegramNewsNarrative(focusModel, options, language) {
+  const sourceLanguage = focusModel.telegramNews?.sourceLanguage || "en";
+  const source = telegramSourceNarrativeResult(focusModel, sourceLanguage);
+  if (language === sourceLanguage) return source;
+  const narrative = source.lines.join("\n");
+  const narrativeTerms = list(options.protectedTerms)
+    .filter((literal) => narrative.includes(String(literal)));
+  return translateAlertLines(source.lines, {
+    ...options,
+    protectedTerms: narrativeTerms,
+    targetLanguage: language === "zh" ? "zh-CN" : "en",
+  });
+}
+
+function resolvedTelegramNewsNarrative(result, focusModel, language) {
   const zh = language === "zh";
-  const fellBack = ["fallback_source", "partial_fallback"].includes(status);
-  let narrative = String(lines?.[1] || baseLines[1] || "").trim();
-  if (fellBack && zh) {
-    if (/英文原文\s*[:：]/u.test(narrative)) {
-      narrative = narrative.replace(/英文原文\s*[:：]\s*/u, "翻译暂不可用，原文: ");
-    } else {
-      const latin = (narrative.match(/[A-Za-z]/g) || []).length;
-      const chinese = (narrative.match(/[\u3400-\u9fff]/g) || []).length;
-      if (latin >= 8 && chinese < Math.max(2, Math.floor(latin * 0.12))) {
-        narrative = `翻译暂不可用，原文: ${baseLines[1]}`;
-      }
+  const sourceLanguage = focusModel.telegramNews?.sourceLanguage || "en";
+  const sourceSide = language === sourceLanguage;
+  const unavailable = !sourceSide && ["fallback_source", "partial_fallback"].includes(result?.status);
+  const source = telegramSourceNarrativeResult(focusModel, sourceLanguage).lines;
+  return {
+    headline: unavailable
+      ? (zh
+          ? "中文翻译暂不可用；英文原文已保留在下方英文区"
+          : "English translation unavailable; Chinese source retained in the Chinese section above")
+      : oneLine(sourceSide ? source[0] : result?.lines?.[0], MAX_TELEGRAM_NARRATIVE_LENGTH),
+    summary: unavailable ? null : oneLine(sourceSide ? source[1] : result?.lines?.[1], MAX_TELEGRAM_NARRATIVE_LENGTH),
+    unavailable,
+  };
+}
+
+function finalizeTelegramNewsLines(result, focusModel, language, required) {
+  const zh = language === "zh";
+  const narrative = resolvedTelegramNewsNarrative(result, focusModel, language);
+  const headline = narrative.headline;
+  const summary = narrative.summary;
+  const separator = zh ? "｜" : " | ";
+  const category = focusModel.telegramNews?.category?.[language] || (zh ? "未分类" : "Unclassified");
+  const facts = [
+    headline || (zh ? "标题未取得" : "Headline unavailable"),
+    summary ? `${zh ? "摘要：" : "Summary: "}${summary}` : null,
+    `${zh ? "类型：" : "Type: "}${category} · ${focusModel.telegramNews?.sourceMarker}`,
+    focusModel.showPriority ? tradingBrief(focusModel.priority, language) : null,
+    focusModel.stage?.[language],
+    focusModel.time?.[language],
+  ].filter(Boolean).join(separator);
+  const visibleRequired = required.filter((literal) => !/^(?:CST|UTC|GMT)$/iu.test(String(literal)));
+  return ensureTechnicalLiterals([
+    `${zh ? "平台：" : "Platform: "}${focusModel.platform?.[language]}`,
+    `${zh ? "更新了什么：" : "What changed: "}${facts}`,
+  ], visibleRequired, language);
+}
+
+function compactTelegramUsd(value, unit = "") {
+  const normalizedUnit = String(unit || "").toLowerCase();
+  const suffix = ["million", "mn", "m"].includes(normalizedUnit)
+    ? "m"
+    : ["billion", "bn", "b"].includes(normalizedUnit)
+      ? "b"
+      : ["thousand", "k"].includes(normalizedUnit)
+        ? "k"
+        : normalizedUnit;
+  return `$${String(value || "").replace(/\s+/g, "")}${suffix}`;
+}
+
+function compactChineseTelegramUsd(value, unit) {
+  const amount = Number(String(value || "").replace(/,/g, ""));
+  if (!Number.isFinite(amount)) return null;
+  const millions = unit === "亿" ? amount * 100 : amount / 100;
+  const compact = (number) => Number(number.toPrecision(12)).toLocaleString("en-US", {
+    useGrouping: false,
+    maximumFractionDigits: 6,
+  });
+  if (millions >= 1) return `$${compact(millions)}m`;
+  if (millions * 1_000 >= 1) return `$${compact(millions * 1_000)}k`;
+  return `$${compact(millions * 1_000_000)}`;
+}
+
+function telegramUsdAmountKey(value, unit = "") {
+  const amount = Number(String(value || "").replace(/,/g, ""));
+  if (!Number.isFinite(amount)) return null;
+  const normalizedUnit = String(unit || "").toLowerCase();
+  const multiplier = normalizedUnit === "万" ? 10_000
+    : normalizedUnit === "亿" ? 100_000_000
+      : ["thousand", "k"].includes(normalizedUnit) ? 1_000
+        : ["million", "mn", "m"].includes(normalizedUnit) ? 1_000_000
+          : ["billion", "bn", "b"].includes(normalizedUnit) ? 1_000_000_000
+            : 1;
+  return String(Number((amount * multiplier).toPrecision(12)));
+}
+
+function telegramPriceDisplay(value, unit = "") {
+  if (["万", "亿"].includes(unit)) return compactChineseTelegramUsd(value, unit);
+  if (unit) return compactTelegramUsd(value, unit);
+  return String(value || "").replace(/\s+/g, "");
+}
+
+function telegramNewsNumericAtoms(values, language = "zh") {
+  const zh = language === "zh";
+  const source = values.map((value) => String(value || "")).filter(Boolean).join("；");
+  if (!source) return [];
+  const atoms = [];
+  const seen = new Set();
+  const add = (value) => {
+    const atom = String(value || "").trim();
+    if (!atom || seen.has(atom.toLowerCase())) return;
+    seen.add(atom.toLowerCase());
+    atoms.push(atom);
+  };
+  const priceValues = new Set();
+  const directionFor = (value) => {
+    if (/下跌|跌至|跌破|下探|下降|回落|\b(?:fell|falls?|down|dropped?|declined?|slid)\b/iu.test(value)) {
+      return zh ? "下跌" : "down";
     }
-  } else if (fellBack && !zh) {
-    const chinese = (narrative.match(/[\u3400-\u9fff]/g) || []).length;
-    if (/Source fact \(translation pending\)/iu.test(narrative) || chinese >= 2) {
-      narrative = `Translation unavailable; source: ${baseLines[1]}`;
+    if (/上涨|涨至|涨破|升至|上探|突破|\b(?:rose|rises?|up|gained?|climbed?|surged?)\b/iu.test(value)) {
+      return zh ? "上涨" : "up";
+    }
+    return "";
+  };
+  for (const [symbol, alias] of [
+    ["BTC", "(?:BTC|Bitcoin|比特币)"],
+    ["ETH", "(?:ETH|Ethereum|以太坊)"],
+  ]) {
+    const pattern = new RegExp(`${alias}.{0,48}?(?:跌至|跌到|跌破|涨至|涨破|升至|下探|上探|报|为|价格(?:为|报)?|(?:fell|falls?|dropped?|declined?|slid)\\s+(?:to|below)|(?:rose|rises?|gained?|climbed?|surged?)\\s+(?:to|above)|traded\\s+at|at|to|around)\\s*(?:约|about\\s+|around\\s+|approximately\\s+)?(?:US\\$|\\$|USD\\s*)?(\\d[\\d,]*(?:\\.\\d+)?)\\s*(万|亿|thousand|million|billion|mn|bn|[kmb])?\\s*(?:美元|美金)?`, "giu");
+    const matches = [...source.matchAll(pattern)];
+    for (const item of matches) {
+      const key = telegramUsdAmountKey(item[1], item[2]);
+      if (key) priceValues.add(key);
+    }
+    // Prefer a point price (fell/rose to) over a headline boundary (below/above).
+    // The latter is still retained when it is the only price, but must not
+    // displace a more precise spot value from the source summary.
+    const pointPrices = matches.filter((item) => !/(?:跌破|涨破|\b(?:below|above)\b)/iu.test(item[0]));
+    const candidates = pointPrices.length ? pointPrices : matches;
+    const precise = candidates.filter((item) => item[1].includes(","))
+      .sort((left, right) => left[0].length - right[0].length);
+    const match = precise[0] || candidates.sort((left, right) => left[0].length - right[0].length)[0];
+    if (!match) continue;
+    const price = telegramPriceDisplay(match[1], match[2]);
+    const direction = directionFor(match[0]) || directionFor(source);
+    add([symbol, direction, price].filter(Boolean).join(" "));
+  }
+  const clauses = source.split(/[。；;]\s*|(?<!\d)\.\s+/u).filter(Boolean);
+  for (const clause of clauses) {
+    const flow = /净?流出|\b(?:net\s+)?outflows?\b/iu.test(clause)
+      ? (zh ? "净流出" : "outflow")
+      : /净?流入|\b(?:net\s+)?inflows?\b/iu.test(clause)
+        ? (zh ? "净流入" : "inflow")
+        : "";
+    for (const match of clause.matchAll(/(?:US\$|\$|USD\s*)\s*(\d[\d,]*(?:\.\d+)?)\s*(million|billion|thousand|mn|bn|[kmb])?\b/giu)) {
+      if (priceValues.has(telegramUsdAmountKey(match[1], match[2]))) continue;
+      add([flow, compactTelegramUsd(match[1], match[2])].filter(Boolean).join(" "));
+    }
+    for (const match of clause.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*(万|亿)\s*(?:美元|美金)/gu)) {
+      if (priceValues.has(telegramUsdAmountKey(match[1], match[2]))) continue;
+      const compact = compactChineseTelegramUsd(match[1], match[2]);
+      if (compact) add([flow, compact].filter(Boolean).join(" "));
     }
   }
-  const prefix = zh ? "更新了什么" : "What changed";
-  narrative = narrative.replace(/^(?:更新了什么|What changed)[:：]\s*/iu, "").trim();
-  return ensureTechnicalLiterals([
-    baseLines[0],
-    `${prefix}${zh ? "：" : ": "}${narrative}`,
-  ], required, language);
+  for (const match of source.matchAll(/(?<![A-Za-z0-9.])(\d+(?:\.\d+)?)\s*(x|倍|times?|%|％)(?![A-Za-z0-9])/giu)) {
+    const unit = /^(?:x|倍|times?)$/iu.test(match[2]) ? "x" : "%";
+    add(`${match[1]}${unit}`);
+  }
+  return atoms;
+}
+
+function telegramNumericFactLines(atoms, language = "zh") {
+  const zh = language === "zh";
+  const delimiter = " · ";
+  const groups = [[]];
+  for (const atom of atoms) {
+    const group = groups.at(-1);
+    const label = groups.length === 1 ? (zh ? "数字：" : "Numbers: ") : (zh ? "数字续：" : "Numbers cont.: ");
+    const candidate = [...group, atom].join(delimiter);
+    if (group.length && label.length + candidate.length > MAX_TARGET_LINE_LENGTH && groups.length < 2) groups.push([atom]);
+    else group.push(atom);
+  }
+  return groups.filter((group) => group.length).map((group, index) => {
+    const label = index === 0 ? (zh ? "数字：" : "Numbers: ") : (zh ? "数字续：" : "Numbers cont.: ");
+    return `${label}${group.join(delimiter)}`;
+  });
 }
 
 function translationMeta(result, fallbackStatus = null) {
@@ -2834,6 +3278,7 @@ function usesLocalStructuredChineseFocus(event) {
 
 function usesLocalStructuredBilingualFocus(event) {
   return event?.type === "fomo_monitor_health_update"
+    || Boolean(publishedFomoCallDetails(event))
     || isPonFunRenderEvent(event)
     || event?.type === "github_module_update"
     || event?.type === "uniswap_official_update"
@@ -2845,9 +3290,11 @@ function usesLocalStructuredBilingualFocus(event) {
 }
 
 function localStructuredResult(lines, { language = "zh", deliveryBudgetFallback = false, event = null } = {}) {
+  const publishedCall = Boolean(publishedFomoCallDetails(event));
   const rendered = lines.map((line, index) => {
     const value = oneLine(line, index === 1 ? 10_000 : 70);
     if (language !== "zh" || !deliveryBudgetFallback || index !== 1) return value;
+    if (publishedCall) return value;
     const narrative = labelledValue(value);
     const latin = (narrative.match(/[A-Za-z]/g) || []).length;
     const chinese = (narrative.match(/[\u3400-\u9fff]/g) || []).length;
@@ -2857,8 +3304,7 @@ function localStructuredResult(lines, { language = "zh", deliveryBudgetFallback 
   const sourceNarrative = String(event?.thesis?.text || event?.body || "").trim();
   const sourceLatin = (sourceNarrative.match(/[A-Za-z]/g) || []).length;
   const sourceChinese = (sourceNarrative.match(/[\u3400-\u9fff]/g) || []).length;
-  const untranslatedFomoCall = event?.type === "fomo_family_top_call"
-    && ["fomo_published_call", "fomo_x_call"].includes(event?.signalKind)
+  const untranslatedFomoCall = publishedCall
     && sourceLatin >= 8
     && sourceChinese < Math.max(2, Math.floor(sourceLatin * 0.12));
   const untranslatedSource = deliveryBudgetFallback
@@ -2953,24 +3399,36 @@ export async function buildBilingualAlertBundle(config, event, baseMessage) {
   const localBilingual = criticalTradingTier
     || config?.alertForceLocalStructured === true
     || usesLocalStructuredBilingualFocus(event);
-  const [chinese, english] = await Promise.all([
-    usesLocalStructuredChineseFocus(event) || localBilingual
-      ? Promise.resolve(localStructuredResult(chineseBaseLines, {
-        language: "zh",
-        deliveryBudgetFallback: criticalTradingTier || config?.alertForceLocalStructured === true,
-        event,
-      }))
-      : translateAlertLines(chineseBaseLines, { ...options, targetLanguage: "zh-CN" }),
-    localBilingual
-      ? Promise.resolve(localStructuredResult(englishBaseLines, { language: "en", event }))
-      : translateAlertLines(englishBaseLines, { ...options, targetLanguage: "en" }),
-  ]);
+  const [chinese, english] = event?.type === "telegram_news_update"
+    ? await Promise.all([
+        translateTelegramNewsNarrative(focusModel, options, "zh"),
+        translateTelegramNewsNarrative(focusModel, options, "en"),
+      ])
+    : await Promise.all([
+        usesLocalStructuredChineseFocus(event) || localBilingual
+          ? Promise.resolve(localStructuredResult(chineseBaseLines, {
+            language: "zh",
+            deliveryBudgetFallback: criticalTradingTier || config?.alertForceLocalStructured === true,
+            event,
+          }))
+          : translateAlertLines(chineseBaseLines, { ...options, targetLanguage: "zh-CN" }),
+        localBilingual
+          ? Promise.resolve(localStructuredResult(englishBaseLines, { language: "en", event }))
+          : translateAlertLines(englishBaseLines, { ...options, targetLanguage: "en" }),
+      ]);
 
   let chineseLines;
   let englishLines;
   if (event?.type === "telegram_news_update") {
-    chineseLines = finalizeTelegramNewsLines(chinese.lines, chineseBaseLines, "zh", chinese.status, chineseRequired);
-    englishLines = finalizeTelegramNewsLines(english.lines, englishBaseLines, "en", english.status, englishRequired);
+    // Persist the exact post-translation narrative separately from the legacy
+    // two-field envelope. Final Telegram rendering can then split important
+    // numeric facts into atomic rows without reparsing already-compacted prose.
+    focusModel.telegramNews.localized = {
+      zh: resolvedTelegramNewsNarrative(chinese, focusModel, "zh"),
+      en: resolvedTelegramNewsNarrative(english, focusModel, "en"),
+    };
+    chineseLines = finalizeTelegramNewsLines(chinese, focusModel, "zh", chineseRequired);
+    englishLines = finalizeTelegramNewsLines(english, focusModel, "en", englishRequired);
   } else {
     chineseLines = ensureTechnicalLiterals(
       normalizePublishedCallChineseFallback(chinese.lines, chineseBaseLines, event, chinese.status),
@@ -2988,9 +3446,11 @@ export async function buildBilingualAlertBundle(config, event, baseMessage) {
     englishLines,
     chineseRequired,
     englishRequired,
-    showPriority
-      ? TWO_FIELD_COMBINED_BLOCK_BUDGET - (delayedPonRecovery ? 48 : 12)
-      : TWO_FIELD_COMBINED_BLOCK_BUDGET,
+    publishedFomoCallDetails(event)
+      ? 1_000
+      : showPriority
+        ? TWO_FIELD_COMBINED_BLOCK_BUDGET - (delayedPonRecovery ? 48 : 12)
+        : TWO_FIELD_COMBINED_BLOCK_BUDGET,
   );
   const sourceHash = createHash("sha256")
     .update(`${chineseBaseLines.join("\n")}\n---\n${englishBaseLines.join("\n")}`)
@@ -3020,5 +3480,267 @@ export function renderBilingualTelegramText(bundle, strong = false) {
   const telegramNews = bundle?.eventType === "telegram_news_update"
     || bundle?.focusModel?.eventType === "telegram_news_update";
   const severity = strong && !telegramNews ? "🔴 强提醒 | STRONG ALERT" : "🔔 监控提醒 | MONITOR ALERT";
-  return `${severity}\n🇨🇳 中文\n${bundle.zh.text}\n\n🇬🇧 English\n${bundle.en.text}`;
+  const displayBlock = (text, language) => {
+    const lines = String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const zh = language === "zh";
+    const focusModel = bundle?.focusModel || {};
+    const tier = focusModel.priority?.tier || bundle?.priority?.tier;
+    const fallbackPlatform = focusModel.platform?.[language] || focusModel.title?.[language]
+      || (zh ? "监控" : "Monitor");
+    const platform = lines[0]
+      || `${zh ? "平台：" : "Platform: "}${fallbackPlatform}${focusModel.showPriority && tier ? ` · ${tier}` : ""}`;
+    const field = (label, value, maximum = MAX_DISPLAY_LINE_LENGTH) => {
+      const normalized = String(value || "")
+        .replace(/^(?:平台|Platform|更新了什么|What changed)[:：]\s*/iu, "")
+        .trim();
+      return `${label}${oneLine(normalized || (zh ? "未取得" : "Unavailable"), maximum)}`;
+    };
+
+    if (focusModel.eventType === "fomo_monitor_health_update") {
+      const facts = focusModel.healthFacts?.[language] || {};
+      return [
+        platform,
+        field(zh ? "状态：" : "Status: ", facts.transition || focusModel.health?.[language], 112),
+        field("", facts.smartMoney, 120),
+        field(zh ? "网络：" : "Network: ", facts.network, 120),
+        field(zh ? "队列：" : "Pipeline: ", facts.pipeline, 120),
+        field(zh ? "时间：" : "Time: ", localizedCstTime(focusModel.time?.[language], language), 104),
+      ].join("\n");
+    }
+
+    if (focusModel.eventType === "telegram_news_update") {
+      const narrative = focusModel.telegramNews?.localized?.[language] || {};
+      const headline = String(narrative.headline || focusModel.telegramNews?.headline?.[language] || "").trim();
+      const summary = String(narrative.summary || "").trim();
+      const numericNarrative = narrative.unavailable
+        ? telegramSourceNarrativeResult(
+            focusModel,
+            focusModel.telegramNews?.sourceLanguage || "en",
+          ).lines
+        : [headline, summary];
+      const numericLines = telegramNumericFactLines(
+        telegramNewsNumericAtoms(numericNarrative, language),
+        language,
+      );
+      const narrativeValue = numericLines.length
+        ? [headline, summary].filter(Boolean).join(" · ")
+        : headline;
+      const source = [
+        focusModel.telegramNews?.category?.[language],
+        focusModel.telegramNews?.sourceMarker,
+      ].filter(Boolean).join(" · ");
+      return [
+        platform,
+        field(zh ? "事件：" : "Event: ", narrativeValue, 112),
+        numericLines.length || narrative.unavailable
+          ? null
+          : field(zh ? "摘要：" : "Summary: ", summary || (zh ? "暂无独立摘要" : "No separate summary"), 108),
+        ...numericLines,
+        field(zh ? "来源：" : "Source: ", source, 108),
+        field(zh ? "验证：" : "Verification: ", focusModel.stage?.[language], 108),
+        field(zh ? "时间：" : "Time: ", localizedCstTime(focusModel.time?.[language], language), 104),
+      ].filter(Boolean).join("\n");
+    }
+
+    const prefix = lines[1]?.match(/^(?:更新了什么|What changed)[:：]\s*/u)?.[0];
+    const body = prefix ? lines[1].slice(prefix.length) : lines.slice(1).join(" · ");
+    const separator = body.includes("｜") ? "｜" : body.includes(" | ") ? " | " : null;
+    const parts = separator ? body.split(separator).map((part) => part.trim()).filter(Boolean) : [];
+    const parsed = parts.length >= 3;
+    let key = parsed ? parts.shift() || "" : body;
+    let time = parsed ? parts.pop() || "" : "";
+    let stage = parsed ? parts.pop() || "" : "";
+    const tradeIndex = parts.findIndex((part) => /^(?:交易|Trade)[:=：]/u.test(part));
+    let trade = tradeIndex >= 0 ? parts.splice(tradeIndex, 1)[0] : "";
+    let evidence = parts.join(" · ");
+    if (!parsed) {
+      const fellBack = ["fallback_source", "partial_fallback"].includes(bundle?.[language]?.status);
+      evidence = fellBack && focusModel.eventType === "telegram_news_update"
+        ? focusModel.telegramNews?.sourceMarker || ""
+        : focusModel.evidence?.map((item) => item?.[language]).filter(Boolean).join(" · ") || evidence;
+      stage = focusModel.stage?.[language] || stage;
+      time = focusModel.showPriority
+        ? priorityFlashTime(focusModel.time?.[language], language, focusModel.priority)
+        : focusModel.time?.[language] || time;
+      if (focusModel.showPriority) trade = tradingBrief(focusModel.priority, language);
+    }
+    // The persisted two-field bundle may compact a long trading brief down to
+    // its conclusion. Rebuild the deterministic brief for display so a T0/T1
+    // card never loses its capital path, entry condition, or invalidation.
+    if (focusModel.showPriority
+      && (!/(?:资金路径|flow)=/iu.test(trade)
+        || !/(?:入场|entry)=/iu.test(trade)
+        || !/(?:失效|invalid)=/iu.test(trade))) {
+      trade = tradingBrief(focusModel.priority, language);
+    }
+    key = key.replace(/\s+·\s+(?:CST|UTC|GMT)\s*$/iu, "");
+
+    const instrument = focusModel.instrumentChange;
+    let target = "";
+    if (instrument?.kind === "instrument_change") {
+      const instruments = list(instrument.instruments)
+        .filter((item) => String(item?.symbol || "").trim());
+      const market = {
+        usd_m_perpetual: zh ? "USDⓈ-M 永续合约" : "USDⓈ-M perpetual contracts",
+        coin_m_perpetual: zh ? "币本位永续合约" : "COIN-M perpetual contracts",
+        spot: zh ? "现货资产" : "spot assets",
+        spot_pair: zh ? "现货交易对" : "spot pairs",
+      }[instrument.market] || (zh ? "市场标的" : "market instruments");
+      const compactMarket = !zh && instrument.market === "usd_m_perpetual"
+        ? "USDⓈ-M perpetuals"
+        : market;
+      const action = instrument.action === "delist"
+        ? (zh ? "下架" : "Delist")
+        : instrument.action === "list"
+          ? (zh ? "上币" : "List")
+          : (zh ? "上线" : "Launch");
+      const count = instruments.length > 1 ? `${instruments.length}${zh ? "个" : ""} ` : "";
+      key = `${action} ${count}${compactMarket}`.replace(/\s+/g, " ").trim();
+      target = instruments.map((item) => String(item.symbol).trim()).join(zh ? "、" : ", ");
+      stage = instrument.action === "delist"
+        ? (zh ? "官方时间表；待生效核验" : "Official schedule; verify at effective time")
+        : (zh ? "官方时间表；待开盘核验" : "Official schedule; verify at launch");
+      const timeField = instrument.action === "delist" ? "effectiveAt" : "launchAt";
+      const scheduled = instruments.map((item) => item?.[timeField]).filter(Boolean)
+        .map((value) => new Date(value)).filter((date) => !Number.isNaN(date.getTime()))
+        .sort((left, right) => left - right)[0];
+      if (scheduled) {
+        const cst = beijingMinute(scheduled);
+        const utc = utcMinute(scheduled);
+        time = zh
+          ? `首批${instrument.action === "delist" ? "生效" : "开盘"}=${cst} CST（${utc} UTC）`
+          : `First ${instrument.action === "delist" ? "effective" : "launch"}=${cst} CST (${utc} UTC)`;
+      }
+    }
+
+    const targetFactLines = () => {
+      if (!target) {
+        return [field(zh ? "证据：" : "Evidence: ", evidence || (zh ? "官方来源" : "Official source"), MAX_DISPLAY_LINE_LENGTH)];
+      }
+      const delimiter = zh ? "、" : ", ";
+      const items = target.split(delimiter).map((item) => item.trim()).filter(Boolean);
+      const joined = items.join(delimiter);
+      const firstLabel = zh ? "标的：" : "Targets: ";
+      if ((firstLabel.length + joined.length) <= MAX_TARGET_LINE_LENGTH) {
+        return [`${firstLabel}${joined}`];
+      }
+      // Keep each exact target atomic and use at most three short rows. A
+      // three-row batch reclaims the separate event row below, so the block
+      // still satisfies Telegram's 4–7 fact-line contract.
+      const groups = [[]];
+      for (const item of items) {
+        const group = groups.at(-1);
+        const label = groups.length === 1 ? firstLabel : (zh ? "标的续：" : "Targets cont.: ");
+        const candidate = [...group, item].join(delimiter);
+        if (group.length && label.length + candidate.length > MAX_TARGET_LINE_LENGTH && groups.length < 3) {
+          groups.push([item]);
+        } else {
+          group.push(item);
+        }
+      }
+      return groups.filter((group) => group.length).map((group, index) => {
+        const value = group.join(delimiter);
+        const label = index === 0 ? firstLabel : (zh ? "标的续：" : "Targets cont.: ");
+        return `${label}${value}`;
+      });
+    };
+
+    const conclusion = trade.match(/(?:结论|conclusion)=([^；;]+)/iu)?.[1]?.trim();
+    const flow = trade.match(/(?:资金路径|flow)=([^；;]+)/iu)?.[1]?.trim();
+    const entry = trade.match(/(?:入场|entry)=([^；;]+)/iu)?.[1]?.trim();
+    const invalid = trade.match(/(?:失效|invalid)=([^；;]+)/iu)?.[1]?.trim();
+    const hasTrade = Boolean(trade || focusModel.showPriority);
+    const decision = zh
+      ? [conclusion || "观察", flow ? `路径=${flow}` : null].filter(Boolean).join("；")
+      : [conclusion || "Watch", flow ? `flow=${flow}` : null].filter(Boolean).join("; ");
+    const fomo = focusModel.fomo;
+    const pon = focusModel.pon;
+    const atomicBoundary = fomo || pon;
+    const displayDecision = atomicBoundary && hasTrade
+      ? (zh
+          ? [conclusion || "观察", flow ? `路径=${flow}` : null, entry ? `入场=${entry}` : null, invalid ? `失效=${invalid}` : null]
+            .filter(Boolean).join("；")
+          : [conclusion || "Watch", flow ? `flow=${flow}` : null, entry ? `entry=${entry}` : null, invalid ? `invalid=${invalid}` : null]
+            .filter(Boolean).join("; "))
+      : decision;
+    const verification = zh
+      ? [entry ? `入场=${entry}` : null, invalid ? `失效=${invalid}` : null, stage].filter(Boolean).join("；")
+      : [entry ? `entry=${entry}` : null, invalid ? `invalid=${invalid}` : null, stage].filter(Boolean).join("; ");
+    const displayTimeSource = instrument?.kind === "instrument_change" && time
+      ? time
+      : focusModel.showPriority
+        ? focusModel.time?.[language] || time
+        : time || focusModel.time?.[language];
+    const displayTime = localizedCstTime(
+      String(displayTimeSource || "")
+        .replace(/^(?:时效|时间|发生|Time|Occurred|Launch)\s*[:=：]\s*/iu, ""),
+      language,
+    );
+    const displayTargetLines = targetFactLines();
+
+    const callThesis = focusModel.callThesis;
+    if (callThesis?.source) {
+      const thesisLabel = zh
+        ? (callThesis.sourceLanguage === "zh" ? "观点：" : "英文原文：")
+        : (callThesis.sourceLanguage === "en" ? "Thesis: " : "Chinese original: ");
+      const signalAtoms = [
+        focusModel.key?.[language] || key,
+        ...list(focusModel.evidence).map((item) => item?.[language]),
+      ].map((value) => String(value || "").trim()).filter(Boolean);
+      const signalGroups = [[]];
+      for (const atom of signalAtoms) {
+        const current = signalGroups.at(-1);
+        const candidate = [...current, atom].join(" · ");
+        if (current.length && candidate.length > 138 && signalGroups.length < 2) signalGroups.push([atom]);
+        else current.push(atom);
+      }
+      const signalLines = signalGroups.filter((group) => group.length).map((group, index) => {
+        const label = index === 0
+          ? (zh ? "信号：" : "Signal: ")
+          : (zh ? "证据：" : "Evidence: ");
+        // These are already-selected atomic identifiers. Do not route them
+        // through prose shortening, which could cut the trailing X post ID.
+        return `${label}${group.join(" · ")}`;
+      });
+      return [
+        platform,
+        hasTrade ? field(zh ? "结论：" : "Decision: ", displayDecision, 136) : null,
+        field(thesisLabel, callThesis.source, 112),
+        ...signalLines,
+        field(
+          zh ? "验证：" : "Verification: ",
+          [fomo?.verification?.[language] || stage, fomo?.risk?.[language]].filter(Boolean).join(zh ? "；" : "; ")
+            || (zh ? "状态待核" : "Status pending"),
+          136,
+        ),
+        field(zh ? "时间：" : "Time: ", displayTime, 112),
+      ].filter(Boolean).join("\n");
+    }
+
+    if (atomicBoundary) {
+      return [
+        platform,
+        hasTrade ? field(zh ? "结论：" : "Decision: ", displayDecision, 136) : null,
+        field(zh ? "事件：" : "Event: ", key, MAX_DISPLAY_LINE_LENGTH),
+        ...displayTargetLines,
+        field(zh ? "验证：" : "Verification: ", atomicBoundary.verification?.[language] || (zh ? "状态待核" : "Status pending"), 136),
+        field(zh ? "风险：" : "Risk: ", atomicBoundary.risk?.[language] || (zh ? "非自动交易" : "No automatic trading"), 136),
+        field(zh ? "时间：" : "Time: ", displayTime, 112),
+      ].filter(Boolean).join("\n");
+    }
+
+    const mergeEventIntoDecision = hasTrade && displayTargetLines.length >= 3;
+    const boundedDecision = mergeEventIntoDecision
+      ? (zh ? `${displayDecision}；事件=${key}` : `${displayDecision}; event=${key}`)
+      : displayDecision;
+    return [
+      platform,
+      hasTrade ? field(zh ? "结论：" : "Decision: ", boundedDecision, 136) : null,
+      mergeEventIntoDecision ? null : field(zh ? "事件：" : "Event: ", key, MAX_DISPLAY_LINE_LENGTH),
+      ...displayTargetLines,
+      field(zh ? "验证：" : "Verification: ", hasTrade ? verification : stage || (zh ? "状态待核" : "Status pending"), MAX_DISPLAY_LINE_LENGTH),
+      field(zh ? "时间：" : "Time: ", displayTime, 112),
+    ].filter(Boolean).join("\n");
+  };
+  return `${severity}\n🇨🇳 中文\n${displayBlock(bundle.zh.text, "zh")}\n\n🇬🇧 English\n${displayBlock(bundle.en.text, "en")}`;
 }

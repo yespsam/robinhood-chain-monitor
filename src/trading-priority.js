@@ -1,6 +1,6 @@
-const PRIORITY_SCHEMA = "news_trading_priority_v1";
+const PRIORITY_SCHEMA = "news_trading_priority_v2";
 
-export const TRADING_PRIORITY_VERSION = 1;
+export const TRADING_PRIORITY_VERSION = 2;
 export const TRADING_TIERS = Object.freeze(["T0", "T1", "T2", "T3"]);
 
 const TIER_RANK = Object.freeze({ T0: 4, T1: 3, T2: 2, T3: 1 });
@@ -33,6 +33,13 @@ const BINANCE_T0_LABELS = new Set([
   "整币下架",
   "安全/紧急公告",
 ]);
+const BINANCE_STRUCTURED_T0_LABELS = new Set([
+  "现货首次上币", "新币上线", "Alpha 上新", "新合约上线", "整币下架",
+]);
+const BINANCE_LOW_VALUE_LABEL = /活动|奖励|竞赛|比赛|挑战|拉新|推荐|返现|答题|测验|节庆|节日|代金券|年化|campaign|rewards?|competition|tournament|quiz|cashback|referral|festival/i;
+const BINANCE_LOW_VALUE_HEADLINE = /\b(?:campaign|competition|tournament|rewards?|prize\s+pool|giveaway|voucher|wotd|word\s+of\s+the\s+day|quiz|cashback|referrals?|new\s+user\s+exclusive|yield\s+arena|limited[- ]time\s+offers?|hackathon|challenge)\b|\bP2P\b[^\n]{0,100}\b(?:merchant|new\s+user|competition|rewards?|voucher)\b|\b(?:merchant|new\s+user)\b[^\n]{0,100}\bP2P\b|\b\d+(?:\.\d+)?%\s+APR\b|活动|奖励|竞赛|比赛|挑战|拉新|推荐有奖|返现|答题|测验|节庆|节日|代金券|奖池|商家招募|年化收益/i;
+const BINANCE_SQUARE_GOVERNANCE = /\b(?:community\s+governance|governance\s+announcement|enforcement\s+actions?|violations?|weekly\s+(?:governance\s+)?report)\b|社区治理|治理公告|执法行动|违规处理|违规账号|治理周报/i;
+const BINANCE_SECURITY_EMERGENCY_ACTION = /\b(?:security\s+(?:incident|breach|exploit|compromise)|confirmed\s+(?:breach|exploit|attack)|unauthori[sz]ed\s+(?:access|withdrawals?)|hot\s+wallet\s+(?:breach|compromise)|suspend(?:s|ed|ing)?\s+(?:all\s+)?(?:withdrawals?|deposits?|trading)|halt(?:s|ed|ing)?\s+(?:all\s+)?(?:withdrawals?|deposits?|trading)|emergency\s+(?:maintenance|suspension|shutdown))\b|确认(?:安全事件|漏洞|攻击|入侵)|安全(?:事件|漏洞|遭入侵)|暂停(?:全部)?(?:提现|充值|交易)|紧急(?:维护|暂停)/iu;
 const PON_STRUCTURAL_KINDS = new Set([
   "factory_config",
   "curve_params",
@@ -102,6 +109,53 @@ function firstInstant(...values) {
   return null;
 }
 
+const BINANCE_INSTRUMENT_ACTIONS = new Set(["launch", "list", "delist"]);
+const BINANCE_INSTRUMENT_MARKETS = new Set(["usd_m_perpetual", "coin_m_perpetual", "spot", "spot_pair"]);
+const BINANCE_INSTRUMENT_SYMBOL = /^[\p{L}\p{N}][\p{L}\p{N}._-]{0,63}$/u;
+const BINANCE_INSTRUMENT_PAIR = /^[\p{L}\p{N}][\p{L}\p{N}._\/-]{1,127}$/u;
+
+function structuredBinanceTargetSet(event = {}) {
+  const details = event.announcementDetails;
+  if (!details || typeof details !== "object" || lower(details.kind) !== "instrument_change") {
+    return { present: false, complete: true, targets: [] };
+  }
+  const action = lower(details.action);
+  const market = lower(details.market);
+  const listed = list(details.instruments);
+  const rawTargets = listed.length
+    ? listed
+    : details.instrument ? [{ symbol: details.instrument, launchAt: details.launchAt, effectiveAt: details.effectiveAt }] : [];
+  const commonTime = firstInstant(details.launchAt, details.effectiveAt);
+  const targets = rawTargets.map((item) => {
+    const rawSymbol = item?.symbol ?? item?.instrument;
+    const symbol = typeof rawSymbol === "string" ? rawSymbol : "";
+    const pairs = list(item?.pairs).map((pair) => typeof pair === "string" ? pair : "");
+    // The producer's top-level time is a projection of its first instrument,
+    // not proof of a shared schedule. Only a single-target payload may use it
+    // as a compatibility fallback; every multi-target item needs its own time.
+    const effectiveAt = firstInstant(
+      item?.launchAt,
+      item?.effectiveAt,
+      rawTargets.length === 1 ? commonTime : null,
+    );
+    return {
+      type: /(?:USDT|USDC|FDUSD|TUSD|USD1|USD|BTC|ETH|BNB)$/u.test(symbol)
+        || market.endsWith("perpetual") || market === "spot_pair" ? "market" : "ticker",
+      value: symbol,
+      exact: BINANCE_INSTRUMENT_SYMBOL.test(symbol),
+      market,
+      action,
+      pairs,
+      effectiveAt: effectiveAt === null ? null : new Date(effectiveAt).toISOString(),
+    };
+  });
+  const symbolsComplete = targets.length > 0 && targets.every((target) => target.exact
+    && target.pairs.every((pair) => BINANCE_INSTRUMENT_PAIR.test(pair)));
+  const timingComplete = targets.every((target) => target.effectiveAt !== null);
+  const shapeComplete = BINANCE_INSTRUMENT_ACTIONS.has(action) && BINANCE_INSTRUMENT_MARKETS.has(market);
+  return { present: true, complete: shapeComplete && symbolsComplete && timingComplete, targets };
+}
+
 function exactTarget(event = {}, text = eventText(event)) {
   const platform = normalizedPlatform(event);
   if (focusPlatform(platform)) {
@@ -127,6 +181,19 @@ function exactTarget(event = {}, text = eventText(event)) {
   const address = addressCandidates.find(validAddress);
   if (address) return { type: "CA", value: clean(address), exact: true };
 
+  const structuredTargets = structuredBinanceTargetSet(event);
+  if (structuredTargets.present) {
+    // A multi-market announcement is exact only when the complete structured
+    // set is valid. Never promote it from whichever ticker a prose regex sees
+    // first while another listed target or its effective time is absent.
+    if (structuredTargets.complete) return structuredTargets.targets[0];
+    return { type: null, value: null, exact: false };
+  }
+  if (normalizedPlatform(event).startsWith("binance")
+    && binanceLabels(event).has("安全/紧急公告")
+    && BINANCE_SECURITY_EMERGENCY_ACTION.test(text)) {
+    return { type: "venue", value: "Binance", exact: true };
+  }
   const explicit = [
     event.instrument,
     event.marketSymbol,
@@ -291,6 +358,15 @@ function trustedConfirmation(event = {}) {
 }
 
 function launchTime(event = {}) {
+  const announcementTime = firstInstant(
+    event.announcementDetails?.launchAt,
+    event.announcementDetails?.effectiveAt,
+  );
+  if (announcementTime !== null) return announcementTime;
+  const instrumentTimes = list(event.announcementDetails?.instruments)
+    .map((item) => firstInstant(item?.launchAt, item?.effectiveAt))
+    .filter((value) => value !== null);
+  if (instrumentTimes.length) return Math.min(...instrumentTimes);
   return firstInstant(
     event.launchAt,
     event.launchTime,
@@ -301,7 +377,6 @@ function launchTime(event = {}) {
     event.signal?.effectiveAt,
     event.currentSnapshot?.launchAt,
     event.currentSnapshot?.tradingStartsAt,
-    event.announcementDetails?.effectiveAt,
   );
 }
 
@@ -314,6 +389,9 @@ function sourceTime(event = {}) {
     event.timestamp,
     event.tweet?.createdAt,
     event.committedAt,
+    ["platform_capability_update", "launchpad_site_update"].includes(event.type) ? event.observedAt : null,
+    event.type === "binance_official_update" && event.kind === "developer_update"
+      && event.comparisonBasis === "exact_snapshot" ? event.observedAt : null,
   );
 }
 
@@ -410,6 +488,27 @@ function binanceLabels(event = {}) {
   ].map(clean).filter(Boolean));
 }
 
+function binanceHeadline(event = {}) {
+  return clean(event.title || event.signal?.headline || event.tweet?.text || event.message || "");
+}
+
+function lowValueBinanceUpdate(event = {}, labels = binanceLabels(event)) {
+  const headline = binanceHeadline(event);
+  if ([...labels].some((label) => BINANCE_LOW_VALUE_LABEL.test(label))) return true;
+  if (BINANCE_LOW_VALUE_HEADLINE.test(headline)) return true;
+  return lower(event.source?.id) === "binance_square_cms"
+    && BINANCE_SQUARE_GOVERNANCE.test(`${headline} ${[...labels].join(" ")}`);
+}
+
+function binanceStructuredTargetRequired(event = {}, eventCategory) {
+  if (eventCategory !== "binance_market_catalyst") return false;
+  const labels = binanceLabels(event);
+  return !labels.has("安全/紧急公告")
+    && ([...labels].some((label) => BINANCE_STRUCTURED_T0_LABELS.has(label))
+      || structuredBinanceTargetSet(event).present
+      || /\b(?:will\s+(?:list|delist)|futures\s+will\s+(?:launch|list)|alpha\b.*\b(?:add|list))\b/iu.test(eventText(event)));
+}
+
 function focusPlatform(platform) {
   return platform === "flap"
     || platform === "openfour"
@@ -472,12 +571,22 @@ function category(event = {}, text = eventText(event)) {
   const isBinance = event.type === "binance_official_update" || platform.startsWith("binance");
   if (isBinance) {
     const marketAnnouncementSource = event.type === "binance_official_update" || event.type === "twitter_update";
+    if (lowValueBinanceUpdate(event, labels)) return "binance_low_value";
+    if (labels.has("安全/紧急公告") && BINANCE_SECURITY_EMERGENCY_ACTION.test(text)) {
+      return "binance_security_emergency";
+    }
+    // A broad security label or a ticker in the headline is not evidence of
+    // an active venue incident. Only the explicit action branch above may
+    // enter the emergency T0 lane.
+    if (labels.has("安全/紧急公告")) return "binance_information";
+    const structuredTargetSet = structuredBinanceTargetSet(event);
+    if (marketAnnouncementSource && structuredTargetSet.present && structuredTargetSet.complete) return "binance_market_catalyst";
     if (marketAnnouncementSource && [...labels].some((label) => BINANCE_T0_LABELS.has(label))) return "binance_market_catalyst";
     if ([...labels].some((label) => /活动|奖励|普通公告|维护|交易规则|市场公告/u.test(label))) return "binance_information";
     const structuredProductFeature = [event.binanceChange, event.developerChange].some((change) => (
       lower(change?.classification) === "product_feature" && change?.productFeature === true
     )) || event.productFeature === true;
-    const agentNativeProductFeature = event.type === "binance_official_update"
+    const agentNativeProductFeature = ["binance_official_update", "twitter_update"].includes(event.type)
       && ((event.kind === "developer_update"
         && ([...labels].some((label) => /agent_native|agent\s+native/i.test(label))
           || list(event.addedSignals).some((signal) => /(?:\/agent-native\/|Binance\s+MCP\s+Server)/iu.test(clean(signal)))))
@@ -498,10 +607,58 @@ function category(event = {}, text = eventText(event)) {
   return "information";
 }
 
+const FOCUS_STRUCTURAL_CHANGE_KEYS = [
+  "newFlapPools", "updatedFlapPools", "newQuoteTokens", "newQuoteConfigs", "updatedQuoteConfigs",
+  "quoteConfigChanges", "newContracts", "newModules", "newVersions", "newPackages", "updatedPackages",
+  "packageVersionChanges", "newChains",
+];
+
+function explicitTradingPath(event = {}, eventCategory, target) {
+  if (eventCategory === "pon_structural") {
+    return PON_STRUCTURAL_KINDS.has(event.kind)
+      || (event.type === "twitter_update"
+        && event.signal?.ponPriority === "T1"
+        && event.signal?.platformStructural === true
+        && event.signal?.majorProductUpdate === true);
+  }
+  if (eventCategory === "focus_onchain") return onchainEvidence(event);
+  if (eventCategory === "focus_official") {
+    if (event.type === "github_module_update") return materialFocusGithub(event);
+    if (event.signal?.platformStructural === true || event.chainSupportChange?.candidate === true) return true;
+    if (list(event.chainSupport).length || list(event.newContracts).length) return true;
+    return FOCUS_STRUCTURAL_CHANGE_KEYS.some((key) => list(event.changes?.[key]).length > 0);
+  }
+  if (eventCategory === "binance_market_catalyst") {
+    const structured = structuredBinanceTargetSet(event);
+    const structuredRequired = binanceStructuredTargetRequired(event, eventCategory);
+    return target.exact && (!structuredRequired || (structured.present && structured.complete));
+  }
+  if (eventCategory === "binance_security_emergency") {
+    return target.type === "venue"
+      && target.value === "Binance"
+      && BINANCE_SECURITY_EMERGENCY_ACTION.test(eventText(event));
+  }
+  if (eventCategory === "binance_product") {
+    const structuredProduct = [event.binanceChange, event.developerChange].some((change) => (
+      lower(change?.classification) === "product_feature" && change?.productFeature === true
+    )) || event.productFeature === true;
+    const agentNative = /\bAgent\s+(?:OS|Native)|\bBinance\s+MCP\s+Server\b|\/agent-native\//iu.test(eventText(event));
+    const namedModule = event.signal?.strong === true
+      && /\b(?:introduc(?:e|es|ed)|launch(?:es|ed)?|add(?:s|ed)?)\b[^\n]{0,80}\b(?:web3\s+api|wallet\s+api|api\s+module|product\s+feature)\b/iu.test(eventText(event));
+    return structuredProduct || agentNative || namedModule;
+  }
+  if (eventCategory.startsWith("fomo_")) {
+    return target.exact && (FOMO_SINGLE_KINDS.has(event.signalKind)
+      || FOMO_OFFICIAL_KINDS.has(event.signalKind)
+      || event.signalKind === "top_blogger_convergence");
+  }
+  return false;
+}
+
 function catalystScore(eventCategory) {
   if (eventCategory === "pon_structural") return 3;
   if (eventCategory === "pon_information") return 1;
-  if (["binance_market_catalyst", "focus_onchain", "fomo_cluster", "fomo_official_exact"].includes(eventCategory)) return 5;
+  if (["binance_market_catalyst", "binance_security_emergency", "focus_onchain", "fomo_cluster", "fomo_official_exact"].includes(eventCategory)) return 5;
   if (["binance_product", "focus_official", "fomo_single", "fomo_signal"].includes(eventCategory)) return 3;
   if (eventCategory === "binance_information") return 1;
   return 0;
@@ -510,7 +667,7 @@ function catalystScore(eventCategory) {
 function capitalFlowScore(eventCategory) {
   if (eventCategory === "pon_structural") return 1;
   if (eventCategory === "pon_information") return 0;
-  if (["binance_market_catalyst", "fomo_cluster", "fomo_official_exact"].includes(eventCategory)) return 3;
+  if (["binance_market_catalyst", "binance_security_emergency", "fomo_cluster", "fomo_official_exact"].includes(eventCategory)) return 3;
   if (["focus_onchain", "fomo_single"].includes(eventCategory)) return 2;
   if (["binance_product", "focus_official"].includes(eventCategory)) return 1;
   return 0;
@@ -566,14 +723,91 @@ function tradePlan(event, eventCategory, tier, target) {
       risk: { zh: `平台币/股票映射不等于股票；${noAutoZh}`, en: `Platform coins/stock mappings are not shares; ${noAutoEn}` },
     };
   }
+  if (eventCategory === "binance_security_emergency") {
+    return {
+      conclusion: { zh: "规避风险", en: "Reduce risk" },
+      mainline: { zh: "Binance 平台风险→充提、交易与相关资产流动性", en: "Binance venue risk→deposits, withdrawals, trading, and related-asset liquidity" },
+      capitalPath: { zh: "平台风险→充提/交易/相关资产流动性", en: "Venue risk→funding/trading/related-asset liquidity" },
+      entryCondition: { zh: "核对公告影响范围、链上异常与恢复条件", en: "Verify affected scope, on-chain anomalies, and recovery conditions" },
+      invalidation: { zh: "官方确认恢复且链上资金流正常", en: "Official recovery confirmed and on-chain flows normalize" },
+      risk: { zh: `不要把安全事故当作抄底信号；${noAutoZh}`, en: `Do not treat a security incident as a dip-buy signal; ${noAutoEn}` },
+    };
+  }
   if (eventCategory === "binance_market_catalyst") {
     const delist = /delist|下架/iu.test(eventText(event));
+    const announcementMarket = lower(event.announcementDetails?.market);
+    const perpetualMarket = ["usd_m_perpetual", "coin_m_perpetual"].includes(announcementMarket);
+    const alphaMarket = /\bbinance\s+alpha\b|币安\s*alpha|alpha\s*上新/iu.test(eventText(event));
+    const tradFiPerpetual = perpetualMarket && (
+      /\b(?:tradfi|stocks?|equities|equity|shares?)\b|传统金融|股票|证券/iu.test(eventText(event))
+      || lower(event.announcementDetails?.assetClass) === "tradfi"
+      || event.announcementDetails?.spotMappingConfirmed === false
+    );
+    if (perpetualMarket) {
+      return {
+        conclusion: { zh: delist ? "不做" : "观察", en: delist ? "Do not trade" : "Watch" },
+        mainline: {
+          zh: delist ? "Binance 永续下架→仓位与结算风险" : "Binance 新永续入口→开盘深度、持仓与基差",
+          en: delist ? "Binance perpetual delisting→position and settlement risk" : "New Binance perpetual access→opening depth, open interest, and basis",
+        },
+        capitalPath: {
+          zh: delist ? "永续下架→仓位、保证金与结算" : "永续盘口→成交深度、持仓量、资金费率与基差",
+          en: delist ? "Perpetual delisting→positions, margin, and settlement" : "Perpetual order book→depth, open interest, funding, and basis",
+        },
+        entryCondition: {
+          zh: delist ? "不新增仓位；核对停止交易与结算时间" : "仅在开盘深度、成交、持仓与资金费率可验证时观察",
+          en: delist ? "Do not add positions; verify trading-stop and settlement times" : "Watch only when opening depth, volume, open interest, and funding are verifiable",
+        },
+        invalidation: {
+          zh: delist ? "未平仓、流动性枯竭或结算异常" : "开盘深度不足、资金费率/基差失真或公告撤回",
+          en: delist ? "Open positions, vanishing liquidity, or settlement anomalies" : "Weak opening depth, distorted funding/basis, or notice withdrawal",
+        },
+        risk: {
+          zh: `${tradFiPerpetual ? "永续合约不等于现货股票" : "永续上线不证明现货或Alpha已上线"}；${noAutoZh}`,
+          en: `${tradFiPerpetual ? "A perpetual contract is not the underlying cash equity" : "A perpetual launch does not prove a spot or Alpha listing"}; ${noAutoEn}`,
+        },
+      };
+    }
+    if (delist) {
+      return {
+        conclusion: { zh: "不做", en: "Do not trade" },
+        mainline: {
+          zh: `Binance ${alphaMarket ? "Alpha" : "现货"}下架→订单、退出与流动性风险`,
+          en: `Binance ${alphaMarket ? "Alpha" : "spot"} delisting→order, exit, and liquidity risk`,
+        },
+        capitalPath: {
+          zh: `${alphaMarket ? "Alpha" : "现货"}下架→订单、退出与流动性`,
+          en: `${alphaMarket ? "Alpha" : "Spot"} delisting→orders, exits, and liquidity`,
+        },
+        entryCondition: {
+          zh: "不新增仓位；核对停止交易、撤单与提现安排",
+          en: "Do not add positions; verify trading stop, order cancellation, and withdrawal arrangements",
+        },
+        invalidation: {
+          zh: "未撤单、提现受限或流动性枯竭",
+          en: "Open orders, restricted withdrawals, or vanishing liquidity",
+        },
+        risk: { zh: noAutoZh, en: noAutoEn },
+      };
+    }
     return {
-      conclusion: { zh: delist ? "不做" : "观察", en: delist ? "Do not trade" : "Watch" },
-      mainline: { zh: `Binance 市场入口变化→${target.value || "目标资产"}`, en: `Binance market access change→${target.value || "target asset"}` },
-      capitalPath: { zh: "现货/Alpha→永续与链上流动性", en: "Spot/Alpha→perpetual and on-chain liquidity" },
-      entryCondition: { zh: delist ? "不新增多头" : "开盘量能与现货承接同时确认", en: delist ? "Do not add longs" : "Opening volume and spot support both confirm" },
-      invalidation: { zh: "公告撤回、无现货承接或冲高回落", en: "Notice withdrawn, no spot support, or failed breakout" },
+      conclusion: { zh: "观察", en: "Watch" },
+      mainline: {
+        zh: `Binance ${alphaMarket ? "Alpha" : "现货"}入口→${target.value || "目标资产"}价格发现`,
+        en: `Binance ${alphaMarket ? "Alpha" : "spot"} access→price discovery for ${target.value || "the target asset"}`,
+      },
+      capitalPath: {
+        zh: `${alphaMarket ? "Alpha" : "现货"}开盘→成交深度与价格发现`,
+        en: `${alphaMarket ? "Alpha" : "Spot"} launch→trading depth and price discovery`,
+      },
+      entryCondition: {
+        zh: "仅在开盘成交、深度与价格发现可验证时观察",
+        en: "Watch only when opening volume, depth, and price discovery are verifiable",
+      },
+      invalidation: {
+        zh: "深度不足、价格失真或公告撤回",
+        en: "Weak depth, distorted pricing, or notice withdrawal",
+      },
       risk: { zh: noAutoZh, en: noAutoEn },
     };
   }
@@ -637,6 +871,8 @@ function tierLabel(tier) {
 export function deriveTradingPriority(event = {}, { nowMs = null } = {}) {
   const text = eventText(event);
   const eventCategory = category(event, text);
+  const structuredTargets = structuredBinanceTargetSet(event);
+  const structuredTargetsRequired = binanceStructuredTargetRequired(event, eventCategory);
   const target = exactTarget(event, text);
   const confirmation = trustedConfirmation(event);
   const window = validTradingWindow(event, nowMs);
@@ -657,23 +893,34 @@ export function deriveTradingPriority(event = {}, { nowMs = null } = {}) {
     && confirmedFocusFirstToken(event)
     && focusSafety
     && onchainEvidence(event);
-  const highCatalyst = eventCategory === "binance_market_catalyst" || focusT0 || fomoT0;
+  const highCatalyst = ["binance_market_catalyst", "binance_security_emergency"].includes(eventCategory)
+    || focusT0 || fomoT0;
   const safetyPassed = eventCategory.startsWith("fomo_")
     ? fomoSafety
     : eventCategory.startsWith("focus_")
       ? focusSafety
       : true;
+  const explicitPath = explicitTradingPath(event, eventCategory, target);
   const hardGates = {
     exactTarget: target.exact,
+    completeTargetSet: structuredTargetsRequired
+      ? structuredTargets.present && structuredTargets.complete
+      : !structuredTargets.present || structuredTargets.complete,
     trustedConfirmation: confirmation.trusted,
     validWindow: window.valid,
     safetyPassed: !riskBlocked && safetyPassed,
+    explicitPath,
   };
   hardGates.t0Eligible = highCatalyst
     && hardGates.exactTarget
+    && hardGates.completeTargetSet
     && hardGates.trustedConfirmation
     && hardGates.validWindow
     && hardGates.safetyPassed;
+  hardGates.t1Eligible = hardGates.trustedConfirmation
+    && hardGates.validWindow
+    && hardGates.safetyPassed
+    && hardGates.explicitPath;
 
   const components = {
     catalyst: catalystScore(eventCategory),
@@ -686,17 +933,11 @@ export function deriveTradingPriority(event = {}, { nowMs = null } = {}) {
   const score = Object.values(components).reduce((total, value) => total + value, 0);
   let tier;
   if (hardGates.t0Eligible && score >= 10) tier = "T0";
-  else if (eventCategory === "developer_maintenance") tier = "T3";
-  else if (eventCategory === "pon_structural") tier = "T1";
+  else if (["developer_maintenance", "binance_low_value"].includes(eventCategory)) tier = "T3";
   else if (eventCategory === "pon_information") tier = "T2";
   else if (eventCategory === "binance_information" || eventCategory === "information") tier = "T2";
-  else if (eventCategory.startsWith("focus_") && riskBlocked && confirmation.trusted) tier = "T1";
-  else if (eventCategory.startsWith("focus_")) tier = "T1";
-  else if (eventCategory === "fomo_single" && fomoSafety && confirmation.trusted) tier = "T1";
-  else if (eventCategory.startsWith("fomo_") && fomoSafety && confirmation.trusted) tier = "T1";
-  else if (["focus_onchain", "focus_official", "binance_product", "binance_market_catalyst"].includes(eventCategory)
-    && confirmation.trusted && !riskBlocked) tier = "T1";
-  else tier = score >= 6 && !riskBlocked ? "T1" : "T2";
+  else if (hardGates.t1Eligible) tier = "T1";
+  else tier = "T2";
 
   const lifecycle = deriveEventLifecycle(event);
   return Object.freeze({
@@ -710,6 +951,8 @@ export function deriveTradingPriority(event = {}, { nowMs = null } = {}) {
     components: Object.freeze(components),
     category: eventCategory,
     target: Object.freeze(target),
+    targets: Object.freeze((structuredTargets.present ? structuredTargets.targets : target.exact ? [target] : [])
+      .map((item) => Object.freeze({ ...item, ...(item.pairs ? { pairs: Object.freeze([...item.pairs]) } : {}) }))),
     confirmation: Object.freeze(confirmation),
     window: Object.freeze(window),
     hardGates: Object.freeze(hardGates),
@@ -731,9 +974,10 @@ export function legacyTradingPriority(event = {}) {
     components: null,
     category: "legacy_pending",
     target: Object.freeze({ type: null, value: null, exact: false }),
+    targets: Object.freeze([]),
     confirmation: Object.freeze({ trusted: false, kind: "legacy", value: null }),
     window: Object.freeze({ valid: false, basis: "legacy_pending", ageMs: null }),
-    hardGates: Object.freeze({ exactTarget: false, trustedConfirmation: false, validWindow: false, safetyPassed: false, t0Eligible: false }),
+    hardGates: Object.freeze({ exactTarget: false, completeTargetSet: false, trustedConfirmation: false, validWindow: false, safetyPassed: false, explicitPath: false, t0Eligible: false, t1Eligible: false }),
     lifecycle: deriveEventLifecycle(event),
     plan: Object.freeze({ ...tradePlan(event, "information", tier, { value: null }), automaticExecution: false }),
   });

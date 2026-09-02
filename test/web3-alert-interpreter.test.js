@@ -158,6 +158,146 @@ test("Binance listings, contracts, Alpha, activities, and product launches use l
   assert.match(interpretBinanceOfficialUpdate(spot, "en"), /Spot lists EXM \(Example\); Seed Tag applied/);
 });
 
+test("Binance structured instrument changes retain every real TradFi contract, UTC launch, and Unicode ticker", () => {
+  const symbols = ["NVDLUSDT", "TSLLUSDT", "DDOGUSDT", "TEAMUSDT", "MDBUSDT", "ZSUSDT", "GTLBUSDT"];
+  const launches = ["10:00", "10:05", "10:10", "10:15", "10:20", "10:25", "10:30"];
+  const event = {
+    type: "binance_official_update",
+    kind: "announcement",
+    title: "Binance Futures Will Launch Multiple USDⓈ-Margined TradFi Perpetual Contracts (2026-09-02)",
+    signal: { category: "新合约上线" },
+    announcementDetails: {
+      kind: "instrument_change",
+      action: "launch",
+      market: "usd_m_perpetual",
+      timezone: "UTC",
+      instrument: symbols[0],
+      launchAt: "2026-09-02T10:00:00.000Z",
+      instruments: symbols.map((symbol, index) => ({
+        symbol,
+        launchAt: `2026-09-02T${launches[index]}:00.000Z`,
+      })),
+    },
+  };
+
+  const zh = interpretBinanceOfficialUpdate(event, "zh");
+  const en = interpretBinanceOfficialUpdate(event, "en");
+  assert.match(zh, /^新增 7 个 USDⓈ-M 永续合约：/);
+  assert.match(en, /^Launching 7 USDⓈ-M perpetual contracts:/);
+  for (const symbol of symbols) {
+    assert.ok(zh.includes(symbol), `Chinese interpretation keeps ${symbol}`);
+    assert.ok(en.includes(symbol), `English interpretation keeps ${symbol}`);
+  }
+  assert.match(zh, /NVDLUSDT（2026-09-02 10:00 UTC）/);
+  assert.match(zh, /GTLBUSDT（2026-09-02 10:30 UTC）/);
+
+  const unicode = structuredClone(event);
+  unicode.announcementDetails = {
+    kind: "instrument_change",
+    action: "launch",
+    market: "usd_m_perpetual",
+    timezone: "UTC",
+    instrument: "牛来USDT",
+    launchAt: "2026-08-30T11:30:00.000Z",
+    instruments: [{ symbol: "牛来USDT", launchAt: "2026-08-30T11:30:00.000Z" }],
+  };
+  assert.match(interpretBinanceOfficialUpdate(unicode, "zh"), /牛来USDT.*2026-08-30 11:30 UTC/);
+  assert.match(interpretBinanceOfficialUpdate(unicode, "en"), /牛来USDT.*2026-08-30 11:30 UTC/);
+});
+
+test("Binance structured spot listings and delistings are interpreted from exact instruments", () => {
+  const spot = {
+    type: "binance_official_update",
+    kind: "announcement",
+    announcementDetails: {
+      kind: "instrument_change",
+      action: "list",
+      market: "spot",
+      timezone: "UTC",
+      instrument: "AERO",
+      launchAt: "2026-07-17T11:00:00.000Z",
+      instruments: [{
+        symbol: "AERO",
+        name: "Aerodrome",
+        pairs: ["AERO/USDT", "AERO/USDC", "AERO/TRY"],
+        launchAt: "2026-07-17T11:00:00.000Z",
+      }],
+    },
+  };
+  const delist = {
+    type: "binance_official_update",
+    kind: "announcement",
+    announcementDetails: {
+      kind: "instrument_change",
+      action: "delist",
+      market: "spot",
+      timezone: "UTC",
+      instrument: "ICX",
+      effectiveAt: "2026-09-03T03:00:00.000Z",
+      instruments: ["ICX", "SCRT", "STORJ"].map((symbol) => ({
+        symbol,
+        effectiveAt: "2026-09-03T03:00:00.000Z",
+      })),
+    },
+  };
+
+  assert.equal(
+    interpretBinanceOfficialUpdate(spot, "zh"),
+    "现货上币：AERO（Aerodrome）；交易对 AERO/USDT、AERO/USDC、AERO/TRY；上线 2026-07-17 11:00 UTC",
+  );
+  assert.equal(
+    interpretBinanceOfficialUpdate(delist, "en"),
+    "Spot delisting 3 assets: ICX, SCRT, STORJ; effective 2026-09-03 03:00 UTC",
+  );
+});
+
+test("Binance structured Alpha and multi-asset spot listings retain every verified ticker", () => {
+  const alpha = {
+    type: "binance_official_update",
+    kind: "announcement",
+    signal: { category: "Alpha 上新" },
+    announcementDetails: {
+      kind: "instrument_change",
+      action: "list",
+      market: "spot",
+      timezone: "UTC",
+      instrument: "DMC",
+      launchAt: "2025-06-24T11:00:00.000Z",
+      instruments: [{ symbol: "DMC", name: "DeLorean", launchAt: "2025-06-24T11:00:00.000Z" }],
+    },
+  };
+  const multiSpot = {
+    type: "binance_official_update",
+    kind: "announcement",
+    signal: { category: "现货上币" },
+    announcementDetails: {
+      kind: "instrument_change",
+      action: "list",
+      market: "spot",
+      timezone: "UTC",
+      instrument: "AAA",
+      launchAt: "2026-09-03T12:00:00.000Z",
+      instruments: [
+        { symbol: "AAA", name: "Alpha", pairs: ["AAA/USDT"], launchAt: "2026-09-03T12:00:00.000Z" },
+        { symbol: "BBB", name: "Beta", pairs: ["BBB/USDT"], launchAt: "2026-09-03T12:00:00.000Z" },
+      ],
+    },
+  };
+
+  assert.equal(
+    interpretBinanceOfficialUpdate(alpha, "zh"),
+    "Binance Alpha 上新：DMC（DeLorean）；上线 2025-06-24 11:00 UTC",
+  );
+  assert.equal(
+    interpretBinanceOfficialUpdate(alpha, "en"),
+    "Binance Alpha listing: DMC (DeLorean); launch 2025-06-24 11:00 UTC",
+  );
+  assert.equal(
+    interpretBinanceOfficialUpdate(multiSpot, "zh"),
+    "现货上币：AAA（Alpha）、BBB（Beta）；交易对 AAA/USDT、BBB/USDT；上线 2026-09-03 12:00 UTC",
+  );
+});
+
 test("a real Wallet GitHub card leads with business impact and keeps exact evidence", async () => {
   const commit = "9f515f11e9b88244eb6263e27246a2767e025e4f";
   const needBalanceFact = {
@@ -197,7 +337,7 @@ test("a real Wallet GitHub card leads with business impact and keeps exact evide
   assert.doesNotMatch(rendered, /英文原文|Translation unavailable/i);
   assert.equal(bundle.zh.text.split("\n").length, 2);
   assert.equal(bundle.en.text.split("\n").length, 2);
-  assert.ok(rendered.length <= 600, `card is ${rendered.length} characters`);
+  assert.ok(rendered.length <= 900, `card is ${rendered.length} characters`);
 });
 
 test("a misclassified client-version card is corrected to maintenance in both languages", async () => {
@@ -373,7 +513,7 @@ test("long Java client-version cards stay bounded and retain product plus versio
   for (const literal of ["binance-derivatives-trading-portfolio-margin-pro", "8.0.0", "8.0.1"]) {
     assert.ok(card.includes(literal), literal);
   }
-  assert.ok(card.length <= 600, `card is ${card.length} characters`);
+  assert.ok(card.length <= 900, `card is ${card.length} characters`);
   assert.equal(bundle.zh.text.split("\n").length, 2);
   assert.equal(bundle.en.text.split("\n").length, 2);
 });

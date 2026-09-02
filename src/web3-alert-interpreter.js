@@ -442,12 +442,95 @@ function officialEndpoints(event) {
   return { corpus, endpoints: [...new Set(endpoints)] };
 }
 
+function utcMinute(value) {
+  const parsed = new Date(value || "");
+  if (Number.isNaN(parsed.getTime())) return "";
+  return `${parsed.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}
+
+function interpretBinanceInstrumentChange(details, language, category = "") {
+  if (details?.kind !== "instrument_change") return null;
+  const instruments = values(details.instruments)
+    .map((item) => ({
+      ...item,
+      symbol: text(item?.symbol),
+      name: text(item?.name),
+      pairs: values(item?.pairs).map(text).filter(Boolean),
+    }))
+    .filter((item) => item.symbol);
+  if (!instruments.length) return null;
+  const zh = language === "zh";
+  const timeField = details.action === "delist" ? "effectiveAt" : "launchAt";
+  const times = instruments.map((item) => utcMinute(item[timeField])).filter(Boolean);
+  const sharedTime = times.length === instruments.length && new Set(times).size === 1 ? times[0] : "";
+  const displaySymbols = instruments.map((item) => {
+    const label = `${item.symbol}${item.name && item.name.toUpperCase() !== item.symbol.toUpperCase()
+      ? zh ? `（${item.name}）` : ` (${item.name})`
+      : ""}`;
+    const instant = sharedTime ? "" : utcMinute(item[timeField]);
+    return `${label}${instant ? zh ? `（${instant}）` : ` (${instant})` : ""}`;
+  });
+  const symbolList = displaySymbols.join(zh ? "、" : ", ");
+  const timeSuffix = sharedTime
+    ? zh
+      ? `；${details.action === "delist" ? "生效" : "上线"} ${sharedTime}`
+      : `; ${details.action === "delist" ? "effective" : "launch"} ${sharedTime}`
+    : "";
+
+  if (["usd_m_perpetual", "coin_m_perpetual"].includes(details.market)) {
+    const marketZh = details.market === "coin_m_perpetual" ? "币本位" : "USDⓈ-M";
+    const marketEn = details.market === "coin_m_perpetual" ? "COIN-M" : "USDⓈ-M";
+    const countZh = instruments.length > 1 ? `${instruments.length} 个 ` : "";
+    const countEn = instruments.length > 1 ? `${instruments.length} ` : "";
+    return details.action === "delist"
+      ? zh
+        ? `下架 ${countZh}${marketZh} 永续合约：${symbolList}${timeSuffix}`
+        : `Delisting ${countEn}${marketEn} perpetual contract${instruments.length > 1 ? "s" : ""}: ${symbolList}${timeSuffix}`
+      : zh
+        ? `新增 ${countZh}${marketZh} 永续合约：${symbolList}${timeSuffix}`
+        : `Launching ${countEn}${marketEn} perpetual contract${instruments.length > 1 ? "s" : ""}: ${symbolList}${timeSuffix}`;
+  }
+
+  if (details.market === "spot") {
+    const pairs = [...new Set(instruments.flatMap((item) => item.pairs))];
+    const pairSuffix = pairs.length
+      ? zh ? `；交易对 ${pairs.join("、")}` : `; pairs ${pairs.join(", ")}`
+      : "";
+    const alphaListing = details.action === "list" && /alpha\s*上新|alpha[_\s-]*listing/iu.test(category);
+    if (alphaListing) return zh
+      ? `Binance Alpha 上新：${symbolList}${timeSuffix}`
+      : `Binance Alpha listing: ${symbolList}${timeSuffix}`;
+    return details.action === "delist"
+      ? zh
+        ? `现货下架${instruments.length > 1 ? ` ${instruments.length} 个资产` : ""}：${symbolList}${timeSuffix}`
+        : `Spot delisting${instruments.length > 1 ? ` ${instruments.length} assets` : ""}: ${symbolList}${timeSuffix}`
+      : zh
+        ? `现货上币：${symbolList}${pairSuffix}${timeSuffix}`
+        : `Spot listing: ${symbolList}${pairSuffix}${timeSuffix}`;
+  }
+
+  if (details.market === "spot_pair") return details.action === "delist"
+    ? zh
+      ? `移除现货交易对：${symbolList}${timeSuffix}`
+      : `Removing spot pairs: ${symbolList}${timeSuffix}`
+    : zh
+      ? `新增现货交易对：${symbolList}${timeSuffix}`
+      : `Adding spot pairs: ${symbolList}${timeSuffix}`;
+  return null;
+}
+
 export function interpretBinanceOfficialUpdate(event, language = "zh") {
   if (event?.type !== "binance_official_update") return null;
   const zh = language === "zh";
   if (event?.kind === "announcement") {
     const title = text(event?.title || event?.article?.title || event?.signal?.headline);
     const category = text(event?.signal?.category || values(event?.signal?.labels)[0]).toLowerCase();
+    const structuredInstrumentChange = interpretBinanceInstrumentChange(
+      event?.announcementDetails || event?.currentSnapshot?.details,
+      language,
+      category,
+    );
+    if (structuredInstrumentChange) return structuredInstrumentChange;
     const spot = title.match(/\b(?:will\s+list|lists?|introducing)\s+(.+?)\s*\(([A-Z0-9]{2,15})\)/i);
     if (/现货上币|现货首次上币|spot[_\s-]*listing/i.test(category) || spot) {
       const name = text(spot?.[1]);
@@ -461,11 +544,14 @@ export function interpretBinanceOfficialUpdate(event, language = "zh") {
         : `Spot lists ${assetEn}${seed ? "; Seed Tag applied" : ""}`;
     }
 
-    const perpetual = title.match(/\b([A-Z0-9]{2,24}(?:USDT|USDC|FDUSD|USD))\b/i);
+    const perpetual = title.match(/([\p{L}\p{N}\p{M}][\p{L}\p{N}\p{M}._-]{0,63}(?:USDT|USDC|FDUSD|TUSD|USD1|USD))/iu);
     if (/新合约上线|futures[_\s-]*contract[_\s-]*listing/i.test(category)
       || /\b(?:will\s+launch|launches?)\b.*\bperpetual\s+contract\b/i.test(title)) {
-      const instrument = text(perpetual?.[1]).toUpperCase() || "新交易对";
+      const instrument = text(perpetual?.[1]).toUpperCase();
       const margin = /USDⓈ|USDT|USDC|FDUSD/i.test(title) ? (zh ? "U 本位" : "USDⓈ-M") : "";
+      if (!instrument) return zh
+        ? `新增${margin ? ` ${margin}` : ""}永续合约；标的待核`
+        : `Added ${margin ? `${margin} ` : ""}perpetual contract(s); exact instruments pending verification`;
       return zh
         ? `新增 ${instrument} ${margin}永续合约`
         : `Added the ${instrument} ${margin} perpetual contract`;

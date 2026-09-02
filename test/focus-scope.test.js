@@ -991,6 +991,7 @@ test("public Telegram news is an opt-in fail-closed lane with exact provenance a
     },
     news: {
       category: "crypto",
+      stage: "observed",
       headline: "A monitored public-channel update",
       summary: "The source message links to a public HTTPS article.",
       externalUrls: ["https://example.com/news?id=31415"],
@@ -1018,6 +1019,8 @@ test("public Telegram news is an opt-in fail-closed lane with exact provenance a
   invalid((candidate) => { candidate.source.url = "https://t.me/maxguruai"; });
   invalid((candidate) => { candidate.strong = true; });
   invalid((candidate) => { candidate.news.confidence = "verified"; });
+  invalid((candidate) => { candidate.news.category = "AI Agent"; });
+  invalid((candidate) => { candidate.news.stage = "edited"; });
   invalid((candidate) => { candidate.news.externalUrls = ["http://example.com/news"]; });
   invalid((candidate) => { candidate.news.externalUrls = ["https://127.0.0.1/private"]; });
   invalid((candidate) => { candidate.news.externalUrls = ["https://user:pass@example.com/news"]; });

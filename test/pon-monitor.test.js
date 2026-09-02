@@ -426,6 +426,7 @@ async function harness(t, options = {}) {
     if (url === PON_TOKEN_LIST_URL) return jsonResponse(url, tokenList(api.markets), { responseUrl });
     throw new Error(`unexpected URL ${url}`);
   });
+  const clock = options.now || (() => Date.parse("2026-09-02T12:00:00.000Z"));
   const monitor = createPonMonitor({
     dataDir,
     ponMonitorEnabled: true,
@@ -437,6 +438,7 @@ async function harness(t, options = {}) {
     ponBackoffMaxMs: 1_000,
     ponPendingLimit: options.pendingLimit || 10,
     confirmations: 0,
+    alertNow: clock,
     ...(options.config || {}),
   }, {
     provider,
@@ -449,7 +451,7 @@ async function harness(t, options = {}) {
       return { status: "delivered", eventId: event.eventKey };
     }),
     logger: { error() {} },
-    now: options.now || (() => Date.parse("2026-09-02T12:00:00.000Z")),
+    now: clock,
   });
   t.after(() => monitor.stop());
   return { dataDir, provider, api, alerts, monitor };
@@ -1713,6 +1715,9 @@ test("A-B-A-B API lifecycle revisions remain distinct through the real alert out
   assert.deepEqual(revisions.map((entry) => entry.event.evidence.transitionRevision), [1, 2, 3]);
   assert.equal(new Set(revisions.map((entry) => entry.id)).size, 3);
   assert.equal(revisions.every((entry) => entry.semanticDuplicateOf === null), true);
+  assert.equal(revisions.every((entry) => entry.event.freshness.decision === "realtime"), true);
+  assert.equal(revisions.every((entry) => entry.event.tradingPriority.tier === "T2"), true);
+  assert.equal(revisions.every((entry) => entry.deliveryDisposition.reason === "pon_exact_onchain_realtime"), true);
 });
 
 test("a failed API lifecycle delivery reserves one stable revision across restart", async (t) => {

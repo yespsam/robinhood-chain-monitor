@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   AlertDeliveryError,
+  alertDeliveryDisposition,
   alertEventKey,
   classifyAlertFreshness,
   drainAlertOutbox,
@@ -56,6 +57,7 @@ function publicTelegramNewsEvent({
     },
     news: {
       category: "crypto",
+      stage: "live",
       headline: "Flap introduces Vault V2",
       summary: "The public channel observed a Flap Vault V2 update.",
       externalUrls: ["https://example.com/flap-vault-v2"],
@@ -67,7 +69,7 @@ function publicTelegramNewsEvent({
   };
 }
 
-test("Telegram public news stays ordinary and deduplicates only exact message revisions", async (t) => {
+test("Telegram public news is audit-only and same-stage revisions deduplicate semantically", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-telegram-news-"));
   const payloads = [];
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -104,46 +106,45 @@ test("Telegram public news stays ordinary and deduplicates only exact message re
   assert.deepEqual(telegramButtons({ ...first, messageUrl: "https://evil.example/message" }), { inline_keyboard: [] });
 
   const delivered = await sendAlerts(config, first);
-  assert.equal(delivered.status, "delivered");
+  assert.equal(delivered.status, "suppressed");
+  assert.equal(delivered.reason, "policy_suppressed");
   assert.deepEqual(first, originalFirst, "queue metadata and rendering must not mutate the source event");
   assert.equal(delivered.eventId, eventId);
-  assert.equal(payloads.length, 1);
-  assert.equal(payloads[0].disable_notification, true);
-  assert.deepEqual(payloads[0].reply_markup.inline_keyboard, [[{
-    text: "查看原消息",
-    url: "https://t.me/maxguruai/271828",
-  }]]);
-  assert.match(payloads[0].text, /Telegram 公共频道新闻/);
-  assert.match(payloads[0].text, /非官方来源/);
+  assert.equal(payloads.length, 0);
 
   const exactRepeat = await sendAlerts(config, structuredClone(first));
-  assert.equal(exactRepeat.status, "delivered");
+  assert.equal(exactRepeat.status, "suppressed");
+  assert.equal(exactRepeat.reason, "policy_suppressed");
   assert.equal(exactRepeat.eventId, eventId);
-  assert.equal(payloads.length, 1, "the exact same message revision is idempotent");
+  assert.equal(payloads.length, 0, "the exact same audit record is idempotent");
 
   const revision = publicTelegramNewsEvent({
     contentDigest: "b".repeat(64),
     news: { summary: "The public channel edited the same message with additional details." },
   });
-  assert.equal((await sendAlerts(config, revision)).status, "delivered");
-  assert.equal(payloads.length, 2, "an actual content edit is a distinct revision");
+  const revisionResult = await sendAlerts(config, revision);
+  assert.equal(revisionResult.status, "suppressed");
+  assert.equal(revisionResult.reason, "semantic_duplicate");
+  assert.equal(payloads.length, 0);
 
   const official = {
     type: "platform_capability_update",
     platform: { id: "flap", name: "Flap", website: "https://flap.sh" },
     changes: { newModules: ["Vault V2"] },
+    publishedAt: new Date().toISOString(),
     observedAt: new Date().toISOString(),
     url: "https://docs.flap.sh/vault-v2",
   };
   assert.equal((await sendAlerts(config, official)).status, "delivered", "public-channel news must not suppress an official source");
-  assert.equal(payloads.length, 3);
+  assert.equal(payloads.length, 1);
 
   const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
-  assert.deepEqual(outbox.events[eventId].event.canonicalSignalIds, []);
-  assert.equal(outbox.events[eventId].event.canonicalSignalId, null);
+  assert.equal(outbox.events[eventId].event.canonicalSignalIds.length, 1);
+  assert.match(outbox.events[eventId].event.canonicalSignalId, /^telegram:story:/);
+  assert.equal(outbox.events[eventId].deliveryDisposition.mode, "audit_only");
   assert.equal(outbox.events[eventId].semanticDuplicateOf, null);
   const revisionId = "telegram-news:-1002540748528:271828:bbbbbbbbbbbbbbbb";
-  assert.equal(outbox.events[revisionId].semanticDuplicateOf, null);
+  assert.equal(outbox.events[revisionId].semanticDuplicateOf, eventId);
 });
 
 test("Telegram news freshness uses source time with 10-minute realtime and 2-hour maximum windows", () => {
@@ -480,7 +481,7 @@ test("GitHub revisions use structured delta novelty while exact event keys remai
     changeEvidence,
     modeChange: { candidate: true },
     developmentStage: "pull_request",
-    pullRequest: { number: 42, state: "open", authorAssociation: "NONE" },
+    pullRequest: { number: 42, state: "open", authorAssociation: "MEMBER" },
     url: `https://github.com/${repository}/commit/${commit}`,
   });
   const first = github(
@@ -509,7 +510,7 @@ test("GitHub revisions use structured delta novelty while exact event keys remai
   assert.equal(secondResult.status, "delivered", "a same-title commit with a different structured delta must deliver");
   assert.equal(thirdResult.status, "delivered", "a different repository, commit, and delta must deliver");
   assert.equal(payloads.length, 3);
-  assert.ok(payloads.every((payload) => payload.disable_notification === true), "untrusted open PRs are ordinary notifications");
+  assert.ok(payloads.every((payload) => payload.disable_notification === false), "organization-authored structural revisions are T1");
 
   const exactRepeat = await sendAlerts(config, second);
   assert.equal(exactRepeat.status, "delivered");
@@ -683,6 +684,9 @@ test("focus3 keeps distinct feature activations alertable and deduplicates repea
     mode: { fingerprint: "vault-v3-mode", componentMode: "Vault V3" },
     tokens: [{ token, metadata: { name: "First Vault Token", symbol: "FVT" } }],
     structural: { eligible: true },
+    transactionHash: `0x${token.slice(2, 3).repeat(64)}`,
+    blockNumber: 42_000_001,
+    security: { decision: "pass", metrics: { liquidityConfirmed: true } },
     strong: true,
     blockTimestamp: now,
     observedAt: now,
@@ -839,7 +843,7 @@ test("platform capability cards show exact before-to-after values and deployment
   assertCompactCard(payload);
 });
 
-test("official repository and X cards state the concrete change instead of generic labels", async (t) => {
+test("T2 repository observations stay audit-only while a T1 official X change renders", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-concrete-official-update-"));
   const payloads = [];
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -850,7 +854,7 @@ test("official repository and X cards state the concrete change instead of gener
   t.mock.method(console, "info", () => {});
   const config = { ...alertConfig(dataDir), monitorScope: "focus3", ponsMonitorEnabled: false, alertChineseTranslationEnabled: false };
 
-  await sendAlerts(config, {
+  const repositoryResult = await sendAlerts(config, {
     type: "github_repository_discovered",
     launchpad: "Uniswap",
     repository: "Uniswap/liquidity-launcher-v2",
@@ -861,8 +865,8 @@ test("official repository and X cards state the concrete change instead of gener
   });
   await sendAlerts(config, {
     type: "twitter_update",
-    project: { id: "fourmeme", name: "Four.Meme" },
-    tweet: { handle: "fourdotmemezh", id: "royalty-update", text: "Royalty is now live", createdAt: new Date().toISOString() },
+    project: { id: "fourmeme", name: "Four.Meme", match: "official_x" },
+    tweet: { handle: "fourdotmemezh", id: "2085000000000000001", text: "Royalty is now live", createdAt: new Date().toISOString(), url: "https://x.com/fourdotmemezh/status/2085000000000000001" },
     signal: {
       relevant: true,
       strong: true,
@@ -870,18 +874,15 @@ test("official repository and X cards state the concrete change instead of gener
       labels: ["税收/募资/报价代币"],
       keyChanges: ["Royalty 正式上线", "新增生态回购金库", "X 认证账号可管理版税金库", "开放自定义版税模板", "外盘交易零平台费"],
     },
+    observedAt: new Date().toISOString(),
   });
 
-  const repository = payloads.find((item) => item.text.includes("官方新增仓库"));
-  assert.match(repository.text, /具体更新: 官方组织新增 GitHub 仓库 liquidity-launcher-v2/);
-  assert.match(repository.text, /用途: Contracts and SDK for Liquidity Launcher V2/);
-  assert.match(repository.text, /官方归属已确认/);
-  assert.doesNotMatch(repository.text, /Factory:|待官方来源交叉认证/);
+  assert.equal(repositoryResult.status, "suppressed");
+  assert.equal(repositoryResult.reason, "policy_suppressed");
   const twitter = payloads.find((item) => item.text.includes("Four.Meme 官方动态"));
   assert.match(twitter.text, /具体更新: Royalty 正式上线/);
   assert.match(twitter.text, /关键变化: 新增生态回购金库；X 认证账号可管理版税金库；开放自定义版税模板；另有1项/);
   assert.doesNotMatch(twitter.text, /事件: 税收|内容: Royalty/);
-  assertCompactCard(repository);
   assertCompactCard(twitter);
 });
 
@@ -902,7 +903,8 @@ test("an implementation-only BSC observation is not mislabeled as a new launch m
     platform: { id: "flap", name: "Flap", trust: "official_verified" },
     attribution: { status: "verified", platform: { id: "flap", name: "Flap" } },
     launcher: "0x2222222222222222222222222222222222222222",
-    transactionHash: "0xabcdef1234567890",
+    transactionHash: `0x${"a".repeat(64)}`,
+    blockNumber: 42_000_001,
     structural: { eligible: true },
     strong: true,
     mode: {
@@ -922,7 +924,7 @@ test("an implementation-only BSC observation is not mislabeled as a new launch m
   assertCompactCard(payload);
 });
 
-test("Uniswap cards use the official title, concrete release notes, and verified stage", async (t) => {
+test("Uniswap release notes without a direct trading path stay audit-only", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-uniswap-concrete-update-"));
   let payload;
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -948,12 +950,10 @@ test("Uniswap cards use the official title, concrete release notes, and verified
     observedAt: new Date().toISOString(),
   };
 
-  assert.equal((await sendAlerts({ ...alertConfig(dataDir), monitorScope: "focus3", ponsMonitorEnabled: false, alertChineseTranslationEnabled: false }, event)).status, "delivered");
-  assert.match(payload.text, /具体更新: Liquidity Launcher v2\.0\.0/);
-  assert.match(payload.text, /内容: Adds InstantLaunchStrategy and FeeSplitter for new launches/);
-  assert.match(payload.text, /状态: GitHub 代码版本发布（未确认产品上线）/);
-  assert.doesNotMatch(payload.text, /官方发布高信号更新|协议级更新/);
-  assertCompactCard(payload);
+  const result = await sendAlerts({ ...alertConfig(dataDir), monitorScope: "focus3", ponsMonitorEnabled: false, alertChineseTranslationEnabled: false }, event);
+  assert.equal(result.status, "suppressed");
+  assert.equal(result.reason, "policy_suppressed");
+  assert.equal(payload, undefined);
 });
 
 test("focus3 derives semantic identities from pre-upgrade delivered outbox entries", async (t) => {
@@ -1081,6 +1081,9 @@ test("focus3 maps readable chain mode names to the same cross-source identity", 
     mode: { fingerprint: "vault-mode-fingerprint", componentMode: "Vault V2" },
     structural: { eligible: true },
     strong: true,
+    transactionHash: `0x${"1".repeat(64)}`,
+    blockNumber: 42_000_001,
+    blockTimestamp: now,
     observedAt: now,
   };
   const twitter = {
@@ -1090,12 +1093,15 @@ test("focus3 maps readable chain mode names to the same cross-source identity", 
     signal: { relevant: true, strong: true, platformStructural: true, labels: ["新发射/新模式"] },
   };
 
-  assert.deepEqual(focusNoveltyKeys(chain), ["flap:concept:vault:v2"]);
+  assert.deepEqual(focusNoveltyKeys(chain), [
+    "flap:concept:vault:v2",
+    "flap:lifecycle:vault-v2:onchain-confirmed",
+  ]);
   assert.deepEqual(focusNoveltyKeys({ ...chain, mode: { fingerprint: "opaque-mode" } }), ["flap:mode:opaque-mode"]);
   assert.deepEqual(focusNoveltyKeys({
     ...chain,
     mode: { fingerprint: "creator-mode-fingerprint", componentMode: "Creator Mode", selectorName: "newTokenV6" },
-  }), ["flap:module:creator-mode"]);
+  }), ["flap:lifecycle:creator-mode:onchain-confirmed", "flap:module:creator-mode"]);
   assert.deepEqual(focusNoveltyKeys({
     type: "twitter_update",
     project: { id: "flap", name: "Flap" },
@@ -1140,7 +1146,9 @@ test("focus3 keeps distinct generic proxy upgrades separate and deduplicates onl
     },
     structural: { eligible: true },
     strong: true,
-    transactionHash,
+    transactionHash: `0x${transactionHash.replace(/[^ab]/g, "a").slice(-1).repeat(64)}`,
+    blockNumber: transactionHash.includes("b") ? 42_000_002 : 42_000_001,
+    blockTimestamp: new Date().toISOString(),
     observedAt: new Date().toISOString(),
   });
 
@@ -1168,6 +1176,7 @@ const platformUpdate = {
     newAnnouncements: [],
   },
   url: "https://four.meme/en/create-token",
+  observedAt: new Date().toISOString(),
 };
 
 const alertConfig = (dataDir) => ({
@@ -1504,7 +1513,7 @@ test("X, xAI and Grok official events use strict strong-alert cards and official
   assert.equal(isRelevantAlert({ ...fromX, signal: { relevant: false, strong: false, labels: [] } }), false);
 });
 
-test("the first Grok product event wins across release notes and official X", async (t) => {
+test("Grok product observations without a direct trading path remain separate audit records", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-grok-cross-source-"));
   let telegramCalls = 0;
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -1544,12 +1553,14 @@ test("the first Grok product event wins across release notes and official X", as
     signal: { relevant: true, strong: true, labels: ["Grok 新模型/能力"] },
     observedAt: now,
   };
-  assert.equal((await sendAlerts(config, release)).status, "delivered");
-  const duplicate = await sendAlerts(config, fromX);
-  assert.equal(duplicate.status, "suppressed");
-  assert.equal(duplicate.reason, "semantic_duplicate");
-  assert.equal(duplicate.persisted, true);
-  assert.equal(telegramCalls, 1);
+  const releaseResult = await sendAlerts(config, release);
+  assert.equal(releaseResult.status, "suppressed");
+  assert.equal(releaseResult.reason, "policy_suppressed");
+  const xResult = await sendAlerts(config, fromX);
+  assert.equal(xResult.status, "suppressed");
+  assert.equal(xResult.reason, "policy_suppressed");
+  assert.equal(xResult.persisted, true);
+  assert.equal(telegramCalls, 0);
 });
 
 test("Uniswap official protocol updates are strong while ordinary X chatter stays silent", () => {
@@ -1583,7 +1594,7 @@ test("Uniswap official protocol updates are strong while ordinary X chatter stay
   assert.equal(isStrongAlert({ type: "github_repository_discovered", launchpad: "Uniswap", sourceTrust: "official_verified" }), true);
 });
 
-test("Binance Meme Rush alerts explain the concrete production mode identifier", async (t) => {
+test("Binance Meme Rush observations without a direct target stay audit-only", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-binance-mode-"));
   let requestBody;
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -1593,7 +1604,7 @@ test("Binance Meme Rush alerts explain the concrete production mode identifier",
   });
   t.mock.method(console, "info", () => {});
 
-  await sendAlerts(alertConfig(dataDir), {
+  const result = await sendAlerts(alertConfig(dataDir), {
     type: "binance_official_update",
     kind: "meme_rush_capability",
     eventKey: "binance-meme-rush-baseline-gap:56:2004",
@@ -1609,10 +1620,9 @@ test("Binance Meme Rush alerts explain the concrete production mode identifier",
     url: "https://www.binance.com/en/skills/detail/binance-web3/meme-rush",
   });
 
-  assert.match(requestBody.text, /实时补漏确认/);
-  assert.match(requestBody.text, /OpenFour \(Four\.Meme\) 56\/2004/);
-  assert.match(requestBody.text, /新模式 openfour\.meme\.TaxToken/);
-  assertCompactCard(requestBody);
+  assert.equal(result.status, "suppressed");
+  assert.equal(result.reason, "policy_suppressed");
+  assert.equal(requestBody, undefined);
 });
 
 test("BSC launchpad confirmations are strong, concise, and include copy plus GMGN actions", async (t) => {
@@ -1628,6 +1638,7 @@ test("BSC launchpad confirmations are strong, concise, and include copy plus GMG
     type: "bsc_launchpad_update",
     kind: "new_launchpad",
     eventKey: "bsc-launchpad:56:0x1111111111111111111111111111111111111111",
+    platform: { id: "fourmeme", name: "Four.Meme" },
     chainId: 56,
     launcher: "0x1111111111111111111111111111111111111111",
     launchCount: 2,
@@ -1637,6 +1648,9 @@ test("BSC launchpad confirmations are strong, concise, and include copy plus GMG
     mode: { selector: "0x12345678", fingerprint: "mode-a", poolKinds: ["PancakeSwap V2"] },
     structural: { usesCreate2: true },
     security: { decision: "pass", metrics: { liquidityConfirmed: true } },
+    transactionHash: `0x${"a".repeat(64)}`,
+    blockNumber: 42_000_001,
+    blockTimestamp: new Date().toISOString(),
     explorerUrl: "https://bscscan.com/tx/0xabc",
     launcherUrl: "https://bscscan.com/address/0x1111111111111111111111111111111111111111",
   };
@@ -1656,7 +1670,7 @@ test("BSC launchpad confirmations are strong, concise, and include copy plus GMG
   assertCompactCard(requestBody);
 });
 
-test("Flap and Four.Meme first-token cards only claim safety after pass plus confirmed liquidity in bilingual rendering", async (t) => {
+test("unsafe first-token observations stay audit-only and safe confirmed first tokens may render", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-bsc-first-token-safety-"));
   const payloads = [];
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -1678,6 +1692,8 @@ test("Flap and Four.Meme first-token cards only claim safety after pass plus con
     mode: { fingerprint: `${platform.id}-first-token-safety`, componentMode: "Safety Gate Mode" },
     tokens: [{ token, metadata: { name: "Safety Test", symbol: "SAFE" } }],
     structural: { eligible: true },
+    transactionHash: `0x${token.slice(2, 3).repeat(64)}`,
+    blockNumber: 42_000_001,
     security,
     strong: true,
     blockTimestamp: now,
@@ -1705,19 +1721,15 @@ test("Flap and Four.Meme first-token cards only claim safety after pass plus con
     alertTranslationFetchImpl: translationFetch,
     alertTranslationTimeoutMs: 3_000,
   };
-  assert.equal((await sendAlerts(config, blocked)).status, "delivered");
+  const blockedResult = await sendAlerts(config, blocked);
+  assert.equal(blockedResult.status, "suppressed");
+  assert.equal(blockedResult.reason, "policy_suppressed", "a failed local safety gate cannot enter T1");
   assert.equal((await sendAlerts(config, passed)).status, "delivered");
-  assert.equal(payloads.length, 2);
-
-  const blockedCard = payloads.find((payload) => payload.text.includes("Flap"));
-  assert.match(blockedCard.text, /^🔴 强提醒 \| STRONG ALERT/);
-  assert.match(blockedCard.text, /🇨🇳 中文[\s\S]*本地安全门已拦截/);
-  assert.match(blockedCard.text, /🇬🇧 English[\s\S]*Blocked by local safety gate/);
-  assert.doesNotMatch(blockedCard.text, /首个通过本地权限与交易安全初筛的代币/);
+  assert.equal(payloads.length, 1);
 
   const passedCard = payloads.find((payload) => payload.text.includes("Four.Meme"));
   assert.match(passedCard.text, /🇨🇳 中文[\s\S]*安全初筛通过，非买入建议/);
-  assert.match(passedCard.text, /🇬🇧 English[\s\S]*Safety screening passed; not a buy recommendation/);
+  assert.match(passedCard.text, /🇬🇧 English[\s\S]*Safety screening passed/);
   assert.doesNotMatch(passedCard.text, /本地安全门已拦截|Blocked by local safety gate/);
 });
 
@@ -2257,14 +2269,12 @@ test("sendAlerts resolves with an auditable result after Telegram delivery succe
   assert.ok(logs.every((line) => !line.includes("test-bot-token-secret") && !line.includes("1234567890")));
 });
 
-test("official-token dedup state is committed atomically only after successful delivery", async (t) => {
+test("ordinary official-token activity is audit-only and never commits delivery dedup state", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-dedup-"));
-  let shouldFail = true;
   let fetchCalls = 0;
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
   t.mock.method(globalThis, "fetch", async () => {
     fetchCalls += 1;
-    if (shouldFail) throw new Error("temporary Telegram outage");
     return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: 77 } }) };
   });
   t.mock.method(console, "info", () => {});
@@ -2283,27 +2293,17 @@ test("official-token dedup state is committed atomically only after successful d
   const config = alertConfig(dataDir);
   const stateFile = path.join(dataDir, "alert-state.json");
 
-  t.mock.method(console, "error", () => {});
-  assert.equal((await sendAlerts(config, event)).status, "queued");
-  await assert.rejects(fs.access(stateFile), { code: "ENOENT" });
-
-  shouldFail = false;
-  await mutateOutboxEntry(dataDir, alertEventKey(event), (entry) => {
-    entry.destinations.telegram.nextAttemptAt = null;
-  });
   const result = await sendAlerts(config, event);
-  const state = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  assert.equal(result.status, "suppressed");
+  assert.equal(result.reason, "policy_suppressed");
+  await assert.rejects(fs.access(stateFile), { code: "ENOENT" });
   const files = await fs.readdir(dataDir);
-
-  assert.equal(result.status, "delivered");
-  assert.ok(Number(state.officialTokens[officialTokenDedupKey(event)]) > 0);
   assert.equal(files.some((file) => file.endsWith(".tmp")), false);
-
   assert.equal((await sendAlerts(config, event)).status, "suppressed");
-  assert.equal(fetchCalls, 2);
+  assert.equal(fetchCalls, 0);
 });
 
-test("focus platform alerts always sound while non-focus informational alerts stay silent", async (t) => {
+test("only trade-ready focus platform updates sound; ordinary platform observations stay audit-only", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-notification-strength-"));
   const payloads = [];
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -2330,9 +2330,8 @@ test("focus platform alerts always sound while non-focus informational alerts st
     url: "https://noxa.fi",
   });
 
+  assert.equal(payloads.length, 1);
   assert.equal(payloads[0].disable_notification, false);
-  assert.equal(payloads[1].disable_notification, false);
-  assert.equal(payloads[2].disable_notification, true);
   assert.match(payloads[0].text, /^🔴 强提醒｜/);
   assert.doesNotMatch(payloads[0].text, /强提醒[^\n]*\n\n/);
   payloads.forEach((payload) => assertCompactCard(payload));
@@ -2372,7 +2371,7 @@ test("outbox retries only the failed destination after partial delivery", async 
   assert.equal(await drainAlertOutbox(config), 0);
 });
 
-test("Telegram cards keep decisions, evidence, risk and actions without audit-field walls", async (t) => {
+test("non-trade-ready legacy card shapes are persisted without Telegram fan-out", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-complete-context-"));
   const payloads = [];
   const now = Date.now();
@@ -2507,62 +2506,14 @@ test("Telegram cards keep decisions, evidence, risk and actions without audit-fi
     observedAt: timestamp(0),
   });
 
-  const site = payloads.find((payload) => payload.text.includes("官网变化"));
-  assert.match(site.text, /页面首次出现 v2（具体功能尚未解析）/);
-  assert.match(site.text, /状态: 官方页面已变化；链上部署\/实际启用尚未确认/);
-  assert.doesNotMatch(site.text, /当前官方 X:|当前官方文档:|社交覆盖:/);
-  assert.ok(site.reply_markup.inline_keyboard.flat().some((button) => button.text === "🌐 官方主页"));
-  assert.ok(site.reply_markup.inline_keyboard.flat().some((button) => button.text === "📘 官方文档"));
-  assertCompactCard(site);
-
-  const github = payloads.find((payload) => payload.text.includes("官方代码更新"));
-  assert.match(github.text, /具体更新: refresh showcase and docs/);
-  assert.match(github.text, /范围: 展示、文档、前端/);
-  assert.match(github.text, /关键差异: vaultMode v2→v3/);
-  assert.match(github.text, /showcase\/scene\.tsx/);
-  assert.match(github.text, /状态: 代码已进入官方仓库；是否发布、部署或启用尚未确认/);
-  assert.match(github.text, /证据: flap-sh\/skills#abcdef12/);
-  assert.match(github.text, /时间: .*延迟1分钟/);
-  assert.doesNotMatch(github.text, /文件:|作者 |认证证据:/);
-  assertCompactCard(github);
-  const githubFallback = payloads.find((payload) => payload.text.includes("flap-sh/feed-fallback"));
-  assert.match(githubFallback.text, /具体更新: add a new vault contract/);
-  assert.match(githubFallback.text, /状态: 代码已进入官方仓库；是否发布、部署或启用尚未确认/);
-  assert.doesNotMatch(githubFallback.text, /代码行统计未取得|文件列表/);
-  assertCompactCard(githubFallback);
-
-  const early = payloads.find((payload) => payload.text.includes("早期量能异动"));
-  assert.match(early.text, /CA 0x1111/);
-  assert.match(early.text, /Uniswap V3 fee 3000/);
-  assert.match(early.text, /买 42 \/ 卖 13/);
-  assert.match(early.text, /门槛 ≥50笔\/≥0\.6 WETH/);
-  assert.match(early.text, /5分钟: 买 60 \/ 卖 21 · 共 81 笔/);
-  assert.match(early.text, /加速2\.5倍/);
-  assert.match(early.text, /风险: .*可卖/);
-  assert.doesNotMatch(early.text, /Launcher:|币龄:|安全矩阵|社交覆盖|口径:/);
-  assertCompactCard(early);
-
-  const launch = payloads.find((payload) => payload.text.includes("Mode Test"));
-  assert.match(launch.text, /结论: 不买（安全检查未完成）/);
-  assert.match(launch.text, /时间: .*延迟1分钟/);
-  assert.match(launch.text, /新模式: 0x99999999\/Uniswap V4/);
-  assert.doesNotMatch(launch.text, /官网:|官方 X:|文档:|安全矩阵:/);
-  assert.equal(launch.reply_markup.inline_keyboard.flat().some((button) => /GMGN/.test(button.text)), false);
-  assert.ok(launch.reply_markup.inline_keyboard.flat().some((button) => button.text === "📘 官方文档"));
-  assertCompactCard(launch);
-
-  const twitter = payloads.find((payload) => payload.text.includes("官方动态"));
-  assert.match(twitter.text, /时间: .*延迟1分钟/);
-  assert.match(twitter.text, /具体更新: A new tax-token mode is live/);
-  assert.match(twitter.text, /状态: 官方 X 明示已上线；链上\/合约启用尚未独立核验/);
-  assert.doesNotMatch(twitter.text, /外链: https:|互动:/);
-  assert.ok(twitter.reply_markup.inline_keyboard.flat().some((button) => button.text === "🌐 项目官网"));
-  assert.ok(twitter.reply_markup.inline_keyboard.flat().some((button) => button.text === "🔗 外链"));
-  assertCompactCard(twitter);
-  assert.ok(payloads.every((payload) => payload.text.length <= 700));
+  assert.equal(payloads.length, 0);
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(Object.keys(outbox.events).length, 6);
+  assert.ok(Object.values(outbox.events).every((entry) => entry.status === "suppressed"));
+  assert.ok(Object.values(outbox.events).every((entry) => entry.deliveryDisposition.mode === "audit_only"));
 });
 
-test("BSC and Fomo cards distinguish market facts from unchecked security coverage", async (t) => {
+test("generic BSC discovery is audit-only while a qualified Fomo call still renders", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-complete-market-"));
   const payloads = [];
   const now = Date.now();
@@ -2637,15 +2588,7 @@ test("BSC and Fomo cards distinguish market facts from unchecked security covera
     explorerUrl: "https://basescan.org/token/0x1212121212121212121212121212121212121212",
   });
 
-  const bsc = payloads.find((payload) => payload.text.includes("BSC 新发射台"));
-  assert.match(bsc.text, /PancakeSwap V2 fee 25/);
-  assert.match(bsc.text, /流动性 \$7,241\.02 USD/);
-  assert.match(bsc.text, /风险: .*可卖/);
-  assert.match(bsc.text, /延迟45秒/);
-  assert.doesNotMatch(bsc.text, /创建者:|社交:|安全矩阵|权限:/);
-  assert.ok(bsc.reply_markup.inline_keyboard.flat().some((button) => button.text === "📋 复制池地址"));
-  assertCompactCard(bsc);
-
+  assert.equal(payloads.some((payload) => payload.text.includes("BSC 新发射台")), false);
   const fomo = payloads.find((payload) => payload.text.includes("FOMO BSC KOL"));
   assert.match(fomo.text, /前一区块零仓位首仓候选/);
   assert.match(fomo.text, /支付 0\.25 WETH（已核验）/);
@@ -2813,7 +2756,7 @@ test("pon.fun delayed recovery uses the verified recovery instant while retainin
   assert.equal(delayedRecovery.lagMs, 3 * 60 * 60_000);
 });
 
-test("pon.fun chain and X delayed recoveries pass the closed gate as T2 bilingual do-not-chase alerts", async (t) => {
+test("pon.fun chain and X delayed recoveries are durable T2 audit records and never replay immediately", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-pon-delayed-e2e-"));
   const payloads = [];
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -2849,41 +2792,34 @@ test("pon.fun chain and X delayed recoveries pass the closed gate as T2 bilingua
 
   assert.equal(isMonitoringSourceEnabled(config, chainRecovery), true);
   const chainResult = await sendAlerts(config, chainRecovery);
-  assert.equal(chainResult.status, "delivered");
+  assert.equal(chainResult.status, "suppressed");
+  assert.equal(chainResult.reason, "policy_suppressed");
   const xRecovery = ponDelayedOfficialXEvent({ recoveredAtMs });
   assert.equal(isMonitoringSourceEnabled(config, xRecovery), true);
   const xResult = await sendAlerts(config, xRecovery);
-  assert.equal(xResult.status, "delivered");
-  assert.equal(payloads.length, 2);
-
-  for (const payload of payloads) {
-    assert.equal(payload.disable_notification, true);
-    assert.ok(payload.text.length <= 600, `delayed recovery card is ${payload.text.length} characters: ${payload.text}`);
-    assert.match(payload.text, /^平台：pon\.fun · T2/m);
-    assert.match(payload.text, /^Platform: pon\.fun · T2/m);
-    assert.match(payload.text, /监控恢复补报/);
-    assert.match(payload.text, /勿追价/);
-    assert.match(payload.text, /Delayed recovery/);
-    assert.match(payload.text, /do not chase/);
-  }
+  assert.equal(xResult.status, "suppressed");
+  assert.equal(xResult.reason, "policy_suppressed");
+  assert.equal(payloads.length, 0);
 
   const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   assert.equal(outbox.events[chainResult.eventId].event.tradingPriority.tier, "T2");
   assert.equal(outbox.events[xResult.eventId].event.tradingPriority.tier, "T2");
+  assert.equal(outbox.events[chainResult.eventId].deliveryDisposition.reason, "pon_delayed_recovery");
+  assert.equal(outbox.events[xResult.eventId].deliveryDisposition.reason, "pon_delayed_recovery");
+  assert.equal(outbox.events[chainResult.eventId].destinations.telegram.disabledReason, "policy_suppressed");
+  assert.equal(outbox.events[xResult.eventId].destinations.telegram.disabledReason, "policy_suppressed");
   assert.equal(outbox.events[chainResult.eventId].event.freshness.basis, "delayedRecovery.recoveredAt_continuous_recovery");
   assert.equal(outbox.events[xResult.eventId].event.freshness.basis, "delayedRecovery.recoveredAt_continuous_recovery");
 });
 
-test("pon.fun delayed recovery stays deliverable after the generic two-hour TTL but expires after seven days", async (t) => {
+test("pon.fun delayed recovery suppression is terminal and never becomes retryable", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-pon-delayed-ttl-"));
   let clockMs = Date.parse("2026-09-02T04:00:00.000Z");
-  let deliveryOnline = false;
   let fetchCalls = 0;
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
   t.mock.method(Date, "now", () => clockMs);
   t.mock.method(globalThis, "fetch", async () => {
     fetchCalls += 1;
-    if (!deliveryOnline) throw new Error("simulated Telegram outage");
     return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: fetchCalls } }) };
   });
   t.mock.method(console, "error", () => {});
@@ -2899,40 +2835,19 @@ test("pon.fun delayed recovery stays deliverable after the generic two-hour TTL 
   };
 
   const delayed = ponDelayedPausedEvent({ recoveredAtMs: clockMs });
-  assert.equal((await sendAlerts(config, delayed)).status, "queued");
-  assert.equal(fetchCalls, 1);
-  deliveryOnline = true;
+  const result = await sendAlerts(config, delayed);
+  assert.equal(result.status, "suppressed");
+  assert.equal(result.reason, "policy_suppressed");
+  assert.equal(fetchCalls, 0);
   clockMs += 3 * 60 * 60_000;
   const pendingOutbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
-  assert.equal(
-    isMonitoringSourceEnabled(config, pendingOutbox.events[delayed.eventKey].event),
-    true,
-    JSON.stringify(pendingOutbox.events[delayed.eventKey].event, null, 2),
-  );
-  assert.equal(await drainAlertOutbox(config), 1);
-  assert.equal(fetchCalls, 2, "the recovery summary remains deliverable after the ordinary two-hour queue TTL");
-  let outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
-  assert.equal(outbox.events[delayed.eventKey].status, "delivered");
-
-  deliveryOnline = false;
-  const expired = ponDelayedPausedEvent({
-    recoveredAtMs: clockMs,
-    transactionHash: `0x${"c".repeat(64)}`,
-    blockNumber: 52_000_101,
-  });
-  assert.equal((await sendAlerts(config, expired)).status, "queued");
-  assert.equal(fetchCalls, 3);
-  await mutateOutboxEntry(dataDir, expired.eventKey, (entry) => {
-    entry.createdAt = new Date(clockMs - 7 * 24 * 60 * 60_000 - 1).toISOString();
-    entry.destinations.telegram.nextAttemptAt = null;
-  });
-  deliveryOnline = true;
+  assert.equal(pendingOutbox.events[delayed.eventKey].status, "suppressed");
   assert.equal(await drainAlertOutbox(config), 0);
-  assert.equal(fetchCalls, 3, "an over-seven-day recovery summary is not sent");
-  outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
-  assert.equal(outbox.events[expired.eventKey].status, "suppressed");
-  assert.equal(outbox.events[expired.eventKey].destinations.telegram.disabledReason, "delivery_ttl_expired");
-  assert.equal(outbox.events[expired.eventKey].destinations.telegram.deliveryMaxAgeMs, 7 * 24 * 60 * 60_000);
+  assert.equal(fetchCalls, 0, "terminal policy suppression is never retried");
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(outbox.events[delayed.eventKey].status, "suppressed");
+  assert.equal(outbox.events[delayed.eventKey].destinations.telegram.disabledReason, "policy_suppressed");
+  assert.equal(outbox.events[delayed.eventKey].deliveryDisposition.reason, "pon_delayed_recovery");
 });
 
 test("GitHub repository discovery uses repository creation time instead of pretending recovery is realtime", () => {
@@ -3063,18 +2978,15 @@ test("1h X and GitHub updates become silent backfills while 3h updates are audit
     url: `https://github.com/flap-sh/contracts/commit/${commit}`,
   });
 
-  assert.equal((await sendAlerts(config, twitterEvent("late-x", 1))).status, "delivered");
+  assert.equal((await sendAlerts(config, twitterEvent("late-x", 1))).status, "suppressed");
   assert.equal((await sendAlerts(config, twitterEvent("stale-x", 3))).status, "suppressed");
-  assert.equal((await sendAlerts(config, githubEvent("late-github", 1))).status, "delivered");
+  assert.equal((await sendAlerts(config, githubEvent("late-github", 1))).status, "suppressed");
   assert.equal((await sendAlerts(config, githubEvent("stale-github", 3))).status, "suppressed");
 
-  assert.equal(payloads.length, 2);
-  for (const payload of payloads) {
-    assert.equal(payload.disable_notification, true);
-    assert.match(payload.text, /^🕘 迟到补扫（延迟1小时）｜/);
-    assert.doesNotMatch(payload.text, /🔴 强提醒/);
-  }
+  assert.equal(payloads.length, 0);
   const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(outbox.events["twitter:flapdotsh:late-x"].deliveryDisposition.mode, "audit_only");
+  assert.equal(outbox.events["github:flap-sh/contracts:late-github"].deliveryDisposition.mode, "audit_only");
   assert.equal(outbox.events["twitter:flapdotsh:stale-x"].event.freshness.scope, "twitter");
   assert.equal(outbox.events["twitter:flapdotsh:stale-x"].status, "suppressed");
   assert.equal(outbox.events["github:flap-sh/contracts:stale-github"].event.freshness.scope, "github");
@@ -3099,6 +3011,8 @@ test("a realtime chain event keeps strong delivery and records its freshness evi
     observedAt: new Date().toISOString(),
     launcher: "0x1111111111111111111111111111111111111111",
     platform: { id: "fourmeme", name: "Four.Meme" },
+    transactionHash: `0x${"a".repeat(64)}`,
+    blockNumber: 42_000_001,
     tokens: [],
     pools: [],
     mode: { selector: "proxy-upgrade", componentMode: "Factory" },
@@ -3151,11 +3065,12 @@ test("a 20h Binance publication is audit-only while a freshly timestamped revisi
     changeType: "revised",
     eventKey: "binance-announcement:revision-freshness-test",
     project: { id: "binance", name: "Binance" },
-    signal: { labels: ["安全/紧急事件"] },
-    title: "Security announcement materially revised",
+    signal: { labels: ["安全/紧急公告"] },
+    title: "Binance suspends all withdrawals after a confirmed security breach; notice materially revised",
     publishedAt: new Date(Date.now() - 20 * 60 * 60_000).toISOString(),
     updatedAt: new Date().toISOString(),
     observedAt: new Date().toISOString(),
+    source: { id: "binance_exchange_cms", url: "https://www.binance.com/en/support/announcement/detail/revision-freshness-test" },
     url: "https://www.binance.com/en/support/announcement/detail/revision-freshness-test",
     strong: true,
   });
@@ -3187,11 +3102,12 @@ test("Telegram delivery TTL stops a failed Binance revision retry after two hour
     changeType: "revised",
     eventKey: eventId,
     project: { id: "binance", name: "Binance" },
-    signal: { labels: ["安全/紧急事件"] },
-    title: "Security announcement materially revised",
+    signal: { labels: ["安全/紧急公告"] },
+    title: "Binance suspends all withdrawals after a confirmed security breach; notice materially revised",
     publishedAt: new Date(Date.now() - 20 * 60 * 60_000).toISOString(),
     updatedAt: new Date().toISOString(),
     observedAt: new Date().toISOString(),
+    source: { id: "binance_exchange_cms", url: "https://www.binance.com/en/support/announcement/detail/revision-delivery-ttl" },
     url: "https://www.binance.com/en/support/announcement/detail/revision-delivery-ttl",
     strong: true,
   };
@@ -3293,26 +3209,23 @@ test("Telegram delivery TTL also expires an unassessed Pons alert without trusti
   const factory = "0x6666666666666666666666666666666666666666";
   const eventId = `pons-v2-factory:${factory}`;
 
-  assert.equal((await sendAlerts(config, {
+  const result = await sendAlerts(config, {
     type: "pons_v2_factory_discovered",
     factory,
     source: "official_v2_hook",
     observedAt: new Date().toISOString(),
     verification: { launchEnabled: true, selectorMatches: ["launchEnabled()"] },
-  })).status, "queued");
-  await mutateOutboxEntry(dataDir, eventId, (entry) => {
-    entry.createdAt = new Date(Date.now() - config.alertTelegramDeliveryMaxAgeMs - 60_000).toISOString();
-    entry.destinations.telegram.nextAttemptAt = null;
   });
-
+  assert.equal(result.status, "suppressed");
+  assert.equal(result.reason, "policy_suppressed");
   assert.equal(await drainAlertOutbox(config), 0);
-  assert.equal(fetchCalls, 1);
+  assert.equal(fetchCalls, 0);
   const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   const entry = outbox.events[eventId];
   assert.equal(entry.event.freshness.decision, "unassessed");
   assert.equal(entry.event.freshness.sourceOccurredAt, null, "observedAt is not promoted to source time");
   assert.equal(entry.destinations.telegram.status, "disabled");
-  assert.equal(entry.destinations.telegram.disabledReason, "delivery_ttl_expired");
+  assert.equal(entry.destinations.telegram.disabledReason, "policy_suppressed");
 });
 
 test("a fresh pending Telegram destination remains retryable before delivery TTL", async (t) => {
@@ -3335,9 +3248,11 @@ test("a fresh pending Telegram destination remains retryable before delivery TTL
     changeType: "revised",
     eventKey: eventId,
     project: { id: "binance", name: "Binance" },
-    signal: { labels: ["安全/紧急事件"] },
-    title: "Fresh material revision",
+    signal: { labels: ["安全/紧急公告"] },
+    title: "Binance suspends all withdrawals after a confirmed security breach; fresh material revision",
+    updatedAt: new Date().toISOString(),
     observedAt: new Date().toISOString(),
+    source: { id: "binance_exchange_cms", url: "https://www.binance.com/en/support/announcement/detail/fresh-delivery-retry" },
     url: "https://www.binance.com/en/support/announcement/detail/fresh-delivery-retry",
   };
 
@@ -3373,9 +3288,11 @@ test("a duplicate cannot reset the first Telegram delivery TTL anchor", async (t
     changeType: "revised",
     eventKey: eventId,
     project: { id: "binance", name: "Binance" },
-    signal: { labels: ["安全/紧急事件"] },
-    title: "First revision payload",
+    signal: { labels: ["安全/紧急公告"] },
+    title: "Binance suspends all withdrawals after a confirmed security breach; first revision payload",
+    updatedAt: new Date().toISOString(),
     observedAt: new Date().toISOString(),
+    source: { id: "binance_exchange_cms", url: "https://www.binance.com/en/support/announcement/detail/duplicate-delivery-ttl" },
     url: "https://www.binance.com/en/support/announcement/detail/duplicate-delivery-ttl",
   };
 
@@ -3431,9 +3348,11 @@ test("Telegram delivery TTL leaves a pending webhook eligible for retry", async 
     changeType: "revised",
     eventKey: eventId,
     project: { id: "binance", name: "Binance" },
-    signal: { labels: ["安全/紧急事件"] },
-    title: "Revision with two destinations",
+    signal: { labels: ["安全/紧急公告"] },
+    title: "Binance suspends all withdrawals after a confirmed security breach; two-destination revision",
+    updatedAt: new Date().toISOString(),
     observedAt: new Date().toISOString(),
+    source: { id: "binance_exchange_cms", url: "https://www.binance.com/en/support/announcement/detail/delivery-ttl-webhook" },
     url: "https://www.binance.com/en/support/announcement/detail/delivery-ttl-webhook",
   };
 
@@ -3503,6 +3422,9 @@ test("a stale duplicate cannot disable retry delivery for the first realtime pay
     timestamp: new Date(Date.now() - 5 * 60_000).toISOString(),
     observedAt: new Date().toISOString(),
     launcher: "0x4444444444444444444444444444444444444444",
+    platform: { id: "fourmeme", name: "Four.Meme" },
+    transactionHash: `0x${"a".repeat(64)}`,
+    blockNumber: 42_000_001,
     tokens: [],
     pools: [],
     mode: { selector: "0x12345678" },
@@ -3527,6 +3449,56 @@ test("a stale duplicate cannot disable retry delivery for the first realtime pay
   assert.equal(entry.destinations.telegram.status, "failed");
   assert.notEqual(entry.destinations.telegram.disabledReason, "freshness_too_old");
   assert.equal(fetchCalls, 1, "the duplicate must not bypass the first failed attempt's retry backoff");
+});
+
+test("a valid v2 failed T1 is re-scored on duplicate observation and cannot deliver after its trading window", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-active-v2-aging-"));
+  let clockMs = Date.parse("2026-09-03T00:00:00.000Z");
+  let fetchCalls = 0;
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async () => {
+    fetchCalls += 1;
+    throw new Error("simulated Telegram outage");
+  });
+  t.mock.method(console, "error", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    alertChineseTranslationEnabled: false,
+    alertNow: () => clockMs,
+  };
+  const occurredAt = new Date(clockMs).toISOString();
+  const event = {
+    type: "platform_capability_update",
+    eventKey: "platform-capability:flap:active-v2-aging",
+    platform: { id: "flap", name: "Flap", website: "https://flap.sh" },
+    changes: { newModules: ["Vault Current Window"] },
+    title: "Flap launches Vault Current Window",
+    publishedAt: occurredAt,
+    observedAt: occurredAt,
+    url: "https://docs.flap.sh/current-window",
+  };
+
+  const queued = await sendAlerts(config, event);
+  assert.equal(queued.status, "queued");
+  assert.equal(fetchCalls, 1);
+  let outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(outbox.events[event.eventKey].event.tradingPriority.version, 2);
+  assert.equal(outbox.events[event.eventKey].event.tradingPriority.tier, "T1");
+  assert.equal(outbox.events[event.eventKey].deliveryDisposition.mode, "immediate");
+
+  clockMs += 16 * 60_000;
+  const expiredDuplicate = await sendAlerts(config, structuredClone(event));
+  assert.equal(expiredDuplicate.status, "suppressed");
+  assert.equal(expiredDuplicate.reason, "policy_suppressed");
+  assert.equal(fetchCalls, 1, "an aged duplicate never retries with its formerly valid T1 grant");
+  outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  const expired = outbox.events[event.eventKey];
+  assert.equal(expired.event.tradingPriority.tier, "T2");
+  assert.equal(expired.event.tradingPriority.hardGates.validWindow, false);
+  assert.equal(expired.deliveryDisposition.mode, "audit_only");
+  assert.equal(expired.destinations.telegram.disabledReason, "policy_suppressed");
 });
 
 test("an idle outbox drain does not rewrite a terminal-only outbox", async (t) => {
@@ -3765,12 +3737,15 @@ test("pon.fun producer events pass the closed gate, render durably, and deduplic
   assert.equal(first.status, "delivered");
   assert.equal(payloads.length, 1);
   assert.equal(payloads[0].disable_notification, true, "ordinary MarketCreated is T2");
-  assert.ok(payloads[0].text.length <= 600);
+  assert.ok(payloads[0].text.length < 3_800);
+  assert.ok(payloads[0].text.split("\n").length <= 18);
   assert.match(payloads[0].text, /^🔔 监控提醒 \| MONITOR ALERT/m);
   assert.match(payloads[0].text, /^平台：pon\.fun · T2/m);
-  assert.match(payloads[0].text, /^更新了什么：/m);
+  assert.match(payloads[0].text, /^结论：/m);
+  assert.match(payloads[0].text, /^事件：/m);
   assert.match(payloads[0].text, /^Platform: pon\.fun · T2/m);
-  assert.match(payloads[0].text, /^What changed: /m);
+  assert.match(payloads[0].text, /^Decision: /m);
+  assert.match(payloads[0].text, /^Event: /m);
 
   const officialX = {
     type: "twitter_update",
@@ -3883,21 +3858,24 @@ test("pon.fun producer events pass the closed gate, render durably, and deduplic
   }
   assert.deepEqual(ponFunNoveltyKeys(graduated), [`pon:${coin}:graduated`]);
   assert.deepEqual(ponFunNoveltyKeys(lpDeployed), [`pon:${coin}:lp_deployed`]);
-  assert.equal((await sendAlerts(config, graduated)).status, "delivered");
-  assert.equal((await sendAlerts(config, lpDeployed)).status, "delivered");
-  assert.equal(payloads.length, 3, "created, graduated and LP deployed remain independent stages");
+  const graduatedResult = await sendAlerts(config, graduated);
+  const lpDeployedResult = await sendAlerts(config, lpDeployed);
+  assert.equal(graduatedResult.status, "delivered");
+  assert.equal(lpDeployedResult.status, "delivered");
+  assert.equal(payloads.length, 3, "strict official API transitions with a fresh on-chain binding are realtime T2");
 
-  const poolFeeFirst = {
-    ...lifecycle("pool-fee", { poolFee: { before: 3_000, after: 10_000 } }),
-  };
-  const poolFeeRepeated = {
-    ...lifecycle("pool-fee", { poolFee: { before: 3_000, after: 10_000 } }),
-  };
+  const poolFeeUpFirst = lifecycle("pool-fee", { poolFee: { before: 3_000, after: 10_000 } });
+  const poolFeeDown = lifecycle("pool-fee", { poolFee: { before: 10_000, after: 3_000 } });
+  const poolFeeUpAgain = lifecycle("pool-fee", { poolFee: { before: 3_000, after: 10_000 } });
   assert.notDeepEqual(
-    ponFunNoveltyKeys(poolFeeFirst),
-    ponFunNoveltyKeys(poolFeeRepeated),
-    "a later repeat of the same mutable lifecycle transition needs its own durable revision identity",
+    ponFunNoveltyKeys(poolFeeUpFirst),
+    ponFunNoveltyKeys(poolFeeUpAgain),
+    "an A-B-A-B lifecycle sequence keeps the later B transition independently identifiable",
   );
+  for (const transition of [poolFeeUpFirst, poolFeeDown, poolFeeUpAgain]) {
+    assert.equal((await sendAlerts(config, transition)).status, "delivered");
+  }
+  assert.equal(payloads.length, 6, "A-B-A-B emits all three verified lifecycle transitions");
 
   const delisted = {
     ...market,
@@ -3989,7 +3967,7 @@ test("pon.fun producer events pass the closed gate, render durably, and deduplic
   assert.equal((await sendAlerts(config, configA)).status, "delivered");
   assert.equal((await sendAlerts(config, configB)).status, "delivered");
   assert.equal((await sendAlerts(config, configC)).status, "delivered");
-  assert.equal(payloads.length, 6, "three independently proven config revisions remain alertable inside six hours");
+  assert.equal(payloads.length, 9, "three independently proven T1 config revisions remain alertable inside six hours");
 
   const platformToken = "0x7673dc6d2357bdc2e04fd80c169f2bef56622d9a";
   let platformRevision = 0;
@@ -4066,7 +4044,7 @@ test("pon.fun producer events pass the closed gate, render durably, and deduplic
   );
   assert.equal((await sendAlerts(config, firstBurn)).status, "delivered");
   assert.equal((await sendAlerts(config, secondBurn)).status, "delivered");
-  assert.equal(payloads.length, 8, "separate supply revisions remain alertable inside six hours");
+  assert.equal(payloads.length, 11, "separate T1 supply revisions remain alertable inside six hours");
 
   const laterStageObservation = {
     ...officialX,
@@ -4109,7 +4087,7 @@ test("pon.fun producer events pass the closed gate, render durably, and deduplic
   };
   assert.notDeepEqual(ponFunNoveltyKeys(laterStageObservation), ponFunNoveltyKeys(separateStageObservation));
   assert.equal((await sendAlerts(config, separateStageObservation)).status, "delivered", "two distinct official X control updates cannot collapse to their shared stage");
-  assert.equal(payloads.length, 10);
+  assert.equal(payloads.length, 13);
 
   const claimFallbackObservation = {
     ...separateStageObservation,
@@ -4131,7 +4109,7 @@ test("pon.fun producer events pass the closed gate, render durably, and deduplic
     },
   };
   assert.equal((await sendAlerts(config, exactTxObservation)).status, "suppressed", "a shared exact transaction still folds an X observation into its chain event");
-  assert.equal(payloads.length, 10);
+  assert.equal(payloads.length, 13);
 
   const configAddress = configA.changes.oracle.after;
   const exactCaObservation = {
@@ -4151,11 +4129,13 @@ test("pon.fun producer events pass the closed gate, render durably, and deduplic
   assert.equal(ponFunNoveltyKeys(configA).includes(sharedCaKey), true);
   assert.equal(ponFunNoveltyKeys(exactCaObservation).includes(sharedCaKey), true);
   assert.equal((await sendAlerts(config, exactCaObservation)).status, "suppressed", "a shared exact CA still folds an X observation into its chain event");
-  assert.equal(payloads.length, 10);
+  assert.equal(payloads.length, 13);
 
   const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   assert.equal(outbox.events[first.eventId].event.tradingPriority.tier, "T2");
   assert.deepEqual(outbox.events[first.eventId].event.canonicalSignalIds, [`pon:${coin}:created`]);
-  assert.equal(outbox.events[first.eventId].renderBundle.version, 17);
+  assert.equal(outbox.events[graduatedResult.eventId].deliveryDisposition.reason, "pon_exact_onchain_realtime");
+  assert.equal(outbox.events[graduatedResult.eventId].event.tradingPriority.tier, "T2");
+  assert.equal(outbox.events[first.eventId].renderBundle.version, 18);
   assert.equal(outbox.events[duplicate.eventId].semanticDuplicateOf, first.eventId);
 });
