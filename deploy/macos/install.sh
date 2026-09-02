@@ -75,12 +75,16 @@ agent_dir="$home_dir/Library/LaunchAgents"
 support_dir="$home_dir/Library/Application Support/robinhood-chain-monitor"
 bin_dir="$support_dir/bin"
 state_dir="$support_dir/watchdog"
+vpn_state_dir="$support_dir/vpn-watchdog"
 log_dir="$project_dir/data/logs"
 watchdog_install="$bin_dir/watchdog.sh"
+vpn_watchdog_install="$bin_dir/vpn-watchdog.sh"
 sleep_label=com.qohfq.robinhood-ac-sleep-guard
 watchdog_label=com.qohfq.robinhood-local-watchdog
+vpn_watchdog_label=com.qohfq.robinhood-vpn-watchdog
 sleep_plist="$agent_dir/$sleep_label.plist"
 watchdog_plist="$agent_dir/$watchdog_label.plist"
+vpn_watchdog_plist="$agent_dir/$vpn_watchdog_label.plist"
 domain="gui/$(/usr/bin/id -u)"
 
 print_action() {
@@ -104,20 +108,25 @@ bootout_managed() {
 if [ "$uninstall" = true ]; then
   print_action "Managed sleep guard: $sleep_plist"
   print_action "Managed watchdog: $watchdog_plist"
+  print_action "Managed VPN watchdog: $vpn_watchdog_plist"
   print_action "Managed script: $watchdog_install"
+  print_action "Managed VPN script: $vpn_watchdog_install"
+  bootout_managed "$vpn_watchdog_label" "$vpn_watchdog_plist"
   bootout_managed "$watchdog_label" "$watchdog_plist"
   bootout_managed "$sleep_label" "$sleep_plist"
   if [ "$dry_run" = true ]; then
-    print_action "DRY-RUN: remove the three managed files above; retain watchdog reports and logs"
+    print_action "DRY-RUN: remove the five managed files above; retain watchdog reports and logs"
     exit 0
   fi
-  /bin/rm -f -- "$watchdog_plist" "$sleep_plist" "$watchdog_install"
+  /bin/rm -f -- "$vpn_watchdog_plist" "$watchdog_plist" "$sleep_plist" \
+    "$vpn_watchdog_install" "$watchdog_install"
   /bin/rmdir "$bin_dir" 2>/dev/null || true
   # Reports and logs are deliberately retained for diagnosis. Empty parent
   # directories are removed, but no recursive deletion is performed.
   /bin/rmdir "$state_dir" 2>/dev/null || true
+  /bin/rmdir "$vpn_state_dir" 2>/dev/null || true
   /bin/rmdir "$support_dir" 2>/dev/null || true
-  print_action "Removed the managed LaunchAgents and watchdog script. Reports/logs were retained if present."
+  print_action "Removed the managed LaunchAgents and watchdog scripts. Reports/logs were retained if present."
   exit 0
 fi
 
@@ -207,25 +216,84 @@ watchdog_xml=$(cat <<EOF
 EOF
 )
 
+vpn_watchdog_xml=$(cat <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>$vpn_watchdog_label</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$(xml_escape "$vpn_watchdog_install")</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>VPN_WATCHDOG_ENABLED</key>
+    <string>true</string>
+    <key>VPN_WATCHDOG_BUNDLE_ID</key>
+    <string>com.vpn.cat</string>
+    <key>VPN_WATCHDOG_STATE_DIR</key>
+    <string>$(xml_escape "$vpn_state_dir")</string>
+    <key>VPN_WATCHDOG_FAILURE_SAMPLES</key>
+    <string>2</string>
+    <key>VPN_WATCHDOG_COOLDOWN_SECONDS</key>
+    <string>600</string>
+    <key>VPN_WATCHDOG_ATTEMPT_WINDOW_SECONDS</key>
+    <string>3600</string>
+    <key>VPN_WATCHDOG_MAX_ATTEMPTS</key>
+    <string>3</string>
+    <key>VPN_WATCHDOG_CIRCUIT_SECONDS</key>
+    <string>3600</string>
+    <key>VPN_WATCHDOG_POST_START_WAIT_SECONDS</key>
+    <string>2</string>
+    <key>VPN_WATCHDOG_UNDERLAY_URL_PRIMARY</key>
+    <string>https://www.baidu.com/</string>
+    <key>VPN_WATCHDOG_UNDERLAY_URL_SECONDARY</key>
+    <string>https://www.aliyun.com/</string>
+  </dict>
+  <key>StartInterval</key>
+  <integer>30</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>LowPriorityIO</key>
+  <true/>
+  <key>Nice</key>
+  <integer>10</integer>
+  <key>StandardOutPath</key>
+  <string>$(xml_escape "$log_dir/vpn-watchdog.out.log")</string>
+  <key>StandardErrorPath</key>
+  <string>$(xml_escape "$log_dir/vpn-watchdog.err.log")</string>
+</dict>
+</plist>
+EOF
+)
+
 if [ "$dry_run" = true ]; then
   print_action "DRY-RUN: create private support directory $support_dir (0700)"
   print_action "DRY-RUN: copy $script_dir/watchdog.sh to $watchdog_install (0700)"
+  print_action "DRY-RUN: copy $script_dir/vpn-watchdog.sh to $vpn_watchdog_install (0700)"
   print_action "DRY-RUN: write $sleep_plist (0600)"
   printf '%s\n' "$sleep_xml"
   print_action "DRY-RUN: write $watchdog_plist (0600)"
   printf '%s\n' "$watchdog_xml"
+  print_action "DRY-RUN: write $vpn_watchdog_plist (0600)"
+  printf '%s\n' "$vpn_watchdog_xml"
   if [ "$no_load" = false ]; then
-    print_action "DRY-RUN: bootstrap only $sleep_label and $watchdog_label"
+    print_action "DRY-RUN: bootstrap only $sleep_label, $watchdog_label, and $vpn_watchdog_label"
   fi
   exit 0
 fi
 
-for path in "$agent_dir" "$support_dir" "$bin_dir" "$state_dir" "$log_dir"; do
+for path in "$agent_dir" "$support_dir" "$bin_dir" "$state_dir" "$vpn_state_dir" "$log_dir"; do
   [ ! -L "$path" ] || die "managed directory must not be a symlink: $path"
   /bin/mkdir -p "$path"
 done
-/bin/chmod 700 "$support_dir" "$bin_dir" "$state_dir"
+/bin/chmod 700 "$support_dir" "$bin_dir" "$state_dir" "$vpn_state_dir"
 /usr/bin/install -m 0700 "$script_dir/watchdog.sh" "$watchdog_install"
+/usr/bin/install -m 0700 "$script_dir/vpn-watchdog.sh" "$vpn_watchdog_install"
 
 write_plist() {
   destination=$1
@@ -239,16 +307,20 @@ write_plist() {
 
 write_plist "$sleep_plist" "$sleep_xml"
 write_plist "$watchdog_plist" "$watchdog_xml"
+write_plist "$vpn_watchdog_plist" "$vpn_watchdog_xml"
 
 if [ "$no_load" = false ]; then
-  # Only the two units owned by this installer are touched. The production
+  # Only the three helper units owned by this installer are touched. The production
   # monitor and Fomo LaunchAgents remain running throughout installation.
+  /bin/launchctl bootout "$domain" "$vpn_watchdog_plist" 2>/dev/null || true
   /bin/launchctl bootout "$domain" "$watchdog_plist" 2>/dev/null || true
   /bin/launchctl bootout "$domain" "$sleep_plist" 2>/dev/null || true
   /bin/launchctl enable "$domain/$sleep_label"
   /bin/launchctl enable "$domain/$watchdog_label"
+  /bin/launchctl enable "$domain/$vpn_watchdog_label"
   /bin/launchctl bootstrap "$domain" "$sleep_plist"
   /bin/launchctl bootstrap "$domain" "$watchdog_plist"
+  /bin/launchctl bootstrap "$domain" "$vpn_watchdog_plist"
 fi
 
-print_action "Installed AC-only sleep protection and the local watchdog. Existing production LaunchAgents were not edited or restarted."
+print_action "Installed AC-only sleep protection, the local watchdog, and the independent VPN reconnect watchdog. Existing production LaunchAgents were not edited or restarted."
