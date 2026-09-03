@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -12,6 +13,7 @@ import {
   isStrictFlapQuoteAsset,
   isStrictFlapQuoteAssetUpdate,
   isStrictFlapPortalQuoteAssetUpdate,
+  isStrictFlapTrackedPoolTokenUpdate,
   isTelegramNewsUpdateAllowed,
   isThreePlatformSource,
 } from "../src/source-controls.js";
@@ -356,6 +358,137 @@ const strictFlapPortalFirstObservedAfterGapEvent = ({ successfulReaders = 0 } = 
   event.risk = "Historical archive state was unavailable from the required independent readers. This confirms only that the quote asset is enabled now; it does not prove a new 0-to-1 activation, token safety, liquidity, backing, or favorable execution.";
   return event;
 };
+
+const FLAP_TRACKED_TOKEN_PORTAL = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
+const FLAP_TRACKED_TOKEN_TOPIC = "0x504e7f360b2e5fe33cbaaae4c593bc55305328341bf79009e43e0e3b7f699603";
+const FLAP_TRACKED_TOKEN_QUOTE = "0xd97d097a89113fa59b76c572e5b2eb647e8eefaf";
+
+function strictFlapTrackedPoolTokenEvent({
+  ordinal = 1,
+  quoteSymbol = "SOXLB",
+  blockTimestamp = "2026-09-04T00:00:00.000Z",
+  observedAt = "2026-09-04T00:00:05.000Z",
+  delayedRecovery,
+} = {}) {
+  const token = "0x4444444444444444444444444444444444444444";
+  const poolAddress = "0x5555555555555555555555555555555555555555";
+  const factory = "0xca143ce32fe78f1f7019d7d551a6402fc5350c73";
+  const transactionHash = `0x${"11".repeat(32)}`;
+  const blockHash = `0x${"77".repeat(32)}`;
+  const activationTransactionHash = `0x${"22".repeat(32)}`;
+  const activationBlockHash = `0x${"33".repeat(32)}`;
+  const activationLogIndex = 4;
+  const logIndex = 7;
+  const generationKey = `quote:${FLAP_TRACKED_TOKEN_QUOTE}:generation:${activationBlockHash}:${activationTransactionHash}:${activationLogIndex}`;
+  const fingerprint = createHash("sha256")
+    .update(JSON.stringify({ generationKey, quoteAddress: FLAP_TRACKED_TOKEN_QUOTE }))
+    .digest("hex")
+    .slice(0, 20);
+  return {
+    type: "bsc_launchpad_update",
+    kind: "flap_pool_token",
+    eventKey: `bsc-flap-pool-token:${generationKey}:${ordinal}:${transactionHash}:${logIndex}:${token}`,
+    chainId: 56,
+    launcher: FLAP_TRACKED_TOKEN_PORTAL,
+    platform: {
+      id: "flap",
+      name: "Flap",
+      trust: "official_verified",
+      website: "https://flap.sh",
+      twitter: "https://x.com/flapdotsh",
+      github: null,
+      notifyFirstToken: false,
+      notifyFirstInfrastructureActivation: false,
+      evidenceUrl: `https://bscscan.com/address/${FLAP_TRACKED_TOKEN_PORTAL}`,
+    },
+    featurePlatform: "flap",
+    featureActivationKey: generationKey,
+    featureGenerationKey: generationKey,
+    featureTrackedToken: true,
+    featureTokenOrdinal: ordinal,
+    featureTokenTarget: 3,
+    featureFirstToken: ordinal === 1,
+    informationalOnly: true,
+    autoTradeEligible: false,
+    automaticExecution: false,
+    strong: true,
+    launchCount: ordinal,
+    uniqueTokens: ordinal,
+    transactionHash,
+    blockNumber: 119_900_001,
+    blockHash,
+    blockTimestamp,
+    transactionIndex: 3,
+    logIndex,
+    tokens: [{
+      token,
+      isNewContract: true,
+      metadata: { name: "First Tracked Token", symbol: "FTT", decimals: 18 },
+    }],
+    pools: [{
+      kind: "v2",
+      factory,
+      token0: token,
+      token1: FLAP_TRACKED_TOKEN_QUOTE,
+      pool: poolAddress,
+      poolId: null,
+      hook: null,
+      verifiedDex: true,
+    }],
+    mode: {
+      fingerprint,
+      selector: "official-portal-token-created",
+      creationTopics: [FLAP_TRACKED_TOKEN_TOPIC],
+      customTopics: [FLAP_TRACKED_TOKEN_TOPIC],
+      quoteAsset: FLAP_TRACKED_TOKEN_QUOTE,
+      quoteName: "Semicon Bull 3X ETF",
+      quoteSymbol,
+      componentMode: `Flap ${quoteSymbol} 新底池`,
+      componentModeAlertEligible: true,
+      featureActivationEligible: true,
+      monitorOnly: true,
+    },
+    structural: {
+      eligible: true,
+      mechanismEvidence: true,
+      causalTokenEvent: true,
+      controllerKind: "official_direct",
+      source: "verified_flap_portal_receipt",
+    },
+    security: {
+      decision: "pass",
+      label: "静态检查通过",
+      reasons: ["local bytecode checks passed"],
+      metrics: { liquidityConfirmed: true },
+    },
+    featureTokenProof: {
+      version: 1,
+      activationId: generationKey,
+      activationEventKey: `flap-quote:56:${activationTransactionHash}:${activationLogIndex}`,
+      quoteAddress: FLAP_TRACKED_TOKEN_QUOTE,
+      tokenAddress: token,
+      portal: FLAP_TRACKED_TOKEN_PORTAL,
+      tokenCreatedTopic: FLAP_TRACKED_TOKEN_TOPIC,
+      transactionHash,
+      blockNumber: 119_900_001,
+      blockHash,
+      transactionIndex: 3,
+      logIndex,
+      canonical: true,
+      confirmations: 6,
+      requiredConfirmations: 3,
+      pairAddress: poolAddress,
+      pairKind: "v2",
+    },
+    ...(delayedRecovery ? { delayedRecovery } : {}),
+    launchEvidence: [{ emitter: FLAP_TRACKED_TOKEN_PORTAL, topic: FLAP_TRACKED_TOKEN_TOPIC, token }],
+    sourceUrl: `https://bscscan.com/tx/${transactionHash}`,
+    activationSourceUrl: `https://bscscan.com/tx/${activationTransactionHash}`,
+    explorerUrl: `https://bscscan.com/tx/${transactionHash}`,
+    launcherUrl: `https://bscscan.com/address/${FLAP_TRACKED_TOKEN_PORTAL}`,
+    observedAt,
+  };
+}
 
 async function temporaryDirectory(t, prefix) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -822,6 +955,134 @@ test("focus3 admits only the exact stale Flap first-observed fallback when prior
   assert.equal(isStrictFlapPortalQuoteAssetUpdate(ordinaryFresh), false, "a normal fresh event cannot opt into the weak lane");
 });
 
+test("focus3 admits only exact Flap Portal first-three token proofs, including stock quote pools", () => {
+  const exact = strictFlapTrackedPoolTokenEvent();
+  assert.equal(isStrictFlapTrackedPoolTokenUpdate(exact), true);
+  assert.equal(isMonitoringSourceEnabled(focusConfig, exact), true);
+
+  const mixedCase = strictFlapTrackedPoolTokenEvent({ quoteSymbol: "Brk.B" });
+  assert.equal(isStrictFlapTrackedPoolTokenUpdate(mixedCase), true);
+  assert.equal(isMonitoringSourceEnabled(focusConfig, mixedCase), true);
+
+  const v3 = strictFlapTrackedPoolTokenEvent();
+  v3.pools[0].factory = "0x0bfbcf9fa4f9c56b0f40a671ad40e0805a091865";
+  v3.pools[0].kind = "v3";
+  v3.pools[0].fee = 2_500;
+  v3.featureTokenProof.pairKind = "v3";
+  assert.equal(isStrictFlapTrackedPoolTokenUpdate(v3), true);
+
+  const mutations = [
+    ["ordinal", (event) => { event.featureTokenOrdinal = 4; }],
+    ["string ordinal alias", (event) => { event.featureTokenOrdinal = "1"; }],
+    ["first flag", (event) => { event.featureFirstToken = false; }],
+    ["target", (event) => { event.featureTokenTarget = 4; }],
+    ["automatic execution", (event) => { event.automaticExecution = true; }],
+    ["trade eligibility", (event) => { event.autoTradeEligible = true; }],
+    ["generation mismatch", (event) => { event.featureActivationKey += ":forged"; }],
+    ["event key", (event) => { event.eventKey = event.eventKey.replace(event.tokens[0].token, FLAP_QUOTE_ADDRESS); }],
+    ["platform trust", (event) => { event.platform.trust = "display_name"; }],
+    ["platform extension", (event) => { event.platform.attackerUrl = "https://attacker.example"; }],
+    ["portal", (event) => { event.launcher = "0x9999999999999999999999999999999999999999"; }],
+    ["topic", (event) => { event.featureTokenProof.tokenCreatedTopic = `0x${"99".repeat(32)}`; }],
+    ["proof extension", (event) => { event.featureTokenProof.attacker = true; }],
+    ["proof block hash", (event) => { event.featureTokenProof.blockHash = `0x${"88".repeat(32)}`; }],
+    ["string block alias", (event) => { event.blockNumber = String(event.blockNumber); }],
+    ["string log alias", (event) => { event.logIndex = String(event.logIndex); }],
+    ["generation log alias", (event) => {
+      event.featureGenerationKey = event.featureGenerationKey.replace(/:4$/, ":04");
+      event.featureActivationKey = event.featureGenerationKey;
+      event.featureTokenProof.activationId = event.featureGenerationKey;
+      event.featureTokenProof.activationEventKey = event.featureTokenProof.activationEventKey.replace(/:4$/, ":04");
+      event.eventKey = event.eventKey.replace(/:generation:([^:]+):([^:]+):4:/, ":generation:$1:$2:04:");
+      event.mode.fingerprint = createHash("sha256")
+        .update(JSON.stringify({ generationKey: event.featureGenerationKey, quoteAddress: event.mode.quoteAsset }))
+        .digest("hex").slice(0, 20);
+    }],
+    ["confirmations", (event) => { event.featureTokenProof.confirmations = 2; }],
+    ["pair address", (event) => { event.featureTokenProof.pairAddress = "0x9999999999999999999999999999999999999999"; }],
+    ["unknown DEX factory", (event) => { event.pools[0].factory = "0x9999999999999999999999999999999999999999"; }],
+    ["zero pool", (event) => { event.pools[0].pool = "0x0000000000000000000000000000000000000000"; event.featureTokenProof.pairAddress = event.pools[0].pool; }],
+    ["v2 fee", (event) => { event.pools[0].fee = 2_500; }],
+    ["v2 hook", (event) => { event.pools[0].hook = "0x9999999999999999999999999999999999999999"; }],
+    ["v2 pool id", (event) => { event.pools[0].poolId = `0x${"99".repeat(32)}`; }],
+    ["pair relation", (event) => { event.pools[0].token1 = "0x9999999999999999999999999999999999999999"; }],
+    ["unverified pair", (event) => { event.pools[0].verifiedDex = false; }],
+    ["token proof", (event) => { event.featureTokenProof.tokenAddress = FLAP_QUOTE_ADDRESS; }],
+    ["activation URL", (event) => { event.activationSourceUrl = "https://bscscan.com/tx/0xdead"; }],
+    ["selector", (event) => { event.mode.selector = "display-only"; }],
+    ["mode fingerprint", (event) => { event.mode.fingerprint = "0".repeat(20); }],
+    ["structural source", (event) => { event.structural.source = "copied_payload"; }],
+    ["unknown root field", (event) => { event.attackerUrl = "https://attacker.example"; }],
+  ];
+  for (const [label, mutate] of mutations) {
+    const forged = structuredClone(exact);
+    mutate(forged);
+    assert.equal(isStrictFlapTrackedPoolTokenUpdate(forged), false, label);
+    assert.equal(isMonitoringSourceEnabled(focusConfig, forged), false, label);
+  }
+
+  const staleWithoutProof = strictFlapTrackedPoolTokenEvent({
+    observedAt: "2026-09-04T00:20:00.001Z",
+  });
+  assert.equal(isStrictFlapTrackedPoolTokenUpdate(staleWithoutProof), false);
+
+  const delayedRecovery = {
+    version: 1,
+    reason: "verified_generation_archive_catch_up",
+    sourceOccurredAt: "2026-09-04T00:00:00.000Z",
+    firstObservedAt: "2026-09-04T00:00:10.000Z",
+    recoveredAt: "2026-09-04T00:20:00.001Z",
+    lagMs: 20 * 60_000 + 1,
+    continuousCoverage: true,
+  };
+  const delayed = strictFlapTrackedPoolTokenEvent({
+    observedAt: delayedRecovery.recoveredAt,
+    delayedRecovery,
+  });
+  assert.equal(isStrictFlapTrackedPoolTokenUpdate(delayed), true);
+  assert.equal(isMonitoringSourceEnabled(focusConfig, delayed), true);
+
+  const revision = strictFlapTrackedPoolTokenEvent();
+  const replacedEventKey = revision.eventKey;
+  const replacedBlockHash = revision.blockHash;
+  revision.blockHash = `0x${"88".repeat(32)}`;
+  revision.featureTokenProof.blockHash = revision.blockHash;
+  revision.eventKey = `${replacedEventKey}:canonical-revision:${revision.blockHash}`;
+  revision.canonicalRevision = {
+    version: 1,
+    reason: "token_created_reorg",
+    ordinal: revision.featureTokenOrdinal,
+    replacesEventKey: replacedEventKey,
+    replacesBlockHash: replacedBlockHash,
+    replacesTokenAddress: revision.tokens[0].token,
+  };
+  assert.equal(isStrictFlapTrackedPoolTokenUpdate(revision), true);
+  assert.equal(isMonitoringSourceEnabled(focusConfig, revision), true);
+  for (const [label, mutate] of [
+    ["revision ordinal", (event) => { event.canonicalRevision.ordinal = 2; }],
+    ["revision old hash", (event) => { event.canonicalRevision.replacesBlockHash = event.blockHash; }],
+    ["revision old key", (event) => { event.canonicalRevision.replacesEventKey = "attacker"; }],
+    ["revision log alias", (event) => { event.canonicalRevision.replacesEventKey = event.canonicalRevision.replacesEventKey.replace(":7:", ":07:"); }],
+    ["revision event key", (event) => { event.eventKey = replacedEventKey; }],
+  ]) {
+    const forged = structuredClone(revision);
+    mutate(forged);
+    assert.equal(isStrictFlapTrackedPoolTokenUpdate(forged), false, label);
+    assert.equal(isMonitoringSourceEnabled(focusConfig, forged), false, label);
+  }
+
+  for (const [label, mutate] of [
+    ["recovery threshold", (event) => { event.delayedRecovery.lagMs = 15 * 60_000; }],
+    ["recovery time", (event) => { event.delayedRecovery.recoveredAt = event.blockTimestamp; }],
+    ["recovery extension", (event) => { event.delayedRecovery.attacker = true; }],
+  ]) {
+    const forged = structuredClone(delayed);
+    mutate(forged);
+    assert.equal(isStrictFlapTrackedPoolTokenUpdate(forged), false, label);
+    assert.equal(isMonitoringSourceEnabled(focusConfig, forged), false, label);
+  }
+});
+
 test("focus3 rejects other platforms, ordinary activity, campaigns, untrusted gaps, and broad Uniswap chatter", () => {
   const rejected = [
     { type: "binance_official_update", platform: { id: "binance" }, strong: true },
@@ -829,6 +1090,7 @@ test("focus3 rejects other platforms, ordinary activity, campaigns, untrusted ga
     { type: "official_activity", project: "Uniswap", activity: "buy" },
     { type: "early_activity_alert", entry: { launchpad: { id: "flap" } }, activity: "volume_anomaly", stage: 3 },
     { type: "bsc_launchpad_update", kind: "new_mode", platform: { id: "bullshot" }, structural: { eligible: true }, strong: true },
+    { type: "bsc_launchpad_update", kind: "new_mode", platform: { id: "flap" }, structural: { eligible: true }, strong: true, mode: { componentMode: "New quote mode", quoteName: "Tokenized stock ETF RWA" } },
     { type: "bsc_launchpad_update", kind: "new_launchpad", platform: { id: "flap" }, structural: { eligible: true }, strong: true },
     { type: "bsc_launchpad_update", kind: "new_launchpad", officialFirstToken: false, platform: { id: "flap" }, structural: { eligible: true }, strong: true },
     { type: "bsc_launchpad_update", kind: "new_launchpad", officialFirstToken: true, platform: { id: "flap" }, structural: { eligible: false }, strong: true },

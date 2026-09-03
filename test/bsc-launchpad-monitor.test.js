@@ -63,6 +63,7 @@ import {
   waifuModeFingerprint,
 } from "../src/bsc-launchpad-monitor.js";
 import { classifyAlertFreshness } from "../src/alerts.js";
+import { isStrictFlapTrackedPoolTokenUpdate } from "../src/source-controls.js";
 
 const old = Date.parse("2026-08-02T00:00:00Z");
 const current = Date.parse("2026-08-02T01:00:00Z");
@@ -2743,20 +2744,20 @@ test("v2 BSC state is normalized and durably migrated while a future version is 
   await fs.writeFile(stateFile, JSON.stringify({ version: 2, lastFinalizedBlock: 77, hooks: null, transactionFailures: null, launchers: {}, seenTransactions: { "0xabc": 76 }, coverageGaps: [] }));
   const monitor = createBscLaunchpadMonitor({ dataDir }, { autoStart: false, provider: { destroy() {} } });
   const migrated = await monitor.getState();
-  assert.equal(migrated.version, 6);
+  assert.equal(migrated.version, 7);
   assert.equal(migrated.lastFinalizedBlock, 77);
   assert.deepEqual(migrated.hooks, {});
   assert.deepEqual(migrated.transactionFailures, {});
   assert.equal(migrated.seenTransactions["0xabc"], 76);
-  assert.equal(JSON.parse(await fs.readFile(stateFile, "utf8")).version, 6);
+  assert.equal(JSON.parse(await fs.readFile(stateFile, "utf8")).version, 7);
 
   const futureDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-state-future-"));
   t.after(() => fs.rm(futureDir, { recursive: true, force: true }));
   const futureFile = path.join(futureDir, "bsc-launchpad-state.json");
-  await fs.writeFile(futureFile, JSON.stringify({ version: 7 }));
+  await fs.writeFile(futureFile, JSON.stringify({ version: 8 }));
   const future = createBscLaunchpadMonitor({ dataDir: futureDir }, { autoStart: false, provider: { destroy() {} } });
   await assert.rejects(() => future.getState(), /newer than supported/);
-  assert.equal(JSON.parse(await fs.readFile(futureFile, "utf8")).version, 7);
+  assert.equal(JSON.parse(await fs.readFile(futureFile, "utf8")).version, 8);
 });
 
 test("deferred creation evidence is never pruned by ordinary state maintenance", async (t) => {
@@ -4513,7 +4514,7 @@ test("v4 migration reopens v3 RPC coverage gaps without replaying older seen tra
   }));
   const monitor = createBscLaunchpadMonitor({ dataDir }, { autoStart: false, provider: { destroy() {} } });
   const migrated = await monitor.getState();
-  assert.equal(migrated.version, 6);
+  assert.equal(migrated.version, 7);
   assert.equal(migrated.lastFinalizedBlock, 899);
   assert.equal(migrated.alertSuppressedThroughBlock, 1_000);
   assert.equal(migrated.seenTransactions.old, 800);
@@ -5801,6 +5802,10 @@ test("realtime processing persists shared RPC cooling without retry loops or dro
   });
   await monitor.start();
   await waitUntil(async () => (await monitor.getState())._health.realtimeQueue.status === "backoff", 2_000);
+  // start() also launches independent official-source/replay maintenance.
+  // Settle those expected startup writes before asserting that cooling queue
+  // wakeups themselves remain write-free.
+  await monitor.awaitIdle();
   let snapshot = await monitor.getState();
   assert.equal(snapshot._health.realtimeQueue.nextRetryAt, "2026-08-24T10:40:05.000Z");
   assert.ok(snapshot.realtimePendingEntries[transactionHash]);
@@ -9752,4 +9757,777 @@ test("a post-receipt deep-proof failure leaves WS pending, retry and coverage st
   assert.equal(snapshot.deferredCreationEvidence[proof.transactionHash], undefined);
   assert.equal(snapshot.transactionFailures[proof.transactionHash], undefined);
   assert.equal(harness.alerts.length, 0);
+});
+
+function flapQuoteLifecycleRecord({
+  action = "activated",
+  quoteAddress = "0x1111111111111111111111111111111111111111",
+  quoteName = "Berkshire Class B",
+  quoteSymbol = "Brk.B",
+  transactionHash = `0x${"a1".repeat(32)}`,
+  blockNumber = 100,
+  blockHash = `0x${"b1".repeat(32)}`,
+  transactionIndex = 1,
+  logIndex = 2,
+  occurredAt = "2026-08-24T12:00:00.000Z",
+  targetActivationEventKey,
+} = {}) {
+  return {
+    version: 1,
+    action,
+    quoteAddress,
+    quoteName,
+    quoteSymbol,
+    activationEventKey: `flap-quote:56:${transactionHash}:${logIndex}`,
+    transactionHash,
+    blockNumber,
+    blockHash,
+    transactionIndex,
+    logIndex,
+    occurredAt,
+    proofType: action === "activated"
+      ? "verified_zero_to_one"
+      : action === "disabled" ? "verified_disable" : "verified_disable_orphaned",
+    requiredConfirmations: 0,
+    monitorOnly: true,
+    ...(targetActivationEventKey ? { targetActivationEventKey } : {}),
+  };
+}
+
+function flapQuoteLifecycleProvider(head = 120) {
+  return {
+    async getBlockNumber() { return head; },
+    async send(method) {
+      if (method === "eth_getLogs") return [];
+      throw new Error(`unexpected lifecycle provider method ${method}`);
+    },
+    destroy() {},
+  };
+}
+
+test("Flap direct quote lifecycle is durable, case-preserving, reorg-safe, and exactly restorable", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-flap-first-three-lifecycle-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const config = { dataDir, bscConfirmations: 0 };
+  const dependencies = {
+    autoStart: false,
+    provider: flapQuoteLifecycleProvider(),
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  };
+  let monitor = createBscLaunchpadMonitor(config, dependencies);
+  const activation = flapQuoteLifecycleRecord();
+  assert.deepEqual(await monitor.registerFlapQuotePoolLifecycle(activation), {
+    accepted: true,
+    changed: true,
+    action: "activated",
+    status: "activated",
+    quoteAddress: activation.quoteAddress,
+    generationKey: `quote:${activation.quoteAddress}:generation:${activation.blockHash}:${activation.transactionHash}:${activation.logIndex}`,
+  });
+  assert.equal((await monitor.registerFlapQuotePoolLifecycle(activation)).status, "duplicate");
+  await assert.rejects(() => monitor.registerFlapQuotePoolLifecycle(flapQuoteLifecycleRecord({
+    transactionHash: `0x${"a2".repeat(32)}`,
+    blockNumber: 101,
+    blockHash: `0x${"b2".repeat(32)}`,
+    logIndex: 3,
+  })), /already has active generation/);
+
+  const replacement = flapQuoteLifecycleRecord({ blockHash: `0x${"c1".repeat(32)}` });
+  const replacementAck = await monitor.registerFlapQuotePoolLifecycle(replacement);
+  assert.equal(replacementAck.status, "activated");
+  assert.notEqual(replacementAck.generationKey, `quote:${activation.quoteAddress}:generation:${activation.blockHash}:${activation.transactionHash}:${activation.logIndex}`);
+
+  const disable = flapQuoteLifecycleRecord({
+    action: "disabled",
+    transactionHash: `0x${"d1".repeat(32)}`,
+    blockNumber: 110,
+    blockHash: `0x${"e1".repeat(32)}`,
+    transactionIndex: 0,
+    logIndex: 4,
+    occurredAt: "2026-08-24T12:10:00.000Z",
+  });
+  assert.equal((await monitor.registerFlapQuotePoolLifecycle(disable)).status, "disabled");
+  const restore = flapQuoteLifecycleRecord({
+    ...disable,
+    action: "restored",
+    targetActivationEventKey: replacement.activationEventKey,
+  });
+  assert.equal((await monitor.registerFlapQuotePoolLifecycle(restore)).status, "restored");
+  assert.equal((await monitor.registerFlapQuotePoolLifecycle(restore)).status, "duplicate");
+  const replacementDisable = flapQuoteLifecycleRecord({
+    ...disable,
+    blockHash: `0x${"e2".repeat(32)}`,
+    occurredAt: "2026-08-24T12:11:00.000Z",
+  });
+  assert.equal((await monitor.registerFlapQuotePoolLifecycle(replacementDisable)).status, "disabled");
+  const replacementRestore = flapQuoteLifecycleRecord({
+    ...replacementDisable,
+    action: "restored",
+    targetActivationEventKey: replacement.activationEventKey,
+  });
+  assert.equal((await monitor.registerFlapQuotePoolLifecycle(replacementRestore)).status, "restored");
+  assert.equal((await monitor.registerFlapQuotePoolLifecycle(replacementRestore)).status, "duplicate");
+  await monitor.awaitIdle();
+  let snapshot = await monitor.getState();
+  const windows = Object.values(snapshot.officialSources.flap.quotePoolFirstThree.windows);
+  const oldWindow = windows.find((item) => item.activationBlockHash === activation.blockHash);
+  const activeWindow = windows.find((item) => item.generationKey === replacementAck.generationKey);
+  assert.equal(oldWindow.status, "canonical_replaced");
+  assert.equal(activeWindow.active, true);
+  assert.equal(activeWindow.quoteSymbol, "Brk.B");
+  assert.equal(activeWindow.disableEventKey, disable.activationEventKey);
+  assert.equal(activeWindow.orphanedDisableProof.blockHash, replacementDisable.blockHash);
+  assert.equal(activeWindow.disableCanonicalReplacementOfBlockHash, disable.blockHash);
+  assert.equal(snapshot.officialSources.flap.quotePoolFirstThree.activeByQuote[activation.quoteAddress], replacementAck.generationKey);
+
+  const finalDisable = flapQuoteLifecycleRecord({
+    action: "disabled",
+    transactionHash: `0x${"d3".repeat(32)}`,
+    blockNumber: 111,
+    blockHash: `0x${"e3".repeat(32)}`,
+    transactionIndex: 0,
+    logIndex: 5,
+    occurredAt: "2026-08-24T12:12:00.000Z",
+  });
+  await monitor.registerFlapQuotePoolLifecycle(finalDisable);
+  const reenabled = flapQuoteLifecycleRecord({
+    transactionHash: `0x${"d4".repeat(32)}`,
+    blockNumber: 112,
+    blockHash: `0x${"e4".repeat(32)}`,
+    transactionIndex: 0,
+    logIndex: 6,
+    occurredAt: "2026-08-24T12:13:00.000Z",
+  });
+  const reenabledAck = await monitor.registerFlapQuotePoolLifecycle(reenabled);
+  assert.equal(reenabledAck.status, "activated");
+  assert.notEqual(reenabledAck.generationKey, replacementAck.generationKey,
+    "disable then re-enable creates a new independent generation");
+
+  await monitor.stop();
+  monitor = createBscLaunchpadMonitor(config, dependencies);
+  assert.equal((await monitor.registerFlapQuotePoolLifecycle(replacementRestore)).status, "duplicate");
+  snapshot = await monitor.getState();
+  assert.equal(snapshot.officialSources.flap.quotePoolFirstThree.windows[replacementAck.generationKey].quoteSymbol, "Brk.B");
+  await monitor.stop();
+});
+
+test("Flap first-three retention keeps active windows and lifecycle references closed", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-flap-first-three-retention-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const config = { dataDir, bscConfirmations: 0 };
+  const dependencies = {
+    autoStart: false,
+    provider: flapQuoteLifecycleProvider(),
+    logger: { error() {}, info() {} },
+    flapQuoteFirstThreeWindowMax: 2,
+    flapQuoteFirstThreeLifecycleMax: 4,
+    ...disabledJournalTimerDependencies(),
+  };
+  const record = (index, action, blockNumber) => flapQuoteLifecycleRecord({
+    action,
+    quoteAddress: `0x${String(100 + index).padStart(40, "0")}`,
+    quoteName: `Quote ${index}`,
+    quoteSymbol: `Q${index}`,
+    transactionHash: `0x${(1_000 + blockNumber).toString(16).padStart(64, "0")}`,
+    blockNumber,
+    blockHash: `0x${(2_000 + blockNumber).toString(16).padStart(64, "0")}`,
+    transactionIndex: 0,
+    logIndex: action === "activated" ? 1 : 2,
+    occurredAt: new Date(Date.parse("2026-08-24T12:00:00.000Z") + blockNumber * 1_000).toISOString(),
+  });
+  let monitor = createBscLaunchpadMonitor(config, dependencies);
+  const first = record(1, "activated", 101);
+  const firstAck = await monitor.registerFlapQuotePoolLifecycle(first);
+  for (const index of [2, 3]) {
+    const activation = record(index, "activated", 100 + index * 2);
+    await monitor.registerFlapQuotePoolLifecycle(activation);
+    await monitor.registerFlapQuotePoolLifecycle(record(index, "disabled", 101 + index * 2));
+  }
+  await monitor.awaitIdle();
+  let firstThree = (await monitor.getState()).officialSources.flap.quotePoolFirstThree;
+  assert.equal(Object.keys(firstThree.windows).length, 2);
+  assert.ok(firstThree.windows[firstAck.generationKey], "the older active generation is never evicted");
+  assert.equal(firstThree.activeByQuote[first.quoteAddress], firstAck.generationKey);
+  assert.ok(Object.values(firstThree.lifecycleEvents).every((event) => (
+    event.generationKey === null || firstThree.windows[event.generationKey]
+  )));
+  await monitor.stop();
+
+  monitor = createBscLaunchpadMonitor(config, dependencies);
+  firstThree = (await monitor.getState()).officialSources.flap.quotePoolFirstThree;
+  assert.equal(Object.keys(firstThree.windows).length, 2);
+  assert.equal(firstThree.activeByQuote[first.quoteAddress], firstAck.generationKey);
+  assert.ok(Object.values(firstThree.lifecycleEvents).every((event) => (
+    event.generationKey === null || firstThree.windows[event.generationKey]
+  )));
+  await monitor.stop();
+});
+
+test("Flap orphan disable is a durable no-op and v6 Board activations remain legacy-closed", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-flap-first-three-legacy-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  await fs.writeFile(path.join(dataDir, "bsc-launchpad-state.json"), JSON.stringify({
+    version: 6,
+    initializedAt: "2026-08-24T10:00:00.000Z",
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    coverageGaps: [],
+    officialSources: {
+      flap: {
+        featureActivations: {
+          "quote_pool:legacy": {
+            type: "quote_pool",
+            quoteAddress: "0x2222222222222222222222222222222222222222",
+            quoteSymbol: "OLD",
+            active: true,
+          },
+        },
+      },
+    },
+  }));
+  const monitor = createBscLaunchpadMonitor({ dataDir, bscConfirmations: 0 }, {
+    autoStart: false,
+    provider: flapQuoteLifecycleProvider(),
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  const orphan = flapQuoteLifecycleRecord({
+    action: "disabled",
+    quoteAddress: "0x3333333333333333333333333333333333333333",
+    transactionHash: `0x${"f1".repeat(32)}`,
+    blockHash: `0x${"f2".repeat(32)}`,
+    logIndex: 7,
+  });
+  const ack = await monitor.registerFlapQuotePoolLifecycle(orphan);
+  assert.equal(ack.accepted, true);
+  assert.equal(ack.status, "disabled");
+  assert.equal(ack.generationKey, null);
+  assert.equal((await monitor.registerFlapQuotePoolLifecycle(orphan)).status, "duplicate");
+  const snapshot = await monitor.getState();
+  assert.equal(snapshot.officialSources.flap.featureActivations["quote_pool:legacy"].firstThreeStatus, "legacy_closed");
+  assert.deepEqual(snapshot.officialSources.flap.quotePoolFirstThree.activeByQuote, {});
+  assert.deepEqual(snapshot.officialSources.flap.quotePoolFirstThree.windows, {});
+  await monitor.stop();
+});
+
+async function createFlapQuoteFirstThreeHarness(t, {
+  delayedMs = 31 * 60_000,
+  alertResult = async (event) => ({ status: "delivered", eventId: event.eventKey }),
+  factoryAddress = "0xca143ce32fe78f1f7019d7d551a6402fc5350c73",
+} = {}) {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-flap-first-three-archive-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const portal = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
+  const factory = factoryAddress;
+  const quoteAddress = "0x1111111111111111111111111111111111111111";
+  const creator = "0x2222222222222222222222222222222222222222";
+  const tokens = [
+    "0x3333333333333333333333333333333333333333",
+    "0x4444444444444444444444444444444444444444",
+    "0x5555555555555555555555555555555555555555",
+    "0x6666666666666666666666666666666666666666",
+  ];
+  const pairs = [
+    "0x7333333333333333333333333333333333333333",
+    "0x7444444444444444444444444444444444444444",
+    "0x7555555555555555555555555555555555555555",
+    "0x7666666666666666666666666666666666666666",
+  ];
+  const transactionHash = `0x${"91".repeat(32)}`;
+  const blockHash = `0x${"92".repeat(32)}`;
+  const activationTransactionHash = `0x${"81".repeat(32)}`;
+  const activationBlockHash = `0x${"82".repeat(32)}`;
+  const activationBlockNumber = 100;
+  const blockNumber = 101;
+  const blockTimestampMs = Date.parse("2026-08-24T12:00:00.000Z");
+  let clock = blockTimestampMs + delayedMs;
+  const flapInterface = new Interface([
+    "event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)",
+  ]);
+  const pairInterface = new Interface([
+    "event PairCreated(address indexed token0,address indexed token1,address pair,uint256)",
+  ]);
+  const tokenLogs = [];
+  const receiptLogs = [];
+  tokens.forEach((token, index) => {
+    const tokenLogIndex = 5 + index * 2;
+    const encodedToken = flapInterface.encodeEventLog(
+      flapInterface.getEvent("TokenCreated"),
+      [BigInt(Math.floor(blockTimestampMs / 1_000)), creator, BigInt(index + 1), token, `Token ${index + 1}`, `T${index + 1}`, `ipfs://token-${index + 1}`],
+    );
+    const tokenLog = {
+      address: portal,
+      topics: encodedToken.topics,
+      data: encodedToken.data,
+      transactionHash,
+      blockNumber,
+      blockHash,
+      transactionIndex: 2,
+      logIndex: tokenLogIndex,
+      removed: false,
+    };
+    const encodedPair = pairInterface.encodeEventLog(
+      pairInterface.getEvent("PairCreated"),
+      [token, quoteAddress, pairs[index], BigInt(index + 1)],
+    );
+    const pairLog = {
+      address: factory,
+      topics: encodedPair.topics,
+      data: encodedPair.data,
+      transactionHash,
+      blockNumber,
+      blockHash,
+      transactionIndex: 2,
+      logIndex: tokenLogIndex + 1,
+      removed: false,
+    };
+    tokenLogs.push(tokenLog);
+    receiptLogs.push(tokenLog, pairLog);
+  });
+  const duplicateTokenLog = {
+    ...tokenLogs[0],
+    logIndex: 13,
+  };
+  tokenLogs.push(duplicateTokenLog);
+  receiptLogs.push(duplicateTokenLog);
+  const transaction = {
+    hash: transactionHash,
+    blockNumber,
+    blockHash,
+    transactionIndex: 2,
+    from: creator,
+    to: portal,
+    data: `0x12345678${"0".repeat(128)}`,
+    value: 0n,
+  };
+  const receipt = {
+    hash: transactionHash,
+    transactionHash,
+    blockNumber,
+    blockHash,
+    index: 2,
+    transactionIndex: 2,
+    from: creator,
+    to: portal,
+    status: 1,
+    logs: receiptLogs,
+  };
+  const block = {
+    number: blockNumber,
+    hash: blockHash,
+    timestamp: Math.floor(blockTimestampMs / 1_000),
+    transactions: [transactionHash],
+  };
+  const archiveRequests = [];
+  let archiveVisible = true;
+  let currentHead = blockNumber;
+  const provider = {
+    async getBlockNumber() { return currentHead; },
+    async send(method, [filter]) {
+      if (method !== "eth_getLogs") throw new Error(`unexpected archive method ${method}`);
+      archiveRequests.push(structuredClone(filter));
+      const from = Number.parseInt(filter.fromBlock, 16);
+      const to = Number.parseInt(filter.toBlock, 16);
+      if (!archiveVisible || from > blockNumber || to < blockNumber) return [];
+      // Deliberately reverse the RPC result to prove canonical log ordering.
+      return [...tokenLogs].reverse();
+    },
+    async getTransaction(hash) { return hash === transactionHash ? transaction : null; },
+    async getTransactionReceipt(hash) { return hash === transactionHash ? receipt : null; },
+    async getBlock(number) { return Number(number) === blockNumber ? block : null; },
+    async getCode() { return `0x${"6000".repeat(400)}`; },
+    async getStorage() { return "0x"; },
+    async call() { throw new Error("safety RPC unavailable"); },
+    destroy() {},
+  };
+  const alerts = [];
+  const errors = [];
+  const dependencies = {
+    autoStart: false,
+    externalAttribution: false,
+    provider,
+    now: () => clock,
+    logger: { error(message) { errors.push(String(message)); }, info() {} },
+    sendAlertsImpl: async (_config, event) => {
+      alerts.push(structuredClone(event));
+      return alertResult(event);
+    },
+    ...disabledJournalTimerDependencies(),
+  };
+  const config = {
+    dataDir,
+    bscConfirmations: 0,
+    bscRecoveryLogBatchSize: 2,
+    blockedContracts: new Set(),
+  };
+  const activation = flapQuoteLifecycleRecord({
+    quoteAddress,
+    quoteName: "Berkshire Class B",
+    quoteSymbol: "Brk.B",
+    transactionHash: activationTransactionHash,
+    blockNumber: activationBlockNumber,
+    blockHash: activationBlockHash,
+    transactionIndex: 0,
+    logIndex: 1,
+    occurredAt: new Date(blockTimestampMs - 60_000).toISOString(),
+  });
+  const createMonitor = (overrides = {}) => createBscLaunchpadMonitor(config, {
+    ...dependencies,
+    ...overrides,
+  });
+  return {
+    dataDir,
+    config,
+    dependencies,
+    createMonitor,
+    activation,
+    alerts,
+    errors,
+    archiveRequests,
+    portal,
+    factory,
+    quoteAddress,
+    tokens,
+    pairs,
+    transactionHash,
+    blockHash,
+    blockNumber,
+    blockTimestampMs,
+    reorgBlock(nextBlockHash) {
+      transaction.blockHash = nextBlockHash;
+      receipt.blockHash = nextBlockHash;
+      block.hash = nextBlockHash;
+      for (const log of receiptLogs) log.blockHash = nextBlockHash;
+    },
+    setArchiveVisible(value) { archiveVisible = value === true; },
+    setHead(value) { currentHead = Number(value); },
+    setClock(value) { clock = value; },
+  };
+}
+
+test("Flap first-three ignores non-V2/V3 factory logs before reserving an ordinal", async (t) => {
+  const harness = await createFlapQuoteFirstThreeHarness(t, {
+    factoryAddress: "0x28e2ea090877bf75740558f6bfb36a5ffee9e9df",
+  });
+  const monitor = harness.createMonitor();
+  const ack = await monitor.registerFlapQuotePoolLifecycle(harness.activation);
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  const window = (await monitor.getState()).officialSources.flap.quotePoolFirstThree
+    .windows[ack.generationKey];
+  assert.equal(window.slots.length, 0);
+  assert.equal(harness.alerts.length, 0);
+  await monitor.stop();
+});
+
+test("Flap active incomplete generations keep incrementally replaying finalized heads", async (t) => {
+  const harness = await createFlapQuoteFirstThreeHarness(t);
+  harness.setArchiveVisible(false);
+  harness.setHead(harness.activation.blockNumber);
+  let monitor = harness.createMonitor();
+  const ack = await monitor.registerFlapQuotePoolLifecycle(harness.activation);
+  await monitor.awaitIdle();
+  let window = (await monitor.getState()).officialSources.flap.quotePoolFirstThree
+    .windows[ack.generationKey];
+  assert.equal(window.slots.length, 0);
+  assert.ok(window.replayCompletedAt, "the first archive pass completed at the then-finalized head");
+
+  harness.setArchiveVisible(true);
+  harness.setHead(harness.blockNumber);
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  window = (await monitor.getState()).officialSources.flap.quotePoolFirstThree
+    .windows[ack.generationKey];
+  assert.equal(window.slots.length, 3);
+  assert.ok(window.trackingCompletedAt);
+  assert.deepEqual(harness.alerts.map((event) => event.featureTokenOrdinal), [1, 2, 3]);
+  await monitor.stop();
+
+  monitor = harness.createMonitor();
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  assert.equal(harness.alerts.length, 3, "an incremental replay remains exact-once after restart");
+  await monitor.stop();
+});
+
+test("Flap retries a reserved third ordinal until delivery is durably accepted", async (t) => {
+  let thirdAttempts = 0;
+  const harness = await createFlapQuoteFirstThreeHarness(t, {
+    alertResult: async (event) => {
+      if (event.featureTokenOrdinal === 3 && ++thirdAttempts === 1) {
+        return { status: "suppressed", reason: "monitoring_source_disabled", terminal: true };
+      }
+      return { status: "delivered", eventId: event.eventKey };
+    },
+  });
+  let monitor = harness.createMonitor();
+  const ack = await monitor.registerFlapQuotePoolLifecycle(harness.activation);
+  await monitor.awaitIdle();
+  let window = (await monitor.getState()).officialSources.flap.quotePoolFirstThree
+    .windows[ack.generationKey];
+  assert.equal(window.slots.length, 3);
+  assert.deepEqual(window.slots.map((slot) => Boolean(slot.deliveryAcceptedAt)), [true, true, false]);
+  assert.equal(window.trackingCompletedAt ?? null, null);
+  const thirdEventKey = window.slots[2].eventKey;
+  await monitor.stop();
+
+  monitor = harness.createMonitor();
+  assert.equal((await monitor.registerFlapQuotePoolLifecycle(harness.activation)).status, "duplicate");
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  window = (await monitor.getState()).officialSources.flap.quotePoolFirstThree
+    .windows[ack.generationKey];
+  assert.ok(window.slots.every((slot) => slot.deliveryAcceptedAt));
+  assert.ok(window.trackingCompletedAt);
+  assert.equal(thirdAttempts, 2);
+  assert.equal(harness.alerts.filter((event) => event.eventKey === thirdEventKey).length, 2,
+    "the same pending event is retried; accepted ordinals are never resent");
+  assert.equal(harness.alerts.filter((event) => event.featureTokenOrdinal < 3).length, 2);
+  await monitor.stop();
+});
+
+test("Flap v7 state rejects tampered pending event and slot invariants on restart", async (t) => {
+  const harness = await createFlapQuoteFirstThreeHarness(t);
+  const monitor = harness.createMonitor();
+  await monitor.registerFlapQuotePoolLifecycle(harness.activation);
+  await monitor.awaitIdle();
+  await monitor.stop();
+  const stateFile = path.join(harness.dataDir, "bsc-launchpad-state.json");
+  const walFile = `${stateFile}.wal`;
+  const durable = await readBscLaunchpadDurableState(stateFile);
+  const mutations = [
+    ["event", (slot) => { slot.event.sourceUrl = "https://attacker.example"; }],
+    ["event key", (slot) => { slot.eventKey += ":forged"; }],
+    ["proof", (slot) => { slot.event.featureTokenProof.tokenAddress = harness.quoteAddress; }],
+    ["pair", (slot) => { slot.pool.token1 = "0x9999999999999999999999999999999999999999"; }],
+    ["delivery", (slot) => { slot.deliveryAcceptedAt = null; }],
+    ["canonical ordinal", (_slot, snapshot) => { snapshot.officialSources.flap.quotePoolFirstThree
+      .windows[Object.keys(snapshot.officialSources.flap.quotePoolFirstThree.windows)[0]].slots[1].ordinal = 1; }],
+    ["archive cursor", (_slot, snapshot) => { snapshot.officialSources.flap.quotePoolFirstThree
+      .windows[Object.keys(snapshot.officialSources.flap.quotePoolFirstThree.windows)[0]].archiveReplayNextBlock = 999_999_999; }],
+    ["activation lifecycle", (_slot, snapshot) => {
+      const lifecycle = Object.values(snapshot.officialSources.flap.quotePoolFirstThree.lifecycleEvents)
+        .find((event) => event.action === "activated");
+      lifecycle.blockNumber += 1;
+    }],
+  ];
+  for (const [label, mutate] of mutations) {
+    const corrupted = structuredClone(durable);
+    const firstThree = corrupted.officialSources.flap.quotePoolFirstThree;
+    const corruptedWindow = firstThree.windows[Object.keys(firstThree.windows)[0]];
+    mutate(corruptedWindow.slots[0], corrupted);
+    await fs.writeFile(stateFile, `${JSON.stringify(corrupted)}\n`);
+    await fs.writeFile(walFile, "");
+    const restarted = harness.createMonitor();
+    await assert.rejects(() => restarted.getState(), /invalid durable Flap first-three/, label);
+    await restarted.stop().catch(() => {});
+  }
+});
+
+test("Flap archive replay emits the first three distinct CAs in canonical order and survives restart exactly once", async (t) => {
+  const harness = await createFlapQuoteFirstThreeHarness(t);
+  let monitor = harness.createMonitor();
+  const ack = await monitor.registerFlapQuotePoolLifecycle(harness.activation);
+  assert.equal(ack.status, "activated");
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  const debugSnapshot = await monitor.getState();
+  assert.equal(harness.alerts.length, 3, JSON.stringify({
+    errors: harness.errors,
+    firstThree: debugSnapshot.officialSources.flap.quotePoolFirstThree,
+    seen: debugSnapshot.seenTransactions,
+    launchers: debugSnapshot.launchers,
+    failures: debugSnapshot.transactionFailures,
+    deferred: debugSnapshot.deferredCreationEvidence,
+  }));
+  assert.deepEqual(harness.alerts.map((event) => event.tokens[0].token), harness.tokens.slice(0, 3));
+  assert.deepEqual(harness.alerts.map((event) => event.featureTokenOrdinal), [1, 2, 3]);
+  const proofKeys = [
+    "activationEventKey", "activationId", "blockHash", "blockNumber", "canonical",
+    "confirmations", "logIndex", "pairAddress", "pairKind", "portal", "quoteAddress",
+    "requiredConfirmations", "tokenAddress", "tokenCreatedTopic", "transactionHash",
+    "transactionIndex", "version",
+  ];
+  for (const [index, event] of harness.alerts.entries()) {
+    assert.equal(event.type, "bsc_launchpad_update");
+    assert.equal(event.kind, "flap_pool_token");
+    assert.equal(event.featureActivationKey, event.featureGenerationKey);
+    assert.equal(event.featureTrackedToken, true);
+    assert.equal(event.featureTokenTarget, 3);
+    assert.equal(event.featureFirstToken, index === 0);
+    assert.equal(event.informationalOnly, true);
+    assert.equal(event.autoTradeEligible, false);
+    assert.equal(event.automaticExecution, false);
+    assert.equal(event.launcher, harness.portal);
+    assert.equal(event.platform.id, "flap");
+    assert.equal(event.platform.trust, "official_verified");
+    assert.equal(event.mode.featureActivationKey, undefined);
+    assert.equal(event.mode.quoteAsset, harness.quoteAddress);
+    assert.equal(event.mode.quoteSymbol, "Brk.B");
+    assert.equal(event.tokens.length, 1);
+    assert.equal(event.pools.length, 1);
+    assert.equal(event.pools[0].pool, harness.pairs[index]);
+    assert.equal(event.security.decision, "block", "unsafe/unknown checks still occupy their canonical ordinal");
+    assert.deepEqual(Object.keys(event.featureTokenProof).sort(), proofKeys);
+    assert.equal(event.featureTokenProof.tokenAddress, event.tokens[0].token);
+    assert.equal(event.featureTokenProof.quoteAddress, event.mode.quoteAsset);
+    assert.equal(event.featureTokenProof.pairAddress, event.pools[0].pool);
+    assert.equal(event.featureTokenProof.transactionHash, event.transactionHash);
+    assert.equal(event.featureTokenProof.blockHash, event.blockHash);
+    assert.equal(event.featureTokenProof.logIndex, event.logIndex);
+    assert.equal(event.featureTokenProof.canonical, true);
+    assert.equal(event.delayedRecovery.reason, "verified_generation_archive_catch_up");
+    assert.equal(event.delayedRecovery.lagMs, 31 * 60_000);
+    assert.equal(isStrictFlapTrackedPoolTokenUpdate(event), true);
+  }
+  const snapshot = await monitor.getState();
+  const window = snapshot.officialSources.flap.quotePoolFirstThree.windows[ack.generationKey];
+  assert.equal(window.slots.length, 3);
+  assert.equal(new Set(window.slots.map((slot) => slot.tokenAddress)).size, 3);
+  assert.ok(window.replayAttemptedCandidateKeys.some((key) => key.endsWith(`:13:${harness.tokens[0]}`)),
+    "a repeated CA is observed but never consumes another ordinal");
+  assert.ok(window.slots.every((slot) => slot.deliveryAcceptedAt));
+  assert.ok(window.trackingCompletedAt);
+  assert.ok(harness.archiveRequests.some((filter) => Number.parseInt(filter.fromBlock, 16) === harness.activation.blockNumber),
+    "archive replay starts at the durable activation cursor even with an empty hot index");
+  const unrelatedQuoteActivation = flapQuoteLifecycleRecord({
+    quoteAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    quoteName: "Unrelated Quote",
+    quoteSymbol: "UQ",
+    transactionHash: `0x${"83".repeat(32)}`,
+    blockNumber: 100,
+    blockHash: `0x${"84".repeat(32)}`,
+    transactionIndex: 1,
+    logIndex: 2,
+    occurredAt: new Date(harness.blockTimestampMs - 30_000).toISOString(),
+  });
+  const unrelatedAck = await monitor.registerFlapQuotePoolLifecycle(unrelatedQuoteActivation);
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  assert.equal(harness.alerts.length, 3, "same transaction cannot leak tokens across quote pools without its exact pair");
+  assert.equal((await monitor.getState()).officialSources.flap.quotePoolFirstThree
+    .windows[unrelatedAck.generationKey].slots.length, 0);
+  const canonicalReplacementHash = `0x${"93".repeat(32)}`;
+  harness.reorgBlock(canonicalReplacementHash);
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  assert.equal(harness.alerts.length, 6);
+  for (const [index, event] of harness.alerts.slice(3).entries()) {
+    const previous = harness.alerts[index];
+    assert.deepEqual(event.canonicalRevision, {
+      version: 1,
+      reason: "token_created_reorg",
+      ordinal: index + 1,
+      replacesEventKey: previous.eventKey,
+      replacesBlockHash: harness.blockHash,
+      replacesTokenAddress: previous.tokens[0].token,
+    });
+    assert.equal(event.featureTokenOrdinal, index + 1);
+    assert.equal(event.blockHash, canonicalReplacementHash);
+    assert.equal(event.featureTokenProof.blockHash, canonicalReplacementHash);
+    assert.equal(event.eventKey,
+      `bsc-flap-pool-token:${ack.generationKey}:${index + 1}:${harness.transactionHash}:${5 + index * 2}:${harness.tokens[index]}:canonical-revision:${canonicalReplacementHash}`);
+    assert.equal(isStrictFlapTrackedPoolTokenUpdate(event), true);
+  }
+  await monitor.stop();
+
+  monitor = harness.createMonitor();
+  assert.equal((await monitor.registerFlapQuotePoolLifecycle(harness.activation)).status, "duplicate");
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  assert.equal(harness.alerts.length, 6, "restart and duplicate lifecycle handoff cannot redeliver accepted ordinals or revisions");
+  await monitor.stop();
+});
+
+test("Flap fresh archive replay omits delayed recovery and policy suppression keeps its ordinal pending", async (t) => {
+  let attempts = 0;
+  const harness = await createFlapQuoteFirstThreeHarness(t, {
+    delayedMs: 60_000,
+    alertResult: async (event) => {
+      attempts += 1;
+      return attempts === 1
+        ? { status: "suppressed", reason: "monitoring_source_disabled", terminal: true }
+        : { status: "queued", eventId: event.eventKey };
+    },
+  });
+  const monitor = harness.createMonitor();
+  await monitor.registerFlapQuotePoolLifecycle(harness.activation);
+  await monitor.awaitIdle();
+  let snapshot = await monitor.getState();
+  let window = Object.values(snapshot.officialSources.flap.quotePoolFirstThree.windows)[0];
+  assert.equal(window.slots.length, 1);
+  assert.equal(window.slots[0].ordinal, 1);
+  assert.equal(window.slots[0].deliveryAcceptedAt, null);
+  assert.equal(window.slots[0].lastDeliveryResult.reason, "monitoring_source_disabled");
+
+  harness.reorgBlock(`0x${"94".repeat(32)}`);
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  snapshot = await monitor.getState();
+  window = Object.values(snapshot.officialSources.flap.quotePoolFirstThree.windows)[0];
+  assert.equal(window.slots.length, 3);
+  assert.deepEqual(window.slots.map((slot) => slot.ordinal), [1, 2, 3]);
+  assert.ok(window.slots.every((slot) => slot.deliveryAcceptedAt));
+  assert.ok(window.slots.every((slot) => slot.canonicalRevision === undefined),
+    "an unaccepted orphan is removed and canonically reordered without a replacement notification");
+  assert.ok(harness.alerts.every((event) => event.delayedRecovery === undefined));
+  assert.ok(harness.alerts.every((event) => isStrictFlapTrackedPoolTokenUpdate(event)),
+    "fresh ordinary producer events pass the strict source gate");
+  assert.equal(window.slots[0].deliveryStatus, "queued");
+  await monitor.stop();
+});
+
+test("Flap orphaned disable restoration replays its canonical gap and remains exact-once after restart", async (t) => {
+  const harness = await createFlapQuoteFirstThreeHarness(t, { delayedMs: 60_000 });
+  harness.setArchiveVisible(false);
+  harness.setHead(harness.activation.blockNumber);
+  let monitor = harness.createMonitor();
+  const activationAck = await monitor.registerFlapQuotePoolLifecycle(harness.activation);
+  await monitor.awaitIdle();
+  let window = (await monitor.getState()).officialSources.flap.quotePoolFirstThree
+    .windows[activationAck.generationKey];
+  assert.equal(window.slots.length, 0);
+  assert.ok(window.replayCompletedAt);
+
+  const disable = flapQuoteLifecycleRecord({
+    action: "disabled",
+    quoteAddress: harness.quoteAddress,
+    quoteName: "Berkshire Class B",
+    quoteSymbol: "Brk.B",
+    transactionHash: `0x${"95".repeat(32)}`,
+    blockNumber: harness.blockNumber,
+    blockHash: `0x${"96".repeat(32)}`,
+    transactionIndex: 0,
+    logIndex: 4,
+    occurredAt: new Date(harness.blockTimestampMs).toISOString(),
+  });
+  await monitor.registerFlapQuotePoolLifecycle(disable);
+  harness.setArchiveVisible(true);
+  harness.setHead(harness.blockNumber);
+  const restore = flapQuoteLifecycleRecord({
+    ...disable,
+    action: "restored",
+    targetActivationEventKey: harness.activation.activationEventKey,
+  });
+  assert.equal((await monitor.registerFlapQuotePoolLifecycle(restore)).status, "restored");
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  assert.equal(harness.alerts.length, 3);
+  assert.deepEqual(harness.alerts.map((event) => event.featureTokenOrdinal), [1, 2, 3]);
+  assert.ok(harness.alerts.every((event) => isStrictFlapTrackedPoolTokenUpdate(event)));
+  window = (await monitor.getState()).officialSources.flap.quotePoolFirstThree
+    .windows[activationAck.generationKey];
+  assert.equal(window.slots.length, 3);
+  assert.ok(window.trackingCompletedAt);
+  assert.ok(window.orphanedDisableProof);
+  await monitor.stop();
+
+  monitor = harness.createMonitor();
+  assert.equal((await monitor.registerFlapQuotePoolLifecycle(restore)).status, "duplicate");
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  assert.equal(harness.alerts.length, 3);
+  await monitor.stop();
 });

@@ -366,6 +366,7 @@ async function harness(t, {
   provider = new FakeBscProvider(),
   sendAlertsImpl,
   cancelPendingFlapQuoteActivationImpl,
+  onFlapQuotePoolLifecycle,
   atomicWriteImpl,
   dataDir,
   logVerificationProviders,
@@ -378,6 +379,7 @@ async function harness(t, {
   if (!dataDir) t.after(() => fs.rm(directory, { recursive: true, force: true }));
   const alerts = [];
   const cancellations = [];
+  const lifecycles = [];
   const defaultLogVerificationProviders = [
     new FakeLogRpcEndpoint("https://fake-flap-log-a.test", provider).descriptor(),
     new FakeLogRpcEndpoint("https://fake-flap-log-b.test", provider).descriptor(),
@@ -411,6 +413,17 @@ async function harness(t, {
       cancellations.push(cancellation);
       return { status: "cancelled", reason: "quote_asset_disabled", persisted: true, terminal: true };
     }),
+    onFlapQuotePoolLifecycle: onFlapQuotePoolLifecycle || (async (record) => {
+      lifecycles.push(structuredClone(record));
+      return {
+        accepted: true,
+        changed: true,
+        action: record.action,
+        status: record.action,
+        quoteAddress: record.quoteAddress,
+        generationKey: `${record.quoteAddress}:${record.activationEventKey}`,
+      };
+    }),
     atomicWriteImpl,
     now,
     random,
@@ -420,7 +433,7 @@ async function harness(t, {
   monitorDependencies.stateVerificationProviders = stateVerificationProviders || defaultStateVerificationProviders;
   const monitor = createFlapQuoteMonitor(monitorConfig, monitorDependencies);
   t.after(() => monitor.stop());
-  return { provider, monitor, alerts, cancellations, dataDir: directory };
+  return { provider, monitor, alerts, cancellations, lifecycles, dataDir: directory };
 }
 
 function addAssetEvent(provider, {
@@ -430,6 +443,7 @@ function addAssetEvent(provider, {
   configuration = [1, 32, 32, 7, 0],
   blockNumber = 99,
   transactionHash,
+  transactionIndex,
   logIndex = 10,
   data,
 } = {}) {
@@ -439,6 +453,7 @@ function addAssetEvent(provider, {
     configuration,
     blockNumber,
     transactionHash,
+    transactionIndex,
     logIndex,
     data,
   });
@@ -1097,6 +1112,142 @@ test("one real Safe transaction with MRNAB and SQQQB Portal logs emits two compl
   assert.deepEqual(fixture.monitor.state().processedEventKeys, fixture.alerts.map((event) => event.eventKey));
 });
 
+test("a verified direct bStock activation hands off one exact monitor-only lifecycle record", async (t) => {
+  const provider = new FakeBscProvider();
+  const records = [];
+  const fixture = await harness(t, {
+    provider,
+    onFlapQuotePoolLifecycle: async (record) => {
+      records.push(structuredClone(record));
+      return {
+        accepted: true,
+        changed: true,
+        action: record.action,
+        status: record.action,
+        quoteAddress: record.quoteAddress,
+        generationKey: "test-generation",
+      };
+    },
+  });
+  await fixture.monitor.check();
+  const occurredAt = "2026-09-03T06:59:00.000Z";
+  provider.setBlockTimestamp(99, Date.parse(occurredAt) / 1_000);
+  provider.setAsset(FLAP_SQQQB_ADDRESS, {
+    name: "ProShares UltraPro Short QQQ ETF Tokenized Stock (bStock)",
+    symbol: "SQQQB",
+    decimals: 18,
+    configuration: [1, 56, 56, 7, 0],
+  });
+  const log = provider.addQuoteEvent({
+    address: FLAP_SQQQB_ADDRESS,
+    configuration: [1, 56, 56, 7, 0],
+    blockNumber: 99,
+    transactionHash: id("direct-bstock-lifecycle"),
+    transactionIndex: 4,
+    logIndex: 17,
+  });
+  provider.head = 101;
+
+  const result = await fixture.monitor.check();
+  assert.equal(result.status, "healthy");
+  assert.equal(result.delivered, 1);
+  assert.deepEqual(records, [{
+    version: 1,
+    action: "activated",
+    quoteAddress: lower(FLAP_SQQQB_ADDRESS),
+    quoteName: "ProShares UltraPro Short QQQ ETF Tokenized Stock (bStock)",
+    quoteSymbol: "SQQQB",
+    activationEventKey: flapQuoteEventKey(log),
+    transactionHash: lower(log.transactionHash),
+    blockNumber: 99,
+    blockHash: lower(log.blockHash),
+    transactionIndex: 4,
+    logIndex: 17,
+    occurredAt,
+    proofType: "verified_zero_to_one",
+    requiredConfirmations: CONFIRMATIONS,
+    monitorOnly: true,
+  }]);
+  assert.equal(fixture.alerts[0].changes.newFlapPools[0].quoteSymbol, "SQQQB");
+});
+
+test("a non-durable lifecycle reply leaves delivery pending and retries the same record after restart", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-quote-lifecycle-retry-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const provider = new FakeBscProvider();
+  const records = [];
+  let attempts = 0;
+  const lifecycle = async (record) => {
+    attempts += 1;
+    records.push(structuredClone(record));
+    if (attempts === 1) return { accepted: false, status: "queued" };
+    return {
+      accepted: true,
+      changed: true,
+      action: record.action,
+      status: "duplicate",
+      quoteAddress: record.quoteAddress,
+      generationKey: "test-generation",
+    };
+  };
+  const first = await harness(t, { provider, dataDir, onFlapQuotePoolLifecycle: lifecycle });
+  await first.monitor.check();
+  const log = addAssetEvent(provider, {
+    blockNumber: 99,
+    transactionHash: id("lifecycle-restart"),
+    logIndex: 19,
+  });
+  provider.head = 101;
+
+  const failed = await first.monitor.check();
+  assert.equal(failed.errorCode, "FLAP_QUOTE_LIFECYCLE_NOT_DURABLE");
+  assert.equal(first.monitor.state().eventRecords[0].delivered, false,
+    "the lifecycle failure cannot commit the direct delivery checkpoint");
+  assert.equal(first.monitor.state().pendingEnableCandidates[lower(FLAP_MRNAB_ADDRESS)].eventKey, flapQuoteEventKey(log));
+  await first.monitor.stop();
+
+  const restarted = await harness(t, { provider, dataDir, onFlapQuotePoolLifecycle: lifecycle });
+  const recovered = await restarted.monitor.check();
+  assert.equal(recovered.status, "healthy");
+  assert.equal(recovered.delivered, 1);
+  assert.equal(attempts, 2);
+  assert.deepEqual(records[1], records[0], "restart retries the idempotent base producer record unchanged");
+  assert.equal(restarted.monitor.state().eventRecords[0].delivered, true);
+  assert.equal(Object.keys(restarted.monitor.state().pendingEnableCandidates).length, 0);
+});
+
+test("a thrown lifecycle hook cannot consume the direct activation", async (t) => {
+  let attempts = 0;
+  const fixture = await harness(t, {
+    onFlapQuotePoolLifecycle: async (record) => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("registry unavailable");
+      return {
+        accepted: true,
+        changed: true,
+        action: record.action,
+        status: record.action,
+        quoteAddress: record.quoteAddress,
+        generationKey: "test-generation",
+      };
+    },
+  });
+  await fixture.monitor.check();
+  const log = addAssetEvent(fixture.provider, { blockNumber: 99, logIndex: 21 });
+  fixture.provider.head = 101;
+
+  const failed = await fixture.monitor.check();
+  assert.equal(failed.errorCode, "FLAP_QUOTE_LIFECYCLE_NOT_DURABLE");
+  assert.equal(fixture.monitor.state().eventRecords[0].delivered, false);
+  assert.equal(fixture.monitor.state().pendingEnableCandidates[lower(FLAP_MRNAB_ADDRESS)].eventKey, flapQuoteEventKey(log));
+
+  const recovered = await fixture.monitor.check();
+  assert.equal(recovered.status, "healthy");
+  assert.equal(recovered.delivered, 1);
+  assert.equal(attempts, 2);
+  assert.equal(fixture.monitor.state().eventRecords[0].delivered, true);
+});
+
 test("only the latest surviving 0-to-1 transition is alerted within one range and across cycles", async (t) => {
   for (const [label, config] of [
     ["one range", { flapQuoteEventChunkSize: 100, flapQuoteMaxBlocksPerCycle: 100 }],
@@ -1526,6 +1677,7 @@ test("historical prior-state quorum follows the fail-closed recovery truth table
     });
     assert.equal(fixture.alerts[0].changes.newFlapPools.length, 0);
     assert.equal(fixture.alerts[0].changes.updatedFlapPools.length, 1);
+    assert.equal(fixture.lifecycles.length, 0, "first-observed-after-gap is never armed");
   });
 
   await t.test("one enabled result plus archive loss cannot suppress the stale first-observed event", async (subtest) => {
@@ -1989,12 +2141,156 @@ test("a canonical replacement may reuse tx plus log index without persisted orph
   assert.deepEqual(fixture.monitor.state().processedEventKeys, [eventKey]);
   assert.ok(!fixture.monitor.state().reorgOrphanedEventKeys.includes(eventKey));
   assert.equal(fixture.monitor.state().eventRecords[0].blockHash, replacementHash);
+  assert.equal(fixture.lifecycles.length, 2);
+  assert.deepEqual(fixture.lifecycles.map(({ action, activationEventKey }) => ({ action, activationEventKey })), [
+    { action: "activated", activationEventKey: eventKey },
+    { action: "activated", activationEventKey: eventKey },
+  ], "the replacement is handed off again even though its base producer key is unchanged");
+  assert.equal(fixture.lifecycles[0].blockHash, lower(oldLog.blockHash));
+  assert.equal(fixture.lifecycles[1].blockHash, replacementHash);
   await fixture.monitor.stop();
 
   const restarted = await harness(t, { provider, dataDir });
   const afterRestart = await restarted.monitor.check();
   assert.equal(afterRestart.status, "healthy");
   assert.notEqual(afterRestart.errorCode, "FLAP_QUOTE_STATE_INVALID");
+});
+
+test("an orphaned disable durably restores its exact activation generation across restart", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-quote-disable-restore-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const provider = new FakeBscProvider();
+  const lifecycles = [];
+  let restoreAttempts = 0;
+  const lifecycle = async (record) => {
+    lifecycles.push(structuredClone(record));
+    if (record.action === "restored") {
+      restoreAttempts += 1;
+      if (restoreAttempts === 1) return { accepted: false, status: "queued" };
+    }
+    return {
+      accepted: true,
+      changed: true,
+      action: record.action,
+      status: record.action,
+      quoteAddress: record.quoteAddress,
+      generationKey: "test-generation",
+    };
+  };
+  const first = await harness(t, { provider, dataDir, onFlapQuotePoolLifecycle: lifecycle });
+  await first.monitor.check();
+  const enable = addAssetEvent(provider, {
+    blockNumber: 99,
+    transactionHash: id("enable-before-orphaned-disable"),
+    transactionIndex: 3,
+    logIndex: 13,
+  });
+  provider.head = 101;
+  assert.equal((await first.monitor.check()).delivered, 1);
+
+  const disabled = [0, 32, 32, 7, 0];
+  provider.setConfiguration(FLAP_MRNAB_ADDRESS, disabled);
+  provider.setBlockTimestamp(100, Date.parse("2026-09-03T07:01:00.000Z") / 1_000);
+  const disable = provider.addQuoteEvent({
+    address: FLAP_MRNAB_ADDRESS,
+    configuration: disabled,
+    blockNumber: 100,
+    transactionHash: id("orphaned-disable-lifecycle"),
+    transactionIndex: 5,
+    logIndex: 15,
+  });
+  provider.head = 102;
+  assert.equal((await first.monitor.check()).status, "healthy");
+  assert.deepEqual(lifecycles.map(({ action }) => action), ["activated", "disabled"]);
+
+  provider.setBlockHash(100, id("replacement-without-disable"));
+  provider.logs = provider.logs.filter((log) => flapQuoteEventKey(log) !== flapQuoteEventKey(disable));
+  provider.receipts.delete(lower(disable.transactionHash));
+  provider.transactions.delete(lower(disable.transactionHash));
+  provider.configurationHistory.set(lower(FLAP_MRNAB_ADDRESS), (
+    provider.configurationHistory.get(lower(FLAP_MRNAB_ADDRESS)) || []
+  ).filter((entry) => entry.blockNumber !== disable.blockNumber));
+  provider.setConfiguration(FLAP_MRNAB_ADDRESS, [1, 32, 32, 7, 0]);
+
+  const held = await first.monitor.check();
+  assert.equal(held.errorCode, "FLAP_QUOTE_LIFECYCLE_NOT_DURABLE");
+  assert.equal(first.monitor.state().quoteAssets[lower(FLAP_MRNAB_ADDRESS)].enabled, false,
+    "a non-durable restore cannot commit the reorg rewind");
+  await first.monitor.stop();
+
+  const restarted = await harness(t, { provider, dataDir, onFlapQuotePoolLifecycle: lifecycle });
+  const recovered = await restarted.monitor.check();
+  assert.equal(recovered.status, "healthy");
+  assert.equal(recovered.reorgRecovered, true);
+  assert.equal(restarted.monitor.state().quoteAssets[lower(FLAP_MRNAB_ADDRESS)].enabled, true);
+  assert.equal(restoreAttempts, 2);
+  assert.deepEqual(lifecycles.map(({ action }) => action), ["activated", "disabled", "restored", "restored"]);
+  const restored = lifecycles.at(-1);
+  assert.equal(restored.activationEventKey, flapQuoteEventKey(disable));
+  assert.equal(restored.targetActivationEventKey, flapQuoteEventKey(enable));
+  assert.equal(restored.transactionHash, lower(disable.transactionHash));
+  assert.equal(restored.blockHash, lower(disable.blockHash));
+  assert.equal(restored.transactionIndex, 5);
+  assert.equal(restored.logIndex, 15);
+  assert.equal(restored.occurredAt, "2026-09-03T07:01:00.000Z");
+  assert.equal(restored.proofType, "verified_disable_orphaned");
+  assert.equal(restored.monitorOnly, true);
+  assert.deepEqual(lifecycles.at(-2), restored, "restart retries the identical restore proof");
+
+  await restarted.monitor.stop();
+  const stableRestart = await harness(t, { provider, dataDir, onFlapQuotePoolLifecycle: lifecycle });
+  assert.equal((await stableRestart.monitor.check()).status, "healthy");
+  assert.equal(restoreAttempts, 2, "a committed restore is not emitted again after restart");
+});
+
+test("an orphaned disable is not restored when fixed finalized state remains disabled", async (t) => {
+  const fixture = await harness(t);
+  await fixture.monitor.check();
+  addAssetEvent(fixture.provider, {
+    blockNumber: 99,
+    transactionHash: id("enable-before-replaced-disable"),
+    logIndex: 13,
+  });
+  fixture.provider.head = 101;
+  assert.equal((await fixture.monitor.check()).delivered, 1);
+
+  const disabled = [0, 32, 32, 7, 0];
+  fixture.provider.setConfiguration(FLAP_MRNAB_ADDRESS, disabled);
+  const orphanedDisable = fixture.provider.addQuoteEvent({
+    address: FLAP_MRNAB_ADDRESS,
+    configuration: disabled,
+    blockNumber: 100,
+    transactionHash: id("disable-on-old-fork"),
+    logIndex: 15,
+  });
+  fixture.provider.head = 102;
+  assert.equal((await fixture.monitor.check()).status, "healthy");
+
+  const replacementHash = lower(id("replacement-still-disabled"));
+  fixture.provider.setBlockHash(100, replacementHash);
+  fixture.provider.logs = fixture.provider.logs.filter((log) => flapQuoteEventKey(log) !== flapQuoteEventKey(orphanedDisable));
+  fixture.provider.receipts.delete(lower(orphanedDisable.transactionHash));
+  fixture.provider.transactions.delete(lower(orphanedDisable.transactionHash));
+  fixture.provider.configurationHistory.set(lower(FLAP_MRNAB_ADDRESS), (
+    fixture.provider.configurationHistory.get(lower(FLAP_MRNAB_ADDRESS)) || []
+  ).filter((entry) => entry.blockNumber !== orphanedDisable.blockNumber));
+  fixture.provider.setConfiguration(FLAP_MRNAB_ADDRESS, disabled);
+  fixture.provider.addQuoteEvent({
+    address: FLAP_MRNAB_ADDRESS,
+    configuration: disabled,
+    blockNumber: 100,
+    blockHash: replacementHash,
+    transactionHash: id("disable-on-new-fork"),
+    logIndex: 16,
+  });
+
+  const recovered = await fixture.monitor.check();
+  assert.equal(recovered.status, "healthy");
+  assert.equal(recovered.reorgRecovered, true);
+  assert.equal(fixture.monitor.state().quoteAssets[lower(FLAP_MRNAB_ADDRESS)].enabled, false);
+  assert.equal(fixture.lifecycles.filter(({ action }) => action === "restored").length, 0,
+    "an orphan hash alone cannot restore while both fixed state readers prove disabled");
+  assert.deepEqual(fixture.lifecycles.map(({ action }) => action), ["activated", "disabled", "disabled"]);
 });
 
 test("reorg of a finalized decision snapshot replays earlier canonical events it influenced", async (t) => {
@@ -2980,7 +3276,7 @@ test("disabled configuration is removal audit, never a platform capability alert
   assert.equal(fixture.alerts.length, 1);
 
   fixture.provider.setConfiguration(FLAP_MRNAB_ADDRESS, [0, 32, 32, 7, 0]);
-  fixture.provider.addQuoteEvent({
+  const disableLog = fixture.provider.addQuoteEvent({
     address: FLAP_MRNAB_ADDRESS,
     configuration: [0, 32, 32, 7, 0],
     blockNumber: 100,
@@ -2997,6 +3293,12 @@ test("disabled configuration is removal audit, never a platform capability alert
   assert.equal(audit.action, "removed");
   assert.equal(audit.after.enabled, false);
   assert.equal(fixture.monitor.state().quoteAssets[lower(FLAP_MRNAB_ADDRESS)].enabled, false);
+  assert.deepEqual(fixture.lifecycles.map(({ action, proofType }) => ({ action, proofType })), [
+    { action: "activated", proofType: "verified_zero_to_one" },
+    { action: "disabled", proofType: "verified_disable" },
+  ]);
+  assert.equal(fixture.lifecycles.at(-1).activationEventKey, flapQuoteEventKey(disableLog));
+  assert.equal(fixture.lifecycles.at(-1).monitorOnly, true);
 });
 
 test("an enabled configuration refresh is audited instead of being mislabeled as a new pool", async (t) => {
@@ -3022,6 +3324,8 @@ test("an enabled configuration refresh is audited instead of being mislabeled as
   assert.equal(fixture.alerts.length, 1);
   assert.equal(fixture.monitor.state().auditTrail.at(-1).action, "updated");
   assert.equal(fixture.monitor.state().quoteAssets[lower(FLAP_MRNAB_ADDRESS)].configuration.defaultCurve, 33);
+  assert.deepEqual(fixture.lifecycles.map(({ action }) => action), ["activated"],
+    "an enabled-to-enabled configuration refresh does not create another lifecycle generation");
 });
 
 test("an already-enabled pre-baseline asset is not mislabeled as newly enabled", async (t) => {

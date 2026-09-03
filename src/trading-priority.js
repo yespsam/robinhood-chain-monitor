@@ -67,6 +67,89 @@ function normalizedPlatform(event = {}) {
   return lower(value).replace(/[^a-z0-9]/g, "");
 }
 
+function flapTrackedTokenOrdinal(event = {}) {
+  if (event.type !== "bsc_launchpad_update"
+    || event.kind !== "flap_pool_token"
+    || event.featureTrackedToken !== true
+    || normalizedPlatform(event) !== "flap"
+    || Number(event.featureTokenTarget) !== 3) return null;
+  const ordinal = Number(event.featureTokenOrdinal);
+  return Number.isSafeInteger(ordinal) && ordinal >= 1 && ordinal <= 3 ? ordinal : null;
+}
+
+function isClosedFlapTrackedTokenMonitor(event = {}) {
+  const ordinal = flapTrackedTokenOrdinal(event);
+  const token = list(event.tokens).map((item) => item?.token || item).find(validAddress);
+  const generation = clean(
+    event.featureGenerationKey
+      ?? event.generation
+      ?? event.generationKey
+      ?? event.featureTokenGeneration
+      ?? event.featureActivationGeneration,
+  );
+  return Boolean(
+    ordinal
+      && token
+      && clean(event.featureActivationKey)
+      && generation
+      && clean(event.featureActivationKey) === generation
+      && lower(event.platform?.trust) === "official_verified"
+      && event.informationalOnly === true
+      && event.autoTradeEligible === false
+      && event.automaticExecution === false,
+  );
+}
+
+function isFlapTrackedTokenCanonicalRevision(event = {}) {
+  if (!isClosedFlapTrackedTokenMonitor(event)) return false;
+  const revision = event.canonicalRevision;
+  const keys = [
+    "version", "reason", "ordinal", "replacesEventKey", "replacesBlockHash",
+    "replacesTokenAddress",
+  ];
+  if (!revision
+    || typeof revision !== "object"
+    || Array.isArray(revision)
+    || Object.keys(revision).length !== keys.length
+    || !keys.every((key) => Object.prototype.hasOwnProperty.call(revision, key))) return false;
+  const ordinal = flapTrackedTokenOrdinal(event);
+  const generation = clean(event.featureGenerationKey);
+  const token = lower(list(event.tokens).map((item) => item?.token || item).find(validAddress));
+  const prefix = `bsc-flap-pool-token:${generation}:${ordinal}:`;
+  const replacedEventKey = clean(revision.replacesEventKey);
+  const replacedTail = replacedEventKey.startsWith(prefix) ? replacedEventKey.slice(prefix.length) : "";
+  const replacedCandidate = /^(0x[a-f0-9]{64}):(0|[1-9]\d*):(0x[a-f0-9]{40})(?::canonical-revision:(0x[a-f0-9]{64}))?$/.exec(replacedTail);
+  const blockHash = lower(event.blockHash);
+  const baseKey = `${prefix}${lower(event.transactionHash)}:${Number(event.logIndex)}:${token}`;
+  return revision.version === 1
+    && revision.reason === "token_created_reorg"
+    && Number(revision.ordinal) === ordinal
+    && Boolean(replacedCandidate)
+    && replacedCandidate?.[3] === lower(revision.replacesTokenAddress)
+    && (!replacedCandidate?.[4] || replacedCandidate[4] === lower(revision.replacesBlockHash))
+    && validTransaction(revision.replacesBlockHash)
+    && lower(revision.replacesBlockHash) !== blockHash
+    && validTransaction(blockHash)
+    && validTransaction(event.transactionHash)
+    && Number.isSafeInteger(Number(event.logIndex))
+    && Number(event.logIndex) >= 0
+    && event.eventKey === `${baseKey}:canonical-revision:${blockHash}`;
+}
+
+function isFlapTrackedTokenDelayedRecovery(event = {}) {
+  const recovery = event?.delayedRecovery;
+  const sourceOccurredAt = Date.parse(recovery?.sourceOccurredAt || "");
+  const recoveredAt = Date.parse(recovery?.recoveredAt || "");
+  return isClosedFlapTrackedTokenMonitor(event)
+    && recovery?.version === 1
+    && recovery?.reason === "verified_generation_archive_catch_up"
+    && recovery?.continuousCoverage === true
+    && Number.isFinite(sourceOccurredAt)
+    && Number.isFinite(recoveredAt)
+    && recoveredAt >= sourceOccurredAt
+    && Number(recovery?.lagMs) === recoveredAt - sourceOccurredAt;
+}
+
 function isFlapQuoteDelayedRecovery(event = {}) {
   return event.type === "platform_capability_update"
     && normalizedPlatform(event) === "flap"
@@ -522,6 +605,16 @@ function confirmedFocusFirstToken(event = {}) {
   );
 }
 
+function confirmedFocusLeadToken(event = {}) {
+  const trackedOrdinal = flapTrackedTokenOrdinal(event);
+  if (trackedOrdinal != null) {
+    return isClosedFlapTrackedTokenMonitor(event)
+      && trackedOrdinal === 1
+      && Boolean(focusFirstTokenAddress(event));
+  }
+  return confirmedFocusFirstToken(event);
+}
+
 function binanceLabels(event = {}) {
   return new Set([
     ...list(event.signal?.labels),
@@ -641,6 +734,9 @@ function category(event = {}, text = eventText(event)) {
     return "binance_information";
   }
   if (focusPlatform(platform)) {
+    if (event.type === "bsc_launchpad_update" && event.kind === "flap_pool_token") {
+      return isClosedFlapTrackedTokenMonitor(event) ? "focus_onchain" : "information";
+    }
     if (["bsc_launchpad_update", "evm_launchpad_update", "token_launch"].includes(event.type)) return "focus_onchain";
     if (event.type === "github_module_update" && !materialFocusGithub(event)) return "developer_maintenance";
     return "focus_official";
@@ -884,6 +980,59 @@ function tradePlan(event, eventCategory, tier, target) {
   }
   if (["focus_onchain", "focus_official"].includes(eventCategory)) {
     const blocked = event.security?.decision === "block";
+    const trackedOrdinal = flapTrackedTokenOrdinal(event);
+    if (trackedOrdinal != null) {
+      const quote = clean(event.mode?.quoteSymbol || event.mode?.quoteName || event.mode?.quoteAsset) || "Flap 底池";
+      const decision = lower(event.security?.decision);
+      const delayedRecovery = isFlapTrackedTokenDelayedRecovery(event);
+      const canonicalRevision = isFlapTrackedTokenCanonicalRevision(event);
+      const safetyConclusion = decision === "pass"
+        ? {
+            zh: "观察；静态初筛通过，可卖性仍待验证",
+            en: "Watch; static screening passed; sellability still unverified",
+          }
+        : decision === "block"
+          ? { zh: "⛔ 不买；安全门已拦截", en: "⛔ Do not buy; safety gate blocked" }
+          : { zh: "安全未完成｜不买", en: "Safety incomplete | do not buy" };
+      const conclusion = canonicalRevision
+        ? {
+            zh: "链重组修订｜以本条 CA 为准｜不买",
+            en: "Chain-reorg revision | use this CA as canonical | do not buy",
+          }
+        : delayedRecovery
+        ? {
+            zh: `延迟补报｜勿追价｜${safetyConclusion.zh}`,
+            en: `Delayed recovery | do not chase | ${safetyConclusion.en}`,
+          }
+        : safetyConclusion;
+      return {
+        conclusion,
+        mainline: {
+          zh: `官方 TokenCreated→${quote} 第 ${trackedOrdinal}/3 个代币`,
+          en: `Official TokenCreated→token ${trackedOrdinal}/3 paired with ${quote}`,
+        },
+        capitalPath: {
+          zh: "仅监控底池注意力与后续流动性，不构成交易准入",
+          en: "Monitor pool attention and follow-on liquidity only; this is not trade admission",
+        },
+        entryCondition: {
+          zh: "不执行买入；继续核验可卖性、流动性与量价",
+          en: "Do not execute a buy; continue verifying sellability, liquidity, and price-volume",
+        },
+        invalidation: {
+          zh: "不可卖、撤池、权限风险或无量价承接",
+          en: "Unsellable, liquidity removal, permission risk, or no price-volume support",
+        },
+        risk: {
+          zh: canonicalRevision
+            ? "链重组修订；非自动交易"
+            : delayedRecovery ? "延迟补报｜勿追价；非自动交易" : "非自动交易",
+          en: canonicalRevision
+            ? "Chain-reorg revision; no automatic trading"
+            : delayedRecovery ? "Delayed recovery | do not chase; no automatic trading" : "No automatic trading",
+        },
+      };
+    }
     const quotePools = [
       ...list(event.changes?.newFlapPools),
       ...list(event.changes?.updatedFlapPools),
@@ -1035,7 +1184,14 @@ export function deriveTradingPriority(event = {}, { nowMs = null } = {}) {
   const confirmation = trustedConfirmation(event);
   const window = validTradingWindow(event, nowMs);
   const riskBlocked = event.security?.decision === "block";
-  const focusSafety = focusSafetyPassed(event);
+  const trackedOrdinal = isClosedFlapTrackedTokenMonitor(event)
+    ? flapTrackedTokenOrdinal(event)
+    : null;
+  const trackedTokenCanonicalRevision = isFlapTrackedTokenCanonicalRevision(event);
+  const trackedTokenDelayedRecovery = isFlapTrackedTokenDelayedRecovery(event);
+  const focusSafety = trackedOrdinal != null
+    ? lower(event.security?.decision) === "pass"
+    : focusSafetyPassed(event);
   const fomoSafety = fomoSafetyPassed(event);
   const clusterSize = fomoClusterSize(event);
   const officialFomoExact = eventCategory === "fomo_official_exact"
@@ -1048,7 +1204,9 @@ export function deriveTradingPriority(event = {}, { nowMs = null } = {}) {
   // evidence. Focus-platform T0 is reserved for the actual first token, with
   // its own CA plus the existing security/liquidity and on-chain hard gates.
   const focusT0 = eventCategory === "focus_onchain"
-    && confirmedFocusFirstToken(event)
+    && confirmedFocusLeadToken(event)
+    && !trackedTokenCanonicalRevision
+    && !trackedTokenDelayedRecovery
     && focusSafety
     && onchainEvidence(event);
   const highCatalyst = ["binance_market_catalyst", "binance_security_emergency"].includes(eventCategory)
@@ -1090,7 +1248,8 @@ export function deriveTradingPriority(event = {}, { nowMs = null } = {}) {
   };
   const score = Object.values(components).reduce((total, value) => total + value, 0);
   let tier;
-  if (hardGates.t0Eligible && score >= 10) tier = "T0";
+  if (trackedTokenCanonicalRevision || trackedTokenDelayedRecovery) tier = "T2";
+  else if (hardGates.t0Eligible && score >= 10) tier = "T0";
   else if (["developer_maintenance", "binance_low_value"].includes(eventCategory)) tier = "T3";
   else if (eventCategory === "pon_information") tier = "T2";
   else if (eventCategory === "binance_information" || eventCategory === "information") tier = "T2";

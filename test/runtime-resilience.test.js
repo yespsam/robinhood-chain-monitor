@@ -13,6 +13,10 @@ test("independent update monitors start before fallible chain initialization", a
   assert.ok(chain > independent);
   assert.match(independentBody, /createBscLaunchpadMonitor/);
   assert.match(independentBody, /createFlapQuoteMonitor/);
+  assert.match(independentBody, /onFlapQuotePoolLifecycle:\s*async \(record\)/);
+  assert.match(independentBody, /bscLaunchpadMonitor\.registerFlapQuotePoolLifecycle\(record\)/);
+  assert.match(independentBody, /lifecycle registry is not ready/,
+    "a direct lifecycle cannot be silently dropped while the BSC registry is unavailable");
   assert.match(main, /\[chain-init-retry\]/);
 });
 

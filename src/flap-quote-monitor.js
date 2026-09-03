@@ -410,11 +410,14 @@ function stateConfiguration(value) {
 }
 
 function stateAsset(value, expectedAddress = null) {
-  if (!stateExactKeys(value, [
+  const baseKeys = [
     "identity", "kind", "category", "vaultFactory", "quoteAddress", "quoteName", "quoteSymbol",
     "quoteDecimals", "decimals", "enabled", "configuration", "chainId", "portal", "codeHash",
     "codeBytes", "verifiedAtBlock", "verifiedAtBlockHash", "sourceUrl",
-  ])
+  ];
+  const hasLifecycleActivation = Object.hasOwn(value || {}, "lifecycleActivationEventKey");
+  if ((!stateExactKeys(value, baseKeys)
+      && !stateExactKeys(value, [...baseKeys, "lifecycleActivationEventKey"]))
     || !stateAddress(value.quoteAddress)
     || (expectedAddress !== null && value.quoteAddress !== expectedAddress)
     || value.identity !== `chain-${FLAP_QUOTE_CHAIN_ID}:quote:${value.quoteAddress}`
@@ -444,6 +447,9 @@ function stateAsset(value, expectedAddress = null) {
     || !Number.isSafeInteger(value.verifiedAtBlock)
     || value.verifiedAtBlock < 0
     || !stateHash(value.verifiedAtBlockHash)
+    || (hasLifecycleActivation
+      && value.lifecycleActivationEventKey !== null
+      && !stateEventKey(value.lifecycleActivationEventKey))
     || value.sourceUrl !== FLAP_BOARD_URL) return false;
   return true;
 }
@@ -628,12 +634,18 @@ function normalizeState(parsed, expectedRuntimeHash, pinOverrides = {}) {
       && item.blockNumber <= parsed.finalizedCheckpoints[index - 1].blockNumber)) {
     invalidState("finalizedCheckpoints is malformed");
   }
-  if (parsed.eventRecords.length > MAX_STATE_EVENT_RECORDS
-    || parsed.eventRecords.some((item) => !stateExactKeys(item, [
+  const eventRecordKeys = [
       "eventKey", "blockNumber", "blockHash", "transactionHash", "logIndex", "quoteAddress",
       "configurationVerifiedAtBlock", "configurationVerifiedAtBlockHash",
       "previousAsset", "nextAsset", "previousCandidate", "nextCandidate", "reorgReplacement", "delivered", "observedAt",
-    ])
+  ];
+  const proofBoundEventRecordKeys = [
+    ...eventRecordKeys,
+    "transactionIndex", "occurredAt", "requiredConfirmations",
+  ];
+  if (parsed.eventRecords.length > MAX_STATE_EVENT_RECORDS
+    || parsed.eventRecords.some((item) => (!stateExactKeys(item, eventRecordKeys)
+      && !stateExactKeys(item, proofBoundEventRecordKeys))
       || !stateEventKey(item.eventKey)
       || !Number.isSafeInteger(item.blockNumber)
       || item.blockNumber < 0
@@ -641,6 +653,11 @@ function normalizeState(parsed, expectedRuntimeHash, pinOverrides = {}) {
       || !stateHash(item.transactionHash)
       || !Number.isSafeInteger(item.logIndex)
       || item.logIndex < 0
+      || (Object.hasOwn(item, "transactionIndex")
+        && (!Number.isSafeInteger(item.transactionIndex) || item.transactionIndex < 0))
+      || (Object.hasOwn(item, "occurredAt") && !stateTimestamp(item.occurredAt))
+      || (Object.hasOwn(item, "requiredConfirmations")
+        && (!Number.isSafeInteger(item.requiredConfirmations) || item.requiredConfirmations < 0))
       || item.eventKey !== `flap-quote:${FLAP_QUOTE_CHAIN_ID}:${item.transactionHash}:${item.logIndex}`
       || !stateAddress(item.quoteAddress)
       || !Number.isSafeInteger(item.configurationVerifiedAtBlock)
@@ -1057,6 +1074,14 @@ function acceptedCancellation(result) {
     && result?.terminal === true;
 }
 
+function acceptedLifecycle(result, expected) {
+  const status = String(result?.status || "").toLowerCase();
+  return result?.accepted === true
+    && String(result?.action || "").toLowerCase() === expected.action
+    && String(result?.quoteAddress || "").toLowerCase() === expected.quoteAddress
+    && (status === expected.action || status === "duplicate");
+}
+
 function appendBounded(values, value, limit) {
   return [...values, value].slice(-limit);
 }
@@ -1354,6 +1379,7 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
   const alertSender = dependencies.sendAlertsImpl || sendAlerts;
   const cancelActivation = dependencies.cancelPendingFlapQuoteActivationImpl
     || cancelPendingFlapQuoteActivation;
+  const quotePoolLifecycle = dependencies.onFlapQuotePoolLifecycle;
   const autoStart = dependencies.autoStart !== false;
   const expectedRuntimeHash = String(dependencies.expectedPortalRuntimeHash || FLAP_PORTAL_RUNTIME_HASH).toLowerCase();
   const portalPins = expectedPortalPins({
@@ -2230,6 +2256,90 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
     };
   }
 
+  function lifecycleRecord(prepared, action) {
+    return {
+      version: 1,
+      action,
+      quoteAddress: prepared.asset.quoteAddress.toLowerCase(),
+      quoteName: prepared.asset.quoteName,
+      quoteSymbol: prepared.asset.quoteSymbol,
+      activationEventKey: flapQuoteEventKey(prepared.log),
+      transactionHash: prepared.proof.transactionHash,
+      blockNumber: prepared.proof.blockNumber,
+      blockHash: prepared.proof.blockHash,
+      transactionIndex: prepared.proof.transactionIndex,
+      logIndex: prepared.proof.logIndex,
+      occurredAt: prepared.proof.blockTimestamp,
+      proofType: action === "activated" ? "verified_zero_to_one" : "verified_disable",
+      requiredConfirmations,
+      monitorOnly: true,
+    };
+  }
+
+  function restoredLifecycleRecord(record) {
+    return {
+      version: 1,
+      action: "restored",
+      quoteAddress: record.quoteAddress,
+      quoteName: record.previousAsset.quoteName,
+      quoteSymbol: record.previousAsset.quoteSymbol,
+      activationEventKey: record.eventKey,
+      targetActivationEventKey: record.previousAsset.lifecycleActivationEventKey,
+      transactionHash: record.transactionHash,
+      blockNumber: record.blockNumber,
+      blockHash: record.blockHash,
+      transactionIndex: record.transactionIndex,
+      logIndex: record.logIndex,
+      occurredAt: record.occurredAt,
+      proofType: "verified_disable_orphaned",
+      requiredConfirmations: record.requiredConfirmations,
+      monitorOnly: true,
+    };
+  }
+
+  async function registerQuotePoolLifecycleRecord(record) {
+    if (typeof quotePoolLifecycle !== "function") {
+      throw monitorError(
+        "delivery",
+        "FLAP_QUOTE_LIFECYCLE_NOT_DURABLE",
+        "Flap quote lifecycle registry is unavailable",
+      );
+    }
+    const wasDeliveryCritical = deliveryCriticalSection;
+    deliveryCriticalSection = true;
+    let result;
+    const registration = Promise.resolve().then(() => quotePoolLifecycle(structuredClone(record)));
+    activeDelivery = registration;
+    try {
+      try {
+        result = await registration;
+      } catch (error) {
+        throw monitorError(
+          "delivery",
+          "FLAP_QUOTE_LIFECYCLE_NOT_DURABLE",
+          `Flap quote lifecycle registration threw: ${error.message}`,
+          retryDetails(error),
+        );
+      }
+      if (!acceptedLifecycle(result, record)) {
+        throw monitorError(
+          "delivery",
+          "FLAP_QUOTE_LIFECYCLE_NOT_DURABLE",
+          `Flap quote lifecycle was not durably accepted${result?.reason ? `: ${result.reason}` : ""}`,
+          retryDetails(result),
+        );
+      }
+      return result;
+    } finally {
+      if (activeDelivery === registration) activeDelivery = null;
+      deliveryCriticalSection = wasDeliveryCritical;
+    }
+  }
+
+  function registerQuotePoolLifecycle(prepared, action) {
+    return registerQuotePoolLifecycleRecord(lifecycleRecord(prepared, action));
+  }
+
   function eventRecord(
     prepared,
     previousAsset,
@@ -2246,7 +2356,10 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
       blockNumber: prepared.proof.blockNumber,
       blockHash: prepared.proof.blockHash,
       transactionHash: prepared.proof.transactionHash,
+      transactionIndex: prepared.proof.transactionIndex,
       logIndex: prepared.proof.logIndex,
+      occurredAt: prepared.proof.blockTimestamp,
+      requiredConfirmations: context.requiredConfirmations,
       quoteAddress: prepared.asset.quoteAddress,
       configurationVerifiedAtBlock: context.finalizedBlock,
       configurationVerifiedAtBlockHash: context.finalizedBlockHash,
@@ -2270,6 +2383,9 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
       ...prepared.asset,
       enabled: prepared.eventConfiguration.enabled,
       configuration: prepared.eventConfiguration,
+      lifecycleActivationEventKey: prepared.eventConfiguration.enabled
+        ? previousAsset?.lifecycleActivationEventKey || null
+        : null,
     };
     const activationCandidate = prepared.eventConfiguration.enabled === true
       && (prepared.priorConfiguration?.enabled === false
@@ -2319,6 +2435,9 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
         }
         throw error;
       }
+    }
+    if (!prepared.eventConfiguration.enabled) {
+      await registerQuotePoolLifecycle(prepared, "disabled");
     }
     const next = structuredClone(state);
     // A canonical replacement may legitimately reuse the same transaction
@@ -2446,6 +2565,9 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
           }
           throw error;
         }
+        if (candidate.priorTransitionProof === "verified_zero_to_one") {
+          await registerQuotePoolLifecycle(prepared, "activated");
+        }
         const next = structuredClone(state);
         const retained = next.pendingEnableCandidates[addressKey];
         if (!retained || retained.eventKey !== candidate.eventKey || retained.log.blockHash !== candidate.log.blockHash) {
@@ -2460,12 +2582,19 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
         next.eventRecords[recordIndex].delivered = true;
         next.eventRecords[recordIndex].configurationVerifiedAtBlock = context.finalizedBlock;
         next.eventRecords[recordIndex].configurationVerifiedAtBlockHash = context.finalizedBlockHash;
+        const deliveredAsset = {
+          ...asset,
+          lifecycleActivationEventKey: candidate.priorTransitionProof === "verified_zero_to_one"
+            ? candidate.eventKey
+            : null,
+        };
+        next.eventRecords[recordIndex].nextAsset = deliveredAsset;
         for (const item of next.eventRecords) {
           if (item.quoteAddress !== addressKey) continue;
           if (item.previousCandidate?.eventKey === candidate.eventKey) item.previousCandidate = null;
           if (item.nextCandidate?.eventKey === candidate.eventKey) item.nextCandidate = null;
         }
-        next.quoteAssets[addressKey] = asset;
+        next.quoteAssets[addressKey] = deliveredAsset;
         next.reorgOrphanedEventKeys = next.reorgOrphanedEventKeys.filter((key) => key !== candidate.eventKey);
         next.identity = { ...next.identity, ...identity };
         markHealthy(next, deliveryObservedAt);
@@ -2476,6 +2605,52 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
       }
     }
     return delivered;
+  }
+
+  async function restoreOrphanedDisables(orphanedRecords, finalizedBlock, finalizedBlockHash) {
+    const candidates = orphanedRecords
+      .filter((item) => item.nextAsset?.enabled === false
+        && item.previousAsset?.enabled === true
+        && stateEventKey(item.previousAsset?.lifecycleActivationEventKey)
+        && Number.isSafeInteger(item.transactionIndex)
+        && stateTimestamp(item.occurredAt)
+        && Number.isSafeInteger(item.requiredConfirmations))
+      .sort((left, right) => left.blockNumber - right.blockNumber
+        || left.transactionIndex - right.transactionIndex
+        || left.logIndex - right.logIndex);
+    for (const item of candidates) {
+      let canonicalBlock;
+      try {
+        canonicalBlock = await readFixedBlock(
+          item.blockNumber,
+          "FLAP_QUOTE_REORG_CHECK_FAILED",
+          `orphaned disable block ${item.blockNumber}`,
+        );
+      } catch (error) {
+        if (error?.code === "FLAP_QUOTE_STOPPED") throw error;
+        throw monitorError(
+          "chain",
+          "FLAP_QUOTE_REORG_CHECK_FAILED",
+          `orphaned disable block ${item.blockNumber} lookup failed: ${error.message}`,
+          retryDetails(error),
+        );
+      }
+      if (!canonicalBlock || Number(canonicalBlock.number) !== item.blockNumber) {
+        throw monitorError(
+          "chain",
+          "FLAP_QUOTE_REORG_CHECK_FAILED",
+          `orphaned disable block ${item.blockNumber} is unavailable`,
+        );
+      }
+      if (String(canonicalBlock.hash || "").toLowerCase() === item.blockHash) continue;
+      const finalizedAsset = await readQuoteAsset(
+        item.quoteAddress,
+        finalizedBlock,
+        finalizedBlockHash,
+      );
+      if (!finalizedAsset.configuration.enabled) continue;
+      await registerQuotePoolLifecycleRecord(restoredLifecycleRecord(item));
+    }
   }
 
   async function recoverReorg(observedAt, identity, finalizedBlock) {
@@ -2585,6 +2760,7 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
       .filter((item) => item.blockNumber > ancestor.blockNumber)
       .sort((left, right) => right.blockNumber - left.blockNumber || right.logIndex - left.logIndex);
     const orphaned = replayed.filter((item) => item.blockNumber > canonicalAncestor.blockNumber);
+    await restoreOrphanedDisables(orphaned, finalizedBlock, identity.verifiedBlockHash);
     const next = structuredClone(state);
     for (const item of replayed) {
       if (item.previousAsset) next.quoteAssets[item.quoteAddress] = item.previousAsset;

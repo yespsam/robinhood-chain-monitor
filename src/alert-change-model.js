@@ -865,9 +865,52 @@ function genericPublishedModel(event) {
   });
 }
 
+function flapTrackedPoolTokenModel(event) {
+  const ordinal = Number(event?.featureTokenOrdinal);
+  const target = Number(event?.featureTokenTarget);
+  const tokenEntry = event?.tokens?.[0] || {};
+  const token = String(tokenEntry?.token || "").trim();
+  const metadata = tokenEntry?.metadata || {};
+  const name = String(metadata?.name || "").replace(/\s+/g, " ").trim();
+  const symbol = String(metadata?.symbol || "").replace(/\s+/g, " ").trim();
+  const label = name && symbol && name.toLowerCase() !== symbol.toLowerCase()
+    ? `${name} (${symbol})`
+    : name || symbol || "未命名代币";
+  const quote = String(event?.mode?.quoteSymbol || event?.mode?.quoteName || event?.mode?.quoteAsset || "Flap").trim();
+  const ordinalLabel = Number.isSafeInteger(ordinal) && ordinal >= 1 && target === 3
+    ? `第 ${ordinal}/${target} 个代币`
+    : "追踪代币";
+  const revision = event?.canonicalRevision;
+  const canonicalRevision = revision?.version === 1
+    && revision?.reason === "token_created_reorg"
+    && Number(revision?.ordinal) === ordinal
+    && /^0x[a-fA-F0-9]{64}$/.test(String(revision?.replacesBlockHash || ""))
+    && /^0x[a-fA-F0-9]{40}$/.test(String(revision?.replacesTokenAddress || ""));
+  return model({
+    kind: canonicalRevision ? "modification" : "addition",
+    basis: "exact_snapshot",
+    before: canonicalRevision
+      ? { state: "known", items: [`${ordinalLabel}（被链重组替换） · CA ${revision.replacesTokenAddress}`] }
+      : { state: "not_observed" },
+    after: {
+      state: "known",
+      items: [`${ordinalLabel}: ${label} · CA ${token} · ${quote} 配对${canonicalRevision ? "（以本条为准）" : ""}`],
+    },
+    evidence: [
+      event?.transactionHash && Number.isSafeInteger(Number(event?.blockNumber))
+        ? `${event.transactionHash}#${Number(event.blockNumber)}`
+        : event?.transactionHash,
+      event?.mode?.quoteAsset ? `Quote ${event.mode.quoteAsset}` : null,
+    ].filter(Boolean),
+  });
+}
+
 export function deriveAlertChangeModel(event = {}) {
   if (event.type === "pon_fun_update") return ponFunUpdateModel(event);
   if (event.type === "platform_capability_update") return platformChangeModel(event);
+  if (event.type === "bsc_launchpad_update"
+    && event.kind === "flap_pool_token"
+    && event.featureTrackedToken === true) return flapTrackedPoolTokenModel(event);
   if (event.type === "bsc_launchpad_update" && event.mode?.selector === "official-template") return fourMemeTemplateModel(event);
   if (event.type === "binance_official_update" && event.kind === "developer_update") return developerUpdateModel(event);
   if (event.currentSnapshot && typeof event.currentSnapshot === "object") return explicitSnapshotModel(event);
@@ -980,6 +1023,9 @@ function englishFact(value) {
     .replace(/参数/g, "parameter")
     .replace(/首个样本/g, "first sample")
     .replace(/首币/g, "first token")
+    .replace(/第\s*(\d+)\/(\d+)\s*个代币/g, "Token $1/$2")
+    .replace(/被链重组替换/g, "replaced by chain reorg")
+    .replace(/以本条为准/g, "this record is canonical")
     .replace(/另有(\d+)项/g, "+$1 more")
     .replaceAll("；", "; ")
     .replaceAll("：", ": ")

@@ -393,3 +393,58 @@ test("pon.fun changes retain exact before/after values and fingerprinted Factory
   assert.ok(model.evidence.includes(`${tx}#52000001`));
   assert.ok(model.evidence.includes(`Factory ${factory}`));
 });
+
+test("Flap tracked pool-token change models label the exact ordinal instead of every token as first", () => {
+  const token = "0x2222222222222222222222222222222222222222";
+  const transactionHash = `0x${"a".repeat(64)}`;
+  const generationKey = `quote:0xd97d097a89113fa59b76c572e5b2eb647e8eefaf:generation:0x${"b".repeat(64)}:0x${"c".repeat(64)}:4`;
+  const event = {
+    type: "bsc_launchpad_update",
+    kind: "flap_pool_token",
+    featureTrackedToken: true,
+    featureTokenOrdinal: 2,
+    featureTokenTarget: 3,
+    featureActivationKey: generationKey,
+    featureGenerationKey: generationKey,
+    platform: { id: "flap", name: "Flap", trust: "official_verified" },
+    mode: {
+      quoteAsset: "0xd97d097a89113fa59b76c572e5b2eb647e8eefaf",
+      quoteSymbol: "SOXLB",
+      quoteName: "Semicon Bull 3X ETF",
+    },
+    tokens: [{ token, metadata: { name: "Second Wave", symbol: "WAVE2" } }],
+    transactionHash,
+    blockNumber: 119_800_002,
+    security: { decision: "unknown" },
+  };
+
+  const result = deriveAlertChangeModel(event);
+  assert.equal(result.kind, "addition");
+  assert.equal(result.basis, "exact_snapshot");
+  assert.match(result.after.text, /第 2\/3 个代币/u);
+  assert.match(result.after.text, /Second Wave \(WAVE2\)/u);
+  assert.match(result.after.text, new RegExp(token));
+  assert.doesNotMatch(result.after.text, /首币|首个样本/u);
+  const english = renderAlertChangeLines(result, { locale: "en" }).join("\n");
+  assert.match(english, /Token 2\/3/u);
+  assert.doesNotMatch(english, /first token|first sample/iu);
+
+  const revision = deriveAlertChangeModel({
+    ...event,
+    canonicalRevision: {
+      version: 1,
+      reason: "token_created_reorg",
+      ordinal: 2,
+      replacesEventKey: "prior-canonical-event",
+      replacesBlockHash: `0x${"b".repeat(64)}`,
+      replacesTokenAddress: "0x3333333333333333333333333333333333333333",
+    },
+  });
+  assert.equal(revision.kind, "modification");
+  assert.match(revision.before.text, /被链重组替换/u);
+  assert.match(revision.before.text, /0x3333333333333333333333333333333333333333/);
+  assert.match(revision.after.text, /以本条为准/u);
+  const revisionEnglish = renderAlertChangeLines(revision, { locale: "en" }).join("\n");
+  assert.match(revisionEnglish, /replaced by chain reorg/iu);
+  assert.match(revisionEnglish, /this record is canonical/iu);
+});

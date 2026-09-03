@@ -2168,6 +2168,26 @@ export function telegramButtons(event) {
   if (event.type === "bsc_launchpad_update") {
     const token = event.tokens?.[0]?.token;
     const metadata = event.tokens?.[0]?.metadata || {};
+    const trackedToken = flapTrackedTokenIdentity(event);
+    const declaredMonitorOnlyTrackedToken = event.kind === "flap_pool_token"
+      && event.featureTrackedToken === true
+      && event.informationalOnly === true
+      && event.autoTradeEligible === false
+      && event.automaticExecution === false;
+    if (trackedToken || declaredMonitorOnlyTrackedToken) {
+      const ordinal = trackedToken?.ordinal || Number(event.featureTokenOrdinal);
+      const copyLabel = Number.isSafeInteger(ordinal) && ordinal >= 1 && ordinal <= 3
+        ? `📋 复制第 ${ordinal}/3 个代币 CA`
+        : "📋 复制监控代币 CA";
+      const rows = [[copyButton(token, copyLabel)].filter(Boolean)];
+      const explorer = httpsUrl(event.explorerUrl);
+      if (explorer) rows.push([{ text: "🔍 查看 TokenCreated", url: explorer }]);
+      const activationSource = httpsUrl(event.activationSourceUrl);
+      if (activationSource && activationSource !== explorer) {
+        rows.push([{ text: "🧾 底池启用证明", url: activationSource }]);
+      }
+      return { inline_keyboard: rows.filter((row) => row.length) };
+    }
     const poolAddress = firstValue(event.pools?.[0]?.pool, event.pools?.[0]?.poolId, event.marketContext?.pairAddress);
     const rows = [
       [copyButton(event.launcher, "📋 复制 BSC Factory")].filter(Boolean),
@@ -2652,6 +2672,23 @@ export function focusNoveltyKeys(event) {
   if (event?.type === "telegram_news_update") return [];
   const platform = focusNoveltyPlatform(event);
   if (!platform) return [];
+  const trackedToken = flapTrackedTokenIdentity(event);
+  if (trackedToken) {
+    const activationGeneration = digest({
+      featureActivationKey: trackedToken.featureActivationKey,
+      generation: trackedToken.generation,
+    }).slice(0, 24);
+    const revision = verifiedFlapTrackedTokenCanonicalRevision(event, trackedToken);
+    const revisionIdentity = revision
+      ? `:canonical-revision:${digest({
+          newBlockHash: revision.newBlockHash,
+          replacesEventKey: revision.replacesEventKey,
+          replacesBlockHash: revision.replacesBlockHash,
+          replacesTokenAddress: revision.replacesTokenAddress,
+        }).slice(0, 24)}`
+      : "";
+    return [`flap:feature-activation:${activationGeneration}:ordinal:${trackedToken.ordinal}:token:${trackedToken.token}${revisionIdentity}`];
+  }
   const exactFlapQuoteKeys = exactFlapQuoteNoveltyKeys(event, platform);
   if (exactFlapQuoteKeys !== null) return exactFlapQuoteKeys;
   if (platform === "long") {
@@ -3229,7 +3266,204 @@ function binanceNoveltyKeys(event) {
   return [`binance:title:${digest({ title, occurredAt }).slice(0, 24)}`];
 }
 
+function flapTrackedTokenIdentity(event) {
+  if (event?.type !== "bsc_launchpad_update"
+    || event?.kind !== "flap_pool_token"
+    || event?.featureTrackedToken !== true
+    || eventPlatform(event) !== "flap"
+    || String(event?.platform?.trust || "").toLowerCase() !== "official_verified"
+    || Number(event?.featureTokenTarget) !== 3
+    || event?.informationalOnly !== true
+    || event?.autoTradeEligible !== false
+    || event?.automaticExecution !== false) return null;
+  const ordinal = Number(event.featureTokenOrdinal);
+  const token = String(event?.tokens?.[0]?.token || "").toLowerCase();
+  const quoteAsset = String(event?.mode?.quoteAsset || "").toLowerCase();
+  const quoteSymbol = String(event?.mode?.quoteSymbol || "").trim();
+  const featureActivationKey = String(event?.featureActivationKey || "").trim();
+  const rawGeneration = event?.featureGenerationKey
+    ?? event?.generation
+    ?? event?.generationKey
+    ?? event?.featureTokenGeneration
+    ?? event?.featureActivationGeneration;
+  const generation = rawGeneration == null ? "" : String(rawGeneration).trim();
+  const security = String(event?.security?.decision || "unknown").toLowerCase();
+  if (!Number.isSafeInteger(ordinal) || ordinal < 1 || ordinal > 3
+    || !/^0x[a-f0-9]{40}$/.test(token)
+    || !/^0x[a-f0-9]{40}$/.test(quoteAsset)
+    || !quoteSymbol
+    || !featureActivationKey
+    || !generation
+    || featureActivationKey !== generation
+    || !["pass", "block", "unknown"].includes(security)) return null;
+  return { ordinal, token, quoteAsset, quoteSymbol, featureActivationKey, generation, security };
+}
+
+const FLAP_TRACKED_TOKEN_PORTAL = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
+const FLAP_TRACKED_TOKEN_CREATED_TOPIC = "0x504e7f360b2e5fe33cbaaae4c593bc55305328341bf79009e43e0e3b7f699603";
+
+function hasVerifiedFlapTrackedTokenProof(event, identity = flapTrackedTokenIdentity(event)) {
+  const proof = event?.featureTokenProof;
+  const pair = event?.pools?.[0] || {};
+  const generation = /^quote:(0x[a-f0-9]{40}):generation:(0x[a-f0-9]{64}):(0x[a-f0-9]{64}):(0|[1-9]\d*)$/.exec(identity?.generation || "");
+  const blockNumber = Number(event?.blockNumber);
+  const transactionIndex = Number(event?.transactionIndex);
+  const logIndex = Number(event?.logIndex);
+  const confirmations = Number(proof?.confirmations);
+  const requiredConfirmations = Number(proof?.requiredConfirmations);
+  if (!identity
+    || !generation
+    || generation[1] !== identity.quoteAsset
+    || proof?.version !== 1
+    || proof?.canonical !== true
+    || String(proof?.activationId || "") !== identity.generation
+    || String(proof?.activationEventKey || "") !== `flap-quote:56:${generation[3]}:${generation[4]}`
+    || String(proof?.quoteAddress || "").toLowerCase() !== identity.quoteAsset
+    || String(proof?.tokenAddress || "").toLowerCase() !== identity.token
+    || String(proof?.portal || "").toLowerCase() !== FLAP_TRACKED_TOKEN_PORTAL
+    || String(proof?.tokenCreatedTopic || "").toLowerCase() !== FLAP_TRACKED_TOKEN_CREATED_TOPIC
+    || String(event?.launcher || "").toLowerCase() !== FLAP_TRACKED_TOKEN_PORTAL
+    || !/^0x[a-f0-9]{64}$/.test(String(event?.transactionHash || "").toLowerCase())
+    || !/^0x[a-f0-9]{64}$/.test(String(event?.blockHash || "").toLowerCase())
+    || !Number.isSafeInteger(blockNumber) || blockNumber <= 0
+    || !Number.isSafeInteger(transactionIndex) || transactionIndex < 0
+    || !Number.isSafeInteger(logIndex) || logIndex < 0
+    || String(proof?.transactionHash || "").toLowerCase() !== String(event?.transactionHash || "").toLowerCase()
+    || Number(proof?.blockNumber) !== blockNumber
+    || String(proof?.blockHash || "").toLowerCase() !== String(event?.blockHash || "").toLowerCase()
+    || Number(proof?.transactionIndex) !== transactionIndex
+    || Number(proof?.logIndex) !== logIndex
+    || !Number.isSafeInteger(confirmations) || confirmations < 0
+    || !Number.isSafeInteger(requiredConfirmations) || requiredConfirmations < 0
+    || confirmations < requiredConfirmations
+    || !/^0x[a-f0-9]{40}$/.test(String(proof?.pairAddress || "").toLowerCase())
+    || !String(proof?.pairKind || "").trim()
+    || String(pair?.pool || pair?.poolId || "").toLowerCase() !== String(proof.pairAddress).toLowerCase()
+    || String(pair?.kind || "") !== String(proof.pairKind)
+    || String(event?.sourceUrl || "") !== `https://bscscan.com/tx/${String(event.transactionHash).toLowerCase()}`
+    || event?.explorerUrl !== event.sourceUrl
+    || String(event?.activationSourceUrl || "") !== `https://bscscan.com/tx/${generation[3]}`) return false;
+  const token0 = String(pair?.token0 || "").toLowerCase();
+  const token1 = String(pair?.token1 || "").toLowerCase();
+  return pair?.verifiedDex === true
+    && ((token0 === identity.token && token1 === identity.quoteAsset)
+      || (token1 === identity.token && token0 === identity.quoteAsset));
+}
+
+function verifiedFlapTrackedTokenCanonicalRevision(event, identity = flapTrackedTokenIdentity(event)) {
+  const revision = event?.canonicalRevision;
+  const keys = [
+    "version", "reason", "ordinal", "replacesEventKey", "replacesBlockHash",
+    "replacesTokenAddress",
+  ];
+  const exactKeys = revision
+    && typeof revision === "object"
+    && !Array.isArray(revision)
+    && Object.keys(revision).length === keys.length
+    && keys.every((key) => Object.prototype.hasOwnProperty.call(revision, key));
+  const ordinaryPrefix = identity
+    ? `bsc-flap-pool-token:${identity.generation}:${identity.ordinal}:`
+    : "";
+  const replacedTail = exactKeys && String(revision.replacesEventKey || "").startsWith(ordinaryPrefix)
+    ? String(revision.replacesEventKey).slice(ordinaryPrefix.length)
+    : "";
+  const replacedCandidate = /^(0x[a-f0-9]{64}):(0|[1-9]\d*):(0x[a-f0-9]{40})(?::canonical-revision:(0x[a-f0-9]{64}))?$/.exec(replacedTail);
+  const newBlockHash = String(event?.blockHash || "").toLowerCase();
+  const newBaseKey = identity
+    ? `${ordinaryPrefix}${String(event?.transactionHash || "").toLowerCase()}:${Number(event?.logIndex)}:${identity.token}`
+    : "";
+  if (!identity
+    || !exactKeys
+    || revision.version !== 1
+    || revision.reason !== "token_created_reorg"
+    || Number(revision.ordinal) !== identity.ordinal
+    || !replacedCandidate
+    || replacedCandidate[3] !== String(revision.replacesTokenAddress || "").toLowerCase()
+    || !/^0x[a-f0-9]{64}$/.test(String(revision.replacesBlockHash || "").toLowerCase())
+    || (replacedCandidate[4]
+      && replacedCandidate[4] !== String(revision.replacesBlockHash).toLowerCase())
+    || String(revision.replacesBlockHash).toLowerCase() === newBlockHash
+    || !/^0x[a-f0-9]{64}$/.test(newBlockHash)
+    || event?.eventKey !== `${newBaseKey}:canonical-revision:${newBlockHash}`
+    || revision.replacesEventKey === event.eventKey
+    || !hasVerifiedFlapTrackedTokenProof(event, identity)) return null;
+  return {
+    ordinal: identity.ordinal,
+    newBlockHash,
+    replacesEventKey: revision.replacesEventKey,
+    replacesBlockHash: String(revision.replacesBlockHash).toLowerCase(),
+    replacesTokenAddress: String(revision.replacesTokenAddress).toLowerCase(),
+  };
+}
+
+function isVerifiedFlapTrackedTokenRecovery(event) {
+  const identity = flapTrackedTokenIdentity(event);
+  const recovery = event?.delayedRecovery;
+  if (!identity
+    || !hasVerifiedFlapTrackedTokenProof(event, identity)
+    || recovery?.version !== 1
+    || recovery?.reason !== "verified_generation_archive_catch_up"
+    || recovery?.continuousCoverage !== true
+  ) return false;
+  const sourceOccurredAt = Date.parse(recovery.sourceOccurredAt || "");
+  const firstObservedAt = Date.parse(recovery.firstObservedAt || "");
+  const recoveredAt = Date.parse(recovery.recoveredAt || "");
+  return Number.isFinite(sourceOccurredAt)
+    && Number.isFinite(firstObservedAt)
+    && Number.isFinite(recoveredAt)
+    && sourceOccurredAt <= firstObservedAt
+    && firstObservedAt <= recoveredAt
+    && Number(recovery.lagMs) === Math.max(0, recoveredAt - sourceOccurredAt)
+    && Date.parse(event?.blockTimestamp || "") === sourceOccurredAt
+    && Date.parse(event?.observedAt || "") === recoveredAt;
+}
+
+const DURABLE_FLAP_TRACKED_TOKEN_DISPOSITIONS = new Set([
+  "flap_tracked_token_monitor_only",
+  "flap_tracked_token_delayed_recovery",
+  "flap_tracked_token_canonical_revision",
+  "flap_tracked_token_delayed_delivery",
+]);
+
+function isDurablyAcceptedFlapTrackedTokenEntry(entry) {
+  const identity = flapTrackedTokenIdentity(entry?.event);
+  const disposition = entry?.deliveryDisposition;
+  const retryableDestination = Object.values(entry?.destinations || {})
+    .some((destination) => ["pending", "failed", "delivering"].includes(destination?.status));
+  const initiallyFresh = entry?.event?.freshness?.decision === "realtime";
+  return Boolean(
+    identity
+      && hasVerifiedFlapTrackedTokenProof(entry.event, identity)
+      && entry?.status === "pending"
+      && retryableDestination
+      && disposition?.deliverImmediately === true
+      && DURABLE_FLAP_TRACKED_TOKEN_DISPOSITIONS.has(disposition?.reason)
+      && (initiallyFresh
+        || isVerifiedFlapTrackedTokenRecovery(entry.event)
+        || Boolean(verifiedFlapTrackedTokenCanonicalRevision(entry.event, identity))),
+  );
+}
+
+function flapTrackedTokenRetryDisposition(entry, event, fallback) {
+  if (!isDurablyAcceptedFlapTrackedTokenEntry(entry) || fallback?.deliverImmediately === true) return fallback;
+  const priority = isTradingPriority(event?.tradingPriority) ? event.tradingPriority : null;
+  if (!flapTrackedTokenIdentity(event)
+    || priority?.tier !== "T2"
+    || priority?.hardGates?.exactTarget !== true
+    || priority?.hardGates?.trustedConfirmation !== true
+    || priority?.plan?.automaticExecution !== false) return fallback;
+  // Persistence, not producer-controlled freshness fields, grants this retry.
+  // It is permanently monitor-only and downgraded to a no-chase T2 card.
+  return Object.freeze({
+    mode: "immediate",
+    deliverImmediately: true,
+    tier: "T2",
+    reason: "flap_tracked_token_delayed_delivery",
+  });
+}
+
 function isFocusOnchainTokenActivation(event) {
+  if (flapTrackedTokenIdentity(event)) return true;
   const supportedType = event?.type === "bsc_launchpad_update"
     || (isMorphLaunchpadEvent(event) && event.kind === "new_mode");
   if (!supportedType || !["new_mode", "new_launchpad"].includes(event.kind)) return false;
@@ -3759,6 +3993,29 @@ export function alertDeliveryDisposition(event = {}) {
     // The strict observed-only card remains immediate and never claims 0→1.
     return Object.freeze({ mode: "immediate", deliverImmediately: true, tier, reason: "flap_board_quote_observed" });
   }
+  const delayedTrackedTokenRecovery = isVerifiedFlapTrackedTokenRecovery(event);
+  const trackedTokenRevision = verifiedFlapTrackedTokenCanonicalRevision(event);
+  if (flapTrackedTokenIdentity(event)
+    && ["T0", "T1", "T2"].includes(tier)
+    && priority?.hardGates?.exactTarget === true
+    && priority?.hardGates?.trustedConfirmation === true
+    && (priority?.hardGates?.validWindow === true
+      || (tier === "T2" && (delayedTrackedTokenRecovery || trackedTokenRevision)))
+    && priority?.plan?.automaticExecution === false) {
+    // This is a deliberately narrow monitoring exception. A proven official
+    // TokenCreated ordinal remains useful even when the local safety result is
+    // unknown or blocked, but it can never inherit an execution affordance.
+    return Object.freeze({
+      mode: "immediate",
+      deliverImmediately: true,
+      tier,
+      reason: trackedTokenRevision
+        ? "flap_tracked_token_canonical_revision"
+        : delayedTrackedTokenRecovery
+        ? "flap_tracked_token_delayed_recovery"
+        : "flap_tracked_token_monitor_only",
+    });
+  }
   const hardGateEligible = tier === "T0"
     ? priority?.hardGates?.t0Eligible === true
     : tier === "T1" ? priority?.hardGates?.t1Eligible === true : false;
@@ -3796,11 +4053,13 @@ function disablePolicySuppressedDestinations(destinationState, disposition, now)
   return changed;
 }
 
-function disableFreshnessSuppressedTelegram(destinationState, event, now) {
+function disableFreshnessSuppressedTelegram(destinationState, event, now, { preserveFlapTrackedToken = false } = {}) {
   // A strict Flap Portal recovery is a durable structural fact, not an old
   // trade call. Once authenticated and queued it remains retryable as T2 with
   // an explicit no-chase warning until Telegram actually accepts it.
-  if (isDurableFlapQuoteNotificationEvent(event)) return false;
+  if (isDurableFlapQuoteNotificationEvent(event)
+    || isVerifiedFlapTrackedTokenRecovery(event)
+    || preserveFlapTrackedToken) return false;
   if (effectiveFreshnessDecision(event) !== "suppress") return false;
   const telegram = destinationState.telegram;
   if (!telegram || telegram.status === "delivered") return false;
@@ -3825,6 +4084,7 @@ function disableExpiredTelegramDelivery(config, entry, evaluatedAt = Date.now())
   // or an explicit policy/destination decision disables it.
   if (entry.event?.type === "fomo_monitor_health_update") return false;
   if (isDurableFlapQuoteNotificationEvent(entry.event)) return false;
+  if (isDurablyAcceptedFlapTrackedTokenEntry(entry)) return false;
 
   const isFomo = entry.event?.type === "fomo_family_top_call";
   const isPonDelayedRecovery = isPonFunDelayedRecoveryEvent(entry.event);
@@ -3976,6 +4236,8 @@ async function enqueueAlert(config, event) {
       || semanticDuplicateOf?.status === "delivered"
       || persistedSemanticDuplicateOwner?.status === "delivered";
     const activeExisting = existing && !["delivered", "suppressed"].includes(existing.status);
+    const retryingDurableFlapTrackedToken = activeExisting
+      && isDurablyAcceptedFlapTrackedTokenEntry(existing);
     const refreshingFlapNotification = activeExisting
       && isDurableFlapQuoteNotificationEvent(event)
       && existing.event?.eventKey === event.eventKey
@@ -3992,11 +4254,10 @@ async function enqueueAlert(config, event) {
       // cannot be delivered after its trading window has closed.
       queuedEvent = withTradingPriority(queuedEvent, { nowMs: Date.parse(now) });
     }
-    if (refreshingFlapNotification) {
-      // The generic worker is intentionally forbidden from touching Portal
-      // retries. Refresh the delivery-age fields on the producer-authorized
-      // observation instead so the recovery card reports the real wait and
-      // total delay when the destination finally returns.
+    if (refreshingFlapNotification || retryingDurableFlapTrackedToken) {
+      // Refresh delivery age for a producer-authorized Portal observation or
+      // an already-admitted tracked-token retry so the rebuilt card reports
+      // the real wait when the destination finally returns.
       queuedEvent = refreshDeliveryFreshness(config, queuedEvent, Date.parse(now));
     }
     const flapQuoteSignal = eventPlatform(queuedEvent) === "flap"
@@ -4058,9 +4319,12 @@ async function enqueueAlert(config, event) {
         stale.updatedAt = now;
       }
     }
-    const deliveryDisposition = activeExisting || reactivatingCancelledFlapQuote
+    const ordinaryDeliveryDisposition = activeExisting || reactivatingCancelledFlapQuote
       ? alertDeliveryDisposition(queuedEvent)
       : existing?.deliveryDisposition || alertDeliveryDisposition(queuedEvent);
+    const deliveryDisposition = retryingDurableFlapTrackedToken
+      ? flapTrackedTokenRetryDisposition({ ...existing, event: queuedEvent }, queuedEvent, ordinaryDeliveryDisposition)
+      : ordinaryDeliveryDisposition;
     const destinationState = { ...(existing?.destinations || {}) };
     if (reactivatingCancelledFlapQuote) {
       for (const [destination, state] of Object.entries(destinationState)) {
@@ -4114,8 +4378,16 @@ async function enqueueAlert(config, event) {
     const createdAt = existing?.createdAt || now;
     // A duplicate is audit evidence only. It must never revoke (or restore) the
     // delivery eligibility established by the first payload for this event key.
-    disableFreshnessSuppressedTelegram(destinationState, queuedEvent, now);
-    disableExpiredTelegramDelivery(config, { createdAt, event: queuedEvent, destinations: destinationState }, now);
+    disableFreshnessSuppressedTelegram(destinationState, queuedEvent, now, {
+      preserveFlapTrackedToken: retryingDurableFlapTrackedToken,
+    });
+    disableExpiredTelegramDelivery(config, {
+      createdAt,
+      event: queuedEvent,
+      destinations: destinationState,
+      status: outboxEntryStatus(destinationState),
+      deliveryDisposition,
+    }, now);
     disablePolicySuppressedDestinations(destinationState, deliveryDisposition, now);
     const status = outboxEntryStatus(destinationState);
     const duplicateObservation = existing ? {
@@ -4146,7 +4418,9 @@ async function enqueueAlert(config, event) {
       ...((existing?.semanticDuplicateOf || semanticDuplicateOf) ? { semanticDuplicateOwnerDelivered } : {}),
       deliveryDisposition,
       ...(flapQuoteProducerGate ? { flapQuoteProducerGate } : {}),
-      ...(refreshingFlapNotification || reactivatingCancelledFlapQuote ? { renderBundle: null } : {}),
+      ...(refreshingFlapNotification || reactivatingCancelledFlapQuote || retryingDurableFlapTrackedToken
+        ? { renderBundle: null }
+        : {}),
     };
     if (reactivatingCancelledFlapQuote) delete outbox.events[eventId].flapQuoteCancellation;
     return eventId;
@@ -4498,7 +4772,9 @@ export async function drainAlertOutbox(config) {
       // The gate follows an exact canonical board/Portal takeover as well.
       if (isFlapQuoteProducerGatedEntry(entry)) continue;
       changed = true;
+      const retryingDurableFlapTrackedToken = isDurablyAcceptedFlapTrackedTokenEntry(entry);
       const flapNotificationRenderState = isDurableFlapQuoteNotificationEvent(entry.event)
+        || retryingDurableFlapTrackedToken
         ? JSON.stringify({
             observedAt: entry.event.observedAt,
             delayedRecovery: entry.event.delayedRecovery,
@@ -4561,9 +4837,14 @@ export async function drainAlertOutbox(config) {
         entry.updatedAt = entry.suppressedAt;
         continue;
       }
-      disableFreshnessSuppressedTelegram(entry.destinations || {}, entry.event, new Date(now).toISOString());
+      const ordinaryDeliveryDisposition = alertDeliveryDisposition(entry.event || {});
+      entry.deliveryDisposition = retryingDurableFlapTrackedToken
+        ? flapTrackedTokenRetryDisposition(entry, entry.event, ordinaryDeliveryDisposition)
+        : ordinaryDeliveryDisposition;
+      disableFreshnessSuppressedTelegram(entry.destinations || {}, entry.event, new Date(now).toISOString(), {
+        preserveFlapTrackedToken: retryingDurableFlapTrackedToken,
+      });
       disableExpiredTelegramDelivery(config, entry, now);
-      entry.deliveryDisposition = alertDeliveryDisposition(entry.event || {});
       disablePolicySuppressedDestinations(
         entry.destinations || {},
         entry.deliveryDisposition,
@@ -5015,7 +5296,10 @@ export function isRelevantAlert(event) {
       && event.strong === true
       && event.structural?.eligible === true;
   }
-  if (event.type === "bsc_launchpad_update") return ["new_launchpad", "new_mode", "new_factory"].includes(event.kind);
+  if (event.type === "bsc_launchpad_update") {
+    if (event.kind === "flap_pool_token") return Boolean(flapTrackedTokenIdentity(event));
+    return ["new_launchpad", "new_mode", "new_factory"].includes(event.kind);
+  }
   if (event.type === "fomo_family_top_call") {
     if (event.signalKind === SMART_WALLET_SIGNAL_KIND) return isRelevantSmartWalletBuy(event);
     if (event.signalKind === "top_blogger_convergence") {

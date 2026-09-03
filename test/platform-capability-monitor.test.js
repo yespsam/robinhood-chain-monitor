@@ -633,7 +633,7 @@ test("Flap pending metadata keeps one stable event through queued and policy-sup
   await check();
   state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
   assert.equal(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending, undefined);
-  assert.equal(activations.length, 1);
+  assert.equal(activations.length, 0, "Board metadata delivery is notification-only and cannot arm quote tracking");
   assert.equal(metadataReads, 2, "complete durable metadata is reused across delivery restarts");
   assert.equal(new Set(events.map(({ eventKey }) => eventKey)).size, 1);
   assert.equal(new Set(events.map(({ sourceOccurredAt }) => sourceOccurredAt)).size, 1);
@@ -710,13 +710,13 @@ test("Flap pending metadata uses one stable event key per quote when assets reso
   assert.equal(new Set(bKeys).size, 1);
   assert.notEqual(aKeys[0], bKeys[0]);
   assert.equal(events.every((event) => event.changes.newFlapPools.length === 1), true);
-  assert.deepEqual(activations.map(({ quoteSymbol }) => quoteSymbol).sort(), ["QA", "QB"]);
+  assert.deepEqual(activations, [], "Board quote identities never arm direct lifecycle tracking");
   const state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
   assert.equal(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending, undefined);
 
   await check();
   assert.equal(events.length, 3, "delivered identity events are not regenerated");
-  assert.deepEqual(activations.map(({ quoteSymbol }) => quoteSymbol).sort(), ["QA", "QB"]);
+  assert.deepEqual(activations, []);
 });
 
 test("Flap metadata pending crosses the real source gate, outbox, renderer, and fake Telegram exactly once after restart", async (t) => {
@@ -888,7 +888,7 @@ test("Flap suppresses a quote-linked vault until metadata proves an unknown addr
   assert.equal(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending, undefined);
 });
 
-test("Flap observes stock and genuine quote pools after metadata but activates only the genuine quote", async (t) => {
+test("Flap observes stock and genuine quote pools after metadata but Board activates neither", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-stock-quote-filter-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
   const board = "https://flap.sh/board";
@@ -939,7 +939,7 @@ test("Flap observes stock and genuine quote pools after metadata but activates o
   assert.equal(alerts.every(({ kind, changes }) => (
     kind === "flap_quote_asset_board_observed" && changes.newFlapPools.length === 1
   )), true);
-  assert.deepEqual(activations.map(({ quoteAddress }) => quoteAddress), [realQuote]);
+  assert.deepEqual(activations, [], "the Board top list is metadata evidence, not an activation source");
   assert.deepEqual(metadataReads.map(({ address, chainId }) => ({ address, chainId })).sort((a, b) => a.address.localeCompare(b.address)), [
     { address: stockQuote, chainId: 56 },
     { address: realQuote, chainId: 56 },
@@ -1219,14 +1219,11 @@ test("Flap pools require two observations, retain pagination misses, and detect 
     `chain-56:quote:${quoteB}`,
   ]);
   assert.equal(alerts[0].changes.newModules.length, 0, "the factory identity detects a change even when its category already exists");
-  assert.equal(activations.length, 1);
-  assert.deepEqual(activations[0].map(({ identity }) => identity), [`quote:${quoteB}`]);
-  assert.equal(activations[0].every(({ confirmed, observations, sourceUrl }) => confirmed && observations >= 2 && sourceUrl === board), true);
-  assert.equal(activations[0][0].firstObservedAt, "2026-08-10T10:01:00.000Z");
+  assert.equal(activations.length, 0, "stable Board top-list observations do not arm quote tracking");
 
   await check();
   assert.equal(alerts.length, 1);
-  assert.equal(activations.length, 1, "a committed activation fires only once");
+  assert.equal(activations.length, 0);
 
   items = [];
   await check();
@@ -1236,7 +1233,53 @@ test("Flap pools require two observations, retain pagination misses, and detect 
 
 });
 
-test("Flap feature activation failure keeps the checkpoint retryable", async (t) => {
+test("Flap Board keeps the legacy activation hook for confirmed vault factories only", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-vault-activation-only-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const board = "https://flap.sh/board";
+  const quote = "0x1111111111111111111111111111111111111111";
+  const oldFactory = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const newFactory = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  const target = {
+    id: "flap",
+    name: "Flap",
+    website: "https://flap.sh",
+    capabilitySchemaVersion: 3,
+    marketSources: [board],
+    pagePattern: /$a/,
+  };
+  let items = [{
+    quoteToken: { address: quote, name: "Existing Quote", symbol: "OLDQ" },
+    vault: { vaultFactory: oldFactory, vaultFactoryCategory: ["index"] },
+  }];
+  const activations = [];
+  const check = () => runPlatformCapabilityCheck({ dataDir }, {
+    targets: [target],
+    fetchImpl: async (url) => response(JSON.stringify({ initialBoard: { items } }), { url }),
+    sendAlertsImpl: async (_config, event) => ({ status: "delivered", eventId: event.eventKey }),
+    onFlapFeatureActivation: async (records) => activations.push(...records),
+    logger: quietLogger,
+    now: () => new Date("2026-08-10T12:00:00.000Z"),
+  });
+
+  await check();
+  items = [...items, {
+    quoteToken: { address: quote, name: "Existing Quote", symbol: "OLDQ" },
+    vault: { vaultFactory: newFactory, vaultFactoryCategory: ["yield"] },
+  }];
+  await check();
+  assert.equal(activations.length, 0, "one Board observation cannot confirm a vault factory");
+  await check();
+
+  assert.equal(activations.length, 1);
+  assert.equal(activations[0].identity, `vault:YIELD:${newFactory}`);
+  assert.equal(activations[0].vaultFactory, newFactory);
+  assert.equal(activations[0].quoteAddress, quote);
+  assert.equal(activations[0].confirmed, true);
+  assert.ok(activations[0].observations >= 2);
+});
+
+test("Flap Board quote observations never call the legacy activation hook", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-pool-activation-retry-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
   const board = "https://flap.sh/board";
@@ -1244,7 +1287,6 @@ test("Flap feature activation failure keeps the checkpoint retryable", async (t)
   const oldQuote = "0x1111111111111111111111111111111111111111";
   const newQuote = "0x2222222222222222222222222222222222222222";
   let quotes = [oldQuote];
-  let failActivation = true;
   let activationAttempts = 0;
   const alerts = [];
   const options = {
@@ -1261,7 +1303,7 @@ test("Flap feature activation failure keeps the checkpoint retryable", async (t)
     },
     onFlapFeatureActivation: async () => {
       activationAttempts += 1;
-      if (failActivation) throw new Error("registry unavailable");
+      throw new Error("Board quote observations must not reach this hook");
     },
     logger: quietLogger,
     now: () => new Date("2026-08-10T11:00:00.000Z"),
@@ -1272,20 +1314,19 @@ test("Flap feature activation failure keeps the checkpoint retryable", async (t)
   await runPlatformCapabilityCheck({ dataDir }, options);
   await runPlatformCapabilityCheck({ dataDir }, options);
   let state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
-  assert.equal(activationAttempts, 1);
+  assert.equal(activationAttempts, 0);
   assert.equal(state.flap.capabilities.flapPools.some(({ quoteAddress }) => quoteAddress === newQuote), true,
-    "resolved metadata is durable while downstream activation remains pending");
-  assert.ok(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending[`quote:${newQuote}`]);
+    "resolved Board metadata still commits durably");
+  assert.equal(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending, undefined);
 
-  failActivation = false;
   await runPlatformCapabilityCheck({ dataDir }, options);
   state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
-  assert.equal(activationAttempts, 2, "the failed activation is retried before checkpoint commit");
+  assert.equal(activationAttempts, 0);
   assert.equal(state.flap.capabilities.flapPools.some(({ quoteAddress }) => quoteAddress === newQuote), true);
   assert.equal(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending, undefined);
   await runPlatformCapabilityCheck({ dataDir }, options);
-  assert.equal(activationAttempts, 2, "a successful activation is not repeated");
-  assert.equal(alerts.length, 2, "delivery follows the existing retry semantics until activation succeeds");
+  assert.equal(activationAttempts, 0);
+  assert.equal(alerts.length, 1, "the delivered Board observation is checkpointed exactly once");
 });
 
 test("Flap v3 migration seeds existing structured pools without activating historical items", async (t) => {

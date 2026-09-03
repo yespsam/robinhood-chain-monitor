@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -393,6 +394,314 @@ test("focus3 assigns stable cross-source novelty ids and sends only the first so
   const duplicateEntry = outbox.events[duplicate.eventId];
   assert.equal(duplicateEntry.destinations.telegram.disabledReason, "semantic_duplicate");
   assert.equal(duplicateEntry.semanticDuplicateOf, "github:flap-sh/flap-skills:vault-v2-first");
+});
+
+const FLAP_TRACKED_TOKEN_PORTAL = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
+const FLAP_TRACKED_TOKEN_CREATED_TOPIC = "0x504e7f360b2e5fe33cbaaae4c593bc55305328341bf79009e43e0e3b7f699603";
+const FLAP_TRACKED_TOKEN_QUOTE = "0xd97d097a89113fa59b76c572e5b2eb647e8eefaf";
+
+function flapTrackedTokenEvent({
+  ordinal = 1,
+  token = `0x${String(ordinal).repeat(40)}`,
+  eventKey,
+  generationTag = "a",
+  blockTag = generationTag,
+  decision = "pass",
+  observedAt = new Date().toISOString(),
+  blockTimestamp = observedAt,
+  delayedRecovery = null,
+  canonicalRevision = null,
+} = {}) {
+  const transactionHash = `0x${String(ordinal).repeat(64)}`;
+  const blockHash = `0x${blockTag.repeat(64)}`;
+  const activationTransactionHash = `0x${(generationTag === "a" ? "b" : "c").repeat(64)}`;
+  const activationBlockHash = `0x${(generationTag === "a" ? "c" : "d").repeat(64)}`;
+  const activationLogIndex = 4;
+  const generationKey = `quote:${FLAP_TRACKED_TOKEN_QUOTE}:generation:${activationBlockHash}:${activationTransactionHash}:${activationLogIndex}`;
+  const poolAddress = `0x${String(ordinal + 3).repeat(40)}`;
+  const blockNumber = 119_800_000 + ordinal;
+  const transactionIndex = ordinal;
+  const logIndex = ordinal + 5;
+  const sourceUrl = `https://bscscan.com/tx/${transactionHash}`;
+  const activationSourceUrl = `https://bscscan.com/tx/${activationTransactionHash}`;
+  const candidateKey = `${transactionHash}:${logIndex}:${token.toLowerCase()}`;
+  const fingerprint = createHash("sha256")
+    .update(JSON.stringify({ generationKey, quoteAddress: FLAP_TRACKED_TOKEN_QUOTE }))
+    .digest("hex")
+    .slice(0, 20);
+  return {
+    type: "bsc_launchpad_update",
+    kind: "flap_pool_token",
+    eventKey: eventKey || `bsc-flap-pool-token:${generationKey}:${ordinal}:${candidateKey}${canonicalRevision ? `:canonical-revision:${blockHash}` : ""}`,
+    chainId: 56,
+    launcher: FLAP_TRACKED_TOKEN_PORTAL,
+    featurePlatform: "flap",
+    featureActivationKey: generationKey,
+    featureGenerationKey: generationKey,
+    featureTrackedToken: true,
+    featureTokenOrdinal: ordinal,
+    featureTokenTarget: 3,
+    featureFirstToken: ordinal === 1,
+    informationalOnly: true,
+    autoTradeEligible: false,
+    automaticExecution: false,
+    strong: true,
+    launchCount: ordinal,
+    uniqueTokens: ordinal,
+    platform: {
+      id: "flap",
+      name: "Flap",
+      trust: "official_verified",
+      website: "https://flap.sh",
+      twitter: "https://x.com/flapdotsh",
+      github: null,
+      notifyFirstToken: false,
+      notifyFirstInfrastructureActivation: false,
+      evidenceUrl: `https://bscscan.com/address/${FLAP_TRACKED_TOKEN_PORTAL}`,
+    },
+    mode: {
+      fingerprint,
+      selector: "official-portal-token-created",
+      creationTopics: [FLAP_TRACKED_TOKEN_CREATED_TOPIC],
+      customTopics: [FLAP_TRACKED_TOKEN_CREATED_TOPIC],
+      quoteAsset: FLAP_TRACKED_TOKEN_QUOTE,
+      quoteSymbol: "SOXLB",
+      quoteName: "Semicon Bull 3X ETF",
+      componentMode: "Flap SOXLB 新底池",
+      componentModeAlertEligible: true,
+      featureActivationEligible: true,
+      monitorOnly: true,
+    },
+    tokens: [{
+      token,
+      isNewContract: true,
+      metadata: { name: `Tracked ${ordinal}`, symbol: `TRK${ordinal}`, decimals: 18 },
+    }],
+    pools: [{
+      pool: poolAddress,
+      poolId: null,
+      kind: "v2",
+      factory: "0xca143ce32fe78f1f7019d7d551a6402fc5350c73",
+      token0: token,
+      token1: FLAP_TRACKED_TOKEN_QUOTE,
+      hook: null,
+      verifiedDex: true,
+    }],
+    security: {
+      decision,
+      metrics: { liquidityConfirmed: decision === "pass" },
+    },
+    structural: {
+      eligible: true,
+      mechanismEvidence: true,
+      causalTokenEvent: true,
+      controllerKind: "official_direct",
+      source: "verified_flap_portal_receipt",
+    },
+    transactionHash,
+    blockNumber,
+    blockHash,
+    blockTimestamp,
+    transactionIndex,
+    logIndex,
+    featureTokenProof: {
+      version: 1,
+      activationId: generationKey,
+      activationEventKey: `flap-quote:56:${activationTransactionHash}:${activationLogIndex}`,
+      quoteAddress: FLAP_TRACKED_TOKEN_QUOTE,
+      tokenAddress: token,
+      portal: FLAP_TRACKED_TOKEN_PORTAL,
+      tokenCreatedTopic: FLAP_TRACKED_TOKEN_CREATED_TOPIC,
+      transactionHash,
+      blockNumber,
+      blockHash,
+      transactionIndex,
+      logIndex,
+      canonical: true,
+      confirmations: 6,
+      requiredConfirmations: 6,
+      pairAddress: poolAddress,
+      pairKind: "v2",
+    },
+    ...(canonicalRevision ? { canonicalRevision } : {}),
+    launchEvidence: [{
+      emitter: FLAP_TRACKED_TOKEN_PORTAL,
+      topic: FLAP_TRACKED_TOKEN_CREATED_TOPIC,
+      token,
+    }],
+    sourceUrl,
+    activationSourceUrl,
+    explorerUrl: sourceUrl,
+    launcherUrl: `https://bscscan.com/address/${FLAP_TRACKED_TOKEN_PORTAL}`,
+    observedAt,
+    ...(delayedRecovery ? { delayedRecovery } : {}),
+  };
+}
+
+test("Flap tracked token novelty includes generation, ordinal, and CA so 1/3 through 3/3 deliver once each", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-tracked-token-"));
+  const payloads = [];
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    payloads.push(JSON.parse(options.body));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: payloads.length } }) };
+  });
+  t.mock.method(console, "info", () => {});
+  const observedAt = new Date().toISOString();
+  const makeEvent = (overrides) => flapTrackedTokenEvent({ observedAt, ...overrides });
+  const events = [1, 2, 3].map((ordinal) => makeEvent({
+    ordinal,
+    token: `0x${String(ordinal).repeat(40)}`,
+  }));
+  const keys = events.map((event) => focusNoveltyKeys(event));
+  assert.ok(keys.every((value) => value.some((key) => key.startsWith("flap:feature-activation:"))));
+  assert.equal(new Set(keys.map((value) => value.find((key) => key.startsWith("flap:feature-activation:")))).size, 3);
+  assert.deepEqual(
+    focusNoveltyKeys(makeEvent({ ordinal: 2, token: events[1].tokens[0].token, eventKey: "producer-retry" })),
+    keys[1],
+  );
+  assert.deepEqual(
+    focusNoveltyKeys({ ...events[1], generation: "legacy-field-must-not-override-featureGenerationKey" }),
+    keys[1],
+  );
+  assert.notDeepEqual(
+    focusNoveltyKeys(makeEvent({ ordinal: 2, token: events[1].tokens[0].token, generationTag: "b" })),
+    keys[1],
+  );
+
+  const config = { ...alertConfig(dataDir), monitorScope: "focus3", ponsMonitorEnabled: false, alertChineseTranslationEnabled: false };
+  for (const event of events) assert.equal((await sendAlerts(config, event)).status, "delivered");
+  const duplicate = await sendAlerts(config, structuredClone(events[1]));
+  assert.equal(duplicate.status, "delivered");
+  assert.equal(duplicate.eventId, events[1].eventKey);
+  assert.equal(payloads.length, 3);
+
+  const buttons = telegramButtons(events[0]).inline_keyboard.flat();
+  assert.ok(buttons.some((button) => button.copy_text?.text === events[0].tokens[0].token));
+  assert.deepEqual(
+    buttons.filter((button) => button.url).map((button) => button.url),
+    [events[0].explorerUrl, events[0].activationSourceUrl],
+    "TokenCreated and the distinct pool-activation proof each appear once",
+  );
+  assert.ok(buttons.every((button) => !/GMGN|买入|交易/i.test(button.text)));
+});
+
+test("a durably queued Flap tracked token survives the two-hour TTL and delivers once as delayed monitor-only", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-tracked-token-delayed-delivery-"));
+  let nowMs = Date.parse("2026-09-04T01:00:00.000Z");
+  let shouldFail = true;
+  const payloads = [];
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    payloads.push(JSON.parse(options.body));
+    if (shouldFail) throw new Error("simulated Telegram outage");
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: 7301 } }) };
+  });
+  t.mock.method(console, "error", () => {});
+  t.mock.method(console, "info", () => {});
+  const event = flapTrackedTokenEvent({
+    ordinal: 1,
+    token: "0x1111111111111111111111111111111111111111",
+    observedAt: new Date(nowMs).toISOString(),
+    blockTimestamp: new Date(nowMs - 1_000).toISOString(),
+  });
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    telegramStrongAlerts: true,
+    alertBilingualEnabled: true,
+    alertChineseTranslationEnabled: false,
+    alertNow: () => nowMs,
+  };
+
+  const queued = await sendAlerts(config, event);
+  assert.equal(queued.status, "queued");
+  assert.equal(payloads.length, 1);
+  let outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  let entry = outbox.events[queued.eventId];
+  assert.equal(entry.status, "pending");
+  assert.equal(entry.deliveryDisposition.reason, "flap_tracked_token_monitor_only");
+  assert.equal(entry.destinations.telegram.attempts, 1);
+
+  nowMs += 2 * 60 * 60_000 + 60_000;
+  shouldFail = false;
+  assert.equal(await drainAlertOutbox(config), 1);
+  assert.equal(payloads.length, 2);
+  assert.match(payloads[1].text, /延迟送达｜勿追价/u);
+  assert.match(payloads[1].text, /Delayed delivery \| do not chase/i);
+  assert.match(payloads[1].text, /非自动交易/u);
+  assert.match(payloads[1].text, /0x1111111111111111111111111111111111111111/);
+  const retryButtons = payloads[1].reply_markup.inline_keyboard.flat();
+  assert.ok(retryButtons.some((button) => button.copy_text?.text === event.tokens[0].token));
+  assert.ok(retryButtons.every((button) => !/GMGN|买入|交易/i.test(button.text)));
+
+  outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  entry = outbox.events[queued.eventId];
+  assert.equal(entry.status, "delivered");
+  assert.equal(entry.event.tradingPriority.tier, "T2");
+  assert.equal(entry.deliveryDisposition.reason, "flap_tracked_token_delayed_delivery");
+  assert.equal(entry.destinations.telegram.receipt.messageId, 7301);
+  assert.equal(entry.renderBundle.version, 19);
+  assert.equal(await drainAlertOutbox(config), 0);
+  assert.equal(payloads.length, 2, "terminal delivery is exact-once across later drains");
+});
+
+test("a canonical Flap tracked-token reorg revision is a distinct T2 no-buy alert even when the CA is unchanged", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-tracked-token-revision-"));
+  const payloads = [];
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    payloads.push(JSON.parse(options.body));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: payloads.length } }) };
+  });
+  t.mock.method(console, "info", () => {});
+  const observedAt = new Date().toISOString();
+  const token = "0x2222222222222222222222222222222222222222";
+  const original = flapTrackedTokenEvent({ ordinal: 2, token, generationTag: "a", blockTag: "d", observedAt });
+  const revision = flapTrackedTokenEvent({
+    ordinal: 2,
+    token,
+    generationTag: "a",
+    blockTag: "e",
+    observedAt,
+    canonicalRevision: {
+      version: 1,
+      reason: "token_created_reorg",
+      ordinal: 2,
+      replacesEventKey: original.eventKey,
+      replacesBlockHash: original.blockHash,
+      replacesTokenAddress: token,
+    },
+  });
+  const originalKey = focusNoveltyKeys(original).find((key) => key.startsWith("flap:feature-activation:"));
+  const revisionKey = focusNoveltyKeys(revision).find((key) => key.startsWith("flap:feature-activation:"));
+  assert.notEqual(revisionKey, originalKey);
+  assert.match(revisionKey, /:canonical-revision:/);
+
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    telegramStrongAlerts: true,
+    alertBilingualEnabled: true,
+    alertChineseTranslationEnabled: false,
+  };
+  assert.equal((await sendAlerts(config, original)).status, "delivered");
+  assert.equal((await sendAlerts(config, revision)).status, "delivered");
+  assert.equal(payloads.length, 2);
+  assert.match(payloads[1].text, /链重组修订｜以本条 CA 为准｜不买/u);
+  assert.match(payloads[1].text, /Chain-reorg revision \| use this CA as canonical \| do not buy/);
+  assert.match(payloads[1].text, /非自动交易/u);
+  assert.ok(payloads[1].reply_markup.inline_keyboard.flat().every((button) => !/GMGN|买入|交易/i.test(button.text)));
+
+  const retry = await sendAlerts(config, structuredClone(revision));
+  assert.equal(retry.status, "delivered");
+  assert.equal(payloads.length, 2);
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  const entry = outbox.events[revision.eventKey];
+  assert.equal(entry.event.tradingPriority.tier, "T2");
+  assert.equal(entry.deliveryDisposition.reason, "flap_tracked_token_canonical_revision");
 });
 
 test("Flap Vault subtypes stay independent and deduplicate the same subtype across official sources", async (t) => {
@@ -5753,6 +6062,6 @@ test("pon.fun producer events pass the closed gate, render durably, and deduplic
   assert.deepEqual(outbox.events[first.eventId].event.canonicalSignalIds, [`pon:${coin}:created`]);
   assert.equal(outbox.events[graduatedResult.eventId].deliveryDisposition.reason, "pon_exact_onchain_realtime");
   assert.equal(outbox.events[graduatedResult.eventId].event.tradingPriority.tier, "T2");
-  assert.equal(outbox.events[first.eventId].renderBundle.version, 18);
+  assert.equal(outbox.events[first.eventId].renderBundle.version, 19);
   assert.equal(outbox.events[duplicate.eventId].semanticDuplicateOf, first.eventId);
 });

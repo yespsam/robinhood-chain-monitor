@@ -132,7 +132,7 @@ test("bilingual rendering preserves layout, entities, and protected technical id
     assert.match(bundle.en.text, new RegExp(literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.match(rendered, new RegExp(address));
-  assert.equal(bundle.version, 18);
+  assert.equal(bundle.version, 19);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.match(rendered, /^🔴 强提醒 \| STRONG ALERT\n🇨🇳 中文\n/);
   assert.match(rendered, /\n\n🇬🇧 English\n/);
@@ -200,7 +200,7 @@ test("Binance connector cards state the one concrete diff and never disguise SDK
     assert.ok(bundle.en.text.includes(item.stageEn));
     assert.equal(bundle.zh.text.split("\n").length, 2);
     assert.equal(bundle.en.text.split("\n").length, 2);
-    assert.equal(bundle.version, 18);
+    assert.equal(bundle.version, 19);
     assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   }
 });
@@ -563,7 +563,7 @@ test("Binance Agent Native developer diff renders the new MCP entry without sign
   assert.equal(bundle.zh.status, "not_needed");
   assert.equal(bundle.en.status, "not_needed");
   assert.equal(providerCalls, 0);
-  assert.equal(bundle.version, 18);
+  assert.equal(bundle.version, 19);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.equal(bundle.zh.text.split("\n").length, 2);
   assert.equal(bundle.en.text.split("\n").length, 2);
@@ -949,6 +949,159 @@ test("BSC feature-first-token card prioritizes mode and token over addresses and
   assert.ok(rendered.length <= 600, `card is ${rendered.length} characters`);
 });
 
+test("Flap tracked pool-token cards are local five-line bilingual monitor-only alerts for pass, unknown, and block", async () => {
+  clearTranslationCache();
+  let providerCalls = 0;
+  let passEvent = null;
+  const observedAt = "2026-09-04T01:00:05.000Z";
+  const generationKey = `quote:0xd97d097a89113fa59b76c572e5b2eb647e8eefaf:generation:0x${"a".repeat(64)}:0x${"b".repeat(64)}:4`;
+  const cases = [
+    {
+      ordinal: 1,
+      decision: "pass",
+      zh: "结论：观察；静态初筛通过，可卖性仍待验证",
+      en: "Decision: Watch; static screening passed; sellability still unverified",
+    },
+    {
+      ordinal: 2,
+      decision: "unknown",
+      zh: "结论：安全未完成｜不买",
+      en: "Decision: Safety incomplete | do not buy",
+    },
+    {
+      ordinal: 3,
+      decision: "block",
+      zh: "结论：⛔ 不买；安全门已拦截",
+      en: "Decision: ⛔ Do not buy; safety gate blocked",
+    },
+  ];
+
+  for (const item of cases) {
+    const token = `0x${String(item.ordinal).repeat(40)}`;
+    const transactionHash = `0x${String(item.ordinal).repeat(64)}`;
+    const logIndex = item.ordinal + 5;
+    const event = withTradingPriority({
+      type: "bsc_launchpad_update",
+      kind: "flap_pool_token",
+      eventKey: `bsc-flap-pool-token:${generationKey}:${item.ordinal}:${transactionHash}:${logIndex}:${token}`,
+      featureTrackedToken: true,
+      featureTokenOrdinal: item.ordinal,
+      featureTokenTarget: 3,
+      featureActivationKey: generationKey,
+      featureGenerationKey: generationKey,
+      informationalOnly: true,
+      autoTradeEligible: false,
+      automaticExecution: false,
+      platform: { id: "flap", name: "Flap", trust: "official_verified" },
+      mode: {
+        quoteAsset: "0xd97d097a89113fa59b76c572e5b2eb647e8eefaf",
+        quoteSymbol: "SOXLB",
+        quoteName: "Semicon Bull 3X ETF",
+        selector: "0x12345678",
+      },
+      tokens: [{ token, metadata: { name: "Signal Cat", symbol: "SCAT" } }],
+      security: { decision: item.decision, metrics: { liquidityConfirmed: item.decision === "pass" } },
+      transactionHash,
+      blockNumber: 119_800_000 + item.ordinal,
+      blockHash: `0x${String(item.ordinal + 3).repeat(64)}`,
+      transactionIndex: item.ordinal,
+      logIndex,
+      blockTimestamp: observedAt,
+      observedAt,
+    }, { nowMs: Date.parse(observedAt) + 5_000 });
+    const bundle = await buildBilingualAlertBundle({
+      alertTranslationFetchImpl: async () => {
+        providerCalls += 1;
+        throw new Error("tracked-token cards must not call translation");
+      },
+      alertTranslationTimeoutMs: 50,
+    }, event, `Flap token selector=0x12345678 security=${item.decision} liquidityConfirmed=${item.decision === "pass"}\n时间: ${observedAt}`);
+    const rendered = renderBilingualTelegramText(bundle, item.decision === "pass");
+    const blocks = renderedLanguageBlocks(rendered);
+
+    assert.equal(blocks.zh.length, 5);
+    assert.equal(blocks.en.length, 5);
+    assert.equal(blocks.zh[0], `平台：Flap｜SOXLB 底池｜第 ${item.ordinal}/3 个代币`);
+    assert.equal(blocks.en[0], `Platform: Flap | SOXLB pool | Token ${item.ordinal}/3`);
+    assert.equal(blocks.zh[1], `代币：Signal Cat (SCAT)｜CA ${token}`);
+    assert.equal(blocks.en[1], `Token: Signal Cat (SCAT) | CA ${token}`);
+    assert.ok(blocks.zh.includes(item.zh));
+    assert.ok(blocks.en.includes(item.en));
+    assert.match(blocks.zh[3], /^确认：官方 TokenCreated \+ SOXLB 配对$/u);
+    assert.match(blocks.en[3], /^Proof: Official TokenCreated \+ SOXLB pair$/u);
+    assert.match(blocks.zh[4], /^风险\/时间：非自动交易｜/u);
+    assert.match(blocks.en[4], /^Risk\/Time: No automatic trading \|/u);
+    assert.doesNotMatch(rendered, /selector=|security=|liquidityConfirmed=|路径=|flow=|入场=|entry=/iu);
+    assert.equal(bundle.version, 19);
+    if (item.decision === "pass") passEvent = event;
+  }
+  assert.equal(providerCalls, 0);
+
+  const producerRecovery = {
+    ...passEvent,
+    blockTimestamp: "2026-09-04T00:00:00.000Z",
+    observedAt: "2026-09-04T01:00:05.000Z",
+    delayedRecovery: {
+      version: 1,
+      reason: "verified_generation_archive_catch_up",
+      sourceOccurredAt: "2026-09-04T00:00:00.000Z",
+      firstObservedAt: "2026-09-04T00:00:05.000Z",
+      recoveredAt: "2026-09-04T01:00:05.000Z",
+      lagMs: 3_605_000,
+      continuousCoverage: true,
+    },
+  };
+  const recoveryBundle = await buildBilingualAlertBundle({}, producerRecovery, "must stay structured");
+  const recoveryBlocks = renderedLanguageBlocks(renderBilingualTelegramText(recoveryBundle, false));
+  assert.equal(recoveryBlocks.zh.length, 5);
+  assert.equal(recoveryBlocks.en.length, 5);
+  assert.match(recoveryBlocks.zh[2], /^结论：延迟补报｜勿追价｜/u);
+  assert.match(recoveryBlocks.en[2], /^Decision: Delayed recovery \| do not chase \|/);
+  assert.doesNotMatch(recoveryBlocks.zh.join("\n"), /断线/u);
+
+  const deliveryDelayed = {
+    ...passEvent,
+    freshness: {
+      ...passEvent.freshness,
+      decision: "realtime",
+      realtimeMaxAgeMs: 600_000,
+      telegramMaxAgeMs: 7_200_000,
+      deliveryLagMs: 7_260_000,
+      deliveryDecision: "suppress",
+      deliveryEvaluatedAt: "2026-09-04T03:01:05.000Z",
+    },
+  };
+  const deliveryBundle = await buildBilingualAlertBundle({}, deliveryDelayed, "must stay structured");
+  const deliveryBlocks = renderedLanguageBlocks(renderBilingualTelegramText(deliveryBundle, false));
+  assert.equal(deliveryBlocks.zh.length, 5);
+  assert.equal(deliveryBlocks.en.length, 5);
+  assert.match(deliveryBlocks.zh[2], /^结论：延迟送达｜勿追价｜/u);
+  assert.match(deliveryBlocks.en[2], /^Decision: Delayed delivery \| do not chase \|/);
+  assert.match(deliveryBlocks.zh[4], /^风险\/时间：勿追价｜非自动交易｜/u);
+
+  const revisionBlockHash = `0x${"f".repeat(64)}`;
+  const revisionEvent = {
+    ...passEvent,
+    blockHash: revisionBlockHash,
+    eventKey: `${passEvent.eventKey}:canonical-revision:${revisionBlockHash}`,
+    canonicalRevision: {
+      version: 1,
+      reason: "token_created_reorg",
+      ordinal: 1,
+      replacesEventKey: passEvent.eventKey,
+      replacesBlockHash: passEvent.blockHash,
+      replacesTokenAddress: passEvent.tokens[0].token,
+    },
+  };
+  const revisionBundle = await buildBilingualAlertBundle({}, revisionEvent, "must stay structured");
+  const revisionBlocks = renderedLanguageBlocks(renderBilingualTelegramText(revisionBundle, false));
+  assert.equal(revisionBlocks.zh.length, 5);
+  assert.equal(revisionBlocks.en.length, 5);
+  assert.equal(revisionBlocks.zh[2], "结论：链重组修订｜以本条 CA 为准｜不买");
+  assert.equal(revisionBlocks.en[2], "Decision: Chain-reorg revision | use this CA as canonical | do not buy");
+  assert.match(revisionBlocks.zh[4], /非自动交易/u);
+});
+
 test("Flap Agentic Wallet first-token candidate keeps complete chain evidence and honest attribution", async () => {
   clearTranslationCache();
   let providerCalls = 0;
@@ -1198,6 +1351,8 @@ test("Flap verified quote-pool activation renders symbol, name, CA, chain and ri
   }
   assert.match(blocks.zh.join("\n"), /Portal 回执 \+ ERC-20 元数据已核验/u);
   assert.match(blocks.en.join("\n"), /Portal receipt \+ ERC-20 metadata verified/u);
+  assert.match(blocks.zh.join("\n"), /后续播报该池第1–3个代币CA/u);
+  assert.match(blocks.en.join("\n"), /report token CAs #1–#3 from this pool/iu);
   assert.match(blocks.zh.join("\n"), /不等于 ETF\/股票所有权.*非自动交易/u);
   assert.match(blocks.en.join("\n"), /not ETF\/share ownership.*no automatic trading/iu);
   assert.doesNotMatch(rendered, /平台新模式.*首个安全代币|Platform mode\/upgrade.*first safe token/iu);
@@ -1492,7 +1647,7 @@ test("Binance funding notices lead with the actual rule change instead of an int
   ].join("\n"));
   const rendered = renderBilingualTelegramText(bundle, false);
 
-  assert.equal(bundle.version, 18);
+  assert.equal(bundle.version, 19);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.match(bundle.zh.text, /^平台：Binance/m);
   assert.match(bundle.zh.text, /更新了什么：UNITREEUSDT 永续：8小时→4小时，费率上下限 \+2\.00%\/-2\.00%/);
@@ -1779,7 +1934,7 @@ test("real hooklist registrations distinguish the Hook file address from an unre
   const rendered = renderBilingualTelegramText(bundle, true);
 
   assert.deepEqual(event, original);
-  assert.equal(bundle.version, 18);
+  assert.equal(bundle.version, 19);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.match(bundle.zh.text, /^平台：Uniswap/m);
   assert.match(bundle.en.text, /^Platform: Uniswap/m);
@@ -2029,7 +2184,7 @@ test("Telegram news renders the two-field bilingual template and can never becom
   const en = bundle.en.text.split("\n");
 
   assert.ok(providerCalls > 0, "the existing translation provider path must be preferred");
-  assert.equal(bundle.version, 18);
+  assert.equal(bundle.version, 19);
   assert.equal(bundle.eventType, "telegram_news_update");
   assert.equal(bundle.focusModel.telegramNews.messageUrl, event.messageUrl);
   assert.equal(zh.length, 2);
@@ -2427,7 +2582,7 @@ test("every supported Telegram event type uses the same compact bilingual envelo
     ].join("\n"));
     const rendered = renderBilingualTelegramText(bundle, false);
 
-    assert.equal(bundle.version, 18, type);
+    assert.equal(bundle.version, 19, type);
     assert.equal(bundle.format, "telegram_zh_en_compact_v13", type);
     assert.match(bundle.zh.text, /[\u3400-\u9fff]/, type);
     assert.match(bundle.en.text, /[A-Za-z]{3,}/, type);
@@ -2463,7 +2618,7 @@ test("every bilingual alert persists a one-glance before/after model and fails o
     source: { name: "Binance Wallet 官方公告" },
   }, "🚨 Binance Wallet 更新\n事件: Wallet API v2\n状态: 官方公告已确认\n时间: 2026-08-13 00:00:00");
 
-  assert.equal(bundle.version, 18);
+  assert.equal(bundle.version, 19);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.equal(bundle.changeModel.basis, "exact_snapshot");
   assert.match(bundle.zh.text, /更新了什么：中文翻译暂不可用；请看英文原文/);
@@ -2791,7 +2946,7 @@ test("Telegram retries reuse the persisted bilingual render bundle without retra
   assert.equal((await sendAlerts(config, event)).status, "queued");
   const firstOutbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   const entry = firstOutbox.events[Object.keys(firstOutbox.events)[0]];
-  assert.equal(entry.renderBundle.version, 18);
+  assert.equal(entry.renderBundle.version, 19);
   const callsAfterFirstRender = translationCalls;
   entry.destinations.telegram.nextAttemptAt = null;
   await fs.writeFile(path.join(dataDir, "alert-outbox.json"), `${JSON.stringify(firstOutbox, null, 2)}\n`);
@@ -2806,12 +2961,12 @@ test("Telegram retries reuse the persisted bilingual render bundle without retra
 
   const finalOutbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   const finalEntry = finalOutbox.events[Object.keys(finalOutbox.events)[0]];
-  assert.equal(finalEntry.destinations.telegram.receipt.renderVersion, 18);
+  assert.equal(finalEntry.destinations.telegram.receipt.renderVersion, 19);
   assert.equal(finalEntry.destinations.telegram.receipt.translation.zh.status, finalEntry.renderBundle.zh.status);
   assert.equal(finalEntry.destinations.telegram.receipt.translation.en.status, finalEntry.renderBundle.en.status);
 });
 
-test("a pending v14 card is rebuilt once as v18 while terminal v14 is not migrated", async (t) => {
+test("a pending v14 card is rebuilt once as v19 while terminal v14 is not migrated", async (t) => {
   clearTranslationCache();
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-bilingual-v6-migration-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -2879,13 +3034,13 @@ test("a pending v14 card is rebuilt once as v18 while terminal v14 is not migrat
 
   const migrated = JSON.parse(await fs.readFile(file, "utf8"));
   const migratedEntry = migrated.events[Object.keys(migrated.events)[0]];
-  assert.equal(migratedEntry.renderBundle.version, 18);
+  assert.equal(migratedEntry.renderBundle.version, 19);
   assert.equal(migratedEntry.renderBundle.format, "telegram_zh_en_compact_v13");
   assert.notEqual(migratedEntry.renderBundle.sourceHash, "V14_SENTINEL_HASH");
   assert.equal(migratedEntry.renderBundle.zh.text.split("\n").length, 2);
   assert.equal(migratedEntry.renderBundle.en.text.split("\n").length, 2);
   assert.equal((await sendAlerts(config, event)).status, "delivered");
-  assert.equal(translationCalls, callsAfterMigration, "the persisted v18 bundle must not be translated again");
+  assert.equal(translationCalls, callsAfterMigration, "the persisted v19 bundle must not be translated again");
   assert.equal(telegramCalls, 2, "a terminal delivered event must not be sent again");
 
   migratedEntry.renderBundle.version = 14;

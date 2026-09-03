@@ -2314,25 +2314,6 @@ function flapQuoteMetadataNotificationEvent({ platform, previous, current, pool,
   };
 }
 
-function flapFeatureActivationRecord(pool, boardCandidateState, observedAt, firstObservedAt = observedAt) {
-  const identity = flapPoolIdentity(pool);
-  const confirmation = boardCandidateState?.flapPools?.[identity] || {};
-  return {
-    identity,
-    category: pool.category || null,
-    vaultFactory: pool.vaultFactory || null,
-    quoteAddress: pool.quoteAddress || null,
-    quoteSymbol: pool.quoteSymbol || null,
-    sourceUrl: pool.sourceUrl || FLAP_BOARD_URL,
-    chainId: pool.chainId ?? null,
-    confirmed: confirmation.confirmed === true,
-    observations: Number(confirmation.observations || 0),
-    changeType: "new_flap_pool",
-    observedAt,
-    firstObservedAt: firstObservedAt || confirmation.firstObservedAt || observedAt,
-  };
-}
-
 const isOfficialBscFlapBoardQuoteAsset = (pool) => pool?.kind === "quote_asset"
   && Number(pool.chainId) === 56
   && canonicalUrl(pool.sourceUrl || "") === canonicalUrl(FLAP_BOARD_URL);
@@ -3117,22 +3098,6 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
         }
         if (!flapQuoteNotificationDeliveryCommitted(delivery)) continue;
 
-        if (dependencies.onFlapFeatureActivation && !isExcludedFlapQuoteAsset(notification.pool)) {
-          const record = flapFeatureActivationRecord(
-            notification.pool,
-            stabilizedBoard.boardCandidateState,
-            observedAt,
-            notification.pending.firstObservedAt,
-          );
-          if (record.confirmed && record.observations >= FLAP_BOARD_STABLE_OBSERVATIONS) {
-            try { await Promise.resolve(dependencies.onFlapFeatureActivation([record])); }
-            catch (error) {
-              await appendAudit(auditFile, fsImpl, { ...auditBase, delivery: { status: "feature_activation_failed", baselineCommitted: false, error: error?.message || String(error) } });
-              logger.error(`[platform-capability] flap feature activation: ${error?.message || error}`);
-              continue;
-            }
-          }
-        }
         clearCompletedFlapQuoteMetadataNotifications(
           stabilizedBoard.boardCandidateState,
           [notification.identity],
@@ -3202,7 +3167,7 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
           const records = [
             ...(changes.newFlapPools || []).map((pool) => ({ pool, changeType: "new_flap_pool" })),
             ...(changes.updatedFlapPools || []).map((pool) => ({ pool, changeType: "updated_flap_pool" })),
-          ].filter(({ pool }) => !isExcludedFlapQuoteAsset(pool)).map(({ pool, changeType }) => {
+          ].filter(({ pool }) => pool.kind === "vault_factory" && !isExcludedFlapQuoteAsset(pool)).map(({ pool, changeType }) => {
             const identity = flapPoolIdentity(pool);
             const confirmation = stabilizedBoard.boardCandidateState?.flapPools?.[identity] || {};
             return {

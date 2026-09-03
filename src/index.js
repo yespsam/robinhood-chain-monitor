@@ -523,6 +523,15 @@ function startIndependentMonitors() {
         sourceId,
         provider: stateProvider,
       })),
+      onFlapQuotePoolLifecycle: async (record) => {
+        if (shutdownRequested) {
+          throw new Error("BSC launchpad monitor is shutting down");
+        }
+        if (typeof bscLaunchpadMonitor?.registerFlapQuotePoolLifecycle !== "function") {
+          throw new Error("BSC launchpad monitor lifecycle registry is not ready");
+        }
+        return bscLaunchpadMonitor.registerFlapQuotePoolLifecycle(record);
+      },
     });
   });
   if (config.binanceMonitorEnabled) startMonitor("binance", () => {

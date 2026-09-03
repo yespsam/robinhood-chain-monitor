@@ -6,6 +6,7 @@ import { analyzeReceipt, bytecodeFeatures, readTokenMetadata } from "./detector.
 import { assessLocalTokenSecurity } from "./local-security.js";
 import { sendAlerts } from "./alerts.js";
 import { inferBscLaunchpadAttribution, parseBscScanAttribution, parseDexScreenerTokenPairs } from "./bsc-attribution.js";
+import { isStrictFlapTrackedPoolTokenUpdate } from "./source-controls.js";
 
 export const BSC_CHAIN_ID = 56;
 export const BSC_WBNB = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
@@ -703,6 +704,15 @@ const FLAP_ACTIVATION_REPLAY_LOOKBACK_MS = 15 * 60_000;
 const FLAP_CREATION_HOT_INDEX_TTL_MS = 30 * 60_000;
 const FLAP_CREATION_HOT_INDEX_MAX = 6_000;
 const FLAP_REPLAY_ATTEMPTED_TRANSACTIONS_MAX = 6_000;
+const FLAP_QUOTE_FIRST_THREE_TARGET = 3;
+const FLAP_QUOTE_FIRST_THREE_WINDOW_MAX = 2_000;
+const FLAP_QUOTE_FIRST_THREE_LIFECYCLE_MAX = 4_000;
+const FLAP_QUOTE_FIRST_THREE_PAIR_FACTORIES = new Set([
+  "0xca143ce32fe78f1f7019d7d551a6402fc5350c73",
+  "0x0bfbcf9fa4f9c56b0f40a671ad40e0805a091865",
+  "0x8909dc15e40173ff4699343b6eb8132c65e18ec6",
+  "0xdb1d10011ad0ff90774d0c6bb92e5c5c8b4461f7",
+]);
 // Keep a durable near-head cache of exact Four.Meme creation events. Official
 // feature APIs can lag the chain, so an activation should be able to revisit
 // transactions the realtime lane already classified without first walking a
@@ -768,7 +778,7 @@ const GENERIC_TOPICS = new Set([
 ]);
 const WARMUP_MS = 15 * 60_000;
 const RUNTIME_PROFILE_TTL_MS = 10_000;
-const STATE_VERSION = 6;
+const STATE_VERSION = 7;
 // v3 briefly advanced coverage while overloaded RPCs were failing. Reopen the
 // whole affected interval once during the v4 migration, including pruned gaps.
 const V3_RECONCILIATION_REPLAY_FLOOR = 113578304;
@@ -1567,8 +1577,451 @@ function flapCreationCandidateKey(candidate = {}) {
   return `${normalizeTransactionHash(candidate.transactionHash)}:${Number(candidate.logIndex || 0)}:${String(candidate.token || "").toLowerCase()}`;
 }
 
+function compareFlapQuoteTokenCandidates(left = {}, right = {}) {
+  return Number(left.blockNumber) - Number(right.blockNumber)
+    || bscQueuePosition(left.transactionIndex) - bscQueuePosition(right.transactionIndex)
+    || bscQueuePosition(left.logIndex) - bscQueuePosition(right.logIndex)
+    || normalizeTransactionHash(left.transactionHash).localeCompare(normalizeTransactionHash(right.transactionHash))
+    || String(left.tokenAddress || left.token || "").toLowerCase()
+      .localeCompare(String(right.tokenAddress || right.token || "").toLowerCase());
+}
+
+function sameFlapQuoteFirstThreeValue(left, right) {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right)
+      && left.length === right.length
+      && left.every((value, index) => sameFlapQuoteFirstThreeValue(value, right[index]));
+  }
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") return false;
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  return leftKeys.length === rightKeys.length
+    && leftKeys.every((key, index) => key === rightKeys[index]
+      && sameFlapQuoteFirstThreeValue(left[key], right[key]));
+}
+
+function exactFlapQuoteFirstThreeIso(value) {
+  const timestamp = Date.parse(value || "");
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
+}
+
+function flapQuoteFirstThreeGenerationKey(record = {}) {
+  const quoteAddress = String(record.quoteAddress || "").toLowerCase();
+  const blockHash = normalizeTransactionHash(record.blockHash);
+  const transactionHash = normalizeTransactionHash(record.transactionHash);
+  const logIndex = Number(record.logIndex);
+  return `quote:${quoteAddress}:generation:${blockHash}:${transactionHash}:${logIndex}`;
+}
+
+function emptyFlapQuoteFirstThreeState() {
+  return {
+    version: 1,
+    windows: {},
+    activeByQuote: {},
+    lifecycleEvents: {},
+  };
+}
+
+function normalizeFlapQuotePoolLifecycleRecord(record = {}) {
+  const allowedKeys = new Set([
+    "version", "action", "quoteAddress", "quoteName", "quoteSymbol",
+    "activationEventKey", "transactionHash", "blockNumber", "blockHash",
+    "transactionIndex", "logIndex", "occurredAt", "proofType",
+    "requiredConfirmations", "monitorOnly", "targetActivationEventKey",
+  ]);
+  if (!record || typeof record !== "object" || Array.isArray(record)
+    || Object.keys(record).some((key) => !allowedKeys.has(key))) {
+    throw new Error("invalid Flap quote lifecycle record shape");
+  }
+  const action = String(record.action || "").toLowerCase();
+  const quoteAddress = String(record.quoteAddress || "").toLowerCase();
+  const activationEventKey = typeof record.activationEventKey === "string"
+    ? record.activationEventKey.trim() : "";
+  const transactionHash = normalizeTransactionHash(record.transactionHash);
+  const blockHash = normalizeTransactionHash(record.blockHash);
+  const blockNumber = Number(record.blockNumber);
+  const transactionIndex = Number(record.transactionIndex);
+  const logIndex = Number(record.logIndex);
+  const occurredAtMs = Date.parse(record.occurredAt || "");
+  const requiredConfirmations = Number(record.requiredConfirmations);
+  const expectedProofType = action === "activated"
+    ? "verified_zero_to_one"
+    : action === "disabled" ? "verified_disable"
+      : action === "restored" ? "verified_disable_orphaned" : null;
+  const targetActivationEventKey = typeof record.targetActivationEventKey === "string"
+    ? record.targetActivationEventKey.trim() : null;
+  const targetActivationMatch = targetActivationEventKey
+    ? /^flap-quote:56:(0x[0-9a-f]{64}):(\d+)$/.exec(targetActivationEventKey)
+    : null;
+  if (record.version !== 1
+    || !expectedProofType
+    || record.proofType !== expectedProofType
+    || record.monitorOnly !== true
+    || !ADDRESS.test(quoteAddress)
+    || !activationEventKey || activationEventKey.length > 512
+    || activationEventKey !== `flap-quote:${BSC_CHAIN_ID}:${transactionHash}:${logIndex}`
+    || !/^0x[0-9a-f]{64}$/.test(transactionHash)
+    || !/^0x[0-9a-f]{64}$/.test(blockHash)
+    || !Number.isSafeInteger(blockNumber) || blockNumber < 0
+    || !Number.isSafeInteger(transactionIndex) || transactionIndex < 0
+    || !Number.isSafeInteger(logIndex) || logIndex < 0
+    || !Number.isFinite(occurredAtMs)
+    || !Number.isSafeInteger(requiredConfirmations) || requiredConfirmations < 0
+    || (action === "restored" && (!targetActivationMatch
+      || !Number.isSafeInteger(Number(targetActivationMatch[2]))))
+    || (action !== "restored" && record.targetActivationEventKey !== undefined)) {
+    throw new Error("invalid or unverified Flap quote lifecycle record");
+  }
+  const quoteName = normalizeOfficialText(record.quoteName || "");
+  const quoteSymbol = normalizeOfficialText(record.quoteSymbol || "");
+  if (!quoteName || quoteName.length > 256 || !quoteSymbol || quoteSymbol.length > 24) {
+    throw new Error("invalid Flap quote lifecycle metadata");
+  }
+  return {
+    version: 1,
+    action,
+    quoteAddress,
+    quoteName,
+    quoteSymbol,
+    activationEventKey,
+    transactionHash,
+    blockNumber,
+    blockHash,
+    transactionIndex,
+    logIndex,
+    occurredAt: new Date(occurredAtMs).toISOString(),
+    proofType: expectedProofType,
+    ...(targetActivationEventKey ? { targetActivationEventKey } : {}),
+    requiredConfirmations,
+    monitorOnly: true,
+  };
+}
+
+function normalizeFlapQuoteFirstThreeState(value = {}) {
+  const baseline = emptyFlapQuoteFirstThreeState();
+  if (!value || typeof value !== "object" || Array.isArray(value)
+    || value.version !== 1
+    || !value.windows || typeof value.windows !== "object" || Array.isArray(value.windows)
+    || !value.activeByQuote || typeof value.activeByQuote !== "object" || Array.isArray(value.activeByQuote)
+    || !value.lifecycleEvents || typeof value.lifecycleEvents !== "object" || Array.isArray(value.lifecycleEvents)) {
+    throw new Error("invalid durable Flap first-three state shape");
+  }
+  const rawWindowEntries = Object.entries(value.windows);
+  const windows = {};
+  for (const [storedKey, raw] of rawWindowEntries) {
+    const quoteAddress = String(raw?.quoteAddress || "").toLowerCase();
+    const quoteName = normalizeOfficialText(raw?.quoteName || "");
+    const quoteSymbol = normalizeOfficialText(raw?.quoteSymbol || "");
+    const activationEventKey = typeof raw?.activationEventKey === "string" ? raw.activationEventKey.trim() : "";
+    const activationTransactionHash = normalizeTransactionHash(raw?.activationTransactionHash);
+    const activationBlockHash = normalizeTransactionHash(raw?.activationBlockHash);
+    const activationBlockNumber = Number(raw?.activationBlockNumber);
+    const activationTransactionIndex = Number(raw?.activationTransactionIndex);
+    const activationLogIndex = Number(raw?.activationLogIndex);
+    const activatedAtMs = Date.parse(raw?.activatedAt || "");
+    const generationKey = flapQuoteFirstThreeGenerationKey({
+      quoteAddress,
+      blockHash: activationBlockHash,
+      transactionHash: activationTransactionHash,
+      logIndex: activationLogIndex,
+    });
+    if (!ADDRESS.test(quoteAddress)
+      || !activationEventKey || activationEventKey.length > 512
+      || activationEventKey !== `flap-quote:${BSC_CHAIN_ID}:${activationTransactionHash}:${activationLogIndex}`
+      || !/^0x[0-9a-f]{64}$/.test(activationTransactionHash)
+      || !/^0x[0-9a-f]{64}$/.test(activationBlockHash)
+      || !Number.isSafeInteger(activationBlockNumber) || activationBlockNumber < 0
+      || !Number.isSafeInteger(activationTransactionIndex) || activationTransactionIndex < 0
+      || !Number.isSafeInteger(activationLogIndex) || activationLogIndex < 0
+      || !Number.isFinite(activatedAtMs)
+      || !quoteName || quoteName.length > 256
+      || !quoteSymbol || quoteSymbol.length > 24
+      || storedKey !== generationKey
+      || raw?.proofType !== "verified_zero_to_one") continue;
+    const slots = [];
+    const seenTokens = new Set();
+    const rawSlots = Array.isArray(raw?.slots) ? raw.slots : [];
+    const slotKeys = new Set([
+      "ordinal", "candidateKey", "tokenAddress", "transactionHash", "blockNumber", "blockHash",
+      "transactionIndex", "logIndex", "blockTimestamp", "firstObservedAt", "confirmations",
+      "requiredConfirmations", "pairAddress", "pairKind", "pool", "metadata", "security", "replay",
+      "reservedAt", "deliveryStatus", "deliveryAcceptedAt", "deliveryEventId", "lastDeliveryRejectedAt",
+      "lastDeliveryResult", "canonicalRevision", "eventKey", "event",
+    ]);
+    for (const item of rawSlots) {
+      const ordinal = Number(item?.ordinal);
+      const tokenAddress = String(item?.tokenAddress || "").toLowerCase();
+      const transactionHash = normalizeTransactionHash(item?.transactionHash);
+      const blockHash = normalizeTransactionHash(item?.blockHash);
+      const blockNumber = Number(item?.blockNumber);
+      const transactionIndex = Number(item?.transactionIndex);
+      const logIndex = Number(item?.logIndex);
+      const pairAddress = String(item?.pairAddress || "").toLowerCase();
+      const candidateKey = flapCreationCandidateKey({ transactionHash, logIndex, token: tokenAddress });
+      const pool = item?.pool;
+      const poolFactory = String(pool?.factory || "").toLowerCase();
+      const dex = BSC_DEX_CONTRACTS.get(poolFactory);
+      const poolToken0 = String(pool?.token0 || "").toLowerCase();
+      const poolToken1 = String(pool?.token1 || "").toLowerCase();
+      const event = item?.event;
+      const ordinaryEventKey = `bsc-flap-pool-token:${generationKey}:${ordinal}:${candidateKey}`;
+      const expectedEventKey = item?.canonicalRevision
+        ? `${ordinaryEventKey}:canonical-revision:${blockHash}` : ordinaryEventKey;
+      const acceptedDelivery = exactFlapQuoteFirstThreeIso(item?.deliveryAcceptedAt);
+      const pendingDelivery = item?.deliveryAcceptedAt === null && item?.deliveryStatus === "pending";
+      const rejectedAtPresent = Object.hasOwn(item || {}, "lastDeliveryRejectedAt");
+      const rejectedResultPresent = Object.hasOwn(item || {}, "lastDeliveryResult");
+      const rejection = item?.lastDeliveryResult;
+      if (!Number.isSafeInteger(ordinal) || ordinal < 1 || ordinal > FLAP_QUOTE_FIRST_THREE_TARGET
+        || !item || typeof item !== "object" || Array.isArray(item)
+        || Object.keys(item).some((key) => !slotKeys.has(key))
+        || !ADDRESS.test(tokenAddress) || seenTokens.has(tokenAddress)
+        || !/^0x[0-9a-f]{64}$/.test(transactionHash)
+        || !/^0x[0-9a-f]{64}$/.test(blockHash)
+        || !Number.isSafeInteger(blockNumber) || blockNumber < 0
+        || !Number.isSafeInteger(transactionIndex) || transactionIndex < 0
+        || !Number.isSafeInteger(logIndex) || logIndex < 0
+        || !exactFlapQuoteFirstThreeIso(item?.blockTimestamp)
+        || !exactFlapQuoteFirstThreeIso(item?.firstObservedAt)
+        || !exactFlapQuoteFirstThreeIso(item?.reservedAt)
+        || !Number.isSafeInteger(item?.confirmations) || item.confirmations < 0
+        || !Number.isSafeInteger(item?.requiredConfirmations) || item.requiredConfirmations < 0
+        || item.confirmations < item.requiredConfirmations
+        || typeof item?.replay !== "boolean"
+        || !ADDRESS.test(pairAddress)
+        || !dex || !FLAP_QUOTE_FIRST_THREE_PAIR_FACTORIES.has(poolFactory)
+        || pool?.kind !== dex.kind || item?.pairKind !== dex.kind
+        || pool?.factory !== poolFactory
+        || pool?.pool !== pairAddress
+        || pool?.verifiedDex !== true
+        || pool?.poolId !== null || pool?.hook !== null
+        || !((poolToken0 === tokenAddress && poolToken1 === quoteAddress)
+          || (poolToken1 === tokenAddress && poolToken0 === quoteAddress))
+        || item?.candidateKey !== candidateKey
+        || item?.eventKey !== expectedEventKey
+        || (!acceptedDelivery && !pendingDelivery)
+        || (acceptedDelivery && !["delivered", "queued", "suppressed"].includes(item.deliveryStatus))
+        || (acceptedDelivery && (typeof item?.deliveryEventId !== "string" || !item.deliveryEventId
+          || item.deliveryEventId.length > 512 || rejectedAtPresent || rejectedResultPresent))
+        || (pendingDelivery && Object.hasOwn(item, "deliveryEventId"))
+        || (rejectedAtPresent !== rejectedResultPresent)
+        || (rejectedAtPresent && (!exactFlapQuoteFirstThreeIso(item.lastDeliveryRejectedAt)
+          || !rejection || typeof rejection !== "object" || Array.isArray(rejection)
+          || !sameFlapQuoteFirstThreeValue(Object.keys(rejection).sort(), ["reason", "status", "terminal"])
+          || (rejection.status !== null && typeof rejection.status !== "string")
+          || (rejection.reason !== null && typeof rejection.reason !== "string")
+          || typeof rejection.terminal !== "boolean"))
+        || !isStrictFlapTrackedPoolTokenUpdate(event)
+        || event.eventKey !== item.eventKey
+        || event.featureActivationKey !== generationKey
+        || event.featureGenerationKey !== generationKey
+        || event.featureTokenOrdinal !== ordinal
+        || event.transactionHash !== transactionHash
+        || event.blockNumber !== blockNumber
+        || event.blockHash !== blockHash
+        || event.transactionIndex !== transactionIndex
+        || event.logIndex !== logIndex
+        || event.blockTimestamp !== item.blockTimestamp
+        || event.observedAt !== item.reservedAt
+        || event.mode?.quoteAsset !== quoteAddress
+        || event.mode?.quoteName !== quoteName
+        || event.mode?.quoteSymbol !== quoteSymbol
+        || event.featureTokenProof?.activationEventKey !== activationEventKey
+        || event.featureTokenProof?.confirmations !== item.confirmations
+        || event.featureTokenProof?.requiredConfirmations !== item.requiredConfirmations
+        || event.featureTokenProof?.pairAddress !== pairAddress
+        || event.featureTokenProof?.pairKind !== item.pairKind
+        || event.tokens?.[0]?.token !== tokenAddress
+        || !sameFlapQuoteFirstThreeValue(event.tokens?.[0]?.metadata, item.metadata)
+        || !sameFlapQuoteFirstThreeValue(event.pools?.[0], pool)
+        || !sameFlapQuoteFirstThreeValue(event.security, item.security)
+        || !sameFlapQuoteFirstThreeValue(event.canonicalRevision, item.canonicalRevision)) continue;
+      seenTokens.add(tokenAddress);
+      slots.push({
+        ...item,
+        ordinal,
+        tokenAddress,
+        transactionHash,
+        blockHash,
+        blockNumber,
+        transactionIndex,
+        logIndex,
+        pairAddress,
+        candidateKey,
+      });
+    }
+    if (slots.length !== rawSlots.length) {
+      throw new Error(`invalid durable Flap first-three slots ${storedKey}`);
+    }
+    slots.sort((left, right) => left.ordinal - right.ordinal);
+    const activationPosition = {
+      blockNumber: activationBlockNumber,
+      transactionIndex: activationTransactionIndex,
+      logIndex: activationLogIndex,
+      transactionHash: activationTransactionHash,
+      tokenAddress: "0x0000000000000000000000000000000000000000",
+    };
+    if (slots.some((slot, index) => slot.ordinal !== index + 1
+      || compareFlapQuoteTokenCandidates(slot, index === 0 ? activationPosition : slots[index - 1]) <= 0)) {
+      throw new Error(`invalid durable Flap first-three canonical slot order ${storedKey}`);
+    }
+    const trackingComplete = raw?.trackingCompletedAt !== null
+      && raw?.trackingCompletedAt !== undefined;
+    const replayComplete = raw?.replayCompletedAt !== null
+      && raw?.replayCompletedAt !== undefined;
+    const hasReplayNextBlock = raw?.archiveReplayNextBlock !== null
+      && raw?.archiveReplayNextBlock !== undefined;
+    const hasReplayTargetBlock = raw?.archiveReplayTargetBlock !== null
+      && raw?.archiveReplayTargetBlock !== undefined;
+    const replayNextBlock = Number(raw?.archiveReplayNextBlock);
+    const replayTargetBlock = Number(raw?.archiveReplayTargetBlock);
+    const allTargetsAccepted = slots.length === FLAP_QUOTE_FIRST_THREE_TARGET
+      && slots.every((slot) => exactFlapQuoteFirstThreeIso(slot.deliveryAcceptedAt));
+    if ((trackingComplete && (!exactFlapQuoteFirstThreeIso(raw.trackingCompletedAt) || !allTargetsAccepted))
+      || (!trackingComplete && allTargetsAccepted)
+      || (replayComplete && !exactFlapQuoteFirstThreeIso(raw.replayCompletedAt))
+      || (hasReplayNextBlock && (!Number.isSafeInteger(replayNextBlock)
+        || replayNextBlock < activationBlockNumber))
+      || (hasReplayTargetBlock && (!Number.isSafeInteger(replayTargetBlock)
+        || replayTargetBlock < activationBlockNumber))
+      || (hasReplayTargetBlock && !hasReplayNextBlock)
+      || (hasReplayNextBlock && hasReplayTargetBlock && replayNextBlock > replayTargetBlock + 1)
+      || (replayComplete && (!hasReplayNextBlock || !hasReplayTargetBlock
+        || replayNextBlock !== replayTargetBlock + 1))) {
+      throw new Error(`invalid durable Flap first-three completion state ${storedKey}`);
+    }
+    windows[generationKey] = {
+      ...raw,
+      generationKey,
+      activationId: generationKey,
+      quoteAddress,
+      quoteName,
+      quoteSymbol,
+      activationEventKey,
+      activationTransactionHash,
+      activationBlockHash,
+      activationBlockNumber,
+      activationTransactionIndex,
+      activationLogIndex,
+      activatedAt: new Date(activatedAtMs).toISOString(),
+      proofType: "verified_zero_to_one",
+      targetCount: FLAP_QUOTE_FIRST_THREE_TARGET,
+      monitorOnly: true,
+      active: raw.active === true,
+      status: raw.active === true
+        ? "active"
+        : raw.status === "canonical_replaced" ? "canonical_replaced" : "disabled",
+      slots,
+      replayAttemptedCandidateKeys: [...new Set((Array.isArray(raw.replayAttemptedCandidateKeys)
+        ? raw.replayAttemptedCandidateKeys : [])
+        .filter((item) => typeof item === "string" && item.length <= 180))]
+        .slice(-FLAP_CREATION_HOT_INDEX_MAX),
+    };
+  }
+  if (Object.keys(windows).length !== rawWindowEntries.length) {
+    throw new Error("invalid durable Flap first-three window proof");
+  }
+  const activeByQuote = {};
+  for (const [quoteAddress, generationKey] of Object.entries(value.activeByQuote || {})) {
+    const normalizedQuote = String(quoteAddress || "").toLowerCase();
+    const window = windows[generationKey];
+    if (ADDRESS.test(normalizedQuote)
+      && window?.active === true
+      && window.quoteAddress === normalizedQuote) activeByQuote[normalizedQuote] = generationKey;
+  }
+  if (Object.keys(activeByQuote).length !== Object.keys(value.activeByQuote).length
+    || Object.values(windows).some((window) => window.active === true
+      && activeByQuote[window.quoteAddress] !== window.generationKey)) {
+    throw new Error("invalid durable Flap first-three active generation index");
+  }
+  const lifecycleEvents = {};
+  const rawLifecycleEntries = Object.entries(value.lifecycleEvents);
+  if (rawLifecycleEntries.length > FLAP_QUOTE_FIRST_THREE_LIFECYCLE_MAX) {
+    throw new Error("durable Flap first-three lifecycle bound exceeded");
+  }
+  for (const [eventKey, item] of rawLifecycleEntries) {
+    const quoteAddress = String(item?.quoteAddress || "").toLowerCase();
+    const generationKey = item?.generationKey === null ? null : String(item?.generationKey || "");
+    const transactionHash = normalizeTransactionHash(item?.transactionHash);
+    const blockNumber = Number(item?.blockNumber);
+    const blockHash = normalizeTransactionHash(item?.blockHash);
+    const transactionIndex = Number(item?.transactionIndex);
+    const logIndex = Number(item?.logIndex);
+    const occurredAtMs = Date.parse(item?.occurredAt || "");
+    const requiredConfirmations = Number(item?.requiredConfirmations);
+    const lifecycleWindow = generationKey === null ? null : windows[generationKey];
+    const derivedGenerationKey = flapQuoteFirstThreeGenerationKey({
+      quoteAddress,
+      blockHash,
+      transactionHash,
+      logIndex,
+    });
+    const expectedProofType = item?.action === "activated"
+      ? "verified_zero_to_one"
+      : item?.action === "disabled" ? "verified_disable" : "verified_disable_orphaned";
+    if (!eventKey || eventKey.length > 512
+      || !["activated", "disabled", "restored"].includes(item?.action)
+      || !ADDRESS.test(quoteAddress)
+      || eventKey !== `flap-quote:${BSC_CHAIN_ID}:${transactionHash}:${logIndex}`
+      || !normalizeOfficialText(item?.quoteName || "")
+      || !normalizeOfficialText(item?.quoteSymbol || "")
+      || (generationKey !== null && (!windows[generationKey]
+        || windows[generationKey].quoteAddress !== quoteAddress))
+      || (generationKey === null && item?.action !== "disabled")
+      || !/^0x[0-9a-f]{64}$/.test(blockHash)
+      || !/^0x[0-9a-f]{64}$/.test(transactionHash)
+      || !Number.isSafeInteger(blockNumber) || blockNumber < 0
+      || !Number.isSafeInteger(transactionIndex) || transactionIndex < 0
+      || !Number.isSafeInteger(logIndex) || logIndex < 0
+      || !Number.isFinite(occurredAtMs)
+      || item?.proofType !== expectedProofType
+      || !Number.isSafeInteger(requiredConfirmations) || requiredConfirmations < 0
+      || (item?.action === "restored" && !item?.targetActivationEventKey)
+      || (item?.action === "activated" && (generationKey !== derivedGenerationKey
+        || lifecycleWindow?.activationEventKey !== eventKey
+        || lifecycleWindow?.activationTransactionHash !== transactionHash
+        || lifecycleWindow?.activationBlockNumber !== blockNumber
+        || lifecycleWindow?.activationBlockHash !== blockHash
+        || lifecycleWindow?.activationTransactionIndex !== transactionIndex
+        || lifecycleWindow?.activationLogIndex !== logIndex
+        || lifecycleWindow?.activatedAt !== new Date(occurredAtMs).toISOString()
+        || lifecycleWindow?.requiredActivationConfirmations !== requiredConfirmations
+        || lifecycleWindow?.quoteName !== normalizeOfficialText(item.quoteName)
+        || lifecycleWindow?.quoteSymbol !== normalizeOfficialText(item.quoteSymbol)))
+      || (item?.action === "restored" && generationKey !== null
+        && item.targetActivationEventKey !== lifecycleWindow?.activationEventKey)
+      || (["disabled", "restored"].includes(item?.action) && generationKey !== null
+        && lifecycleWindow?.disableEventKey === eventKey
+        && (lifecycleWindow.disableTransactionHash !== transactionHash
+          || lifecycleWindow.disableBlockNumber !== blockNumber
+          || lifecycleWindow.disableBlockHash !== blockHash
+          || lifecycleWindow.disableTransactionIndex !== transactionIndex
+          || lifecycleWindow.disableLogIndex !== logIndex))) continue;
+    lifecycleEvents[eventKey] = {
+      ...item,
+      quoteAddress,
+      generationKey,
+      quoteName: normalizeOfficialText(item.quoteName),
+      quoteSymbol: normalizeOfficialText(item.quoteSymbol),
+      blockNumber,
+      blockHash,
+      transactionHash,
+      transactionIndex,
+      logIndex,
+      occurredAt: new Date(occurredAtMs).toISOString(),
+      proofType: expectedProofType,
+      requiredConfirmations,
+    };
+  }
+  if (Object.keys(lifecycleEvents).length !== rawLifecycleEntries.length) {
+    throw new Error("invalid durable Flap first-three lifecycle proof");
+  }
+  return { version: 1, windows, activeByQuote, lifecycleEvents };
+}
+
 function normalizeFlapCreationHotIndex(entries = [], current = null) {
-  const cutoff = Number.isFinite(Number(current))
+  const cutoff = current !== null && current !== undefined && Number.isFinite(Number(current))
     ? Number(current) - FLAP_CREATION_HOT_INDEX_TTL_MS
     : null;
   const expectedEmitters = new Map([
@@ -1580,12 +2033,15 @@ function normalizeFlapCreationHotIndex(entries = [], current = null) {
     const launcher = String(entry?.launcher || "").toLowerCase();
     const token = String(entry?.token || "").toLowerCase();
     const transactionHash = normalizeTransactionHash(entry?.transactionHash);
+    const blockHash = normalizeTransactionHash(entry?.blockHash);
     const blockNumber = Number(entry?.blockNumber);
     const transactionIndex = Number(entry?.transactionIndex || 0);
     const logIndex = Number(entry?.logIndex || 0);
     const topic = String(entry?.topic || "").toLowerCase();
     const observedMs = Date.parse(entry?.observedAt || entry?.indexedAt || "");
     const vaultFactory = String(entry?.vaultFactory || "").toLowerCase();
+    const confirmations = Number(entry?.confirmations);
+    const requiredConfirmations = Number(entry?.requiredConfirmations);
     if (!expectedEmitters.has(topic)
       || launcher !== expectedEmitters.get(topic)
       || !ADDRESS.test(token)
@@ -1608,6 +2064,7 @@ function normalizeFlapCreationHotIndex(entries = [], current = null) {
       launcher,
       token,
       transactionHash,
+      blockHash: /^0x[0-9a-f]{64}$/.test(blockHash) ? blockHash : null,
       blockNumber,
       transactionIndex,
       logIndex,
@@ -1616,6 +2073,9 @@ function normalizeFlapCreationHotIndex(entries = [], current = null) {
       indexedAt: Number.isFinite(Date.parse(entry?.indexedAt || ""))
         ? new Date(Date.parse(entry.indexedAt)).toISOString()
         : new Date(observedMs).toISOString(),
+      confirmations: Number.isSafeInteger(confirmations) && confirmations >= 0 ? confirmations : null,
+      requiredConfirmations: Number.isSafeInteger(requiredConfirmations) && requiredConfirmations >= 0
+        ? requiredConfirmations : null,
       vaultFactory: topic === FLAP_VAULT_TOKEN_CREATED_TOPIC ? vaultFactory : null,
       quoteAssets: topic === FLAP_TOKEN_CREATED_TOPIC ? quoteAssets : [],
     };
@@ -1663,12 +2123,15 @@ export function parseFlapCreationHotCandidates(logs = [], details = {}) {
       launcher,
       token,
       transactionHash: log.transactionHash || details.transactionHash,
+      blockHash: log.blockHash || details.blockHash || null,
       blockNumber: numeric(log.blockNumber, numeric(details.blockNumber, -1)),
       transactionIndex: numeric(log.transactionIndex, numeric(details.transactionIndex, 0)),
       logIndex: numeric(log.logIndex ?? log.index, numeric(details.logIndex, position)),
       topic,
       observedAt,
       indexedAt,
+      confirmations: details.confirmations ?? null,
+      requiredConfirmations: details.requiredConfirmations ?? null,
       vaultFactory: evidence.vaultFactory || null,
       quoteAssets,
     });
@@ -1799,6 +2262,7 @@ function emptyState() {
           nextRetryAt: null,
         },
         creationEventHotIndex: [],
+        quotePoolFirstThree: emptyFlapQuoteFirstThreeState(),
         platformActivationAuditEvents: [],
         initializedAt: null,
         lastSuccessAt: null,
@@ -2028,6 +2492,9 @@ async function readState(file, metadata = null) {
           pools: parsed.officialSources?.flap?.pools || {},
           featureActivations: Object.fromEntries(Object.entries(parsed.officialSources?.flap?.featureActivations || {}).map(([key, activation]) => [key, {
             ...activation,
+            // Board-era activations belong to the legacy one-shot lane. Never
+            // manufacture a first-three generation from historical state.
+            firstThreeStatus: "legacy_closed",
             replayAttemptedTransactionHashes: [...new Set((Array.isArray(activation?.replayAttemptedTransactionHashes) ? activation.replayAttemptedTransactionHashes : [])
               .map(normalizeTransactionHash)
               .filter((value) => /^0x[0-9a-f]{64}$/.test(value)))]
@@ -2038,6 +2505,9 @@ async function readState(file, metadata = null) {
             ...(parsed.officialSources?.flap?.replayControl || {}),
           },
           creationEventHotIndex: normalizeFlapCreationHotIndex(parsed.officialSources?.flap?.creationEventHotIndex),
+          quotePoolFirstThree: parsedVersion >= 7
+            ? normalizeFlapQuoteFirstThreeState(parsed.officialSources?.flap?.quotePoolFirstThree)
+            : emptyFlapQuoteFirstThreeState(),
           platformActivationAuditEvents: parsed.officialSources?.flap?.platformActivationAuditEvents || [],
         },
         fourMeme: {
@@ -2932,6 +3402,9 @@ export function matchFlapFeatureActivation(state, {
   const entries = Object.entries(state?.officialSources?.flap?.featureActivations || {})
     .filter(([key, activation]) => (!requestedActivationKey || key === requestedActivationKey)
       && flapActivationEligibleAt(activation, observedAt)
+      && !(activation.type === "quote_pool"
+        && state?.officialSources?.flap?.quotePoolFirstThree?.activeByQuote
+          ?.[String(activation.quoteAddress || "").toLowerCase()])
       && !activation.firstTokenAlertedAt
       && !activation.firstTokenTransactionHash);
   const vaultFactories = new Set(exactCreationEvidence
@@ -2998,6 +3471,9 @@ function flapActivationForObservation(state, observation) {
   if (String(observation.platform?.id || "").toLowerCase() !== "flap") return null;
   const activation = state?.officialSources?.flap?.featureActivations?.[observation.mode.featureActivationKey];
   if (!flapActivationEligibleAt(activation, observation.observedAt)
+    || (activation?.type === "quote_pool"
+      && state?.officialSources?.flap?.quotePoolFirstThree?.activeByQuote
+        ?.[String(activation.quoteAddress || "").toLowerCase()])
     || activation.firstTokenAlertedAt
     || activation.firstTokenTransactionHash) return null;
   if (activation.allowReplay === true
@@ -4114,6 +4590,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   const autoStart = dependencies.autoStart !== false;
   const externalAttributionEnabled = dependencies.externalAttribution ?? autoStart;
   const focus3ChainScope = String(config.monitorScope || "").toLowerCase() === "focus3";
+  const flapQuoteFirstThreeWindowMax = Math.max(1, Math.floor(Number(
+    dependencies.flapQuoteFirstThreeWindowMax ?? FLAP_QUOTE_FIRST_THREE_WINDOW_MAX,
+  ) || FLAP_QUOTE_FIRST_THREE_WINDOW_MAX));
+  const flapQuoteFirstThreeLifecycleMax = Math.max(1, Math.floor(Number(
+    dependencies.flapQuoteFirstThreeLifecycleMax ?? FLAP_QUOTE_FIRST_THREE_LIFECYCLE_MAX,
+  ) || FLAP_QUOTE_FIRST_THREE_LIFECYCLE_MAX));
   const queue = new Map();
   const profileCache = new Map();
   // Deliberately process-local: after every restart the first matching launch
@@ -4226,6 +4708,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   const inFlightEntries = new Map();
   const fourMemeReplayFlights = new Map();
   const flapReplayFlights = new Map();
+  const flapQuoteFirstThreeReplayFlights = new Map();
   const flapReplayAbortController = new AbortController();
   let flapReplaySweepLock = Promise.resolve();
   const backgroundReplayTasks = new Set();
@@ -6035,6 +6518,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       firstObservedAt: pool.firstObservedAt,
       confirmedAt: pool.confirmedAt,
       active: true,
+      firstThreeStatus: "legacy_closed",
       allowReplay: true,
       firstTokenAlertedAt: null,
       firstTokenTransactionHash: null,
@@ -6443,6 +6927,1010 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     ));
     flapReplaySweepLock = operation.catch(() => {});
     return operation;
+  }
+
+  function compactFlapQuoteFirstThreeState(firstThree) {
+    const windowEntries = Object.entries(firstThree.windows || {});
+    const activeGenerationKeys = new Set(Object.values(firstThree.activeByQuote || {}));
+    const retainedGenerationKeys = new Set(activeGenerationKeys);
+    const newestInactive = windowEntries
+      .filter(([generationKey]) => !retainedGenerationKeys.has(generationKey))
+      .sort(([, left], [, right]) => Date.parse(right.activatedAt || "") - Date.parse(left.activatedAt || ""));
+    for (const [generationKey] of newestInactive) {
+      if (retainedGenerationKeys.size >= flapQuoteFirstThreeWindowMax) break;
+      retainedGenerationKeys.add(generationKey);
+    }
+    firstThree.windows = Object.fromEntries(windowEntries
+      .filter(([generationKey]) => retainedGenerationKeys.has(generationKey)));
+    firstThree.activeByQuote = Object.fromEntries(Object.entries(firstThree.activeByQuote || {})
+      .filter(([, generationKey]) => retainedGenerationKeys.has(generationKey)));
+
+    const lifecycleEntries = Object.entries(firstThree.lifecycleEvents || {});
+    const eligibleLifecycleEntries = lifecycleEntries.filter(([, event]) => (
+      event?.generationKey === null || retainedGenerationKeys.has(event?.generationKey)
+    ));
+    const eligibleByKey = new Map(eligibleLifecycleEntries);
+    const requiredLifecycleKeys = new Set();
+    for (const window of Object.values(firstThree.windows)) {
+      for (const eventKey of [window.activationEventKey, window.disableEventKey]) {
+        if (eligibleByKey.has(eventKey)) requiredLifecycleKeys.add(eventKey);
+      }
+    }
+    const retainedLifecycleKeys = new Set();
+    for (const [eventKey] of [...eligibleLifecycleEntries].reverse()) {
+      if (retainedLifecycleKeys.size >= flapQuoteFirstThreeLifecycleMax) break;
+      if (requiredLifecycleKeys.has(eventKey)) retainedLifecycleKeys.add(eventKey);
+    }
+    for (const [eventKey] of [...eligibleLifecycleEntries].reverse()) {
+      if (retainedLifecycleKeys.size >= flapQuoteFirstThreeLifecycleMax) break;
+      retainedLifecycleKeys.add(eventKey);
+    }
+    firstThree.lifecycleEvents = Object.fromEntries(eligibleLifecycleEntries
+      .filter(([eventKey]) => retainedLifecycleKeys.has(eventKey)));
+  }
+
+  async function registerFlapQuotePoolLifecycle(rawRecord) {
+    await initialize();
+    const record = normalizeFlapQuotePoolLifecycleRecord(rawRecord);
+    const registered = await withState(async () => {
+      const flap = state.officialSources.flap;
+      flap.quotePoolFirstThree = normalizeFlapQuoteFirstThreeState(flap.quotePoolFirstThree);
+      const firstThree = flap.quotePoolFirstThree;
+      const duplicate = firstThree.lifecycleEvents[record.activationEventKey];
+      let canonicalReplacementOfGeneration = null;
+      let canonicalDisableReplacementGeneration = null;
+      if (duplicate) {
+        const exactProof = duplicate.action === record.action
+          && duplicate.quoteAddress === record.quoteAddress
+          && duplicate.quoteName === record.quoteName
+          && duplicate.quoteSymbol === record.quoteSymbol
+          && duplicate.blockHash === record.blockHash
+          && duplicate.transactionHash === record.transactionHash
+          && duplicate.blockNumber === record.blockNumber
+          && duplicate.transactionIndex === record.transactionIndex
+          && duplicate.logIndex === record.logIndex
+          && duplicate.occurredAt === record.occurredAt
+          && duplicate.proofType === record.proofType
+          && duplicate.requiredConfirmations === record.requiredConfirmations
+          && (duplicate.targetActivationEventKey || null) === (record.targetActivationEventKey || null);
+        if (exactProof) {
+          const duplicateWindow = duplicate.generationKey
+            ? firstThree.windows[duplicate.generationKey]
+            : null;
+          const resumeDuplicateReplay = ["activated", "restored"].includes(duplicate.action)
+            && duplicateWindow?.active === true
+            && !duplicateWindow.trackingCompletedAt;
+          return {
+            accepted: true,
+            changed: false,
+            action: record.action,
+            status: "duplicate",
+            quoteAddress: record.quoteAddress,
+            generationKey: duplicate.generationKey,
+            replayGenerationKey: resumeDuplicateReplay ? duplicate.generationKey : null,
+          };
+        }
+        const canonicalActivationReplacement = record.action === "activated"
+          && duplicate.action === "activated"
+          && duplicate.quoteAddress === record.quoteAddress
+          && duplicate.transactionHash === record.transactionHash
+          && duplicate.logIndex === record.logIndex
+          && duplicate.blockHash !== record.blockHash;
+        const canonicalDisableReplacement = record.action === "disabled"
+          && ["disabled", "restored"].includes(duplicate.action)
+          && duplicate.quoteAddress === record.quoteAddress
+          && duplicate.transactionHash === record.transactionHash
+          && duplicate.logIndex === record.logIndex
+          && duplicate.blockHash !== record.blockHash;
+        if (canonicalActivationReplacement) {
+          canonicalReplacementOfGeneration = duplicate.generationKey;
+          const orphaned = firstThree.windows[canonicalReplacementOfGeneration];
+          if (!orphaned) throw new Error(`missing orphaned Flap quote generation ${canonicalReplacementOfGeneration}`);
+          orphaned.active = false;
+          orphaned.status = "canonical_replaced";
+          orphaned.canonicalReplacedAt = iso(now);
+          orphaned.canonicalReplacementBlockHash = record.blockHash;
+          if (firstThree.activeByQuote[record.quoteAddress] === canonicalReplacementOfGeneration) {
+            delete firstThree.activeByQuote[record.quoteAddress];
+          }
+        } else if (canonicalDisableReplacement) {
+          canonicalDisableReplacementGeneration = duplicate.generationKey || null;
+        } else if (!(record.action === "restored"
+          && duplicate.action === "disabled"
+          && duplicate.quoteAddress === record.quoteAddress)) {
+          throw new Error(`conflicting Flap quote lifecycle event ${record.activationEventKey}`);
+        }
+      }
+
+      if (record.action === "restored") {
+        if (!duplicate
+          || duplicate.action !== "disabled"
+          || duplicate.blockHash !== record.blockHash
+          || duplicate.transactionHash !== record.transactionHash
+          || duplicate.logIndex !== record.logIndex) {
+          throw new Error(`Flap quote restore does not match disabled proof ${record.activationEventKey}`);
+        }
+        const window = duplicate.generationKey
+          ? firstThree.windows[duplicate.generationKey]
+          : null;
+        if (!window
+          || window.quoteAddress !== record.quoteAddress
+          || window.activationEventKey !== record.targetActivationEventKey
+          || window.active === true
+          || window.disableEventKey !== record.activationEventKey
+          || window.disableBlockHash !== record.blockHash
+          || window.disableTransactionHash !== record.transactionHash
+          || window.disableLogIndex !== record.logIndex) {
+          throw new Error(`Flap quote restore target is not the exact disabled generation ${record.targetActivationEventKey}`);
+        }
+        const activeGenerationKey = firstThree.activeByQuote[record.quoteAddress];
+        if (activeGenerationKey && activeGenerationKey !== window.generationKey) {
+          throw new Error(`Flap quote restore conflicts with active generation ${activeGenerationKey}`);
+        }
+        window.active = true;
+        window.status = "active";
+        window.restoredAt = record.occurredAt;
+        window.orphanedDisableProof = {
+          eventKey: record.activationEventKey,
+          transactionHash: record.transactionHash,
+          blockHash: record.blockHash,
+          transactionIndex: record.transactionIndex,
+          logIndex: record.logIndex,
+        };
+        const resumeReplay = !window.trackingCompletedAt;
+        if (resumeReplay) {
+          const resumeBlock = Number(window.disableBlockNumber);
+          window.archiveReplayNextBlock = Number.isSafeInteger(resumeBlock)
+            ? Math.min(Number(window.archiveReplayNextBlock ?? resumeBlock), resumeBlock)
+            : Number(window.activationBlockNumber);
+          window.archiveReplayTargetBlock = null;
+          window.replayCompletedAt = null;
+          window.trackingCompletedAt = null;
+          window.replayStatus = "restored_disable_orphan";
+          window.replayLastError = null;
+        }
+        firstThree.activeByQuote[record.quoteAddress] = window.generationKey;
+        firstThree.lifecycleEvents[record.activationEventKey] = {
+          action: "restored",
+          quoteAddress: record.quoteAddress,
+          quoteName: record.quoteName,
+          quoteSymbol: record.quoteSymbol,
+          generationKey: window.generationKey,
+          targetActivationEventKey: record.targetActivationEventKey,
+          transactionHash: record.transactionHash,
+          blockNumber: record.blockNumber,
+          blockHash: record.blockHash,
+          transactionIndex: record.transactionIndex,
+          logIndex: record.logIndex,
+          occurredAt: record.occurredAt,
+          proofType: record.proofType,
+          requiredConfirmations: record.requiredConfirmations,
+        };
+        compactFlapQuoteFirstThreeState(firstThree);
+        await save();
+        return {
+          accepted: true,
+          changed: true,
+          action: "restored",
+          status: "restored",
+          quoteAddress: record.quoteAddress,
+          generationKey: window.generationKey,
+          replayGenerationKey: resumeReplay ? window.generationKey : null,
+        };
+      }
+
+      if (record.action === "disabled") {
+        const generationKey = firstThree.activeByQuote[record.quoteAddress]
+          || canonicalDisableReplacementGeneration
+          || null;
+        const window = generationKey ? firstThree.windows[generationKey] : null;
+        if (window) {
+          const disablePosition = {
+            blockNumber: record.blockNumber,
+            transactionIndex: record.transactionIndex,
+            logIndex: record.logIndex,
+            transactionHash: record.transactionHash,
+          };
+          const activationPosition = {
+            blockNumber: window.activationBlockNumber,
+            transactionIndex: window.activationTransactionIndex,
+            logIndex: window.activationLogIndex,
+            transactionHash: window.activationTransactionHash,
+          };
+          if (compareFlapQuoteTokenCandidates(disablePosition, activationPosition) <= 0) {
+            throw new Error(`Flap quote disable predates active generation ${generationKey}`);
+          }
+          window.active = false;
+          window.status = "disabled";
+          window.disabledAt = record.occurredAt;
+          window.disableEventKey = record.activationEventKey;
+          window.disableTransactionHash = record.transactionHash;
+          window.disableBlockHash = record.blockHash;
+          window.disableBlockNumber = record.blockNumber;
+          window.disableTransactionIndex = record.transactionIndex;
+          window.disableLogIndex = record.logIndex;
+          if (canonicalDisableReplacementGeneration) {
+            window.disableCanonicalReplacementAt = iso(now);
+            window.disableCanonicalReplacementOfBlockHash = duplicate.blockHash;
+          }
+          delete firstThree.activeByQuote[record.quoteAddress];
+        }
+        firstThree.lifecycleEvents[record.activationEventKey] = {
+          action: "disabled",
+          quoteAddress: record.quoteAddress,
+          quoteName: record.quoteName,
+          quoteSymbol: record.quoteSymbol,
+          generationKey,
+          transactionHash: record.transactionHash,
+          blockNumber: record.blockNumber,
+          blockHash: record.blockHash,
+          transactionIndex: record.transactionIndex,
+          logIndex: record.logIndex,
+          occurredAt: record.occurredAt,
+          proofType: record.proofType,
+          requiredConfirmations: record.requiredConfirmations,
+        };
+        compactFlapQuoteFirstThreeState(firstThree);
+        await save();
+        return {
+          accepted: true,
+          changed: true,
+          action: "disabled",
+          status: "disabled",
+          quoteAddress: record.quoteAddress,
+          generationKey,
+          replayGenerationKey: null,
+        };
+      }
+
+      const generationKey = flapQuoteFirstThreeGenerationKey(record);
+      const activeGenerationKey = firstThree.activeByQuote[record.quoteAddress] || null;
+      if (activeGenerationKey && activeGenerationKey !== generationKey) {
+        throw new Error(`Flap quote ${record.quoteAddress} already has active generation ${activeGenerationKey}`);
+      }
+      let window = firstThree.windows[generationKey];
+      if (!window) {
+        window = {
+          generationKey,
+          activationId: generationKey,
+          quoteAddress: record.quoteAddress,
+          quoteName: record.quoteName,
+          quoteSymbol: record.quoteSymbol,
+          activationEventKey: record.activationEventKey,
+          activationTransactionHash: record.transactionHash,
+          activationBlockHash: record.blockHash,
+          activationBlockNumber: record.blockNumber,
+          activationTransactionIndex: record.transactionIndex,
+          activationLogIndex: record.logIndex,
+          activatedAt: record.occurredAt,
+          proofType: "verified_zero_to_one",
+          requiredActivationConfirmations: record.requiredConfirmations,
+          targetCount: FLAP_QUOTE_FIRST_THREE_TARGET,
+          monitorOnly: true,
+          active: true,
+          status: "active",
+          slots: [],
+          replayAttemptedCandidateKeys: [],
+          replayCompletedAt: null,
+          canonicalReplacementOfGeneration,
+          createdAt: iso(now),
+        };
+        firstThree.windows[generationKey] = window;
+      } else if (window.activationEventKey !== record.activationEventKey
+        || window.quoteAddress !== record.quoteAddress
+        || window.activationBlockHash !== record.blockHash
+        || window.activationTransactionHash !== record.transactionHash
+        || window.activationLogIndex !== record.logIndex) {
+        throw new Error(`conflicting Flap quote generation ${generationKey}`);
+      } else {
+        window.quoteName ||= record.quoteName;
+        window.quoteSymbol ||= record.quoteSymbol;
+        window.active = true;
+        window.status = "active";
+      }
+      firstThree.activeByQuote[record.quoteAddress] = generationKey;
+      firstThree.lifecycleEvents[record.activationEventKey] = {
+        action: "activated",
+        quoteAddress: record.quoteAddress,
+        quoteName: record.quoteName,
+        quoteSymbol: record.quoteSymbol,
+        generationKey,
+        transactionHash: record.transactionHash,
+        blockNumber: record.blockNumber,
+        blockHash: record.blockHash,
+        transactionIndex: record.transactionIndex,
+        logIndex: record.logIndex,
+        occurredAt: record.occurredAt,
+        proofType: record.proofType,
+        requiredConfirmations: record.requiredConfirmations,
+      };
+      compactFlapQuoteFirstThreeState(firstThree);
+      await save();
+      return {
+        accepted: true,
+        changed: true,
+        action: "activated",
+        status: "activated",
+        quoteAddress: record.quoteAddress,
+        generationKey,
+        replayGenerationKey: generationKey,
+      };
+    });
+    // The lifecycle producer advances its own durable cursor only after this
+    // acknowledgement. Archive availability must not hold that cursor hostage:
+    // the generation and its exact replay cursor are already durable here, and
+    // startup/maintenance retries own the independent catch-up lane.
+    if (registered.replayGenerationKey) {
+      trackBackgroundReplay(() => replayFlapQuoteFirstThreeGeneration(registered.replayGenerationKey));
+    }
+    const { replayGenerationKey: _replayGenerationKey, ...ack } = registered;
+    return ack;
+  }
+
+  function activeFlapQuoteFirstThreeWindows(snapshot = state) {
+    const firstThree = snapshot?.officialSources?.flap?.quotePoolFirstThree;
+    if (!firstThree) return [];
+    return Object.entries(firstThree.activeByQuote || {}).flatMap(([quoteAddress, generationKey]) => {
+      const window = firstThree.windows?.[generationKey];
+      return window?.active === true && window.quoteAddress === quoteAddress
+        ? [[generationKey, window]] : [];
+    });
+  }
+
+  function flapQuoteCandidateAfterActivation(candidate, window) {
+    return compareFlapQuoteTokenCandidates(candidate, {
+      blockNumber: window.activationBlockNumber,
+      transactionIndex: window.activationTransactionIndex,
+      logIndex: window.activationLogIndex,
+      transactionHash: window.activationTransactionHash,
+      tokenAddress: "0x0000000000000000000000000000000000000000",
+    }) > 0;
+  }
+
+  function verifiedFlapQuotePair(pools = [], tokenAddress, quoteAddress) {
+    const token = String(tokenAddress || "").toLowerCase();
+    const quote = String(quoteAddress || "").toLowerCase();
+    return (pools || []).filter((pool) => {
+      const factory = String(pool?.factory || "").toLowerCase();
+      const dex = BSC_DEX_CONTRACTS.get(factory);
+      const token0 = String(pool?.token0 || "").toLowerCase();
+      const token1 = String(pool?.token1 || "").toLowerCase();
+      return pool?.verifiedDex === true
+        && dex
+        && FLAP_QUOTE_FIRST_THREE_PAIR_FACTORIES.has(factory)
+        && [dex.name, dex.kind].includes(pool.kind)
+        && ADDRESS.test(String(pool?.pool || "").toLowerCase())
+        && ((token0 === token && token1 === quote) || (token1 === token && token0 === quote));
+    }).sort((left, right) => String(left.pool).toLowerCase().localeCompare(String(right.pool).toLowerCase()))[0] || null;
+  }
+
+  function coarseFlapQuoteFirstThreeMatches(snapshot, observation, candidates = []) {
+    const replayGenerationKey = observation?.flapQuoteFirstThreeReplayGenerationKey || null;
+    const windows = activeFlapQuoteFirstThreeWindows(snapshot);
+    const matches = [];
+    for (const candidate of [...candidates].sort(compareFlapQuoteTokenCandidates)) {
+      const tokenAddress = String(candidate?.token || "").toLowerCase();
+      if (String(candidate?.topic || "").toLowerCase() !== FLAP_TOKEN_CREATED_TOPIC
+        || String(candidate?.launcher || "").toLowerCase() !== FLAP_PORTAL_ADDRESS
+        || !ADDRESS.test(tokenAddress)) continue;
+      const token = (observation?.tokens || []).find((item) => String(item?.token || "").toLowerCase() === tokenAddress);
+      if (!token) continue;
+      for (const [generationKey, window] of windows) {
+        if (!window.replayCompletedAt && replayGenerationKey !== generationKey) continue;
+        if (!flapQuoteCandidateAfterActivation(candidate, window)) continue;
+        const pair = verifiedFlapQuotePair(observation?.pools, tokenAddress, window.quoteAddress);
+        if (!pair) continue;
+        matches.push({ generationKey, window, candidate, token, pair });
+      }
+    }
+    return matches.sort((left, right) => compareFlapQuoteTokenCandidates(left.candidate, right.candidate)
+      || left.window.quoteAddress.localeCompare(right.window.quoteAddress));
+  }
+
+  function hasFlapQuoteFirstThreeMatch(snapshot, observation, candidates = []) {
+    return coarseFlapQuoteFirstThreeMatches(snapshot, observation, candidates).length > 0;
+  }
+
+  function normalizedFlapEventPool(pool) {
+    const factory = String(pool.factory || "").toLowerCase();
+    const dex = BSC_DEX_CONTRACTS.get(factory);
+    return {
+      ...pool,
+      kind: dex?.kind || null,
+      factory,
+      token0: String(pool.token0 || "").toLowerCase(),
+      token1: String(pool.token1 || "").toLowerCase(),
+      pool: String(pool.pool || "").toLowerCase(),
+      poolId: pool.poolId || null,
+      hook: pool.hook ? String(pool.hook).toLowerCase() : null,
+      verifiedDex: true,
+    };
+  }
+
+  function unavailableFlapTokenSecurity(reason = "本地链上安全检查未返回结果") {
+    return {
+      decision: "unknown",
+      label: "安全检查未完成",
+      reasons: [reason],
+      metrics: {
+        sellSimulation: "not_available",
+        coverage: {
+          bytecodeCapabilities: "unknown",
+          owner: "unknown",
+          proxy: "unknown",
+          liquidity: "unknown",
+          sellability: "not_checked",
+          buySellTax: "not_checked",
+          holderConcentration: "not_checked",
+          lpLockOrBurn: "not_checked",
+        },
+      },
+    };
+  }
+
+  function flapQuoteFirstThreeEvent(window, slot) {
+    const tokenAddress = slot.tokenAddress;
+    const quoteAddress = window.quoteAddress;
+    const pair = structuredClone(slot.pool);
+    const quoteLabel = window.quoteSymbol || window.quoteName
+      || `${quoteAddress.slice(0, 8)}…${quoteAddress.slice(-4)}`;
+    const sourceUrl = `https://bscscan.com/tx/${slot.transactionHash}`;
+    const activationSourceUrl = `https://bscscan.com/tx/${window.activationTransactionHash}`;
+    const featureTokenProof = {
+      version: 1,
+      activationId: window.activationId,
+      activationEventKey: window.activationEventKey,
+      quoteAddress,
+      tokenAddress,
+      portal: FLAP_PORTAL_ADDRESS,
+      tokenCreatedTopic: FLAP_TOKEN_CREATED_TOPIC,
+      transactionHash: slot.transactionHash,
+      blockNumber: slot.blockNumber,
+      blockHash: slot.blockHash,
+      transactionIndex: slot.transactionIndex,
+      logIndex: slot.logIndex,
+      canonical: true,
+      confirmations: slot.confirmations,
+      requiredConfirmations: slot.requiredConfirmations,
+      pairAddress: slot.pairAddress,
+      pairKind: slot.pairKind,
+    };
+    const recoveryLagMs = Math.max(0, Date.parse(slot.reservedAt) - Date.parse(slot.blockTimestamp));
+    const delayedRecovery = recoveryLagMs > FLAP_ACTIVATION_REPLAY_LOOKBACK_MS ? {
+      version: 1,
+      reason: "verified_generation_archive_catch_up",
+      sourceOccurredAt: slot.blockTimestamp,
+      firstObservedAt: slot.firstObservedAt,
+      recoveredAt: slot.reservedAt,
+      lagMs: recoveryLagMs,
+      continuousCoverage: true,
+    } : null;
+    const platform = {
+      ...publicPlatform(BSC_LAUNCHPAD_CATALOG.find((entry) => entry.id === "flap")),
+      id: "flap",
+      name: "Flap",
+      trust: "official_verified",
+      evidenceUrl: `https://bscscan.com/address/${FLAP_PORTAL_ADDRESS}`,
+    };
+    return {
+      type: "bsc_launchpad_update",
+      kind: "flap_pool_token",
+      eventKey: slot.eventKey,
+      chainId: BSC_CHAIN_ID,
+      launcher: FLAP_PORTAL_ADDRESS,
+      platform,
+      featurePlatform: "flap",
+      featureActivationKey: window.generationKey,
+      featureGenerationKey: window.generationKey,
+      featureTrackedToken: true,
+      featureTokenOrdinal: slot.ordinal,
+      featureTokenTarget: FLAP_QUOTE_FIRST_THREE_TARGET,
+      featureFirstToken: slot.ordinal === 1,
+      informationalOnly: true,
+      autoTradeEligible: false,
+      automaticExecution: false,
+      strong: true,
+      launchCount: slot.ordinal,
+      uniqueTokens: slot.ordinal,
+      transactionHash: slot.transactionHash,
+      blockNumber: slot.blockNumber,
+      blockHash: slot.blockHash,
+      blockTimestamp: slot.blockTimestamp,
+      transactionIndex: slot.transactionIndex,
+      logIndex: slot.logIndex,
+      tokens: [{
+        token: tokenAddress,
+        isNewContract: true,
+        metadata: structuredClone(slot.metadata),
+      }],
+      pools: [pair],
+      mode: {
+        fingerprint: digest({ generationKey: window.generationKey, quoteAddress }),
+        selector: "official-portal-token-created",
+        creationTopics: [FLAP_TOKEN_CREATED_TOPIC],
+        customTopics: [FLAP_TOKEN_CREATED_TOPIC],
+        quoteAsset: quoteAddress,
+        quoteName: window.quoteName,
+        quoteSymbol: window.quoteSymbol,
+        componentMode: `Flap ${quoteLabel} 新底池`,
+        componentModeAlertEligible: true,
+        featureActivationEligible: true,
+        monitorOnly: true,
+      },
+      structural: {
+        eligible: true,
+        mechanismEvidence: true,
+        causalTokenEvent: true,
+        controllerKind: "official_direct",
+        source: "verified_flap_portal_receipt",
+      },
+      security: structuredClone(slot.security),
+      featureTokenProof,
+      ...(slot.canonicalRevision ? { canonicalRevision: structuredClone(slot.canonicalRevision) } : {}),
+      ...(delayedRecovery ? { delayedRecovery } : {}),
+      launchEvidence: [{
+        emitter: FLAP_PORTAL_ADDRESS,
+        topic: FLAP_TOKEN_CREATED_TOPIC,
+        token: tokenAddress,
+      }],
+      sourceUrl,
+      activationSourceUrl,
+      explorerUrl: sourceUrl,
+      launcherUrl: `https://bscscan.com/address/${FLAP_PORTAL_ADDRESS}`,
+      observedAt: slot.reservedAt,
+    };
+  }
+
+  function acceptedFlapQuoteFirstThreeDelivery(result) {
+    const status = String(result?.status || "").toLowerCase();
+    if (["delivered", "queued"].includes(status)) return true;
+    return status === "suppressed"
+      && String(result?.reason || result?.disabledReason || "").toLowerCase() === "semantic_duplicate"
+      && result?.persisted === true
+      && result?.canonicalOwnerDelivered === true;
+  }
+
+  async function codeBackedFlapQuoteCandidates(observation, matches) {
+    const result = new Map();
+    for (const tokenAddress of [...new Set(matches.map((match) => String(match.candidate.token).toLowerCase()))]) {
+      let code;
+      try {
+        code = await provider.getCode(tokenAddress, observation.blockNumber);
+      } catch (error) {
+        if (!isBscArchiveStateUnavailable(error)) throw error;
+        code = await provider.getCode(tokenAddress);
+      }
+      if (typeof code !== "string" || !/^0x(?:[0-9a-f]{2})*$/i.test(code)) {
+        throw new Error(`Flap first-three token code proof malformed ${tokenAddress}`);
+      }
+      result.set(tokenAddress, code !== "0x");
+    }
+    return result;
+  }
+
+  async function reconcileFlapQuoteFirstThreeCanonicalSlots(generationKey) {
+    const snapshot = await withState(() => {
+      const window = state.officialSources?.flap?.quotePoolFirstThree?.windows?.[generationKey];
+      return window?.active === true && window.slots?.length
+        ? structuredClone(window)
+        : null;
+    });
+    if (!snapshot) return false;
+    const blockNumbers = [...new Set(snapshot.slots.map((slot) => Number(slot.blockNumber)))];
+    const canonicalBlocks = new Map();
+    for (const blockNumber of blockNumbers) {
+      const block = await provider.getBlock(blockNumber);
+      const blockHash = normalizeTransactionHash(block?.hash);
+      if (!block || !/^0x[0-9a-f]{64}$/.test(blockHash)) {
+        throw new Error(`Flap first-three canonical block proof unavailable ${blockNumber}`);
+      }
+      canonicalBlocks.set(blockNumber, blockHash);
+    }
+    const mismatched = snapshot.slots
+      .filter((slot) => canonicalBlocks.get(Number(slot.blockNumber)) !== slot.blockHash)
+      .sort((left, right) => left.ordinal - right.ordinal);
+    if (!mismatched.length) return false;
+    const earliestOrdinal = mismatched[0].ordinal;
+    const expectedAnchor = snapshot.slots.find((slot) => slot.ordinal === earliestOrdinal);
+    for (const blockNumber of blockNumbers) {
+      const cached = blockCache.get(blockNumber);
+      if (cached) invalidateBlockCacheGeneration(blockNumber, cached);
+    }
+    return withState(async () => {
+      const window = state.officialSources?.flap?.quotePoolFirstThree?.windows?.[generationKey];
+      const anchor = window?.slots?.find((slot) => slot.ordinal === earliestOrdinal);
+      if (!window || window.active !== true || !anchor
+        || anchor.eventKey !== expectedAnchor.eventKey
+        || anchor.blockHash !== expectedAnchor.blockHash) return false;
+      const orphanedAt = iso(now);
+      const tail = window.slots.filter((slot) => slot.ordinal >= earliestOrdinal);
+      window.pendingCanonicalReplacements ||= {};
+      window.orphanedSlots ||= [];
+      for (const slot of tail) {
+        if (slot.deliveryAcceptedAt) {
+          window.pendingCanonicalReplacements[String(slot.ordinal)] = {
+            ordinal: slot.ordinal,
+            eventKey: slot.eventKey,
+            blockHash: slot.blockHash,
+            tokenAddress: slot.tokenAddress,
+            orphanedAt,
+          };
+        }
+        window.orphanedSlots.push({
+          ...structuredClone(slot),
+          canonicalOrphanedAt: orphanedAt,
+        });
+        delete state.seenTransactions[slot.transactionHash];
+        delete state.deferredCreationEvidence[slot.transactionHash];
+        delete state.realtimePendingEntries[slot.transactionHash];
+      }
+      window.orphanedSlots = window.orphanedSlots.slice(-12);
+      window.slots = window.slots.filter((slot) => slot.ordinal < earliestOrdinal);
+      window.archiveReplayNextBlock = Math.min(...tail.map((slot) => Number(slot.blockNumber)));
+      window.archiveReplayTargetBlock = null;
+      window.replayCompletedAt = null;
+      window.trackingCompletedAt = null;
+      window.replayStatus = "canonical_reorg";
+      window.canonicalReorgCount = Number(window.canonicalReorgCount || 0) + 1;
+      window.lastCanonicalReorgAt = orphanedAt;
+      await save();
+      return true;
+    });
+  }
+
+  async function reserveFlapQuoteFirstThreeSlot(match, observation) {
+    const tokenAddress = String(match.candidate.token).toLowerCase();
+    const assessment = (observation.tokenAssessments || [])
+      .find((item) => String(item?.token || "").toLowerCase() === tokenAddress);
+    const metadata = assessment?.metadata || match.token.metadata || null;
+    const security = assessment?.security || unavailableFlapTokenSecurity();
+    const pool = normalizedFlapEventPool(match.pair);
+    const candidateKey = flapCreationCandidateKey({
+      transactionHash: match.candidate.transactionHash,
+      logIndex: match.candidate.logIndex,
+      token: tokenAddress,
+    });
+    return withState(async () => {
+      const firstThree = state.officialSources?.flap?.quotePoolFirstThree;
+      const window = firstThree?.windows?.[match.generationKey];
+      if (!window || window.active !== true
+        || firstThree.activeByQuote?.[window.quoteAddress] !== match.generationKey) return null;
+      const existing = (window.slots || []).find((slot) => slot.tokenAddress === tokenAddress);
+      if (existing) return { window: structuredClone(window), slot: structuredClone(existing) };
+      if ((window.slots || []).length >= FLAP_QUOTE_FIRST_THREE_TARGET) return null;
+      const previous = window.slots?.at(-1);
+      if (previous && compareFlapQuoteTokenCandidates(match.candidate, previous) <= 0) {
+        const error = new Error(`Flap first-three candidate arrived out of canonical order ${candidateKey}`);
+        error.code = "BSC_FLAP_FIRST_THREE_ORDER_PENDING";
+        throw error;
+      }
+      const ordinal = (window.slots || []).length + 1;
+      const replacement = window.pendingCanonicalReplacements?.[String(ordinal)] || null;
+      const reservedAt = iso(now);
+      const slot = {
+        ordinal,
+        candidateKey,
+        tokenAddress,
+        transactionHash: normalizeTransactionHash(match.candidate.transactionHash),
+        blockNumber: Number(match.candidate.blockNumber),
+        blockHash: observation.blockHash,
+        transactionIndex: Number(match.candidate.transactionIndex),
+        logIndex: Number(match.candidate.logIndex),
+        blockTimestamp: match.candidate.observedAt,
+        firstObservedAt: match.candidate.indexedAt || observation.observedAt || reservedAt,
+        confirmations: Number(observation.confirmations),
+        requiredConfirmations: Number(observation.requiredConfirmations),
+        pairAddress: String(pool.pool).toLowerCase(),
+        pairKind: pool.kind,
+        pool,
+        metadata: structuredClone(metadata),
+        security: structuredClone(security),
+        replay: observation.flapQuoteFirstThreeReplayGenerationKey === match.generationKey,
+        reservedAt,
+        deliveryStatus: "pending",
+        deliveryAcceptedAt: null,
+      };
+      if (replacement) {
+        slot.canonicalRevision = {
+          version: 1,
+          reason: "token_created_reorg",
+          ordinal,
+          replacesEventKey: replacement.eventKey,
+          replacesBlockHash: replacement.blockHash,
+          replacesTokenAddress: replacement.tokenAddress,
+        };
+      }
+      const ordinaryEventKey = `bsc-flap-pool-token:${match.generationKey}:${ordinal}:${candidateKey}`;
+      slot.eventKey = replacement
+        ? `${ordinaryEventKey}:canonical-revision:${slot.blockHash}`
+        : ordinaryEventKey;
+      slot.event = flapQuoteFirstThreeEvent(window, slot);
+      window.slots ||= [];
+      window.slots.push(slot);
+      window.lastCandidateAt = reservedAt;
+      await save();
+      return { window: structuredClone(window), slot: structuredClone(slot) };
+    });
+  }
+
+  async function deliverFlapQuoteFirstThreeSlot(generationKey, slot) {
+    if (!slot || slot.deliveryAcceptedAt) return slot?.event || null;
+    const delivery = await withEventDelivery(slot.eventKey, async () => {
+      let result;
+      try {
+        result = await alertSender(config, structuredClone(slot.event));
+      } catch (error) {
+        error.code ||= "ALERT_DELIVERY_PENDING";
+        throw error;
+      }
+      if (!acceptedFlapQuoteFirstThreeDelivery(result)) {
+        await withState(async () => {
+          const current = state.officialSources?.flap?.quotePoolFirstThree
+            ?.windows?.[generationKey]?.slots?.find((item) => item.eventKey === slot.eventKey);
+          if (!current || current.deliveryAcceptedAt) return;
+          current.lastDeliveryRejectedAt = iso(now);
+          current.lastDeliveryResult = {
+            status: result?.status || null,
+            reason: result?.reason || result?.disabledReason || null,
+            terminal: result?.terminal === true,
+          };
+          await save();
+        });
+        const error = new Error(`Flap first-three alert was not durably accepted: ${result?.reason || result?.disabledReason || result?.status || "unknown"}`);
+        error.code = "ALERT_DELIVERY_PENDING";
+        throw error;
+      }
+      await withState(async () => {
+        const window = state.officialSources?.flap?.quotePoolFirstThree?.windows?.[generationKey];
+        const current = window?.slots?.find((item) => item.eventKey === slot.eventKey);
+        if (!current || current.deliveryAcceptedAt) return;
+        current.deliveryStatus = String(result.status).toLowerCase();
+        current.deliveryAcceptedAt = result.deliveredAt || iso(now);
+        current.deliveryEventId = result.eventId || slot.eventKey;
+        if (current.canonicalRevision
+          && window.pendingCanonicalReplacements?.[String(current.ordinal)]?.eventKey
+            === current.canonicalRevision.replacesEventKey) {
+          delete window.pendingCanonicalReplacements[String(current.ordinal)];
+        }
+        delete current.lastDeliveryRejectedAt;
+        delete current.lastDeliveryResult;
+        if (window.slots.length >= FLAP_QUOTE_FIRST_THREE_TARGET
+          && window.slots.every((item) => item.deliveryAcceptedAt)) {
+          window.trackingCompletedAt ||= iso(now);
+        }
+        await save();
+      });
+      return slot.event;
+    });
+    return delivery.value || slot.event;
+  }
+
+  async function processFlapQuoteFirstThreeCandidates(observation, candidates = []) {
+    let matches = await withState(() => coarseFlapQuoteFirstThreeMatches(state, observation, candidates));
+    if (!matches.length) return [];
+    if (!observation.tokenAssessments) {
+      const snapshot = await withState(() => structuredClone(state));
+      await enrich(observation, snapshot);
+    }
+    matches = await withState(() => coarseFlapQuoteFirstThreeMatches(state, observation, candidates));
+    if (!matches.length) return [];
+    if (observation.canonical !== true
+      || !/^0x[0-9a-f]{64}$/.test(String(observation.blockHash || "").toLowerCase())
+      || !Number.isSafeInteger(Number(observation.confirmations))
+      || !Number.isSafeInteger(Number(observation.requiredConfirmations))
+      || Number(observation.confirmations) < Number(observation.requiredConfirmations)) {
+      const error = new Error(`Flap first-three canonical confirmation proof is incomplete ${observation.transactionHash}`);
+      error.code = "BSC_FLAP_FIRST_THREE_PROOF_PENDING";
+      throw error;
+    }
+    const codeBacked = await codeBackedFlapQuoteCandidates(observation, matches);
+    const emitted = [];
+    for (const match of matches) {
+      if (codeBacked.get(String(match.candidate.token).toLowerCase()) !== true) continue;
+      const reserved = await reserveFlapQuoteFirstThreeSlot(match, observation);
+      if (!reserved) continue;
+      const event = await deliverFlapQuoteFirstThreeSlot(match.generationKey, reserved.slot);
+      if (event) emitted.push(event);
+    }
+    return emitted;
+  }
+
+  async function flapQuoteFirstThreeConfirmedHead() {
+    const requiredConfirmations = Math.max(0, Number(config.bscConfirmations ?? 2));
+    let head = Number(currentHead || 0);
+    if (typeof provider.getBlockNumber === "function") {
+      head = Math.max(head, Number(await provider.getBlockNumber()));
+    }
+    if (!Number.isSafeInteger(head) || head < requiredConfirmations) {
+      throw new Error("BSC head is unavailable for Flap first-three archive replay");
+    }
+    currentHead = Math.max(currentHead, head);
+    return { head, confirmedHead: Math.max(0, head - requiredConfirmations), requiredConfirmations };
+  }
+
+  async function readFlapQuoteFirstThreeArchiveLogs(fromBlock, toBlock) {
+    const filter = {
+      address: FLAP_PORTAL_ADDRESS,
+      fromBlock: hexBlock(fromBlock),
+      toBlock: hexBlock(toBlock),
+      topics: [FLAP_TOKEN_CREATED_TOPIC],
+    };
+    const logs = typeof provider.send === "function"
+      ? await provider.send("eth_getLogs", [filter])
+      : await provider.getLogs(filter);
+    if (!Array.isArray(logs)) throw new Error(`Flap first-three archive logs missing ${fromBlock}-${toBlock}`);
+    const normalized = [];
+    for (const log of logs) {
+      const transactionHash = normalizeTransactionHash(log?.transactionHash);
+      const blockHash = normalizeTransactionHash(log?.blockHash);
+      const blockNumber = typeof log?.blockNumber === "number"
+        ? log.blockNumber : Number.parseInt(log?.blockNumber, 16);
+      const transactionIndex = typeof log?.transactionIndex === "number"
+        ? log.transactionIndex : Number.parseInt(log?.transactionIndex, 16);
+      const logIndex = typeof (log?.logIndex ?? log?.index) === "number"
+        ? (log.logIndex ?? log.index) : Number.parseInt(log?.logIndex ?? log?.index, 16);
+      const evidence = parseKnownBscLaunchEvidence([log])[0];
+      if (log?.removed === true
+        || String(log?.address || "").toLowerCase() !== FLAP_PORTAL_ADDRESS
+        || String(log?.topics?.[0] || "").toLowerCase() !== FLAP_TOKEN_CREATED_TOPIC
+        || !evidence || String(evidence.token || "").toLowerCase() === ""
+        || !/^0x[0-9a-f]{64}$/.test(transactionHash)
+        || !/^0x[0-9a-f]{64}$/.test(blockHash)
+        || !Number.isSafeInteger(blockNumber) || blockNumber < fromBlock || blockNumber > toBlock
+        || !Number.isSafeInteger(transactionIndex) || transactionIndex < 0
+        || !Number.isSafeInteger(logIndex) || logIndex < 0) {
+        throw new Error(`malformed Flap first-three archive log ${fromBlock}-${toBlock}`);
+      }
+      normalized.push({
+        transactionHash,
+        blockHash,
+        blockNumber,
+        transactionIndex,
+        logIndex,
+        token: String(evidence.token).toLowerCase(),
+      });
+    }
+    return normalized.sort(compareFlapQuoteTokenCandidates);
+  }
+
+  async function runFlapQuoteFirstThreeArchiveReplay(generationKey) {
+    await reconcileFlapQuoteFirstThreeCanonicalSlots(generationKey);
+    while (true) {
+      const phase = await withState(() => {
+        const window = state.officialSources?.flap?.quotePoolFirstThree?.windows?.[generationKey];
+        if (!window || window.active !== true || window.trackingCompletedAt) return null;
+        return {
+          nextBlock: Number.isSafeInteger(Number(window.archiveReplayNextBlock))
+            ? Number(window.archiveReplayNextBlock) : Number(window.activationBlockNumber),
+          window: structuredClone(window),
+        };
+      });
+      if (!phase) return false;
+      const head = await flapQuoteFirstThreeConfirmedHead();
+      const targetBlock = Math.max(phase.window.activationBlockNumber, head.confirmedHead);
+      if (phase.nextBlock > targetBlock) {
+        const refreshed = await flapQuoteFirstThreeConfirmedHead();
+        const refreshedTarget = Math.max(phase.window.activationBlockNumber, refreshed.confirmedHead);
+        if (phase.nextBlock <= refreshedTarget) continue;
+        await withState(async () => {
+          const window = state.officialSources?.flap?.quotePoolFirstThree?.windows?.[generationKey];
+          if (!window || window.active !== true || window.trackingCompletedAt) return;
+          window.archiveReplayTargetBlock = Math.max(Number(window.archiveReplayTargetBlock || 0), refreshedTarget);
+          window.archiveReplayNextBlock = phase.nextBlock;
+          window.replayCompletedAt = iso(now);
+          window.replayStatus = "complete";
+          await save();
+        });
+        return true;
+      }
+      const toBlock = Math.min(targetBlock, phase.nextBlock + recoveryLogBatchSize - 1);
+      await withState(async () => {
+        const window = state.officialSources?.flap?.quotePoolFirstThree?.windows?.[generationKey];
+        if (!window || window.active !== true) return;
+        window.archiveReplayNextBlock = phase.nextBlock;
+        window.archiveReplayTargetBlock = Math.max(Number(window.archiveReplayTargetBlock || 0), targetBlock);
+        window.replayCompletedAt = null;
+        window.replayStatus = "running";
+        window.replayLastAttemptAt = iso(now);
+        window.replayLastError = null;
+        await save();
+      });
+      let logs;
+      try {
+        logs = await readFlapQuoteFirstThreeArchiveLogs(phase.nextBlock, toBlock);
+        const transactions = new Map();
+        for (const log of logs) {
+          if (!flapQuoteCandidateAfterActivation(log, phase.window)) continue;
+          const group = transactions.get(log.transactionHash) || {
+            transactionHash: log.transactionHash,
+            blockNumber: log.blockNumber,
+            transactionIndex: log.transactionIndex,
+            logIndex: log.logIndex,
+            tokens: [],
+            candidateKeys: [],
+          };
+          if (!group.tokens.includes(log.token)) group.tokens.push(log.token);
+          group.logIndex = Math.min(group.logIndex, log.logIndex);
+          group.candidateKeys.push(flapCreationCandidateKey(log));
+          transactions.set(log.transactionHash, group);
+        }
+        for (const group of [...transactions.values()].sort(compareBscQueueEntries)) {
+          await withState(async () => {
+            delete state.seenTransactions[group.transactionHash];
+            delete state.deferredCreationEvidence[group.transactionHash];
+            delete state.realtimePendingEntries[group.transactionHash];
+            await save();
+          });
+          enqueue(group.transactionHash, group.blockNumber, "flap_quote_first_three_replay", {
+            transactionIndex: group.transactionIndex,
+            logIndex: group.logIndex,
+            mintEmitters: group.tokens,
+            candidateTokens: group.tokens,
+            verifiedNewContracts: group.tokens,
+            flapQuoteFirstThreeReplayGenerationKey: generationKey,
+            protocol: true,
+          });
+          const entry = queue.get(group.transactionHash);
+          if (!entry) throw new Error(`Flap first-three replay could not reserve ${group.transactionHash}`);
+          await processEntries([entry], 1);
+          await withState(async () => {
+            const window = state.officialSources?.flap?.quotePoolFirstThree?.windows?.[generationKey];
+            if (!window) return;
+            window.replayAttemptedCandidateKeys = [...new Set([
+              ...(window.replayAttemptedCandidateKeys || []),
+              ...group.candidateKeys,
+            ])].slice(-FLAP_CREATION_HOT_INDEX_MAX);
+            await save();
+          });
+        }
+      } catch (error) {
+        await withState(async () => {
+          const window = state.officialSources?.flap?.quotePoolFirstThree?.windows?.[generationKey];
+          if (!window) return;
+          window.replayStatus = "error";
+          window.replayLastAttemptAt = iso(now);
+          window.replayLastError = errorSummary(error);
+          await save().catch(() => {});
+        });
+        throw error;
+      }
+      await withState(async () => {
+        const window = state.officialSources?.flap?.quotePoolFirstThree?.windows?.[generationKey];
+        if (!window || window.active !== true) return;
+        window.archiveReplayNextBlock = toBlock + 1;
+        window.archiveReplayTargetBlock = Math.max(Number(window.archiveReplayTargetBlock || 0), targetBlock);
+        window.replayLastAttemptAt = iso(now);
+        window.replayLastError = null;
+        await save();
+      });
+    }
+  }
+
+  function replayFlapQuoteFirstThreeGeneration(generationKey) {
+    if (!generationKey) return Promise.resolve(false);
+    if (flapQuoteFirstThreeReplayFlights.has(generationKey)) {
+      return flapQuoteFirstThreeReplayFlights.get(generationKey);
+    }
+    let flight;
+    flight = runFlapQuoteFirstThreeArchiveReplay(generationKey).finally(() => {
+      if (flapQuoteFirstThreeReplayFlights.get(generationKey) === flight) {
+        flapQuoteFirstThreeReplayFlights.delete(generationKey);
+      }
+    });
+    flapQuoteFirstThreeReplayFlights.set(generationKey, flight);
+    return flight;
+  }
+
+  async function replayPendingFlapQuoteFirstThreeGenerations() {
+    await initialize();
+    const activeKeys = await withState(() => activeFlapQuoteFirstThreeWindows(state)
+      .map(([generationKey]) => generationKey));
+    for (const key of activeKeys) await reconcileFlapQuoteFirstThreeCanonicalSlots(key);
+    const keys = await withState(() => activeFlapQuoteFirstThreeWindows(state)
+      .filter(([, window]) => !window.trackingCompletedAt)
+      .map(([generationKey]) => generationKey));
+    for (const key of keys) await replayFlapQuoteFirstThreeGeneration(key);
+    return keys.length;
   }
 
   async function registerFlapFeatureActivations(records = [], { awaitReplay = true } = {}) {
@@ -7408,6 +8896,11 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       entry.featureActivationReplayKey = details.featureActivationReplayKey;
       changed = true;
     }
+    if (details.flapQuoteFirstThreeReplayGenerationKey
+      && entry.flapQuoteFirstThreeReplayGenerationKey !== details.flapQuoteFirstThreeReplayGenerationKey) {
+      entry.flapQuoteFirstThreeReplayGenerationKey = details.flapQuoteFirstThreeReplayGenerationKey;
+      changed = true;
+    }
     if (changed) entry.revision = Number(entry.revision || 0) + 1;
     queue.set(normalizedTransactionHash, entry);
   }
@@ -7434,6 +8927,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       hasProtocolTrigger: Boolean(entry.hasProtocolTrigger),
       ...(deliverySla ? { deliverySla } : {}),
       featureActivationReplayKey: entry.featureActivationReplayKey || null,
+      flapQuoteFirstThreeReplayGenerationKey: entry.flapQuoteFirstThreeReplayGenerationKey || null,
       revision: Number(entry.revision || 0),
       queuedAt: previous.queuedAt || observedAt,
       updatedAt: observedAt,
@@ -7458,6 +8952,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       hasProtocolTrigger: Boolean(record.hasProtocolTrigger),
       deliverySla: normalizeBscWebsocketDeliverySla(record.deliverySla),
       featureActivationReplayKey: record.featureActivationReplayKey || null,
+      flapQuoteFirstThreeReplayGenerationKey: record.flapQuoteFirstThreeReplayGenerationKey || null,
       revision: Number(record.revision || 0),
     };
   }
@@ -7481,6 +8976,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       hasProtocolTrigger: Boolean(entry.hasProtocolTrigger),
       ...(deliverySla ? { deliverySla } : {}),
       featureActivationReplayKey: entry.featureActivationReplayKey || null,
+      flapQuoteFirstThreeReplayGenerationKey: entry.flapQuoteFirstThreeReplayGenerationKey || null,
       revision: Number(entry.revision || 0),
       deferredKind: previous.deferredKind || entry.deferredKind || "creation_evidence",
       attempts,
@@ -7509,6 +9005,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       hasProtocolTrigger: Boolean(record.hasProtocolTrigger),
       deliverySla: normalizeBscWebsocketDeliverySla(record.deliverySla),
       featureActivationReplayKey: record.featureActivationReplayKey || null,
+      flapQuoteFirstThreeReplayGenerationKey: record.flapQuoteFirstThreeReplayGenerationKey || null,
       revision: Number(record.revision || 0),
       deferredKind: record.deferredKind || "creation_evidence",
       deferredEvidence: true,
@@ -8801,6 +10298,15 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       }
     }
     if (!block) throw new Error(`missing block ${receipt.blockNumber}`);
+    const blockHash = normalizeTransactionHash(block.hash);
+    const receiptBlockHash = normalizeTransactionHash(receipt.blockHash);
+    const transactionBlockHash = normalizeTransactionHash(transaction.blockHash);
+    const requiredConfirmations = Math.max(0, Number(config.bscConfirmations ?? 2));
+    const confirmations = Math.max(0, Number(currentHead || 0) - Number(receipt.blockNumber));
+    const canonical = /^0x[0-9a-f]{64}$/.test(blockHash)
+      && receiptBlockHash === blockHash
+      && transactionBlockHash === blockHash
+      && normalizeTransactionHash(transaction.hash) === normalizeTransactionHash(receipt.hash || receipt.transactionHash);
     for (const token of tokens) {
       const evidence = (controller.launchEvidence || []).find((item) => item.token.toLowerCase() === token.token.toLowerCase());
       if (!evidence) continue;
@@ -8837,6 +10343,11 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         : controller.platform,
       transactionHash: transaction.hash,
       blockNumber: receipt.blockNumber,
+      blockHash,
+      transactionIndex: Number(receipt.index ?? receipt.transactionIndex ?? 0),
+      canonical,
+      confirmations,
+      requiredConfirmations,
       tokens,
       pools: relevantPools,
       mode: shape,
@@ -9378,11 +10889,17 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           : await cachedBlockTimestamp(entry.blockNumber);
         receiptFlapCreationCandidates = parseFlapCreationHotCandidates(receipt.logs || [], {
           transactionHash: entry.transactionHash,
+          blockHash: receipt.blockHash || null,
           blockNumber: entry.blockNumber,
           transactionIndex: receipt.index ?? receipt.transactionIndex ?? 0,
           observedAt,
           indexedAt: iso(now),
-          current: now(),
+          // A verified generation owns an unbounded durable archive cursor;
+          // its TokenCreated facts must not be discarded by the 30-minute
+          // realtime hot-index retention policy.
+          current: entry.flapQuoteFirstThreeReplayGenerationKey ? null : now(),
+          confirmations: Math.max(0, Number(currentHead || 0) - Number(entry.blockNumber)),
+          requiredConfirmations: Math.max(0, Number(config.bscConfirmations ?? 2)),
           pools: bscPools,
         });
       }
@@ -9437,6 +10954,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       const knownOrdinaryFastPath = observation?.structural?.fastPath === "known_official_mode"
         && observation.officialDiscoveryReplay !== true
         && !flapActivationForObservation(state, observation)
+        && !hasFlapQuoteFirstThreeMatch(state, {
+          ...observation,
+          flapQuoteFirstThreeReplayGenerationKey: entry.flapQuoteFirstThreeReplayGenerationKey || null,
+        }, receiptFlapCreationCandidates)
         && !fourMemeActivationForObservation(state, observation);
       // A warmed exact identity match has already proven the same controller,
       // token implementation, selector and mode fingerprint. Keep its durable
@@ -9446,7 +10967,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       // still receives the complete security/enrichment path.
       return {
         revision,
-        observation: knownOrdinaryFastPath ? null : observation,
+        observation: !observation || knownOrdinaryFastPath ? null : {
+          ...observation,
+          flapQuoteFirstThreeReplayGenerationKey: entry.flapQuoteFirstThreeReplayGenerationKey || null,
+        },
         fourMemeCreationCandidates,
         flapCreationCandidates,
       };
@@ -9470,7 +10994,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     let flapReplayNeeded = false;
     const fourMemeReplayKeys = new Set();
     const dirtyEntries = [];
-    for (let index = 0; index < results.length; index += 1) {
+    const orderedResultIndexes = results.map((_result, index) => index)
+      .sort((left, right) => compareBscQueueEntries(entries[left], entries[right]));
+    for (const index of orderedResultIndexes) {
       if (flapReplaySignal && (stopped || flapReplaySignal.aborted)) {
         // A prior result may already have installed a valid state mutation.
         // Finish that WAL boundary before honoring cancellation.
@@ -9582,7 +11108,13 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         continue;
       }
       if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
-      if (result.value.observation) await observe(result.value.observation, { persistIrrelevant: false });
+      if (result.value.observation) {
+        await processFlapQuoteFirstThreeCandidates(
+          result.value.observation,
+          result.value.flapCreationCandidates || [],
+        );
+        await observe(result.value.observation, { persistIrrelevant: false });
+      }
       await withState(async () => {
         const fourMemeAppend = appendFourMemeCreationHotIndex(state, result.value.fourMemeCreationCandidates || []);
         for (const key of fourMemeAppend.replayKeys) fourMemeReplayKeys.add(key);
@@ -11306,6 +12838,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         // replays share this durable maintenance cadence. The per-key flight
         // map prevents overlap with startup, registration, or hot-index wakeups.
         void replayPendingFlapActivations();
+        void replayPendingFlapQuoteFirstThreeGenerations().catch((error) => {
+          logger.error(`[bsc][flap-first-three] ${errorSummary(error)}`);
+        });
       }, config.bscOfficialPollIntervalMs ?? 10_000);
       officialPollTimer.unref?.();
       if (String(config.monitorScope || "").toLowerCase() !== "focus3") {
@@ -11327,6 +12862,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       // checkpoint can never delay the WebSocket/tail startup path.
       void checkOfficialFourMeme();
       void replayPendingFlapActivations();
+      trackBackgroundReplay(() => replayPendingFlapQuoteFirstThreeGenerations());
       watchdogTimer = setInterval(() => {
         const socket = websocket;
         if (!socket || !wsOpenedAt) return;
@@ -11462,7 +12998,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     return attempt;
   }
 
-  const monitor = { start, stop, awaitIdle, observe, registerDiscoveryCandidates, registerFlapFeatureActivations, replayFlapFeatureActivations: replayPendingFlapActivations, registerFourMemeFeatureActivations, checkOfficialSources: checkOfficialFourMeme, checkHttpHead: pollHttpHead, retryDeferredCreationEvidence, processRealtimeQueue, scanRealtimeTail, scanNearHeadRecovery, getState: async () => {
+  const monitor = { start, stop, awaitIdle, observe, registerDiscoveryCandidates, registerFlapFeatureActivations, registerFlapQuotePoolLifecycle, replayFlapFeatureActivations: replayPendingFlapActivations, replayFlapQuotePoolFirstThree: replayPendingFlapQuoteFirstThreeGenerations, registerFourMemeFeatureActivations, checkOfficialSources: checkOfficialFourMeme, checkHttpHead: pollHttpHead, retryDeferredCreationEvidence, processRealtimeQueue, scanRealtimeTail, scanNearHeadRecovery, getState: async () => {
     await initialize();
     return withState(async () => structuredClone(state));
   } };

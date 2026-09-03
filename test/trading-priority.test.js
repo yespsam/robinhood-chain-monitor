@@ -299,6 +299,167 @@ test("Flap infrastructure stays T1, only a safe first-token CA reaches T0, and F
   assert.equal(blocked.plan.automaticExecution, false);
 });
 
+test("official Flap pool tokens use ordinal-aware monitor-only priority and every safety state stays immediate", () => {
+  const observedAt = "2026-09-04T01:00:00.000Z";
+  const quoteAddress = "0xd97d097a89113fa59b76c572e5b2eb647e8eefaf";
+  const portal = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
+  const tokenCreatedTopic = "0x504e7f360b2e5fe33cbaaae4c593bc55305328341bf79009e43e0e3b7f699603";
+  const generationKey = `quote:0xd97d097a89113fa59b76c572e5b2eb647e8eefaf:generation:0x${"a".repeat(64)}:0x${"b".repeat(64)}:4`;
+  const makeEvent = ({ ordinal, decision, token }) => {
+    const transactionHash = `0x${String(ordinal).repeat(64)}`;
+    const blockHash = `0x${String(ordinal + 3).repeat(64)}`;
+    const pairAddress = `0x${String(ordinal + 5).repeat(40)}`;
+    const blockNumber = 119_800_000 + ordinal;
+    const transactionIndex = ordinal;
+    const logIndex = ordinal + 5;
+    const eventKey = `bsc-flap-pool-token:${generationKey}:${ordinal}:${transactionHash}:${logIndex}:${token}`;
+    return {
+      type: "bsc_launchpad_update",
+      kind: "flap_pool_token",
+      eventKey,
+      launcher: portal,
+      featureTrackedToken: true,
+      featureTokenOrdinal: ordinal,
+      featureTokenTarget: 3,
+      featureActivationKey: generationKey,
+      featureGenerationKey: generationKey,
+      informationalOnly: true,
+      autoTradeEligible: false,
+      automaticExecution: false,
+      platform: { id: "flap", name: "Flap", trust: "official_verified" },
+      mode: {
+        quoteAsset: quoteAddress,
+        quoteSymbol: "SOXLB",
+        quoteName: "Semicon Bull 3X ETF",
+      },
+      tokens: [{ token, metadata: { name: `Tracked ${ordinal}`, symbol: `TRK${ordinal}` } }],
+      pools: [{ pool: pairAddress, kind: "v2", token0: token, token1: quoteAddress, verifiedDex: true }],
+      security: {
+        decision,
+        metrics: { liquidityConfirmed: decision === "pass" },
+      },
+      transactionHash,
+      blockNumber,
+      blockHash,
+      transactionIndex,
+      logIndex,
+      featureTokenProof: {
+        version: 1,
+        activationId: generationKey,
+        activationEventKey: `flap-quote:56:0x${"b".repeat(64)}:4`,
+        quoteAddress,
+        tokenAddress: token,
+        portal,
+        tokenCreatedTopic,
+        transactionHash,
+        blockNumber,
+        blockHash,
+        transactionIndex,
+        logIndex,
+        canonical: true,
+        confirmations: 6,
+        requiredConfirmations: 6,
+        pairAddress,
+        pairKind: "v2",
+      },
+      sourceUrl: `https://bscscan.com/tx/${transactionHash}`,
+      explorerUrl: `https://bscscan.com/tx/${transactionHash}`,
+      activationSourceUrl: `https://bscscan.com/tx/0x${"b".repeat(64)}`,
+      blockTimestamp: observedAt,
+      observedAt,
+    };
+  };
+
+  const cases = [
+    { ordinal: 1, decision: "pass", tier: "T0", conclusion: "观察；静态初筛通过，可卖性仍待验证" },
+    { ordinal: 2, decision: "pass", tier: "T1", conclusion: "观察；静态初筛通过，可卖性仍待验证" },
+    { ordinal: 3, decision: "pass", tier: "T1", conclusion: "观察；静态初筛通过，可卖性仍待验证" },
+    { ordinal: 2, decision: "unknown", tier: "T2", conclusion: "安全未完成｜不买" },
+    { ordinal: 3, decision: "block", tier: "T2", conclusion: "⛔ 不买；安全门已拦截" },
+  ];
+
+  for (const item of cases) {
+    const token = `0x${String(item.ordinal).repeat(39)}${item.decision === "pass" ? "a" : item.decision === "block" ? "b" : "c"}`;
+    const event = makeEvent({ ...item, token });
+    const priority = deriveTradingPriority(event, { nowMs: Date.parse(observedAt) + 5_000 });
+    assert.equal(priority.tier, item.tier, `${item.ordinal}/${item.decision}`);
+    assert.equal(priority.plan.conclusion.zh, item.conclusion);
+    assert.equal(priority.plan.automaticExecution, false);
+    assert.equal(event.informationalOnly, true);
+    assert.equal(event.autoTradeEligible, false);
+    assert.equal(event.automaticExecution, false);
+    const disposition = alertDeliveryDisposition({ ...event, tradingPriority: priority });
+    assert.equal(disposition.mode, "immediate", `${item.ordinal}/${item.decision}`);
+    assert.equal(disposition.deliverImmediately, true, `${item.ordinal}/${item.decision}`);
+  }
+
+  const notClosedMonitorOnly = makeEvent({
+    ordinal: 2,
+    decision: "unknown",
+    token: "0x9999999999999999999999999999999999999999",
+  });
+  delete notClosedMonitorOnly.informationalOnly;
+  const priority = deriveTradingPriority(notClosedMonitorOnly, { nowMs: Date.parse(observedAt) + 5_000 });
+  assert.equal(priority.tier, "T2");
+  assert.equal(alertDeliveryDisposition({ ...notClosedMonitorOnly, tradingPriority: priority }).mode, "audit_only");
+
+  const original = makeEvent({ ordinal: 1, decision: "pass", token: "0x1111111111111111111111111111111111111111" });
+  const revisionBlockHash = `0x${"f".repeat(64)}`;
+  const canonicalRevision = {
+    ...structuredClone(original),
+    blockHash: revisionBlockHash,
+    eventKey: `${original.eventKey}:canonical-revision:${revisionBlockHash}`,
+    featureTokenProof: { ...original.featureTokenProof, blockHash: revisionBlockHash },
+    canonicalRevision: {
+      version: 1,
+      reason: "token_created_reorg",
+      ordinal: 1,
+      replacesEventKey: original.eventKey,
+      replacesBlockHash: original.blockHash,
+      replacesTokenAddress: original.tokens[0].token,
+    },
+  };
+  canonicalRevision.tradingPriority = deriveTradingPriority(canonicalRevision, { nowMs: Date.parse(observedAt) + 5_000 });
+  assert.equal(canonicalRevision.tradingPriority.tier, "T2");
+  assert.equal(canonicalRevision.tradingPriority.plan.conclusion.zh, "链重组修订｜以本条 CA 为准｜不买");
+  assert.equal(canonicalRevision.tradingPriority.plan.automaticExecution, false);
+  assert.deepEqual(alertDeliveryDisposition(canonicalRevision), {
+    mode: "immediate",
+    deliverImmediately: true,
+    tier: "T2",
+    reason: "flap_tracked_token_canonical_revision",
+  });
+
+  const recoverySourceAt = "2026-09-04T00:00:00.000Z";
+  const recoveryObservedAt = "2026-09-04T01:00:05.000Z";
+  const delayedRecovery = {
+    ...makeEvent({ ordinal: 2, decision: "pass", token: "0x2222222222222222222222222222222222222222" }),
+    blockTimestamp: recoverySourceAt,
+    observedAt: recoveryObservedAt,
+    delayedRecovery: {
+      version: 1,
+      reason: "verified_generation_archive_catch_up",
+      sourceOccurredAt: recoverySourceAt,
+      firstObservedAt: "2026-09-04T00:00:05.000Z",
+      recoveredAt: recoveryObservedAt,
+      lagMs: 3_605_000,
+      continuousCoverage: true,
+    },
+  };
+  delayedRecovery.tradingPriority = deriveTradingPriority(delayedRecovery, { nowMs: Date.parse(recoveryObservedAt) });
+  assert.equal(delayedRecovery.tradingPriority.tier, "T2");
+  assert.equal(delayedRecovery.tradingPriority.hardGates.validWindow, false);
+  assert.match(delayedRecovery.tradingPriority.plan.conclusion.zh, /^延迟补报｜勿追价｜/u);
+  assert.match(delayedRecovery.tradingPriority.plan.conclusion.en, /^Delayed recovery \| do not chase \|/);
+  assert.doesNotMatch(delayedRecovery.tradingPriority.plan.conclusion.zh, /断线/u);
+  assert.deepEqual(alertDeliveryDisposition(delayedRecovery), {
+    mode: "immediate",
+    deliverImmediately: true,
+    tier: "T2",
+    reason: "flap_tracked_token_delayed_recovery",
+  });
+});
+
 test("Flap quote-pair announcements and verified pools are T1 while anonymous pool addresses remain audit-only", () => {
   const createdAt = "2026-09-02T12:20:25.000Z";
   const announcement = {

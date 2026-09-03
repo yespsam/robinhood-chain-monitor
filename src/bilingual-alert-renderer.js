@@ -13,7 +13,7 @@ import {
 } from "./web3-alert-interpreter.js";
 import { isTradingPriority, tradingPriorityForEvent } from "./trading-priority.js";
 
-export const BILINGUAL_RENDER_VERSION = 18;
+export const BILINGUAL_RENDER_VERSION = 19;
 const MAX_CARD_LINES = 2;
 const MAX_LINE_LENGTH = 230;
 const MAX_DISPLAY_LINE_LENGTH = 138;
@@ -625,6 +625,147 @@ function flapQuotePairDetails(event) {
   };
 }
 
+function flapTrackedTokenRevisionDetails(event, ordinal, token, generation) {
+  const revision = event?.canonicalRevision;
+  if (revision == null) return null;
+  const keys = [
+    "version", "reason", "ordinal", "replacesEventKey", "replacesBlockHash",
+    "replacesTokenAddress",
+  ];
+  if (typeof revision !== "object"
+    || Array.isArray(revision)
+    || Object.keys(revision).length !== keys.length
+    || !keys.every((key) => Object.prototype.hasOwnProperty.call(revision, key))) return false;
+  const prefix = `bsc-flap-pool-token:${generation}:${ordinal}:`;
+  const replacesEventKey = String(revision.replacesEventKey || "");
+  const replacedTail = replacesEventKey.startsWith(prefix) ? replacesEventKey.slice(prefix.length) : "";
+  const replacedCandidate = /^(0x[a-f0-9]{64}):(0|[1-9]\d*):(0x[a-f0-9]{40})(?::canonical-revision:(0x[a-f0-9]{64}))?$/.exec(replacedTail);
+  const blockHash = String(event?.blockHash || "").toLowerCase();
+  const eventKeyBase = `${prefix}${String(event?.transactionHash || "").toLowerCase()}:${Number(event?.logIndex)}:${token.toLowerCase()}`;
+  if (revision.version !== 1
+    || revision.reason !== "token_created_reorg"
+    || Number(revision.ordinal) !== ordinal
+    || !replacedCandidate
+    || replacedCandidate[3] !== String(revision.replacesTokenAddress || "").toLowerCase()
+    || !/^0x[a-f0-9]{64}$/.test(String(revision.replacesBlockHash || "").toLowerCase())
+    || (replacedCandidate[4]
+      && replacedCandidate[4] !== String(revision.replacesBlockHash).toLowerCase())
+    || String(revision.replacesBlockHash).toLowerCase() === blockHash
+    || !/^0x[a-f0-9]{64}$/.test(blockHash)
+    || event?.eventKey !== `${eventKeyBase}:canonical-revision:${blockHash}`) return false;
+  return {
+    replacesTokenAddress: String(revision.replacesTokenAddress).toLowerCase(),
+    replacesBlockHash: String(revision.replacesBlockHash).toLowerCase(),
+    newBlockHash: blockHash,
+  };
+}
+
+function flapTrackedPoolTokenDetails(event) {
+  const platform = String(event?.platform?.id || event?.featurePlatform || "").toLowerCase();
+  const ordinal = Number(event?.featureTokenOrdinal);
+  const target = Number(event?.featureTokenTarget);
+  const tokenEntry = event?.tokens?.[0] || {};
+  const token = String(tokenEntry?.token || "").trim();
+  const quoteAsset = String(event?.mode?.quoteAsset || "").trim();
+  const quoteSymbol = String(event?.mode?.quoteSymbol || "").replace(/\s+/g, " ").trim();
+  const quoteName = String(event?.mode?.quoteName || "").replace(/\s+/g, " ").trim();
+  const rawGeneration = event?.featureGenerationKey
+    ?? event?.generation
+    ?? event?.generationKey
+    ?? event?.featureTokenGeneration
+    ?? event?.featureActivationGeneration;
+  if (event?.type !== "bsc_launchpad_update"
+    || event?.kind !== "flap_pool_token"
+    || event?.featureTrackedToken !== true
+    || platform !== "flap"
+    || String(event?.platform?.trust || "").toLowerCase() !== "official_verified"
+    || !Number.isSafeInteger(ordinal) || ordinal < 1 || ordinal > 3
+    || target !== 3
+    || !/^0x[a-fA-F0-9]{40}$/.test(token)
+    || !/^0x[a-fA-F0-9]{40}$/.test(quoteAsset)
+    || !quoteSymbol
+    || !String(event?.featureActivationKey || "").trim()
+    || rawGeneration == null || !String(rawGeneration).trim()
+    || String(event.featureActivationKey).trim() !== String(rawGeneration).trim()
+    || event?.informationalOnly !== true
+    || event?.autoTradeEligible !== false
+    || event?.automaticExecution !== false) return null;
+  const revision = flapTrackedTokenRevisionDetails(event, ordinal, token, String(rawGeneration).trim());
+  if (revision === false) return null;
+  const metadata = tokenEntry?.metadata || {};
+  const name = String(metadata?.name || "").replace(/\s+/g, " ").trim();
+  const symbol = String(metadata?.symbol || "").replace(/\s+/g, " ").trim();
+  const label = name && symbol && name.toLowerCase() !== symbol.toLowerCase()
+    ? `${name} (${symbol})`
+    : name || symbol || null;
+  const security = ["pass", "block"].includes(String(event?.security?.decision || "").toLowerCase())
+    ? String(event.security.decision).toLowerCase()
+    : "unknown";
+  const producerDelayedRecovery = event?.delayedRecovery?.version === 1
+    && event.delayedRecovery.reason === "verified_generation_archive_catch_up"
+    && event.delayedRecovery.continuousCoverage === true;
+  const deliveryLagMs = Number(event?.freshness?.deliveryLagMs);
+  const realtimeMaxAgeMs = Number(event?.freshness?.realtimeMaxAgeMs);
+  const delayedDelivery = ["late", "suppress"].includes(event?.freshness?.deliveryDecision)
+    && Number.isFinite(deliveryLagMs)
+    && Number.isFinite(realtimeMaxAgeMs)
+    && deliveryLagMs > realtimeMaxAgeMs;
+  return {
+    ordinal,
+    target,
+    token,
+    tokenLabel: label ? oneLine(label, 64) : null,
+    quoteAsset,
+    quoteSymbol: oneLine(quoteSymbol, 32),
+    quoteName: quoteName ? oneLine(quoteName, 64) : null,
+    security,
+    canonicalRevision: revision,
+    delayKind: delayedDelivery ? "delivery" : producerDelayedRecovery ? "recovery" : null,
+  };
+}
+
+function renderFlapTrackedPoolTokenLines(focusModel, language = "zh") {
+  const details = focusModel?.flapTrackedToken;
+  if (!details) return null;
+  const zh = language === "zh";
+  const tokenLabel = details.tokenLabel || (zh ? "未命名代币" : "Unnamed token");
+  const safetyDecision = details.security === "pass"
+    ? (zh
+        ? "观察；静态初筛通过，可卖性仍待验证"
+        : "Watch; static screening passed; sellability still unverified")
+    : details.security === "block"
+      ? (zh ? "⛔ 不买；安全门已拦截" : "⛔ Do not buy; safety gate blocked")
+      : (zh ? "安全未完成｜不买" : "Safety incomplete | do not buy");
+  const delayPrefix = details.delayKind === "delivery"
+    ? (zh ? "延迟送达｜勿追价" : "Delayed delivery | do not chase")
+    : details.delayKind === "recovery"
+      ? (zh ? "延迟补报｜勿追价" : "Delayed recovery | do not chase")
+      : null;
+  const decision = details.canonicalRevision
+    ? (zh
+        ? "链重组修订｜以本条 CA 为准｜不买"
+        : "Chain-reorg revision | use this CA as canonical | do not buy")
+    : delayPrefix
+      ? `${delayPrefix}${zh ? "｜" : " | "}${safetyDecision}`
+      : safetyDecision;
+  const time = localizedCstTime(focusModel?.time?.[language], language);
+  return zh
+    ? [
+        `平台：Flap｜${details.quoteSymbol} 底池｜第 ${details.ordinal}/${details.target} 个代币`,
+        `代币：${tokenLabel}｜CA ${details.token}`,
+        `结论：${decision}`,
+        `确认：官方 TokenCreated + ${details.quoteSymbol} 配对`,
+        `风险/时间：${details.delayKind ? "勿追价｜" : ""}非自动交易｜${time}`,
+      ]
+    : [
+        `Platform: Flap | ${details.quoteSymbol} pool | Token ${details.ordinal}/${details.target}`,
+        `Token: ${tokenLabel} | CA ${details.token}`,
+        `Decision: ${decision}`,
+        `Proof: Official TokenCreated + ${details.quoteSymbol} pair`,
+        `Risk/Time: ${details.delayKind ? "Do not chase | " : ""}No automatic trading | ${time}`,
+      ];
+}
+
 function structuredPoolFacts(event, language = "en") {
   const changes = event?.changes || {};
   const zh = language === "zh";
@@ -677,7 +818,10 @@ function structuredLaunchFacts(event) {
   if (mode) output.push(`Mode: ${factValue(mode)}`);
   if (token?.token) {
     const label = [metadata.name, metadata.symbol ? `(${metadata.symbol})` : null].filter(Boolean).join(" ") || "first verified sample";
-    output.push(`First token: ${label} · CA ${token.token}`);
+    const tracked = flapTrackedPoolTokenDetails(event);
+    output.push(tracked
+      ? `Token ${tracked.ordinal}/${tracked.target}: ${label} · CA ${token.token}`
+      : `First token: ${label} · CA ${token.token}`);
   }
   const decision = event?.security?.decision;
   if (decision === "pass") output.push("Safety: local contract and trading gates passed; not a buy recommendation.");
@@ -1351,6 +1495,10 @@ function flapAgenticFirstTokenCandidate(event) {
 function focusTitle(event, language = "zh") {
   const zh = language === "zh";
   if (isPonFunRenderEvent(event)) return `pon.fun｜${zh ? "官方更新" : "Official update"}`;
+  const trackedToken = flapTrackedPoolTokenDetails(event);
+  if (trackedToken) return zh
+    ? `Flap｜${trackedToken.quoteSymbol} 底池｜第 ${trackedToken.ordinal}/${trackedToken.target} 个代币`
+    : `Flap | ${trackedToken.quoteSymbol} pool | Token ${trackedToken.ordinal}/${trackedToken.target}`;
   const flapQuote = flapQuotePairDetails(event);
   if (flapQuote) return flapQuote.firstObservedAfterGap
     ? (zh ? "Flap｜补扫首次观察" : "Flap｜First observed after gap")
@@ -1414,7 +1562,9 @@ function focusTitle(event, language = "zh") {
   else if (event?.type === "uniswap_official_update") label = zh ? "官方更新" : "Official update";
   else if (event?.type === "ai_official_update") label = zh ? "产品更新" : "Product update";
   else if (event?.type === "bsc_launchpad_update") {
-    if (event?.featureFirstToken || event?.officialFirstToken) label = zh ? "首个代币" : "First token";
+    const tracked = flapTrackedPoolTokenDetails(event);
+    if (tracked) label = zh ? `第 ${tracked.ordinal}/${tracked.target} 个代币` : `Token ${tracked.ordinal}/${tracked.target}`;
+    else if (event?.featureFirstToken || event?.officialFirstToken) label = zh ? "首个代币" : "First token";
     else if (["new_launchpad", "new_factory"].includes(event?.kind)) label = zh ? "新发射台" : "New launchpad";
     else label = zh ? "新模式" : "New mode";
   } else if (event?.type === "evm_launchpad_update") label = zh ? "新模式" : "New mode";
@@ -1894,6 +2044,10 @@ function bscModeFacts(event) {
 function bscFocusKey(event, language) {
   if (event?.type !== "bsc_launchpad_update") return null;
   const zh = language === "zh";
+  const tracked = flapTrackedPoolTokenDetails(event);
+  if (tracked) return zh
+    ? `${tracked.quoteSymbol} 底池第 ${tracked.ordinal}/${tracked.target} 个代币 ${tracked.tokenLabel || "未命名代币"}`
+    : `${tracked.quoteSymbol} pool token ${tracked.ordinal}/${tracked.target}: ${tracked.tokenLabel || "Unnamed token"}`;
   const mode = bscModeFacts(event);
   const identity = mode.name
     || (mode.templateId != null ? `templateId=${mode.templateId}` : null)
@@ -2351,6 +2505,8 @@ function focusEvidence(event) {
 
   const token = firstTokenAddress(event);
   if (event?.type === "bsc_launchpad_update") {
+    const tracked = flapTrackedPoolTokenDetails(event);
+    if (tracked) return [{ zh: `CA ${tracked.token}`, en: `CA ${tracked.token}` }];
     const mode = bscModeFacts(event);
     const technical = mode.templateId != null
       ? { zh: `templateId=${mode.templateId}`, en: `templateId=${mode.templateId}` }
@@ -2559,6 +2715,10 @@ function fomoStage(event, language) {
 
 function bscStage(event, language) {
   const zh = language === "zh";
+  const tracked = flapTrackedPoolTokenDetails(event);
+  if (tracked) return zh
+    ? `官方 TokenCreated + ${tracked.quoteSymbol} 配对；非自动交易`
+    : `Official TokenCreated + ${tracked.quoteSymbol} pair; no automatic trading`;
   const onchain = Boolean(event?.transactionHash || event?.blockNumber != null || event?.featureFirstToken || event?.officialFirstToken);
   const security = securityDecision(event) || "unknown";
   const liquidity = typeof event?.security?.metrics?.liquidityConfirmed === "boolean"
@@ -2590,8 +2750,8 @@ function focusStage(event, language = "zh", sourceStatus = "") {
         : `Delayed recovery after disconnect · ${lag} · original Portal receipt and ERC-20 metadata verified`;
     }
     if (flapQuote.onchain) return zh
-      ? "Portal 交易回执与 ERC-20 元数据已核验"
-      : "Portal receipt and ERC-20 metadata verified";
+      ? "Portal 交易回执与 ERC-20 元数据已核验；后续播报该池第1–3个代币CA"
+      : "Portal receipt and ERC-20 metadata verified; next: report token CAs #1–#3 from this pool";
     if (flapQuote.board && flapQuote.stage === "observed") return zh
       ? "Flap 官方看板首次确认观察到报价资产；名称/符号已解析，Portal 0→1 待确认"
       : "Flap official Board first confirmed the quote asset; name/symbol resolved, Portal 0→1 pending";
@@ -2798,6 +2958,7 @@ function buildFocusModel(event, changeModel, sourceLines, tradingPriority, showP
     };
   }
   const rawPlatform = isGithubSkillUpdate(event) ? "Binance Skills" : focusProject(event);
+  const trackedToken = flapTrackedPoolTokenDetails(event);
   const profitableWallet = event?.type === "fomo_family_top_call"
     && event?.signalKind === "high_profit_high_winrate_wallet_buy";
   const platform = profitableWallet
@@ -2838,7 +2999,7 @@ function buildFocusModel(event, changeModel, sourceLines, tradingPriority, showP
             : flapQuoteDetails.delayedRecovery
             ? `断线恢复补报 · ${flapRecoveryLagSummary(flapQuoteDetails, "zh")} · 原始 Portal 回执已核验`
             : flapQuoteDetails.onchain
-            ? "Portal 回执 + ERC-20 元数据已核验"
+            ? "Portal 回执 + ERC-20 元数据已核验；后续播报该池第1–3个代币CA"
             : flapQuoteDetails.board && flapQuoteDetails.stage === "observed"
               ? "官方看板首次确认观察到报价资产 + 名称/符号已解析；Portal 0→1 待确认"
             : flapQuoteDetails.board && flapQuoteDetails.stage === "live"
@@ -2849,7 +3010,7 @@ function buildFocusModel(event, changeModel, sourceLines, tradingPriority, showP
             : flapQuoteDetails.delayedRecovery
             ? `Delayed recovery · ${flapRecoveryLagSummary(flapQuoteDetails, "en")} · original Portal receipt verified`
             : flapQuoteDetails.onchain
-            ? "Portal receipt + ERC-20 metadata verified"
+            ? "Portal receipt + ERC-20 metadata verified; next: report token CAs #1–#3 from this pool"
             : flapQuoteDetails.board && flapQuoteDetails.stage === "observed"
               ? "Official Board first confirmed the quote asset + name/symbol resolved; Portal 0→1 pending"
             : flapQuoteDetails.board && flapQuoteDetails.stage === "live"
@@ -2908,6 +3069,7 @@ function buildFocusModel(event, changeModel, sourceLines, tradingPriority, showP
     ...(fomo ? { fomo } : {}),
     ...(pon ? { pon } : {}),
     ...(flapQuote ? { flapQuote } : {}),
+    ...(trackedToken ? { flapTrackedToken: trackedToken } : {}),
   };
 }
 
@@ -3026,6 +3188,8 @@ function renderFocusLines(focusModel, language = "zh") {
   const zh = language === "zh";
   const tier = focusModel.priority?.tier || "T2";
   const prioritySuffix = focusModel.showPriority ? ` · ${tier}` : "";
+  const trackedTokenLines = renderFlapTrackedPoolTokenLines(focusModel, language);
+  if (trackedTokenLines) return trackedTokenLines;
   if (focusModel.eventType === "fomo_monitor_health_update") {
     return [
       `${zh ? "平台：" : "Platform: "}${focusModel.platform[language]}${prioritySuffix}`,
@@ -3538,6 +3702,7 @@ function usesLocalStructuredChineseFocus(event) {
 
 function usesLocalStructuredBilingualFocus(event) {
   return event?.type === "fomo_monitor_health_update"
+    || Boolean(flapTrackedPoolTokenDetails(event))
     || Boolean(publishedFomoCallDetails(event))
     || isPonFunRenderEvent(event)
     || event?.type === "github_module_update"
@@ -3763,6 +3928,9 @@ export function renderBilingualTelegramText(bundle, strong = false) {
         .trim();
       return `${label}${oneLine(normalized || (zh ? "未取得" : "Unavailable"), maximum)}`;
     };
+
+    const trackedTokenLines = renderFlapTrackedPoolTokenLines(focusModel, language);
+    if (trackedTokenLines) return trackedTokenLines.join("\n");
 
     if (focusModel.eventType === "fomo_monitor_health_update") {
       const facts = focusModel.healthFacts?.[language] || {};
