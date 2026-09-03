@@ -386,7 +386,9 @@ function rawEnglishNarrative(event) {
 
 function eventTime(event) {
   return event?.publishedAt || event?.timestamp || event?.blockTimestamp || event?.tweet?.createdAt
-    || event?.committedAt || event?.observedAt || event?.alertQueuedAt || null;
+    || event?.committedAt
+    || (event?.type === "platform_capability_update" ? event?.sourceOccurredAt : null)
+    || event?.observedAt || event?.alertQueuedAt || null;
 }
 
 function telegramNewsUsername(event) {
@@ -590,9 +592,11 @@ function flapQuotePairDetails(event) {
     });
   }
   if (!assets.length) return null;
+  const onchain = Boolean(event?.transactionHash || event?.onchainProof || event?.receiptProof);
   const stage = ["announced", "live", "observed"].includes(signal?.stage)
     ? signal.stage
-    : pools.some((pool) => pool?.quoteSymbol) ? "live" : "observed";
+    : pools.length > 0 && !onchain ? "observed"
+      : pools.some((pool) => pool?.quoteSymbol) ? "live" : "observed";
   const delayedRecovery = event?.type === "platform_capability_update"
     && event?.kind === "flap_quote_asset_enabled"
     && event?.delayedRecovery?.version === 1
@@ -607,10 +611,13 @@ function flapQuotePairDetails(event) {
     assets: assets.slice(0, 8),
     stage,
     bstock: assets.some((asset) => asset.bstock),
-    onchain: Boolean(event?.transactionHash || event?.onchainProof || event?.receiptProof),
+    onchain,
     board: pools.length > 0,
     delayedRecovery,
     firstObservedAfterGap,
+    boardMetadataDelayed: stage === "observed"
+      && pools.length > 0
+      && event?.tradingPriority?.tier === "T2",
     recovery: delayedRecovery || firstObservedAfterGap,
     recoveryLagMs: event?.delayedRecovery?.lagMs,
     deliveryLagMs: event?.freshness?.deliveryLagMs,
@@ -2189,7 +2196,7 @@ function poolEvidence(event) {
   const quoteAssets = pools.filter((pool) => pool?.kind === "quote_asset");
   if (quoteAssets.length) {
     return quoteAssets.slice(0, 2).map((pool) => {
-      const symbol = String(pool?.quoteSymbol || "").trim().toUpperCase();
+      const symbol = String(pool?.quoteSymbol || "").trim();
       const name = String(pool?.quoteName || "").replace(/\s+/g, " ").trim();
       const address = pool?.quoteAddress || pool?.quoteTokenAddress || pool?.quoteAssetAddress;
       const chainId = pool?.chainId ?? event?.chainId ?? event?.chain?.id;
@@ -2585,6 +2592,9 @@ function focusStage(event, language = "zh", sourceStatus = "") {
     if (flapQuote.onchain) return zh
       ? "Portal 交易回执与 ERC-20 元数据已核验"
       : "Portal receipt and ERC-20 metadata verified";
+    if (flapQuote.board && flapQuote.stage === "observed") return zh
+      ? "Flap 官方看板首次确认观察到报价资产；名称/符号已解析，Portal 0→1 待确认"
+      : "Flap official Board first confirmed the quote asset; name/symbol resolved, Portal 0→1 pending";
     if (flapQuote.board && flapQuote.stage === "live") return zh
       ? "Flap 官方看板与 ERC-20 元数据已核验"
       : "Flap official board and ERC-20 metadata verified";
@@ -2829,6 +2839,8 @@ function buildFocusModel(event, changeModel, sourceLines, tradingPriority, showP
             ? `断线恢复补报 · ${flapRecoveryLagSummary(flapQuoteDetails, "zh")} · 原始 Portal 回执已核验`
             : flapQuoteDetails.onchain
             ? "Portal 回执 + ERC-20 元数据已核验"
+            : flapQuoteDetails.board && flapQuoteDetails.stage === "observed"
+              ? "官方看板首次确认观察到报价资产 + 名称/符号已解析；Portal 0→1 待确认"
             : flapQuoteDetails.board && flapQuoteDetails.stage === "live"
               ? "官方看板 + ERC-20 元数据已核验"
               : "官方 X 已验证；链上启用待确认",
@@ -2838,6 +2850,8 @@ function buildFocusModel(event, changeModel, sourceLines, tradingPriority, showP
             ? `Delayed recovery · ${flapRecoveryLagSummary(flapQuoteDetails, "en")} · original Portal receipt verified`
             : flapQuoteDetails.onchain
             ? "Portal receipt + ERC-20 metadata verified"
+            : flapQuoteDetails.board && flapQuoteDetails.stage === "observed"
+              ? "Official Board first confirmed the quote asset + name/symbol resolved; Portal 0→1 pending"
             : flapQuoteDetails.board && flapQuoteDetails.stage === "live"
               ? "Official board + ERC-20 metadata verified"
               : "Official X verified; on-chain enablement pending",
@@ -2851,6 +2865,10 @@ function buildFocusModel(event, changeModel, sourceLines, tradingPriority, showP
             ? flapQuoteDetails.bstock
               ? "补报可能已被市场消化，勿追价；bStock 报价代币不等于 ETF/股票所有权；非自动交易"
               : "补报可能已被市场消化，勿追价；报价代币仍有合约、流动性与可卖性风险；非自动交易"
+            : flapQuoteDetails.board && flapQuoteDetails.stage === "observed"
+            ? `${flapQuoteDetails.boardMetadataDelayed ? "元数据延迟补齐，勿追价；" : ""}看板观察≠Portal 0→1；${flapQuoteDetails.bstock
+              ? "bStock 不等于 ETF/股票所有权；核对预言机/背书/流动性/可卖性；非自动交易"
+              : "报价代币仍有合约、流动性与可卖性风险；非自动交易"}`
             : flapQuoteDetails.bstock
             ? "bStock 报价代币不等于 ETF/股票所有权；仍需核对预言机、背书、流动性与可卖性；非自动交易"
             : "报价代币仍有合约、流动性与可卖性风险；非自动交易",
@@ -2862,6 +2880,10 @@ function buildFocusModel(event, changeModel, sourceLines, tradingPriority, showP
             ? flapQuoteDetails.bstock
               ? "The recovery may already be priced in; do not chase; a bStock quote token is not ETF/share ownership; no automatic trading"
               : "The recovery may already be priced in; do not chase; quote-token contract, liquidity, and sellability risks remain; no automatic trading"
+            : flapQuoteDetails.board && flapQuoteDetails.stage === "observed"
+            ? `${flapQuoteDetails.boardMetadataDelayed ? "Late metadata; do not chase; " : ""}Board ≠ Portal 0→1; ${flapQuoteDetails.bstock
+              ? "bStock is not ETF/share ownership; oracle/backing/liquidity risk; no automatic trading"
+              : "quote-token contract/liquidity/sellability risk; no automatic trading"}`
             : flapQuoteDetails.bstock
             ? "A bStock quote token is not ETF/share ownership; verify oracle, backing, liquidity, and sellability; no automatic trading"
             : "Quote-token contract, liquidity, and sellability risks remain; no automatic trading",

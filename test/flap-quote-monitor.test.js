@@ -2056,7 +2056,7 @@ test("dependency-only replay does not mark an already delivered canonical event 
     sendAlertsImpl: async (_config, event) => {
       attempts.push(event);
       if (visible.has(event.eventKey)) {
-        return { status: "suppressed", persisted: true, reason: "semantic_duplicate" };
+        return { status: "suppressed", persisted: true, canonicalOwnerDelivered: true, reason: "semantic_duplicate" };
       }
       visible.add(event.eventKey);
       return { status: "delivered" };
@@ -2184,7 +2184,7 @@ test("a mid-delivery finalized-snapshot reorg never marks the canonical event pr
         provider.setBlockHash(100, id("mid-delivery-snapshot-only-reorg"));
       }
       if (visible.has(event.eventKey)) {
-        return { status: "suppressed", persisted: true, reason: "semantic_duplicate" };
+        return { status: "suppressed", persisted: true, canonicalOwnerDelivered: true, reason: "semantic_duplicate" };
       }
       visible.add(event.eventKey);
       return { status: "delivered" };
@@ -2234,7 +2234,7 @@ test("a post-delivery canonical lookup timeout retries without falsely orphaning
     sendAlertsImpl: async (_config, event) => {
       senderAttempts += 1;
       if (visible.has(event.eventKey)) {
-        return { status: "suppressed", persisted: true, reason: "semantic_duplicate" };
+        return { status: "suppressed", persisted: true, canonicalOwnerDelivered: true, reason: "semantic_duplicate" };
       }
       visible.add(event.eventKey);
       posts += 1;
@@ -2939,22 +2939,27 @@ test("non-durable suppressions retain a retryable activation candidate", async (
   }
 });
 
-test("only a persisted semantic duplicate can durably consume a duplicate recovery", async (t) => {
-  for (const persisted of [false, true]) {
-    await t.test(`persisted=${persisted}`, async (subtest) => {
+test("only a persisted semantic duplicate with a delivered canonical owner can consume a recovery", async (t) => {
+  for (const { persisted, canonicalOwnerDelivered, accepted } of [
+    { persisted: false, canonicalOwnerDelivered: true, accepted: false },
+    { persisted: true, canonicalOwnerDelivered: false, accepted: false },
+    { persisted: true, canonicalOwnerDelivered: true, accepted: true },
+  ]) {
+    await t.test(`persisted=${persisted}, ownerDelivered=${canonicalOwnerDelivered}`, async (subtest) => {
       const fixture = await harness(subtest, {
         sendAlertsImpl: async () => ({
           status: "suppressed",
           terminal: true,
           reason: "semantic_duplicate",
           persisted,
+          canonicalOwnerDelivered,
         }),
       });
       await fixture.monitor.check();
       const log = addAssetEvent(fixture.provider);
       fixture.provider.head = 101;
       const result = await fixture.monitor.check();
-      if (persisted) {
+      if (accepted) {
         assert.equal(result.status, "healthy");
         assert.equal(fixture.monitor.state().processedEventKeys.length, 1);
       } else {

@@ -22,6 +22,9 @@ import {
   createPlatformCapabilityMonitor,
   runPlatformCapabilityCheck,
 } from "../src/platform-capability-monitor.js";
+import { sendAlerts } from "../src/alerts.js";
+import { buildBilingualAlertBundle, renderBilingualTelegramText } from "../src/bilingual-alert-renderer.js";
+import { withTradingPriority } from "../src/trading-priority.js";
 
 const response = (body, { ok = true, status = 200, url = "https://test.invalid", headers = {} } = {}) => {
   const normalizedHeaders = new Map(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), String(value)]));
@@ -346,7 +349,7 @@ test("Flap quote metadata resolver deduplicates RPCs, validates evidence, and fa
   );
 });
 
-test("Flap BSC SOX quotes remain alertable, skip activation, and backfill metadata after one failure", async (t) => {
+test("Flap BSC SOX quotes hold raw discoveries and emit one readable Board observation after metadata recovery", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-sox-metadata-retry-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
   const board = "https://flap.sh/board";
@@ -390,7 +393,10 @@ test("Flap BSC SOX quotes remain alertable, skip activation, and backfill metada
         });
         return names.get(address);
       },
-      sendAlertsImpl: async (_config, event) => alerts.push(event),
+      sendAlertsImpl: async (_config, event) => {
+        alerts.push(event);
+        return { status: "delivered", eventId: event.eventKey };
+      },
       onFlapFeatureActivation: async (records) => activations.push(...records),
       logger: quietLogger,
       now: () => new Date(current),
@@ -401,23 +407,36 @@ test("Flap BSC SOX quotes remain alertable, skip activation, and backfill metada
 
   await check();
   newQuotes = [soxlb, soxsb];
+  const firstObservedAt = new Date(current).toISOString();
   await check();
   await check();
-  assert.equal(alerts.length, 1);
-  assert.deepEqual(alerts[0].changes.newFlapPools.map(({ quoteAddress }) => quoteAddress).sort(), [soxlb, soxsb]);
-  assert.equal(alerts[0].changes.newFlapPools.every(({ quoteSymbol }) => quoteSymbol === null), true);
+  assert.equal(alerts.length, 0, "an address without name+symbol must remain a durable pending intent");
   assert.equal(activations.length, 0, "known stock/ETF quote addresses must never start first-token activation");
+  let state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  assert.deepEqual(Object.keys(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending).sort(), [
+    `chain-56:quote:${soxlb}`,
+    `chain-56:quote:${soxsb}`,
+  ]);
+  assert.equal(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending[`chain-56:quote:${soxlb}`].firstObservedAt, firstObservedAt);
 
   await check();
   assert.equal(alerts.length, 2);
-  assert.deepEqual(alerts[1].changes.updatedFlapPools.map(({ quoteSymbol }) => quoteSymbol).sort(), ["SOXLB", "SOXSB"]);
-  assert.equal(alerts[1].changes.flapPoolChanges.every(({ before, after }) => before.quoteSymbol === null && after.quoteSymbol), true);
+  assert.equal(alerts.every(({ kind }) => kind === "flap_quote_asset_board_observed"), true);
+  assert.equal(alerts.every(({ changeType }) => changeType === "observed"), true);
+  assert.equal(alerts.every(({ sourceOccurredAt }) => sourceOccurredAt === firstObservedAt), true);
+  assert.equal(alerts.every(({ observedAt }) => observedAt === new Date(Date.parse(firstObservedAt) + 3_000).toISOString()), true);
+  assert.equal(alerts.every(({ signal }) => signal.quotePairChange.stage === "observed"), true);
+  assert.deepEqual(alerts.flatMap(({ changes }) => changes.newFlapPools.map(({ quoteSymbol }) => quoteSymbol)).sort(), ["SOXLB", "SOXSB"]);
+  assert.equal(alerts.every(({ changes }) => changes.updatedFlapPools.length === 0), true);
+  assert.equal(alerts.every(({ changes }) => changes.flapPoolChanges.length === 0), true);
+  assert.equal(new Set(alerts.map(({ eventKey }) => eventKey)).size, 2, "each pending identity owns one stable delivery key");
   assert.equal(activations.length, 0, "metadata backfill must remain notification-only for stock/ETF quotes");
-  let state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
   assert.deepEqual(state.flap.capabilities.flapPools
     .filter(({ quoteAddress }) => names.has(quoteAddress))
     .map(({ quoteSymbol }) => quoteSymbol).sort(), ["SOXLB", "SOXSB"]);
   assert.equal(state.flap.boardCandidateState.flapQuoteMetadataRetries, undefined);
+  assert.equal(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending, undefined);
 
   await check();
   state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
@@ -427,7 +446,449 @@ test("Flap BSC SOX quotes remain alertable, skip activation, and backfill metada
   assert.equal(state.flap.capabilities.flapPools.find(({ quoteAddress }) => quoteAddress === soxlb).quoteName, "Semicon Bull 3X ETF");
 });
 
-test("Flap suppresses stock quote pools after chain metadata while retaining a genuine new quote pool", async (t) => {
+test("Flap rollout legacy null metadata is repaired silently without an enabled-now event", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-legacy-metadata-repair-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const board = "https://flap.sh/board";
+  const soxlb = "0xd97d097a89113fa59b76c572e5b2eb647e8eefaf";
+  const target = {
+    id: "flap",
+    name: "Flap",
+    website: "https://flap.sh",
+    capabilitySchemaVersion: 4,
+    marketSources: [{ url: board, chainId: 56 }],
+    pagePattern: /$a/,
+  };
+  let current = Date.parse("2026-09-03T06:00:00.000Z");
+  let metadataReads = 0;
+  const alerts = [];
+  const check = () => runPlatformCapabilityCheck({ dataDir }, {
+    targets: [target],
+    fetchImpl: async (url) => response(JSON.stringify({ initialBoard: { quoteToken: soxlb } }), { url }),
+    resolveFlapQuoteAssetMetadata: async () => {
+      metadataReads += 1;
+      return { name: "Semicon Bull 3X ETF", symbol: "SOXLB", decimals: 18 };
+    },
+    sendAlertsImpl: async (_config, event) => {
+      alerts.push(event);
+      return { status: "delivered", eventId: event.eventKey };
+    },
+    logger: quietLogger,
+    now: () => new Date(current),
+  }).finally(() => { current += 1_500; });
+
+  await check();
+  assert.equal(metadataReads, 0, "the first deployment observation is a quiet legacy baseline");
+  await check();
+  assert.equal(metadataReads, 1);
+  assert.equal(alerts.length, 0, "legacy null -> metadata must never be announced as a current activation");
+  const state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  assert.equal(state.flap.capabilities.flapPools[0].quoteSymbol, "SOXLB");
+  assert.equal(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending, undefined);
+  assert.equal(state.flap.boardCandidateState.flapQuoteMetadataRetries, undefined);
+});
+
+test("Flap repairs metadata-only changes on an existing complete quote without a first-observed alert or activation", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-existing-metadata-repair-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const board = "https://flap.sh/board";
+  const quote = "0x1212121212121212121212121212121212121212";
+  const target = { id: "flap", name: "Flap", website: "https://flap.sh", capabilitySchemaVersion: 4, marketSources: [{ url: board, chainId: 56 }], pagePattern: /$a/ };
+  let metadata = { address: quote, name: "Original Quote", symbol: "ORIG" };
+  const alerts = [];
+  const activations = [];
+  const check = () => runPlatformCapabilityCheck({ dataDir }, {
+    targets: [target],
+    fetchImpl: async (url) => response(JSON.stringify({ initialBoard: { items: [{ quoteToken: metadata }] } }), { url }),
+    sendAlertsImpl: async (_config, event) => alerts.push(structuredClone(event)),
+    onFlapFeatureActivation: async (records) => activations.push(...records),
+    logger: quietLogger,
+    now: () => new Date("2026-09-03T07:30:00.000Z"),
+  });
+
+  await check();
+  metadata = { address: quote, name: "Corrected Quote", symbol: "Brk.B", assetClass: "quote asset" };
+  await check();
+  await check();
+
+  assert.equal(alerts.length, 0, "metadata corrections never claim the Board first confirmed an existing identity");
+  assert.equal(activations.length, 0, "metadata-only repairs never activate downstream trading correlation");
+  const state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  const pool = state.flap.capabilities.flapPools.find(({ quoteAddress }) => quoteAddress === quote);
+  assert.equal(pool.quoteName, "Corrected Quote");
+  assert.equal(pool.quoteSymbol, "Brk.B");
+});
+
+test("Flap partial metadata accumulates exponential backoff and a non-due restart does not call or log", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-partial-metadata-backoff-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const board = "https://flap.sh/board";
+  const quote = "0x924f000000000000000000000000000000004444";
+  const oldQuote = "0x1111111111111111111111111111111111111111";
+  const target = { id: "flap", name: "Flap", website: "https://flap.sh", capabilitySchemaVersion: 4, marketSources: [{ url: board, chainId: 56 }], pagePattern: /$a/ };
+  let current = Date.parse("2026-09-03T07:00:00.000Z");
+  let quotes = [oldQuote];
+  let reads = 0;
+  const errors = [];
+  const check = () => runPlatformCapabilityCheck({ dataDir }, {
+    targets: [target],
+    fetchImpl: async (url) => response(JSON.stringify({ initialBoard: { items: quotes.map((address) => ({
+      quoteToken: address === oldQuote ? { address, name: "Old", symbol: "OLD" } : address,
+    })) } }), { url }),
+    resolveFlapQuoteAssetMetadata: async () => {
+      reads += 1;
+      return { name: "Partial only" };
+    },
+    sendAlertsImpl: async (_config, event) => {
+      throw new Error(`unexpected alert ${event.eventKey}`);
+    },
+    logger: { error: (message) => errors.push(message) },
+    now: () => new Date(current),
+  });
+
+  await check();
+  current += 1_500;
+  quotes = [oldQuote, quote];
+  await check();
+  current += 1_500;
+  await check();
+  current += 1_500;
+  assert.equal(reads, 1);
+  await check();
+  current += 1_500;
+  assert.equal(reads, 2);
+  let state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  const identity = `chain-56:quote:${quote}`;
+  assert.equal(state.flap.boardCandidateState.flapQuoteMetadataRetries[identity].attempts, 2);
+  assert.equal(state.flap.boardCandidateState.flapQuoteMetadataRetries[identity].nextAttemptAt, "2026-09-03T07:00:19.500Z");
+  const logged = errors.length;
+
+  // A new process reads the durable retry deadline. It must not turn a partial
+  // response into attempts=1 again or hammer the RPC/log while not due.
+  await check();
+  assert.equal(reads, 2);
+  assert.equal(errors.length, logged);
+  state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  assert.equal(state.flap.boardCandidateState.flapQuoteMetadataRetries[identity].attempts, 2);
+  assert.equal(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending[identity].status, "pending_metadata");
+});
+
+test("Flap pending metadata keeps one stable event through queued and policy-suppressed restarts until delivered", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-metadata-delivery-retry-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const board = "https://flap.sh/board";
+  const quote = "0x3333333333333333333333333333333333333333";
+  const oldQuote = "0x1111111111111111111111111111111111111111";
+  const target = { id: "flap", name: "Flap", website: "https://flap.sh", capabilitySchemaVersion: 4, marketSources: [{ url: board, chainId: 56 }], pagePattern: /$a/ };
+  let current = Date.parse("2026-09-03T08:00:00.000Z");
+  let quotes = [oldQuote];
+  let metadataReads = 0;
+  const events = [];
+  const deliveries = [
+    { status: "queued", eventId: "queued-owner" },
+    { status: "suppressed", reason: "policy_suppressed", persisted: true, eventId: "queued-owner" },
+    { status: "delivered", eventId: "queued-owner" },
+  ];
+  const activations = [];
+  const check = async () => {
+    const result = await runPlatformCapabilityCheck({ dataDir }, {
+      targets: [target],
+      fetchImpl: async (url) => response(JSON.stringify({ initialBoard: { items: quotes.map((address) => ({
+        quoteToken: address === oldQuote ? { address, name: "Old", symbol: "OLD" } : address,
+      })) } }), { url }),
+      resolveFlapQuoteAssetMetadata: async () => {
+        metadataReads += 1;
+        if (metadataReads === 1) throw new Error("temporary metadata outage");
+        return { name: "Readable quote", symbol: "Brk.B", decimals: 18 };
+      },
+      sendAlertsImpl: async (_config, event) => {
+        events.push(structuredClone(event));
+        return deliveries.shift();
+      },
+      onFlapFeatureActivation: async (records) => activations.push(...records),
+      logger: quietLogger,
+      now: () => new Date(current),
+    });
+    current += 1_500;
+    return result;
+  };
+
+  await check();
+  quotes = [oldQuote, quote];
+  const firstObservedAt = new Date(current).toISOString();
+  await check();
+  await check();
+  assert.equal(events.length, 0);
+  await check();
+  let state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  const identity = `chain-56:quote:${quote}`;
+  assert.equal(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending[identity].firstObservedAt, firstObservedAt);
+  assert.equal(activations.length, 0, "a queued user notification must not activate downstream work twice");
+
+  await check();
+  state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  assert.ok(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending[identity]);
+  assert.equal(activations.length, 0, "terminal policy suppression is not a committed user notification");
+
+  await check();
+  state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  assert.equal(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending, undefined);
+  assert.equal(activations.length, 1);
+  assert.equal(metadataReads, 2, "complete durable metadata is reused across delivery restarts");
+  assert.equal(new Set(events.map(({ eventKey }) => eventKey)).size, 1);
+  assert.equal(new Set(events.map(({ sourceOccurredAt }) => sourceOccurredAt)).size, 1);
+  assert.equal(events[0].sourceOccurredAt, firstObservedAt);
+  assert.equal(events.every(({ kind }) => kind === "flap_quote_asset_board_observed"), true);
+  assert.equal(events.every((event) => event.changes.newFlapPools[0].quoteSymbol === "Brk.B"), true,
+    "the producer preserves the resolver's valid mixed-case ticker");
+  const rendered = renderBilingualTelegramText(await buildBilingualAlertBundle(
+    { alertForceLocalStructured: true },
+    withTradingPriority(events[0], { nowMs: Date.parse(events[0].observedAt) }),
+    "Flap Board quote observation",
+  ), false);
+  assert.match(rendered, /Brk\.B/u);
+  assert.doesNotMatch(rendered, /BRK\.B/u, "the rendered evidence preserves the producer ticker byte-for-byte");
+
+  await check();
+  assert.equal(events.length, 3, "delivered pending intent must not be regenerated");
+});
+
+test("Flap pending metadata uses one stable event key per quote when assets resolve in different rounds", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-metadata-identity-events-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const board = "https://flap.sh/board";
+  const oldQuote = "0x1111111111111111111111111111111111111111";
+  const quoteA = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const quoteB = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  const target = { id: "flap", name: "Flap", website: "https://flap.sh", capabilitySchemaVersion: 4, marketSources: [{ url: board, chainId: 56 }], pagePattern: /$a/ };
+  let current = Date.parse("2026-09-03T08:30:00.000Z");
+  let quotes = [oldQuote];
+  const metadataCalls = new Map();
+  const events = [];
+  const activations = [];
+  const check = async () => {
+    const result = await runPlatformCapabilityCheck({ dataDir }, {
+      targets: [target],
+      fetchImpl: async (url) => response(JSON.stringify({ initialBoard: { items: quotes.map((address) => ({
+        quoteToken: address === oldQuote ? { address, name: "Old", symbol: "OLD" } : address,
+      })) } }), { url }),
+      resolveFlapQuoteAssetMetadata: async ({ address }) => {
+        const calls = Number(metadataCalls.get(address) || 0) + 1;
+        metadataCalls.set(address, calls);
+        if (address === quoteB && calls === 1) throw new Error("quote B metadata delayed one round");
+        return address === quoteA
+          ? { name: "Quote A", symbol: "QA", decimals: 18 }
+          : { name: "Quote B", symbol: "QB", decimals: 18 };
+      },
+      sendAlertsImpl: async (_config, event) => {
+        events.push(structuredClone(event));
+        const symbol = event.changes.newFlapPools[0].quoteSymbol;
+        const attempts = events.filter((item) => item.changes.newFlapPools[0].quoteSymbol === symbol).length;
+        return symbol === "QA" && attempts === 1
+          ? { status: "queued", eventId: event.eventKey }
+          : { status: "delivered", eventId: event.eventKey };
+      },
+      onFlapFeatureActivation: async (records) => activations.push(...records),
+      logger: quietLogger,
+      now: () => new Date(current),
+    });
+    current += 1_500;
+    return result;
+  };
+
+  await check();
+  quotes = [oldQuote, quoteA, quoteB];
+  await check();
+  await check();
+  assert.deepEqual(events.map((event) => event.changes.newFlapPools[0].quoteSymbol), ["QA"]);
+
+  await check();
+  assert.deepEqual(events.map((event) => event.changes.newFlapPools[0].quoteSymbol), ["QA", "QA", "QB"]);
+  const aKeys = events.filter((event) => event.changes.newFlapPools[0].quoteSymbol === "QA").map(({ eventKey }) => eventKey);
+  const bKeys = events.filter((event) => event.changes.newFlapPools[0].quoteSymbol === "QB").map(({ eventKey }) => eventKey);
+  assert.equal(new Set(aKeys).size, 1, "quote A keeps its event key when quote B joins the next round");
+  assert.equal(new Set(bKeys).size, 1);
+  assert.notEqual(aKeys[0], bKeys[0]);
+  assert.equal(events.every((event) => event.changes.newFlapPools.length === 1), true);
+  assert.deepEqual(activations.map(({ quoteSymbol }) => quoteSymbol).sort(), ["QA", "QB"]);
+  const state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  assert.equal(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending, undefined);
+
+  await check();
+  assert.equal(events.length, 3, "delivered identity events are not regenerated");
+  assert.deepEqual(activations.map(({ quoteSymbol }) => quoteSymbol).sort(), ["QA", "QB"]);
+});
+
+test("Flap metadata pending crosses the real source gate, outbox, renderer, and fake Telegram exactly once after restart", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-metadata-real-delivery-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const board = "https://flap.sh/board";
+  const oldQuote = "0x1111111111111111111111111111111111111111";
+  const soxsb = "0xe28cd11c99af2df76bb8ada4cd0ef3904378280f";
+  const target = {
+    id: "flap",
+    name: "Flap",
+    website: "https://flap.sh",
+    capabilitySchemaVersion: 4,
+    marketSources: [{ url: board, chainId: 56 }],
+    pagePattern: /$a/,
+  };
+  let current = Date.parse("2026-09-03T09:00:00.000Z");
+  let quotes = [oldQuote];
+  let metadataReads = 0;
+  const producerEvents = [];
+  const telegramPayloads = [];
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    assert.match(String(url), /^https:\/\/api\.telegram\.org\/bottest-token\/sendMessage$/);
+    telegramPayloads.push(JSON.parse(options.body));
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ ok: true, result: { message_id: 5581 } }),
+    };
+  });
+  t.mock.method(console, "info", () => {});
+  const config = {
+    dataDir,
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    telegramToken: "test-token",
+    telegramChatId: "-1001",
+    telegramStrongAlerts: true,
+    alertBilingualEnabled: true,
+    alertChineseTranslationEnabled: false,
+    alertNow: () => current,
+  };
+  const check = async () => {
+    const result = await runPlatformCapabilityCheck(config, {
+      targets: [target],
+      fetchImpl: async (url) => response(JSON.stringify({ initialBoard: { items: quotes.map((address) => ({
+        quoteToken: address === oldQuote ? { address, name: "Old Quote", symbol: "OLD" } : address,
+      })) } }), { url }),
+      resolveFlapQuoteAssetMetadata: async () => {
+        metadataReads += 1;
+        if (metadataReads === 1) throw new Error("temporary RPC outage");
+        return { name: "Direxion Semiconductor Bear 3X ETF", symbol: "SOXSB", decimals: 18 };
+      },
+      sendAlertsImpl: async (sendConfig, event) => {
+        producerEvents.push(structuredClone(event));
+        return sendAlerts(sendConfig, event);
+      },
+      onFlapFeatureActivation: async () => assert.fail("bStock Board observations must never activate auto correlation"),
+      logger: quietLogger,
+      now: () => new Date(current),
+    });
+    current += 1_500;
+    return result;
+  };
+
+  await check();
+  quotes = [oldQuote, soxsb];
+  const firstObservedAt = new Date(current).toISOString();
+  await check();
+  await check();
+  assert.equal(telegramPayloads.length, 0);
+  let state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  assert.equal(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending[`chain-56:quote:${soxsb}`].firstObservedAt, firstObservedAt);
+
+  // This call represents a fresh process: all producer and outbox ownership is
+  // recovered from disk, then complete metadata is admitted through the real
+  // source gate and delivered by the actual alert pipeline.
+  current += 3 * 60 * 60_000;
+  await check();
+  assert.equal(producerEvents.length, 1);
+  assert.equal(telegramPayloads.length, 1);
+  assert.equal(producerEvents[0].sourceOccurredAt, firstObservedAt);
+  assert.equal(producerEvents[0].kind, "flap_quote_asset_board_observed");
+  assert.match(telegramPayloads[0].text, /Flap quote pools observed: SOXSB/i);
+  assert.match(telegramPayloads[0].text, /元数据延迟补齐，勿追价/u);
+  assert.match(telegramPayloads[0].text, /Late metadata; do not chase/i);
+  assert.doesNotMatch(telegramPayloads[0].text, /quote pools enabled|报价底池已启用/i);
+
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  const entries = Object.values(outbox.events);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].id, producerEvents[0].eventKey);
+  assert.equal(entries[0].status, "delivered");
+  assert.equal(entries[0].deliveryDisposition.reason, "flap_board_quote_observed");
+  assert.equal(entries[0].event.tradingPriority.tier, "T2");
+  assert.deepEqual(entries[0].event.canonicalSignalIds, [
+    `flap:quote-pair:soxsb:ca:${soxsb}:observed`,
+  ]);
+  state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  assert.equal(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending, undefined);
+
+  await check();
+  assert.equal(producerEvents.length, 1);
+  assert.equal(telegramPayloads.length, 1, "a restart after delivery must not POST again");
+});
+
+test("Flap suppresses a quote-linked vault until metadata proves an unknown address is bStock", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-linked-vault-metadata-pending-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const board = "https://flap.sh/board";
+  const oldQuote = "0x1111111111111111111111111111111111111111";
+  const stockQuote = "0x7777777777777777777777777777777777777777";
+  const vaultFactory = "0x8888888888888888888888888888888888888888";
+  const target = { id: "flap", name: "Flap", website: "https://flap.sh", capabilitySchemaVersion: 4, marketSources: [{ url: board, chainId: 56 }], pagePattern: /$a/ };
+  let current = Date.parse("2026-09-03T09:30:00.000Z");
+  let includeStock = false;
+  let metadataReads = 0;
+  const alerts = [];
+  const activations = [];
+  const check = async () => {
+    const result = await runPlatformCapabilityCheck({ dataDir }, {
+      targets: [target],
+      fetchImpl: async (url) => response(JSON.stringify({ initialBoard: { items: [
+        { quoteToken: { address: oldQuote, name: "Old Quote", symbol: "OLD" } },
+        ...(includeStock ? [{
+          quoteToken: stockQuote,
+          vaultFactory,
+          vaultFactoryCategory: ["INDEX"],
+        }] : []),
+      ] } }), { url }),
+      resolveFlapQuoteAssetMetadata: async () => {
+        metadataReads += 1;
+        if (metadataReads === 1) throw new Error("temporary metadata outage");
+        return { name: "Unknown Leveraged ETF", symbol: "UX3", decimals: 18, assetClass: "ETF bStock" };
+      },
+      sendAlertsImpl: async (_config, event) => {
+        alerts.push(structuredClone(event));
+        return { status: "delivered", eventId: event.eventKey };
+      },
+      onFlapFeatureActivation: async (records) => activations.push(...records),
+      logger: quietLogger,
+      now: () => new Date(current),
+    });
+    current += 1_500;
+    return result;
+  };
+
+  await check();
+  includeStock = true;
+  await check();
+  await check();
+  assert.equal(alerts.filter(({ kind }) => kind === "flap_quote_asset_board_observed").length, 0);
+  assert.equal(alerts.every(({ changes }) => !(changes.newFlapPools || []).some((pool) => (
+    pool.quoteAddress === stockQuote || pool.vaultFactory === vaultFactory
+  ))), true, "raw quote and its linked vault stay outside the first alert");
+  assert.equal(activations.length, 0);
+
+  await check();
+  const boardAlerts = alerts.filter(({ kind }) => kind === "flap_quote_asset_board_observed");
+  assert.equal(boardAlerts.length, 1);
+  assert.deepEqual(boardAlerts[0].changes.newFlapPools.map(({ kind, quoteAddress, quoteSymbol }) => ({ kind, quoteAddress, quoteSymbol })), [{
+    kind: "quote_asset",
+    quoteAddress: stockQuote,
+    quoteSymbol: "UX3",
+  }]);
+  assert.equal(activations.length, 0, "metadata-discovered bStock/ETF never activates automatic correlation");
+  const state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  assert.ok(state.flap.capabilities.flapPools.some((pool) => pool.vaultFactory === vaultFactory));
+  assert.equal(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending, undefined);
+});
+
+test("Flap observes stock and genuine quote pools after metadata but activates only the genuine quote", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-stock-quote-filter-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
   const board = "https://flap.sh/board";
@@ -456,7 +917,10 @@ test("Flap suppresses stock quote pools after chain metadata while retaining a g
         ? { name: "Example Tokenized Stock", symbol: "EXMB", assetClass: "RWA stock" }
         : { name: "Real quote asset", symbol: "USDQ" };
     },
-    sendAlertsImpl: async (_config, event) => alerts.push(event),
+    sendAlertsImpl: async (_config, event) => {
+      alerts.push(event);
+      return { status: "delivered", eventId: event.eventKey };
+    },
     onFlapFeatureActivation: async (records) => activations.push(...records),
     logger: quietLogger,
     now: () => new Date("2026-08-18T10:00:00Z"),
@@ -467,8 +931,14 @@ test("Flap suppresses stock quote pools after chain metadata while retaining a g
   await check();
   await check();
 
-  assert.equal(alerts.length, 1);
-  assert.deepEqual(alerts[0].changes.newFlapPools.map(({ quoteAddress }) => quoteAddress), [realQuote]);
+  assert.equal(alerts.length, 2);
+  assert.deepEqual(alerts.flatMap(({ changes }) => changes.newFlapPools.map(({ quoteAddress }) => quoteAddress)).sort(), [
+    stockQuote,
+    realQuote,
+  ].sort());
+  assert.equal(alerts.every(({ kind, changes }) => (
+    kind === "flap_quote_asset_board_observed" && changes.newFlapPools.length === 1
+  )), true);
   assert.deepEqual(activations.map(({ quoteAddress }) => quoteAddress), [realQuote]);
   assert.deepEqual(metadataReads.map(({ address, chainId }) => ({ address, chainId })).sort((a, b) => a.address.localeCompare(b.address)), [
     { address: stockQuote, chainId: 56 },
@@ -480,7 +950,7 @@ test("Flap suppresses stock quote pools after chain metadata while retaining a g
   assert.equal(isExcludedFlapQuoteAsset(storedStock), true);
 
   await check();
-  assert.equal(alerts.length, 1, "the suppressed stock quote is checkpointed and does not repeat");
+  assert.equal(alerts.length, 2, "both delivered quote observations are checkpointed and do not repeat");
 });
 
 test("Flap Board HTTP 200 with an empty schema fails closed and preserves its last good baseline", async (t) => {
@@ -590,16 +1060,28 @@ test("an exact optional Flap Morph board may stay healthy while empty and reveal
   let current = Date.parse("2026-08-12T00:00:00.000Z");
   let firstPool = false;
   const alerts = [];
-  const emptyMorphBoard = '<title>Flap — The Programmable Token Launchpad</title><a href="/morph/board"><button aria-label="Current chain: MORPH">MORPH</button></a>';
-  const check = () => runPlatformCapabilityCheck({
+  const deliveries = [];
+  const config = {
     dataDir,
     platformCapabilityPollIntervalMs: 10_000,
-  }, {
+    monitorScope: "focus3",
+    telegramToken: "test-token",
+    telegramChatId: "-1001",
+    telegramStrongAlerts: true,
+  };
+  t.mock.method(globalThis, "fetch", async () => assert.fail("focus3 must not POST a Morph quote event"));
+  const emptyMorphBoard = '<title>Flap — The Programmable Token Launchpad</title><a href="/morph/board"><button aria-label="Current chain: MORPH">MORPH</button></a>';
+  const check = () => runPlatformCapabilityCheck(config, {
     targets: [target],
     fetchImpl: async () => response(firstPool
-      ? `${emptyMorphBoard}<script>${JSON.stringify({ initialBoard: { quoteToken: quote } })}</script>`
+      ? `${emptyMorphBoard}<script>${JSON.stringify({ initialBoard: { quoteToken: { address: quote, name: "Morph Quote", symbol: "MQUOTE" } } })}</script>`
       : emptyMorphBoard, { url: board }),
-    sendAlertsImpl: async (_config, event) => alerts.push(event),
+    sendAlertsImpl: async (_config, event) => {
+      alerts.push(event);
+      const delivery = await sendAlerts(config, event);
+      deliveries.push(delivery);
+      return delivery;
+    },
     logger: quietLogger,
     now: () => new Date(current),
   });
@@ -618,6 +1100,19 @@ test("an exact optional Flap Morph board may stay healthy while empty and reveal
   state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
   assert.equal(state.flap.capabilities.flapPools[0].identity, `chain-2818:quote:${quote}`);
   assert.equal(alerts.length, 1, "the stable first Morph pool is detected on consecutive fast polls");
+  assert.equal(alerts[0].kind, undefined, "Morph remains on its generic platform-capability lane");
+  assert.equal(alerts[0].source, board);
+  assert.equal(alerts[0].changes.newFlapPools[0].sourceUrl, board);
+  assert.deepEqual(deliveries.map(({ status, reason }) => ({ status, reason })), [{
+    status: "suppressed",
+    reason: "monitoring_source_disabled",
+  }]);
+  assert.equal(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending, undefined,
+    "the BSC-only pending lane never captures Morph");
+
+  current += 10_000;
+  await check();
+  assert.equal(alerts.length, 1, "the terminal focus3 policy result does not create a Morph retry loop");
 });
 
 test("an old optional Flap Morph schema-empty backoff is migrated on the next startup check", async (t) => {
@@ -690,7 +1185,15 @@ test("Flap pools require two observations, retain pagination misses, and detect 
   const check = () => runPlatformCapabilityCheck({ dataDir }, {
     targets: [target],
     fetchImpl: async (url) => response(JSON.stringify({ initialBoard: { items } }), { url }),
-    sendAlertsImpl: async (_config, event) => alerts.push(event),
+    resolveFlapQuoteAssetMetadata: async ({ address }) => ({
+      name: address === quoteB ? "Quote B" : "Quote A",
+      symbol: address === quoteB ? "QUOTEB" : "QUOTEA",
+      decimals: 18,
+    }),
+    sendAlertsImpl: async (_config, event) => {
+      alerts.push(event);
+      return { status: "delivered", eventId: event.eventKey };
+    },
     onFlapFeatureActivation: async (records) => activations.push(records),
     logger: quietLogger,
     now: () => new Date(`2026-08-10T10:${String(minute++).padStart(2, "0")}:00.000Z`),
@@ -713,11 +1216,11 @@ test("Flap pools require two observations, retain pagination misses, and detect 
   await check();
   assert.equal(alerts.length, 1);
   assert.deepEqual(alerts[0].changes.newFlapPools.map(({ identity }) => identity), [
-    `quote:${quoteB}`,
-    `vault:INDEX:${factoryB}`,
+    `chain-56:quote:${quoteB}`,
   ]);
   assert.equal(alerts[0].changes.newModules.length, 0, "the factory identity detects a change even when its category already exists");
   assert.equal(activations.length, 1);
+  assert.deepEqual(activations[0].map(({ identity }) => identity), [`quote:${quoteB}`]);
   assert.equal(activations[0].every(({ confirmed, observations, sourceUrl }) => confirmed && observations >= 2 && sourceUrl === board), true);
   assert.equal(activations[0][0].firstObservedAt, "2026-08-10T10:01:00.000Z");
 
@@ -747,7 +1250,15 @@ test("Flap feature activation failure keeps the checkpoint retryable", async (t)
   const options = {
     targets: [target],
     fetchImpl: async (url) => response(JSON.stringify({ initialBoard: { items: quotes.map((quoteToken) => ({ quoteToken })) } }), { url }),
-    sendAlertsImpl: async (_config, event) => alerts.push(event),
+    resolveFlapQuoteAssetMetadata: async ({ address }) => ({
+      name: address === newQuote ? "New Quote" : "Old Quote",
+      symbol: address === newQuote ? "NEWQ" : "OLDQ",
+      decimals: 18,
+    }),
+    sendAlertsImpl: async (_config, event) => {
+      alerts.push(event);
+      return { status: "delivered", eventId: event.eventKey };
+    },
     onFlapFeatureActivation: async () => {
       activationAttempts += 1;
       if (failActivation) throw new Error("registry unavailable");
@@ -762,13 +1273,16 @@ test("Flap feature activation failure keeps the checkpoint retryable", async (t)
   await runPlatformCapabilityCheck({ dataDir }, options);
   let state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
   assert.equal(activationAttempts, 1);
-  assert.equal(state.flap.capabilities.flapPools.some(({ quoteAddress }) => quoteAddress === newQuote), false);
+  assert.equal(state.flap.capabilities.flapPools.some(({ quoteAddress }) => quoteAddress === newQuote), true,
+    "resolved metadata is durable while downstream activation remains pending");
+  assert.ok(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending[`quote:${newQuote}`]);
 
   failActivation = false;
   await runPlatformCapabilityCheck({ dataDir }, options);
   state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
   assert.equal(activationAttempts, 2, "the failed activation is retried before checkpoint commit");
   assert.equal(state.flap.capabilities.flapPools.some(({ quoteAddress }) => quoteAddress === newQuote), true);
+  assert.equal(state.flap.boardCandidateState.flapQuoteMetadataNotificationPending, undefined);
   await runPlatformCapabilityCheck({ dataDir }, options);
   assert.equal(activationAttempts, 2, "a successful activation is not repeated");
   assert.equal(alerts.length, 2, "delivery follows the existing retry semantics until activation succeeds");
@@ -792,7 +1306,10 @@ test("Flap v3 migration seeds existing structured pools without activating histo
     targets: [{ id: "flap", name: "Flap", website: "https://flap.sh", capabilitySchemaVersion: 3, marketSources: [board], pagePattern: /$a/ }],
     fetchImpl: async (url) => response(JSON.stringify({ initialBoard: { items: [{ quoteToken: quote,
       vault: { vaultFactory: factory, vaultFactoryCategory: ["index"] } }] } }), { url }),
-    sendAlertsImpl: async (_config, event) => alerts.push(event),
+    sendAlertsImpl: async (_config, event) => {
+      alerts.push(event);
+      return { status: "delivered", eventId: event.eventKey };
+    },
     onFlapFeatureActivation: async (records) => activations.push(...records),
     logger: quietLogger,
     now: () => new Date("2026-08-10T08:01:00.000Z"),
@@ -827,9 +1344,9 @@ test("Flap v3 to v4 migration silences only chain-scoped BSC pool equivalents an
       quoteToken: oldQuote,
       vault: { vaultFactory: oldFactory, vaultFactoryCategory: ["index"] },
     },
-    { quoteToken: newBscQuote },
+    { quoteToken: { address: newBscQuote, name: "New BSC Quote", symbol: "BSCQ" } },
   ] } });
-  const morphPayload = JSON.stringify({ initialBoard: { quoteToken: newMorphQuote } });
+  const morphPayload = JSON.stringify({ initialBoard: { quoteToken: { address: newMorphQuote, name: "New Morph Quote", symbol: "MORPHQ" } } });
   const alerts = [];
   let upgraded = false;
   let minute = 0;
@@ -860,7 +1377,10 @@ test("Flap v3 to v4 migration silences only chain-scoped BSC pool equivalents an
         ? "Flap supports BNB Chain mainnet (chainId: 56) and Morph mainnet (chainId: 2818)."
         : "Flap supports BNB Chain mainnet (chainId: 56).", { url });
     },
-    sendAlertsImpl: async (_config, event) => alerts.push(event),
+    sendAlertsImpl: async (_config, event) => {
+      alerts.push(event);
+      return { status: "delivered", eventId: event.eventKey };
+    },
     logger: quietLogger,
     now: () => new Date(`2026-08-12T00:${String(minute++).padStart(2, "0")}:00.000Z`),
   });
@@ -870,16 +1390,21 @@ test("Flap v3 to v4 migration silences only chain-scoped BSC pool equivalents an
 
   upgraded = true;
   await check(targetV4);
-  assert.equal(alerts.length, 1);
-  assert.deepEqual(alerts[0].changes.newFlapPools.map(({ identity }) => identity).sort(), [
-    `chain-2818:quote:${newMorphQuote}`,
+  const boardAlerts = alerts.filter(({ kind }) => kind === "flap_quote_asset_board_observed");
+  const chainAlerts = alerts.filter(({ kind }) => kind !== "flap_quote_asset_board_observed");
+  assert.equal(boardAlerts.length, 1);
+  assert.deepEqual(boardAlerts.flatMap(({ changes }) => changes.newFlapPools.map(({ identity }) => identity)), [
     `chain-56:quote:${newBscQuote}`,
   ]);
-  assert.deepEqual(alerts[0].changes.newChains.map(({ name, chainId }) => ({ name, chainId })), [
+  assert.equal(chainAlerts.length, 1);
+  assert.deepEqual(chainAlerts[0].changes.newFlapPools.map(({ identity }) => identity), [
+    `chain-2818:quote:${newMorphQuote}`,
+  ]);
+  assert.deepEqual(chainAlerts[0].changes.newChains.map(({ name, chainId }) => ({ name, chainId })), [
     { name: "Morph", chainId: 2818 },
   ]);
-  assert.equal(alerts[0].changes.newFlapPools.some(({ identity }) => identity === `chain-56:quote:${oldQuote}`), false);
-  assert.equal(alerts[0].changes.newFlapPools.some(({ identity }) => identity === `chain-56:vault:INDEX:${oldFactory}`), false);
+  assert.equal(boardAlerts.some(({ changes }) => changes.newFlapPools.some(({ identity }) => identity === `chain-56:quote:${oldQuote}`)), false);
+  assert.equal(boardAlerts.some(({ changes }) => changes.newFlapPools.some(({ identity }) => identity === `chain-56:vault:INDEX:${oldFactory}`)), false);
 
   // Reproduce the already-persisted production v4 shape from before the
   // cleanup: both scoped and legacy identities, including candidate records.
@@ -900,7 +1425,7 @@ test("Flap v3 to v4 migration silences only chain-scoped BSC pool equivalents an
   await fs.writeFile(stateFile, `${JSON.stringify(state)}\n`);
 
   await check(targetV4);
-  assert.equal(alerts.length, 1, "the migrated checkpoint and genuine discoveries remain stable on the next poll");
+  assert.equal(alerts.length, 2, "the migrated checkpoint and genuine discoveries remain stable on the next poll");
   state = JSON.parse(await fs.readFile(stateFile, "utf8"));
   const expectedScopedIdentities = [
     `chain-2818:quote:${newMorphQuote}`,
@@ -2393,7 +2918,15 @@ test("Flap fast confirmation keeps the first observation deadline and deduplicat
     targets: [fastFlapTarget([{ url: board, chainId: 56 }])],
     now: () => new Date(current),
     logger: quietLogger,
-    sendAlertsImpl: async (_config, event) => alerts.push(event),
+    sendAlertsImpl: async (_config, event) => {
+      alerts.push(event);
+      return { status: "delivered", eventId: event.eventKey };
+    },
+    resolveFlapQuoteAssetMetadata: async ({ address }) => ({
+      name: address === quoteA ? "Quote A" : "Quote B",
+      symbol: address === quoteA ? "QA" : "QB",
+      decimals: 18,
+    }),
     atomicWriteJsonImpl: async (...args) => {
       stateWrites += 1;
       return atomicWriteJson(...args);

@@ -85,6 +85,16 @@ function isFlapQuoteFirstObservedAfterGap(event = {}) {
     && event.delayedRecovery?.reason === "first_observed_after_gap";
 }
 
+function isFlapBoardQuoteObserved(event = {}) {
+  return event.type === "platform_capability_update"
+    && normalizedPlatform(event) === "flap"
+    && event.kind === "flap_quote_asset_board_observed"
+    && event.changeType === "observed"
+    && event?.signal?.quotePairChange?.stage === "observed"
+    && event.signal.quotePairChange.assetClass === "quote_asset"
+    && !onchainEvidence(event);
+}
+
 function eventText(event = {}) {
   return [
     event.title,
@@ -885,6 +895,7 @@ function tradePlan(event, eventCategory, tier, target) {
     if (flapQuoteUpdate) {
       const delayedRecovery = isFlapQuoteDelayedRecovery(event);
       const firstObservedAfterGap = isFlapQuoteFirstObservedAfterGap(event);
+      const boardObserved = isFlapBoardQuoteObserved(event);
       const bstock = quotePair?.assetClass === "bstock_quote"
         || /(?:bstock|stock|equity|ETF|证券|股票)/iu.test([
           ...list(quotePair?.assets).flatMap((asset) => [asset?.name, asset?.classification, ...list(asset?.tags)]),
@@ -895,7 +906,7 @@ function tradePlan(event, eventCategory, tier, target) {
         ...quotePools.map((pool) => clean(pool?.quoteSymbol)),
       ].filter(Boolean);
       const labels = [...new Set(assets)].join("/") || "报价资产";
-      const live = quotePair?.stage === "live" || quotePools.some((pool) => pool?.quoteSymbol);
+      const live = !boardObserved && (quotePair?.stage === "live" || quotePools.some((pool) => pool?.quoteSymbol));
       return {
         conclusion: { zh: blocked ? "不做" : "观察", en: blocked ? "Do not trade" : "Watch" },
         mainline: {
@@ -903,6 +914,8 @@ function tradePlan(event, eventCategory, tier, target) {
             ? `补扫首次确认 ${labels} 当前启用→此前是否 0→1 未证，仅观察后续`
             : delayedRecovery
             ? `断线恢复补报 ${labels} 报价底池启用→仅观察后续真实新币`
+            : boardObserved
+            ? `Flap 官方看板首次确认观察到 ${labels} 报价资产→等待 Portal 0→1 与后续真实新币`
             : live
             ? `Flap 启用 ${labels} 报价底池→关注后续以其计价的新币`
             : `Flap 预告 ${labels} 报价底池→等待链上启用与首个真实新币`,
@@ -910,6 +923,8 @@ function tradePlan(event, eventCategory, tier, target) {
             ? `Backfill first confirmed ${labels} currently enabled→prior 0→1 is unproven; watch only`
             : delayedRecovery
             ? `Recovered ${labels} quote-pool enablement after an outage→watch only for subsequent live tokens`
+            : boardObserved
+            ? `Flap official Board first confirmed the ${labels} quote asset→await Portal 0→1 and subsequent live tokens`
             : live
             ? `Flap enabled ${labels} quote pools→watch subsequent tokens priced in them`
             : `Flap announced ${labels} quote pools→await on-chain enablement and the first live token`,
@@ -917,9 +932,13 @@ function tradePlan(event, eventCategory, tier, target) {
         capitalPath: {
           zh: firstObservedAfterGap
             ? "当前报价资产→代币定价/结算→后续发行流动性"
+            : boardObserved
+            ? "官方看板观察→Portal 启用确认→后续发行流动性"
             : "官方报价资产→新币定价/结算→新发行流动性",
           en: firstObservedAfterGap
             ? "Current quote asset→token pricing/settlement→subsequent launch liquidity"
+            : boardObserved
+            ? "Official Board observation→Portal enablement confirmation→subsequent launch liquidity"
             : "Official quote asset→new-token pricing/settlement→launch liquidity",
         },
         entryCondition: {
@@ -927,20 +946,28 @@ function tradePlan(event, eventCategory, tier, target) {
             ? "此前是否新增或 0→1 未证；勿追价；核对 Portal CA 后仅等待后续安全、流动性与成交确认"
             : delayedRecovery
             ? "断线补报勿追价；核对 Portal CA 后等待新币安全、流动性与成交确认"
+            : boardObserved
+            ? `${tier === "T2" ? "元数据延迟补齐，勿追价；" : ""}看板观察不等于 Portal 0→1；核对 CA 后等待链上启用、安全与成交确认`
             : "先核对 Portal/看板 CA，再等真实新币安全、流动性与成交确认",
           en: blocked ? "Local safety gate blocked; do not enter" : firstObservedAfterGap
             ? "Prior listing or 0→1 is unproven; do not chase; verify the Portal CA and await safety, liquidity, and volume confirmation"
             : delayedRecovery
             ? "Do not chase an outage recovery; verify the Portal CA, then await token safety, liquidity, and volume confirmation"
+            : boardObserved
+            ? `${tier === "T2" ? "Metadata arrived late; do not chase; " : ""}a Board observation is not Portal 0→1; verify the CA and await on-chain enablement, safety, and volume`
             : "Verify the Portal/board CA, then require a live token with safety, liquidity, and volume confirmation",
         },
         invalidation: {
-          zh: "底池未启用、CA 不一致、无后续发币或流动性不足",
-          en: "Pool not enabled, CA mismatch, no downstream launch, or weak liquidity",
+          zh: boardObserved
+            ? "Portal 未启用、CA 不一致、无后续发币或流动性不足"
+            : "底池未启用、CA 不一致、无后续发币或流动性不足",
+          en: boardObserved
+            ? "Portal remains disabled, CA mismatch, no downstream launch, or weak liquidity"
+            : "Pool not enabled, CA mismatch, no downstream launch, or weak liquidity",
         },
         risk: {
-          zh: `${firstObservedAfterGap ? "补扫仅确认当前启用，此前是否新增或 0→1 未证，勿追价；" : delayedRecovery ? "断线恢复补报可能已被市场消化，勿追价；" : ""}${bstock ? "bStock 报价代币不等于 ETF/股票所有权；预言机、背书、" : "报价代币仍有合约、"}流动性与可卖性风险；${noAutoZh}`,
-          en: `${firstObservedAfterGap ? "The backfill confirms only the current enabled state; prior listing or 0→1 is unproven; do not chase; " : delayedRecovery ? "An outage recovery may already be priced in; do not chase; " : ""}${bstock ? "a bStock quote token is not ETF/share ownership; oracle, backing, " : "quote-token contract, "}liquidity, and sellability risks remain; ${noAutoEn}`,
+          zh: `${firstObservedAfterGap ? "补扫仅确认当前启用，此前是否新增或 0→1 未证，勿追价；" : delayedRecovery ? "断线恢复补报可能已被市场消化，勿追价；" : boardObserved ? "看板仅确认观察到资产，不证明 Portal 0→1；" : ""}${bstock ? "bStock 报价代币不等于 ETF/股票所有权；预言机、背书、" : "报价代币仍有合约、"}流动性与可卖性风险；${noAutoZh}`,
+          en: `${firstObservedAfterGap ? "The backfill confirms only the current enabled state; prior listing or 0→1 is unproven; do not chase; " : delayedRecovery ? "An outage recovery may already be priced in; do not chase; " : boardObserved ? "The Board only confirms observation of the asset, not Portal 0→1; " : ""}${bstock ? "a bStock quote token is not ETF/share ownership; oracle, backing, " : "quote-token contract, "}liquidity, and sellability risks remain; ${noAutoEn}`,
         },
       };
     }

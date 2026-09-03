@@ -610,8 +610,9 @@ test("Flap quote-token prose and structured pools receive stable identities and 
   assert.equal(payloads.length, 1);
   const payload = payloads[0];
   assert.match(payload.text, /^🔴 强提醒 \| STRONG ALERT/);
-  assert.match(payload.text, /🇨🇳 中文[\s\S]*Flap 报价底池已启用：BABAB/);
-  assert.match(payload.text, /🇬🇧 English[\s\S]*Flap quote pools enabled: BABAB/i);
+  assert.match(payload.text, /🇨🇳 中文[\s\S]*Flap 报价底池已发现：BABAB/);
+  assert.match(payload.text, /🇬🇧 English[\s\S]*Flap quote pools observed: BABAB/i);
+  assert.doesNotMatch(payload.text, /报价底池已启用|quote pools enabled/iu);
   assert.match(payload.text, /非自动交易/);
   assert.match(payload.text, /no automatic trading/i);
   assert.equal(payload.text.split(quoteAddress).length - 1, 2, "Quote address remains byte-for-byte in both language blocks");
@@ -1240,6 +1241,52 @@ const alertConfig = (dataDir) => ({
   alertTelegramDeliveryMaxAgeMs: 7_200_000,
   webhookUrl: "",
 });
+
+function flapBoardObservedEvent({
+  sourceOccurredAtMs = Date.parse("2026-09-03T06:59:55.000Z"),
+  observedAtMs = sourceOccurredAtMs + 5_000,
+  eventKey = "platform-capability:flap:board-observed:test",
+  quoteAddress = "0xe28c09e21db5bb63c4821c3f44c26ee5aee8280f",
+  quoteSymbol = "Brk.B",
+  quoteName = "Berkshire Class B",
+} = {}) {
+  const boardUrl = "https://flap.sh/board";
+  const pool = {
+    identity: `chain-56:quote:${quoteAddress}`,
+    kind: "quote_asset",
+    category: null,
+    vaultFactory: null,
+    quoteAddress,
+    quoteSymbol,
+    quoteName,
+    sourceUrl: boardUrl,
+    chainId: 56,
+  };
+  return {
+    type: "platform_capability_update",
+    kind: "flap_quote_asset_board_observed",
+    changeType: "observed",
+    eventKey,
+    platform: { id: "flap", name: "Flap", website: "https://flap.sh" },
+    changes: { newFlapPools: [pool] },
+    source: boardUrl,
+    sources: [boardUrl],
+    url: boardUrl,
+    sourceOccurredAt: new Date(sourceOccurredAtMs).toISOString(),
+    observedAt: new Date(observedAtMs).toISOString(),
+    signal: {
+      strong: false,
+      platformStructural: true,
+      category: "Flap quote asset observed on official Board",
+      headline: `Flap official Board first confirmed ${quoteSymbol} as a quote asset`,
+      quotePairChange: {
+        stage: "observed",
+        assetClass: "quote_asset",
+        assets: [{ symbol: quoteSymbol, name: quoteName, address: quoteAddress, chainId: 56 }],
+      },
+    },
+  };
+}
 
 function flapPortalDelayedRecoveryEvent({
   recoveredAtMs = Date.parse("2026-09-03T07:00:00.000Z"),
@@ -2126,6 +2173,75 @@ test("sendAlerts durably queues a Telegram failure with redacted diagnostics", a
   assert.equal(entry.destinations.telegram.status, "failed");
   assert.match(entry.destinations.telegram.lastError, /simulated failure/);
   assert.doesNotMatch(entry.destinations.telegram.lastError, /test-bot-token-secret/);
+});
+
+test("semantic duplicates expose canonical delivery only after their durable owner is delivered", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-semantic-owner-delivery-"));
+  let clockMs = Date.now();
+  let telegramAvailable = false;
+  let postCount = 0;
+  let successfulPosts = 0;
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async () => {
+    postCount += 1;
+    if (!telegramAvailable) throw new Error("simulated Telegram outage");
+    successfulPosts += 1;
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: 5582 } }) };
+  });
+  t.mock.method(console, "error", () => {});
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    alertNow: () => clockMs,
+  };
+  const owner = {
+    type: "github_module_update",
+    launchpad: "Flap",
+    repository: "flap-sh/flap-skills",
+    sourceTrust: "official_verified",
+    commit: "vault-v2-semantic-owner",
+    committedAt: new Date(clockMs).toISOString(),
+    message: "feat: add Vault V2 module",
+    files: [{ filename: "contracts/VaultV2.sol", status: "added", additions: 10, deletions: 0 }],
+    modeChange: { candidate: true },
+    newContracts: [],
+    url: "https://github.com/flap-sh/flap-skills/commit/vault-v2-semantic-owner",
+  };
+  const duplicate = {
+    type: "twitter_update",
+    project: { id: "flap", name: "Flap" },
+    tweet: {
+      id: "vault-v2-semantic-duplicate",
+      handle: "flapdotsh",
+      text: "Flap adds a new Vault V2 module",
+      createdAt: new Date(clockMs).toISOString(),
+      url: "https://x.com/flapdotsh/status/vault-v2-semantic-duplicate",
+    },
+    signal: { relevant: true, strong: true, platformStructural: true, labels: ["新发射/新模式"] },
+  };
+
+  assert.equal((await sendAlerts(config, owner)).status, "queued");
+  const pendingOwnerDuplicate = await sendAlerts({ ...config }, duplicate);
+  assert.equal(pendingOwnerDuplicate.status, "suppressed");
+  assert.equal(pendingOwnerDuplicate.reason, "semantic_duplicate");
+  assert.equal(pendingOwnerDuplicate.persisted, true);
+  assert.equal(pendingOwnerDuplicate.canonicalOwnerDelivered, false);
+
+  telegramAvailable = true;
+  clockMs += 5_001;
+  assert.equal((await sendAlerts({ ...config }, structuredClone(owner))).status, "delivered");
+  const deliveredOwnerDuplicate = await sendAlerts({ ...config }, structuredClone(duplicate));
+  assert.equal(deliveredOwnerDuplicate.status, "suppressed");
+  assert.equal(deliveredOwnerDuplicate.reason, "semantic_duplicate");
+  assert.equal(deliveredOwnerDuplicate.canonicalOwnerDelivered, true);
+  assert.equal(postCount, 2);
+  assert.equal(successfulPosts, 1, "a semantic duplicate never creates a second Telegram POST");
+
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(outbox.events[deliveredOwnerDuplicate.eventId].semanticDuplicateOf, alertEventKey(owner));
+  assert.equal(outbox.events[deliveredOwnerDuplicate.eventId].semanticDuplicateOwnerDelivered, true);
 });
 
 test("critical Binance delivery stays within a fake-clock five-second budget and bypasses slow translation", async (t) => {
@@ -3417,6 +3533,57 @@ test("a >15m Flap Portal recovery survives a >2h failed delivery and restart, th
   assert.equal(entry.duplicateCount, 2);
 });
 
+test("a queued Flap Board observation survives TTL and rebuilds its stale card before generic retry", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-board-durable-retry-"));
+  const sourceOccurredAtMs = Date.parse("2026-09-03T06:59:55.000Z");
+  let clockMs = sourceOccurredAtMs + 5_000;
+  let telegramAvailable = false;
+  let attempts = 0;
+  const payloads = [];
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    attempts += 1;
+    if (!telegramAvailable) throw new Error("simulated Telegram outage");
+    payloads.push(JSON.parse(options.body));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: 5583 } }) };
+  });
+  t.mock.method(console, "error", () => {});
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    telegramStrongAlerts: true,
+    alertBilingualEnabled: true,
+    alertChineseTranslationEnabled: false,
+    alertNow: () => clockMs,
+  };
+  const event = flapBoardObservedEvent({ sourceOccurredAtMs, observedAtMs: clockMs });
+  assert.equal(isMonitoringSourceEnabled(config, event), true);
+  assert.equal((await sendAlerts(config, event)).status, "queued");
+  assert.equal(attempts, 1);
+
+  telegramAvailable = true;
+  clockMs += 3 * 60 * 60_000;
+  assert.equal(await drainAlertOutbox({ ...config }), 1);
+  assert.equal(attempts, 2);
+  assert.equal(payloads.length, 1);
+  assert.match(payloads[0].text, /Flap · T2/u);
+  assert.match(payloads[0].text, /元数据延迟补齐，勿追价/u);
+  assert.match(payloads[0].text, /Late metadata; do not chase/i);
+  assert.doesNotMatch(payloads[0].text, /报价底池已启用|quote pools enabled/iu);
+
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  const entry = outbox.events[event.eventKey];
+  assert.equal(entry.status, "delivered");
+  assert.equal(entry.event.tradingPriority.tier, "T2");
+  assert.equal(entry.deliveryDisposition.reason, "flap_board_quote_observed");
+  assert.notEqual(entry.destinations.telegram.disabledReason, "delivery_ttl_expired");
+  assert.notEqual(entry.destinations.telegram.disabledReason, "freshness_too_old");
+  assert.equal((await sendAlerts({ ...config }, structuredClone(event))).status, "delivered");
+  assert.equal(attempts, 2, "the stable Board event key remains exact-once after restart");
+});
+
 test("a fresh Flap Portal queue held by Telegram outage is superseded after 15m and recovers after >2h exactly once as T2", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-fresh-queue-upgrade-"));
   const occurredAtMs = Date.parse("2026-09-03T06:40:00.000Z");
@@ -3879,6 +4046,7 @@ test("a concurrent Flap Portal observation reuses an in-flight board delivery an
   assert.equal(foldedPortal.status, "suppressed");
   assert.equal(foldedPortal.reason, "semantic_duplicate");
   assert.equal(foldedPortal.persisted, true);
+  assert.equal(foldedPortal.canonicalOwnerDelivered, true);
   assert.equal(postCount, 1, "the shared canonical signal performs exactly one Telegram POST");
 });
 
@@ -3936,6 +4104,7 @@ test("a superseded Portal producer key reconciles immediately to its delivered b
   assert.equal(producerRetry.status, "suppressed");
   assert.equal(producerRetry.reason, "semantic_duplicate");
   assert.equal(producerRetry.persisted, true);
+  assert.equal(producerRetry.canonicalOwnerDelivered, true);
   assert.equal(successfulPosts, 1);
   assert.equal(postCount, 2, "the producer retry resolves from durable ownership without another POST");
 
@@ -3943,6 +4112,7 @@ test("a superseded Portal producer key reconciles immediately to its delivered b
   const reconciled = outbox.events[portal.eventKey];
   assert.ok(reconciled.semanticDuplicateOf);
   assert.equal(reconciled.semanticDuplicateOf, reconciled.destinations.telegram.duplicateOf);
+  assert.equal(reconciled.semanticDuplicateOwnerDelivered, true);
   assert.equal(reconciled.destinations.telegram.disabledReason, "semantic_duplicate");
 });
 
@@ -3993,6 +4163,7 @@ test("Flap board and Portal live observations fold only for the same symbol and 
   assert.equal(duplicate.status, "suppressed");
   assert.equal(duplicate.reason, "semantic_duplicate");
   assert.equal(duplicate.persisted, true);
+  assert.equal(duplicate.canonicalOwnerDelivered, true);
   assert.equal(payloads.length, 1);
 
   const reverseConfig = { ...config, dataDir: reverseDataDir };
@@ -4001,6 +4172,7 @@ test("Flap board and Portal live observations fold only for the same symbol and 
   assert.equal(reverseDuplicate.status, "suppressed");
   assert.equal(reverseDuplicate.reason, "semantic_duplicate");
   assert.equal(reverseDuplicate.persisted, true);
+  assert.equal(reverseDuplicate.canonicalOwnerDelivered, true);
   assert.equal(payloads.length, 2, "Portal→board and board→Portal each emit one live fact");
 });
 

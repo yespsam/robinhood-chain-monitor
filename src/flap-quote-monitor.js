@@ -1046,6 +1046,7 @@ function acceptedDelivery(result) {
   if (status === "delivered") return true;
   return status === "suppressed"
     && result?.persisted === true
+    && result?.canonicalOwnerDelivered === true
     && String(result?.reason || result?.disabledReason || "").toLowerCase() === "semantic_duplicate";
 }
 

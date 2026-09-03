@@ -203,6 +203,45 @@ function isFlapQuoteRecoveryEvent(event) {
     || isFlapQuoteFirstObservedAfterGapEvent(event);
 }
 
+function isFlapBoardQuoteObservedEvent(event) {
+  const changedPools = [
+    ...(event?.changes?.newFlapPools || []),
+    ...(event?.changes?.updatedFlapPools || []),
+    ...(event?.changes?.flapPoolChanges || []).map((change) => change?.after),
+  ];
+  const pools = [...new Map(changedPools
+    .filter((pool) => pool?.kind === "quote_asset")
+    .map((pool) => [String(pool.quoteAddress || "").toLowerCase(), pool])).values()];
+  const assets = event?.signal?.quotePairChange?.assets;
+  const sourceMs = Date.parse(event?.sourceOccurredAt || "");
+  const observedMs = Date.parse(event?.observedAt || "");
+  return event?.type === "platform_capability_update"
+    && eventPlatform(event) === "flap"
+    && event.kind === "flap_quote_asset_board_observed"
+    && event.changeType === "observed"
+    && event.source === "https://flap.sh/board"
+    && event.url === "https://flap.sh/board"
+    && Number.isFinite(sourceMs)
+    && Number.isFinite(observedMs)
+    && sourceMs <= observedMs + 60_000
+    && !event.transactionHash
+    && !event.onchainProof
+    && pools.length > 0
+    && pools.every((pool) => /^0x[a-f0-9]{40}$/.test(String(pool?.quoteAddress || ""))
+      && /^[A-Za-z0-9][A-Za-z0-9_$.-]{0,23}$/.test(String(pool?.quoteSymbol || ""))
+      && String(pool?.quoteName || "").trim().length > 0)
+    && event?.signal?.quotePairChange?.stage === "observed"
+    && event.signal.quotePairChange.assetClass === "quote_asset"
+    && Array.isArray(assets)
+    && assets.length === pools.length
+    && pools.every((pool) => assets.some((asset) => String(asset?.address || "").toLowerCase() === pool.quoteAddress
+      && String(asset?.symbol || "").toUpperCase() === String(pool.quoteSymbol || "").toUpperCase()));
+}
+
+function isDurableFlapQuoteNotificationEvent(event) {
+  return isFlapQuoteRecoveryEvent(event) || isFlapBoardQuoteObservedEvent(event);
+}
+
 function isFlapPortalQuoteEvent(event) {
   return event?.type === "platform_capability_update"
     && eventPlatform(event) === "flap"
@@ -2588,7 +2627,9 @@ function exactFlapQuoteNoveltyKeys(event, platform) {
       keys.add(`flap:quote-address:${address}:observed`);
     }
   };
-  const poolStage = isFlapQuoteFirstObservedAfterGapEvent(event) ? "observed" : "live";
+  const poolStage = isFlapQuoteFirstObservedAfterGapEvent(event) || isFlapBoardQuoteObservedEvent(event)
+    ? "observed"
+    : "live";
   for (const pool of quotePools) add(pool, poolStage, true);
   if (signalClaimsQuote) {
     for (const asset of signal.assets) add(asset, signal.stage, false);
@@ -3708,6 +3749,16 @@ export function alertDeliveryDisposition(event = {}) {
         : "flap_delayed_recovery",
     });
   }
+  if (isFlapBoardQuoteObservedEvent(event)
+    && ["T1", "T2"].includes(tier)
+    && priority?.hardGates?.exactTarget === true
+    && priority?.hardGates?.trustedConfirmation === true
+    && priority?.plan?.automaticExecution === false) {
+    // A metadata delay may make the original Board observation stale for
+    // trading priority, but it must not erase a genuinely new quote asset.
+    // The strict observed-only card remains immediate and never claims 0→1.
+    return Object.freeze({ mode: "immediate", deliverImmediately: true, tier, reason: "flap_board_quote_observed" });
+  }
   const hardGateEligible = tier === "T0"
     ? priority?.hardGates?.t0Eligible === true
     : tier === "T1" ? priority?.hardGates?.t1Eligible === true : false;
@@ -3749,7 +3800,7 @@ function disableFreshnessSuppressedTelegram(destinationState, event, now) {
   // A strict Flap Portal recovery is a durable structural fact, not an old
   // trade call. Once authenticated and queued it remains retryable as T2 with
   // an explicit no-chase warning until Telegram actually accepts it.
-  if (isFlapQuoteRecoveryEvent(event)) return false;
+  if (isDurableFlapQuoteNotificationEvent(event)) return false;
   if (effectiveFreshnessDecision(event) !== "suppress") return false;
   const telegram = destinationState.telegram;
   if (!telegram || telegram.status === "delivered") return false;
@@ -3773,7 +3824,7 @@ function disableExpiredTelegramDelivery(config, entry, evaluatedAt = Date.now())
   // preserve the exact event and render bundle until the destination recovers
   // or an explicit policy/destination decision disables it.
   if (entry.event?.type === "fomo_monitor_health_update") return false;
-  if (isFlapQuoteRecoveryEvent(entry.event)) return false;
+  if (isDurableFlapQuoteNotificationEvent(entry.event)) return false;
 
   const isFomo = entry.event?.type === "fomo_family_top_call";
   const isPonDelayedRecovery = isPonFunDelayedRecoveryEvent(entry.event);
@@ -3914,14 +3965,25 @@ async function enqueueAlert(config, event) {
     const semanticDuplicateOf = !existing || existingSuperseded
       ? semanticDuplicate(outbox, eventId, event, Date.parse(now))
       : null;
+    const persistedSemanticDuplicateOwner = existing?.semanticDuplicateOf
+      ? outbox.events?.[existing.semanticDuplicateOf]
+      : null;
+    // Persist the proof that consumed this event, not merely the fact that a
+    // canonical owner exists. A producer may only advance its durable cursor
+    // after that owner was actually delivered. Retrying the same suppressed
+    // event refreshes this proof when a formerly-pending owner later succeeds.
+    const semanticDuplicateOwnerDelivered = existing?.semanticDuplicateOwnerDelivered === true
+      || semanticDuplicateOf?.status === "delivered"
+      || persistedSemanticDuplicateOwner?.status === "delivered";
     const activeExisting = existing && !["delivered", "suppressed"].includes(existing.status);
-    const refreshingFlapRecovery = activeExisting
-      && isFlapQuoteRecoveryEvent(event)
+    const refreshingFlapNotification = activeExisting
+      && isDurableFlapQuoteNotificationEvent(event)
       && existing.event?.eventKey === event.eventKey
-      && existing.event?.originalEventKey === event.originalEventKey;
+      && (!isFlapQuoteRecoveryEvent(event)
+        || existing.event?.originalEventKey === event.originalEventKey);
     let queuedEvent = reactivatingCancelledFlapQuote
       ? { ...event, alertQueuedAt: existing.event?.alertQueuedAt || existing.createdAt || now }
-      : refreshingFlapRecovery
+      : refreshingFlapNotification
       ? { ...event, alertQueuedAt: existing.event?.alertQueuedAt || existing.createdAt || now }
       : existing?.event || { ...event, alertQueuedAt: event.alertQueuedAt || now };
     if ((activeExisting || reactivatingCancelledFlapQuote) && queuedEvent.type !== "fomo_monitor_health_update") {
@@ -3930,7 +3992,7 @@ async function enqueueAlert(config, event) {
       // cannot be delivered after its trading window has closed.
       queuedEvent = withTradingPriority(queuedEvent, { nowMs: Date.parse(now) });
     }
-    if (refreshingFlapRecovery) {
+    if (refreshingFlapNotification) {
       // The generic worker is intentionally forbidden from touching Portal
       // retries. Refresh the delivery-age fields on the producer-authorized
       // observation instead so the recovery card reports the real wait and
@@ -4081,9 +4143,10 @@ async function enqueueAlert(config, event) {
         : existing?.duplicateObservations || [],
       sideEffectsCommitted: Boolean(existing?.sideEffectsCommitted),
       semanticDuplicateOf: existing?.semanticDuplicateOf || semanticDuplicateOf?.id || null,
+      ...((existing?.semanticDuplicateOf || semanticDuplicateOf) ? { semanticDuplicateOwnerDelivered } : {}),
       deliveryDisposition,
       ...(flapQuoteProducerGate ? { flapQuoteProducerGate } : {}),
-      ...(refreshingFlapRecovery || reactivatingCancelledFlapQuote ? { renderBundle: null } : {}),
+      ...(refreshingFlapNotification || reactivatingCancelledFlapQuote ? { renderBundle: null } : {}),
     };
     if (reactivatingCancelledFlapQuote) delete outbox.events[eventId].flapQuoteCancellation;
     return eventId;
@@ -4435,7 +4498,7 @@ export async function drainAlertOutbox(config) {
       // The gate follows an exact canonical board/Portal takeover as well.
       if (isFlapQuoteProducerGatedEntry(entry)) continue;
       changed = true;
-      const flapRecoveryRenderState = isFlapQuoteRecoveryEvent(entry.event)
+      const flapNotificationRenderState = isDurableFlapQuoteNotificationEvent(entry.event)
         ? JSON.stringify({
             observedAt: entry.event.observedAt,
             delayedRecovery: entry.event.delayedRecovery,
@@ -4456,7 +4519,7 @@ export async function drainAlertOutbox(config) {
       }
       entry.event = withAlertFreshness(config, entry.event || {}, entry.createdAt || now);
       entry.event = refreshDeliveryFreshness(config, entry.event, now);
-      if (flapRecoveryRenderState !== null && flapRecoveryRenderState !== JSON.stringify({
+      if (flapNotificationRenderState !== null && flapNotificationRenderState !== JSON.stringify({
         observedAt: entry.event.observedAt,
         delayedRecovery: entry.event.delayedRecovery,
         freshness: entry.event.freshness,
@@ -5105,6 +5168,9 @@ export async function sendAlerts(config, event) {
     return terminalAlertSuppression(queuedEvent.type, reason, {
       eventId,
       persisted: true,
+      ...(semanticDuplicate ? {
+        canonicalOwnerDelivered: entry?.semanticDuplicateOwnerDelivered === true,
+      } : {}),
       suppressedAt: entry.suppressedAt,
       freshness: entry.event?.freshness || queuedEvent.freshness || null,
       destinations: configuredDestinations(config),

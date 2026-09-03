@@ -16,6 +16,8 @@ const FLAP_BOARD_STABLE_OBSERVATIONS = 2;
 const FLAP_QUOTE_METADATA_MAX_PER_CHECK = 2;
 const FLAP_QUOTE_METADATA_RETRY_BASE_MS = 15_000;
 const FLAP_QUOTE_METADATA_RETRY_MAX_MS = 15 * 60_000;
+const FLAP_QUOTE_METADATA_NOTIFICATION_VERSION = 1;
+const FLAP_QUOTE_BOARD_OBSERVED_KIND = "flap_quote_asset_board_observed";
 const FLAP_SITEMAP_URL = "https://docs.flap.sh/sitemap.xml";
 const FLAP_DOC_URLS = [
   "https://docs.flap.sh/flap/developers/deployed-contract-addresses",
@@ -330,7 +332,7 @@ const KNOWN_FLAP_STOCK_QUOTE_ASSETS = new Set([
   "0xd97d097a89113fa59b76c572e5b2eb647e8eefaf", // SOXLB
   "0xe28cd11c99af2df76bb8ada4cd0ef3904378280f", // SOXSB
 ]);
-const FLAP_STOCK_CLASSIFICATION = /(?:\bbstocks?\b|\bstocks?\b|\brwa\b|\btokeni[sz]ed\s+(?:stocks?|equities|securit(?:y|ies))\b|\b(?:stocks?|equities)\s+token\b|股票|证券|股权)/i;
+const FLAP_STOCK_CLASSIFICATION = /(?:\bbstocks?\b|\bstocks?\b|\brwa\b|\betfs?\b|\btokeni[sz]ed\s+(?:stocks?|equities|securit(?:y|ies))\b|\b(?:stocks?|equities)\s+token\b|股票|证券|股权)/i;
 const KNOWN_BSTOCK_SYMBOL = /^(?:AAPL|AMZN|COIN|GOOGL|META|MSFT|MSTR|NFLX|NVDA|QQQ|SOXL|SOXS|SPY|TSLA)B$/i;
 const isFlapStockClassification = (value) => FLAP_STOCK_CLASSIFICATION.test(String(value || "").replace(/[_-]+/g, " "));
 
@@ -492,7 +494,6 @@ const flapPoolObservationFingerprint = (item) => fingerprint({
   category: item?.category || null,
   vaultFactory: item?.vaultFactory || null,
   quoteAddress: item?.quoteAddress || null,
-  quoteSymbol: item?.quoteSymbol || null,
 });
 
 const normalizeFlapPool = (value) => {
@@ -510,7 +511,7 @@ const normalizeFlapPool = (value) => {
     vaultFactory: kind === "vault_factory" ? vaultFactory : null,
     quoteAddress,
     quoteSymbol: typeof value?.quoteSymbol === "string" && /^[A-Za-z0-9_$.-]{1,24}$/.test(value.quoteSymbol.trim())
-      ? value.quoteSymbol.trim().toUpperCase()
+      ? value.quoteSymbol.trim()
       : null,
     sourceUrl: canonicalUrl(value?.sourceUrl || FLAP_BOARD_URL),
     ...(normalizeChainId(value?.chainId) == null ? {} : { chainId: normalizeChainId(value.chainId) }),
@@ -691,13 +692,19 @@ export function extractFlapMarketCapabilities(text, sourceUrl = FLAP_BOARD_URL, 
     for (const item of categoryBlock?.matchAll(/"([a-zA-Z0-9_-]+)"/g) || []) {
       const category = normalizeFlapCategory(item[1]);
       if (!category) continue;
-      pools.push(normalizeFlapPool({
+      const fallbackPool = normalizeFlapPool({
         kind: "vault_factory",
         category,
         vaultFactory: match[1],
         sourceUrl,
         chainId,
-      }));
+      });
+      // Structured payloads retain the quote/vault relationship. The narrow
+      // text fallback must not overwrite that richer record with quoteAddress
+      // null when `uniqueObjects` folds the duplicate identity below.
+      if (fallbackPool && !pools.some((pool) => flapPoolIdentity(pool) === flapPoolIdentity(fallbackPool))) {
+        pools.push(fallbackPool);
+      }
     }
   }
 
@@ -1928,6 +1935,50 @@ const finalizeFlapPoolChanges = (platform, previousEntry, current, changes) => {
 const flapPoolNeedsQuoteMetadata = (pool) => pool?.kind === "quote_asset"
   && (!normalizedFlapMetadataText(pool.quoteName) || !normalizedFlapMetadataText(pool.quoteSymbol, 24));
 
+const flapPoolHasCompleteQuoteMetadata = (pool) => pool?.kind === "quote_asset"
+  && !flapPoolNeedsQuoteMetadata(pool);
+
+const isBscFlapBoardQuoteNotificationPool = (pool) => pool?.kind === "quote_asset"
+  && (pool.chainId == null || Number(pool.chainId) === 56)
+  && canonicalUrl(pool.sourceUrl || FLAP_BOARD_URL) === canonicalUrl(FLAP_BOARD_URL);
+
+const normalizedFlapQuoteMetadataPending = (value, identity) => {
+  const scopedIdentity = String(identity || "").match(/^chain-(\d+):quote:(0x[a-f0-9]{40})$/);
+  const legacyIdentity = String(identity || "").match(/^quote:(0x[a-f0-9]{40})$/);
+  const quoteAddress = normalizeFlapAddress(value?.quoteAddress);
+  const chainId = normalizeChainId(value?.chainId);
+  const sourceUrl = canonicalUrl(value?.sourceUrl || FLAP_BOARD_URL);
+  if (!value || typeof value !== "object" || Array.isArray(value)
+    || value.version !== FLAP_QUOTE_METADATA_NOTIFICATION_VERSION
+    || value.status !== "pending_metadata"
+    || value.identity !== identity
+    || (!scopedIdentity && !legacyIdentity)
+    || !quoteAddress
+    || quoteAddress !== (scopedIdentity?.[2] || legacyIdentity?.[1])
+    || chainId !== 56
+    || sourceUrl !== canonicalUrl(FLAP_BOARD_URL)
+    || !Number.isFinite(Date.parse(value.firstObservedAt || ""))) return null;
+  if ((scopedIdentity && Number(scopedIdentity[1]) !== chainId)
+    || (legacyIdentity && chainId !== 56)) return null;
+  return {
+    version: FLAP_QUOTE_METADATA_NOTIFICATION_VERSION,
+    status: "pending_metadata",
+    identity,
+    quoteAddress,
+    chainId,
+    sourceUrl,
+    firstObservedAt: new Date(Date.parse(value.firstObservedAt)).toISOString(),
+    stage: "observed",
+  };
+};
+
+const normalizedFlapQuoteMetadataPendingMap = (value) => Object.fromEntries(
+  Object.entries(value || {}).map(([identity, record]) => [
+    identity,
+    normalizedFlapQuoteMetadataPending(record, identity),
+  ]).filter(([, record]) => record),
+);
+
 const flapQuoteMetadataRetryDelayMs = (attempts) => attempts <= 1
   ? 0
   : Math.min(FLAP_QUOTE_METADATA_RETRY_MAX_MS, FLAP_QUOTE_METADATA_RETRY_BASE_MS * (2 ** Math.min(10, attempts - 2)));
@@ -1965,13 +2016,45 @@ async function enrichNewFlapQuoteAssets(platform, previousEntry, current, boardC
     return { capabilities: baseCurrent, boardCandidateState: nextBoardCandidateState };
   }
   const retryState = { ...(previousEntry?.boardCandidateState?.flapQuoteMetadataRetries || {}) };
-  const confirmedMissing = baseCurrent.flapPools
+  const notificationPending = normalizedFlapQuoteMetadataPendingMap(
+    previousEntry?.boardCandidateState?.flapQuoteMetadataNotificationPending,
+  );
+  const confirmedQuotes = baseCurrent.flapPools
     .map(normalizeFlapPool)
-    .filter((pool) => pool?.quoteAddress && flapPoolNeedsQuoteMetadata(pool))
+    .filter((pool) => pool?.kind === "quote_asset" && pool.quoteAddress)
     .filter((pool) => nextBoardCandidateState.flapPools?.[flapPoolIdentity(pool)]?.confirmed === true);
+  const confirmedMissing = confirmedQuotes.filter(flapPoolNeedsQuoteMetadata);
   const confirmedMissingIdentities = new Set(confirmedMissing.map(flapPoolIdentity));
   for (const identity of Object.keys(retryState)) {
     if (!confirmedMissingIdentities.has(identity)) delete retryState[identity];
+  }
+  const previousLegacyBscIdentities = new Set(previousPools
+    .filter((pool) => pool.chainId == null)
+    .map(flapPoolIdentityWithoutChain));
+  for (const pool of confirmedQuotes.filter(isBscFlapBoardQuoteNotificationPool)) {
+    const identity = flapPoolIdentity(pool);
+    const legacyBscEquivalent = pool.chainId === 56
+      && previousLegacyBscIdentities.has(flapPoolIdentityWithoutChain(pool));
+    if (notificationPending[identity] || previousByIdentity.has(identity) || legacyBscEquivalent) continue;
+    const candidate = nextBoardCandidateState.flapPools?.[identity] || {};
+    const firstObservedMs = Date.parse(candidate.firstObservedAt || "");
+    notificationPending[identity] = {
+      version: FLAP_QUOTE_METADATA_NOTIFICATION_VERSION,
+      status: "pending_metadata",
+      identity,
+      quoteAddress: pool.quoteAddress,
+      chainId: pool.chainId == null ? 56 : pool.chainId,
+      sourceUrl: pool.sourceUrl || FLAP_BOARD_URL,
+      firstObservedAt: Number.isFinite(firstObservedMs)
+        ? new Date(firstObservedMs).toISOString()
+        : new Date(Date.parse(observedAt)).toISOString(),
+      stage: "observed",
+    };
+  }
+  if (Object.keys(notificationPending).length) {
+    nextBoardCandidateState.flapQuoteMetadataNotificationPending = notificationPending;
+  } else {
+    delete nextBoardCandidateState.flapQuoteMetadataNotificationPending;
   }
   if (!confirmedMissing.length || typeof dependencies.resolveFlapQuoteAssetMetadata !== "function") {
     if (Object.keys(retryState).length) nextBoardCandidateState.flapQuoteMetadataRetries = retryState;
@@ -2017,7 +2100,6 @@ async function enrichNewFlapQuoteAssets(platform, previousEntry, current, boardC
     const pool = requests[index];
     if (result.status === "fulfilled" && result.value?.metadata) {
       metadataByIdentity.set(flapPoolIdentity(pool), result.value.metadata);
-      delete retryState[flapPoolIdentity(pool)];
       return;
     }
     const error = result.status === "rejected"
@@ -2043,6 +2125,8 @@ async function enrichNewFlapQuoteAssets(platform, previousEntry, current, boardC
         recordFailure(normalized, Object.assign(new Error("quote metadata remained incomplete after enrichment"), {
           code: "FLAP_QUOTE_METADATA_INCOMPLETE",
         }));
+      } else {
+        delete retryState[identity];
       }
       return enriched;
     }).filter(Boolean);
@@ -2051,6 +2135,201 @@ async function enrichNewFlapQuoteAssets(platform, previousEntry, current, boardC
   return {
     capabilities: { ...baseCurrent, flapPools: enrichedPools },
     boardCandidateState: nextBoardCandidateState,
+  };
+}
+
+const flapQuoteMetadataOnlyChange = (change) => {
+  const before = normalizeFlapPool(change?.before);
+  const after = normalizeFlapPool(change?.after);
+  if (!before || !after
+    || before.kind !== "quote_asset"
+    || after.kind !== "quote_asset"
+    || flapPoolIdentity(before) !== flapPoolIdentity(after)) return false;
+  const withoutMetadata = (pool) => ({
+    identity: pool.identity,
+    kind: pool.kind,
+    category: pool.category,
+    vaultFactory: pool.vaultFactory,
+    quoteAddress: pool.quoteAddress,
+    sourceUrl: pool.sourceUrl,
+    chainId: pool.chainId ?? null,
+  });
+  return stableStringify(withoutMetadata(before)) === stableStringify(withoutMetadata(after));
+};
+
+function finalizeFlapQuoteMetadataNotifications(platform, current, boardCandidateState, changes) {
+  if (platform.id !== "flap") {
+    return { changes, pendingNotifications: [] };
+  }
+  const pending = normalizedFlapQuoteMetadataPendingMap(
+    boardCandidateState?.flapQuoteMetadataNotificationPending,
+  );
+  const pendingAddresses = new Set(Object.values(pending).map(({ quoteAddress }) => quoteAddress));
+  const linkedToPendingQuote = (value) => {
+    const pool = normalizeFlapPool(value);
+    return pool?.kind === "vault_factory" && pendingAddresses.has(pool.quoteAddress);
+  };
+  const completedPending = new Set();
+  const suppressUpdated = new Set();
+  const currentByIdentity = byIdentity(current.flapPools || [], flapPoolIdentity);
+
+  for (const change of changes.flapPoolChanges || []) {
+    const after = normalizeFlapPool(change?.after);
+    if (!after) continue;
+    const identity = flapPoolIdentity(after);
+    if (linkedToPendingQuote(after)) {
+      suppressUpdated.add(identity);
+      continue;
+    }
+    if (after.kind !== "quote_asset") continue;
+    if (pending[identity]) {
+      suppressUpdated.add(identity);
+      if (flapPoolHasCompleteQuoteMetadata(after)) completedPending.add(identity);
+      continue;
+    }
+    // A metadata-only null -> resolved transition without our durable pending
+    // marker predates this lifecycle rollout. It is state repair, not a new
+    // market event, so checkpoint it silently instead of claiming enablement.
+    if (flapQuoteMetadataOnlyChange(change)) suppressUpdated.add(identity);
+  }
+
+  const keptNew = [];
+  for (const value of changes.newFlapPools || []) {
+    const pool = normalizeFlapPool(value);
+    if (!pool) {
+      keptNew.push(value);
+      continue;
+    }
+    if (linkedToPendingQuote(pool)) continue;
+    if (pool.kind !== "quote_asset") {
+      keptNew.push(pool);
+      continue;
+    }
+    if (!isBscFlapBoardQuoteNotificationPool(pool)) {
+      keptNew.push(pool);
+      continue;
+    }
+    const identity = flapPoolIdentity(pool);
+    if (!flapPoolHasCompleteQuoteMetadata(pool)) continue;
+    if (pending[identity]) {
+      completedPending.add(identity);
+    }
+    // Every post-baseline quote discovery must be owned by a persisted
+    // identity-level notification intent. An unowned quote is fail-closed: it
+    // cannot fall through to the generic batch event or activation callback.
+    continue;
+  }
+
+  // A persisted pending record is the delivery intent. If metadata and the
+  // capability snapshot ever become durable in separate crash windows, rebuild
+  // the same one-shot event rather than losing it or inventing a new timestamp.
+  for (const [identity] of Object.entries(pending)) {
+    const pool = normalizeFlapPool(currentByIdentity.get(identity));
+    if (!flapPoolHasCompleteQuoteMetadata(pool)) continue;
+    completedPending.add(identity);
+  }
+
+  const filtered = {
+    ...changes,
+    newFlapPools: uniqueObjects(keptNew, flapPoolIdentity),
+    updatedFlapPools: (changes.updatedFlapPools || []).filter((value) => {
+      const pool = normalizeFlapPool(value);
+      return !pool || (!linkedToPendingQuote(pool)
+        && !suppressUpdated.has(flapPoolIdentity(pool))
+        && !(isBscFlapBoardQuoteNotificationPool(pool) && flapPoolNeedsQuoteMetadata(pool)));
+    }),
+    flapPoolChanges: (changes.flapPoolChanges || []).filter((change) => {
+      const after = normalizeFlapPool(change?.after);
+      if (!after) return true;
+      if (linkedToPendingQuote(after) || suppressUpdated.has(flapPoolIdentity(after))) return false;
+      return !isBscFlapBoardQuoteNotificationPool(after) || !flapPoolNeedsQuoteMetadata(after);
+    }),
+  };
+  const pendingNotifications = [...completedPending].sort().map((identity) => ({
+    identity,
+    pending: pending[identity],
+    pool: normalizeFlapPool(currentByIdentity.get(identity)),
+  })).filter(({ pending: record, pool }) => record && flapPoolHasCompleteQuoteMetadata(pool));
+  return {
+    changes: filtered,
+    pendingNotifications,
+  };
+}
+
+function clearCompletedFlapQuoteMetadataNotifications(boardCandidateState, identities) {
+  if (!identities?.length) return;
+  const pending = normalizedFlapQuoteMetadataPendingMap(
+    boardCandidateState?.flapQuoteMetadataNotificationPending,
+  );
+  for (const identity of identities) delete pending[identity];
+  if (Object.keys(pending).length) boardCandidateState.flapQuoteMetadataNotificationPending = pending;
+  else delete boardCandidateState.flapQuoteMetadataNotificationPending;
+}
+
+function flapQuoteMetadataNotificationEvent({ platform, previous, current, pool, pending, observedAt }) {
+  const eventPool = normalizeFlapPool({
+    ...pool,
+    chainId: pool.chainId ?? pending.chainId,
+  });
+  const changes = emptyChanges();
+  changes.newFlapPools = [eventPool];
+  const quoteAsset = {
+    symbol: eventPool.quoteSymbol,
+    name: eventPool.quoteName,
+    address: eventPool.quoteAddress,
+    chainId: eventPool.chainId ?? null,
+    ...(eventPool.quoteClassification ? { classification: eventPool.quoteClassification } : {}),
+    ...(eventPool.quoteTags?.length ? { tags: eventPool.quoteTags } : {}),
+  };
+  const eventKey = `platform-capability:flap:board-observed:${fingerprint({
+    version: pending.version,
+    identity: pending.identity,
+    firstObservedAt: pending.firstObservedAt,
+  })}`;
+  return {
+    type: "platform_capability_update",
+    kind: FLAP_QUOTE_BOARD_OBSERVED_KIND,
+    changeType: "observed",
+    eventKey,
+    platform,
+    previous,
+    current,
+    changes,
+    source: FLAP_BOARD_URL,
+    sources: [FLAP_BOARD_URL],
+    url: FLAP_BOARD_URL,
+    sourceOccurredAt: pending.firstObservedAt,
+    observedAt,
+    signal: {
+      strong: false,
+      platformStructural: true,
+      category: "Flap quote asset observed on official Board",
+      headline: `Flap official Board first confirmed ${quoteAsset.symbol} as a quote asset`,
+      quotePairChange: {
+        stage: "observed",
+        assetClass: "quote_asset",
+        assets: [quoteAsset],
+      },
+    },
+  };
+}
+
+function flapFeatureActivationRecord(pool, boardCandidateState, observedAt, firstObservedAt = observedAt) {
+  const identity = flapPoolIdentity(pool);
+  const confirmation = boardCandidateState?.flapPools?.[identity] || {};
+  return {
+    identity,
+    category: pool.category || null,
+    vaultFactory: pool.vaultFactory || null,
+    quoteAddress: pool.quoteAddress || null,
+    quoteSymbol: pool.quoteSymbol || null,
+    sourceUrl: pool.sourceUrl || FLAP_BOARD_URL,
+    chainId: pool.chainId ?? null,
+    confirmed: confirmation.confirmed === true,
+    observations: Number(confirmation.observations || 0),
+    changeType: "new_flap_pool",
+    observedAt,
+    firstObservedAt: firstObservedAt || confirmation.firstObservedAt || observedAt,
   };
 }
 
@@ -2308,6 +2587,12 @@ const appendAudit = async (auditFile, fsImpl, record) => {
   await fsImpl.mkdir(path.dirname(auditFile), { recursive: true });
   await fsImpl.appendFile(auditFile, `${JSON.stringify(record)}\n`);
 };
+
+const flapQuoteNotificationDeliveryCommitted = (delivery) => delivery?.status === "delivered"
+  || (delivery?.status === "suppressed"
+    && delivery?.reason === "semantic_duplicate"
+    && delivery?.persisted === true
+    && delivery?.canonicalOwnerDelivered === true);
 
 async function readPlatformCapabilityState(stateFile, fsImpl) {
   let state = {};
@@ -2742,6 +3027,9 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
       const current = enrichedBoard.capabilities;
       stabilizedBoard.boardCandidateState = enrichedBoard.boardCandidateState;
       let changes = null;
+      let flapQuoteMetadataNotification = {
+        pendingNotifications: [],
+      };
       let observedChains = mergeChainRecords(current.chains || []);
       if (previousEntry?.capabilities) {
         changes = diffCapabilities(previousEntry.capabilities, current);
@@ -2752,6 +3040,13 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
         }
         changes = suppressFlapBoardChurn(platform, previousEntry.capabilities, changes);
         changes = finalizeFlapPoolChanges(platform, previousEntry, current, changes);
+        flapQuoteMetadataNotification = finalizeFlapQuoteMetadataNotifications(
+          platform,
+          current,
+          stabilizedBoard.boardCandidateState,
+          changes,
+        );
+        changes = flapQuoteMetadataNotification.changes;
         changes = suppressExcludedFlapStockAssets(platform, changes);
         const finalizedChains = finalizeChainChanges(previousEntry, current, changes);
         changes = finalizedChains.changes;
@@ -2777,6 +3072,74 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
         || stableStringify(platformBoardDurableValue(previousEntry.boardCandidateState || null))
           !== stableStringify(platformBoardDurableValue(nextEntry.boardCandidateState || null))
         || removedPendingSources;
+
+      const committedNotificationEventKeys = [];
+      let notificationStateChanged = false;
+      for (const notification of flapQuoteMetadataNotification.pendingNotifications) {
+        const event = flapQuoteMetadataNotificationEvent({
+          platform,
+          previous: previousEntry.capabilities,
+          current,
+          pool: notification.pool,
+          pending: notification.pending,
+          observedAt,
+        });
+        const notificationDeliverySla = sourceLane === "fast"
+          ? platformEventDeliverySla(
+            platform,
+            event.changes,
+            stabilizedBoard.boardCandidateState,
+            dependencies.deliverySla,
+          )
+          : null;
+        if (notificationDeliverySla) event.deliverySla = notificationDeliverySla;
+        const auditBase = {
+          eventKey: event.eventKey,
+          type: event.type,
+          platform: platform.id,
+          source: event.source,
+          sources: event.sources,
+          changes: event.changes,
+          observedAt,
+        };
+        await appendAudit(auditFile, fsImpl, { ...auditBase, delivery: { status: "pending", baselineCommitted: false } });
+        let delivery;
+        try {
+          delivery = await alertSender(config, event);
+          await appendAudit(auditFile, fsImpl, {
+            ...auditBase,
+            delivery: { status: delivery?.status || "unknown", eventId: delivery?.eventId || event.eventKey, baselineCommitted: false },
+          });
+        } catch (error) {
+          await appendAudit(auditFile, fsImpl, { ...auditBase, delivery: { status: "failed", baselineCommitted: false, error: error.message } });
+          logger.error(`[platform-capability] flap quote metadata delivery: ${error.message}`);
+          continue;
+        }
+        if (!flapQuoteNotificationDeliveryCommitted(delivery)) continue;
+
+        if (dependencies.onFlapFeatureActivation && !isExcludedFlapQuoteAsset(notification.pool)) {
+          const record = flapFeatureActivationRecord(
+            notification.pool,
+            stabilizedBoard.boardCandidateState,
+            observedAt,
+            notification.pending.firstObservedAt,
+          );
+          if (record.confirmed && record.observations >= FLAP_BOARD_STABLE_OBSERVATIONS) {
+            try { await Promise.resolve(dependencies.onFlapFeatureActivation([record])); }
+            catch (error) {
+              await appendAudit(auditFile, fsImpl, { ...auditBase, delivery: { status: "feature_activation_failed", baselineCommitted: false, error: error?.message || String(error) } });
+              logger.error(`[platform-capability] flap feature activation: ${error?.message || error}`);
+              continue;
+            }
+          }
+        }
+        clearCompletedFlapQuoteMetadataNotifications(
+          stabilizedBoard.boardCandidateState,
+          [notification.identity],
+        );
+        committedNotificationEventKeys.push(event.eventKey);
+        notificationStateChanged = true;
+      }
 
       let emittedEventKey = null;
       if (changes && meaningful(changes)) {
@@ -2883,6 +3246,15 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
         }
       }
       state[platform.id] = nextEntry;
+      for (const eventKey of committedNotificationEventKeys) {
+        await appendAudit(auditFile, fsImpl, {
+          eventKey,
+          type: "platform_capability_update",
+          platform: platform.id,
+          observedAt,
+          delivery: { status: "checkpoint_committed", baselineCommitted: true },
+        });
+      }
       if (changes && meaningful(changes)) {
         await appendAudit(auditFile, fsImpl, {
           eventKey: emittedEventKey,
@@ -2893,7 +3265,7 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
         });
       }
       return persistPlatformState({
-        durable: entryDurableChange || Boolean(changes && meaningful(changes)),
+        durable: entryDurableChange || notificationStateChanged || Boolean(changes && meaningful(changes)),
       });
     });
   }

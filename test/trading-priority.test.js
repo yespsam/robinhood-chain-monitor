@@ -369,6 +369,76 @@ test("Flap quote-pair announcements and verified pools are T1 while anonymous po
     assert.equal(priority.hardGates.explicitPath, true, quoteSymbol);
   }
 
+  const boardObserved = {
+    ...pool("SOXLB"),
+    kind: "flap_quote_asset_board_observed",
+    changeType: "observed",
+    source: "https://flap.sh/board",
+    url: "https://flap.sh/board",
+    sourceOccurredAt: createdAt,
+    signal: {
+      strong: false,
+      platformStructural: true,
+      category: "Flap quote asset observed on official Board",
+      headline: "Flap official Board first confirmed SOXLB as quote asset",
+      quotePairChange: {
+        stage: "observed",
+        assetClass: "quote_asset",
+        assets: [{
+          symbol: "SOXLB",
+          name: "Semicon Bull 3X ETF",
+          address: "0xd97d097a89113fa59b76c572e5b2eb647e8eefaf",
+          chainId: 56,
+          classification: "bstock",
+        }],
+      },
+    },
+  };
+  const freshBoard = withTradingPriority(boardObserved, { nowMs: Date.parse(createdAt) + 30_000 });
+  assert.equal(freshBoard.tradingPriority.tier, "T1");
+  assert.equal(freshBoard.tradingPriority.lifecycle.stage, "observed");
+  assert.match(freshBoard.tradingPriority.plan.mainline.zh, /官方看板首次确认观察到/u);
+  assert.doesNotMatch(freshBoard.tradingPriority.plan.mainline.zh, /启用.*报价底池/u);
+  assert.match(freshBoard.tradingPriority.plan.risk.zh, /不证明 Portal 0→1.*非自动交易/u);
+  assert.deepEqual(alertDeliveryDisposition(freshBoard), {
+    mode: "immediate",
+    deliverImmediately: true,
+    tier: "T1",
+    reason: "flap_board_quote_observed",
+  });
+  assert.deepEqual(focusNoveltyKeys(freshBoard), [
+    "flap:quote-pair:soxlb:ca:0xd97d097a89113fa59b76c572e5b2eb647e8eefaf:observed",
+  ]);
+
+  const mixedCaseBoard = structuredClone(boardObserved);
+  mixedCaseBoard.changes.newFlapPools[0].quoteSymbol = "Brk.B";
+  mixedCaseBoard.signal.headline = "Flap official Board first confirmed Brk.B as quote asset";
+  mixedCaseBoard.signal.quotePairChange.assets[0].symbol = "Brk.B";
+  const prioritizedMixedCaseBoard = withTradingPriority(mixedCaseBoard, { nowMs: Date.parse(createdAt) + 30_000 });
+  assert.deepEqual(alertDeliveryDisposition(prioritizedMixedCaseBoard), {
+    mode: "immediate",
+    deliverImmediately: true,
+    tier: "T1",
+    reason: "flap_board_quote_observed",
+  });
+  assert.deepEqual(focusNoveltyKeys(prioritizedMixedCaseBoard), [
+    "flap:quote-pair:brk-b:ca:0xd97d097a89113fa59b76c572e5b2eb647e8eefaf:observed",
+  ]);
+
+  const lateBoard = withTradingPriority({
+    ...structuredClone(boardObserved),
+    observedAt: new Date(Date.parse(createdAt) + 20 * 60_000).toISOString(),
+  }, { nowMs: Date.parse(createdAt) + 20 * 60_000 });
+  assert.equal(lateBoard.tradingPriority.tier, "T2");
+  assert.equal(lateBoard.tradingPriority.window.valid, false);
+  assert.match(lateBoard.tradingPriority.plan.entryCondition.zh, /元数据延迟补齐，勿追价/u);
+  assert.deepEqual(alertDeliveryDisposition(lateBoard), {
+    mode: "immediate",
+    deliverImmediately: true,
+    tier: "T2",
+    reason: "flap_board_quote_observed",
+  });
+
   const recoveredAt = "2026-09-02T12:40:25.000Z";
   const delayedEvent = {
     ...pool("Brk.B"),

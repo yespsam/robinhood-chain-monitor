@@ -563,6 +563,26 @@ test("focus3 Flap board stock-quote exception requires a complete BSC quote_asse
   assert.equal(isStrictFlapQuoteAsset(pool), true);
   assert.equal(isStrictFlapQuoteAssetUpdate(exact), true);
   assert.equal(isMonitoringSourceEnabled(focusConfig, exact), true);
+  const boardObserved = {
+    ...strictFlapQuoteAssetEvent(pool),
+    kind: "flap_quote_asset_board_observed",
+    changeType: "observed",
+    sourceOccurredAt: "2026-09-02T12:20:25.000Z",
+    observedAt: "2026-09-02T12:20:28.000Z",
+    signal: {
+      strong: false,
+      platformStructural: true,
+      category: "Flap quote asset observed on official Board",
+      headline: "Flap official Board first confirmed SOXSB as quote asset",
+      quotePairChange: {
+        stage: "observed",
+        assetClass: "quote_asset",
+        assets: [{ symbol: pool.quoteSymbol, name: pool.quoteName, address: pool.quoteAddress, chainId: 56 }],
+      },
+    },
+  };
+  assert.equal(isStrictFlapQuoteAssetUpdate(boardObserved), true);
+  assert.equal(isMonitoringSourceEnabled(focusConfig, boardObserved), true);
   for (const quoteSymbol of ["Brk.B", "X", "A$", "Mixed_Case$1", "A12345678901234567890123"]) {
     const variant = strictFlapQuoteAsset({ quoteSymbol });
     assert.equal(isStrictFlapQuoteAsset(variant), true, quoteSymbol);

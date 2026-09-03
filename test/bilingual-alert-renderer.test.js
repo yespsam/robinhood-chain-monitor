@@ -1205,6 +1205,77 @@ test("Flap verified quote-pool activation renders symbol, name, CA, chain and ri
   assert.ok(rendered.length < 3_800);
 });
 
+test("Flap Board metadata recovery says first observed, keeps original time, and never claims enabled now", async () => {
+  clearTranslationCache();
+  const quoteAddress = "0xd97d097a89113fa59b76c572e5b2eb647e8eefaf";
+  const sourceOccurredAt = "2026-09-02T12:20:25.000Z";
+  const observedAt = "2026-09-02T12:40:25.000Z";
+  const asset = {
+    kind: "quote_asset",
+    category: null,
+    vaultFactory: null,
+    chainId: 56,
+    identity: `chain-56:quote:${quoteAddress}`,
+    quoteAddress,
+    quoteSymbol: "SOXLB",
+    quoteName: "Semicon Bull 3X ETF",
+    quoteClassification: "bstock",
+    sourceUrl: "https://flap.sh/board",
+  };
+  const event = withTradingPriority({
+    type: "platform_capability_update",
+    kind: "flap_quote_asset_board_observed",
+    changeType: "observed",
+    platform: { id: "flap", name: "Flap", website: "https://flap.sh" },
+    source: "https://flap.sh/board",
+    sources: ["https://flap.sh/board"],
+    url: "https://flap.sh/board",
+    sourceOccurredAt,
+    observedAt,
+    changes: { newFlapPools: [asset], updatedFlapPools: [], flapPoolChanges: [] },
+    signal: {
+      strong: false,
+      platformStructural: true,
+      category: "Flap quote asset observed on official Board",
+      headline: "Flap official Board first confirmed SOXLB as quote asset",
+      quotePairChange: {
+        stage: "observed",
+        assetClass: "quote_asset",
+        assets: [{
+          symbol: asset.quoteSymbol,
+          name: asset.quoteName,
+          address: asset.quoteAddress,
+          chainId: 56,
+          classification: "bstock",
+        }],
+      },
+    },
+  }, { nowMs: Date.parse(observedAt) });
+  assert.equal(event.tradingPriority.tier, "T2");
+
+  const bundle = await buildBilingualAlertBundle({ alertForceLocalStructured: true }, event, "Flap Board quote observation");
+  const rendered = renderBilingualTelegramText(bundle, false);
+  const blocks = renderedLanguageBlocks(rendered);
+  assert.match(blocks.zh.join("\n"), /报价底池已发现：SOXLB/u);
+  assert.match(blocks.zh.join("\n"), /官方看板首次确认观察到报价资产/u);
+  assert.match(blocks.zh.join("\n"), /名称\/符号已解析/u);
+  assert.match(blocks.en.join("\n"), /quote pools observed: SOXLB/i);
+  assert.match(blocks.en.join("\n"), /official Board first confirmed the quote asset/i);
+  assert.match(blocks.en.join("\n"), /name\/symbol resolved/i);
+  assert.match(blocks.zh.join("\n"), /Portal 0→1 待确认/u);
+  assert.match(blocks.en.join("\n"), /Portal 0→1 pending/i);
+  assert.match(blocks.zh.join("\n"), /09-02 20:20 CST/u);
+  assert.match(blocks.en.join("\n"), /09-02 20:20 CST/u);
+  assert.match(blocks.zh.join("\n"), /元数据延迟补齐，勿追价/u);
+  assert.match(blocks.zh.join("\n"), /不等于 ETF\/股票所有权.*非自动交易/u);
+  assert.match(blocks.en.join("\n"), /not ETF\/share ownership.*no automatic trading/i);
+  assert.doesNotMatch(blocks.zh.join("\n"), /报价底池已启用|当前启用/u);
+  assert.doesNotMatch(blocks.en.join("\n"), /quote pools? enabled|currently enabled/i);
+  assert.doesNotMatch(rendered, /ERC-20 元数据已核验|ERC-20 metadata verified/iu);
+  assertShortFieldLayout(rendered);
+  assert.ok(rendered.length < 3_800);
+});
+
 test("official repository discovery keeps one repository identifier without metadata walls", async () => {
   clearTranslationCache();
   const repository = "four-meme-community/fourmeme-docs";
