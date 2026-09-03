@@ -12,6 +12,7 @@ test("independent update monitors start before fallible chain initialization", a
   assert.ok(independent >= 0);
   assert.ok(chain > independent);
   assert.match(independentBody, /createBscLaunchpadMonitor/);
+  assert.match(independentBody, /createFlapQuoteMonitor/);
   assert.match(main, /\[chain-init-retry\]/);
 });
 
@@ -78,6 +79,7 @@ test("graceful shutdown covers every independently created monitor and stops new
     "earlyActivityMonitor",
     "twitterMonitor",
     "platformCapabilityMonitor",
+    "flapQuoteMonitor",
     "ponsVersionMonitor",
     "binanceMonitor",
     "bscLaunchpadMonitor",

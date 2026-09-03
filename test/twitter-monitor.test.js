@@ -139,6 +139,35 @@ Step 2 — Sign in to your Agentic Wallet
 Step 3 — Configure your wallet's…`,
 });
 
+const FLAP_BSTOCK_PAIRS_209512 = Object.freeze({
+  id: "2095124685788979225",
+  createdTimestamp: Date.parse("2026-09-02T12:20:25.000Z") / 1_000,
+  text: `Leveraged bStocks are coming to Flap. 🦋
+
+Flap is expanding the programmable asset layer with two new bStock trading pairs:
+
+SOXLB — Bull Semiconductors 3X ETF
+SOXSB — Bear Semiconductors 3X ETF
+
+Creators can now launch tokens paired directly against leveraged semiconductor exposure — and build their own token economies on top.
+
+On Flap, the trading pair is only the foundation.
+
+You can program mechanisms including:
+
+1.Creator wallet — direct tax fees to creators, or a self-build distribution contract
+2.Holder Dividends — continuously distribute dividends to token holders
+3.Burn — use accumulated tax fees to burn tokens and reduce supply
+4.Liquidity — automatically route trading taxes back into liquidity pool
+5.Custom Tax Strategies — combine multiple mechanisms into one token economy
+
+With these, you can build entirely different markets around the same underlying asset.
+
+Different assets. Different mechanisms.
+
+Build on http://Flap.sh 🦋`,
+});
+
 function criticalTestFetch(timelines, requests = []) {
   return async (url) => {
     const value = String(url);
@@ -290,6 +319,67 @@ test("focus launchpad X classifier rejects ordinary token launches and CA posts"
     const result = classifyFocusLaunchpadText(message);
     assert.equal(result.relevant, true, message);
     assert.equal(result.platformStructural, true, message);
+  }
+});
+
+test("focus launchpad X classifier extracts the real Flap bStock quote-pair announcement", () => {
+  const result = classifyFocusLaunchpadText(FLAP_BSTOCK_PAIRS_209512.text);
+  assert.equal(result.relevant, true);
+  assert.equal(result.strong, true);
+  assert.equal(result.platformStructural, true);
+  assert.equal(result.reason, "flap_bstock_quote_pair_announced");
+  assert.ok(result.labels.includes("税收/募资/报价代币"));
+  assert.deepEqual(result.quotePairChange, {
+    assetClass: "bstock_quote",
+    stage: "announced",
+    assets: [
+      { symbol: "SOXLB", name: "Bull Semiconductors 3X ETF" },
+      { symbol: "SOXSB", name: "Bear Semiconductors 3X ETF" },
+    ],
+  });
+});
+
+test("focus launchpad X classifier distinguishes live Flap quote pairs and fails closed on marketing or malformed assets", () => {
+  const live = classifyFocusLaunchpadText(`Two new bStock trading pairs are now live on Flap:
+- NVDA2B — NVIDIA Leveraged 2X ETF
+- TSLASB — Tesla Bear 1X ETF`);
+  assert.equal(live.reason, "flap_bstock_quote_pair_live");
+  assert.deepEqual(live.quotePairChange, {
+    assetClass: "bstock_quote",
+    stage: "live",
+    assets: [
+      { symbol: "NVDA2B", name: "NVIDIA Leveraged 2X ETF" },
+      { symbol: "TSLASB", name: "Tesla Bear 1X ETF" },
+    ],
+  });
+
+  for (const message of [
+    `Flap introduces two new bStock trading pairs:
+SOXLB — Bull Semiconductors 3X ETF
+SOXSB — Bear Semiconductors 3X ETF
+Trade & Win for a 50,000 USDT prize pool.`,
+    `Explore bStock trading pairs on Flap:
+SOXLB — Bull Semiconductors 3X ETF`,
+    `Flap is expanding with two new bStock trading pairs:
+SOXLB — Bull Semiconductors 3X ETF`,
+    `Flap is expanding with two new bStock trading pairs:
+SOXLB — Bull Semiconductors 3X ETF
+SOXLB — Bear Semiconductors 3X ETF`,
+    `Flap is expanding with nine new bStock trading pairs:
+AAA1B — Alpha One ETF
+AAA2B — Alpha Two ETF
+AAA3B — Alpha Three ETF
+AAA4B — Alpha Four ETF
+AAA5B — Alpha Five ETF
+AAA6B — Alpha Six ETF
+AAA7B — Alpha Seven ETF
+AAA8B — Alpha Eight ETF
+AAA9B — Alpha Nine ETF`,
+    "Flap adds a new bStock quote token promotion for stock traders.",
+  ]) {
+    const result = classifyFocusLaunchpadText(message);
+    assert.equal(result.relevant, false, message);
+    assert.equal(result.quotePairChange, undefined, message);
   }
 });
 
@@ -1387,6 +1477,59 @@ test("focus critical X keeps the complete Fx body when the verified oEmbed previ
   assert.equal(state.flapdotsh.latestId, timelines.flapdotsh[0].id);
   assert.equal(state.fourdotmemezh.latestId, timelines.fourdotmemezh[0].id, "filtered noise still advances its durable cursor");
   assert.equal(state._health.flapdotsh.criticalVerification.identity, "fxtwitter_numeric_id+official_x_oembed");
+});
+
+test("focus critical X emits the real Flap bStock quote-pair structure after official oEmbed verification", async (t) => {
+  const nowMs = Date.parse("2026-09-02T12:20:55.000Z");
+  const dataDir = await fixture(t, {
+    flapdotsh: { latestId: "2095124685788979000", checkedAt: "old" },
+    fourdotmemezh: { latestId: "2095124685788979100", checkedAt: "old" },
+  });
+  const timelines = {
+    flapdotsh: [{ ...FLAP_BSTOCK_PAIRS_209512 }],
+    fourdotmemezh: [{
+      id: "2095124685788979101",
+      text: "Four.Meme community recap.",
+      createdTimestamp: nowMs / 1_000 - 30,
+    }],
+  };
+  const delivered = [];
+  const monitor = createTwitterMonitor(config(dataDir, {
+    twitterMonitorEnabled: false,
+    binanceCriticalXMonitorEnabled: false,
+    focusCriticalXMonitorEnabled: true,
+    focusCriticalXMaxAgeMs: 10 * 60 * 1_000,
+    binanceCriticalXPollAllowanceMs: 1_000,
+    binanceCriticalXLocalBudgetMs: 5_000,
+    twitterFallbackApiBases: [],
+    twitterDirectXEnabled: false,
+    twitterFxTwitterEnabled: true,
+    twitterFxTwitterApiBase: "https://api.fxtwitter.test",
+    twitterPriorityPollConcurrency: 2,
+  }), {
+    autoStart: false,
+    now: () => nowMs,
+    logger: { error() {} },
+    fetchImpl: criticalTestFetch(timelines),
+    sendAlertsImpl: async (_config, event) => { delivered.push(event); return { status: "queued" }; },
+  });
+
+  await monitor.check();
+
+  assert.equal(delivered.length, 1);
+  const [event] = delivered;
+  assert.equal(event.tweet.id, FLAP_BSTOCK_PAIRS_209512.id);
+  assert.equal(event.tweet.authorId, CRITICAL_TEST_ACCOUNTS.flapdotsh.userId);
+  assert.equal(event.tweet.sourceVerifiedBy, "official_x_oembed");
+  assert.equal(event.signal.reason, "flap_bstock_quote_pair_announced");
+  assert.deepEqual(event.signal.quotePairChange, {
+    assetClass: "bstock_quote",
+    stage: "announced",
+    assets: [
+      { symbol: "SOXLB", name: "Bull Semiconductors 3X ETF" },
+      { symbol: "SOXSB", name: "Bear Semiconductors 3X ETF" },
+    ],
+  });
 });
 
 test("focus critical Jina discovery keeps the complete exact Fx body after truncated oEmbed verification", async (t) => {

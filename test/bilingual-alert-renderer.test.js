@@ -1109,6 +1109,102 @@ test("Flap quote-pool timeout fallback stays bilingual, structured, JSON-free, a
   assert.ok(rendered.split("\n").length <= 18);
 });
 
+test("Flap official bStock quote-pair announcement names every asset and keeps the no-auto-trade boundary", async () => {
+  clearTranslationCache();
+  const observedAt = new Date().toISOString();
+  const event = withTradingPriority({
+    type: "twitter_update",
+    project: { id: "flap", name: "Flap", match: "official_x" },
+    tweet: {
+      id: "2095124685788979225",
+      handle: "flapdotsh",
+      url: "https://x.com/flapdotsh/status/2095124685788979225",
+      text: "Flap is expanding the programmable asset layer with two new bStock trading pairs: SOXLB and SOXSB.",
+      createdAt: observedAt,
+    },
+    signal: {
+      relevant: true,
+      strong: true,
+      platformStructural: true,
+      labels: ["税收/募资/报价代币"],
+      quotePairChange: {
+        assetClass: "bstock_quote",
+        stage: "announced",
+        assets: [
+          { symbol: "SOXLB", name: "Semicon Bull 3X ETF" },
+          { symbol: "SOXSB", name: "Direxion Semiconductor Bear 3X ETF" },
+        ],
+      },
+    },
+    source: { id: "official_x_oembed", trust: "official_verified" },
+    sourceTrust: "official_verified",
+    observedAt,
+  }, { nowMs: Date.parse(observedAt) });
+  assert.equal(event.tradingPriority.tier, "T1");
+
+  const bundle = await buildBilingualAlertBundle({}, event, "Flap official X quote-pair announcement");
+  const rendered = renderBilingualTelegramText(bundle, true);
+  const blocks = renderedLanguageBlocks(rendered);
+
+  assertShortFieldLayout(rendered);
+  for (const literal of ["SOXLB", "SOXSB", "Semicon Bull 3X ETF", "Direxion Semiconductor Bear 3X ETF"]) {
+    assert.match(blocks.zh.join("\n"), new RegExp(literal));
+    assert.match(blocks.en.join("\n"), new RegExp(literal));
+  }
+  assert.match(blocks.zh.join("\n"), /官方 X 已验证；链上启用待确认/u);
+  assert.match(blocks.en.join("\n"), /Official X verified; on-chain enablement pending/u);
+  assert.match(blocks.zh.join("\n"), /不等于 ETF\/股票所有权.*非自动交易/u);
+  assert.match(blocks.en.join("\n"), /not ETF\/share ownership.*no automatic trading/iu);
+  assert.ok(rendered.split("\n").length <= 18);
+  assert.ok(rendered.length < 3_800);
+});
+
+test("Flap verified quote-pool activation renders symbol, name, CA, chain and risk instead of a raw address", async () => {
+  clearTranslationCache();
+  const quoteAddress = "0xd97d097a89113fa59b76c572e5b2eb647e8eefaf";
+  const observedAt = new Date().toISOString();
+  const event = withTradingPriority({
+    type: "platform_capability_update",
+    platform: { id: "flap", name: "Flap" },
+    changes: {
+      newFlapPools: [{
+        kind: "quote_asset",
+        category: "QUOTE",
+        chainId: 56,
+        quoteAddress,
+        quoteSymbol: "SOXLB",
+        quoteName: "Semicon Bull 3X ETF",
+        quoteClassification: "bstock",
+        sourceUrl: "https://flap.sh/board",
+      }],
+    },
+    sources: ["https://flap.sh/board"],
+    transactionHash: `0x${"a".repeat(64)}`,
+    blockNumber: 71_234_567,
+    observedAt,
+  }, { nowMs: Date.parse(observedAt) });
+  assert.equal(event.tradingPriority.tier, "T1");
+
+  const bundle = await buildBilingualAlertBundle({}, event, "Flap quote-pool activation");
+  const rendered = renderBilingualTelegramText(bundle, true);
+  const blocks = renderedLanguageBlocks(rendered);
+
+  assertShortFieldLayout(rendered);
+  for (const block of [blocks.zh.join("\n"), blocks.en.join("\n")]) {
+    assert.match(block, /SOXLB/);
+    assert.match(block, /Semicon Bull 3X ETF/);
+    assert.match(block, new RegExp(quoteAddress));
+    assert.match(block, /chainId=56/);
+  }
+  assert.match(blocks.zh.join("\n"), /Portal 回执 \+ ERC-20 元数据已核验/u);
+  assert.match(blocks.en.join("\n"), /Portal receipt \+ ERC-20 metadata verified/u);
+  assert.match(blocks.zh.join("\n"), /不等于 ETF\/股票所有权.*非自动交易/u);
+  assert.match(blocks.en.join("\n"), /not ETF\/share ownership.*no automatic trading/iu);
+  assert.doesNotMatch(rendered, /平台新模式.*首个安全代币|Platform mode\/upgrade.*first safe token/iu);
+  assert.ok(rendered.split("\n").length <= 18);
+  assert.ok(rendered.length < 3_800);
+});
+
 test("official repository discovery keeps one repository identifier without metadata walls", async () => {
   clearTranslationCache();
   const repository = "four-meme-community/fourmeme-docs";
@@ -2919,4 +3015,162 @@ test("pon.fun structural and official-X cards keep a clear bounded bilingual fac
   assert.doesNotMatch(delayedBundle.en.text, /[\u3400-\u9fff]/u);
   assertShortFieldLayout(delayedRendered);
   assert.ok(delayedRendered.length < 3_800, `delayed pon.fun card is ${delayedRendered.length} characters`);
+});
+
+test("Flap Portal delayed recovery is a bilingual T2 outage card with original time and no-chase boundary", async () => {
+  const occurredAt = "2026-09-03T06:40:00.000Z";
+  const recoveredAt = "2026-09-03T07:00:00.000Z";
+  const quoteAddress = "0xe28c09e21db5bb63c4821c3f44c26ee5aee8280f";
+  const transactionHash = `0x${"ab".repeat(32)}`;
+  const event = withTradingPriority({
+    type: "platform_capability_update",
+    kind: "flap_quote_asset_enabled",
+    platform: { id: "flap", name: "Flap", website: "https://flap.sh", board: "https://flap.sh/board" },
+    transactionHash,
+    blockNumber: 119_700_000,
+    blockTimestamp: occurredAt,
+    occurredAt,
+    observedAt: recoveredAt,
+    changes: {
+      newFlapPools: [{
+        kind: "quote_asset",
+        quoteAddress,
+        quoteSymbol: "Brk.B",
+        quoteName: "Berkshire Class B stock",
+        sourceUrl: "https://flap.sh/board",
+        chainId: 56,
+      }],
+    },
+    signal: {
+      quotePairChange: {
+        stage: "live",
+        assetClass: "quote_asset",
+        assets: [{ symbol: "Brk.B", name: "Berkshire Class B stock", address: quoteAddress, decimals: 18 }],
+      },
+    },
+    delayedRecovery: {
+      version: 1,
+      reason: "monitoring_gap_recovery",
+      sourceOccurredAt: occurredAt,
+      recoveredAt,
+      lagMs: 20 * 60_000,
+    },
+    freshness: {
+      version: 1,
+      scope: "flap_delayed_recovery",
+      basis: "delayedRecovery.recoveredAt_continuous_recovery",
+      sourceOccurredAt: recoveredAt,
+      discoveredAt: recoveredAt,
+      lagMs: 0,
+      sourceTimeReliable: true,
+      realtimeMaxAgeMs: 600_000,
+      telegramMaxAgeMs: 7_200_000,
+      decision: "realtime",
+      reason: "within_realtime_window",
+    },
+  }, { nowMs: Date.parse(recoveredAt) });
+
+  const bundle = await buildBilingualAlertBundle({ alertForceLocalStructured: true }, event, "Flap delayed recovery");
+  const rendered = renderBilingualTelegramText(bundle, false);
+  const blocks = renderedLanguageBlocks(rendered);
+  assert.equal(event.tradingPriority.tier, "T2");
+  assert.match(rendered, /^🔔 监控提醒 \| MONITOR ALERT/u);
+  assert.match(blocks.zh.join("\n"), /断线恢复补报/u);
+  assert.match(blocks.zh.join("\n"), /勿追价/u);
+  assert.match(blocks.zh.join("\n"), /非自动交易/u);
+  assert.match(blocks.zh.join("\n"), /原始发生=.*恢复=/u);
+  assert.match(blocks.en.join("\n"), /Delayed recovery/i);
+  assert.match(blocks.en.join("\n"), /do not chase/i);
+  assert.match(blocks.en.join("\n"), /no automatic trading/i);
+  assert.match(blocks.en.join("\n"), /bStock quote token is not ETF\/share ownership/i);
+  for (const literal of ["Brk.B", quoteAddress]) {
+    assert.match(blocks.zh.join("\n"), new RegExp(literal.replaceAll(".", "\\.")));
+    assert.match(blocks.en.join("\n"), new RegExp(literal.replaceAll(".", "\\.")));
+  }
+  assertShortFieldLayout(rendered);
+  assert.ok(rendered.length < 3_800);
+
+  const genericEvent = withTradingPriority({
+    ...structuredClone(event),
+    tradingPriority: undefined,
+    changes: {
+      newFlapPools: [{
+        ...event.changes.newFlapPools[0],
+        quoteSymbol: "USDT",
+        quoteName: "Tether USD",
+      }],
+    },
+    signal: {
+      quotePairChange: {
+        ...event.signal.quotePairChange,
+        assets: [{ symbol: "USDT", name: "Tether USD", address: quoteAddress, decimals: 18 }],
+      },
+    },
+  }, { nowMs: Date.parse(recoveredAt) });
+  const genericBundle = await buildBilingualAlertBundle(
+    { alertForceLocalStructured: true },
+    genericEvent,
+    "Flap generic quote delayed recovery",
+  );
+  const genericRendered = renderBilingualTelegramText(genericBundle, false);
+  assert.match(genericRendered, /报价代币仍有合约、流动性与可卖性风险/u);
+  assert.match(genericRendered, /quote-token contract, liquidity, and sellability risks remain/i);
+  assert.doesNotMatch(genericRendered, /bStock|ETF|share ownership/iu);
+  assert.match(genericRendered, /勿追价/u);
+  assert.match(genericRendered, /do not chase/i);
+  assert.match(genericRendered, /非自动交易/u);
+  assert.match(genericRendered, /no automatic trading/i);
+  assertShortFieldLayout(genericRendered);
+
+  const firstObserved = structuredClone(genericEvent);
+  const observedAsset = firstObserved.changes.newFlapPools[0];
+  firstObserved.kind = "flap_quote_asset_first_observed_after_gap";
+  firstObserved.changeType = "observed";
+  firstObserved.strong = false;
+  firstObserved.changes = {
+    newFlapPools: [],
+    updatedFlapPools: [observedAsset],
+    removedFlapPools: [],
+    flapPoolChanges: [],
+    newQuoteTokens: [],
+    newQuoteConfigs: [],
+    newContracts: [],
+  };
+  firstObserved.signal = {
+    strong: false,
+    platformStructural: true,
+    category: "Flap quote asset first observed after gap",
+    headline: "Flap first observed USDT currently enabled after a monitoring gap",
+    quotePairChange: {
+      stage: "observed",
+      assetClass: "quote_asset",
+      assets: [{ symbol: "USDT", name: "Tether USD", address: quoteAddress, decimals: 18 }],
+    },
+  };
+  firstObserved.delayedRecovery.reason = "first_observed_after_gap";
+  firstObserved.freshness.scope = "flap_first_observed_after_gap";
+  delete firstObserved.tradingPriority;
+  const rankedFirstObserved = withTradingPriority(firstObserved, { nowMs: Date.parse(recoveredAt) });
+  const observedBundle = await buildBilingualAlertBundle(
+    { alertForceLocalStructured: true },
+    rankedFirstObserved,
+    "Flap first observed after gap",
+  );
+  const observedRendered = renderBilingualTelegramText(observedBundle, false);
+  const observedBlocks = renderedLanguageBlocks(observedRendered);
+  assert.equal(rankedFirstObserved.tradingPriority.tier, "T2");
+  assert.match(observedBlocks.zh.join("\n"), /补扫首次观察/u);
+  assert.match(observedBlocks.zh.join("\n"), /当前确认启用/u);
+  assert.match(observedBlocks.zh.join("\n"), /此前是否新增\/0→1 未证/u);
+  assert.match(observedBlocks.zh.join("\n"), /勿追价/u);
+  assert.match(observedBlocks.zh.join("\n"), /非自动交易/u);
+  assert.doesNotMatch(observedBlocks.zh.join("\n"), /新增底池|报价底池已启用/u);
+  assert.match(observedBlocks.en.join("\n"), /First observed after (?:a )?gap/i);
+  assert.match(observedBlocks.en.join("\n"), /currently confirmed enabled/i);
+  assert.match(observedBlocks.en.join("\n"), /prior listing\/0→1 unproven/i);
+  assert.match(observedBlocks.en.join("\n"), /do not chase/i);
+  assert.match(observedBlocks.en.join("\n"), /no automatic trading/i);
+  assert.doesNotMatch(observedBlocks.en.join("\n"), /new quote pools?|quote pools enabled/i);
+  assert.doesNotMatch(observedRendered, /bStock|ETF|share ownership/iu);
+  assertShortFieldLayout(observedRendered);
 });

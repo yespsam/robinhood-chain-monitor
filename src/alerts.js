@@ -180,6 +180,72 @@ function isPonFunDelayedRecoveryEvent(event) {
     && event.delayedRecovery?.reason === "monitoring_gap_recovery";
 }
 
+function isFlapQuoteDelayedRecoveryEvent(event) {
+  return event?.type === "platform_capability_update"
+    && eventPlatform(event) === "flap"
+    && event?.kind === "flap_quote_asset_enabled"
+    && event?.delayedRecovery?.version === 1
+    && event.delayedRecovery?.reason === "monitoring_gap_recovery";
+}
+
+function isFlapQuoteFirstObservedAfterGapEvent(event) {
+  return event?.type === "platform_capability_update"
+    && eventPlatform(event) === "flap"
+    && event?.kind === "flap_quote_asset_first_observed_after_gap"
+    && event?.changeType === "observed"
+    && event?.signal?.quotePairChange?.stage === "observed"
+    && event?.delayedRecovery?.version === 1
+    && event.delayedRecovery?.reason === "first_observed_after_gap";
+}
+
+function isFlapQuoteRecoveryEvent(event) {
+  return isFlapQuoteDelayedRecoveryEvent(event)
+    || isFlapQuoteFirstObservedAfterGapEvent(event);
+}
+
+function isFlapPortalQuoteEvent(event) {
+  return event?.type === "platform_capability_update"
+    && eventPlatform(event) === "flap"
+    && (event?.kind === "flap_quote_asset_enabled"
+      || event?.kind === "flap_quote_asset_first_observed_after_gap")
+    && event?.signal?.quotePairChange?.assetClass === "quote_asset"
+    && event.signal.quotePairChange.stage === (event.kind === "flap_quote_asset_enabled" ? "live" : "observed")
+    && /^0x[a-f0-9]{64}$/i.test(String(event?.transactionHash || ""))
+    && Number.isSafeInteger(Number(event?.blockNumber));
+}
+
+function flapPortalQuoteAddress(event) {
+  if (!isFlapPortalQuoteEvent(event)) return null;
+  const assets = event?.signal?.quotePairChange?.assets;
+  if (!Array.isArray(assets) || assets.length !== 1) return null;
+  const address = String(assets[0]?.address || "").toLowerCase();
+  return /^0x[a-f0-9]{40}$/.test(address) ? address : null;
+}
+
+function flapQuoteProducerGateForEvent(event) {
+  const quoteAddress = flapPortalQuoteAddress(event);
+  const originalEventKey = isFlapPortalQuoteEvent(event)
+    ? String(event.originalEventKey || event.eventKey || "")
+    : "";
+  if (!quoteAddress || !/^flap-quote:56:0x[a-f0-9]{64}:\d+$/.test(originalEventKey)) return null;
+  return Object.freeze({ version: 1, originalEventKey, quoteAddress });
+}
+
+function validFlapQuoteProducerGate(value) {
+  return Boolean(value
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && Object.keys(value).sort().join(",") === "originalEventKey,quoteAddress,version"
+    && value.version === 1
+    && /^flap-quote:56:0x[a-f0-9]{64}:\d+$/.test(String(value.originalEventKey || ""))
+    && /^0x[a-f0-9]{40}$/.test(String(value.quoteAddress || "")));
+}
+
+function isFlapQuoteProducerGatedEntry(entry) {
+  return isFlapPortalQuoteEvent(entry?.event)
+    || validFlapQuoteProducerGate(entry?.flapQuoteProducerGate);
+}
+
 export function isBscLaunchpadEvent(event) {
   return event.type === "bsc_launchpad_update";
 }
@@ -339,6 +405,15 @@ function freshnessSource(event) {
       value: event.delayedRecovery.recoveredAt || event.observedAt,
     };
   }
+  if (isFlapQuoteRecoveryEvent(event)) {
+    return {
+      scope: isFlapQuoteFirstObservedAfterGapEvent(event)
+        ? "flap_first_observed_after_gap"
+        : "flap_delayed_recovery",
+      basis: "delayedRecovery.recoveredAt_continuous_recovery",
+      value: event.delayedRecovery.recoveredAt,
+    };
+  }
   if (isPonFunEvent(event)) {
     const chainTime = event.blockTimestamp;
     return {
@@ -424,6 +499,8 @@ function freshnessLimits(config, scope) {
     ai_official: ["alertAiOfficialRealtimeMaxAgeMs", "alertAiOfficialTelegramMaxAgeMs"],
     binance_announcement: ["alertBinanceAnnouncementRealtimeMaxAgeMs", "alertBinanceAnnouncementTelegramMaxAgeMs"],
     telegram_news: ["alertTelegramNewsRealtimeMaxAgeMs", "alertTelegramNewsTelegramMaxAgeMs"],
+    flap_delayed_recovery: ["alertBscRealtimeMaxAgeMs", "alertBscTelegramMaxAgeMs"],
+    flap_first_observed_after_gap: ["alertBscRealtimeMaxAgeMs", "alertBscTelegramMaxAgeMs"],
   }[scope];
   if (!names) return null;
   const realtimeMaxAgeMs = nonNegativeLimit(config, names[0], DEFAULT_FRESHNESS_REALTIME_MAX_AGE_MS);
@@ -2351,6 +2428,11 @@ function noveltySlug(value) {
     .slice(0, 96);
 }
 
+function quoteSymbolNoveltySlug(value) {
+  return noveltySlug(value)
+    || String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
 const FOCUS_NOVELTY_CONCEPTS = [
   ["liquidity-launcher", /\bliquidity[ -]?launcher\b/i],
   ["crowd-launch", /\bcrowd\s+launch\b/i],
@@ -2441,7 +2523,11 @@ function quoteNoveltyKeys(platform, value) {
     const parts = flapPoolParts(value);
     const symbol = noveltySlug(parts.quoteSymbol);
     if (symbol) keys.add(`${platform}:quote:${symbol}`);
-    if (parts.quoteAddress) keys.add(`${platform}:quote-address:${parts.quoteAddress.toLowerCase()}`);
+    // A first observation may contain only a CA while RPC metadata is
+    // temporarily unavailable. Once its verified symbol is backfilled, use a
+    // new semantic identity so the readable confirmation is not swallowed by
+    // the earlier address-only audit record.
+    if (parts.quoteAddress && !symbol) keys.add(`${platform}:quote-address:${parts.quoteAddress.toLowerCase()}`);
   }
   for (const match of text.matchAll(/\b([A-Z][A-Z0-9]{1,11})\b.{0,56}\b(?:quote|raised)\s+(?:token|asset)\b/g)) addSymbol(match[1]);
   const marker = /\b(?:quote|raised)\s+(?:token|asset)s?\b|\bnew\s+(?:quote\s+)?pool\b|报价(?:代币|资产|底池)|新底池|募资代币/gi;
@@ -2464,9 +2550,50 @@ function flapPoolNoveltyKeys(platform, value) {
   const identity = [
     `${platform}:pool:${normalizedFlapPoolCategory(category)}`,
     factory ? `factory:${factory.toLowerCase()}` : null,
-    quoteAddress ? `quote:${quoteAddress.toLowerCase()}` : quoteSymbol ? `quote:${noveltySlug(quoteSymbol)}` : null,
+    quoteSymbol && quoteAddress
+      ? `quote:${noveltySlug(quoteSymbol)}:ca:${quoteAddress.toLowerCase()}`
+      : quoteSymbol ? `quote:${noveltySlug(quoteSymbol)}`
+        : quoteAddress ? `quote:${quoteAddress.toLowerCase()}` : null,
   ].filter(Boolean).join(":");
   return identity.includes(":factory:") || identity.includes(":quote:") ? [identity] : [];
+}
+
+function exactFlapQuoteNoveltyKeys(event, platform) {
+  if (platform !== "flap") return null;
+  const signal = event?.signal?.quotePairChange;
+  const changedPools = [
+    ...(event?.changes?.newFlapPools || []),
+    ...(event?.changes?.updatedFlapPools || []),
+    ...(event?.changes?.flapPoolChanges || []).map((change) => change?.after || change),
+  ];
+  const quotePools = changedPools.filter((pool) => pool?.kind === "quote_asset");
+  const signalClaimsQuote = ["bstock_quote", "quote_asset"].includes(signal?.assetClass)
+    && ["announced", "live", "observed"].includes(signal?.stage)
+    && Array.isArray(signal?.assets);
+  const poolsClaimExactQuote = quotePools.length > 0 && quotePools.length === changedPools.length;
+  if (!signalClaimsQuote && !poolsClaimExactQuote) return null;
+
+  const keys = new Set();
+  const add = (asset, stage, poolEvidence = false) => {
+    const symbol = quoteSymbolNoveltySlug(asset?.symbol || asset?.quoteSymbol);
+    const rawAddress = String(asset?.address || asset?.quoteAddress || "");
+    const address = /^0x[a-fA-F0-9]{40}$/.test(rawAddress) ? rawAddress.toLowerCase() : null;
+    if (symbol && address && stage === "observed") {
+      keys.add(`flap:quote-pair:${symbol}:ca:${address}:observed`);
+    } else if (symbol && address && (poolEvidence || stage === "live")) {
+      keys.add(`flap:quote-pair:${symbol}:ca:${address}:live`);
+    } else if (symbol && ["announced", "live", "observed"].includes(stage)) {
+      keys.add(`flap:quote-pair:${symbol}:${stage}`);
+    } else if (address) {
+      keys.add(`flap:quote-address:${address}:observed`);
+    }
+  };
+  const poolStage = isFlapQuoteFirstObservedAfterGapEvent(event) ? "observed" : "live";
+  for (const pool of quotePools) add(pool, poolStage, true);
+  if (signalClaimsQuote) {
+    for (const asset of signal.assets) add(asset, signal.stage, false);
+  }
+  return [...keys].sort();
 }
 
 function noveltyVersions(value) {
@@ -2484,6 +2611,8 @@ export function focusNoveltyKeys(event) {
   if (event?.type === "telegram_news_update") return [];
   const platform = focusNoveltyPlatform(event);
   if (!platform) return [];
+  const exactFlapQuoteKeys = exactFlapQuoteNoveltyKeys(event, platform);
+  if (exactFlapQuoteKeys !== null) return exactFlapQuoteKeys;
   if (platform === "long") {
     const morphChains = chainSupportEntries(event).filter((chain) => Number(chain.chainId) === 2818
       || String(chain.id || "").toLowerCase() === "morph");
@@ -2565,12 +2694,37 @@ export function focusNoveltyKeys(event) {
     keys.add(`${platform}:feature-activation:${digest(event.featureActivationKey).slice(0, 24)}`);
   }
 
+  if (platform === "flap" && event.signal?.quotePairChange?.assetClass === "bstock_quote") {
+    const stage = ["announced", "live"].includes(event.signal.quotePairChange.stage)
+      ? event.signal.quotePairChange.stage
+      : "observed";
+    const symbols = (Array.isArray(event.signal.quotePairChange.assets) ? event.signal.quotePairChange.assets : [])
+      .map((asset) => noveltySlug(asset?.symbol))
+      .filter(Boolean);
+    for (const symbol of symbols) keys.add(`flap:quote-pair:${symbol}:${stage}`);
+    if (symbols.length > 1) keys.add(`flap:quote-pair-set:${[...new Set(symbols)].sort().join("+")}:${stage}`);
+  }
+
   for (const pool of changes.newFlapPools || []) {
     for (const key of flapPoolNoveltyKeys(platform, pool)) keys.add(key);
+    const symbol = noveltySlug(pool?.quoteSymbol);
+    const quoteAddress = /^0x[a-fA-F0-9]{40}$/.test(String(pool?.quoteAddress || ""))
+      ? String(pool.quoteAddress).toLowerCase()
+      : null;
+    if (platform === "flap" && pool?.kind === "quote_asset" && symbol) {
+      keys.add(`flap:quote-pair:${symbol}${quoteAddress ? `:ca:${quoteAddress}` : ""}:live`);
+    }
   }
   for (const change of changes.flapPoolChanges || []) {
     const after = change?.after || change;
     for (const key of flapPoolNoveltyKeys(platform, after)) keys.add(key);
+    const symbol = noveltySlug(after?.quoteSymbol);
+    const quoteAddress = /^0x[a-fA-F0-9]{40}$/.test(String(after?.quoteAddress || ""))
+      ? String(after.quoteAddress).toLowerCase()
+      : null;
+    if (platform === "flap" && after?.kind === "quote_asset" && symbol) {
+      keys.add(`flap:quote-pair:${symbol}${quoteAddress ? `:ca:${quoteAddress}` : ""}:live`);
+    }
     keys.add(`${platform}:pool-update:${digest({
       identity: change?.identity || after?.identity || null,
       before: change?.before || null,
@@ -2580,6 +2734,13 @@ export function focusNoveltyKeys(event) {
   if (!(changes.flapPoolChanges || []).length) {
     for (const pool of changes.updatedFlapPools || []) {
       for (const key of flapPoolNoveltyKeys(platform, pool)) keys.add(key);
+      const symbol = noveltySlug(pool?.quoteSymbol);
+      const quoteAddress = /^0x[a-fA-F0-9]{40}$/.test(String(pool?.quoteAddress || ""))
+        ? String(pool.quoteAddress).toLowerCase()
+        : null;
+      if (platform === "flap" && pool?.kind === "quote_asset" && symbol) {
+        keys.add(`flap:quote-pair:${symbol}${quoteAddress ? `:ca:${quoteAddress}` : ""}:live`);
+      }
       keys.add(`${platform}:pool-update:${digest(pool).slice(0, 24)}`);
     }
   }
@@ -3037,6 +3198,17 @@ function isFocusOnchainTokenActivation(event) {
 function semanticDuplicate(outbox, eventId, event, now = Date.now()) {
   const incoming = new Set(event.canonicalSignalIds || []);
   if (!incoming.size) return null;
+  const incomingFlapProofBase = isFlapPortalQuoteEvent(event)
+    ? event.originalEventKey || event.eventKey
+    : null;
+  const singleFlapQuoteSignal = eventPlatform(event) === "flap" && incoming.size === 1
+    && /^flap:quote-pair:[a-z0-9-]+:ca:0x[a-f0-9]{40}:live$/.test([...incoming][0])
+    ? [...incoming][0]
+    : null;
+  const singleFlapObservedSignal = eventPlatform(event) === "flap" && incoming.size === 1
+    && /^flap:quote-pair:[a-z0-9-]+:ca:0x[a-f0-9]{40}:observed$/.test([...incoming][0])
+    ? [...incoming][0]
+    : null;
   const orphanedEventKeys = new Set(event.reorgOrphanedEventKeys || []);
   const binanceSignal = [...incoming].every((key) => key.startsWith("binance:"));
   const aiSignal = [...incoming].every((key) => key.startsWith("ai:"));
@@ -3052,7 +3224,28 @@ function semanticDuplicate(outbox, eventId, event, now = Date.now()) {
     const eligibleStatus = ["pending", "delivered"].includes(entry.status)
       || ((fomoSignal || telegramSignal) && entry.status === "suppressed" && !entry.semanticDuplicateOf);
     if (entry.id === eventId || !eligibleStatus) continue;
-    if (orphanedEventKeys.has(entry.id)) continue;
+    const priorFlapProofBase = isFlapPortalQuoteEvent(entry.event)
+      ? entry.event.originalEventKey || entry.event.eventKey
+      : null;
+    if (incomingFlapProofBase
+      && priorFlapProofBase === incomingFlapProofBase
+      && /^0x[a-f0-9]{64}$/i.test(String(event.blockHash || ""))
+      && /^0x[a-f0-9]{64}$/i.test(String(entry.event?.blockHash || ""))
+      && String(entry.event.blockHash).toLowerCase() !== String(event.blockHash).toLowerCase()) {
+      continue;
+    }
+    // A fresh Portal attempt can be durably queued while Telegram is down.
+    // The producer deliberately keeps its cursor until actual delivery, then
+    // upgrades that same proof to the authenticated delayed-recovery key once
+    // the 15-minute window closes.  A still-undelivered base entry is not
+    // evidence that the market saw the signal and must not suppress the safer
+    // T2 recovery card. A delivered base entry still folds normally.
+    if (isFlapQuoteRecoveryEvent(event)
+      && entry.status !== "delivered"
+      && (entry.id === event.originalEventKey
+        || entry.event?.eventKey === event.originalEventKey)) continue;
+    if (orphanedEventKeys.has(entry.id)
+      || orphanedEventKeys.has(entry.event?.originalEventKey)) continue;
     const createdAt = Date.parse(entry.createdAt || "");
     if (!Number.isFinite(createdAt) || now - createdAt > dedupWindowMs) continue;
     // Product announcements and the first token created through that product
@@ -3081,6 +3274,23 @@ function semanticDuplicate(outbox, eventId, event, now = Date.now()) {
       const refined = focusNoveltyKeys(entry.event || {}).filter((key) => /^flap:concept:vault:(?:index|staking|nft|distribution)$/.test(key));
       if (refined.length) prior = [...new Set([...storedPrior.filter((key) => key !== "flap:concept:vault"), ...refined])];
     }
+    // A proven live transition is stronger than the fallback observation and
+    // may consume a later weak replay. The reverse is intentionally false: a
+    // prior-state-unavailable observation must never hide a future proven 0→1.
+    if (singleFlapObservedSignal && entry.status === "delivered") {
+      const liveEquivalent = singleFlapObservedSignal.replace(/:observed$/u, ":live");
+      if (prior.includes(liveEquivalent) && !coverage.has(singleFlapObservedSignal)) {
+        coverage.set(singleFlapObservedSignal, entry);
+      }
+    }
+    // Pending cross-source evidence is not durable proof that the alert was
+    // seen. The enqueue step migrates this one exact Flap live signal into a
+    // single active entry and inherits each already-delivered destination.
+    // Only a fully delivered prior entry may semantically consume the Portal
+    // producer event and allow its cursor to advance.
+    if (singleFlapQuoteSignal
+      && entry.status !== "delivered"
+      && prior.includes(singleFlapQuoteSignal)) continue;
     for (const key of prior) {
       if (incoming.has(key) && !coverage.has(key)) coverage.set(key, entry);
     }
@@ -3096,6 +3306,18 @@ export function alertEventKey(event) {
   if (event.type === "fomo_monitor_health_update") return String(event.eventKey);
   if (event.type === "telegram_news_update") {
     return `telegram-news:${event.chatId}:${String(event.messageId)}:${String(event.contentDigest).slice(0, 16)}`;
+  }
+  const flapOriginalEventKey = isFlapPortalQuoteEvent(event)
+    ? event.originalEventKey || event.eventKey
+    : null;
+  if (flapOriginalEventKey
+    && event.reorgOrphanedEventKeys?.includes(flapOriginalEventKey)
+    && /^0x[a-f0-9]{64}$/i.test(String(event.blockHash || ""))) {
+    // A reorg can re-include the same transaction/log index in a different
+    // canonical block. Keep the authenticated producer eventKey unchanged,
+    // but give the replacement its own durable delivery identity. Retrying the
+    // same replacement block still resolves to one exact outbox entry.
+    return `${event.eventKey}:canonical:${String(event.blockHash).toLowerCase()}`;
   }
   if (event.eventKey) return String(event.eventKey);
   if (event.type === "ai_official_update") {
@@ -3472,6 +3694,20 @@ export function alertDeliveryDisposition(event = {}) {
   if (isPonFunDelayedRecoveryEvent(event)) {
     return Object.freeze({ mode: "audit_only", deliverImmediately: false, tier, reason: "pon_delayed_recovery" });
   }
+  if (isFlapQuoteRecoveryEvent(event)) {
+    // This lane has already been downgraded to a no-chase T2 recovery card.
+    // Delivery age updates the warning and timing, but never silently turns a
+    // durably queued, verified 0→1 Portal transition into terminal suppression.
+    const deliverImmediately = tier === "T2";
+    return Object.freeze({
+      mode: deliverImmediately ? "immediate" : "audit_only",
+      deliverImmediately,
+      tier,
+      reason: isFlapQuoteFirstObservedAfterGapEvent(event)
+        ? "flap_first_observed_after_gap"
+        : "flap_delayed_recovery",
+    });
+  }
   const hardGateEligible = tier === "T0"
     ? priority?.hardGates?.t0Eligible === true
     : tier === "T1" ? priority?.hardGates?.t1Eligible === true : false;
@@ -3510,6 +3746,10 @@ function disablePolicySuppressedDestinations(destinationState, disposition, now)
 }
 
 function disableFreshnessSuppressedTelegram(destinationState, event, now) {
+  // A strict Flap Portal recovery is a durable structural fact, not an old
+  // trade call. Once authenticated and queued it remains retryable as T2 with
+  // an explicit no-chase warning until Telegram actually accepts it.
+  if (isFlapQuoteRecoveryEvent(event)) return false;
   if (effectiveFreshnessDecision(event) !== "suppress") return false;
   const telegram = destinationState.telegram;
   if (!telegram || telegram.status === "delivered") return false;
@@ -3533,6 +3773,7 @@ function disableExpiredTelegramDelivery(config, entry, evaluatedAt = Date.now())
   // preserve the exact event and render bundle until the destination recovers
   // or an explicit policy/destination decision disables it.
   if (entry.event?.type === "fomo_monitor_health_update") return false;
+  if (isFlapQuoteRecoveryEvent(entry.event)) return false;
 
   const isFomo = entry.event?.type === "fomo_family_top_call";
   const isPonDelayedRecovery = isPonFunDelayedRecoveryEvent(entry.event);
@@ -3581,25 +3822,213 @@ async function enqueueAlert(config, event) {
   if (!destinations.length && !freshnessSuppressesTelegram && initialDisposition.deliverImmediately) {
     throw new AlertDeliveryError(event.type, [{ destination: "configuration", message: "no alert destinations configured" }]);
   }
-  const eventId = alertEventKey(event);
-  await mutateOutbox(config, (outbox) => {
+  const requestedEventId = alertEventKey(event);
+  const persistedEventId = await mutateOutbox(config, (outbox) => {
     const now = new Date(alertPipelineNow(config)).toISOString();
+    let eventId = requestedEventId;
+    const flapProofBase = isFlapPortalQuoteEvent(event)
+      ? event.originalEventKey || event.eventKey
+      : null;
+    const directFlapProducerGate = flapQuoteProducerGateForEvent(event);
+    const conflictingFlapProof = flapProofBase && /^0x[a-f0-9]{64}$/i.test(String(event.blockHash || ""))
+      ? Object.values(outbox.events || {}).find((entry) => {
+          const priorBase = isFlapPortalQuoteEvent(entry.event)
+            ? entry.event.originalEventKey || entry.event.eventKey
+            : null;
+          return priorBase === flapProofBase
+            && /^0x[a-f0-9]{64}$/i.test(String(entry.event?.blockHash || ""))
+            && String(entry.event.blockHash).toLowerCase() !== String(event.blockHash).toLowerCase();
+        })
+      : null;
+    if (conflictingFlapProof) {
+      // The producer may have delivered the old proof and then crashed before
+      // persisting its orphan list. The durable outbox is an independent
+      // witness: a different canonical block for the same tx/log must receive
+      // its own id even when the restarted event cannot carry orphan context.
+      eventId = `${event.eventKey}:canonical:${String(event.blockHash).toLowerCase()}`;
+    }
+    const incomingFlapQuoteSignal = eventPlatform(event) === "flap"
+      && event.canonicalSignalIds?.length === 1
+      && /^flap:quote-pair:[a-z0-9-]+:ca:0x[a-f0-9]{40}:live$/.test(event.canonicalSignalIds[0])
+      ? event.canonicalSignalIds[0]
+      : null;
+    const incomingFlapObservedSignal = eventPlatform(event) === "flap"
+      && event.canonicalSignalIds?.length === 1
+      && /^flap:quote-pair:[a-z0-9-]+:ca:0x[a-f0-9]{40}:observed$/.test(event.canonicalSignalIds[0])
+      ? event.canonicalSignalIds[0]
+      : null;
+    const observedEquivalent = incomingFlapQuoteSignal?.replace(/:live$/u, ":observed") || null;
+    const liveEquivalent = incomingFlapObservedSignal?.replace(/:observed$/u, ":live") || null;
+    const inFlightFlapQuoteEntry = incomingFlapQuoteSignal || incomingFlapObservedSignal
+      ? Object.values(outbox.events || {}).find((entry) => entry.id !== eventId
+        && (() => {
+          const prior = entry.event?.canonicalSignalIds || focusNoveltyKeys(entry.event || {});
+          const delivering = Object.values(entry.destinations || {})
+            .some((destination) => destination.status === "delivering");
+          if (incomingFlapQuoteSignal) {
+            return delivering && (prior.includes(incomingFlapQuoteSignal)
+              || prior.includes(observedEquivalent));
+          }
+          // While stronger live evidence is pending, it owns the destination.
+          // Let this producer-authorized call drive that entry rather than
+          // posting a weaker observation beside it. Once live is delivered,
+          // semantic dedup below records the weak observation as suppressed.
+          return entry.status === "pending" && prior.includes(liveEquivalent);
+        })())
+      : null;
+    if (inFlightFlapQuoteEntry) {
+      // Never migrate a destination while its HTTP request is in flight. The
+      // caller reuses the durable entry and receives queued until that request
+      // settles; the next observation either folds a delivered signal or
+      // takes over a failed/pending destination without creating a second POST.
+      // If the incoming evidence is the strict Portal producer, retain that
+      // ownership on a board-created entry too. Its retry must wait for a
+      // fresh on-chain revalidation instead of being claimed by the generic
+      // outbox worker after the in-flight request settles.
+      if (directFlapProducerGate && !incomingFlapObservedSignal) {
+        inFlightFlapQuoteEntry.flapQuoteProducerGate = directFlapProducerGate;
+        inFlightFlapQuoteEntry.updatedAt = now;
+      }
+      return inFlightFlapQuoteEntry.id;
+    }
     const existing = outbox.events[eventId];
-    const semanticDuplicateOf = !existing ? semanticDuplicate(outbox, eventId, event, Date.parse(now)) : null;
+    // Generic draining is forbidden for this entry. Therefore a new strict
+    // Portal sendAlerts call for the exact original proof and quote address is
+    // the producer's current finalized-state authorization to undo a cancel.
+    // This also closes a crash after the outbox fsync but before the producer
+    // can persist that the disabling proof was orphaned.
+    const reactivatingCancelledFlapQuote = Boolean(existing
+      && directFlapProducerGate
+      && validFlapQuoteCancellationEvidence(existing.flapQuoteCancellation)
+      && existing.flapQuoteCancellation.originalEventKey === directFlapProducerGate.originalEventKey
+      && existing.flapQuoteCancellation.quoteAddress === directFlapProducerGate.quoteAddress
+      && Object.values(existing.destinations || {}).some((destination) => (
+        destination.status === "disabled"
+        && destination.disabledReason === "flap_quote_no_longer_live"
+      )));
+    const existingSuperseded = existing?.status === "suppressed"
+      && Object.values(existing.destinations || {}).some((destination) => [
+        "superseded_by_delayed_recovery",
+        "superseded_by_flap_quote_evidence",
+      ].includes(destination.disabledReason));
+    const semanticDuplicateOf = !existing || existingSuperseded
+      ? semanticDuplicate(outbox, eventId, event, Date.parse(now))
+      : null;
     const activeExisting = existing && !["delivered", "suppressed"].includes(existing.status);
-    let queuedEvent = existing?.event || { ...event, alertQueuedAt: event.alertQueuedAt || now };
-    if (activeExisting && queuedEvent.type !== "fomo_monitor_health_update") {
+    const refreshingFlapRecovery = activeExisting
+      && isFlapQuoteRecoveryEvent(event)
+      && existing.event?.eventKey === event.eventKey
+      && existing.event?.originalEventKey === event.originalEventKey;
+    let queuedEvent = reactivatingCancelledFlapQuote
+      ? { ...event, alertQueuedAt: existing.event?.alertQueuedAt || existing.createdAt || now }
+      : refreshingFlapRecovery
+      ? { ...event, alertQueuedAt: existing.event?.alertQueuedAt || existing.createdAt || now }
+      : existing?.event || { ...event, alertQueuedAt: event.alertQueuedAt || now };
+    if ((activeExisting || reactivatingCancelledFlapQuote) && queuedEvent.type !== "fomo_monitor_health_update") {
       // A valid schema is not a timeless eligibility grant. Re-score active
       // retries at the duplicate observation time so a formerly fresh T1
       // cannot be delivered after its trading window has closed.
       queuedEvent = withTradingPriority(queuedEvent, { nowMs: Date.parse(now) });
     }
-    const deliveryDisposition = activeExisting
+    if (refreshingFlapRecovery) {
+      // The generic worker is intentionally forbidden from touching Portal
+      // retries. Refresh the delivery-age fields on the producer-authorized
+      // observation instead so the recovery card reports the real wait and
+      // total delay when the destination finally returns.
+      queuedEvent = refreshDeliveryFreshness(config, queuedEvent, Date.parse(now));
+    }
+    const flapQuoteSignal = eventPlatform(queuedEvent) === "flap"
+      && queuedEvent.canonicalSignalIds?.length === 1
+      && /^flap:quote-pair:[a-z0-9-]+:ca:0x[a-f0-9]{40}:live$/.test(queuedEvent.canonicalSignalIds[0])
+      ? queuedEvent.canonicalSignalIds[0]
+      : null;
+    const flapQuoteTakeoverEntries = !existing
+      && !semanticDuplicateOf
+      && flapQuoteSignal
+      ? Object.values(outbox.events || {}).filter((stale) => stale.status !== "delivered"
+        && stale.id !== eventId
+        && (() => {
+          const prior = stale.event?.canonicalSignalIds || focusNoveltyKeys(stale.event || {});
+          return prior.includes(flapQuoteSignal)
+            || prior.includes(flapQuoteSignal.replace(/:live$/u, ":observed"));
+        })())
+      : [];
+    const flapObservedTakeoverIds = new Set(flapQuoteTakeoverEntries
+      .filter((stale) => (stale.event?.canonicalSignalIds || focusNoveltyKeys(stale.event || {}))
+        .includes(flapQuoteSignal.replace(/:live$/u, ":observed")))
+      .map((stale) => stale.id));
+    const flapReorgTakeoverIds = new Set(flapQuoteTakeoverEntries.filter((stale) => {
+      const priorBase = isFlapPortalQuoteEvent(stale.event)
+        ? stale.event.originalEventKey || stale.event.eventKey
+        : null;
+      return flapProofBase
+        && priorBase === flapProofBase
+        && /^0x[a-f0-9]{64}$/i.test(String(stale.event?.blockHash || ""))
+        && String(stale.event.blockHash).toLowerCase() !== String(event.blockHash || "").toLowerCase();
+    }).map((stale) => stale.id));
+    const inheritedFlapProducerGate = flapQuoteTakeoverEntries
+      .map((entry) => validFlapQuoteProducerGate(entry.flapQuoteProducerGate)
+        ? entry.flapQuoteProducerGate
+        : flapQuoteProducerGateForEvent(entry.event))
+      .find(Boolean);
+    const flapQuoteProducerGate = directFlapProducerGate
+      || (validFlapQuoteProducerGate(existing?.flapQuoteProducerGate) ? existing.flapQuoteProducerGate : null)
+      || inheritedFlapProducerGate
+      || null;
+    if (flapQuoteTakeoverEntries.length) {
+      for (const stale of flapQuoteTakeoverEntries) {
+        for (const [destination, destinationState] of Object.entries(stale.destinations || {})) {
+          if (destinationState.status === "delivered") continue;
+          stale.destinations[destination] = {
+            ...destinationState,
+            status: "disabled",
+            disabledReason: isFlapQuoteRecoveryEvent(queuedEvent)
+              ? "superseded_by_delayed_recovery"
+              : "superseded_by_flap_quote_evidence",
+            supersededBy: eventId,
+            updatedAt: now,
+            leaseUntil: null,
+            nextAttemptAt: null,
+          };
+        }
+        stale.status = outboxEntryStatus(stale.destinations || {});
+        if (stale.status === "suppressed") stale.suppressedAt ||= now;
+        stale.updatedAt = now;
+      }
+    }
+    const deliveryDisposition = activeExisting || reactivatingCancelledFlapQuote
       ? alertDeliveryDisposition(queuedEvent)
       : existing?.deliveryDisposition || alertDeliveryDisposition(queuedEvent);
     const destinationState = { ...(existing?.destinations || {}) };
+    if (reactivatingCancelledFlapQuote) {
+      for (const [destination, state] of Object.entries(destinationState)) {
+        if (state.status !== "disabled" || state.disabledReason !== "flap_quote_no_longer_live") continue;
+        const {
+          disabledReason: _disabledReason,
+          cancellationReason: _cancellationReason,
+          leaseUntil: _leaseUntil,
+          nextAttemptAt: _nextAttemptAt,
+          updatedAt: _updatedAt,
+          ...preserved
+        } = state;
+        destinationState[destination] = {
+          ...preserved,
+          status: "pending",
+          nextAttemptAt: null,
+          leaseUntil: null,
+          updatedAt: now,
+        };
+      }
+    }
     for (const destination of destinations) {
-      destinationState[destination] ||= { status: "pending", attempts: 0, nextAttemptAt: null, receipt: null, lastError: null };
+      const inherited = flapQuoteTakeoverEntries
+        .filter((entry) => !flapReorgTakeoverIds.has(entry.id)
+          && !flapObservedTakeoverIds.has(entry.id))
+        .map((entry) => ({ entry, state: entry.destinations?.[destination] }))
+        .find(({ state }) => state?.status === "delivered");
+      destinationState[destination] ||= inherited
+        ? { ...inherited.state, inheritedFromEventId: inherited.entry.id }
+        : { status: "pending", attempts: 0, nextAttemptAt: null, receipt: null, lastError: null };
     }
     for (const destination of Object.keys(destinationState)) {
       if (!destinations.includes(destination) && destinationState[destination].status !== "delivered") {
@@ -3645,7 +4074,7 @@ async function enqueueAlert(config, event) {
       createdAt,
       updatedAt: now,
       deliveredAt: existing?.deliveredAt || null,
-      suppressedAt: status === "suppressed" ? existing?.suppressedAt || now : existing?.suppressedAt || null,
+      suppressedAt: status === "suppressed" ? existing?.suppressedAt || now : reactivatingCancelledFlapQuote ? null : existing?.suppressedAt || null,
       duplicateCount: Number(existing?.duplicateCount || 0) + (existing ? 1 : 0),
       duplicateObservations: duplicateObservation
         ? [...(existing?.duplicateObservations || []), duplicateObservation].slice(-20)
@@ -3653,9 +4082,162 @@ async function enqueueAlert(config, event) {
       sideEffectsCommitted: Boolean(existing?.sideEffectsCommitted),
       semanticDuplicateOf: existing?.semanticDuplicateOf || semanticDuplicateOf?.id || null,
       deliveryDisposition,
+      ...(flapQuoteProducerGate ? { flapQuoteProducerGate } : {}),
+      ...(refreshingFlapRecovery || reactivatingCancelledFlapQuote ? { renderBundle: null } : {}),
     };
+    if (reactivatingCancelledFlapQuote) delete outbox.events[eventId].flapQuoteCancellation;
+    return eventId;
   });
-  return eventId;
+  return persistedEventId || requestedEventId;
+}
+
+const FLAP_QUOTE_CANCELLATION_KEYS = Object.freeze([
+  "originalEventKey",
+  "quoteAddress",
+  "reason",
+  "disablingEventKey",
+  "blockNumber",
+  "blockHash",
+  "transactionHash",
+  "logIndex",
+  "observedAt",
+]);
+
+function validateFlapQuoteCancellation(value) {
+  const exactKeys = value
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && Object.keys(value).length === FLAP_QUOTE_CANCELLATION_KEYS.length
+    && FLAP_QUOTE_CANCELLATION_KEYS.every((key) => Object.prototype.hasOwnProperty.call(value, key));
+  if (!exactKeys) throw new TypeError("Flap quote cancellation must use the exact schema");
+  const original = /^flap-quote:56:(0x[a-f0-9]{64}):(0|[1-9]\d*)$/.exec(String(value.originalEventKey || ""));
+  const disabling = /^flap-quote:56:(0x[a-f0-9]{64}):(0|[1-9]\d*)$/.exec(String(value.disablingEventKey || ""));
+  if (!original
+    || !disabling
+    || value.reason !== "quote_asset_disabled"
+    || !/^0x[a-f0-9]{40}$/.test(String(value.quoteAddress || ""))
+    || !/^0x[a-f0-9]{64}$/.test(String(value.transactionHash || ""))
+    || !/^0x[a-f0-9]{64}$/.test(String(value.blockHash || ""))
+    || !Number.isSafeInteger(value.blockNumber)
+    || value.blockNumber <= 0
+    || !Number.isSafeInteger(value.logIndex)
+    || value.logIndex < 0
+    || disabling[1] !== value.transactionHash
+    || Number(disabling[2]) !== value.logIndex
+    || value.disablingEventKey !== `flap-quote:56:${value.transactionHash}:${value.logIndex}`
+    || strictIsoInstantMs(value.observedAt) === null) {
+    throw new TypeError("Flap quote cancellation evidence is invalid");
+  }
+  return Object.freeze({ ...value });
+}
+
+function validFlapQuoteCancellationEvidence(value) {
+  try {
+    validateFlapQuoteCancellation(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Durably terminalize an undelivered strict Flap Portal activation after the
+ * producer has re-read the finalized configuration as disabled.  The outbox
+ * mutation and its fsync finish before this resolves, so the producer may
+ * advance its own cursor only after a `cancelled` result.  An in-flight HTTP
+ * request is never overwritten; the producer must retry the cancellation.
+ */
+export async function cancelPendingFlapQuoteActivation(config, cancellation) {
+  const evidence = validateFlapQuoteCancellation(cancellation);
+  const mutation = await mutateOutbox(config, (outbox) => {
+    const entries = Object.values(outbox.events || {});
+    const directMatches = entries.filter((entry) => {
+      const gate = flapQuoteProducerGateForEvent(entry.event);
+      return gate?.originalEventKey === evidence.originalEventKey;
+    });
+    const gatedMatches = entries.filter((entry) => (
+      validFlapQuoteProducerGate(entry.flapQuoteProducerGate)
+      && entry.flapQuoteProducerGate.originalEventKey === evidence.originalEventKey
+    ));
+    const mismatchedAddress = [...directMatches, ...gatedMatches]
+      .some((entry) => {
+        const address = flapPortalQuoteAddress(entry.event)
+          || entry.flapQuoteProducerGate?.quoteAddress;
+        return address && address !== evidence.quoteAddress;
+      });
+    if (mismatchedAddress) {
+      throw new TypeError("Flap quote cancellation does not match the queued quote address");
+    }
+    for (const entry of directMatches) {
+      const sourceBlock = Number(entry.event?.blockNumber);
+      const sourceLogIndex = Number(entry.event?.logIndex);
+      if (!Number.isSafeInteger(sourceBlock)
+        || !Number.isSafeInteger(sourceLogIndex)
+        || evidence.blockNumber < sourceBlock
+        || (evidence.blockNumber === sourceBlock && evidence.logIndex <= sourceLogIndex)) {
+        throw new TypeError("Flap quote cancellation must be later than the queued activation");
+      }
+    }
+    const ownerIds = new Set(directMatches.flatMap((entry) => Object.values(entry.destinations || {})
+      .map((destination) => destination?.supersededBy)
+      .filter(Boolean)));
+    const matches = [...new Map(entries
+      .filter((entry) => directMatches.includes(entry)
+        || gatedMatches.includes(entry)
+        || ownerIds.has(entry.id))
+      .map((entry) => [entry.id, entry])).values()];
+    const delivering = matches.filter((entry) => Object.values(entry.destinations || {})
+      .some((destination) => destination.status === "delivering"));
+    if (delivering.length) {
+      return {
+        changed: false,
+        status: "queued",
+        reason: "delivery_in_flight",
+        persisted: true,
+        terminal: false,
+        eventIds: delivering.map((entry) => entry.id).sort(),
+      };
+    }
+    const now = evidence.observedAt;
+    let changed = false;
+    let cancelledDestinations = 0;
+    for (const entry of matches) {
+      for (const [name, destination] of Object.entries(entry.destinations || {})) {
+        if (["delivered", "disabled"].includes(destination.status)) continue;
+        entry.destinations[name] = {
+          ...destination,
+          status: "disabled",
+          disabledReason: "flap_quote_no_longer_live",
+          cancellationReason: evidence.reason,
+          updatedAt: now,
+          leaseUntil: null,
+          nextAttemptAt: null,
+        };
+        cancelledDestinations += 1;
+        changed = true;
+      }
+      if (JSON.stringify(entry.flapQuoteCancellation) !== JSON.stringify(evidence)) {
+        entry.flapQuoteCancellation = evidence;
+        changed = true;
+      }
+      const previousStatus = entry.status;
+      entry.status = outboxEntryStatus(entry.destinations || {});
+      if (entry.status === "suppressed") entry.suppressedAt ||= now;
+      if (entry.status === "delivered") entry.deliveredAt ||= now;
+      if (changed || entry.status !== previousStatus) entry.updatedAt = now;
+    }
+    return {
+      changed,
+      status: "cancelled",
+      reason: evidence.reason,
+      persisted: true,
+      terminal: true,
+      eventIds: matches.map((entry) => entry.id).sort(),
+      cancelledDestinations,
+    };
+  }, { writeIf: (result) => result.changed });
+  const { changed: _changed, ...result } = mutation;
+  return result;
 }
 
 async function claimAlertDestinations(config, eventId, force = false) {
@@ -3846,7 +4428,21 @@ export async function drainAlertOutbox(config) {
     let changed = false;
     for (const entry of Object.values(outbox.events || {})) {
       if (["delivered", "suppressed"].includes(entry.status)) continue;
+      // A Portal activation can be invalidated by a later finalized disable
+      // while Telegram is offline. Only the producer that just revalidated
+      // the current chain state may call sendAlerts and claim this work; the
+      // generic retry worker has no chain context and must leave it untouched.
+      // The gate follows an exact canonical board/Portal takeover as well.
+      if (isFlapQuoteProducerGatedEntry(entry)) continue;
       changed = true;
+      const flapRecoveryRenderState = isFlapQuoteRecoveryEvent(entry.event)
+        ? JSON.stringify({
+            observedAt: entry.event.observedAt,
+            delayedRecovery: entry.event.delayedRecovery,
+            freshness: entry.event.freshness,
+            tier: entry.event.tradingPriority?.tier,
+          })
+        : null;
       // Re-evaluate only active work under the current priority contract.
       // Historical terminal archives keep their exact forensic payload, while
       // a pending campaign or incomplete T1 cannot bypass a newly tightened
@@ -3860,6 +4456,12 @@ export async function drainAlertOutbox(config) {
       }
       entry.event = withAlertFreshness(config, entry.event || {}, entry.createdAt || now);
       entry.event = refreshDeliveryFreshness(config, entry.event, now);
+      if (flapRecoveryRenderState !== null && flapRecoveryRenderState !== JSON.stringify({
+        observedAt: entry.event.observedAt,
+        delayedRecovery: entry.event.delayedRecovery,
+        freshness: entry.event.freshness,
+        tier: entry.event.tradingPriority?.tier,
+      })) entry.renderBundle = null;
       // Block rules are hot-reloaded. Re-evaluate undelivered durable entries
       // as well as newly observed events, otherwise a contract blocked during
       // Telegram downtime could still be delivered by the retry worker.
@@ -3927,7 +4529,8 @@ export async function drainAlertOutbox(config) {
       entry.updatedAt = new Date(now).toISOString();
     }
     const pendingIds = Object.values(outbox.events || {})
-      .filter((entry) => !["delivered", "suppressed"].includes(entry.status))
+      .filter((entry) => !["delivered", "suppressed"].includes(entry.status)
+        && !isFlapQuoteProducerGatedEntry(entry))
       .sort(compareTradingPriority)
       .slice(0, 100)
       .map((entry) => entry.id);

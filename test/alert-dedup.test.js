@@ -7,6 +7,7 @@ import {
   AlertDeliveryError,
   alertDeliveryDisposition,
   alertEventKey,
+  cancelPendingFlapQuoteActivation,
   classifyAlertFreshness,
   drainAlertOutbox,
   focusNoveltyKeys,
@@ -22,7 +23,7 @@ import {
   startAlertOutboxWorker,
   telegramButtons,
 } from "../src/alerts.js";
-import { isMonitoringSourceEnabled } from "../src/source-controls.js";
+import { classifyFlapQuotePairSignalCore, isMonitoringSourceEnabled } from "../src/source-controls.js";
 
 function publicTelegramNewsEvent({
   messageId = "271828",
@@ -586,9 +587,10 @@ test("Flap quote-token prose and structured pools receive stable identities and 
 
   assert.deepEqual(focusNoveltyKeys(twitter), ["flap:quote:babab"]);
   assert.ok(poolKeys.includes(`flap:pool:staking:factory:${factory}`));
-  assert.ok(poolKeys.includes(`flap:pool:quote-asset:quote:${quoteAddress}`));
+  assert.ok(poolKeys.includes(`flap:pool:quote-asset:quote:babab:ca:${quoteAddress}`));
   assert.ok(poolKeys.includes("flap:quote:babab"));
-  assert.ok(poolKeys.includes(`flap:quote-address:${quoteAddress}`));
+  assert.ok(poolKeys.includes(`flap:quote-pair:babab:ca:${quoteAddress}:live`));
+  assert.equal(poolKeys.includes(`flap:quote-address:${quoteAddress}`), false, "resolved metadata must not be covered by an earlier CA-only audit key");
   assert.notDeepEqual(poolKeys, focusNoveltyKeys({
     ...event,
     changes: { newFlapPools: [{ kind: "quote_asset", category: null, vaultFactory: null, quoteAddress: "0x3333333333333333333333333333333333333333", quoteSymbol: "OTHER" }] },
@@ -608,10 +610,10 @@ test("Flap quote-token prose and structured pools receive stable identities and 
   assert.equal(payloads.length, 1);
   const payload = payloads[0];
   assert.match(payload.text, /^🔴 强提醒 \| STRONG ALERT/);
-  assert.match(payload.text, /🇨🇳 中文[\s\S]*新增 STAKING Vault Factory 登记；具体用途与链上启用待核/);
-  assert.doesNotMatch(payload.text.split("🇬🇧 English")[0], /\/\s*NEW POOL/);
-  assert.match(payload.text, /🇬🇧 English[\s\S]*Registered a STAKING Vault Factory; its purpose and on-chain activation remain unverified/i);
-  assert.equal(payload.text.split(factory).length - 1, 2, "Factory remains byte-for-byte in both language blocks");
+  assert.match(payload.text, /🇨🇳 中文[\s\S]*Flap 报价底池已启用：BABAB/);
+  assert.match(payload.text, /🇬🇧 English[\s\S]*Flap quote pools enabled: BABAB/i);
+  assert.match(payload.text, /非自动交易/);
+  assert.match(payload.text, /no automatic trading/i);
   assert.equal(payload.text.split(quoteAddress).length - 1, 2, "Quote address remains byte-for-byte in both language blocks");
   const buttons = payload.reply_markup.inline_keyboard.flat();
   assert.ok(buttons.some((button) => button.text === "📋 复制底池 Factory" && button.copy_text?.text === factory));
@@ -652,6 +654,56 @@ test("Flap quote-token prose and structured pools receive stable identities and 
   assert.ok(payloads[1].text.split(nextQuote).length - 1 >= 2, "new quote remains in both language blocks");
   assert.ok(payloads[1].reply_markup.inline_keyboard.flat()
     .some((button) => button.text === "📋 复制报价合约" && button.copy_text?.text === nextQuote));
+});
+
+test("Flap bStock quote-pair announcement and live confirmation use distinct stage identities", () => {
+  const announcement = {
+    type: "twitter_update",
+    project: { id: "flap", name: "Flap" },
+    tweet: {
+      id: "2095124685788979225",
+      handle: "flapdotsh",
+      text: "Flap is expanding the programmable asset layer with two new bStock trading pairs: SOXLB and SOXSB.",
+    },
+    signal: {
+      relevant: true,
+      strong: true,
+      platformStructural: true,
+      labels: ["税收/募资/报价代币"],
+      quotePairChange: {
+        assetClass: "bstock_quote",
+        stage: "announced",
+        assets: [{ symbol: "SOXLB" }, { symbol: "SOXSB" }],
+      },
+    },
+  };
+  const live = {
+    type: "platform_capability_update",
+    platform: { id: "flap", name: "Flap" },
+    changes: {
+      newFlapPools: [{
+        kind: "quote_asset",
+        quoteAddress: "0xd97d097a89113fa59b76c572e5b2eb647e8eefaf",
+        quoteSymbol: "SOXLB",
+        quoteName: "Semicon Bull 3X ETF",
+        sourceUrl: "https://flap.sh/board",
+        chainId: 56,
+      }],
+    },
+  };
+
+  const announcedKeys = focusNoveltyKeys(announcement);
+  const liveKeys = focusNoveltyKeys(live);
+  assert.ok(announcedKeys.includes("flap:quote-pair:soxlb:announced"));
+  assert.ok(announcedKeys.includes("flap:quote-pair:soxsb:announced"));
+  assert.ok(liveKeys.includes("flap:quote-pair:soxlb:ca:0xd97d097a89113fa59b76c572e5b2eb647e8eefaf:live"));
+  assert.equal(announcedKeys.some((key) => liveKeys.includes(key)), false, "announcement must not suppress the later CA-confirmed live stage");
+
+  const replacement = structuredClone(live);
+  replacement.changes.newFlapPools[0].quoteAddress = "0x1111111111111111111111111111111111111111";
+  const replacementKeys = focusNoveltyKeys(replacement);
+  assert.ok(replacementKeys.includes("flap:quote-pair:soxlb:ca:0x1111111111111111111111111111111111111111:live"));
+  assert.ok(liveKeys.some((key) => !replacementKeys.includes(key)), "the same ticker on a replacement CA must retain a distinct live identity");
 });
 
 test("focus3 keeps distinct feature activations alertable and deduplicates repeats of the same activation", async (t) => {
@@ -1188,6 +1240,307 @@ const alertConfig = (dataDir) => ({
   alertTelegramDeliveryMaxAgeMs: 7_200_000,
   webhookUrl: "",
 });
+
+function flapPortalDelayedRecoveryEvent({
+  recoveredAtMs = Date.parse("2026-09-03T07:00:00.000Z"),
+  occurredAtMs = recoveredAtMs - 20 * 60_000,
+  blockHash = `0x${"cd".repeat(32)}`,
+  reorgOrphanedEventKeys = [],
+} = {}) {
+  const boardUrl = "https://flap.sh/board";
+  const portal = "0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0";
+  const quoteAddress = "0xe28c09e21db5bb63c4821c3f44c26ee5aee8280f";
+  const transactionHash = `0x${"ab".repeat(32)}`;
+  const blockNumber = 119_700_000;
+  const finalizedHead = blockNumber + 2;
+  const finalizedHeadHash = `0x${"ef".repeat(32)}`;
+  const logIndex = 7;
+  const occurredAt = new Date(occurredAtMs).toISOString();
+  const recoveredAt = new Date(recoveredAtMs).toISOString();
+  const configuration = {
+    enabled: true,
+    enabledRaw: 1,
+    defaultCurve: 2,
+    alternativeCurve: 3,
+    nativeToQuoteSwapType: 1,
+    dexId: 4,
+  };
+  const asset = {
+    identity: `chain-56:quote:${quoteAddress}`,
+    kind: "quote_asset",
+    category: null,
+    vaultFactory: null,
+    quoteAddress,
+    quoteName: "Berkshire Class B",
+    quoteSymbol: "Brk.B",
+    quoteDecimals: 18,
+    decimals: 18,
+    enabled: true,
+    configuration,
+    chainId: 56,
+    portal,
+    codeHash: `0x${"12".repeat(32)}`,
+    codeBytes: 512,
+    verifiedAtBlock: finalizedHead,
+    verifiedAtBlockHash: finalizedHeadHash,
+    sourceUrl: boardUrl,
+  };
+  const abiWord = (value) => value.toString(16).padStart(64, "0");
+  const logData = `0x${quoteAddress.slice(2).padStart(64, "0")}${[
+    configuration.enabledRaw,
+    configuration.defaultCurve,
+    configuration.alternativeCurve,
+    configuration.nativeToQuoteSwapType,
+    configuration.dexId,
+  ].map(abiWord).join("")}`;
+  const evidence = {
+    chainId: 56,
+    portal,
+    portalRuntimeCodeHash: "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3",
+    portalVersion: "v5.22.0",
+    portalImplementation: "0xE3CfDbb959e4EFb6fFD22E8659e8CBeEeD362019",
+    portalImplementationCodeHash: "0x357c9245739d6af7c4727744d479ec7d8c4ae461c2fb37d56eafb9d7dc9ccbaa",
+    eventSignature: "QuoteTokenConfigurationSet(address,(uint8,uint8,uint8,uint8,uint8))",
+    topic0: "0x9a1f38e55c729ebf0c45d240a00b09f0a79a715df7cfd6e8942bd3f8da839199",
+    logIndex,
+    logData,
+    eventConfiguration: { ...configuration },
+    finalizedConfiguration: { ...configuration },
+    configurationVerifiedAtBlock: finalizedHead,
+    metadataVerifiedAtBlock: finalizedHead,
+    metadataCodeHash: asset.codeHash,
+    receiptVerified: true,
+    transactionVerified: true,
+    canonicalBlockVerified: true,
+    confirmations: 5,
+    requiredConfirmations: 3,
+    finalizedHead,
+    finalizedHeadHash,
+  };
+  const originalEventKey = `flap-quote:56:${transactionHash}:${logIndex}`;
+  const explorerUrl = `https://bscscan.com/tx/${transactionHash}`;
+  return {
+    type: "platform_capability_update",
+    kind: "flap_quote_asset_enabled",
+    changeType: "added",
+    eventKey: `${originalEventKey}:delayed-recovery:v1`,
+    originalEventKey,
+    platform: { id: "flap", name: "Flap", website: "https://flap.sh", board: boardUrl },
+    chain: { id: 56, chainId: 56, name: "BNB Chain", environment: "mainnet" },
+    chainId: 56,
+    portal,
+    source: {
+      id: "flap_portal_quote_configuration",
+      name: "Flap official Portal + Board",
+      url: boardUrl,
+      docsUrl: "https://docs.flap.sh/flap/developers/deployed-contract-addresses",
+      official: true,
+      trust: "official_docs_bound_fingerprinted_portal_receipt",
+    },
+    sourceUrl: boardUrl,
+    url: explorerUrl,
+    explorerUrl,
+    observedAt: recoveredAt,
+    occurredAt,
+    blockTimestamp: occurredAt,
+    transactionHash,
+    blockNumber,
+    blockHash,
+    logIndex,
+    receiptProof: {
+      status: 1,
+      transactionHash,
+      transactionIndex: 2,
+      blockNumber,
+      blockHash,
+      logIndex,
+      logMatched: true,
+    },
+    transactionProof: {
+      hash: transactionHash,
+      from: "0x1111111111111111111111111111111111111111",
+      to: "0xc68f29BfE2f6c3D95AdB5685592B9F86680968f2",
+      nonce: 9,
+      blockNumber,
+      blockHash,
+    },
+    blockProof: {
+      number: blockNumber,
+      hash: blockHash,
+      timestamp: occurredAt,
+      canonical: true,
+      confirmations: 5,
+      requiredConfirmations: 3,
+    },
+    onchainProof: evidence,
+    evidence: structuredClone(evidence),
+    changes: {
+      newFlapPools: [asset],
+      updatedFlapPools: [],
+      removedFlapPools: [],
+      flapPoolChanges: [],
+      newQuoteTokens: [asset.quoteSymbol],
+      newQuoteConfigs: [{ symbol: asset.quoteSymbol, address: asset.quoteAddress, ...configuration }],
+      newContracts: [asset.quoteAddress],
+    },
+    signal: {
+      strong: true,
+      platformStructural: true,
+      category: "Flap quote asset enabled",
+      headline: `Flap enabled ${asset.quoteSymbol} as a BSC quote asset`,
+      quotePairChange: {
+        stage: "live",
+        assetClass: "quote_asset",
+        assets: [{
+          symbol: asset.quoteSymbol,
+          name: asset.quoteName,
+          address: asset.quoteAddress,
+          decimals: asset.quoteDecimals,
+        }],
+      },
+    },
+    strong: true,
+    reorgOrphanedEventKeys,
+    risk: "A Portal quote configuration is platform capability evidence, not proof of token safety, liquidity depth, backing, or favorable execution.",
+    delayedRecovery: {
+      version: 1,
+      reason: "monitoring_gap_recovery",
+      sourceOccurredAt: occurredAt,
+      originalBlockNumber: blockNumber,
+      originalBlockHash: blockHash,
+      originalTransactionHash: transactionHash,
+      originalLogIndex: logIndex,
+      recoveredAt,
+      lagMs: recoveredAtMs - occurredAtMs,
+      cursor: { nextBlockAtRecovery: blockNumber, eventBlock: blockNumber },
+    },
+  };
+}
+
+function flapPortalFirstObservedAfterGapEvent({
+  successfulReaders = 0,
+  ...options
+} = {}) {
+  const event = flapPortalDelayedRecoveryEvent(options);
+  const asset = event.changes.newFlapPools[0];
+  event.kind = "flap_quote_asset_first_observed_after_gap";
+  event.changeType = "observed";
+  event.eventKey = `${event.originalEventKey}:first-observed-after-gap:v1`;
+  event.priorTransitionProof = "unavailable";
+  event.priorStateRead = {
+    blockNumber: event.blockNumber - 1,
+    method: "getQuoteTokenConfiguration(address)",
+    requiredIndependentReaders: 2,
+    successfulReaders,
+    matchingUnavailableReaders: 2 - successfulReaders,
+    failureClass: "archive_state_unavailable",
+  };
+  event.changes = {
+    newFlapPools: [],
+    updatedFlapPools: [asset],
+    removedFlapPools: [],
+    flapPoolChanges: [],
+    newQuoteTokens: [],
+    newQuoteConfigs: [],
+    newContracts: [],
+  };
+  event.signal = {
+    strong: false,
+    platformStructural: true,
+    category: "Flap quote asset first observed after gap",
+    headline: `Flap first observed ${asset.quoteSymbol} currently enabled after a monitoring gap`,
+    quotePairChange: {
+      stage: "observed",
+      assetClass: "quote_asset",
+      assets: [{
+        symbol: asset.quoteSymbol,
+        name: asset.quoteName,
+        address: asset.quoteAddress,
+        decimals: asset.quoteDecimals,
+      }],
+    },
+  };
+  event.strong = false;
+  event.delayedRecovery.reason = "first_observed_after_gap";
+  event.risk = "Historical archive state was unavailable from the required independent readers. This confirms only that the quote asset is enabled now; it does not prove a new 0-to-1 activation, token safety, liquidity, backing, or favorable execution.";
+  return event;
+}
+
+function flapPortalFreshEvent({
+  occurredAtMs = Date.parse("2026-09-03T06:40:00.000Z"),
+  observedAtMs = occurredAtMs + 5_000,
+  blockHash = `0x${"cd".repeat(32)}`,
+  reorgOrphanedEventKeys = [],
+} = {}) {
+  const event = flapPortalDelayedRecoveryEvent({
+    recoveredAtMs: observedAtMs,
+    occurredAtMs,
+    blockHash,
+    reorgOrphanedEventKeys,
+  });
+  event.eventKey = event.originalEventKey;
+  delete event.originalEventKey;
+  delete event.delayedRecovery;
+  return event;
+}
+
+function flapPortalDisableCancellation(event, {
+  observedAtMs = Date.parse(event.observedAt) + 30_000,
+  transactionHash = `0x${"dc".repeat(32)}`,
+  blockNumber = event.blockNumber + 1,
+  blockHash = `0x${"de".repeat(32)}`,
+  logIndex = 8,
+} = {}) {
+  return {
+    originalEventKey: event.originalEventKey || event.eventKey,
+    quoteAddress: event.signal.quotePairChange.assets[0].address.toLowerCase(),
+    reason: "quote_asset_disabled",
+    disablingEventKey: `flap-quote:56:${transactionHash}:${logIndex}`,
+    blockNumber,
+    blockHash,
+    transactionHash,
+    logIndex,
+    observedAt: new Date(observedAtMs).toISOString(),
+  };
+}
+
+function flapOfficialQuoteAnnouncementEvent({ observedAtMs = Date.now() } = {}) {
+  const tweetId = "2095124685788979225";
+  const text = `Flap is expanding with one new bStock trading pair:
+BRK.B — Berkshire Class B Stock
+The BRK.B bStock quote pair is coming to Flap.sh.`;
+  const quotePairChange = classifyFlapQuotePairSignalCore(text);
+  return {
+    type: "twitter_update",
+    project: {
+      id: "flap",
+      name: "Flap",
+      handle: "flapdotsh",
+      xUserId: "1749114887807320064",
+      match: "official_x",
+    },
+    tweet: {
+      id: tweetId,
+      text,
+      handle: "flapdotsh",
+      xUserId: "1749114887807320064",
+      authorId: "1749114887807320064",
+      url: `https://x.com/flapdotsh/status/${tweetId}`,
+      sourceVerifiedBy: "official_x_oembed",
+      isReply: false,
+      createdAt: new Date(observedAtMs).toISOString(),
+    },
+    signal: {
+      relevant: true,
+      strong: true,
+      platformStructural: true,
+      reason: `flap_bstock_quote_pair_${quotePairChange.stage}`,
+      labels: ["税收/募资/报价代币"],
+      quotePairChange,
+    },
+    observedAt: new Date(observedAtMs).toISOString(),
+  };
+}
 
 function ponDelayedPausedEvent({
   recoveredAtMs = Date.now(),
@@ -2712,6 +3065,1098 @@ test("freshness classification uses absolute instants across timezones and exact
   assert.equal(late.decision, "late");
   assert.equal(suppressed.decision, "suppress");
   assert.equal(classifyAlertFreshness({}, { type: "launchpad_site_update", observedAt: "2020-01-01T00:00:00Z" }, Date.now()), null);
+});
+
+test("Flap delayed recovery freshness uses recoveredAt without rewriting original occurrence evidence", () => {
+  const occurredAt = "2026-09-03T06:40:00.000Z";
+  const recoveredAt = "2026-09-03T07:00:00.000Z";
+  const event = {
+    type: "platform_capability_update",
+    kind: "flap_quote_asset_enabled",
+    platform: { id: "flap" },
+    occurredAt,
+    blockTimestamp: occurredAt,
+    observedAt: recoveredAt,
+    delayedRecovery: {
+      version: 1,
+      reason: "monitoring_gap_recovery",
+      sourceOccurredAt: occurredAt,
+      recoveredAt,
+      lagMs: 20 * 60_000,
+    },
+  };
+  const freshness = classifyAlertFreshness({}, event, Date.parse(recoveredAt) + 1_000);
+  assert.equal(freshness.scope, "flap_delayed_recovery");
+  assert.equal(freshness.basis, "delayedRecovery.recoveredAt_continuous_recovery");
+  assert.equal(freshness.sourceOccurredAt, recoveredAt);
+  assert.equal(freshness.lagMs, 1_000);
+  assert.equal(freshness.decision, "realtime");
+  assert.equal(event.occurredAt, occurredAt);
+  assert.equal(event.delayedRecovery.sourceOccurredAt, occurredAt);
+  assert.equal(event.delayedRecovery.lagMs, 20 * 60_000);
+});
+
+test("Flap quote canonical identity is stage-aware and folds board with Portal only for the same symbol and CA", () => {
+  const address = "0xe28c09e21db5bb63c4821c3f44c26ee5aee8280f";
+  const otherAddress = "0x2222222222222222222222222222222222222222";
+  const signalEvent = (stage, assets) => ({
+    type: "twitter_update",
+    project: { id: "flap" },
+    signal: { quotePairChange: { assetClass: "bstock_quote", stage, assets } },
+  });
+  const liveEvent = (quoteAddress) => ({
+    type: "platform_capability_update",
+    platform: { id: "flap" },
+    changes: {
+      newFlapPools: [{ kind: "quote_asset", quoteSymbol: "Brk.B", quoteAddress }],
+      newQuoteConfigs: [{ symbol: "Brk.B", address: quoteAddress }],
+      newContracts: [quoteAddress],
+    },
+    signal: {
+      quotePairChange: {
+        assetClass: "quote_asset",
+        stage: "live",
+        assets: [{ symbol: "Brk.B", address: quoteAddress }],
+      },
+    },
+  });
+
+  assert.deepEqual(focusNoveltyKeys(signalEvent("announced", [
+    { symbol: "Brk.B" },
+    { symbol: "X" },
+  ])), ["flap:quote-pair:brk-b:announced", "flap:quote-pair:x:announced"]);
+  assert.deepEqual(focusNoveltyKeys(signalEvent("live", [{ symbol: "Brk.B" }])), [
+    "flap:quote-pair:brk-b:live",
+  ]);
+  assert.deepEqual(focusNoveltyKeys(signalEvent("live", [{ symbol: "A$", address }])), [
+    `flap:quote-pair:a:ca:${address}:live`,
+  ]);
+  const board = liveEvent(address);
+  const portal = structuredClone(board);
+  portal.transactionHash = `0x${"ab".repeat(32)}`;
+  portal.blockNumber = 119_700_000;
+  assert.deepEqual(focusNoveltyKeys(board), [
+    `flap:quote-pair:brk-b:ca:${address}:live`,
+  ]);
+  assert.deepEqual(focusNoveltyKeys(portal), focusNoveltyKeys(board));
+  assert.notDeepEqual(focusNoveltyKeys(liveEvent(otherAddress)), focusNoveltyKeys(board));
+  const observed = flapPortalFirstObservedAfterGapEvent();
+  assert.deepEqual(focusNoveltyKeys(observed), [
+    `flap:quote-pair:brk-b:ca:${address}:observed`,
+  ]);
+  assert.notDeepEqual(focusNoveltyKeys(observed), focusNoveltyKeys(portal));
+  assert.deepEqual(focusNoveltyKeys({
+    type: "platform_capability_update",
+    platform: { id: "flap" },
+    changes: { newFlapPools: [{ kind: "quote_asset", quoteAddress: address }] },
+  }), [`flap:quote-address:${address}:observed`]);
+});
+
+test("Flap first-observed recovery is an exact-once T2 and never hides a later proven live stage", async (t) => {
+  const observedDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-first-observed-"));
+  const liveFirstDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-live-before-observed-"));
+  const nowMs = Date.parse("2026-09-03T07:00:00.000Z");
+  const payloads = [];
+  t.after(() => fs.rm(observedDataDir, { recursive: true, force: true }));
+  t.after(() => fs.rm(liveFirstDataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    payloads.push(JSON.parse(options.body));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: payloads.length } }) };
+  });
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(observedDataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    telegramStrongAlerts: true,
+    alertBilingualEnabled: true,
+    alertChineseTranslationEnabled: false,
+    alertNow: () => nowMs,
+  };
+  const observed = flapPortalFirstObservedAfterGapEvent({ recoveredAtMs: nowMs });
+  const quoteAddress = observed.signal.quotePairChange.assets[0].address;
+  assert.equal(isMonitoringSourceEnabled(config, observed), true);
+  assert.deepEqual(focusNoveltyKeys(observed), [
+    `flap:quote-pair:brk-b:ca:${quoteAddress}:observed`,
+  ]);
+  const observedResult = await sendAlerts(config, observed);
+  assert.equal(observedResult.status, "delivered");
+  assert.equal(payloads.length, 1);
+  assert.equal(payloads[0].disable_notification, true);
+  assert.match(payloads[0].text, /Flap · T2/u);
+  assert.match(payloads[0].text, /补扫首次观察/u);
+  assert.match(payloads[0].text, /当前确认启用/u);
+  assert.match(payloads[0].text, /此前是否新增\/0→1 未证/u);
+  assert.match(payloads[0].text, /勿追价/u);
+  assert.match(payloads[0].text, /非自动交易/u);
+  assert.match(payloads[0].text, /First observed after (?:a )?gap/i);
+  assert.match(payloads[0].text, /prior listing\/0→1 unproven/i);
+  assert.match(payloads[0].text, /do not chase/i);
+  assert.match(payloads[0].text, /no automatic trading/i);
+  assert.doesNotMatch(payloads[0].text, /新增底池|报价底池已启用|new quote pools?|quote pools enabled/iu);
+  assert.equal((await sendAlerts(config, structuredClone(observed))).status, "delivered");
+  assert.equal(payloads.length, 1, "same weak proof remains exact-once");
+
+  const provenLive = flapPortalFreshEvent({
+    occurredAtMs: nowMs - 5_000,
+    observedAtMs: nowMs,
+  });
+  assert.equal(isMonitoringSourceEnabled(config, provenLive), true);
+  assert.equal((await sendAlerts(config, provenLive)).status, "delivered");
+  assert.equal(payloads.length, 2, "a weak observation cannot suppress later proven live evidence");
+
+  const reverseConfig = { ...config, dataDir: liveFirstDataDir };
+  assert.equal((await sendAlerts(reverseConfig, structuredClone(provenLive))).status, "delivered");
+  const coveredWeak = await sendAlerts(reverseConfig, structuredClone(observed));
+  assert.equal(coveredWeak.status, "suppressed");
+  assert.equal(coveredWeak.reason, "semantic_duplicate");
+  assert.equal(coveredWeak.persisted, true);
+  assert.equal(payloads.length, 3, "delivered live evidence silently covers a later weak observation");
+
+  const outbox = JSON.parse(await fs.readFile(path.join(observedDataDir, "alert-outbox.json"), "utf8"));
+  const entry = outbox.events[observed.eventKey];
+  assert.equal(entry.event.tradingPriority.tier, "T2");
+  assert.equal(entry.event.tradingPriority.lifecycle.stage, "observed");
+  assert.equal(entry.event.tradingPriority.hardGates.t1Eligible, false);
+  assert.equal(entry.event.freshness.scope, "flap_first_observed_after_gap");
+  assert.equal(entry.deliveryDisposition.reason, "flap_first_observed_after_gap");
+  assert.equal(isMonitoringSourceEnabled(config, entry.event), true, "derived priority/freshness identity remains source-authenticated");
+});
+
+test("a pending weak Flap observation is atomically superseded by proven live evidence", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-observed-live-takeover-"));
+  const nowMs = Date.parse("2026-09-03T07:00:00.000Z");
+  let telegramAvailable = false;
+  let attempts = 0;
+  let successes = 0;
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async () => {
+    attempts += 1;
+    if (!telegramAvailable) throw new Error("simulated Telegram outage");
+    successes += 1;
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: 7800 + successes } }) };
+  });
+  t.mock.method(console, "error", () => {});
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    telegramStrongAlerts: true,
+    alertNow: () => nowMs,
+  };
+  const observed = flapPortalFirstObservedAfterGapEvent({ recoveredAtMs: nowMs });
+  assert.equal((await sendAlerts(config, observed)).status, "queued");
+  assert.equal(attempts, 1);
+
+  telegramAvailable = true;
+  const live = flapPortalFreshEvent({ occurredAtMs: nowMs - 5_000, observedAtMs: nowMs });
+  assert.equal((await sendAlerts(config, live)).status, "delivered");
+  assert.equal(attempts, 2);
+  assert.equal(successes, 1, "only the stronger live card is delivered after the outage");
+  const weakRetry = await sendAlerts(config, structuredClone(observed));
+  assert.equal(weakRetry.status, "suppressed");
+  assert.equal(weakRetry.reason, "semantic_duplicate");
+  assert.equal(weakRetry.persisted, true);
+  assert.equal(attempts, 2, "the superseded weak producer key cannot self-revive");
+
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(outbox.events[observed.eventKey].status, "suppressed");
+  assert.equal(outbox.events[observed.eventKey].destinations.telegram.disabledReason, "semantic_duplicate");
+  assert.equal(outbox.events[live.eventKey].status, "delivered");
+});
+
+test("proven live waits for an in-flight weak Flap observation before emitting its distinct upgrade", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-observed-live-inflight-"));
+  const nowMs = Date.parse("2026-09-03T07:00:00.000Z");
+  let attempts = 0;
+  let releaseFirst;
+  let markFirstStarted;
+  const firstStarted = new Promise((resolve) => { markFirstStarted = resolve; });
+  const firstRelease = new Promise((resolve) => { releaseFirst = resolve; });
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async () => {
+    attempts += 1;
+    if (attempts === 1) {
+      markFirstStarted();
+      await firstRelease;
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: 7900 + attempts } }) };
+  });
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    telegramStrongAlerts: true,
+    alertNow: () => nowMs,
+  };
+  const observed = flapPortalFirstObservedAfterGapEvent({ recoveredAtMs: nowMs });
+  const live = flapPortalFreshEvent({ occurredAtMs: nowMs - 5_000, observedAtMs: nowMs });
+  const weakDelivery = sendAlerts(config, observed);
+  await firstStarted;
+  const concurrentLive = await sendAlerts(config, live);
+  assert.equal(concurrentLive.status, "queued");
+  assert.equal(attempts, 1, "the strong stage cannot start a second POST while the weak request is in flight");
+  releaseFirst();
+  assert.equal((await weakDelivery).status, "delivered");
+  assert.equal((await sendAlerts(config, live)).status, "delivered");
+  assert.equal(attempts, 2, "after settlement, proven live emits one distinct stage upgrade");
+  assert.equal((await sendAlerts(config, structuredClone(live))).status, "delivered");
+  assert.equal(attempts, 2);
+});
+
+test("a same-key first-observed proof in a different canonical block emits one revision", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-observed-reorg-revision-"));
+  const nowMs = Date.parse("2026-09-03T07:00:00.000Z");
+  let posts = 0;
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async () => {
+    posts += 1;
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: 8000 + posts } }) };
+  });
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    telegramStrongAlerts: true,
+    alertNow: () => nowMs,
+  };
+  const original = flapPortalFirstObservedAfterGapEvent({ recoveredAtMs: nowMs });
+  assert.equal((await sendAlerts(config, original)).status, "delivered");
+  const replacementHash = `0x${"81".repeat(32)}`;
+  const replacement = flapPortalFirstObservedAfterGapEvent({
+    recoveredAtMs: nowMs,
+    blockHash: replacementHash,
+    reorgOrphanedEventKeys: [],
+  });
+  const replacementId = `${replacement.eventKey}:canonical:${replacementHash}`;
+  const replaced = await sendAlerts(config, replacement);
+  assert.equal(replaced.status, "delivered");
+  assert.equal(replaced.eventId, replacementId);
+  assert.equal((await sendAlerts(config, structuredClone(replacement))).status, "delivered");
+  assert.equal(posts, 2, "old proof, one canonical revision, then exact-once retry");
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(outbox.events[original.eventKey].status, "delivered");
+  assert.equal(outbox.events[replacementId].status, "delivered");
+  assert.equal(outbox.events[replacementId].event.blockHash, replacementHash);
+});
+
+test("a >15m Flap Portal recovery survives a >2h failed delivery and restart, then delivers exactly once as a refreshed silent T2", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-delayed-recovery-"));
+  let clockMs = Date.parse("2026-09-03T07:00:00.000Z");
+  let failTelegram = true;
+  let telegramAttempts = 0;
+  const payloads = [];
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    telegramAttempts += 1;
+    if (failTelegram) throw new Error("simulated disconnect");
+    payloads.push(JSON.parse(options.body));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: 7301 } }) };
+  });
+  t.mock.method(console, "error", () => {});
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    telegramStrongAlerts: true,
+    alertBilingualEnabled: true,
+    alertChineseTranslationEnabled: false,
+    alertNow: () => clockMs,
+  };
+  const event = flapPortalDelayedRecoveryEvent({ recoveredAtMs: clockMs });
+  const original = structuredClone(event);
+  assert.equal(isMonitoringSourceEnabled(config, event), true);
+  const queued = await sendAlerts(config, event);
+  assert.equal(queued.status, "queued");
+  assert.equal(telegramAttempts, 1);
+  assert.deepEqual(event, original, "freshness, priority, rendering and retries keep the producer event immutable");
+
+  let outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  let entry = outbox.events[event.eventKey];
+  assert.ok(entry);
+  assert.equal(entry.event.tradingPriority.tier, "T2");
+  assert.equal(entry.event.freshness.scope, "flap_delayed_recovery");
+  assert.equal(entry.event.freshness.sourceOccurredAt, event.delayedRecovery.recoveredAt);
+  assert.equal(entry.event.occurredAt, event.occurredAt);
+  assert.equal(entry.deliveryDisposition.mode, "immediate");
+  assert.equal(entry.deliveryDisposition.reason, "flap_delayed_recovery");
+  assert.ok(entry.renderBundle, "the failed first attempt persisted its original render bundle");
+
+  failTelegram = false;
+  clockMs += 3 * 60 * 60_000;
+  assert.equal(await drainAlertOutbox(config), 0, "the generic worker lacks a current finalized-chain revalidation");
+  assert.equal(telegramAttempts, 1);
+  assert.equal((await sendAlerts(config, structuredClone(event))).status, "delivered");
+  assert.equal(payloads.length, 1);
+  assert.equal(payloads[0].disable_notification, true);
+  assert.match(payloads[0].text, /^🔔 监控提醒 \| MONITOR ALERT/u);
+  assert.match(payloads[0].text, /断线恢复补报/u);
+  assert.match(payloads[0].text, /送达等待 3小时/u);
+  assert.match(payloads[0].text, /总延迟 3小时20分/u);
+  assert.match(payloads[0].text, /勿追价/u);
+  assert.match(payloads[0].text, /非自动交易/u);
+  assert.match(payloads[0].text, /Delayed recovery/i);
+  assert.match(payloads[0].text, /delivery wait 3h/i);
+  assert.match(payloads[0].text, /total delay 3h20m/i);
+  assert.match(payloads[0].text, /do not chase/i);
+  assert.match(payloads[0].text, /no automatic trading/i);
+
+  assert.equal((await sendAlerts(config, structuredClone(event))).status, "delivered");
+  assert.equal(await drainAlertOutbox(config), 0);
+  assert.equal(payloads.length, 1, "restart and duplicate observations reuse the durable delivered entry");
+  outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  entry = outbox.events[event.eventKey];
+  assert.equal(entry.status, "delivered");
+  assert.equal(entry.event.freshness.deliveryDecision, "suppress");
+  assert.notEqual(entry.destinations.telegram.disabledReason, "freshness_too_old");
+  assert.notEqual(entry.destinations.telegram.disabledReason, "delivery_ttl_expired");
+  assert.equal(entry.duplicateCount, 2);
+});
+
+test("a fresh Flap Portal queue held by Telegram outage is superseded after 15m and recovers after >2h exactly once as T2", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-fresh-queue-upgrade-"));
+  const occurredAtMs = Date.parse("2026-09-03T06:40:00.000Z");
+  let clockMs = occurredAtMs + 5_000;
+  let failTelegram = true;
+  const payloads = [];
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    if (failTelegram) throw new Error("simulated Telegram outage");
+    payloads.push(JSON.parse(options.body));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: 7302 } }) };
+  });
+  t.mock.method(console, "error", () => {});
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    telegramStrongAlerts: true,
+    alertBilingualEnabled: true,
+    alertChineseTranslationEnabled: false,
+    alertNow: () => clockMs,
+  };
+  const fresh = flapPortalFreshEvent({ occurredAtMs, observedAtMs: clockMs });
+  assert.equal(isMonitoringSourceEnabled(config, fresh), true);
+  const queued = await sendAlerts(config, fresh);
+  assert.equal(queued.status, "queued");
+
+  let outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(outbox.events[fresh.eventKey].status, "pending");
+  assert.equal(outbox.events[fresh.eventKey].event.tradingPriority.tier, "T1");
+
+  clockMs += 3 * 60 * 60_000;
+  assert.equal(await drainAlertOutbox(config), 0, "the stale T1 payload is never delivered without a recovery warning");
+  assert.equal(payloads.length, 0);
+
+  const delayed = flapPortalDelayedRecoveryEvent({ recoveredAtMs: clockMs, occurredAtMs });
+  assert.equal(delayed.originalEventKey, fresh.eventKey);
+  assert.equal(isMonitoringSourceEnabled(config, delayed), true);
+  assert.equal((await sendAlerts(config, delayed)).status, "queued");
+
+  clockMs += 60 * 60_000;
+  failTelegram = false;
+  const refreshedDelayed = flapPortalDelayedRecoveryEvent({ recoveredAtMs: clockMs, occurredAtMs });
+  assert.equal(refreshedDelayed.eventKey, delayed.eventKey);
+  const recovered = await sendAlerts(config, refreshedDelayed);
+  assert.equal(recovered.status, "delivered");
+  assert.equal(payloads.length, 1);
+  assert.equal(payloads[0].disable_notification, true);
+  assert.match(payloads[0].text, /Flap · T2/u);
+  assert.match(payloads[0].text, /断线恢复补报/u);
+  assert.match(payloads[0].text, /总延迟 4小时/u);
+  assert.match(payloads[0].text, /勿追价/u);
+  assert.match(payloads[0].text, /Delayed recovery/i);
+  assert.match(payloads[0].text, /total delay 4h/i);
+  assert.match(payloads[0].text, /do not chase/i);
+
+  outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(outbox.events[fresh.eventKey].status, "suppressed");
+  assert.equal(outbox.events[fresh.eventKey].destinations.telegram.disabledReason, "superseded_by_delayed_recovery");
+  assert.equal(outbox.events[fresh.eventKey].destinations.telegram.supersededBy, delayed.eventKey);
+  assert.equal(outbox.events[delayed.eventKey].status, "delivered");
+  assert.equal(outbox.events[delayed.eventKey].event.tradingPriority.tier, "T2");
+  assert.equal(outbox.events[delayed.eventKey].event.delayedRecovery.recoveredAt, refreshedDelayed.delayedRecovery.recoveredAt);
+  assert.equal(outbox.events[delayed.eventKey].event.delayedRecovery.lagMs, refreshedDelayed.delayedRecovery.lagMs);
+
+  assert.equal((await sendAlerts(config, structuredClone(refreshedDelayed))).status, "delivered");
+  assert.equal(await drainAlertOutbox(config), 0);
+  assert.equal(payloads.length, 1);
+});
+
+test("a finalized Flap disable atomically cancels queued fresh and delayed activations before Telegram recovers", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-disable-cancellation-"));
+  const occurredAtMs = Date.parse("2026-09-03T06:40:00.000Z");
+  let clockMs = occurredAtMs + 5_000;
+  let telegramAvailable = false;
+  let telegramAttempts = 0;
+  let telegramSuccesses = 0;
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async () => {
+    telegramAttempts += 1;
+    if (!telegramAvailable) throw new Error("simulated Telegram outage");
+    telegramSuccesses += 1;
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: 7401 } }) };
+  });
+  t.mock.method(console, "error", () => {});
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    telegramStrongAlerts: true,
+    alertNow: () => clockMs,
+  };
+  const fresh = flapPortalFreshEvent({ occurredAtMs, observedAtMs: clockMs });
+  assert.equal((await sendAlerts(config, fresh)).status, "queued");
+  assert.equal(telegramAttempts, 1);
+
+  clockMs += 20 * 60_000;
+  const delayed = flapPortalDelayedRecoveryEvent({ recoveredAtMs: clockMs, occurredAtMs });
+  assert.equal((await sendAlerts(config, delayed)).status, "queued");
+  assert.equal(telegramAttempts, 2);
+
+  telegramAvailable = true;
+  assert.equal(await drainAlertOutbox(config), 0, "generic retry cannot deliver without a current chain revalidation");
+  assert.equal(telegramAttempts, 2);
+  const cancellation = flapPortalDisableCancellation(delayed, {
+    observedAtMs: clockMs + 30_000,
+    blockNumber: delayed.blockNumber + 1,
+  });
+  const cancelled = await cancelPendingFlapQuoteActivation(config, cancellation);
+  assert.equal(cancelled.status, "cancelled");
+  assert.equal(cancelled.reason, "quote_asset_disabled");
+  assert.equal(cancelled.persisted, true);
+  assert.equal(cancelled.terminal, true);
+  assert.equal(cancelled.cancelledDestinations, 1);
+  assert.deepEqual(cancelled.eventIds, [fresh.eventKey, delayed.eventKey].sort());
+
+  assert.equal(await drainAlertOutbox({ ...config }), 0);
+  assert.equal(telegramAttempts, 2);
+  assert.equal(telegramSuccesses, 0, "the stale enable is never posted after Telegram recovers");
+  const repeated = await cancelPendingFlapQuoteActivation({ ...config }, structuredClone(cancellation));
+  assert.equal(repeated.status, "cancelled");
+  assert.equal(repeated.persisted, true);
+  assert.equal(repeated.cancelledDestinations, 0);
+
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(outbox.events[fresh.eventKey].status, "suppressed");
+  assert.equal(outbox.events[delayed.eventKey].status, "suppressed");
+  assert.equal(outbox.events[delayed.eventKey].destinations.telegram.status, "disabled");
+  assert.equal(outbox.events[delayed.eventKey].destinations.telegram.disabledReason, "flap_quote_no_longer_live");
+  assert.deepEqual(outbox.events[delayed.eventKey].flapQuoteCancellation, cancellation);
+});
+
+test("Flap disable cancellation rejects forged or non-later evidence without mutating the outbox", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-disable-cancellation-invalid-"));
+  const occurredAtMs = Date.parse("2026-09-03T06:40:00.000Z");
+  const clockMs = occurredAtMs + 5_000;
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async () => { throw new Error("simulated Telegram outage"); });
+  t.mock.method(console, "error", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    alertNow: () => clockMs,
+  };
+  const fresh = flapPortalFreshEvent({ occurredAtMs, observedAtMs: clockMs });
+  assert.equal((await sendAlerts(config, fresh)).status, "queued");
+  const valid = flapPortalDisableCancellation(fresh);
+  const file = path.join(dataDir, "alert-outbox.json");
+  const before = await fs.readFile(file, "utf8");
+
+  await assert.rejects(
+    cancelPendingFlapQuoteActivation(config, { ...valid, attacker: true }),
+    /exact schema/u,
+  );
+  await assert.rejects(
+    cancelPendingFlapQuoteActivation(config, {
+      ...valid,
+      disablingEventKey: `flap-quote:56:${`0x${"ff".repeat(32)}`}:${valid.logIndex}`,
+    }),
+    /evidence is invalid/u,
+  );
+  await assert.rejects(
+    cancelPendingFlapQuoteActivation(config, {
+      ...valid,
+      blockNumber: fresh.blockNumber,
+      logIndex: fresh.logIndex,
+      disablingEventKey: `flap-quote:56:${valid.transactionHash}:${fresh.logIndex}`,
+    }),
+    /must be later/u,
+  );
+  assert.equal(await fs.readFile(file, "utf8"), before);
+});
+
+test("a strict revalidated Flap activation revives a pre-commit cancellation after restart exactly once", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-disable-reorg-reactivation-"));
+  const occurredAtMs = Date.parse("2026-09-03T06:40:00.000Z");
+  let clockMs = occurredAtMs + 5_000;
+  let telegramAvailable = false;
+  let telegramAttempts = 0;
+  let telegramSuccesses = 0;
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async () => {
+    telegramAttempts += 1;
+    if (!telegramAvailable) throw new Error("simulated Telegram outage");
+    telegramSuccesses += 1;
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: 7402 } }) };
+  });
+  t.mock.method(console, "error", () => {});
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    telegramStrongAlerts: true,
+    alertNow: () => clockMs,
+  };
+  const fresh = flapPortalFreshEvent({ occurredAtMs, observedAtMs: clockMs });
+  assert.equal((await sendAlerts(config, fresh)).status, "queued");
+  const cancellation = flapPortalDisableCancellation(fresh);
+  assert.equal((await cancelPendingFlapQuoteActivation(config, cancellation)).status, "cancelled");
+
+  telegramAvailable = true;
+  clockMs += 40_000;
+  assert.equal(await drainAlertOutbox(config), 0);
+  assert.equal(telegramAttempts, 1, "a cancelled activation cannot be revived by the generic worker");
+  const recovered = await sendAlerts({ ...config }, {
+    ...structuredClone(fresh),
+    observedAt: new Date(clockMs).toISOString(),
+  });
+  assert.equal(recovered.status, "delivered");
+  assert.equal(telegramAttempts, 2);
+  assert.equal(telegramSuccesses, 1);
+  assert.equal((await sendAlerts(config, structuredClone(fresh))).status, "delivered");
+  assert.equal(telegramAttempts, 2, "the reactivated canonical proof remains exact-once");
+
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  const entry = outbox.events[fresh.eventKey];
+  assert.equal(entry.status, "delivered");
+  assert.equal(entry.flapQuoteCancellation, undefined);
+  assert.deepEqual(entry.event.reorgOrphanedEventKeys, []);
+});
+
+test("Flap fresh-to-delayed migration inherits each delivered destination and retries only the missing one", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-partial-destination-upgrade-"));
+  const occurredAtMs = Date.parse("2026-09-03T06:59:55.000Z");
+  let clockMs = occurredAtMs + 5_000;
+  let webhookFails = true;
+  let telegramCalls = 0;
+  let webhookCalls = 0;
+  let webhookSuccesses = 0;
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).includes("api.telegram.org")) {
+      telegramCalls += 1;
+      return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: 7303 } }) };
+    }
+    webhookCalls += 1;
+    if (webhookFails) throw new Error("simulated webhook outage");
+    webhookSuccesses += 1;
+    return { ok: true, status: 200, text: async () => "ok" };
+  });
+  t.mock.method(console, "error", () => {});
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    telegramStrongAlerts: true,
+    webhookUrl: "https://alerts.example/webhook",
+    alertNow: () => clockMs,
+  };
+  const fresh = flapPortalFreshEvent({ occurredAtMs, observedAtMs: clockMs });
+  assert.equal((await sendAlerts(config, fresh)).status, "queued");
+  assert.equal(telegramCalls, 1);
+  assert.equal(webhookCalls, 1);
+
+  clockMs += 20 * 60_000;
+  webhookFails = false;
+  const delayed = flapPortalDelayedRecoveryEvent({ recoveredAtMs: clockMs, occurredAtMs });
+  assert.equal((await sendAlerts({ ...config }, delayed)).status, "delivered");
+  assert.equal(telegramCalls, 1, "the Telegram receipt from the fresh entry is inherited, not replayed");
+  assert.equal(webhookCalls, 2);
+  assert.equal(webhookSuccesses, 1);
+
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  const migrated = outbox.events[delayed.eventKey];
+  assert.equal(migrated.status, "delivered");
+  assert.equal(migrated.destinations.telegram.status, "delivered");
+  assert.equal(migrated.destinations.telegram.inheritedFromEventId, fresh.eventKey);
+  assert.equal(migrated.destinations.webhook.status, "delivered");
+  assert.equal((await sendAlerts(config, structuredClone(delayed))).status, "delivered");
+  assert.equal(telegramCalls, 1);
+  assert.equal(webhookSuccesses, 1);
+});
+
+test("a partial old-fork Flap delivery never lends its receipt to the replacement block", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-reorg-partial-destination-"));
+  const occurredAtMs = Date.parse("2026-09-03T06:59:55.000Z");
+  const nowMs = occurredAtMs + 5_000;
+  let webhookFails = true;
+  let telegramCalls = 0;
+  let webhookCalls = 0;
+  let webhookSuccesses = 0;
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).includes("api.telegram.org")) {
+      telegramCalls += 1;
+      return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: 7400 + telegramCalls } }) };
+    }
+    webhookCalls += 1;
+    if (webhookFails) throw new Error("simulated webhook outage");
+    webhookSuccesses += 1;
+    return { ok: true, status: 200, text: async () => "ok" };
+  });
+  t.mock.method(console, "error", () => {});
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    telegramStrongAlerts: true,
+    webhookUrl: "https://alerts.example/webhook",
+    alertNow: () => nowMs,
+  };
+  const original = flapPortalFreshEvent({ occurredAtMs, observedAtMs: nowMs });
+  assert.equal((await sendAlerts(config, original)).status, "queued");
+  assert.equal(telegramCalls, 1);
+  assert.equal(webhookCalls, 1);
+
+  webhookFails = false;
+  const replacementHash = `0x${"7b".repeat(32)}`;
+  const replacement = flapPortalFreshEvent({
+    occurredAtMs,
+    observedAtMs: nowMs,
+    blockHash: replacementHash,
+    reorgOrphanedEventKeys: [],
+  });
+  const replacementId = `${replacement.eventKey}:canonical:${replacementHash}`;
+  const result = await sendAlerts({ ...config }, replacement);
+  assert.equal(result.status, "delivered");
+  assert.equal(result.eventId, replacementId);
+  assert.equal(telegramCalls, 2, "the new block proof emits its own Telegram revision");
+  assert.equal(webhookCalls, 2);
+  assert.equal(webhookSuccesses, 1);
+
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(outbox.events[replacementId].status, "delivered");
+  assert.equal(outbox.events[replacementId].destinations.telegram.inheritedFromEventId, undefined);
+  assert.equal(outbox.events[original.eventKey].destinations.webhook.disabledReason, "superseded_by_flap_quote_evidence");
+});
+
+test("pending board and Portal observations merge in either order and recover after >2h with one Telegram", async (t) => {
+  const roots = await Promise.all(["board-first", "portal-first"].map((label) => (
+    fs.mkdtemp(path.join(os.tmpdir(), `alerts-flap-${label}-outage-`))
+  )));
+  let failTelegram = true;
+  let successfulPayloads = 0;
+  t.after(() => Promise.all(roots.map((dataDir) => fs.rm(dataDir, { recursive: true, force: true }))));
+  t.mock.method(globalThis, "fetch", async () => {
+    if (failTelegram) throw new Error("simulated Telegram outage");
+    successfulPayloads += 1;
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: successfulPayloads } }) };
+  });
+  t.mock.method(console, "error", () => {});
+  t.mock.method(console, "info", () => {});
+
+  for (const [index, order] of ["board-first", "portal-first"].entries()) {
+    const occurredAtMs = Date.parse("2026-09-03T06:59:55.000Z");
+    let clockMs = occurredAtMs + 5_000;
+    failTelegram = true;
+    const config = {
+      ...alertConfig(roots[index]),
+      monitorScope: "focus3",
+      ponsMonitorEnabled: false,
+      telegramStrongAlerts: true,
+      alertNow: () => clockMs,
+    };
+    const portal = flapPortalFreshEvent({ occurredAtMs, observedAtMs: clockMs });
+    const pool = portal.changes.newFlapPools[0];
+    const board = {
+      type: "platform_capability_update",
+      platform: { id: "flap", name: "Flap" },
+      source: "https://flap.sh/board",
+      sources: ["https://flap.sh/board"],
+      url: "https://flap.sh/board",
+      observedAt: portal.observedAt,
+      changes: {
+        newFlapPools: [{
+          identity: pool.identity,
+          kind: pool.kind,
+          category: null,
+          vaultFactory: null,
+          quoteAddress: pool.quoteAddress,
+          quoteSymbol: pool.quoteSymbol,
+          quoteName: pool.quoteName,
+          sourceUrl: pool.sourceUrl,
+          chainId: pool.chainId,
+        }],
+      },
+    };
+    const sequence = order === "board-first" ? [board, portal] : [portal, board];
+    assert.equal((await sendAlerts(config, sequence[0])).status, "queued", order);
+    assert.equal((await sendAlerts(config, sequence[1])).status, "queued", order);
+
+    clockMs += 3 * 60 * 60_000;
+    assert.equal(await drainAlertOutbox(config), 0, order);
+    failTelegram = false;
+    const delayed = flapPortalDelayedRecoveryEvent({ recoveredAtMs: clockMs, occurredAtMs });
+    assert.equal((await sendAlerts({ ...config }, delayed)).status, "delivered", order);
+    assert.equal((await sendAlerts(config, structuredClone(delayed))).status, "delivered", `${order} retry`);
+    assert.equal(await drainAlertOutbox(config), 0, order);
+  }
+  assert.equal(successfulPayloads, 2, "each isolated ordering emits exactly one eventual Telegram alert");
+});
+
+test("a concurrent Flap Portal observation reuses an in-flight board delivery and never starts a second POST", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-inflight-canonical-"));
+  const occurredAtMs = Date.parse("2026-09-03T06:59:55.000Z");
+  const nowMs = occurredAtMs + 5_000;
+  let postCount = 0;
+  let releasePost;
+  let signalStarted;
+  const postGate = new Promise((resolve) => { releasePost = resolve; });
+  const postStarted = new Promise((resolve) => { signalStarted = resolve; });
+  t.after(() => {
+    releasePost?.();
+    return fs.rm(dataDir, { recursive: true, force: true });
+  });
+  t.mock.method(globalThis, "fetch", async () => {
+    postCount += 1;
+    signalStarted();
+    await postGate;
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: 7304 } }) };
+  });
+  t.mock.method(console, "error", () => {});
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    telegramStrongAlerts: true,
+    alertNow: () => nowMs,
+  };
+  const portal = flapPortalFreshEvent({ occurredAtMs, observedAtMs: nowMs });
+  const pool = portal.changes.newFlapPools[0];
+  const board = {
+    type: "platform_capability_update",
+    platform: { id: "flap", name: "Flap" },
+    source: "https://flap.sh/board",
+    sources: ["https://flap.sh/board"],
+    url: "https://flap.sh/board",
+    observedAt: portal.observedAt,
+    changes: {
+      newFlapPools: [{
+        identity: pool.identity,
+        kind: pool.kind,
+        category: null,
+        vaultFactory: null,
+        quoteAddress: pool.quoteAddress,
+        quoteSymbol: pool.quoteSymbol,
+        quoteName: pool.quoteName,
+        sourceUrl: pool.sourceUrl,
+        chainId: pool.chainId,
+      }],
+    },
+  };
+
+  const boardDelivery = sendAlerts(config, board);
+  await postStarted;
+  const portalWhileInFlight = await sendAlerts({ ...config }, portal);
+  assert.equal(portalWhileInFlight.status, "queued");
+  assert.equal(postCount, 1);
+
+  releasePost();
+  assert.equal((await boardDelivery).status, "delivered");
+  const foldedPortal = await sendAlerts(config, structuredClone(portal));
+  assert.equal(foldedPortal.status, "suppressed");
+  assert.equal(foldedPortal.reason, "semantic_duplicate");
+  assert.equal(foldedPortal.persisted, true);
+  assert.equal(postCount, 1, "the shared canonical signal performs exactly one Telegram POST");
+});
+
+test("a superseded Portal producer key reconciles immediately to its delivered board owner", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-superseded-owner-"));
+  const occurredAtMs = Date.parse("2026-09-03T06:59:55.000Z");
+  const nowMs = occurredAtMs + 5_000;
+  let failTelegram = true;
+  let postCount = 0;
+  let successfulPosts = 0;
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async () => {
+    postCount += 1;
+    if (failTelegram) throw new Error("simulated Telegram outage");
+    successfulPosts += 1;
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: 7500 } }) };
+  });
+  t.mock.method(console, "error", () => {});
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    telegramStrongAlerts: true,
+    alertNow: () => nowMs,
+  };
+  const portal = flapPortalFreshEvent({ occurredAtMs, observedAtMs: nowMs });
+  const pool = portal.changes.newFlapPools[0];
+  const board = {
+    type: "platform_capability_update",
+    platform: { id: "flap", name: "Flap" },
+    source: "https://flap.sh/board",
+    sources: ["https://flap.sh/board"],
+    url: "https://flap.sh/board",
+    observedAt: portal.observedAt,
+    changes: {
+      newFlapPools: [{
+        identity: pool.identity,
+        kind: pool.kind,
+        category: null,
+        vaultFactory: null,
+        quoteAddress: pool.quoteAddress,
+        quoteSymbol: pool.quoteSymbol,
+        quoteName: pool.quoteName,
+        sourceUrl: pool.sourceUrl,
+        chainId: pool.chainId,
+      }],
+    },
+  };
+
+  assert.equal((await sendAlerts(config, portal)).status, "queued");
+  failTelegram = false;
+  assert.equal((await sendAlerts({ ...config }, board)).status, "delivered");
+  const producerRetry = await sendAlerts(config, structuredClone(portal));
+  assert.equal(producerRetry.status, "suppressed");
+  assert.equal(producerRetry.reason, "semantic_duplicate");
+  assert.equal(producerRetry.persisted, true);
+  assert.equal(successfulPosts, 1);
+  assert.equal(postCount, 2, "the producer retry resolves from durable ownership without another POST");
+
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  const reconciled = outbox.events[portal.eventKey];
+  assert.ok(reconciled.semanticDuplicateOf);
+  assert.equal(reconciled.semanticDuplicateOf, reconciled.destinations.telegram.duplicateOf);
+  assert.equal(reconciled.destinations.telegram.disabledReason, "semantic_duplicate");
+});
+
+test("Flap board and Portal live observations fold only for the same symbol and CA", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-cross-source-"));
+  const reverseDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-cross-source-reverse-"));
+  const payloads = [];
+  const nowMs = Date.parse("2026-09-03T07:00:00.000Z");
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.after(() => fs.rm(reverseDataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    payloads.push(JSON.parse(options.body));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: payloads.length } }) };
+  });
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    alertNow: () => nowMs,
+  };
+  const portal = flapPortalDelayedRecoveryEvent({ recoveredAtMs: nowMs });
+  const pool = portal.changes.newFlapPools[0];
+  const board = {
+    type: "platform_capability_update",
+    platform: { id: "flap", name: "Flap" },
+    source: "https://flap.sh/board",
+    sources: ["https://flap.sh/board"],
+    url: "https://flap.sh/board",
+    observedAt: portal.observedAt,
+    changes: {
+      newFlapPools: [{
+        identity: pool.identity,
+        kind: pool.kind,
+        category: null,
+        vaultFactory: null,
+        quoteAddress: pool.quoteAddress,
+        quoteSymbol: pool.quoteSymbol,
+        quoteName: pool.quoteName,
+        sourceUrl: pool.sourceUrl,
+        chainId: pool.chainId,
+      }],
+    },
+  };
+  assert.equal(isMonitoringSourceEnabled(config, board), true);
+  assert.equal((await sendAlerts(config, board)).status, "delivered");
+  const duplicate = await sendAlerts(config, portal);
+  assert.equal(duplicate.status, "suppressed");
+  assert.equal(duplicate.reason, "semantic_duplicate");
+  assert.equal(duplicate.persisted, true);
+  assert.equal(payloads.length, 1);
+
+  const reverseConfig = { ...config, dataDir: reverseDataDir };
+  assert.equal((await sendAlerts(reverseConfig, structuredClone(portal))).status, "delivered");
+  const reverseDuplicate = await sendAlerts(reverseConfig, structuredClone(board));
+  assert.equal(reverseDuplicate.status, "suppressed");
+  assert.equal(reverseDuplicate.reason, "semantic_duplicate");
+  assert.equal(reverseDuplicate.persisted, true);
+  assert.equal(payloads.length, 2, "Portal→board and board→Portal each emit one live fact");
+});
+
+test("official Flap BRK.B X announcement and the later Portal live proof each emit once in separate stages", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-x-announced-live-"));
+  const payloads = [];
+  const occurredAtMs = Date.parse("2026-09-03T06:59:55.000Z");
+  let clockMs = occurredAtMs + 5_000;
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    payloads.push(JSON.parse(options.body));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: payloads.length } }) };
+  });
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    telegramStrongAlerts: true,
+    alertNow: () => clockMs,
+  };
+  const announced = flapOfficialQuoteAnnouncementEvent({ observedAtMs: clockMs });
+  const live = flapPortalFreshEvent({ occurredAtMs, observedAtMs: clockMs });
+  assert.equal(isMonitoringSourceEnabled(config, announced), true);
+  assert.equal(isMonitoringSourceEnabled(config, live), true);
+  assert.deepEqual(focusNoveltyKeys(announced), ["flap:quote-pair:brk-b:announced"]);
+  assert.deepEqual(focusNoveltyKeys(live), [
+    `flap:quote-pair:brk-b:ca:${live.changes.newFlapPools[0].quoteAddress}:live`,
+  ]);
+  assert.equal((await sendAlerts(config, announced)).status, "delivered");
+  clockMs += 1_000;
+  assert.equal((await sendAlerts(config, live)).status, "delivered");
+  assert.equal((await sendAlerts(config, structuredClone(announced))).status, "delivered");
+  assert.equal((await sendAlerts(config, structuredClone(live))).status, "delivered");
+  assert.equal(payloads.length, 2, "announcement and live activation stay distinct, while retries are exact-once");
+});
+
+test("an orphaned Flap delayed entry cannot hide the same tx/log re-included in a new canonical block", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-reorg-recovery-"));
+  const payloads = [];
+  const nowMs = Date.parse("2026-09-03T07:00:00.000Z");
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    payloads.push(JSON.parse(options.body));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: payloads.length } }) };
+  });
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    alertNow: () => nowMs,
+  };
+  const orphaned = flapPortalDelayedRecoveryEvent({ recoveredAtMs: nowMs });
+  assert.equal((await sendAlerts(config, orphaned)).status, "delivered");
+
+  const replacementHash = `0x${"78".repeat(32)}`;
+  const replacement = flapPortalDelayedRecoveryEvent({
+    recoveredAtMs: nowMs,
+    blockHash: replacementHash,
+    reorgOrphanedEventKeys: [orphaned.originalEventKey],
+  });
+  const replacementId = `${replacement.eventKey}:canonical:${replacementHash}`;
+  assert.equal(alertEventKey(replacement), replacementId);
+  assert.equal(isMonitoringSourceEnabled(config, replacement), true);
+  assert.equal((await sendAlerts(config, replacement)).status, "delivered");
+  assert.equal((await sendAlerts(config, structuredClone(replacement))).status, "delivered");
+  assert.equal(payloads.length, 2, "the canonical replacement is visible once, then deduplicates exactly");
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(outbox.events[orphaned.eventKey].status, "delivered");
+  assert.equal(outbox.events[replacementId].status, "delivered");
+  assert.equal(outbox.events[replacementId].event.blockHash, replacementHash);
+});
+
+test("a fresh Flap Portal proof re-included with the same tx/log and a new canonical block emits one revision", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-fresh-reorg-revision-"));
+  const payloads = [];
+  const occurredAtMs = Date.parse("2026-09-03T06:59:55.000Z");
+  const nowMs = occurredAtMs + 5_000;
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    payloads.push(JSON.parse(options.body));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: payloads.length } }) };
+  });
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    telegramStrongAlerts: true,
+    alertNow: () => nowMs,
+  };
+  const original = flapPortalFreshEvent({ occurredAtMs, observedAtMs: nowMs });
+  assert.equal((await sendAlerts(config, original)).status, "delivered");
+
+  const replacementHash = `0x${"79".repeat(32)}`;
+  const replacement = flapPortalFreshEvent({
+    occurredAtMs,
+    observedAtMs: nowMs,
+    blockHash: replacementHash,
+    reorgOrphanedEventKeys: [original.eventKey],
+  });
+  const replacementId = `${replacement.eventKey}:canonical:${replacementHash}`;
+  assert.equal(alertEventKey(replacement), replacementId);
+  assert.equal(isMonitoringSourceEnabled(config, replacement), true);
+  assert.equal((await sendAlerts(config, replacement)).status, "delivered");
+  assert.equal((await sendAlerts(config, structuredClone(replacement))).status, "delivered");
+  assert.equal(payloads.length, 2);
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(outbox.events[original.eventKey].status, "delivered");
+  assert.equal(outbox.events[replacementId].status, "delivered");
+  assert.equal(outbox.events[replacementId].event.blockHash, replacementHash);
+});
+
+test("the outbox detects a fresh same-tx/log Flap block revision even when orphan-state persistence was lost", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-flap-fresh-reorg-crash-window-"));
+  const payloads = [];
+  const occurredAtMs = Date.parse("2026-09-03T06:59:55.000Z");
+  const nowMs = occurredAtMs + 5_000;
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    payloads.push(JSON.parse(options.body));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: payloads.length } }) };
+  });
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    telegramStrongAlerts: true,
+    alertNow: () => nowMs,
+  };
+  const original = flapPortalFreshEvent({ occurredAtMs, observedAtMs: nowMs });
+  assert.equal((await sendAlerts(config, original)).status, "delivered");
+
+  const replacementHash = `0x${"7a".repeat(32)}`;
+  const replacement = flapPortalFreshEvent({
+    occurredAtMs,
+    observedAtMs: nowMs,
+    blockHash: replacementHash,
+    reorgOrphanedEventKeys: [],
+  });
+  assert.equal(alertEventKey(replacement), replacement.eventKey, "the pure key has no orphan hint after the crash");
+  const replacementId = `${replacement.eventKey}:canonical:${replacementHash}`;
+  const delivered = await sendAlerts({ ...config }, replacement);
+  assert.equal(delivered.status, "delivered");
+  assert.equal(delivered.eventId, replacementId);
+  const retry = await sendAlerts(config, structuredClone(replacement));
+  assert.equal(retry.status, "delivered");
+  assert.equal(retry.eventId, replacementId);
+  assert.equal(payloads.length, 2, "the replacement is visible once despite the missing orphan-state write");
+
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  assert.equal(outbox.events[original.eventKey].status, "delivered");
+  assert.equal(outbox.events[replacementId].status, "delivered");
+  assert.equal(outbox.events[replacementId].event.blockHash, replacementHash);
 });
 
 test("pon.fun delayed recovery uses the verified recovery instant while retaining original lag", () => {

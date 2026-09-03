@@ -134,6 +134,10 @@ TG 代币提醒采用平台事件去重：已知 Factory 只有首次出现新�
 
 每 5 秒读取 Flap 与 Four.meme 官方开发文档、运行时页面、公告、活动、递归 sitemap、Four.meme `public/config` 和 `@four-meme/four-meme-ai` npm 最新版本，只监控平台级变化，不监控普通代币发行。Four.meme 报价币以官方 API 中 `MEME/BSC/PUBLISH` 条目为准；Flap 看板的 Trending/分页代币卡片不再当成报价币能力；Four.meme 首页的普通代币 `{name,address}` 也不会当成平台合约。Flap/Four.meme 所有通过有效性过滤的平台提醒统一使用红色非静音强提醒，包括新增、参数更新和下线变化。Flap 看板独有的 Vault 分类必须连续成功观测两次才确认，单次出现、消失和重新出现不会反复播报。解析器升级会静默清理旧噪音。
 
+Flap BSC 报价资产另有一条 3 秒最终区块通道，固定校验官方 Portal 的代理代码、实现、版本和事件回执。日志必须由两个不同来源的固定 RPC 对同一区间返回完全一致的结果，任一来源超时、返回空值冲突或链身份不符都会保留游标重试。只有链上前态经两条独立状态源明确为禁用、当前态明确为启用的 `0→1` 变化才称为“新增”；配置刷新和重复启用只写审计。首次启动只建立静默基线，不回放历史资产；网络中断超过实时窗口后，若公共节点已经裁掉前态，系统会降为 T2 报告“恢复后首次确认当前启用”，明确说明 `0→1` 未证、勿追价，而不会伪装成实时上新或卡死游标。
+
+Flap 官方 X 的报价对预告与链上/看板的正式启用分开建模：预告和上线各最多提醒一次。卡片优先展示报价符号、名称、合约地址、阶段和证据；暂时取不到 metadata 时先保留地址并持久重试，解析成功后补全身份。bStock、ETF 或其他 RWA 报价资产允许作为平台能力更新播报，但会明确提示“报价资产不等于股票所有权、仅监控、不自动交易”，且不会触发首币自动激活。
+
 递归 sitemap 的子节点独立容错：一个子 sitemap 失败时保留它上次成功的页面，同时继续处理健康子节点。网页只对解析后的稳定能力做语义指纹，普通构建号、nonce 和文案抖动不会触发能力提醒。
 
 GitHub 会枚举 `flap-sh`、`four-meme-community` 与 `Four-Meme` 账号，当前覆盖 Flap 的 3 个公开仓库（包括 `flap-skills`）及 Four.meme 相关仓库；`SKILL.md`、Solidity、Vault、Factory、部署脚本、ABI、底池配置和新模块优先处理。Four.meme 官方 Agentic 页面直接链接的 `four-meme-community/four-meme-ai` 按已认证源处理；没有官网反向链接的 `Four-Meme/Four-Smart-Contracts` 降为未认证候选，不触发官方级强提醒。配置 Token 时读取完整 GitHub API；未配置 Token 时优先使用公开 Atom 提交流，Atom 出现 HTTP 503 或网络传输失败会在同一轮立即回退官方 commits REST API，并分别保存 Atom/API 的 ETag，避免进入长退避而延迟更新。README、图片和普通维护文件不推送。

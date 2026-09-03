@@ -5,13 +5,17 @@ import os from "node:os";
 import path from "node:path";
 import { drainAlertOutbox, isTerminalAlertSuppression, sendAlerts } from "../src/alerts.js";
 import {
+  isOfficialFlapQuotePairUpdate,
   isOfficialPonFunUpdate,
   isMonitoringSourceEnabled,
   isPonFunSource,
+  isStrictFlapQuoteAsset,
+  isStrictFlapQuoteAssetUpdate,
+  isStrictFlapPortalQuoteAssetUpdate,
   isTelegramNewsUpdateAllowed,
   isThreePlatformSource,
 } from "../src/source-controls.js";
-import { createTwitterMonitor } from "../src/twitter-monitor.js";
+import { classifyFocusLaunchpadText, createTwitterMonitor } from "../src/twitter-monitor.js";
 
 const focusConfig = { monitorScope: "focus3", ponsMonitorEnabled: false };
 const binanceFocusConfig = { ...focusConfig, binanceMonitorEnabled: true };
@@ -37,6 +41,321 @@ const aiTwitterEvent = (target) => ({
     url: `https://x.com/${target.handle}/status/1234567890`,
   },
 });
+
+const FLAP_BSTOCK_PAIRS_TWEET_ID = "2095124685788979225";
+const FLAP_BSTOCK_PAIRS_TEXT = `Leveraged bStocks are coming to Flap. 🦋
+
+Flap is expanding the programmable asset layer with two new bStock trading pairs:
+
+SOXLB — Bull Semiconductors 3X ETF
+SOXSB — Bear Semiconductors 3X ETF
+
+Creators can now launch tokens paired directly against leveraged semiconductor exposure — and build their own token economies on top.
+
+On Flap, the trading pair is only the foundation.
+
+You can program mechanisms including:
+
+1.Creator wallet — direct tax fees to creators, or a self-build distribution contract
+2.Holder Dividends — continuously distribute dividends to token holders
+3.Burn — use accumulated tax fees to burn tokens and reduce supply
+4.Liquidity — automatically route trading taxes back into liquidity pool
+5.Custom Tax Strategies — combine multiple mechanisms into one token economy
+
+With these, you can build entirely different markets around the same underlying asset.
+
+Different assets. Different mechanisms.
+
+Build on http://Flap.sh 🦋`;
+
+const exactFlapQuotePairEvent = (text = FLAP_BSTOCK_PAIRS_TEXT) => ({
+  type: "twitter_update",
+  project: {
+    id: "flap",
+    handle: "flapdotsh",
+    xUserId: "1749114887807320064",
+    match: "official_x",
+  },
+  tweet: {
+    id: FLAP_BSTOCK_PAIRS_TWEET_ID,
+    text,
+    handle: "flapdotsh",
+    xUserId: "1749114887807320064",
+    authorId: "1749114887807320064",
+    url: `https://x.com/flapdotsh/status/${FLAP_BSTOCK_PAIRS_TWEET_ID}`,
+    sourceVerifiedBy: "official_x_oembed",
+    isReply: false,
+  },
+  signal: classifyFocusLaunchpadText(text),
+});
+
+const FLAP_BOARD_URL = "https://flap.sh/board";
+const FLAP_QUOTE_ADDRESS = "0xe28c09e21db5bb63c4821c3f44c26ee5aee8280f";
+const strictFlapQuoteAsset = (overrides = {}) => ({
+  identity: `chain-56:quote:${FLAP_QUOTE_ADDRESS}`,
+  kind: "quote_asset",
+  category: null,
+  vaultFactory: null,
+  quoteAddress: FLAP_QUOTE_ADDRESS,
+  quoteSymbol: "SOXSB",
+  quoteName: "Bear Semiconductors 3X ETF Tokenized Stock (bStock)",
+  sourceUrl: FLAP_BOARD_URL,
+  chainId: 56,
+  ...overrides,
+});
+
+const strictFlapQuoteAssetEvent = (pool = strictFlapQuoteAsset(), changeOverrides = {}) => ({
+  type: "platform_capability_update",
+  platform: { id: "flap", name: "Flap" },
+  source: FLAP_BOARD_URL,
+  sources: [FLAP_BOARD_URL],
+  url: FLAP_BOARD_URL,
+  changes: { newFlapPools: [pool], ...changeOverrides },
+});
+
+const strictFlapPortalQuoteAssetEvent = () => {
+  const portal = "0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0";
+  const transactionHash = `0x${"ab".repeat(32)}`;
+  const blockNumber = 119_700_000;
+  const blockHash = `0x${"cd".repeat(32)}`;
+  const finalizedHead = blockNumber + 2;
+  const finalizedHeadHash = `0x${"ef".repeat(32)}`;
+  const logIndex = 7;
+  const blockTimestamp = "2026-09-03T00:00:00.000Z";
+  const configuration = {
+    enabled: true,
+    enabledRaw: 1,
+    defaultCurve: 2,
+    alternativeCurve: 3,
+    nativeToQuoteSwapType: 1,
+    dexId: 4,
+  };
+  const asset = {
+    identity: `chain-56:quote:${FLAP_QUOTE_ADDRESS}`,
+    kind: "quote_asset",
+    category: null,
+    vaultFactory: null,
+    quoteAddress: FLAP_QUOTE_ADDRESS,
+    quoteName: "Bear Semiconductors 3X ETF Tokenized Stock (bStock)",
+    quoteSymbol: "SOXSB",
+    quoteDecimals: 18,
+    decimals: 18,
+    enabled: true,
+    configuration,
+    chainId: 56,
+    portal,
+    codeHash: `0x${"12".repeat(32)}`,
+    codeBytes: 512,
+    verifiedAtBlock: finalizedHead,
+    verifiedAtBlockHash: finalizedHeadHash,
+    sourceUrl: FLAP_BOARD_URL,
+  };
+  const abiWord = (value) => value.toString(16).padStart(64, "0");
+  const logData = `0x${asset.quoteAddress.slice(2).padStart(64, "0")}${[
+    configuration.enabledRaw,
+    configuration.defaultCurve,
+    configuration.alternativeCurve,
+    configuration.nativeToQuoteSwapType,
+    configuration.dexId,
+  ].map(abiWord).join("")}`;
+  const evidence = {
+    chainId: 56,
+    portal,
+    portalRuntimeCodeHash: "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3",
+    portalVersion: "v5.22.0",
+    portalImplementation: "0xE3CfDbb959e4EFb6fFD22E8659e8CBeEeD362019",
+    portalImplementationCodeHash: "0x357c9245739d6af7c4727744d479ec7d8c4ae461c2fb37d56eafb9d7dc9ccbaa",
+    eventSignature: "QuoteTokenConfigurationSet(address,(uint8,uint8,uint8,uint8,uint8))",
+    topic0: "0x9a1f38e55c729ebf0c45d240a00b09f0a79a715df7cfd6e8942bd3f8da839199",
+    logIndex,
+    logData,
+    eventConfiguration: { ...configuration },
+    finalizedConfiguration: { ...configuration },
+    configurationVerifiedAtBlock: finalizedHead,
+    metadataVerifiedAtBlock: finalizedHead,
+    metadataCodeHash: asset.codeHash,
+    receiptVerified: true,
+    transactionVerified: true,
+    canonicalBlockVerified: true,
+    confirmations: 5,
+    requiredConfirmations: 3,
+    finalizedHead,
+    finalizedHeadHash,
+  };
+  const explorerUrl = `https://bscscan.com/tx/${transactionHash}`;
+  return {
+    type: "platform_capability_update",
+    kind: "flap_quote_asset_enabled",
+    changeType: "added",
+    eventKey: `flap-quote:56:${transactionHash}:${logIndex}`,
+    platform: { id: "flap", name: "Flap", website: "https://flap.sh", board: FLAP_BOARD_URL },
+    chain: { id: 56, chainId: 56, name: "BNB Chain", environment: "mainnet" },
+    chainId: 56,
+    portal,
+    source: {
+      id: "flap_portal_quote_configuration",
+      name: "Flap official Portal + Board",
+      url: FLAP_BOARD_URL,
+      docsUrl: "https://docs.flap.sh/flap/developers/deployed-contract-addresses",
+      official: true,
+      trust: "official_docs_bound_fingerprinted_portal_receipt",
+    },
+    sourceUrl: FLAP_BOARD_URL,
+    url: explorerUrl,
+    explorerUrl,
+    observedAt: "2026-09-03T00:00:05.000Z",
+    occurredAt: blockTimestamp,
+    blockTimestamp,
+    transactionHash,
+    blockNumber,
+    blockHash,
+    logIndex,
+    receiptProof: {
+      status: 1,
+      transactionHash,
+      transactionIndex: 2,
+      blockNumber,
+      blockHash,
+      logIndex,
+      logMatched: true,
+    },
+    transactionProof: {
+      hash: transactionHash,
+      from: "0x1111111111111111111111111111111111111111",
+      to: "0xc68f29BfE2f6c3D95AdB5685592B9F86680968f2",
+      nonce: 9,
+      blockNumber,
+      blockHash,
+    },
+    blockProof: {
+      number: blockNumber,
+      hash: blockHash,
+      timestamp: blockTimestamp,
+      canonical: true,
+      confirmations: 5,
+      requiredConfirmations: 3,
+    },
+    onchainProof: evidence,
+    evidence: structuredClone(evidence),
+    changes: {
+      newFlapPools: [asset],
+      updatedFlapPools: [],
+      removedFlapPools: [],
+      flapPoolChanges: [],
+      newQuoteTokens: [asset.quoteSymbol],
+      newQuoteConfigs: [{ symbol: asset.quoteSymbol, address: asset.quoteAddress, ...configuration }],
+      newContracts: [asset.quoteAddress],
+    },
+    signal: {
+      strong: true,
+      platformStructural: true,
+      category: "Flap quote asset enabled",
+      headline: `Flap enabled ${asset.quoteSymbol} as a BSC quote asset`,
+      quotePairChange: {
+        stage: "live",
+        assetClass: "quote_asset",
+        assets: [{
+          symbol: asset.quoteSymbol,
+          name: asset.quoteName,
+          address: asset.quoteAddress,
+          decimals: asset.quoteDecimals,
+        }],
+      },
+    },
+    strong: true,
+    reorgOrphanedEventKeys: [],
+    risk: "A Portal quote configuration is platform capability evidence, not proof of token safety, liquidity depth, backing, or favorable execution.",
+  };
+};
+
+const strictFlapPortalDelayedRecoveryEvent = () => {
+  const event = strictFlapPortalQuoteAssetEvent();
+  const originalEventKey = event.eventKey;
+  const recoveredAt = new Date(Date.parse(event.occurredAt) + 20 * 60_000).toISOString();
+  event.eventKey = `${originalEventKey}:delayed-recovery:v1`;
+  event.originalEventKey = originalEventKey;
+  event.observedAt = recoveredAt;
+  event.delayedRecovery = {
+    version: 1,
+    reason: "monitoring_gap_recovery",
+    sourceOccurredAt: event.occurredAt,
+    originalBlockNumber: event.blockNumber,
+    originalBlockHash: event.blockHash,
+    originalTransactionHash: event.transactionHash,
+    originalLogIndex: event.logIndex,
+    recoveredAt,
+    lagMs: 20 * 60_000,
+    cursor: {
+      nextBlockAtRecovery: event.blockNumber,
+      eventBlock: event.blockNumber,
+    },
+  };
+  return event;
+};
+
+const strictFlapPortalFirstObservedAfterGapEvent = ({ successfulReaders = 0 } = {}) => {
+  const event = strictFlapPortalQuoteAssetEvent();
+  const asset = event.changes.newFlapPools[0];
+  const originalEventKey = event.eventKey;
+  const recoveredAt = new Date(Date.parse(event.occurredAt) + 20 * 60_000).toISOString();
+  event.kind = "flap_quote_asset_first_observed_after_gap";
+  event.changeType = "observed";
+  event.eventKey = `${originalEventKey}:first-observed-after-gap:v1`;
+  event.originalEventKey = originalEventKey;
+  event.observedAt = recoveredAt;
+  event.priorTransitionProof = "unavailable";
+  event.priorStateRead = {
+    blockNumber: event.blockNumber - 1,
+    method: "getQuoteTokenConfiguration(address)",
+    requiredIndependentReaders: 2,
+    successfulReaders,
+    matchingUnavailableReaders: 2 - successfulReaders,
+    failureClass: "archive_state_unavailable",
+  };
+  event.changes = {
+    newFlapPools: [],
+    updatedFlapPools: [asset],
+    removedFlapPools: [],
+    flapPoolChanges: [],
+    newQuoteTokens: [],
+    newQuoteConfigs: [],
+    newContracts: [],
+  };
+  event.signal = {
+    strong: false,
+    platformStructural: true,
+    category: "Flap quote asset first observed after gap",
+    headline: `Flap first observed ${asset.quoteSymbol} currently enabled after a monitoring gap`,
+    quotePairChange: {
+      stage: "observed",
+      assetClass: "quote_asset",
+      assets: [{
+        symbol: asset.quoteSymbol,
+        name: asset.quoteName,
+        address: asset.quoteAddress,
+        decimals: asset.quoteDecimals,
+      }],
+    },
+  };
+  event.strong = false;
+  event.delayedRecovery = {
+    version: 1,
+    reason: "first_observed_after_gap",
+    sourceOccurredAt: event.occurredAt,
+    originalBlockNumber: event.blockNumber,
+    originalBlockHash: event.blockHash,
+    originalTransactionHash: event.transactionHash,
+    originalLogIndex: event.logIndex,
+    recoveredAt,
+    lagMs: 20 * 60_000,
+    cursor: {
+      nextBlockAtRecovery: event.blockNumber,
+      eventBlock: event.blockNumber,
+    },
+  };
+  event.risk = "Historical archive state was unavailable from the required independent readers. This confirms only that the quote asset is enabled now; it does not prove a new 0-to-1 activation, token safety, liquidity, backing, or favorable execution.";
+  return event;
+};
 
 async function temporaryDirectory(t, prefix) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -166,6 +485,321 @@ test("focus3 accepts only structural first-party updates from Flap, Four.Meme, a
     },
   ];
   for (const event of allowed) assert.equal(isMonitoringSourceEnabled(focusConfig, event), true, JSON.stringify(event));
+});
+
+test("focus3 admits the real Flap bStock quote-pair tweet only through exact X identity and recomputed structure", () => {
+  const exact = exactFlapQuotePairEvent();
+  assert.equal(isOfficialFlapQuotePairUpdate(exact), true);
+  assert.equal(isMonitoringSourceEnabled(focusConfig, exact), true);
+  assert.deepEqual(exact.signal.quotePairChange, {
+    assetClass: "bstock_quote",
+    stage: "announced",
+    assets: [
+      { symbol: "SOXLB", name: "Bull Semiconductors 3X ETF" },
+      { symbol: "SOXSB", name: "Bear Semiconductors 3X ETF" },
+    ],
+  });
+
+  const dotted = exactFlapQuotePairEvent(`Flap is expanding with one new bStock trading pair:
+BRK.B — Berkshire Class B Stock
+The BRK.B bStock quote pair is coming to Flap.sh.`);
+  assert.deepEqual(dotted.signal.quotePairChange, {
+    assetClass: "bstock_quote",
+    stage: "announced",
+    assets: [{ symbol: "BRK.B", name: "Berkshire Class B Stock" }],
+  });
+  assert.equal(isOfficialFlapQuotePairUpdate(dotted), true);
+  assert.equal(isMonitoringSourceEnabled(focusConfig, dotted), true);
+
+  const mutations = [
+    ["project id", (event) => { event.project.id = "fourmeme"; }],
+    ["project handle", (event) => { event.project.handle = "flapdotsh_"; }],
+    ["project numeric id", (event) => { event.project.xUserId = "1749114887807320065"; }],
+    ["project trust mode", (event) => { event.project.match = "display_name"; }],
+    ["tweet handle", (event) => { event.tweet.handle = "flapdotsh_"; }],
+    ["tweet numeric id", (event) => { event.tweet.xUserId = "1749114887807320065"; }],
+    ["author id", (event) => { event.tweet.authorId = "1749114887807320065"; }],
+    ["status URL", (event) => { event.tweet.url = `https://x.com/attacker/status/${FLAP_BSTOCK_PAIRS_TWEET_ID}`; }],
+    ["oEmbed proof", (event) => { event.tweet.sourceVerifiedBy = "copied_json"; }],
+    ["reply flag", (event) => { event.tweet.isReply = true; }],
+    ["recomputed symbol", (event) => { event.signal.quotePairChange.assets[0].symbol = "FAKEB"; }],
+    ["recomputed name", (event) => { event.signal.quotePairChange.assets[0].name = "Fake ETF"; }],
+    ["recomputed stage", (event) => { event.signal.quotePairChange.stage = "live"; event.signal.reason = "flap_bstock_quote_pair_live"; }],
+    ["asset order", (event) => { event.signal.quotePairChange.assets.reverse(); }],
+    ["extra structural field", (event) => { event.signal.quotePairChange.assets[0].address = FLAP_QUOTE_ADDRESS; }],
+    ["tweet body after classification", (event) => { event.tweet.text = event.tweet.text.replace("SOXLB", "FAKEB"); }],
+  ];
+  for (const [label, mutate] of mutations) {
+    const forged = structuredClone(exact);
+    mutate(forged);
+    assert.equal(isOfficialFlapQuotePairUpdate(forged), false, label);
+    assert.equal(isMonitoringSourceEnabled(focusConfig, forged), false, label);
+  }
+
+  const marketing = exactFlapQuotePairEvent(`Flap introduces two new bStock trading pairs:
+SOXLB — Bull Semiconductors 3X ETF
+SOXSB — Bear Semiconductors 3X ETF
+Trade & Win for a 50,000 USDT prize pool.`);
+  assert.equal(marketing.signal.relevant, false);
+  assert.equal(isMonitoringSourceEnabled(focusConfig, marketing), false);
+
+  const impersonator = exactFlapQuotePairEvent();
+  impersonator.project = {
+    id: "fourmeme",
+    handle: "fourdotmemezh",
+    xUserId: "1816036559864619011",
+    match: "official_x",
+  };
+  impersonator.tweet.handle = "fourdotmemezh";
+  impersonator.tweet.xUserId = "1816036559864619011";
+  impersonator.tweet.authorId = "1816036559864619011";
+  impersonator.tweet.url = `https://x.com/fourdotmemezh/status/${FLAP_BSTOCK_PAIRS_TWEET_ID}`;
+  assert.equal(isMonitoringSourceEnabled(focusConfig, impersonator), false);
+});
+
+test("focus3 Flap board stock-quote exception requires a complete BSC quote_asset and coherent optional proof", () => {
+  const pool = strictFlapQuoteAsset();
+  const exact = strictFlapQuoteAssetEvent(pool);
+  assert.equal(isStrictFlapQuoteAsset(pool), true);
+  assert.equal(isStrictFlapQuoteAssetUpdate(exact), true);
+  assert.equal(isMonitoringSourceEnabled(focusConfig, exact), true);
+  for (const quoteSymbol of ["Brk.B", "X", "A$", "Mixed_Case$1", "A12345678901234567890123"]) {
+    const variant = strictFlapQuoteAsset({ quoteSymbol });
+    assert.equal(isStrictFlapQuoteAsset(variant), true, quoteSymbol);
+    assert.equal(isMonitoringSourceEnabled(focusConfig, strictFlapQuoteAssetEvent(variant)), true, quoteSymbol);
+  }
+
+  const beforeMetadata = { ...pool, quoteSymbol: null };
+  delete beforeMetadata.quoteName;
+  const metadataBackfill = strictFlapQuoteAssetEvent(pool, {
+    newFlapPools: [],
+    updatedFlapPools: [pool],
+    flapPoolChanges: [{ identity: pool.identity, before: beforeMetadata, after: pool }],
+  });
+  assert.equal(isStrictFlapQuoteAssetUpdate(metadataBackfill), true);
+  assert.equal(isMonitoringSourceEnabled(focusConfig, metadataBackfill), true);
+
+  const transactionHash = `0x${"a1".repeat(32)}`;
+  const proof = {
+    portal: "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0",
+    transactionHash,
+    blockNumber: 61_234_567,
+    receiptVerified: true,
+  };
+  const provedPool = strictFlapQuoteAsset({ ...proof, onchainProof: { ...proof } });
+  const proved = strictFlapQuoteAssetEvent(provedPool);
+  assert.equal(isStrictFlapQuoteAsset(provedPool), true);
+  assert.equal(isMonitoringSourceEnabled(focusConfig, proved), true);
+
+  const poolMutations = [
+    ["kind", (item) => { item.kind = "vault_factory"; }],
+    ["chain", (item) => { item.chainId = 2818; }],
+    ["board URL", (item) => { item.sourceUrl = "https://flap.sh/morph/board"; }],
+    ["identity", (item) => { item.identity = `chain-56:quote:0x${"1".repeat(40)}`; }],
+    ["address", (item) => { delete item.quoteAddress; }],
+    ["symbol", (item) => { delete item.quoteSymbol; }],
+    ["leading punctuation symbol", (item) => { item.quoteSymbol = ".SOXSB"; }],
+    ["name", (item) => { delete item.quoteName; }],
+    ["unknown metadata", (item) => { item.stockMarketing = true; }],
+  ];
+  for (const [label, mutate] of poolMutations) {
+    const item = structuredClone(pool);
+    mutate(item);
+    assert.equal(isStrictFlapQuoteAsset(item), false, label);
+    assert.equal(isMonitoringSourceEnabled(focusConfig, strictFlapQuoteAssetEvent(item)), false, label);
+  }
+
+  const eventMutations = [
+    ["platform", (event) => { event.platform.id = "fourmeme"; }],
+    ["source", (event) => { event.source = "https://docs.flap.sh/flap"; }],
+    ["event URL", (event) => { event.url = "https://docs.flap.sh/flap"; }],
+    ["sources", (event) => { event.sources.push("https://attacker.example/board"); }],
+    ["stock module piggyback", (event) => { event.changes.newModules = ["RWA stock issuance"]; }],
+  ];
+  for (const [label, mutate] of eventMutations) {
+    const event = structuredClone(exact);
+    mutate(event);
+    assert.equal(isStrictFlapQuoteAssetUpdate(event), false, label);
+    assert.equal(isMonitoringSourceEnabled(focusConfig, event), false, label);
+  }
+
+  for (const [label, mutate] of [
+    ["unofficial portal", (item) => { item.portal = item.onchainProof.portal = `0x${"2".repeat(40)}`; }],
+    ["transaction mismatch", (item) => { item.onchainProof.transactionHash = `0x${"b2".repeat(32)}`; }],
+    ["block mismatch", (item) => { item.onchainProof.blockNumber += 1; }],
+    ["unverified receipt", (item) => { item.receiptVerified = item.onchainProof.receiptVerified = false; }],
+    ["proof extension", (item) => { item.onchainProof.logIndex = 0; }],
+  ]) {
+    const item = structuredClone(provedPool);
+    mutate(item);
+    assert.equal(isStrictFlapQuoteAsset(item), false, label);
+    assert.equal(isMonitoringSourceEnabled(focusConfig, strictFlapQuoteAssetEvent(item)), false, label);
+  }
+});
+
+test("focus3 accepts the direct Flap Portal quote event only when board metadata and receipt, transaction, and block proofs agree", () => {
+  const exact = strictFlapPortalQuoteAssetEvent();
+  assert.equal(isStrictFlapPortalQuoteAssetUpdate(exact), true);
+  assert.equal(isStrictFlapQuoteAssetUpdate(exact), true);
+  assert.equal(isMonitoringSourceEnabled(focusConfig, exact), true);
+  for (const quoteSymbol of ["Brk.B", "X", "A$", "Mixed_Case$1", "A12345678901234567890123"]) {
+    const variant = structuredClone(exact);
+    variant.changes.newFlapPools[0].quoteSymbol = quoteSymbol;
+    variant.changes.newQuoteTokens = [quoteSymbol];
+    variant.changes.newQuoteConfigs[0].symbol = quoteSymbol;
+    variant.signal.headline = `Flap enabled ${quoteSymbol} as a BSC quote asset`;
+    variant.signal.quotePairChange.assets[0].symbol = quoteSymbol;
+    assert.equal(isStrictFlapPortalQuoteAssetUpdate(variant), true, quoteSymbol);
+  }
+
+  const mutations = [
+    ["platform", (event) => { event.platform.id = "fourmeme"; }],
+    ["platform attacker link", (event) => { event.platform.twitter = "https://attacker.example"; }],
+    ["chain extension", (event) => { event.chain.explorer = "https://attacker.example"; }],
+    ["top-level extension", (event) => { event.attackerUrl = "https://attacker.example"; }],
+    ["missing producer field", (event) => { delete event.reorgOrphanedEventKeys; }],
+    ["malformed orphan key", (event) => { event.reorgOrphanedEventKeys = ["flap-quote:56:attacker:7"]; }],
+    ["chain", (event) => { event.chainId = 2818; }],
+    ["source URL", (event) => { event.source.url = "https://attacker.example/board"; }],
+    ["portal", (event) => { event.portal = "0x2222222222222222222222222222222222222222"; }],
+    ["receipt transaction", (event) => { event.receiptProof.transactionHash = `0x${"34".repeat(32)}`; }],
+    ["transaction block", (event) => { event.transactionProof.blockNumber += 1; }],
+    ["block hash", (event) => { event.blockProof.hash = `0x${"56".repeat(32)}`; }],
+    ["onchain portal", (event) => {
+      event.onchainProof.portal = "0x2222222222222222222222222222222222222222";
+      event.evidence.portal = event.onchainProof.portal;
+    }],
+    ["receipt verification", (event) => {
+      event.onchainProof.receiptVerified = false;
+      event.evidence.receiptVerified = false;
+    }],
+    ["ABI quote address word", (event) => {
+      const forgedAddressWord = "2".repeat(40).padStart(64, "0");
+      event.onchainProof.logData = `0x${forgedAddressWord}${event.onchainProof.logData.slice(66)}`;
+      event.evidence.logData = event.onchainProof.logData;
+    }],
+    ["ABI configuration word", (event) => {
+      event.onchainProof.logData = `${event.onchainProof.logData.slice(0, -64)}${"5".padStart(64, "0")}`;
+      event.evidence.logData = event.onchainProof.logData;
+    }],
+    ["confirmation arithmetic", (event) => {
+      event.onchainProof.confirmations += 1;
+      event.evidence.confirmations += 1;
+      event.blockProof.confirmations += 1;
+    }],
+    ["pool metadata", (event) => { delete event.changes.newFlapPools[0].quoteName; }],
+    ["leading punctuation symbol", (event) => {
+      event.changes.newFlapPools[0].quoteSymbol = ".SOXSB";
+      event.changes.newQuoteTokens = [".SOXSB"];
+      event.changes.newQuoteConfigs[0].symbol = ".SOXSB";
+      event.signal.headline = "Flap enabled .SOXSB as a BSC quote asset";
+      event.signal.quotePairChange.assets[0].symbol = ".SOXSB";
+    }],
+    ["quote config", (event) => { event.changes.newQuoteConfigs[0].dexId += 1; }],
+    ["signal structure", (event) => { event.signal.quotePairChange.assets[0].name = "Forged ETF"; }],
+    ["stock module piggyback", (event) => { event.changes.newModules = ["RWA stock issuance"]; }],
+  ];
+  for (const [label, mutate] of mutations) {
+    const event = structuredClone(exact);
+    mutate(event);
+    assert.equal(isStrictFlapPortalQuoteAssetUpdate(event), false, label);
+    assert.equal(isStrictFlapQuoteAssetUpdate(event), false, label);
+    assert.equal(isMonitoringSourceEnabled(focusConfig, event), false, label);
+  }
+});
+
+test("focus3 authenticates the exact Flap Portal delayed-recovery envelope and its original proof", () => {
+  const exact = strictFlapPortalDelayedRecoveryEvent();
+  assert.equal(isStrictFlapPortalQuoteAssetUpdate(exact), true);
+  assert.equal(isMonitoringSourceEnabled(focusConfig, exact), true);
+
+  const mutations = [
+    ["derived event key", (event) => { event.eventKey = event.originalEventKey; }],
+    ["original event key", (event) => { event.originalEventKey = `${event.originalEventKey}:forged`; }],
+    ["source occurrence", (event) => { event.delayedRecovery.sourceOccurredAt = event.observedAt; }],
+    ["original block", (event) => { event.delayedRecovery.originalBlockNumber += 1; }],
+    ["original block hash", (event) => { event.delayedRecovery.originalBlockHash = `0x${"91".repeat(32)}`; }],
+    ["original transaction", (event) => { event.delayedRecovery.originalTransactionHash = `0x${"92".repeat(32)}`; }],
+    ["original log", (event) => { event.delayedRecovery.originalLogIndex += 1; }],
+    ["recovered instant", (event) => { event.delayedRecovery.recoveredAt = event.occurredAt; }],
+    ["lag equation", (event) => { event.delayedRecovery.lagMs += 1; }],
+    ["lag threshold", (event) => {
+      event.observedAt = new Date(Date.parse(event.occurredAt) + 15 * 60_000).toISOString();
+      event.delayedRecovery.recoveredAt = event.observedAt;
+      event.delayedRecovery.lagMs = 15 * 60_000;
+    }],
+    ["cursor event block", (event) => { event.delayedRecovery.cursor.eventBlock += 1; }],
+    ["recovery extension", (event) => { event.delayedRecovery.attackerUrl = "https://attacker.example"; }],
+    ["cursor extension", (event) => { event.delayedRecovery.cursor.attacker = true; }],
+    ["original CA binding", (event) => { event.signal.quotePairChange.assets[0].address = "0x2222222222222222222222222222222222222222"; }],
+  ];
+  for (const [label, mutate] of mutations) {
+    const event = structuredClone(exact);
+    mutate(event);
+    assert.equal(isStrictFlapPortalQuoteAssetUpdate(event), false, label);
+    assert.equal(isMonitoringSourceEnabled(focusConfig, event), false, label);
+  }
+
+  const staleWithoutEnvelope = strictFlapPortalQuoteAssetEvent();
+  staleWithoutEnvelope.observedAt = new Date(Date.parse(staleWithoutEnvelope.occurredAt) + 20 * 60_000).toISOString();
+  assert.equal(isStrictFlapPortalQuoteAssetUpdate(staleWithoutEnvelope), false);
+});
+
+test("focus3 admits only the exact stale Flap first-observed fallback when prior archive-state quorum is unavailable", () => {
+  for (const successfulReaders of [0, 1]) {
+    const exact = strictFlapPortalFirstObservedAfterGapEvent({ successfulReaders });
+    assert.equal(isStrictFlapPortalQuoteAssetUpdate(exact), true, `successfulReaders=${successfulReaders}`);
+    assert.equal(isStrictFlapQuoteAssetUpdate(exact), true, `successfulReaders=${successfulReaders}`);
+    assert.equal(isMonitoringSourceEnabled(focusConfig, exact), true, `successfulReaders=${successfulReaders}`);
+  }
+
+  const exact = strictFlapPortalFirstObservedAfterGapEvent();
+  const mutations = [
+    ["fresh age", (event) => {
+      event.observedAt = new Date(Date.parse(event.occurredAt) + 15 * 60_000).toISOString();
+      event.delayedRecovery.recoveredAt = event.observedAt;
+      event.delayedRecovery.lagMs = 15 * 60_000;
+    }],
+    ["added kind", (event) => { event.kind = "flap_quote_asset_enabled"; }],
+    ["added change claim", (event) => { event.changeType = "added"; }],
+    ["live stage", (event) => { event.signal.quotePairChange.stage = "live"; }],
+    ["strong promotion", (event) => { event.strong = event.signal.strong = true; }],
+    ["new pool claim", (event) => {
+      event.changes.newFlapPools = event.changes.updatedFlapPools;
+      event.changes.updatedFlapPools = [];
+    }],
+    ["new quote claim", (event) => { event.changes.newQuoteTokens = ["SOXSB"]; }],
+    ["new config claim", (event) => { event.changes.newQuoteConfigs = [{ symbol: "SOXSB" }]; }],
+    ["new contract claim", (event) => { event.changes.newContracts = [FLAP_QUOTE_ADDRESS]; }],
+    ["transition proof", (event) => { event.priorTransitionProof = "enabled"; }],
+    ["prior block", (event) => { event.priorStateRead.blockNumber += 1; }],
+    ["prior method", (event) => { event.priorStateRead.method = "eth_call"; }],
+    ["reader quorum", (event) => { event.priorStateRead.requiredIndependentReaders = 1; }],
+    ["two successful readers", (event) => {
+      event.priorStateRead.successfulReaders = 2;
+      event.priorStateRead.matchingUnavailableReaders = 0;
+    }],
+    ["reader count mismatch", (event) => { event.priorStateRead.matchingUnavailableReaders = 1; }],
+    ["transport failure", (event) => { event.priorStateRead.failureClass = "transport_unavailable"; }],
+    ["archive disagreement", (event) => { event.priorStateRead.failureClass = "archive_state_disagreement"; }],
+    ["prior proof extension", (event) => { event.priorStateRead.sourceUrl = "https://attacker.example"; }],
+    ["ordinary activation risk", (event) => {
+      event.risk = "A Portal quote configuration is platform capability evidence, not proof of token safety, liquidity depth, backing, or favorable execution.";
+    }],
+    ["wrong recovery reason", (event) => { event.delayedRecovery.reason = "monitoring_gap_recovery"; }],
+    ["wrong derived key", (event) => { event.eventKey = `${event.originalEventKey}:delayed-recovery:v1`; }],
+  ];
+  for (const [label, mutate] of mutations) {
+    const forged = structuredClone(exact);
+    mutate(forged);
+    assert.equal(isStrictFlapPortalQuoteAssetUpdate(forged), false, label);
+    assert.equal(isMonitoringSourceEnabled(focusConfig, forged), false, label);
+  }
+
+  const ordinaryFresh = strictFlapPortalQuoteAssetEvent();
+  ordinaryFresh.kind = "flap_quote_asset_first_observed_after_gap";
+  ordinaryFresh.changeType = "observed";
+  assert.equal(isStrictFlapPortalQuoteAssetUpdate(ordinaryFresh), false, "a normal fresh event cannot opt into the weak lane");
 });
 
 test("focus3 rejects other platforms, ordinary activity, campaigns, untrusted gaps, and broad Uniswap chatter", () => {

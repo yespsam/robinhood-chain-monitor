@@ -11,11 +11,17 @@ import { startSiteMonitor } from "./site-monitor.js";
 import { buildOfficialCatalog, scanOfficialActivity } from "./official-monitor.js";
 import { createEarlyActivityMonitor } from "./early-activity-monitor.js";
 import { createTwitterMonitor } from "./twitter-monitor.js";
-import { contractDiscoveryChainId, createPlatformCapabilityMonitor } from "./platform-capability-monitor.js";
+import {
+  contractDiscoveryChainId,
+  createPlatformCapabilityMonitor,
+  orderedFlapQuoteMetadataRpcUrls,
+  resolveFlapQuoteAssetMetadataAcrossRpcUrls,
+} from "./platform-capability-monitor.js";
 import { createPonsVersionMonitor, PONS_V2_TOKEN_LAUNCHED_TOPIC } from "./pons-version-monitor.js";
 import { createPonMonitor } from "./pon-monitor.js";
 import { createBinanceMonitor } from "./binance-monitor.js";
-import { createBscLaunchpadMonitor } from "./bsc-launchpad-monitor.js";
+import { createBscLaunchpadMonitor, createRpcPool } from "./bsc-launchpad-monitor.js";
+import { createFlapQuoteMonitor } from "./flap-quote-monitor.js";
 import { createAbortableJsonRpcProvider, createMorphLaunchpadMonitor, mapWithConcurrency } from "./morph-launchpad-monitor.js";
 import { createFomoCallMonitor } from "./fomo-call-monitor.js";
 import { createFomoHealthMonitor } from "./fomo-health-monitor.js";
@@ -63,22 +69,40 @@ const provider = createAbortableJsonRpcProvider(config.rpcUrl, config.chainId, {
   batchMaxCount: 20,
 });
 const flapQuoteMetadataProviders = new Map();
+const flapQuoteLogProviders = new Map();
+const flapQuoteStateProviders = new Map();
+let flapQuoteRpcProvider = null;
 async function resolveFlapQuoteAssetMetadata({ address, chainId }) {
   if (shutdownRequested) return null;
   const numericChainId = Number(chainId);
-  const rpcUrl = numericChainId === 56
-    ? config.bscRpcUrl
-    : numericChainId === 2818 ? config.morphRpcUrl : null;
-  if (!rpcUrl) return null;
-  let metadataProvider = flapQuoteMetadataProviders.get(numericChainId);
-  if (!metadataProvider) {
-    metadataProvider = createAbortableJsonRpcProvider(rpcUrl, numericChainId, {
-      requestTimeoutMs: numericChainId === 56 ? config.bscRpcRequestTimeoutMs : config.morphRpcRequestTimeoutMs,
-      batchMaxCount: 3,
-    });
-    flapQuoteMetadataProviders.set(numericChainId, metadataProvider);
-  }
-  return readTokenMetadata(metadataProvider, address, "latest");
+  const rpcUrls = numericChainId === 56
+    ? orderedFlapQuoteMetadataRpcUrls(config.bscRpcUrl, config.bscRpcUrls)
+    : numericChainId === 2818 ? orderedFlapQuoteMetadataRpcUrls(config.morphRpcUrl) : [];
+  const configuredTimeoutMs = numericChainId === 56
+    ? config.bscRpcRequestTimeoutMs
+    : config.morphRpcRequestTimeoutMs;
+  const requestTimeoutMs = Math.max(1_000, Math.min(3_000, Number(configuredTimeoutMs) || 3_000));
+  return resolveFlapQuoteAssetMetadataAcrossRpcUrls({
+    address,
+    chainId: numericChainId,
+    rpcUrls,
+    attemptTimeoutMs: requestTimeoutMs,
+    totalTimeoutMs: Math.min(4_500, requestTimeoutMs * 3),
+    shouldStop: () => shutdownRequested,
+    providerForUrl: (rpcUrl) => {
+      const providerKey = `${numericChainId}:${rpcUrl}`;
+      let metadataProvider = flapQuoteMetadataProviders.get(providerKey);
+      if (!metadataProvider) {
+        metadataProvider = createAbortableJsonRpcProvider(rpcUrl, numericChainId, {
+          requestTimeoutMs,
+          batchMaxCount: 5,
+        });
+        flapQuoteMetadataProviders.set(providerKey, metadataProvider);
+      }
+      return metadataProvider;
+    },
+    readMetadata: readTokenMetadata,
+  });
 }
 const storage = new Storage(config.dataDir);
 const factoryScores = new Map();
@@ -93,6 +117,7 @@ let officialNextScanAt = 0;
 let earlyActivityMonitor;
 let twitterMonitor;
 let platformCapabilityMonitor;
+let flapQuoteMonitor;
 let ponsVersionMonitor;
 let ponMonitor;
 let binanceMonitor;
@@ -460,6 +485,46 @@ function startIndependentMonitors() {
         : bscLaunchpadMonitor?.registerFourMemeFeatureActivations(records, { awaitReplay: false }),
     });
   });
+  if (config.flapQuoteMonitorEnabled) startMonitor("flap-quote", () => {
+    flapQuoteRpcProvider ||= createRpcPool(
+      orderedFlapQuoteMetadataRpcUrls(config.bscRpcUrl, config.bscRpcUrls),
+      config.bscArchiveRpcUrls || [],
+      2,
+      {
+        requestTimeoutMs: Math.max(1_000, Number(config.bscRpcRequestTimeoutMs || 7_000)),
+        standardConcurrency: 2,
+      },
+    );
+    for (const rpcUrl of config.flapQuoteLogRpcUrls) {
+      const sourceId = new URL(rpcUrl).origin.toLowerCase();
+      if (!flapQuoteLogProviders.has(sourceId)) {
+        flapQuoteLogProviders.set(sourceId, createAbortableJsonRpcProvider(rpcUrl, 56, {
+          requestTimeoutMs: Math.max(1_000, Math.min(7_000, Number(config.bscRpcRequestTimeoutMs || 7_000))),
+          batchMaxCount: 1,
+        }));
+      }
+    }
+    for (const rpcUrl of config.flapQuoteStateRpcUrls) {
+      const sourceId = new URL(rpcUrl).origin.toLowerCase();
+      if (!flapQuoteStateProviders.has(sourceId)) {
+        flapQuoteStateProviders.set(sourceId, createAbortableJsonRpcProvider(rpcUrl, 56, {
+          requestTimeoutMs: Math.max(1_000, Math.min(7_000, Number(config.bscRpcRequestTimeoutMs || 7_000))),
+          batchMaxCount: 1,
+        }));
+      }
+    }
+    flapQuoteMonitor = createFlapQuoteMonitor(config, {
+      provider: flapQuoteRpcProvider,
+      logVerificationProviders: [...flapQuoteLogProviders].map(([sourceId, logProvider]) => ({
+        sourceId,
+        provider: logProvider,
+      })),
+      stateVerificationProviders: [...flapQuoteStateProviders].map(([sourceId, stateProvider]) => ({
+        sourceId,
+        provider: stateProvider,
+      })),
+    });
+  });
   if (config.binanceMonitorEnabled) startMonitor("binance", () => {
     binanceMonitor = createBinanceMonitor(config);
   });
@@ -616,6 +681,7 @@ function createdMonitorEntries() {
     ["early-activity", earlyActivityMonitor],
     ["twitter", twitterMonitor],
     ["platform-capability", platformCapabilityMonitor],
+    ["flap-quote", flapQuoteMonitor],
     ["pons-version", ponsVersionMonitor],
     ["pon", ponMonitor],
     ["binance", binanceMonitor],
@@ -650,7 +716,13 @@ function gracefulShutdown(signal) {
       console.error(`[shutdown] ${label}: ${result.reason?.message || result.reason}`);
     });
 
-    const ownedProviders = [...new Set([provider, ...flapQuoteMetadataProviders.values()])];
+    const ownedProviders = [...new Set([
+      provider,
+      flapQuoteRpcProvider,
+      ...flapQuoteMetadataProviders.values(),
+      ...flapQuoteLogProviders.values(),
+      ...flapQuoteStateProviders.values(),
+    ].filter(Boolean))];
     const providerResults = await Promise.allSettled(
       ownedProviders.map((rpc) => Promise.resolve().then(() => rpc.destroy?.())),
     );
@@ -660,6 +732,8 @@ function gracefulShutdown(signal) {
       console.error(`[shutdown] provider: ${result.reason?.message || result.reason}`);
     });
     flapQuoteMetadataProviders.clear();
+    flapQuoteLogProviders.clear();
+    flapQuoteStateProviders.clear();
 
     const [heartbeatResult] = await Promise.allSettled([
       Promise.resolve().then(() => runtimeHeartbeat?.stop()),

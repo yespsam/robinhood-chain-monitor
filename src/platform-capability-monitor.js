@@ -13,6 +13,9 @@ const FOUR_MEME_STOCK_DOC_URLS = [
 const FLAP_BOARD_URL = "https://flap.sh/board";
 const FLAP_MORPH_BOARD_URL = "https://flap.sh/morph/board";
 const FLAP_BOARD_STABLE_OBSERVATIONS = 2;
+const FLAP_QUOTE_METADATA_MAX_PER_CHECK = 2;
+const FLAP_QUOTE_METADATA_RETRY_BASE_MS = 15_000;
+const FLAP_QUOTE_METADATA_RETRY_MAX_MS = 15 * 60_000;
 const FLAP_SITEMAP_URL = "https://docs.flap.sh/sitemap.xml";
 const FLAP_DOC_URLS = [
   "https://docs.flap.sh/flap/developers/deployed-contract-addresses",
@@ -321,9 +324,15 @@ const KNOWN_FLAP_STOCK_QUOTE_ASSETS = new Set([
   // the address rule even when a public RPC temporarily cannot return ERC-20
   // metadata, so the same stock quote cannot re-enter as an unknown symbol.
   "0x3f53de71c126bdabae20f9cd64848d317f6c3238",
+  // Leveraged semiconductor ETF quotes observed on the official Flap BSC
+  // board. Address classification keeps them out of automatic activation even
+  // when the first metadata RPC attempt is unavailable.
+  "0xd97d097a89113fa59b76c572e5b2eb647e8eefaf", // SOXLB
+  "0xe28cd11c99af2df76bb8ada4cd0ef3904378280f", // SOXSB
 ]);
-const FLAP_STOCK_CLASSIFICATION = /(?:\bbstocks?\b|\btokeni[sz]ed\s+(?:stocks?|equities|securit(?:y|ies))\b|\b(?:stocks?|equities)\s+token\b|\brwa\b[^\n]{0,40}\b(?:stocks?|equities|securit(?:y|ies))\b|\b(?:stocks?|equities|securit(?:y|ies))\b[^\n]{0,40}\brwa\b|股票|证券|股权)/i;
-const KNOWN_BSTOCK_SYMBOL = /^(?:AAPL|AMZN|COIN|GOOGL|META|MSFT|MSTR|NFLX|NVDA|QQQ|SPY|TSLA)B$/i;
+const FLAP_STOCK_CLASSIFICATION = /(?:\bbstocks?\b|\bstocks?\b|\brwa\b|\btokeni[sz]ed\s+(?:stocks?|equities|securit(?:y|ies))\b|\b(?:stocks?|equities)\s+token\b|股票|证券|股权)/i;
+const KNOWN_BSTOCK_SYMBOL = /^(?:AAPL|AMZN|COIN|GOOGL|META|MSFT|MSTR|NFLX|NVDA|QQQ|SOXL|SOXS|SPY|TSLA)B$/i;
+const isFlapStockClassification = (value) => FLAP_STOCK_CLASSIFICATION.test(String(value || "").replace(/[_-]+/g, " "));
 
 const normalizedFlapMetadataText = (value, maximum = 96) => {
   const text = String(value || "").replace(/\s+/g, " ").trim();
@@ -346,7 +355,7 @@ export function isExcludedFlapQuoteAsset(value = {}) {
     ...(Array.isArray(value.quoteTags) ? value.quoteTags : []),
     ...(Array.isArray(value.tags) ? value.tags : []),
   ].filter(Boolean).join(" ");
-  return FLAP_STOCK_CLASSIFICATION.test(classification);
+  return isFlapStockClassification(classification);
 }
 
 const normalizeFlapCategory = (value) => {
@@ -358,6 +367,113 @@ const normalizeFlapAddress = (value) => {
   const address = String(value || "").trim();
   return EVM_ADDRESS_PATTERN.test(address) ? address.toLowerCase() : null;
 };
+
+export function orderedFlapQuoteMetadataRpcUrls(primary, fallbacks = []) {
+  return [...new Set([primary, ...(Array.isArray(fallbacks) ? fallbacks : [])]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean))];
+}
+
+const flapMetadataErrorText = (error) => String(error?.message || error || "unknown error")
+  .replace(/\s+/g, " ")
+  .slice(0, 240);
+
+const withFlapMetadataTimeout = async (task, timeoutMs) => {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(task),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          const error = new Error(`metadata endpoint timed out after ${timeoutMs}ms`);
+          error.code = "FLAP_QUOTE_METADATA_TIMEOUT";
+          reject(error);
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+};
+
+const numericRpcChainId = (value) => {
+  try { return Number(typeof value === "string" ? BigInt(value) : value); }
+  catch { return Number.NaN; }
+};
+
+export async function resolveFlapQuoteAssetMetadataAcrossRpcUrls({
+  address,
+  chainId,
+  rpcUrls,
+  providerForUrl,
+  readMetadata,
+  attemptTimeoutMs = 1_500,
+  totalTimeoutMs = 4_500,
+  shouldStop = () => false,
+}) {
+  const quoteAddress = normalizeFlapAddress(address);
+  const numericChain = Number(chainId);
+  const endpoints = orderedFlapQuoteMetadataRpcUrls(null, rpcUrls);
+  const fail = (message, details = {}) => {
+    const error = new Error(message);
+    error.code = "FLAP_QUOTE_METADATA_UNAVAILABLE";
+    error.details = { address: quoteAddress || String(address || ""), chainId: numericChain, ...details };
+    return error;
+  };
+  if (!quoteAddress) throw fail("Flap quote metadata rejected an invalid address");
+  if (!Number.isSafeInteger(numericChain) || numericChain <= 0) throw fail("Flap quote metadata rejected an invalid chain ID");
+  if (!endpoints.length) throw fail(`Flap quote metadata has no RPC endpoint for chain ${numericChain}`);
+  if (typeof providerForUrl !== "function" || typeof readMetadata !== "function") {
+    throw fail("Flap quote metadata resolver dependencies are unavailable");
+  }
+
+  const endpointTimeoutMs = Math.max(100, Math.min(10_000, Number(attemptTimeoutMs) || 1_500));
+  const overallTimeoutMs = Math.max(endpointTimeoutMs, Math.min(30_000, Number(totalTimeoutMs) || 4_500));
+  const deadlineAt = Date.now() + overallTimeoutMs;
+  const failures = [];
+  let attemptedEndpoints = 0;
+
+  for (let index = 0; index < endpoints.length && !shouldStop(); index += 1) {
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs <= 0) break;
+    attemptedEndpoints += 1;
+    try {
+      const provider = providerForUrl(endpoints[index], numericChain);
+      if (!provider || typeof provider.send !== "function" || typeof provider.getCode !== "function") {
+        throw new Error("RPC provider is incomplete");
+      }
+      const [reportedChainId, code, metadata] = await withFlapMetadataTimeout(() => Promise.all([
+        provider.send("eth_chainId", []),
+        provider.getCode(quoteAddress, "latest"),
+        readMetadata(provider, quoteAddress, "latest"),
+      ]), Math.max(1, Math.min(endpointTimeoutMs, remainingMs)));
+      const remoteChain = numericRpcChainId(reportedChainId);
+      if (remoteChain !== numericChain) throw new Error(`RPC chain ID ${reportedChainId} != expected ${numericChain}`);
+      if (typeof code !== "string" || !/^0x(?:[0-9a-fA-F]{2})+$/.test(code)) throw new Error("quote contract code is unavailable");
+      const name = typeof metadata?.name === "string" ? metadata.name.trim() : "";
+      const symbol = typeof metadata?.symbol === "string" ? metadata.symbol.trim() : "";
+      const decimals = Number(metadata?.decimals);
+      if (!name || name.length > 256) throw new Error("quote token name is unavailable or invalid");
+      if (!symbol || symbol.length > 24) throw new Error("quote token symbol is unavailable or invalid");
+      if (!Number.isInteger(decimals) || decimals < 0 || decimals > 255) throw new Error("quote token decimals are unavailable or invalid");
+      return { ...metadata, name, symbol, decimals };
+    } catch (error) {
+      failures.push({
+        endpoint: index + 1,
+        code: String(error?.code || "RPC_ERROR"),
+        message: flapMetadataErrorText(error),
+      });
+    }
+  }
+
+  const failureSummary = failures.slice(0, 3)
+    .map(({ endpoint, code, message }) => `#${endpoint} ${code}: ${message}`)
+    .join(" | ");
+  throw fail(
+    `Flap quote metadata failed on ${attemptedEndpoints}/${endpoints.length} RPC endpoints${failureSummary ? `; ${failureSummary}` : ""}`,
+    { attemptedEndpoints, endpointCount: endpoints.length, failures },
+  );
+}
 
 const flapPoolIdentity = (item) => {
   const chain = item?.chainId == null ? "" : `chain-${item.chainId}:`;
@@ -589,7 +705,7 @@ export function extractFlapMarketCapabilities(text, sourceUrl = FLAP_BOARD_URL, 
     ...emptyCapabilities(),
     flapPools: uniqueObjects(pools, flapPoolIdentity),
     modules: uniqueStrings([...categories]
-      .filter((category) => !FLAP_STOCK_CLASSIFICATION.test(category))
+      .filter((category) => !isFlapStockClassification(category))
       .map((category) => `Vault ${category}`)),
   };
 }
@@ -1809,8 +1925,18 @@ const finalizeFlapPoolChanges = (platform, previousEntry, current, changes) => {
   return filtered;
 };
 
-async function enrichNewFlapQuoteAssets(platform, previousEntry, current, dependencies, logger) {
-  if (platform.id !== "flap" || !Array.isArray(current.flapPools) || !current.flapPools.length) return current;
+const flapPoolNeedsQuoteMetadata = (pool) => pool?.kind === "quote_asset"
+  && (!normalizedFlapMetadataText(pool.quoteName) || !normalizedFlapMetadataText(pool.quoteSymbol, 24));
+
+const flapQuoteMetadataRetryDelayMs = (attempts) => attempts <= 1
+  ? 0
+  : Math.min(FLAP_QUOTE_METADATA_RETRY_MAX_MS, FLAP_QUOTE_METADATA_RETRY_BASE_MS * (2 ** Math.min(10, attempts - 2)));
+
+async function enrichNewFlapQuoteAssets(platform, previousEntry, current, boardCandidateState, dependencies, logger, observedAt) {
+  const nextBoardCandidateState = { ...(boardCandidateState || {}) };
+  if (platform.id !== "flap" || !Array.isArray(current.flapPools) || !current.flapPools.length) {
+    return { capabilities: current, boardCandidateState: nextBoardCandidateState };
+  }
   const previousPools = (previousEntry?.capabilities?.flapPools || [])
     .map(normalizeFlapPool)
     .filter(Boolean);
@@ -1832,19 +1958,40 @@ async function enrichNewFlapQuoteAssets(platform, previousEntry, current, depend
       });
     }).filter(Boolean),
   };
-  // A cold-start snapshot cannot produce a pool activation, so resolving every
-  // existing quote here only adds RPC load. Resolve metadata when a pool first
-  // appears after the durable baseline instead.
-  if (!previousEntry?.capabilities || !Object.hasOwn(previousEntry.capabilities, "flapPools")) return baseCurrent;
-  const previousIdentities = new Set(previousByIdentity.keys());
-  const candidates = baseCurrent.flapPools
+  // Cold start remains a quiet baseline. Once that baseline is durable, every
+  // confirmed address with incomplete metadata is retryable so a transient RPC
+  // outage cannot permanently freeze a raw address into state.
+  if (!previousEntry?.capabilities || !Object.hasOwn(previousEntry.capabilities, "flapPools")) {
+    return { capabilities: baseCurrent, boardCandidateState: nextBoardCandidateState };
+  }
+  const retryState = { ...(previousEntry?.boardCandidateState?.flapQuoteMetadataRetries || {}) };
+  const confirmedMissing = baseCurrent.flapPools
     .map(normalizeFlapPool)
-    .filter((pool) => pool?.quoteAddress && !previousIdentities.has(flapPoolIdentity(pool)));
-  if (!candidates.length || typeof dependencies.resolveFlapQuoteAssetMetadata !== "function") return baseCurrent;
+    .filter((pool) => pool?.quoteAddress && flapPoolNeedsQuoteMetadata(pool))
+    .filter((pool) => nextBoardCandidateState.flapPools?.[flapPoolIdentity(pool)]?.confirmed === true);
+  const confirmedMissingIdentities = new Set(confirmedMissing.map(flapPoolIdentity));
+  for (const identity of Object.keys(retryState)) {
+    if (!confirmedMissingIdentities.has(identity)) delete retryState[identity];
+  }
+  if (!confirmedMissing.length || typeof dependencies.resolveFlapQuoteAssetMetadata !== "function") {
+    if (Object.keys(retryState).length) nextBoardCandidateState.flapQuoteMetadataRetries = retryState;
+    else delete nextBoardCandidateState.flapQuoteMetadataRetries;
+    return { capabilities: baseCurrent, boardCandidateState: nextBoardCandidateState };
+  }
 
-  const requests = [...new Map(candidates.map((pool) => [pool.quoteAddress, pool])).values()]
-    .filter((pool) => !isExcludedFlapQuoteAsset(pool));
+  const observedMs = Date.parse(observedAt || "");
+  const currentTimeMs = Number.isFinite(observedMs) ? observedMs : Date.now();
+  const retryDueAt = (pool) => {
+    const nextAttemptMs = Date.parse(retryState[flapPoolIdentity(pool)]?.nextAttemptAt || "");
+    return Number.isFinite(nextAttemptMs) ? nextAttemptMs : 0;
+  };
+  const requests = [...new Map(confirmedMissing.map((pool) => [flapPoolIdentity(pool), pool])).values()]
+    .filter((pool) => retryDueAt(pool) <= currentTimeMs)
+    .sort((left, right) => retryDueAt(left) - retryDueAt(right)
+      || flapPoolIdentity(left).localeCompare(flapPoolIdentity(right)))
+    .slice(0, FLAP_QUOTE_METADATA_MAX_PER_CHECK);
   const results = await settleBounded(requests, 2, async (pool) => ({
+    identity: flapPoolIdentity(pool),
     address: pool.quoteAddress,
     metadata: await dependencies.resolveFlapQuoteAssetMetadata({
       address: pool.quoteAddress,
@@ -1852,22 +1999,39 @@ async function enrichNewFlapQuoteAssets(platform, previousEntry, current, depend
       sourceUrl: pool.sourceUrl,
     }),
   }));
-  const metadataByAddress = new Map();
-  for (const result of results) {
+  const metadataByIdentity = new Map();
+  const recordFailure = (pool, error) => {
+    const identity = flapPoolIdentity(pool);
+    const attempts = Number(retryState[identity]?.attempts || 0) + 1;
+    const delayMs = flapQuoteMetadataRetryDelayMs(attempts);
+    retryState[identity] = {
+      attempts,
+      lastAttemptAt: new Date(currentTimeMs).toISOString(),
+      nextAttemptAt: new Date(currentTimeMs + delayMs).toISOString(),
+      errorCode: String(error?.code || "FLAP_QUOTE_METADATA_UNAVAILABLE"),
+      lastError: flapMetadataErrorText(error),
+    };
+    logger?.error?.(`[platform-capability] flap quote metadata ${identity}: ${flapMetadataErrorText(error)}`);
+  };
+  results.forEach((result, index) => {
+    const pool = requests[index];
     if (result.status === "fulfilled" && result.value?.metadata) {
-      metadataByAddress.set(result.value.address, result.value.metadata);
-    } else if (result.status === "rejected") {
-      logger?.error?.(`[platform-capability] flap quote metadata: ${result.reason?.message || result.reason}`);
+      metadataByIdentity.set(flapPoolIdentity(pool), result.value.metadata);
+      delete retryState[flapPoolIdentity(pool)];
+      return;
     }
-  }
-  if (!metadataByAddress.size) return baseCurrent;
-  return {
-    ...baseCurrent,
-    flapPools: baseCurrent.flapPools.map((pool) => {
+    const error = result.status === "rejected"
+      ? result.reason
+      : Object.assign(new Error("quote metadata resolver returned no metadata"), { code: "FLAP_QUOTE_METADATA_EMPTY" });
+    recordFailure(pool, error);
+  });
+
+  const enrichedPools = baseCurrent.flapPools.map((pool) => {
       const normalized = normalizeFlapPool(pool);
-      const metadata = normalized?.quoteAddress ? metadataByAddress.get(normalized.quoteAddress) : null;
+      const identity = normalized ? flapPoolIdentity(normalized) : null;
+      const metadata = identity ? metadataByIdentity.get(identity) : null;
       if (!metadata) return normalized;
-      return normalizeFlapPool({
+      const enriched = normalizeFlapPool({
         ...normalized,
         quoteName: normalized.quoteName || metadata.name || metadata.quoteName,
         quoteSymbol: normalized.quoteSymbol || metadata.symbol || metadata.quoteSymbol,
@@ -1875,9 +2039,24 @@ async function enrichNewFlapQuoteAssets(platform, previousEntry, current, depend
           || metadata.classification || metadata.assetClass || metadata.type || metadata.quoteClassification,
         quoteTags: uniqueStrings([...(normalized.quoteTags || []), ...(metadata.tags || metadata.quoteTags || [])]),
       });
-    }).filter(Boolean),
+      if (flapPoolNeedsQuoteMetadata(enriched)) {
+        recordFailure(normalized, Object.assign(new Error("quote metadata remained incomplete after enrichment"), {
+          code: "FLAP_QUOTE_METADATA_INCOMPLETE",
+        }));
+      }
+      return enriched;
+    }).filter(Boolean);
+  if (Object.keys(retryState).length) nextBoardCandidateState.flapQuoteMetadataRetries = retryState;
+  else delete nextBoardCandidateState.flapQuoteMetadataRetries;
+  return {
+    capabilities: { ...baseCurrent, flapPools: enrichedPools },
+    boardCandidateState: nextBoardCandidateState,
   };
 }
+
+const isOfficialBscFlapBoardQuoteAsset = (pool) => pool?.kind === "quote_asset"
+  && Number(pool.chainId) === 56
+  && canonicalUrl(pool.sourceUrl || "") === canonicalUrl(FLAP_BOARD_URL);
 
 function suppressExcludedFlapStockAssets(platform, changes) {
   if (platform.id !== "flap") return changes;
@@ -1891,16 +2070,18 @@ function suppressExcludedFlapStockAssets(platform, changes) {
     .filter(isExcludedFlapQuoteAsset)
     .map((pool) => normalizeFlapAddress(pool.quoteAddress))
     .filter(Boolean));
-  const excluded = (pool) => isExcludedFlapQuoteAsset(pool)
-    || excludedAddresses.has(normalizeFlapAddress(pool?.quoteAddress));
+  const excluded = (pool) => !isOfficialBscFlapBoardQuoteAsset(pool) && (
+    isExcludedFlapQuoteAsset(pool)
+    || excludedAddresses.has(normalizeFlapAddress(pool?.quoteAddress))
+  );
   return {
     ...changes,
     newFlapPools: (changes.newFlapPools || []).filter((pool) => !excluded(pool)),
     removedFlapPools: (changes.removedFlapPools || []).filter((pool) => !excluded(pool)),
     updatedFlapPools: (changes.updatedFlapPools || []).filter((pool) => !excluded(pool)),
     flapPoolChanges: (changes.flapPoolChanges || []).filter((change) => !excluded(change.before) && !excluded(change.after)),
-    newModules: (changes.newModules || []).filter((module) => !FLAP_STOCK_CLASSIFICATION.test(module)),
-    removedModules: (changes.removedModules || []).filter((module) => !FLAP_STOCK_CLASSIFICATION.test(module)),
+    newModules: (changes.newModules || []).filter((module) => !isFlapStockClassification(module)),
+    removedModules: (changes.removedModules || []).filter((module) => !isFlapStockClassification(module)),
   };
 }
 
@@ -2549,7 +2730,17 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
 
       const aggregated = aggregateSources(platform, nextSources);
       const stabilizedBoard = stabilizeFlapBoardCandidates(platform, previousEntry, aggregated, nextSources, successfulKeys, observedAt);
-      const current = await enrichNewFlapQuoteAssets(platform, previousEntry, stabilizedBoard.capabilities, dependencies, logger);
+      const enrichedBoard = await enrichNewFlapQuoteAssets(
+        platform,
+        previousEntry,
+        stabilizedBoard.capabilities,
+        stabilizedBoard.boardCandidateState,
+        dependencies,
+        logger,
+        observedAt,
+      );
+      const current = enrichedBoard.capabilities;
+      stabilizedBoard.boardCandidateState = enrichedBoard.boardCandidateState;
       let changes = null;
       let observedChains = mergeChainRecords(current.chains || []);
       if (previousEntry?.capabilities) {
@@ -2648,7 +2839,7 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
           const records = [
             ...(changes.newFlapPools || []).map((pool) => ({ pool, changeType: "new_flap_pool" })),
             ...(changes.updatedFlapPools || []).map((pool) => ({ pool, changeType: "updated_flap_pool" })),
-          ].map(({ pool, changeType }) => {
+          ].filter(({ pool }) => !isExcludedFlapQuoteAsset(pool)).map(({ pool, changeType }) => {
             const identity = flapPoolIdentity(pool);
             const confirmation = stabilizedBoard.boardCandidateState?.flapPools?.[identity] || {};
             return {

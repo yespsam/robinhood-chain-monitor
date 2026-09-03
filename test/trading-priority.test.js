@@ -299,6 +299,160 @@ test("Flap infrastructure stays T1, only a safe first-token CA reaches T0, and F
   assert.equal(blocked.plan.automaticExecution, false);
 });
 
+test("Flap quote-pair announcements and verified pools are T1 while anonymous pool addresses remain audit-only", () => {
+  const createdAt = "2026-09-02T12:20:25.000Z";
+  const announcement = {
+    type: "twitter_update",
+    project: { id: "flap", name: "Flap", match: "official_x" },
+    tweet: {
+      id: "2095124685788979225",
+      handle: "flapdotsh",
+      url: "https://x.com/flapdotsh/status/2095124685788979225",
+      text: "Flap is expanding the programmable asset layer with two new bStock trading pairs: SOXLB and SOXSB.",
+      createdAt,
+    },
+    signal: {
+      relevant: true,
+      strong: true,
+      platformStructural: true,
+      labels: ["税收/募资/报价代币"],
+      quotePairChange: {
+        assetClass: "bstock_quote",
+        stage: "announced",
+        assets: [
+          { symbol: "SOXLB", name: "Semicon Bull 3X ETF" },
+          { symbol: "SOXSB", name: "Direxion Semiconductor Bear 3X ETF" },
+        ],
+      },
+    },
+  };
+  const announced = deriveTradingPriority(announcement, { nowMs: Date.parse(createdAt) + 30_000 });
+  assert.equal(announced.tier, "T1");
+  assert.deepEqual(announced.target, { type: "quote_asset", value: "SOXLB", exact: true });
+  assert.equal(announced.lifecycle.product, "quote-pair");
+  assert.equal(announced.lifecycle.stage, "announced");
+  assert.match(announced.plan.capitalPath.zh, /新币定价\/结算/);
+  assert.match(announced.plan.risk.en, /not ETF\/share ownership/i);
+  assert.equal(announced.plan.automaticExecution, false);
+
+  const pool = (quoteSymbol) => ({
+    type: "platform_capability_update",
+    platform: { id: "flap", name: "Flap", website: "https://flap.sh" },
+    url: "https://flap.sh/board",
+    observedAt: createdAt,
+    changes: {
+      newFlapPools: [{
+        kind: "quote_asset",
+        quoteAddress: "0xd97d097a89113fa59b76c572e5b2eb647e8eefaf",
+        quoteSymbol,
+        ...(quoteSymbol ? { quoteName: "Semicon Bull 3X ETF", quoteClassification: "bstock" } : {}),
+        sourceUrl: "https://flap.sh/board",
+        chainId: 56,
+      }],
+    },
+  });
+  const anonymous = deriveTradingPriority(pool(null), { nowMs: Date.parse(createdAt) + 30_000 });
+  assert.equal(anonymous.tier, "T2");
+  assert.equal(anonymous.hardGates.explicitPath, false);
+
+  const confirmed = deriveTradingPriority(pool("SOXLB"), { nowMs: Date.parse(createdAt) + 30_000 });
+  assert.equal(confirmed.tier, "T1");
+  assert.equal(confirmed.target.value, "SOXLB");
+  assert.equal(confirmed.lifecycle.stage, "live");
+  assert.match(confirmed.plan.entryCondition.zh, /Portal\/看板 CA/);
+  assert.match(confirmed.plan.risk.zh, /不等于 ETF\/股票所有权/);
+
+  for (const quoteSymbol of ["Brk.B", "X", "Mixed_Case$1", "A12345678901234567890123"]) {
+    const priority = deriveTradingPriority(pool(quoteSymbol), { nowMs: Date.parse(createdAt) + 30_000 });
+    assert.equal(priority.tier, "T1", quoteSymbol);
+    assert.equal(priority.target.value, quoteSymbol, quoteSymbol);
+    assert.equal(priority.hardGates.explicitPath, true, quoteSymbol);
+  }
+
+  const recoveredAt = "2026-09-02T12:40:25.000Z";
+  const delayedEvent = {
+    ...pool("Brk.B"),
+    kind: "flap_quote_asset_enabled",
+    transactionHash: `0x${"ab".repeat(32)}`,
+    blockNumber: 119_700_000,
+    blockTimestamp: createdAt,
+    occurredAt: createdAt,
+    observedAt: recoveredAt,
+    delayedRecovery: {
+      version: 1,
+      reason: "monitoring_gap_recovery",
+      sourceOccurredAt: createdAt,
+      recoveredAt,
+      lagMs: 20 * 60_000,
+    },
+    freshness: {
+      version: 1,
+      scope: "flap_delayed_recovery",
+      basis: "delayedRecovery.recoveredAt_continuous_recovery",
+      sourceOccurredAt: recoveredAt,
+      discoveredAt: recoveredAt,
+      lagMs: 0,
+      sourceTimeReliable: true,
+      realtimeMaxAgeMs: 600_000,
+      telegramMaxAgeMs: 7_200_000,
+      decision: "realtime",
+      reason: "within_realtime_window",
+    },
+  };
+  delayedEvent.tradingPriority = deriveTradingPriority(delayedEvent, { nowMs: Date.parse(recoveredAt) });
+  assert.equal(delayedEvent.tradingPriority.tier, "T2");
+  assert.equal(delayedEvent.tradingPriority.target.value, "Brk.B");
+  assert.match(delayedEvent.tradingPriority.plan.entryCondition.zh, /断线补报勿追价/);
+  assert.match(delayedEvent.tradingPriority.plan.risk.en, /do not chase.*no automatic trading/i);
+  assert.deepEqual(alertDeliveryDisposition(delayedEvent), {
+    mode: "immediate",
+    deliverImmediately: true,
+    tier: "T2",
+    reason: "flap_delayed_recovery",
+  });
+
+  const firstObserved = structuredClone(delayedEvent);
+  const observedAsset = firstObserved.changes.newFlapPools[0];
+  firstObserved.kind = "flap_quote_asset_first_observed_after_gap";
+  firstObserved.changeType = "observed";
+  firstObserved.strong = false;
+  firstObserved.changes = { newFlapPools: [], updatedFlapPools: [observedAsset] };
+  firstObserved.signal = {
+    strong: false,
+    platformStructural: true,
+    category: "Flap quote asset first observed after gap",
+    headline: "Flap first observed Brk.B currently enabled after a monitoring gap",
+    quotePairChange: {
+      stage: "observed",
+      assetClass: "quote_asset",
+      assets: [{
+        symbol: observedAsset.quoteSymbol,
+        name: observedAsset.quoteName,
+        address: observedAsset.quoteAddress,
+        decimals: 18,
+      }],
+    },
+  };
+  firstObserved.delayedRecovery.reason = "first_observed_after_gap";
+  firstObserved.freshness.scope = "flap_first_observed_after_gap";
+  firstObserved.tradingPriority = deriveTradingPriority(firstObserved, { nowMs: Date.parse(recoveredAt) });
+  assert.equal(firstObserved.tradingPriority.tier, "T2");
+  assert.equal(firstObserved.tradingPriority.lifecycle.stage, "observed");
+  assert.equal(firstObserved.tradingPriority.hardGates.explicitPath, false);
+  assert.equal(firstObserved.tradingPriority.hardGates.t1Eligible, false);
+  assert.match(firstObserved.tradingPriority.plan.mainline.zh, /当前启用.*0→1 未证/u);
+  assert.match(firstObserved.tradingPriority.plan.mainline.en, /currently enabled.*0→1 is unproven/i);
+  assert.match(firstObserved.tradingPriority.plan.entryCondition.zh, /勿追价/u);
+  assert.match(firstObserved.tradingPriority.plan.risk.zh, /补扫仅确认当前启用.*0→1 未证.*非自动交易/u);
+  assert.match(firstObserved.tradingPriority.plan.risk.en, /confirms only the current enabled state.*0→1 is unproven.*do not chase.*no automatic trading/i);
+  assert.deepEqual(alertDeliveryDisposition(firstObserved), {
+    mode: "immediate",
+    deliverImmediately: true,
+    tier: "T2",
+    reason: "flap_first_observed_after_gap",
+  });
+});
+
 test("Binance campaigns are forced to T3, ordinary announcements stay T2, and routine code is T3", () => {
   const activity = copy(fixtures.marscoin);
   activity.signal = { scope: "exchange", category: "活动公告", labels: ["活动/奖励公告"], strong: false };

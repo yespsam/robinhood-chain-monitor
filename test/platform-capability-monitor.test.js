@@ -17,6 +17,8 @@ import {
   extractPlatformCapabilities,
   fetchPlatformSource,
   isExcludedFlapQuoteAsset,
+  orderedFlapQuoteMetadataRpcUrls,
+  resolveFlapQuoteAssetMetadataAcrossRpcUrls,
   createPlatformCapabilityMonitor,
   runPlatformCapabilityCheck,
 } from "../src/platform-capability-monitor.js";
@@ -287,6 +289,144 @@ test("Flap quote metadata identifies tokenized stocks without classifying ordina
   }), false);
 });
 
+test("Flap keeps generic stock modules out of capability alerts", () => {
+  const factory = "0x1111111111111111111111111111111111111111";
+  const result = extractFlapMarketCapabilities(JSON.stringify({
+    initialBoard: {
+      items: [{ vault: { vaultFactory: factory, vaultFactoryCategory: ["stock", "rwa_stock", "index"] } }],
+    },
+  }));
+  assert.deepEqual(result.modules, ["Vault INDEX"]);
+});
+
+test("Flap quote metadata resolver deduplicates RPCs, validates evidence, and falls back in order", async () => {
+  const primary = "https://primary.invalid";
+  const fallback = "https://fallback.invalid";
+  const rpcUrls = orderedFlapQuoteMetadataRpcUrls(primary, [primary, fallback, " "]);
+  assert.deepEqual(rpcUrls, [primary, fallback]);
+  const providerRequests = [];
+  const providers = new Map(rpcUrls.map((url) => [url, {
+    id: url,
+    send: async (method) => {
+      assert.equal(method, "eth_chainId");
+      return "0x38";
+    },
+    getCode: async () => "0x6000",
+  }]));
+  const metadata = await resolveFlapQuoteAssetMetadataAcrossRpcUrls({
+    address: "0xd97d097a89113fa59b76c572e5b2eb647e8eefaf",
+    chainId: 56,
+    rpcUrls,
+    providerForUrl: (url) => {
+      providerRequests.push(url);
+      return providers.get(url);
+    },
+    readMetadata: async (provider) => provider.id === primary
+      ? null
+      : { name: "Semicon Bull 3X ETF", symbol: "SOXLB", decimals: 18 },
+    attemptTimeoutMs: 100,
+    totalTimeoutMs: 500,
+  });
+  assert.deepEqual(providerRequests, [primary, fallback]);
+  assert.deepEqual(metadata, { name: "Semicon Bull 3X ETF", symbol: "SOXLB", decimals: 18 });
+
+  await assert.rejects(
+    resolveFlapQuoteAssetMetadataAcrossRpcUrls({
+      address: "0xe28cd11c99af2df76bb8ada4cd0ef3904378280f",
+      chainId: 56,
+      rpcUrls: [primary],
+      providerForUrl: () => providers.get(primary),
+      readMetadata: async () => null,
+      attemptTimeoutMs: 100,
+      totalTimeoutMs: 100,
+    }),
+    (error) => error.code === "FLAP_QUOTE_METADATA_UNAVAILABLE"
+      && error.details?.attemptedEndpoints === 1
+      && error.details?.failures?.[0]?.message === "quote token name is unavailable or invalid",
+  );
+});
+
+test("Flap BSC SOX quotes remain alertable, skip activation, and backfill metadata after one failure", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-sox-metadata-retry-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const board = "https://flap.sh/board";
+  const target = {
+    id: "flap",
+    name: "Flap",
+    website: "https://flap.sh",
+    capabilitySchemaVersion: 4,
+    marketSources: [{ url: board, chainId: 56 }],
+    pagePattern: /$a/,
+  };
+  const oldQuote = "0x1111111111111111111111111111111111111111";
+  const soxlb = "0xd97d097a89113fa59b76c572e5b2eb647e8eefaf";
+  const soxsb = "0xe28cd11c99af2df76bb8ada4cd0ef3904378280f";
+  const names = new Map([
+    [soxlb, { name: "Semicon Bull 3X ETF", symbol: "SOXLB", decimals: 18 }],
+    [soxsb, { name: "Direxion Semiconductor Bear 3X ETF", symbol: "SOXSB", decimals: 18 }],
+  ]);
+  let current = Date.parse("2026-09-02T12:00:00.000Z");
+  let newQuotes = [];
+  const metadataAttempts = new Map();
+  const alerts = [];
+  const activations = [];
+  const check = async () => {
+    const checked = await runPlatformCapabilityCheck({ dataDir }, {
+      targets: [target],
+      fetchImpl: async (url) => response(JSON.stringify({
+        initialBoard: {
+          items: [
+            { quoteToken: { address: oldQuote, name: "Existing quote", symbol: "OLD" } },
+            ...newQuotes.map((quoteToken) => ({ quoteToken })),
+          ],
+        },
+      }), { url }),
+      resolveFlapQuoteAssetMetadata: async ({ address, chainId }) => {
+        assert.equal(chainId, 56);
+        const attempts = Number(metadataAttempts.get(address) || 0) + 1;
+        metadataAttempts.set(address, attempts);
+        if (attempts === 1) throw Object.assign(new Error("all metadata RPCs timed out"), {
+          code: "FLAP_QUOTE_METADATA_UNAVAILABLE",
+        });
+        return names.get(address);
+      },
+      sendAlertsImpl: async (_config, event) => alerts.push(event),
+      onFlapFeatureActivation: async (records) => activations.push(...records),
+      logger: quietLogger,
+      now: () => new Date(current),
+    });
+    current += 1_500;
+    return checked;
+  };
+
+  await check();
+  newQuotes = [soxlb, soxsb];
+  await check();
+  await check();
+  assert.equal(alerts.length, 1);
+  assert.deepEqual(alerts[0].changes.newFlapPools.map(({ quoteAddress }) => quoteAddress).sort(), [soxlb, soxsb]);
+  assert.equal(alerts[0].changes.newFlapPools.every(({ quoteSymbol }) => quoteSymbol === null), true);
+  assert.equal(activations.length, 0, "known stock/ETF quote addresses must never start first-token activation");
+
+  await check();
+  assert.equal(alerts.length, 2);
+  assert.deepEqual(alerts[1].changes.updatedFlapPools.map(({ quoteSymbol }) => quoteSymbol).sort(), ["SOXLB", "SOXSB"]);
+  assert.equal(alerts[1].changes.flapPoolChanges.every(({ before, after }) => before.quoteSymbol === null && after.quoteSymbol), true);
+  assert.equal(activations.length, 0, "metadata backfill must remain notification-only for stock/ETF quotes");
+  let state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  assert.deepEqual(state.flap.capabilities.flapPools
+    .filter(({ quoteAddress }) => names.has(quoteAddress))
+    .map(({ quoteSymbol }) => quoteSymbol).sort(), ["SOXLB", "SOXSB"]);
+  assert.equal(state.flap.boardCandidateState.flapQuoteMetadataRetries, undefined);
+
+  await check();
+  state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  assert.equal(alerts.length, 2);
+  assert.equal(metadataAttempts.get(soxlb), 2);
+  assert.equal(metadataAttempts.get(soxsb), 2);
+  assert.equal(state.flap.capabilities.flapPools.find(({ quoteAddress }) => quoteAddress === soxlb).quoteName, "Semicon Bull 3X ETF");
+});
+
 test("Flap suppresses stock quote pools after chain metadata while retaining a genuine new quote pool", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-stock-quote-filter-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -301,7 +441,15 @@ test("Flap suppresses stock quote pools after chain metadata while retaining a g
   const metadataReads = [];
   const check = () => runPlatformCapabilityCheck({ dataDir }, {
     targets: [target],
-    fetchImpl: async (url) => response(JSON.stringify({ initialBoard: { items: quotes.map((quoteToken) => ({ quoteToken })) } }), { url }),
+    fetchImpl: async (url) => response(JSON.stringify({
+      initialBoard: {
+        items: quotes.map((quoteToken) => ({
+          quoteToken: quoteToken === oldQuote
+            ? { address: oldQuote, name: "Existing quote", symbol: "OLD" }
+            : quoteToken,
+        })),
+      },
+    }), { url }),
     resolveFlapQuoteAssetMetadata: async ({ address, chainId }) => {
       metadataReads.push({ address, chainId });
       return address === stockQuote

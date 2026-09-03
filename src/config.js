@@ -7,6 +7,28 @@ const integer = (name, fallback) => {
   return value;
 };
 
+export const parseDistinctRpcOrigins = (name, rawValue, fallbackValue, { required = true } = {}) => {
+  const values = String(rawValue || fallbackValue || "").split(",").map((value) => value.trim()).filter(Boolean);
+  const byPhysicalHost = new Map();
+  for (const value of values) {
+    let parsed;
+    try { parsed = new URL(value); }
+    catch { throw new Error(`${name} must contain valid HTTP(S) URLs`); }
+    if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) {
+      throw new Error(`${name} must contain credential-free HTTP(S) URLs`);
+    }
+    const physicalHost = parsed.hostname.toLowerCase().replace(/\.+$/u, "");
+    if (!physicalHost) throw new Error(`${name} must contain valid RPC hostnames`);
+    if (!byPhysicalHost.has(physicalHost)) byPhysicalHost.set(physicalHost, value);
+  }
+  if (required && byPhysicalHost.size < 2) {
+    throw new Error(`${name} must contain at least two distinct physical RPC hosts`);
+  }
+  return [...byPhysicalHost.values()];
+};
+
+const flapQuoteMonitorEnabled = !/^false$/i.test(process.env.FLAP_QUOTE_MONITOR_ENABLED || "true");
+
 export const config = {
   monitorScope: String(process.env.MONITOR_SCOPE || "all").trim().toLowerCase(),
   rpcUrl: process.env.RPC_URL || "https://rpc.mainnet.chain.robinhood.com",
@@ -138,6 +160,30 @@ export const config = {
   platformCapabilityFastSchedulerIntervalMs: integer("PLATFORM_CAPABILITY_FAST_SCHEDULER_INTERVAL_MS", 500),
   platformCapabilityFastSourceIntervalMs: integer("PLATFORM_CAPABILITY_FAST_SOURCE_INTERVAL_MS", 1_500),
   platformCapabilityFastRequestTimeoutMs: integer("PLATFORM_CAPABILITY_FAST_REQUEST_TIMEOUT_MS", 2_000),
+  // Independent finalized-chain lane for Flap Portal quote-asset enablement.
+  // This is intentionally separate from the rotating board snapshot so a new
+  // quote pool is still observed before it appears in the board's top items.
+  flapQuoteMonitorEnabled,
+  flapQuotePollIntervalMs: integer("FLAP_QUOTE_POLL_INTERVAL_MS", 3_000),
+  flapQuoteConfirmations: integer("FLAP_QUOTE_CONFIRMATIONS", 3),
+  flapQuoteEventChunkSize: integer("FLAP_QUOTE_EVENT_CHUNK_SIZE", 25),
+  flapQuoteMaxBlocksPerCycle: integer("FLAP_QUOTE_MAX_BLOCKS_PER_CYCLE", 125),
+  flapQuoteLogMaxBlockSpan: integer("FLAP_QUOTE_LOG_MAX_BLOCK_SPAN", 25),
+  flapQuoteLogConcurrency: integer("FLAP_QUOTE_LOG_CONCURRENCY", 1),
+  flapQuoteBackoffBaseMs: integer("FLAP_QUOTE_BACKOFF_BASE_MS", 3_000),
+  flapQuoteBackoffMaxMs: integer("FLAP_QUOTE_BACKOFF_MAX_MS", 300_000),
+  flapQuoteLogRpcUrls: parseDistinctRpcOrigins(
+    "FLAP_QUOTE_LOG_RPC_URLS",
+    process.env.FLAP_QUOTE_LOG_RPC_URLS,
+    "https://rpc-bnb.blockmachine.io,https://rpc.48.club",
+    { required: flapQuoteMonitorEnabled },
+  ),
+  flapQuoteStateRpcUrls: parseDistinctRpcOrigins(
+    "FLAP_QUOTE_STATE_RPC_URLS",
+    process.env.FLAP_QUOTE_STATE_RPC_URLS,
+    "https://rpc-bnb.blockmachine.io,https://bsc-mainnet.public.blastapi.io",
+    { required: flapQuoteMonitorEnabled },
+  ),
   ponsMonitorEnabled: !/^false$/i.test(process.env.PONS_MONITOR_ENABLED || "true"),
   ponsVersionPollIntervalMs: integer("PONS_VERSION_POLL_INTERVAL_MS", 5_000),
   // pon.fun is a separate Robinhood Chain launchpad and must never inherit

@@ -547,6 +547,77 @@ function structuredModules(event) {
   return parts;
 }
 
+function flapQuotePairDetails(event) {
+  const platform = String(event?.platform?.id || event?.project?.id || "").toLowerCase();
+  if (platform !== "flap") return null;
+  const signal = event?.signal?.quotePairChange;
+  const pools = [
+    ...list(event?.changes?.newFlapPools),
+    ...list(event?.changes?.updatedFlapPools),
+    ...list(event?.changes?.flapPoolChanges).map((change) => change?.after || change),
+  ].filter((pool) => pool?.kind === "quote_asset");
+  if (signal?.assetClass !== "bstock_quote" && !pools.length) return null;
+  const rawAssets = [
+    ...list(signal?.assets),
+    ...pools.map((pool) => ({
+      symbol: pool?.quoteSymbol,
+      name: pool?.quoteName,
+      address: pool?.quoteAddress,
+      chainId: pool?.chainId,
+      classification: pool?.quoteClassification,
+      tags: pool?.quoteTags,
+    })),
+  ];
+  const assets = [];
+  const seen = new Set();
+  for (const asset of rawAssets) {
+    const symbol = String(asset?.symbol || "").trim();
+    const address = String(asset?.address || "").trim();
+    const identity = symbol.toLowerCase() || address.toLowerCase();
+    if (!identity || seen.has(identity)) continue;
+    seen.add(identity);
+    assets.push({
+      symbol: symbol || null,
+      name: String(asset?.name || "").replace(/\s+/g, " ").trim() || null,
+      address: /^0x[a-fA-F0-9]{40}$/.test(address) ? address : null,
+      chainId: Number.isSafeInteger(Number(asset?.chainId)) ? Number(asset.chainId) : null,
+      bstock: signal?.assetClass === "bstock_quote"
+        || /(?:bstock|stock|equity|ETF|证券|股票)/iu.test([
+          asset?.classification,
+          asset?.name,
+          ...(Array.isArray(asset?.tags) ? asset.tags : []),
+        ].filter(Boolean).join(" ")),
+    });
+  }
+  if (!assets.length) return null;
+  const stage = ["announced", "live", "observed"].includes(signal?.stage)
+    ? signal.stage
+    : pools.some((pool) => pool?.quoteSymbol) ? "live" : "observed";
+  const delayedRecovery = event?.type === "platform_capability_update"
+    && event?.kind === "flap_quote_asset_enabled"
+    && event?.delayedRecovery?.version === 1
+    && event.delayedRecovery?.reason === "monitoring_gap_recovery";
+  const firstObservedAfterGap = event?.type === "platform_capability_update"
+    && event?.kind === "flap_quote_asset_first_observed_after_gap"
+    && event?.changeType === "observed"
+    && stage === "observed"
+    && event?.delayedRecovery?.version === 1
+    && event.delayedRecovery?.reason === "first_observed_after_gap";
+  return {
+    assets: assets.slice(0, 8),
+    stage,
+    bstock: assets.some((asset) => asset.bstock),
+    onchain: Boolean(event?.transactionHash || event?.onchainProof || event?.receiptProof),
+    board: pools.length > 0,
+    delayedRecovery,
+    firstObservedAfterGap,
+    recovery: delayedRecovery || firstObservedAfterGap,
+    recoveryLagMs: event?.delayedRecovery?.lagMs,
+    deliveryLagMs: event?.freshness?.deliveryLagMs,
+    deliveryEvaluatedAt: event?.freshness?.deliveryEvaluatedAt,
+  };
+}
+
 function structuredPoolFacts(event, language = "en") {
   const changes = event?.changes || {};
   const zh = language === "zh";
@@ -557,7 +628,10 @@ function structuredPoolFacts(event, language = "en") {
       || pool?.vaultFactory?.address || pool?.vaultFactory || pool?.factory;
     const quote = pool?.quoteAddress || pool?.quoteTokenAddress || pool?.quoteAssetAddress
       || pool?.quoteToken?.address || pool?.quoteAsset?.address || pool?.quoteAsset || pool?.quoteToken;
-    output.push(`${label}: ${category}${factory ? ` · Factory ${factValue(factory)}` : ""}${quote ? ` · Quote ${factValue(quote)}` : ""}`);
+    const quoteSymbol = String(pool?.quoteSymbol || pool?.quoteToken?.symbol || "").trim();
+    const quoteName = String(pool?.quoteName || pool?.quoteToken?.name || "").replace(/\s+/g, " ").trim();
+    const quoteLabel = [quoteSymbol, quoteName].filter(Boolean).join(" · ");
+    output.push(`${label}: ${category}${quoteLabel ? ` · ${factValue(quoteLabel)}` : ""}${factory ? ` · Factory ${factValue(factory)}` : ""}${quote ? ` · Quote ${factValue(quote)}` : ""}`);
   };
   for (const pool of list(changes.newFlapPools).slice(0, 2)) render(pool, zh ? "新增底池" : "New pool");
   for (const change of list(changes.flapPoolChanges).slice(0, Math.max(0, 2 - output.length))) {
@@ -943,9 +1017,31 @@ function ponFunRecoveryLag(value, language = "zh") {
   const minutes = Math.floor(milliseconds / 60_000);
   if (minutes < 60) return language === "zh" ? `${minutes}分钟` : `${minutes}m`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return language === "zh" ? `${hours}小时` : `${hours}h`;
+  if (hours < 24) return language === "zh"
+    ? `${hours}小时${minutes % 60 ? `${minutes % 60}分` : ""}`
+    : `${hours}h${minutes % 60 ? `${minutes % 60}m` : ""}`;
   const days = Math.floor(hours / 24);
   return language === "zh" ? `${days}天${hours % 24 ? `${hours % 24}小时` : ""}` : `${days}d${hours % 24 ? `${hours % 24}h` : ""}`;
+}
+
+function flapRecoveryLagSummary(details, language = "zh") {
+  const zh = language === "zh";
+  const monitorLagMs = Number(details?.recoveryLagMs);
+  const deliveryLagMs = Number(details?.deliveryLagMs);
+  const monitorLag = ponFunRecoveryLag(monitorLagMs, language);
+  if (!Number.isFinite(deliveryLagMs) || deliveryLagMs <= 0) {
+    return zh
+      ? `监控缺口 ${monitorLag} · 总延迟 ${monitorLag}`
+      : `monitor gap ${monitorLag} · total delay ${monitorLag}`;
+  }
+  const deliveryLag = ponFunRecoveryLag(deliveryLagMs, language);
+  const totalLag = ponFunRecoveryLag(
+    Number.isFinite(monitorLagMs) && monitorLagMs >= 0 ? monitorLagMs + deliveryLagMs : deliveryLagMs,
+    language,
+  );
+  return zh
+    ? `监控缺口 ${monitorLag} · 送达等待 ${deliveryLag} · 总延迟 ${totalLag}`
+    : `monitor gap ${monitorLag} · delivery wait ${deliveryLag} · total delay ${totalLag}`;
 }
 
 function ponFunFocusKey(event, language = "zh") {
@@ -1248,6 +1344,12 @@ function flapAgenticFirstTokenCandidate(event) {
 function focusTitle(event, language = "zh") {
   const zh = language === "zh";
   if (isPonFunRenderEvent(event)) return `pon.fun｜${zh ? "官方更新" : "Official update"}`;
+  const flapQuote = flapQuotePairDetails(event);
+  if (flapQuote) return flapQuote.firstObservedAfterGap
+    ? (zh ? "Flap｜补扫首次观察" : "Flap｜First observed after gap")
+    : flapQuote.delayedRecovery
+    ? (zh ? "Flap｜断线恢复补报" : "Flap｜Delayed recovery")
+    : (zh ? "Flap｜报价底池更新" : "Flap｜Quote-pool update");
   if (event?.type === "telegram_news_update") return zh ? "频道线索" : "Channel lead";
   if (flapAgenticFirstTokenCandidate(event)) return zh
     ? "Flap｜Skill首币候选"
@@ -1700,6 +1802,13 @@ function githubConcreteFocus(event, language = "zh") {
 
 function poolFocusKey(event, language) {
   const zh = language === "zh";
+  const quotePair = flapQuotePairDetails(event);
+  if (quotePair) {
+    const labels = quotePair.assets.map((asset) => [asset.symbol, asset.name].filter(Boolean).join(" · "));
+    return zh
+      ? `Flap 报价底池已启用：${labels.join("；")}`
+      : `Flap quote pools enabled: ${labels.join("; ")}`;
+  }
   const interpreted = interpretPlatformPoolChange(event, language);
   if (interpreted) return interpreted;
   const added = list(event?.changes?.newFlapPools)[0];
@@ -1909,6 +2018,33 @@ function focusKey(event, changeModel, language = "zh", priority = null) {
       : `Binance confirmed a security incident${actions.length ? ` and suspended ${actions.join("/")}` : ""}`;
   }
   if (isPonFunRenderEvent(event)) return ponFunFocusKey(event, language);
+  const flapQuote = flapQuotePairDetails(event);
+  if (flapQuote) {
+    const labels = flapQuote.assets.map((asset) => [asset.symbol, asset.name].filter(Boolean).join(" · "));
+    const assets = labels.join(zh ? "；" : "; ");
+    if (flapQuote.firstObservedAfterGap) {
+      // The strict fallback contains one asset. Keep its state boundary ahead
+      // of the descriptive name so Telegram compaction cannot truncate the
+      // crucial "currently" / "0→1 unproven" qualifiers. Name and CA remain
+      // on the adjacent evidence row.
+      const symbols = flapQuote.assets.map((asset) => asset.symbol || asset.name).filter(Boolean)
+        .join(zh ? "；" : "; ");
+      return zh
+        ? `补扫首次观察：${symbols} 当前确认启用；此前是否新增/0→1 未证`
+        : `First observed after gap: ${symbols}; currently confirmed enabled; prior listing/0→1 unproven`;
+    }
+    if (flapQuote.stage === "announced") return zh
+      ? `Flap 预告新增报价底池：${assets}`
+      : `Flap announced new quote pools: ${assets}`;
+    if (flapQuote.stage === "live") return flapQuote.delayedRecovery
+      ? (zh
+          ? `断线恢复补报：Flap 报价底池已启用：${assets}`
+          : `Delayed recovery: Flap quote pools enabled: ${assets}`)
+      : (zh
+          ? `Flap 报价底池已启用：${assets}`
+          : `Flap quote pools enabled: ${assets}`);
+    return zh ? `Flap 报价底池已发现：${assets}` : `Flap quote pools observed: ${assets}`;
+  }
   if (flapAgenticFirstTokenCandidate(event)) {
     const token = firstTokenLabel(event) || "chAIn";
     const quoteAmount = String(event?.mode?.quoteAmountDisplay || "1.283 NVDAB");
@@ -2044,9 +2180,28 @@ function focusKey(event, changeModel, language = "zh", priority = null) {
 function poolEvidence(event) {
   const pools = [
     ...list(event?.changes?.newFlapPools),
+    ...(event?.kind === "flap_quote_asset_first_observed_after_gap"
+      ? list(event?.changes?.updatedFlapPools)
+      : []),
     ...list(event?.changes?.flapPoolChanges).map((item) => item?.after || item),
   ].filter(Boolean);
   if (!pools.length) return [];
+  const quoteAssets = pools.filter((pool) => pool?.kind === "quote_asset");
+  if (quoteAssets.length) {
+    return quoteAssets.slice(0, 2).map((pool) => {
+      const symbol = String(pool?.quoteSymbol || "").trim().toUpperCase();
+      const name = String(pool?.quoteName || "").replace(/\s+/g, " ").trim();
+      const address = pool?.quoteAddress || pool?.quoteTokenAddress || pool?.quoteAssetAddress;
+      const chainId = pool?.chainId ?? event?.chainId ?? event?.chain?.id;
+      const label = [symbol, name].filter(Boolean).join(" · ");
+      const value = [
+        label || "Quote",
+        address ? `CA ${factValue(address)}` : null,
+        chainId != null ? `chainId=${factValue(chainId)}` : null,
+      ].filter(Boolean).join(" · ");
+      return { zh: value, en: value };
+    });
+  }
   const changedQuote = list(event?.changes?.flapPoolChanges).some((item) => {
     const before = item?.before || {};
     const after = item?.after || item || {};
@@ -2413,6 +2568,30 @@ function bscStage(event, language) {
 function focusStage(event, language = "zh", sourceStatus = "") {
   const zh = language === "zh";
   if (isPonFunRenderEvent(event)) return ponFunFocusStage(event, language);
+  const flapQuote = flapQuotePairDetails(event);
+  if (flapQuote) {
+    if (flapQuote.firstObservedAfterGap) {
+      const lag = flapRecoveryLagSummary(flapQuote, language);
+      return zh
+        ? `补扫首次观察 · ${lag} · 当前 Portal 配置与 ERC-20 元数据已核验；前一块状态无双源证明`
+        : `First observed after a gap · ${lag} · current Portal config and ERC-20 metadata verified; prior-block state lacks two-source proof`;
+    }
+    if (flapQuote.delayedRecovery) {
+      const lag = flapRecoveryLagSummary(flapQuote, language);
+      return zh
+        ? `断线恢复补报 · ${lag} · 原始 Portal 回执与 ERC-20 元数据已核验`
+        : `Delayed recovery after disconnect · ${lag} · original Portal receipt and ERC-20 metadata verified`;
+    }
+    if (flapQuote.onchain) return zh
+      ? "Portal 交易回执与 ERC-20 元数据已核验"
+      : "Portal receipt and ERC-20 metadata verified";
+    if (flapQuote.board && flapQuote.stage === "live") return zh
+      ? "Flap 官方看板与 ERC-20 元数据已核验"
+      : "Flap official board and ERC-20 metadata verified";
+    return zh
+      ? "Flap 官方 X 已发布；Portal/看板启用待确认"
+      : "Flap official X published; Portal/board enablement pending";
+  }
   if (flapAgenticFirstTokenCandidate(event)) {
     const block = Number.isSafeInteger(Number(event?.blockNumber)) ? Number(event.blockNumber) : "?";
     return zh
@@ -2502,6 +2681,15 @@ function englishDelay(value) {
 }
 
 function focusTime(event, sourceTime, language = "zh") {
+  const flapQuote = flapQuotePairDetails(event);
+  if (flapQuote?.recovery) {
+    const occurred = beijingMinute(event?.delayedRecovery?.sourceOccurredAt || event?.occurredAt);
+    const recovered = beijingMinute(event?.delayedRecovery?.recoveredAt || event?.observedAt);
+    const delivery = beijingMinute(flapQuote.deliveryEvaluatedAt);
+    return language === "zh"
+      ? `原始发生=${occurred || "未取得"} CST · 恢复=${recovered || "未取得"} CST${delivery ? ` · 送达重试=${delivery} CST` : ""}`
+      : `Original=${occurred || "unavailable"} CST · recovered=${recovered || "unavailable"} CST${delivery ? ` · delivery retry=${delivery} CST` : ""}`;
+  }
   if (event?.type === "uniswap_official_update" && event?.kind === "blog" && !event?.publishedAt) {
     return language === "zh" ? "原文时间未取得" : "Source publication time unavailable";
   }
@@ -2631,6 +2819,55 @@ function buildFocusModel(event, changeModel, sourceLines, tradingPriority, showP
         },
       }
     : null;
+  const flapQuoteDetails = flapQuotePairDetails(event);
+  const flapQuote = flapQuoteDetails
+    ? {
+        verification: {
+          zh: flapQuoteDetails.firstObservedAfterGap
+            ? `补扫首次观察 · ${flapRecoveryLagSummary(flapQuoteDetails, "zh")} · 当前 Portal 回执已核验；此前是否新增/0→1 未证`
+            : flapQuoteDetails.delayedRecovery
+            ? `断线恢复补报 · ${flapRecoveryLagSummary(flapQuoteDetails, "zh")} · 原始 Portal 回执已核验`
+            : flapQuoteDetails.onchain
+            ? "Portal 回执 + ERC-20 元数据已核验"
+            : flapQuoteDetails.board && flapQuoteDetails.stage === "live"
+              ? "官方看板 + ERC-20 元数据已核验"
+              : "官方 X 已验证；链上启用待确认",
+          en: flapQuoteDetails.firstObservedAfterGap
+            ? `First observed after a gap · ${flapRecoveryLagSummary(flapQuoteDetails, "en")} · current Portal receipt verified; prior listing/0→1 unproven`
+            : flapQuoteDetails.delayedRecovery
+            ? `Delayed recovery · ${flapRecoveryLagSummary(flapQuoteDetails, "en")} · original Portal receipt verified`
+            : flapQuoteDetails.onchain
+            ? "Portal receipt + ERC-20 metadata verified"
+            : flapQuoteDetails.board && flapQuoteDetails.stage === "live"
+              ? "Official board + ERC-20 metadata verified"
+              : "Official X verified; on-chain enablement pending",
+        },
+        risk: {
+          zh: flapQuoteDetails.firstObservedAfterGap
+            ? flapQuoteDetails.bstock
+              ? "仅确认当前启用；此前新增/0→1 未证；勿追价；bStock 代币不等于 ETF/股票所有权；非自动交易"
+              : "仅确认当前启用；此前新增/0→1 未证；勿追价；报价代币有合约/流动性/可卖性风险；非自动交易"
+            : flapQuoteDetails.delayedRecovery
+            ? flapQuoteDetails.bstock
+              ? "补报可能已被市场消化，勿追价；bStock 报价代币不等于 ETF/股票所有权；非自动交易"
+              : "补报可能已被市场消化，勿追价；报价代币仍有合约、流动性与可卖性风险；非自动交易"
+            : flapQuoteDetails.bstock
+            ? "bStock 报价代币不等于 ETF/股票所有权；仍需核对预言机、背书、流动性与可卖性；非自动交易"
+            : "报价代币仍有合约、流动性与可卖性风险；非自动交易",
+          en: flapQuoteDetails.firstObservedAfterGap
+            ? flapQuoteDetails.bstock
+              ? "Current state only; prior listing/0→1 unproven; do not chase; bStock token ≠ ETF/share ownership; no automatic trading"
+              : "Current state only; prior listing/0→1 unproven; do not chase; quote-token contract/liquidity/sellability risk; no automatic trading"
+            : flapQuoteDetails.delayedRecovery
+            ? flapQuoteDetails.bstock
+              ? "The recovery may already be priced in; do not chase; a bStock quote token is not ETF/share ownership; no automatic trading"
+              : "The recovery may already be priced in; do not chase; quote-token contract, liquidity, and sellability risks remain; no automatic trading"
+            : flapQuoteDetails.bstock
+            ? "A bStock quote token is not ETF/share ownership; verify oracle, backing, liquidity, and sellability; no automatic trading"
+            : "Quote-token contract, liquidity, and sellability risks remain; no automatic trading",
+        },
+      }
+    : null;
   return {
     eventType: event?.type,
     priority: tradingPriority,
@@ -2648,6 +2885,7 @@ function buildFocusModel(event, changeModel, sourceLines, tradingPriority, showP
     ...(callThesis ? { callThesis } : {}),
     ...(fomo ? { fomo } : {}),
     ...(pon ? { pon } : {}),
+    ...(flapQuote ? { flapQuote } : {}),
   };
 }
 
@@ -3284,6 +3522,7 @@ function usesLocalStructuredBilingualFocus(event) {
     || event?.type === "uniswap_official_update"
     || Boolean(binanceAgentNativeDetails(event))
     || flapAgenticFirstTokenCandidate(event)
+    || flapQuotePairDetails(event)?.recovery === true
     || Boolean(interpretPlatformPoolChange(event, "zh"))
     || Boolean(interpretTwitterWeb3Update(event, "zh"))
     || Boolean(interpretBinanceOfficialUpdate(event, "zh"));
@@ -3375,6 +3614,9 @@ export async function buildBilingualAlertBundle(config, event, baseMessage) {
   const delayedPonRecovery = isPonFunRenderEvent(event)
     && event?.delayedRecovery?.version === 1
     && event.delayedRecovery?.reason === "monitoring_gap_recovery";
+  const flapQuoteRecovery = flapQuotePairDetails(event);
+  const delayedFlapRecovery = flapQuoteRecovery?.delayedRecovery === true;
+  const firstObservedFlapRecovery = flapQuoteRecovery?.firstObservedAfterGap === true;
   const delayedRequiredLiterals = (lines) => requiredTechnicalLiterals(lines, event)
     .filter((literal) => !delayedPonRecovery
       || event?.type !== "pon_fun_update"
@@ -3383,10 +3625,14 @@ export async function buildBilingualAlertBundle(config, event, baseMessage) {
   const chineseRequired = [
     ...delayedRequiredLiterals(chineseBaseLines),
     ...(delayedPonRecovery ? ["监控恢复补报", "勿追价"] : []),
+    ...(delayedFlapRecovery ? ["断线恢复补报", "勿追价", "非自动交易"] : []),
+    ...(firstObservedFlapRecovery ? ["补扫首次观察", "0→1", "勿追价", "非自动交易"] : []),
   ];
   const englishRequired = [
     ...delayedRequiredLiterals(englishBaseLines),
     ...(delayedPonRecovery ? ["Delayed recovery", "do not chase"] : []),
+    ...(delayedFlapRecovery ? ["Delayed recovery", "do not chase", "no automatic trading"] : []),
+    ...(firstObservedFlapRecovery ? ["First observed", "0→1", "do not chase", "no automatic trading"] : []),
   ];
   const options = {
     endpoint: config.alertTranslationUrl,
@@ -3449,7 +3695,7 @@ export async function buildBilingualAlertBundle(config, event, baseMessage) {
     publishedFomoCallDetails(event)
       ? 1_000
       : showPriority
-        ? TWO_FIELD_COMBINED_BLOCK_BUDGET - (delayedPonRecovery ? 48 : 12)
+        ? TWO_FIELD_COMBINED_BLOCK_BUDGET - (delayedPonRecovery || delayedFlapRecovery ? 48 : 12)
         : TWO_FIELD_COMBINED_BLOCK_BUDGET,
   );
   const sourceHash = createHash("sha256")
@@ -3655,7 +3901,7 @@ export function renderBilingualTelegramText(bundle, strong = false) {
       : [conclusion || "Watch", flow ? `flow=${flow}` : null].filter(Boolean).join("; ");
     const fomo = focusModel.fomo;
     const pon = focusModel.pon;
-    const atomicBoundary = fomo || pon;
+    const atomicBoundary = fomo || pon || focusModel.flapQuote;
     const displayDecision = atomicBoundary && hasTrade
       ? (zh
           ? [conclusion || "观察", flow ? `路径=${flow}` : null, entry ? `入场=${entry}` : null, invalid ? `失效=${invalid}` : null]

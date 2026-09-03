@@ -67,6 +67,24 @@ function normalizedPlatform(event = {}) {
   return lower(value).replace(/[^a-z0-9]/g, "");
 }
 
+function isFlapQuoteDelayedRecovery(event = {}) {
+  return event.type === "platform_capability_update"
+    && normalizedPlatform(event) === "flap"
+    && event.kind === "flap_quote_asset_enabled"
+    && event?.delayedRecovery?.version === 1
+    && event.delayedRecovery?.reason === "monitoring_gap_recovery";
+}
+
+function isFlapQuoteFirstObservedAfterGap(event = {}) {
+  return event.type === "platform_capability_update"
+    && normalizedPlatform(event) === "flap"
+    && event.kind === "flap_quote_asset_first_observed_after_gap"
+    && event.changeType === "observed"
+    && event?.signal?.quotePairChange?.stage === "observed"
+    && event?.delayedRecovery?.version === 1
+    && event.delayedRecovery?.reason === "first_observed_after_gap";
+}
+
 function eventText(event = {}) {
   return [
     event.title,
@@ -164,6 +182,20 @@ function exactTarget(event = {}, text = eventText(event)) {
       ...list(event.tokens).map((token) => token?.token || token),
     ].find(validAddress);
     if (firstToken) return { type: "CA", value: clean(firstToken), exact: true };
+
+    // Flap quote-pair announcements and confirmed quote assets are platform
+    // infrastructure, not token launches. Prefer the verified quote symbol as
+    // the decision target so a board/Portal update never degrades into an
+    // anonymous address-only alert.
+    const quotePairSymbol = [
+      ...list(event.signal?.quotePairChange?.assets).map((asset) => asset?.symbol),
+      ...list(event.changes?.newFlapPools).map((pool) => pool?.quoteSymbol),
+      ...list(event.changes?.updatedFlapPools).map((pool) => pool?.quoteSymbol),
+      ...list(event.changes?.flapPoolChanges).map((change) => (change?.after || change)?.quoteSymbol),
+    ].map(clean).find((value) => /^[A-Za-z0-9][A-Za-z0-9_$.-]{0,23}$/.test(value));
+    if (platform === "flap" && quotePairSymbol) {
+      return { type: "quote_asset", value: quotePairSymbol, exact: true };
+    }
   }
   const addressCandidates = [
     event.token,
@@ -624,6 +656,21 @@ function explicitTradingPath(event = {}, eventCategory, target) {
   if (eventCategory === "focus_onchain") return onchainEvidence(event);
   if (eventCategory === "focus_official") {
     if (event.type === "github_module_update") return materialFocusGithub(event);
+    if (isFlapQuoteFirstObservedAfterGap(event)) return false;
+    const flapQuotePools = [
+      ...list(event.changes?.newFlapPools),
+      ...list(event.changes?.updatedFlapPools),
+      ...list(event.changes?.flapPoolChanges).map((change) => change?.after || change),
+    ].filter((pool) => pool?.kind === "quote_asset");
+    const flapQuotePair = normalizedPlatform(event) === "flap"
+      && event.signal?.quotePairChange?.assetClass === "bstock_quote"
+      && ["announced", "live"].includes(event.signal?.quotePairChange?.stage)
+      && list(event.signal?.quotePairChange?.assets).length > 0;
+    if (normalizedPlatform(event) === "flap" && (flapQuotePair || flapQuotePools.length)) {
+      // A raw CA is durable audit evidence, but it is not a readable trading
+      // target. Keep it T2 until the symbol has been verified and backfilled.
+      return flapQuotePair || flapQuotePools.every((pool) => /^[A-Za-z0-9][A-Za-z0-9_$.-]{0,23}$/.test(clean(pool?.quoteSymbol)));
+    }
     if (event.signal?.platformStructural === true || event.chainSupportChange?.candidate === true) return true;
     if (list(event.chainSupport).length || list(event.newContracts).length) return true;
     return FOCUS_STRUCTURAL_CHANGE_KEYS.some((key) => list(event.changes?.[key]).length > 0);
@@ -676,6 +723,12 @@ function capitalFlowScore(eventCategory) {
 function lifecycleProduct(event = {}, text = eventText(event)) {
   const explicit = clean(event.lifecycle?.product || event.lifecycleProduct || event.productLifecycle?.product);
   if (explicit) return lower(explicit).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  if (normalizedPlatform(event) === "flap" && (
+    event.signal?.quotePairChange?.assetClass === "bstock_quote"
+    || list(event.changes?.newFlapPools).some((pool) => pool?.kind === "quote_asset")
+    || list(event.changes?.updatedFlapPools).some((pool) => pool?.kind === "quote_asset")
+    || list(event.changes?.flapPoolChanges).some((change) => (change?.after || change)?.kind === "quote_asset")
+  )) return "quote-pair";
   if (/\bmeme\s+arena\b/iu.test(text)) return "meme-arena";
   if (/\bopen\s*four\b/iu.test(text)) return "openfour";
   if (/\bmeme\s+rush\b/iu.test(text)) return "meme-rush";
@@ -686,6 +739,14 @@ function lifecycleProduct(event = {}, text = eventText(event)) {
 function lifecycleStage(event = {}, text = eventText(event)) {
   const explicit = clean(event.lifecycle?.stage || event.lifecycleStage || event.productLifecycle?.stage || event.stage);
   if (explicit) return lower(explicit).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  if (normalizedPlatform(event) === "flap" && ["announced", "live", "observed"].includes(event.signal?.quotePairChange?.stage)) {
+    return event.signal.quotePairChange.stage;
+  }
+  if (normalizedPlatform(event) === "flap" && (
+    list(event.changes?.newFlapPools).some((pool) => pool?.kind === "quote_asset" && pool?.quoteSymbol)
+    || list(event.changes?.updatedFlapPools).some((pool) => pool?.kind === "quote_asset" && pool?.quoteSymbol)
+    || list(event.changes?.flapPoolChanges).some((change) => (change?.after || change)?.kind === "quote_asset" && (change?.after || change)?.quoteSymbol)
+  )) return "live";
   if (onchainEvidence(event)) return event.featureFirstToken || event.officialFirstToken ? "first-safe-token" : "onchain-confirmed";
   if (/\b(?:is\s+live|now\s+live|goes\s+live|launched|available\s+now)\b|已上线|正式上线/iu.test(text)) return "live";
   if (/\b(?:upgrade|upgraded|implementation)\b|升级/iu.test(text)) return "upgrade";
@@ -813,6 +874,76 @@ function tradePlan(event, eventCategory, tier, target) {
   }
   if (["focus_onchain", "focus_official"].includes(eventCategory)) {
     const blocked = event.security?.decision === "block";
+    const quotePools = [
+      ...list(event.changes?.newFlapPools),
+      ...list(event.changes?.updatedFlapPools),
+      ...list(event.changes?.flapPoolChanges).map((change) => change?.after || change),
+    ].filter((pool) => pool?.kind === "quote_asset");
+    const quotePair = event.signal?.quotePairChange;
+    const flapQuoteUpdate = normalizedPlatform(event) === "flap"
+      && (quotePair?.assetClass === "bstock_quote" || quotePools.length > 0);
+    if (flapQuoteUpdate) {
+      const delayedRecovery = isFlapQuoteDelayedRecovery(event);
+      const firstObservedAfterGap = isFlapQuoteFirstObservedAfterGap(event);
+      const bstock = quotePair?.assetClass === "bstock_quote"
+        || /(?:bstock|stock|equity|ETF|证券|股票)/iu.test([
+          ...list(quotePair?.assets).flatMap((asset) => [asset?.name, asset?.classification, ...list(asset?.tags)]),
+          ...quotePools.flatMap((pool) => [pool?.quoteName, pool?.quoteClassification, ...list(pool?.quoteTags)]),
+        ].filter(Boolean).join(" "));
+      const assets = [
+        ...list(quotePair?.assets).map((asset) => clean(asset?.symbol)),
+        ...quotePools.map((pool) => clean(pool?.quoteSymbol)),
+      ].filter(Boolean);
+      const labels = [...new Set(assets)].join("/") || "报价资产";
+      const live = quotePair?.stage === "live" || quotePools.some((pool) => pool?.quoteSymbol);
+      return {
+        conclusion: { zh: blocked ? "不做" : "观察", en: blocked ? "Do not trade" : "Watch" },
+        mainline: {
+          zh: firstObservedAfterGap
+            ? `补扫首次确认 ${labels} 当前启用→此前是否 0→1 未证，仅观察后续`
+            : delayedRecovery
+            ? `断线恢复补报 ${labels} 报价底池启用→仅观察后续真实新币`
+            : live
+            ? `Flap 启用 ${labels} 报价底池→关注后续以其计价的新币`
+            : `Flap 预告 ${labels} 报价底池→等待链上启用与首个真实新币`,
+          en: firstObservedAfterGap
+            ? `Backfill first confirmed ${labels} currently enabled→prior 0→1 is unproven; watch only`
+            : delayedRecovery
+            ? `Recovered ${labels} quote-pool enablement after an outage→watch only for subsequent live tokens`
+            : live
+            ? `Flap enabled ${labels} quote pools→watch subsequent tokens priced in them`
+            : `Flap announced ${labels} quote pools→await on-chain enablement and the first live token`,
+        },
+        capitalPath: {
+          zh: firstObservedAfterGap
+            ? "当前报价资产→代币定价/结算→后续发行流动性"
+            : "官方报价资产→新币定价/结算→新发行流动性",
+          en: firstObservedAfterGap
+            ? "Current quote asset→token pricing/settlement→subsequent launch liquidity"
+            : "Official quote asset→new-token pricing/settlement→launch liquidity",
+        },
+        entryCondition: {
+          zh: blocked ? "本地安全门拦截，不入场" : firstObservedAfterGap
+            ? "此前是否新增或 0→1 未证；勿追价；核对 Portal CA 后仅等待后续安全、流动性与成交确认"
+            : delayedRecovery
+            ? "断线补报勿追价；核对 Portal CA 后等待新币安全、流动性与成交确认"
+            : "先核对 Portal/看板 CA，再等真实新币安全、流动性与成交确认",
+          en: blocked ? "Local safety gate blocked; do not enter" : firstObservedAfterGap
+            ? "Prior listing or 0→1 is unproven; do not chase; verify the Portal CA and await safety, liquidity, and volume confirmation"
+            : delayedRecovery
+            ? "Do not chase an outage recovery; verify the Portal CA, then await token safety, liquidity, and volume confirmation"
+            : "Verify the Portal/board CA, then require a live token with safety, liquidity, and volume confirmation",
+        },
+        invalidation: {
+          zh: "底池未启用、CA 不一致、无后续发币或流动性不足",
+          en: "Pool not enabled, CA mismatch, no downstream launch, or weak liquidity",
+        },
+        risk: {
+          zh: `${firstObservedAfterGap ? "补扫仅确认当前启用，此前是否新增或 0→1 未证，勿追价；" : delayedRecovery ? "断线恢复补报可能已被市场消化，勿追价；" : ""}${bstock ? "bStock 报价代币不等于 ETF/股票所有权；预言机、背书、" : "报价代币仍有合约、"}流动性与可卖性风险；${noAutoZh}`,
+          en: `${firstObservedAfterGap ? "The backfill confirms only the current enabled state; prior listing or 0→1 is unproven; do not chase; " : delayedRecovery ? "An outage recovery may already be priced in; do not chase; " : ""}${bstock ? "a bStock quote token is not ETF/share ownership; oracle, backing, " : "quote-token contract, "}liquidity, and sellability risks remain; ${noAutoEn}`,
+        },
+      };
+    }
     return {
       conclusion: { zh: blocked ? "不做" : "观察", en: blocked ? "Do not trade" : "Watch" },
       mainline: { zh: "平台新模式/升级→首个安全代币", en: "Platform mode/upgrade→first safe token" },
@@ -936,6 +1067,7 @@ export function deriveTradingPriority(event = {}, { nowMs = null } = {}) {
   else if (["developer_maintenance", "binance_low_value"].includes(eventCategory)) tier = "T3";
   else if (eventCategory === "pon_information") tier = "T2";
   else if (eventCategory === "binance_information" || eventCategory === "information") tier = "T2";
+  else if (isFlapQuoteDelayedRecovery(event) || isFlapQuoteFirstObservedAfterGap(event)) tier = "T2";
   else if (hardGates.t1Eligible) tier = "T1";
   else tier = "T2";
 

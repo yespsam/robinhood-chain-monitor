@@ -94,6 +94,161 @@ const PON_FUN_X_SIGNAL_RULES = new Map([
   ["lp_deployed", { kind: "market_lifecycle", priority: "T2", major: false }],
 ]);
 
+const FLAP_X_HANDLE = "flapdotsh";
+const FLAP_X_USER_ID = "1749114887807320064";
+const FLAP_BOARD_URL = "https://flap.sh/board";
+const FLAP_BSC_CHAIN_ID = 56;
+const FLAP_BSC_QUOTE_PORTAL = "0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0";
+const FLAP_QUOTE_SOURCE_ID = "flap_portal_quote_configuration";
+const FLAP_QUOTE_SOURCE_TRUST = "official_docs_bound_fingerprinted_portal_receipt";
+const FLAP_QUOTE_DOCS_URL = "https://docs.flap.sh/flap/developers/deployed-contract-addresses";
+const FLAP_QUOTE_PORTAL_RUNTIME_HASH = "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3";
+const FLAP_QUOTE_PORTAL_VERSION = "v5.22.0";
+const FLAP_QUOTE_PORTAL_IMPLEMENTATION = "0xE3CfDbb959e4EFb6fFD22E8659e8CBeEeD362019";
+const FLAP_QUOTE_PORTAL_IMPLEMENTATION_HASH = "0x357c9245739d6af7c4727744d479ec7d8c4ae461c2fb37d56eafb9d7dc9ccbaa";
+const FLAP_QUOTE_CONFIGURATION_SIGNATURE = "QuoteTokenConfigurationSet(address,(uint8,uint8,uint8,uint8,uint8))";
+const FLAP_QUOTE_CONFIGURATION_TOPIC = "0x9a1f38e55c729ebf0c45d240a00b09f0a79a715df7cfd6e8942bd3f8da839199";
+const FLAP_QUOTE_RISK = "A Portal quote configuration is platform capability evidence, not proof of token safety, liquidity depth, backing, or favorable execution.";
+const FLAP_FIRST_OBSERVED_RISK = "Historical archive state was unavailable from the required independent readers. This confirms only that the quote asset is enabled now; it does not prove a new 0-to-1 activation, token safety, liquidity, backing, or favorable execution.";
+const FLAP_DELAYED_RECOVERY_VERSION = 1;
+const FLAP_DELAYED_RECOVERY_REASON = "monitoring_gap_recovery";
+const FLAP_FIRST_OBSERVED_KIND = "flap_quote_asset_first_observed_after_gap";
+const FLAP_FIRST_OBSERVED_REASON = "first_observed_after_gap";
+const FLAP_DELAYED_RECOVERY_MIN_LAG_MS = 15 * 60 * 1_000;
+const FLAP_DIRECT_EVENT_KEYS = new Set([
+  "type", "kind", "changeType", "eventKey", "platform", "chain", "chainId", "portal",
+  "source", "sourceUrl", "url", "explorerUrl", "observedAt", "occurredAt", "blockTimestamp",
+  "transactionHash", "blockNumber", "blockHash", "logIndex", "receiptProof", "transactionProof",
+  "blockProof", "onchainProof", "evidence", "changes", "signal", "strong",
+  "reorgOrphanedEventKeys", "risk",
+]);
+const FLAP_DIRECT_RECOVERY_EVENT_KEYS = new Set(["originalEventKey", "delayedRecovery"]);
+const FLAP_DIRECT_FIRST_OBSERVED_EVENT_KEYS = new Set(["priorTransitionProof", "priorStateRead"]);
+const FLAP_DIRECT_DERIVED_EVENT_KEYS = new Set([
+  "canonicalSignalId", "canonicalSignalIds", "freshness", "tradingPriority", "alertQueuedAt",
+]);
+const FLAP_DIRECT_PLATFORM_KEYS = new Set(["id", "name", "website", "board"]);
+const FLAP_DIRECT_CHAIN_KEYS = new Set(["id", "chainId", "name", "environment"]);
+const FLAP_BSC_PORTALS = new Set([
+  "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0",
+  "0x90497450f2a706f1951b5bdda52b4e5d16f34c06",
+]);
+const FLAP_QUOTE_PAIR_LABEL = "税收/募资/报价代币";
+const FLAP_QUOTE_PAIR_PROMOTION = /(?:\b(?:trade\s*(?:&|and)\s*win|trading\s+competition|bonus\s+pool|prize\s+pool|reward\s+pool|giveaway|airdrop|contest|compete\s+for|trading\s+volume|leaderboard)\b|交易(?:大赛|竞赛|赢奖)|奖金池|奖池|交易量)/i;
+const FLAP_QUOTE_PAIR_OBJECT = /(?:\bbstocks?\b[^.!?\n]{0,100}\b(?:trading|quote)\s+pairs?\b|\b(?:trading|quote)\s+pairs?\b[^.!?\n]{0,100}\bbstocks?\b|\bbstocks?\b[^.!?\n]{0,100}\bpaired\s+(?:directly\s+)?(?:against|with)\b)/i;
+const FLAP_QUOTE_PAIR_LIVE = /(?:\bbstocks?\b[^.!?\n]{0,120}\b(?:trading|quote)\s+pairs?\b[^.!?\n]{0,80}\b(?:now\s+)?(?:live|available|enabled|listed|supported)\b|\b(?:live|available|enabled|listed|supported)\b[^.!?\n]{0,80}\bbstocks?\b[^.!?\n]{0,100}\b(?:trading|quote)\s+pairs?\b|\bflap(?:\.sh)?\b[^.!?\n]{0,100}\b(?:added|adds|enabled|enables|listed|lists|launched|launches|supports)\b[^.!?\n]{0,120}\bbstocks?\b)/i;
+const FLAP_QUOTE_PAIR_ANNOUNCED = /(?:\bbstocks?\b[^.!?\n]{0,80}\bcoming\s+to\s+flap(?:\.sh)?\b|\bflap(?:\.sh)?\b[^.!?\n]{0,140}\bexpand(?:s|ed|ing)?\b[^.!?\n]{0,100}\b(?:new\s+)?bstock\b|\b(?:announc(?:e|es|ed|ing)|introduc(?:e|es|ed|ing)|will\s+(?:add|enable|list|launch|support)|coming\s+soon)\b[^.!?\n]{0,140}\bbstocks?\b[^.!?\n]{0,100}\b(?:trading|quote)\s+pairs?\b|\bbstocks?\b[^.!?\n]{0,100}\b(?:trading|quote)\s+pairs?\b[^.!?\n]{0,100}\b(?:coming\s+soon|announced?)\b)/i;
+// X list parsing intentionally requires display-style uppercase tickers. The
+// direct Portal contract accepts mixed case, but allowing prose-like mixed
+// case here would misread numbered product bullets such as `3.Burn — ...` as
+// quote assets. Dots/dashes remain valid for real tickers such as BRK.B.
+const FLAP_QUOTE_PAIR_ASSET_LINE = /^\*{0,2}\$?([A-Z0-9][A-Z0-9_$.-]{0,23})\*{0,2}\s*(?:—|–|-|:|\|)\s*(.+)$/u;
+const FLAP_QUOTE_PAIR_BARE_ASSET = /^\*{0,2}\$?([A-Z0-9][A-Z0-9_$.-]{0,23})\*{0,2}$/u;
+const FLAP_QUOTE_PAIR_LIST_PREFIX = /^(?:[-*•▪◦‣●○◆◇]|✅|☑️?|✔️?|🔹|🔸|➤|➡️?)\s*/u;
+const FLAP_QUOTE_PAIR_RESERVED_SYMBOLS = new Set([
+  "BSTOCK", "BSTOCKS", "BUILD", "BURN", "CREATOR", "CREATORS", "CUSTOM", "DIFFERENT",
+  "DIVIDENDS", "ETF", "FLAP", "HOLDER", "HOLDERS", "LIQUIDITY", "PAIR", "PAIRS", "TOKEN", "TOKENS",
+]);
+const FLAP_QUOTE_PAIR_COUNT = /\b(one|two|three|four|five|six|seven|eight|nine|ten|\d{1,2})\s+(?:new\s+|additional\s+)?(?:leveraged\s+)?bstock\s+(?:trading|quote)\s+pairs?\b/gi;
+const FLAP_QUOTE_PAIR_COUNT_WORDS = new Map([
+  ["one", 1], ["two", 2], ["three", 3], ["four", 4], ["five", 5],
+  ["six", 6], ["seven", 7], ["eight", 8], ["nine", 9], ["ten", 10],
+]);
+const FLAP_QUOTE_PAIR_INVALID_TEXT = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u;
+
+function validFlapQuotePairName(value) {
+  return typeof value === "string"
+    && value.length >= 2
+    && value.length <= 120
+    && value === value.replace(/\s+/g, " ").trim()
+    && !FLAP_QUOTE_PAIR_INVALID_TEXT.test(value)
+    && !/https?:\/\/|(?:^|\s)[@#][A-Za-z0-9_]/i.test(value)
+    && /^[A-Za-z0-9][A-Za-z0-9 .,&()/'’+%\-]{1,119}$/u.test(value)
+    && /[A-Za-z]/.test(value);
+}
+
+function validFlapMetadataText(value, maximum, minimum = 1) {
+  return typeof value === "string"
+    && value.length >= minimum
+    && value.length <= maximum
+    && value === value.replace(/\s+/g, " ").trim()
+    && !FLAP_QUOTE_PAIR_INVALID_TEXT.test(value)
+    && !/https?:\/\//i.test(value)
+    && /[\p{L}\p{N}]/u.test(value);
+}
+
+function validFlapQuotePairSymbol(value) {
+  return typeof value === "string"
+    && /^[A-Z0-9][A-Z0-9_$.-]{0,23}$/.test(value)
+    && !FLAP_QUOTE_PAIR_RESERVED_SYMBOLS.has(value.toUpperCase());
+}
+
+function validFlapDirectQuoteSymbol(value) {
+  return typeof value === "string"
+    && /^[A-Za-z0-9][A-Za-z0-9_$.-]{0,23}$/.test(value);
+}
+
+function flapDirectQuoteSymbolSlug(value) {
+  const slug = String(value || "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .replace(/\b(?:feat|new|add|adds|added|adding|introduce|introduces|introduced|launch|launches|launched|deploy|deploys|deployed|release|releases|released|enable|enables|enabled|support|supports|supported|the|a|an|our|official|is|now|live)\b/g, " ")
+    .replace(/[^a-z0-9\u3400-\u9fff]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96);
+  return slug
+    || String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+// Keep the semantic parser independent from the X transport.  The producer
+// and the final trust gate both call this function, so an injected or stale
+// `quotePairChange` cannot disagree with the authenticated tweet body.
+export function classifyFlapQuotePairSignalCore(text = "") {
+  const source = String(text || "").replace(/&amp;/gi, "&").replace(/\r\n?/g, "\n");
+  if (!source || source.length > 20_000 || FLAP_QUOTE_PAIR_INVALID_TEXT.test(source)) return null;
+  if (!/\bflap(?:\.sh)?\b/i.test(source)
+    || !/\bbstocks?\b/i.test(source)
+    || !FLAP_QUOTE_PAIR_OBJECT.test(source)
+    || FLAP_QUOTE_PAIR_PROMOTION.test(source)) return null;
+
+  const stage = FLAP_QUOTE_PAIR_LIVE.test(source)
+    ? "live"
+    : FLAP_QUOTE_PAIR_ANNOUNCED.test(source) ? "announced" : null;
+  if (!stage) return null;
+
+  const assets = [];
+  let malformedAssetLine = false;
+  for (const rawLine of source.split("\n")) {
+    const trimmed = rawLine.trim();
+    const listed = FLAP_QUOTE_PAIR_LIST_PREFIX.test(trimmed);
+    const line = trimmed.replace(FLAP_QUOTE_PAIR_LIST_PREFIX, "").trim();
+    const named = line.match(FLAP_QUOTE_PAIR_ASSET_LINE);
+    if (named) {
+      const symbol = named[1];
+      const name = named[2].replace(/^\*+|\*+$/g, "").replace(/\s+/g, " ").trim();
+      if (!validFlapQuotePairSymbol(symbol) || !validFlapQuotePairName(name)) {
+        malformedAssetLine = true;
+        continue;
+      }
+      assets.push({ symbol, name });
+      continue;
+    }
+    const bare = listed ? line.match(FLAP_QUOTE_PAIR_BARE_ASSET) : null;
+    if (bare) {
+      if (!validFlapQuotePairSymbol(bare[1])) malformedAssetLine = true;
+      else assets.push({ symbol: bare[1] });
+    }
+  }
+  if (malformedAssetLine || assets.length < 1 || assets.length > 8) return null;
+  if (new Set(assets.map(({ symbol }) => symbol.toLowerCase())).size !== assets.length) return null;
+
+  const declaredCounts = [...source.matchAll(FLAP_QUOTE_PAIR_COUNT)].map((match) => (
+    FLAP_QUOTE_PAIR_COUNT_WORDS.get(match[1].toLowerCase()) ?? Number(match[1])
+  ));
+  if (declaredCounts.some((count) => !Number.isSafeInteger(count) || count < 1 || count > 8 || count !== assets.length)) return null;
+  return { assetClass: "bstock_quote", stage, assets };
+}
+
 // One canonical classifier core is shared by the X producer and the final
 // source gate. Presentation-only claims are added by twitter-monitor after
 // this decision; security-sensitive kind/stage/evidence can never drift.
@@ -373,7 +528,7 @@ const FOCUS3_TWITTER_SIGNALS = new Set([
 const FOCUS3_UNISWAP_SIGNAL = /(?:pools?\.trade|liquidity[ -]?launcher|crowd\s+launch|instant\s+launch|launch\s+aggregator|launchpad|token\s+(?:launch|auction)|bonding\s+curve|dualpool|new\s+launch\s+(?:mode|strategy|mechanism)|(?:new\s+)?(?:pool|hook)\s+(?:mode|design|type|mechanism|strategy|template|module)|robinhood[^\n]{0,80}(?:pool|hook|launch|deploy)|(?:pool|hook|launch|deploy)[^\n]{0,80}robinhood|新发射|新底池(?:模式|机制|类型|策略)|新\s*hook(?:模式|机制|模板|模块))/i;
 const FOCUS3_UNISWAP_GITHUB_CORE_SIGNAL = /(?:protocol\s+fees?|fee\s+(?:switch|adapter|policy|splitter)|uniswapx\s+(?:reactor|order|deployment|version))/i;
 const FOCUS3_UNISWAP_EXCLUDED = /(?:permissioned\s+pools?|tokenized\s+(?:stocks?|equities|securities)|security[- ]+tokens?|equity|stocks?\s+(?:issuance|offering|tokenization|tokens?))/i;
-const FOCUS3_STOCK_RWA_EXCLUDED = /(?:\b(?:rwa|stocks?|stock[- ]meme|tokeni[sz]ed\s+(?:assets?|stocks?|equities|securities)|real[- ]world\s+assets?|equity\s+(?:issuance|offering|launch|tokens?|tokenization)|securit(?:y|ies)\s+(?:issuance|offering|tokens?|tokenization))\b|股票|证券|股权|现实世界资产|实物资产|配股)/i;
+const FOCUS3_STOCK_RWA_EXCLUDED = /(?:\b(?:rwa|stocks?|stock[- ]meme|tokeni[sz]ed\s+(?:assets?|stocks?|equities|securities)|real[- ]world\s+assets?|equity\s+(?:issuance|offering|launch|tokens?|tokenization)|securit(?:y|ies)\s+(?:issuance|offering|tokens?|tokenization))\b|\bbstocks?\b[^.!?\n]{0,100}\b(?:trading|quote)\s+pairs?\b|\b(?:trading|quote)\s+pairs?\b[^.!?\n]{0,100}\bbstocks?\b|股票|证券|股权|现实世界资产|实物资产|配股)/i;
 const FOCUS3_FOMO_SOURCE_TRUST = new Set(["public_onchain_verified", "public_onchain_attributed", "authorized_public_api"]);
 const FOCUS3_FOMO_DIRTY_GMGN_TAGS = new Set(["wash_trader", "arbitrager"]);
 const SMART_WALLET_SIGNAL_KIND = "high_profit_high_winrate_wallet_buy";
@@ -465,6 +620,633 @@ function parsedHttpsUrl(value) {
   } catch {
     return null;
   }
+}
+
+function flapRecord(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function exactFlapKeys(value, allowed, required = []) {
+  if (!flapRecord(value)) return false;
+  const keys = Object.keys(value);
+  return keys.every((key) => allowed.has(key)) && required.every((key) => Object.hasOwn(value, key));
+}
+
+function sameFlapValue(left, right) {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right)
+      && left.length === right.length
+      && left.every((value, index) => sameFlapValue(value, right[index]));
+  }
+  if (!flapRecord(left) || !flapRecord(right)) return false;
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length
+    && leftKeys.every((key) => Object.hasOwn(right, key) && sameFlapValue(left[key], right[key]));
+}
+
+function validFlapQuotePairChange(value) {
+  const changeKeys = new Set(["assetClass", "stage", "assets"]);
+  if (!exactFlapKeys(value, changeKeys, [...changeKeys])
+    || value.assetClass !== "bstock_quote"
+    || !["announced", "live"].includes(value.stage)
+    || !Array.isArray(value.assets)
+    || value.assets.length < 1
+    || value.assets.length > 8) return false;
+  const symbols = new Set();
+  for (const asset of value.assets) {
+    const assetKeys = new Set(["symbol", "name"]);
+    if (!exactFlapKeys(asset, assetKeys, ["symbol"])
+      || !validFlapQuotePairSymbol(asset.symbol)
+      || (Object.hasOwn(asset, "name") && !validFlapQuotePairName(asset.name))
+      || symbols.has(asset.symbol)) return false;
+    symbols.add(asset.symbol);
+  }
+  return true;
+}
+
+export function isOfficialFlapQuotePairUpdate(source) {
+  const project = source?.project;
+  const tweet = source?.tweet;
+  const signal = source?.signal;
+  const tweetId = typeof tweet?.id === "string" ? tweet.id : "";
+  const recomputed = classifyFlapQuotePairSignalCore(tweet?.text);
+  return source?.type === "twitter_update"
+    && project?.id === "flap"
+    && project?.handle === FLAP_X_HANDLE
+    && project?.xUserId === FLAP_X_USER_ID
+    && project?.match === "official_x"
+    && /^\d{10,25}$/.test(tweetId)
+    && tweet?.handle === FLAP_X_HANDLE
+    && tweet?.xUserId === FLAP_X_USER_ID
+    && tweet?.authorId === FLAP_X_USER_ID
+    && tweet?.url === `https://x.com/${FLAP_X_HANDLE}/status/${tweetId}`
+    && tweet?.sourceVerifiedBy === "official_x_oembed"
+    && tweet?.isReply === false
+    && typeof tweet?.text === "string"
+    && tweet.text.length > 0
+    && tweet.text.length <= 20_000
+    && !FLAP_QUOTE_PAIR_INVALID_TEXT.test(tweet.text)
+    && signal?.relevant === true
+    && signal?.strong === true
+    && signal?.platformStructural === true
+    && signal?.reason === `flap_bstock_quote_pair_${recomputed?.stage || "invalid"}`
+    && Array.isArray(signal?.labels)
+    && signal.labels.includes(FLAP_QUOTE_PAIR_LABEL)
+    && validFlapQuotePairChange(signal?.quotePairChange)
+    && validFlapQuotePairChange(recomputed)
+    && sameFlapValue(signal.quotePairChange, recomputed);
+}
+
+function validFlapQuoteAssetProof(value, item) {
+  const allowed = new Set(["portal", "transactionHash", "blockNumber", "receiptVerified", "chainId"]);
+  const required = ["portal", "transactionHash", "blockNumber", "receiptVerified"];
+  if (!exactFlapKeys(value, allowed, required)
+    || !FLAP_BSC_PORTALS.has(value.portal)
+    || !/^0x[a-f0-9]{64}$/.test(value.transactionHash)
+    || !Number.isSafeInteger(value.blockNumber)
+    || value.blockNumber <= 0
+    || value.receiptVerified !== true
+    || (Object.hasOwn(value, "chainId") && value.chainId !== FLAP_BSC_CHAIN_ID)) return false;
+  for (const key of ["portal", "transactionHash", "blockNumber", "receiptVerified"]) {
+    if (Object.hasOwn(item, key) && item[key] !== value[key]) return false;
+  }
+  return true;
+}
+
+// Reused by the board source-control exception and the direct Portal producer.
+// It accepts only the canonical BSC quote-asset record; stock/RWA text alone
+// is never sufficient to enter this lane.
+export function isStrictFlapQuoteAsset(value) {
+  const allowed = new Set([
+    "identity", "kind", "category", "vaultFactory", "quoteAddress", "quoteSymbol", "quoteName",
+    "sourceUrl", "chainId", "quoteClassification", "quoteTags", "onchainProof",
+    "portal", "transactionHash", "blockNumber", "receiptVerified",
+  ]);
+  const required = ["identity", "kind", "quoteAddress", "quoteSymbol", "quoteName", "sourceUrl", "chainId"];
+  if (!exactFlapKeys(value, allowed, required)
+    || value.kind !== "quote_asset"
+    || value.chainId !== FLAP_BSC_CHAIN_ID
+    || value.sourceUrl !== FLAP_BOARD_URL
+    || !/^0x[a-f0-9]{40}$/.test(value.quoteAddress)
+    || value.identity !== `chain-${FLAP_BSC_CHAIN_ID}:quote:${value.quoteAddress}`
+    || !validFlapDirectQuoteSymbol(value.quoteSymbol)
+    || !validFlapMetadataText(value.quoteName, 96, 2)
+    || (Object.hasOwn(value, "category") && value.category !== null)
+    || (Object.hasOwn(value, "vaultFactory") && value.vaultFactory !== null)) return false;
+  if (Object.hasOwn(value, "quoteClassification")
+    && !validFlapMetadataText(value.quoteClassification, 96, 2)) return false;
+  if (Object.hasOwn(value, "quoteTags")) {
+    if (!Array.isArray(value.quoteTags) || value.quoteTags.length > 8) return false;
+    const tags = new Set();
+    for (const tag of value.quoteTags) {
+      if (!validFlapMetadataText(tag, 48)
+        || tags.has(tag)) return false;
+      tags.add(tag);
+    }
+  }
+  const rootProofFields = ["portal", "transactionHash", "blockNumber", "receiptVerified"];
+  if (!Object.hasOwn(value, "onchainProof")) return !rootProofFields.some((key) => Object.hasOwn(value, key));
+  return validFlapQuoteAssetProof(value.onchainProof, value);
+}
+
+function isStrictFlapQuoteAssetPrevious(value) {
+  const allowed = new Set([
+    "identity", "kind", "category", "vaultFactory", "quoteAddress", "quoteSymbol", "quoteName",
+    "sourceUrl", "chainId", "quoteClassification", "quoteTags",
+  ]);
+  const required = ["identity", "kind", "quoteAddress", "sourceUrl", "chainId"];
+  if (!exactFlapKeys(value, allowed, required)
+    || value.kind !== "quote_asset"
+    || value.chainId !== FLAP_BSC_CHAIN_ID
+    || value.sourceUrl !== FLAP_BOARD_URL
+    || !/^0x[a-f0-9]{40}$/.test(value.quoteAddress)
+    || value.identity !== `chain-${FLAP_BSC_CHAIN_ID}:quote:${value.quoteAddress}`
+    || (Object.hasOwn(value, "category") && value.category !== null)
+    || (Object.hasOwn(value, "vaultFactory") && value.vaultFactory !== null)
+    || (Object.hasOwn(value, "quoteSymbol") && value.quoteSymbol !== null && !validFlapDirectQuoteSymbol(value.quoteSymbol))
+    || (Object.hasOwn(value, "quoteName") && value.quoteName !== null && !validFlapMetadataText(value.quoteName, 96, 2))
+    || (Object.hasOwn(value, "quoteClassification") && !validFlapMetadataText(value.quoteClassification, 96, 2))) return false;
+  if (!Object.hasOwn(value, "quoteTags")) return true;
+  return Array.isArray(value.quoteTags)
+    && value.quoteTags.length <= 8
+    && new Set(value.quoteTags).size === value.quoteTags.length
+    && value.quoteTags.every((tag) => validFlapMetadataText(tag, 48));
+}
+
+function claimsFlapQuoteAssetCapability(source) {
+  if (source?.type !== "platform_capability_update" || source?.platform?.id !== "flap") return false;
+  const pools = [
+    ...(Array.isArray(source.changes?.newFlapPools) ? source.changes.newFlapPools : []),
+    ...(Array.isArray(source.changes?.updatedFlapPools) ? source.changes.updatedFlapPools : []),
+    ...(Array.isArray(source.changes?.flapPoolChanges)
+      ? source.changes.flapPoolChanges.flatMap((change) => [change?.before, change?.after])
+      : []),
+  ];
+  return pools.some((pool) => pool?.kind === "quote_asset"
+    || Object.hasOwn(pool || {}, "quoteAddress")
+    || /^chain-56:quote:/i.test(String(pool?.identity || "")));
+}
+
+function isStrictFlapBoardQuoteAssetUpdate(source) {
+  if (source?.type !== "platform_capability_update"
+    || source?.platform?.id !== "flap"
+    || (source.platform.chainId != null && source.platform.chainId !== FLAP_BSC_CHAIN_ID)
+    || (source.chainId != null && source.chainId !== FLAP_BSC_CHAIN_ID)
+    || source?.source !== FLAP_BOARD_URL
+    || source?.url !== FLAP_BOARD_URL
+    || (Object.hasOwn(source, "sources")
+      && (!Array.isArray(source.sources) || source.sources.length !== 1 || source.sources[0] !== FLAP_BOARD_URL))
+    || !flapRecord(source?.changes)) return false;
+
+  const allowedNonEmpty = new Set([
+    "newFlapPools", "updatedFlapPools", "flapPoolChanges", "changedSources", "newContentFingerprints",
+  ]);
+  for (const [key, value] of Object.entries(source.changes)) {
+    if (!Array.isArray(value) || (value.length > 0 && !allowedNonEmpty.has(key))) return false;
+  }
+  const newPools = source.changes.newFlapPools || [];
+  const updatedPools = source.changes.updatedFlapPools || [];
+  const changes = source.changes.flapPoolChanges || [];
+  if (!Array.isArray(newPools)
+    || !Array.isArray(updatedPools)
+    || !Array.isArray(changes)
+    || newPools.length + updatedPools.length < 1
+    || newPools.length + updatedPools.length > 32
+    || !newPools.every(isStrictFlapQuoteAsset)
+    || !updatedPools.every(isStrictFlapQuoteAsset)) return false;
+
+  const changedSources = source.changes.changedSources || [];
+  const fingerprints = source.changes.newContentFingerprints || [];
+  if (!Array.isArray(changedSources)
+    || changedSources.some((url) => url !== FLAP_BOARD_URL)
+    || !Array.isArray(fingerprints)
+    || fingerprints.some((value) => !/^https:\/\/flap\.sh\/board#[a-f0-9]{64}$/.test(value))) return false;
+
+  if (updatedPools.length !== changes.length) return false;
+  for (let index = 0; index < changes.length; index += 1) {
+    const change = changes[index];
+    if (!exactFlapKeys(change, new Set(["identity", "before", "after"]), ["identity", "before", "after"])
+      || !isStrictFlapQuoteAssetPrevious(change.before)
+      || !isStrictFlapQuoteAsset(change.after)
+      || change.identity !== change.after.identity
+      || !sameFlapValue(change.after, updatedPools[index])) return false;
+  }
+  const identities = [...newPools, ...updatedPools].map(({ identity }) => identity);
+  return new Set(identities).size === identities.length;
+}
+
+function validFlapQuoteConfiguration(value) {
+  const keys = new Set([
+    "enabled", "enabledRaw", "defaultCurve", "alternativeCurve", "nativeToQuoteSwapType", "dexId",
+  ]);
+  if (!exactFlapKeys(value, keys, [...keys]) || value.enabled !== true || value.enabledRaw !== 1) return false;
+  return ["defaultCurve", "alternativeCurve", "nativeToQuoteSwapType", "dexId"]
+    .every((key) => Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= 255);
+}
+
+function expectedFlapQuoteConfigurationLogData(asset, configuration) {
+  if (!/^0x[a-f0-9]{40}$/.test(String(asset?.quoteAddress || ""))
+    || !validFlapQuoteConfiguration(configuration)) return null;
+  const uint256Word = (value) => value.toString(16).padStart(64, "0");
+  return `0x${asset.quoteAddress.slice(2).padStart(64, "0")}${[
+    configuration.enabledRaw,
+    configuration.defaultCurve,
+    configuration.alternativeCurve,
+    configuration.nativeToQuoteSwapType,
+    configuration.dexId,
+  ].map(uint256Word).join("")}`;
+}
+
+function validFlapDirectQuoteAsset(value) {
+  const keys = new Set([
+    "identity", "kind", "category", "vaultFactory", "quoteAddress", "quoteName", "quoteSymbol",
+    "quoteDecimals", "decimals", "enabled", "configuration", "chainId", "portal", "codeHash",
+    "codeBytes", "verifiedAtBlock", "verifiedAtBlockHash", "sourceUrl",
+  ]);
+  const required = [...keys];
+  return exactFlapKeys(value, keys, required)
+    && value.kind === "quote_asset"
+    && value.category === null
+    && value.vaultFactory === null
+    && /^0x[a-f0-9]{40}$/.test(value.quoteAddress)
+    && value.identity === `chain-${FLAP_BSC_CHAIN_ID}:quote:${value.quoteAddress}`
+    && validFlapMetadataText(value.quoteName, 256, 1)
+    && validFlapDirectQuoteSymbol(value.quoteSymbol)
+    && Number.isSafeInteger(value.quoteDecimals)
+    && value.quoteDecimals >= 0
+    && value.quoteDecimals <= 255
+    && value.decimals === value.quoteDecimals
+    && value.enabled === true
+    && validFlapQuoteConfiguration(value.configuration)
+    && value.chainId === FLAP_BSC_CHAIN_ID
+    && value.portal === FLAP_BSC_QUOTE_PORTAL
+    && /^0x[a-f0-9]{64}$/.test(value.codeHash)
+    && Number.isSafeInteger(value.codeBytes)
+    && value.codeBytes > 0
+    && Number.isSafeInteger(value.verifiedAtBlock)
+    && value.verifiedAtBlock > 0
+    && /^0x[a-f0-9]{64}$/.test(value.verifiedAtBlockHash)
+    && value.sourceUrl === FLAP_BOARD_URL;
+}
+
+function exactFlapIso(value) {
+  const timestamp = Date.parse(value || "");
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value ? timestamp : null;
+}
+
+function validFlapDirectEvidence(value, source, asset) {
+  const keys = new Set([
+    "chainId", "portal", "portalRuntimeCodeHash", "portalVersion", "portalImplementation",
+    "portalImplementationCodeHash", "eventSignature", "topic0", "logIndex", "logData",
+    "eventConfiguration", "finalizedConfiguration", "configurationVerifiedAtBlock",
+    "metadataVerifiedAtBlock", "metadataCodeHash", "receiptVerified", "transactionVerified",
+    "canonicalBlockVerified", "confirmations", "requiredConfirmations", "finalizedHead", "finalizedHeadHash",
+  ]);
+  return exactFlapKeys(value, keys, [...keys])
+    && value.chainId === FLAP_BSC_CHAIN_ID
+    && value.portal === FLAP_BSC_QUOTE_PORTAL
+    && value.portalRuntimeCodeHash === FLAP_QUOTE_PORTAL_RUNTIME_HASH
+    && value.portalVersion === FLAP_QUOTE_PORTAL_VERSION
+    && value.portalImplementation === FLAP_QUOTE_PORTAL_IMPLEMENTATION
+    && value.portalImplementationCodeHash === FLAP_QUOTE_PORTAL_IMPLEMENTATION_HASH
+    && value.eventSignature === FLAP_QUOTE_CONFIGURATION_SIGNATURE
+    && value.topic0 === FLAP_QUOTE_CONFIGURATION_TOPIC
+    && value.logIndex === source.logIndex
+    && validFlapQuoteConfiguration(value.eventConfiguration)
+    && String(value.logData || "").toLowerCase() === expectedFlapQuoteConfigurationLogData(asset, value.eventConfiguration)
+    && sameFlapValue(value.finalizedConfiguration, asset.configuration)
+    && value.configurationVerifiedAtBlock === asset.verifiedAtBlock
+    && value.metadataVerifiedAtBlock === asset.verifiedAtBlock
+    && value.metadataCodeHash === asset.codeHash
+    && value.receiptVerified === true
+    && value.transactionVerified === true
+    && value.canonicalBlockVerified === true
+    && Number.isSafeInteger(value.confirmations)
+    && Number.isSafeInteger(value.requiredConfirmations)
+    && value.requiredConfirmations >= 0
+    && value.confirmations >= value.requiredConfirmations
+    && value.finalizedHead === asset.verifiedAtBlock
+    && value.finalizedHead >= source.blockNumber
+    && value.confirmations === value.finalizedHead + value.requiredConfirmations - source.blockNumber
+    && value.finalizedHeadHash === asset.verifiedAtBlockHash;
+}
+
+function validFlapDirectOrphanKeys(value) {
+  if (!Array.isArray(value) || value.length > 5_000 || new Set(value).size !== value.length) return false;
+  return value.every((key) => {
+    if (typeof key !== "string" || key.length > 180) return false;
+    const match = key.match(/^flap-quote:56:0x[a-f0-9]{64}:(0|[1-9]\d*)$/);
+    return Boolean(match && Number.isSafeInteger(Number(match[1])));
+  });
+}
+
+function validFlapDirectDelayedRecovery(source, originalEventKey, firstObservedAfterGap = false) {
+  const recovery = source?.delayedRecovery;
+  const cursor = recovery?.cursor;
+  const recoveryKeys = new Set([
+    "version", "reason", "sourceOccurredAt", "originalBlockNumber", "originalBlockHash",
+    "originalTransactionHash", "originalLogIndex", "recoveredAt", "lagMs", "cursor",
+  ]);
+  const cursorKeys = new Set(["nextBlockAtRecovery", "eventBlock"]);
+  if (!exactFlapKeys(recovery, recoveryKeys, [...recoveryKeys])
+    || !exactFlapKeys(cursor, cursorKeys, [...cursorKeys])
+    || recovery.version !== FLAP_DELAYED_RECOVERY_VERSION
+    || recovery.reason !== (firstObservedAfterGap ? FLAP_FIRST_OBSERVED_REASON : FLAP_DELAYED_RECOVERY_REASON)
+    || source?.originalEventKey !== originalEventKey
+    || source?.eventKey !== `${originalEventKey}:${firstObservedAfterGap ? "first-observed-after-gap" : "delayed-recovery"}:v1`
+    || recovery.sourceOccurredAt !== source?.occurredAt
+    || recovery.originalBlockNumber !== source?.blockNumber
+    || recovery.originalBlockHash !== source?.blockHash
+    || recovery.originalTransactionHash !== source?.transactionHash
+    || recovery.originalLogIndex !== source?.logIndex
+    || recovery.recoveredAt !== source?.observedAt
+    || !Number.isSafeInteger(recovery.lagMs)
+    || recovery.lagMs <= FLAP_DELAYED_RECOVERY_MIN_LAG_MS
+    || !Number.isSafeInteger(cursor.nextBlockAtRecovery)
+    || cursor.nextBlockAtRecovery <= 0
+    || !Number.isSafeInteger(cursor.eventBlock)
+    || cursor.eventBlock !== recovery.originalBlockNumber) return false;
+  const sourceOccurredAt = exactFlapIso(recovery.sourceOccurredAt);
+  const recoveredAt = exactFlapIso(recovery.recoveredAt);
+  return sourceOccurredAt !== null
+    && recoveredAt !== null
+    && recoveredAt >= sourceOccurredAt
+    && recovery.lagMs === recoveredAt - sourceOccurredAt;
+}
+
+function validFlapFirstObservedPriorState(source) {
+  const value = source?.priorStateRead;
+  const keys = new Set([
+    "blockNumber", "method", "requiredIndependentReaders", "successfulReaders",
+    "matchingUnavailableReaders", "failureClass",
+  ]);
+  return source?.priorTransitionProof === "unavailable"
+    && exactFlapKeys(value, keys, [...keys])
+    && Number.isSafeInteger(value.blockNumber)
+    && value.blockNumber === source.blockNumber - 1
+    && value.method === "getQuoteTokenConfiguration(address)"
+    && value.requiredIndependentReaders === 2
+    && [0, 1].includes(value.successfulReaders)
+    && value.matchingUnavailableReaders === 2 - value.successfulReaders
+    && value.failureClass === "archive_state_unavailable";
+}
+
+function validFlapDirectCanonicalIdentity(source, asset) {
+  const stage = source?.kind === FLAP_FIRST_OBSERVED_KIND ? "observed" : "live";
+  const expected = `flap:quote-pair:${flapDirectQuoteSymbolSlug(asset.quoteSymbol)}:ca:${asset.quoteAddress}:${stage}`;
+  return source.canonicalSignalId === expected
+    && Array.isArray(source.canonicalSignalIds)
+    && source.canonicalSignalIds.length === 1
+    && source.canonicalSignalIds[0] === expected;
+}
+
+function validFlapDirectFreshness(source) {
+  const value = source?.freshness;
+  const baseKeys = new Set([
+    "version", "scope", "basis", "sourceOccurredAt", "discoveredAt", "lagMs",
+    "sourceTimeReliable", "realtimeMaxAgeMs", "telegramMaxAgeMs", "decision", "reason",
+  ]);
+  const deliveryKeys = ["deliveryEvaluatedAt", "deliveryLagMs", "deliveryDecision"];
+  const hasDelivery = deliveryKeys.some((key) => Object.hasOwn(value || {}, key));
+  const allowed = new Set([...baseKeys, ...(hasDelivery ? deliveryKeys : [])]);
+  if (!exactFlapKeys(value, allowed, [...allowed])
+    || value.version !== 1
+    || value.scope !== (source?.kind === FLAP_FIRST_OBSERVED_KIND
+      ? "flap_first_observed_after_gap"
+      : "flap_delayed_recovery")
+    || value.basis !== "delayedRecovery.recoveredAt_continuous_recovery"
+    || value.sourceOccurredAt !== source?.delayedRecovery?.recoveredAt
+    || value.sourceTimeReliable !== true
+    || !Number.isSafeInteger(value.realtimeMaxAgeMs)
+    || value.realtimeMaxAgeMs < 0
+    || !Number.isSafeInteger(value.telegramMaxAgeMs)
+    || value.telegramMaxAgeMs < value.realtimeMaxAgeMs) return false;
+  const sourceAt = exactFlapIso(value.sourceOccurredAt);
+  const discoveredAt = exactFlapIso(value.discoveredAt);
+  if (sourceAt === null || discoveredAt === null || discoveredAt < sourceAt
+    || value.lagMs !== discoveredAt - sourceAt) return false;
+  const expectedDecision = value.lagMs <= value.realtimeMaxAgeMs
+    ? "realtime"
+    : value.lagMs <= value.telegramMaxAgeMs ? "late" : "suppress";
+  const expectedReason = expectedDecision === "realtime"
+    ? "within_realtime_window"
+    : expectedDecision === "late" ? "late_backfill_downgrade" : "too_old_for_telegram";
+  if (value.decision !== expectedDecision || value.reason !== expectedReason) return false;
+  if (!hasDelivery) return true;
+  const deliveryAt = exactFlapIso(value.deliveryEvaluatedAt);
+  if (deliveryAt === null || deliveryAt < sourceAt || value.deliveryLagMs !== deliveryAt - sourceAt) return false;
+  const deliveryDecision = value.deliveryLagMs <= value.realtimeMaxAgeMs
+    ? "realtime"
+    : value.deliveryLagMs <= value.telegramMaxAgeMs ? "late" : "suppress";
+  return value.deliveryDecision === deliveryDecision;
+}
+
+function validFlapDirectPriority(source, asset) {
+  const value = source?.tradingPriority;
+  const keys = new Set([
+    "version", "schema", "deterministic", "tier", "rank", "label", "score", "components",
+    "category", "target", "targets", "confirmation", "window", "hardGates", "lifecycle", "plan",
+  ]);
+  const expectedTier = source?.delayedRecovery ? "T2" : null;
+  return exactFlapKeys(value, keys, [...keys])
+    && value.version === 2
+    && value.schema === "news_trading_priority_v2"
+    && value.deterministic === true
+    && ["T1", "T2"].includes(value.tier)
+    && (!expectedTier || value.tier === expectedTier)
+    && value.rank === ({ T1: 3, T2: 2 })[value.tier]
+    && value.category === "focus_official"
+    && exactFlapKeys(value.target, new Set(["type", "value", "exact"]), ["type", "value", "exact"])
+    && value.target.type === "quote_asset"
+    && value.target.value === asset.quoteSymbol
+    && value.target.exact === true
+    && Array.isArray(value.targets)
+    && value.targets.length === 1
+    && sameFlapValue(value.targets[0], value.target)
+    && value.confirmation?.trusted === true
+    && value.confirmation?.kind === "onchain"
+    && value.confirmation?.value === `${source.transactionHash}#${source.blockNumber}`
+    && value.plan?.automaticExecution === false;
+}
+
+function validFlapDirectDerivedFields(source, asset) {
+  const present = [...FLAP_DIRECT_DERIVED_EVENT_KEYS].filter((key) => Object.hasOwn(source, key));
+  if (!present.length) return true;
+  const required = ["canonicalSignalId", "canonicalSignalIds", "tradingPriority", "alertQueuedAt"];
+  if (source.delayedRecovery) required.push("freshness");
+  if (present.length !== required.length || required.some((key) => !Object.hasOwn(source, key))) return false;
+  return exactFlapIso(source.alertQueuedAt) !== null
+    && validFlapDirectCanonicalIdentity(source, asset)
+    && validFlapDirectPriority(source, asset)
+    && (source.delayedRecovery ? validFlapDirectFreshness(source) : !Object.hasOwn(source, "freshness"));
+}
+
+export function isStrictFlapPortalQuoteAssetUpdate(source) {
+  const firstObservedAfterGap = source?.kind === FLAP_FIRST_OBSERVED_KIND;
+  const asset = firstObservedAfterGap
+    ? source?.changes?.updatedFlapPools?.[0]
+    : source?.changes?.newFlapPools?.[0];
+  const transactionHash = source?.transactionHash;
+  const blockNumber = source?.blockNumber;
+  const blockHash = source?.blockHash;
+  const logIndex = source?.logIndex;
+  const receipt = source?.receiptProof;
+  const transaction = source?.transactionProof;
+  const block = source?.blockProof;
+  const evidence = source?.onchainProof;
+  const change = source?.changes?.newQuoteConfigs?.[0];
+  const signalChange = source?.signal?.quotePairChange;
+  const signalAsset = signalChange?.assets?.[0];
+  const occurredAt = exactFlapIso(source?.occurredAt);
+  const observedAt = exactFlapIso(source?.observedAt);
+  const originalEventKey = `flap-quote:${FLAP_BSC_CHAIN_ID}:${transactionHash}:${logIndex}`;
+  const recoveryFieldsPresent = [...FLAP_DIRECT_RECOVERY_EVENT_KEYS]
+    .filter((key) => Object.hasOwn(source || {}, key));
+  const firstObservedFieldsPresent = [...FLAP_DIRECT_FIRST_OBSERVED_EVENT_KEYS]
+    .filter((key) => Object.hasOwn(source || {}, key));
+  const derivedFieldsPresent = [...FLAP_DIRECT_DERIVED_EVENT_KEYS]
+    .filter((key) => Object.hasOwn(source || {}, key));
+  const allowedEventKeys = new Set([
+    ...FLAP_DIRECT_EVENT_KEYS,
+    ...(recoveryFieldsPresent.length ? FLAP_DIRECT_RECOVERY_EVENT_KEYS : []),
+    ...(firstObservedAfterGap ? FLAP_DIRECT_FIRST_OBSERVED_EVENT_KEYS : []),
+    ...derivedFieldsPresent,
+  ]);
+  if (!exactFlapKeys(source, allowedEventKeys, [...FLAP_DIRECT_EVENT_KEYS])
+    || ![0, FLAP_DIRECT_RECOVERY_EVENT_KEYS.size].includes(recoveryFieldsPresent.length)
+    || firstObservedFieldsPresent.length !== (firstObservedAfterGap ? FLAP_DIRECT_FIRST_OBSERVED_EVENT_KEYS.size : 0)
+    || source.type !== "platform_capability_update"
+    || !["flap_quote_asset_enabled", FLAP_FIRST_OBSERVED_KIND].includes(source?.kind)
+    || source?.changeType !== (firstObservedAfterGap ? "observed" : "added")
+    || !exactFlapKeys(source?.platform, FLAP_DIRECT_PLATFORM_KEYS, [...FLAP_DIRECT_PLATFORM_KEYS])
+    || source.platform.id !== "flap"
+    || source.platform.name !== "Flap"
+    || source.platform.website !== "https://flap.sh"
+    || source.platform.board !== FLAP_BOARD_URL
+    || source?.chainId !== FLAP_BSC_CHAIN_ID
+    || !exactFlapKeys(source?.chain, FLAP_DIRECT_CHAIN_KEYS, [...FLAP_DIRECT_CHAIN_KEYS])
+    || source.chain.id !== FLAP_BSC_CHAIN_ID
+    || source.chain.chainId !== FLAP_BSC_CHAIN_ID
+    || source.chain.name !== "BNB Chain"
+    || source.chain.environment !== "mainnet"
+    || source?.portal !== FLAP_BSC_QUOTE_PORTAL
+    || !exactFlapKeys(source?.source, new Set(["id", "name", "url", "docsUrl", "official", "trust"]), ["id", "name", "url", "docsUrl", "official", "trust"])
+    || source.source.id !== FLAP_QUOTE_SOURCE_ID
+    || source.source.name !== "Flap official Portal + Board"
+    || source.source.url !== FLAP_BOARD_URL
+    || source.source.docsUrl !== FLAP_QUOTE_DOCS_URL
+    || source.source.official !== true
+    || source.source.trust !== FLAP_QUOTE_SOURCE_TRUST
+    || source?.sourceUrl !== FLAP_BOARD_URL
+    || !/^0x[a-f0-9]{64}$/.test(String(transactionHash || ""))
+    || !Number.isSafeInteger(blockNumber)
+    || blockNumber <= 0
+    || !/^0x[a-f0-9]{64}$/.test(String(blockHash || ""))
+    || !Number.isSafeInteger(logIndex)
+    || logIndex < 0
+    || (recoveryFieldsPresent.length
+      ? !validFlapDirectDelayedRecovery(source, originalEventKey, firstObservedAfterGap)
+      : source.eventKey !== originalEventKey || observedAt - occurredAt > FLAP_DELAYED_RECOVERY_MIN_LAG_MS)
+    || (firstObservedAfterGap
+      && (recoveryFieldsPresent.length !== FLAP_DIRECT_RECOVERY_EVENT_KEYS.size
+        || !validFlapFirstObservedPriorState(source)))
+    || source?.url !== `https://bscscan.com/tx/${transactionHash}`
+    || source?.explorerUrl !== source.url
+    || occurredAt === null
+    || observedAt === null
+    || observedAt < occurredAt
+    || source?.blockTimestamp !== source.occurredAt
+    || !validFlapDirectOrphanKeys(source.reorgOrphanedEventKeys)
+    || source.risk !== (firstObservedAfterGap ? FLAP_FIRST_OBSERVED_RISK : FLAP_QUOTE_RISK)
+    || !validFlapDirectQuoteAsset(asset)
+    || !validFlapDirectDerivedFields(source, asset)
+    || !flapRecord(source?.changes)) return false;
+
+  const changeKeys = new Set([
+    "newFlapPools", "updatedFlapPools", "removedFlapPools", "flapPoolChanges",
+    "newQuoteTokens", "newQuoteConfigs", "newContracts",
+  ]);
+  if (!exactFlapKeys(source.changes, changeKeys, [...changeKeys])
+    || ![...changeKeys].every((key) => Array.isArray(source.changes[key]))
+    || source.changes.newFlapPools.length !== (firstObservedAfterGap ? 0 : 1)
+    || source.changes.updatedFlapPools.length !== (firstObservedAfterGap ? 1 : 0)
+    || source.changes.removedFlapPools.length !== 0
+    || source.changes.flapPoolChanges.length !== 0
+    || !sameFlapValue(source.changes.newQuoteTokens, firstObservedAfterGap ? [] : [asset.quoteSymbol])
+    || !sameFlapValue(source.changes.newContracts, firstObservedAfterGap ? [] : [asset.quoteAddress])
+    || (!firstObservedAfterGap && source.changes.newQuoteConfigs.length !== 1)
+    || (firstObservedAfterGap
+      ? source.changes.newQuoteConfigs.length !== 0
+      : !exactFlapKeys(change, new Set(["symbol", "address", "enabled", "enabledRaw", "defaultCurve", "alternativeCurve", "nativeToQuoteSwapType", "dexId"]), ["symbol", "address", "enabled", "enabledRaw", "defaultCurve", "alternativeCurve", "nativeToQuoteSwapType", "dexId"])
+        || change.symbol !== asset.quoteSymbol
+        || change.address !== asset.quoteAddress
+        || !sameFlapValue({
+          enabled: change.enabled,
+          enabledRaw: change.enabledRaw,
+          defaultCurve: change.defaultCurve,
+          alternativeCurve: change.alternativeCurve,
+          nativeToQuoteSwapType: change.nativeToQuoteSwapType,
+          dexId: change.dexId,
+        }, asset.configuration))) return false;
+
+  if (!exactFlapKeys(receipt, new Set(["status", "transactionHash", "transactionIndex", "blockNumber", "blockHash", "logIndex", "logMatched"]), ["status", "transactionHash", "transactionIndex", "blockNumber", "blockHash", "logIndex", "logMatched"])
+    || receipt.status !== 1
+    || receipt.transactionHash !== transactionHash
+    || !Number.isSafeInteger(receipt.transactionIndex)
+    || receipt.transactionIndex < 0
+    || receipt.blockNumber !== blockNumber
+    || receipt.blockHash !== blockHash
+    || receipt.logIndex !== logIndex
+    || receipt.logMatched !== true
+    || !exactFlapKeys(transaction, new Set(["hash", "from", "to", "nonce", "blockNumber", "blockHash"]), ["hash", "from", "to", "nonce", "blockNumber", "blockHash"])
+    || transaction.hash !== transactionHash
+    || !/^0x[a-fA-F0-9]{40}$/.test(String(transaction.from || ""))
+    || !/^0x[a-fA-F0-9]{40}$/.test(String(transaction.to || ""))
+    || !Number.isSafeInteger(transaction.nonce)
+    || transaction.nonce < 0
+    || transaction.blockNumber !== blockNumber
+    || transaction.blockHash !== blockHash
+    || !exactFlapKeys(block, new Set(["number", "hash", "timestamp", "canonical", "confirmations", "requiredConfirmations"]), ["number", "hash", "timestamp", "canonical", "confirmations", "requiredConfirmations"])
+    || block.number !== blockNumber
+    || block.hash !== blockHash
+    || block.timestamp !== source.blockTimestamp
+    || block.canonical !== true
+    || !sameFlapValue(source.onchainProof, source.evidence)
+    || !validFlapDirectEvidence(evidence, source, asset)
+    || block.confirmations !== evidence.confirmations
+    || block.requiredConfirmations !== evidence.requiredConfirmations) return false;
+
+  const quotePairKeys = new Set(["stage", "assetClass", "assets"]);
+  return source?.strong === !firstObservedAfterGap
+    && exactFlapKeys(source?.signal, new Set(["strong", "platformStructural", "category", "headline", "quotePairChange"]), ["strong", "platformStructural", "category", "headline", "quotePairChange"])
+    && source.signal.strong === !firstObservedAfterGap
+    && source.signal.platformStructural === true
+    && source.signal.category === (firstObservedAfterGap
+      ? "Flap quote asset first observed after gap"
+      : "Flap quote asset enabled")
+    && source.signal.headline === (firstObservedAfterGap
+      ? `Flap first observed ${asset.quoteSymbol} currently enabled after a monitoring gap`
+      : `Flap enabled ${asset.quoteSymbol} as a BSC quote asset`)
+    && exactFlapKeys(signalChange, quotePairKeys, [...quotePairKeys])
+    && signalChange.stage === (firstObservedAfterGap ? "observed" : "live")
+    && signalChange.assetClass === "quote_asset"
+    && Array.isArray(signalChange.assets)
+    && signalChange.assets.length === 1
+    && exactFlapKeys(signalAsset, new Set(["symbol", "name", "address", "decimals"]), ["symbol", "name", "address", "decimals"])
+    && sameFlapValue(signalAsset, {
+      symbol: asset.quoteSymbol,
+      name: asset.quoteName,
+      address: asset.quoteAddress,
+      decimals: asset.quoteDecimals,
+    });
+}
+
+export function isStrictFlapQuoteAssetUpdate(source) {
+  return flapRecord(source?.source) || source?.onchainProof != null
+    ? isStrictFlapPortalQuoteAssetUpdate(source)
+    : isStrictFlapBoardQuoteAssetUpdate(source);
 }
 
 function strictPonFunUrl(value, { xStatus = false } = {}) {
@@ -2562,11 +3344,15 @@ function focus3FomoCallAllowed(config, source) {
 function focus3EventAllowed(source) {
   if (!source?.type) return isThreePlatformSource(source);
   if (FOCUS3_BLOCKED_EVENT_TYPES.has(source.type) || !isThreePlatformSource(source)) return false;
+  const officialFlapQuotePair = isOfficialFlapQuotePairUpdate(source);
+  const strictFlapQuoteAsset = isStrictFlapQuoteAssetUpdate(source);
   // Stock/equity/RWA issuance is deliberately out of scope across every
   // first-party lane. Keep this final routing gate in addition to individual
   // source classifiers so queued or newly introduced event shapes cannot leak
-  // those announcements into Telegram.
-  if (focus3StockRwaSignal(source)) return false;
+  // those announcements into Telegram. The only exception is a structurally
+  // revalidated Flap quote pair from the exact official X identity, or a full
+  // BSC quote-asset record from the exact official board source.
+  if (focus3StockRwaSignal(source) && !officialFlapQuotePair && !strictFlapQuoteAsset) return false;
   if (source.type === "uniswap_official_update") return source.strong === true && focus3UniswapSignal(source);
   if (source.type === "bsc_launchpad_update") {
     const focusKind = ["new_mode", "new_factory"].includes(source.kind)
@@ -2587,7 +3373,10 @@ function focus3EventAllowed(source) {
       && source.launchpad?.match === "exact_factory"
       && Number(source.modeConfirmation?.observations || 0) >= 2;
   }
-  if (source.type === "platform_capability_update") return hasFocus3CapabilityChange(source);
+  if (source.type === "platform_capability_update") {
+    if (claimsFlapQuoteAssetCapability(source)) return strictFlapQuoteAsset;
+    return hasFocus3CapabilityChange(source);
+  }
   if (source.type === "github_module_update") {
     const actionable = source.strong === true
       || source.modeChange?.candidate === true
@@ -2615,6 +3404,9 @@ function focus3EventAllowed(source) {
   if (source.type === "twitter_update") {
     if (source.project?.signalProfile === "uniswap" || source.project?.signalProfile === "uniswap-pools" || source.uniswapOfficial === true) {
       return source.signal?.relevant === true && source.signal?.strong === true && focus3UniswapSignal(source);
+    }
+    if (source.signal?.quotePairChange != null || classifyFlapQuotePairSignalCore(source.tweet?.text)) {
+      return officialFlapQuotePair;
     }
     return source.signal?.platformStructural === true
       && source.signal?.labels?.some((label) => FOCUS3_TWITTER_SIGNALS.has(label)) === true;

@@ -6,7 +6,7 @@ import { PLATFORM_CAPABILITY_TARGETS } from "./platform-capability-monitor.js";
 import { extractGithubRepositories } from "./github-monitor.js";
 import { classifyBinanceOfficialText } from "./binance-monitor.js";
 import { parseXDirectTimeline } from "./x-direct-timeline.js";
-import { classifyPonFunSignalCore, isMonitoringSourceEnabled, isThreePlatformScope } from "./source-controls.js";
+import { classifyFlapQuotePairSignalCore, classifyPonFunSignalCore, isMonitoringSourceEnabled, isThreePlatformScope } from "./source-controls.js";
 import { extractChainSupportSignals } from "./chain-support.js";
 
 const SIGNALS = [
@@ -736,6 +736,9 @@ export function classifyTweet(text = "", profile = "launchpad") {
 export function classifyFocusLaunchpadText(text = "") {
   const source = String(text || "");
   const labels = SIGNALS.filter(([, pattern]) => pattern.test(source)).map(([label]) => label);
+  const quotePairChange = classifyFlapQuotePairSignalCore(source);
+  if (quotePairChange) labels.push("税收/募资/报价代币");
+  const bstockMention = /\bbstocks?\b/i.test(source);
   const detectedChainSupport = extractChainSupportSignals(source);
   // Official accounts also publish token competitions on a chain they already
   // use. A chain name next to "launched tokens" or a prize pool is not product
@@ -751,7 +754,7 @@ export function classifyFocusLaunchpadText(text = "") {
   const agentSkillIntegration = FOCUS_PLATFORM_AGENT_SKILL.test(source)
     && !FOCUS_PROMOTIONAL_CAMPAIGN.test(source);
   if (agentSkillIntegration) labels.push("Agent/Skill 集成");
-  const platformStructural = chainSupport.length > 0 || charityMode || agentSkillIntegration || (labels.length > 0 && (
+  const platformStructural = Boolean(quotePairChange) || chainSupport.length > 0 || charityMode || agentSkillIntegration || (!bstockMention && labels.length > 0 && (
     FOCUS_PLATFORM_EXPLICIT_OBJECT.test(source)
     || FOCUS_PLATFORM_VERSION.test(source)
     || (FOCUS_PLATFORM_SUBSCRIPTION.test(source) && FOCUS_PLATFORM_CHANGE_ACTION.test(source))
@@ -762,16 +765,19 @@ export function classifyFocusLaunchpadText(text = "") {
     strong: platformStructural,
     platformStructural,
     labels: platformStructural ? [...new Set(labels)] : [],
+    ...(quotePairChange ? { quotePairChange } : {}),
     ...(chainSupport.length ? { chainSupport } : {}),
-    reason: chainSupport.length
-      ? "new_chain_support"
-      : charityMode
-        ? "charity_donation_tax_mode"
-        : agentSkillIntegration
-          ? "agentic_skill_integration"
-          : platformStructural
-            ? "platform_structural_change"
-            : "ordinary_token_or_non_structural_post",
+    reason: quotePairChange
+      ? `flap_bstock_quote_pair_${quotePairChange.stage}`
+      : chainSupport.length
+        ? "new_chain_support"
+        : charityMode
+          ? "charity_donation_tax_mode"
+          : agentSkillIntegration
+            ? "agentic_skill_integration"
+            : platformStructural
+              ? "platform_structural_change"
+              : "ordinary_token_or_non_structural_post",
   }, source);
 }
 
