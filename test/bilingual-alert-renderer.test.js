@@ -20,6 +20,11 @@ import {
   produceFourRegistryPresetAndFirstToken,
   produceFourRegistryProtocolEvents,
 } from "./helpers/four-registry-fixture.js";
+import {
+  FOUR_TWITTER_POLICY_RECOVERY_SIGNAL_SHAPES,
+  FOUR_TWITTER_POLICY_RECOVERY_SPECS,
+  buildFourPolicyRecoveryEvent,
+} from "../src/four-twitter-policy-recovery.js";
 
 function googleResponse(translated) {
   return {
@@ -136,7 +141,7 @@ test("bilingual rendering preserves layout, entities, and protected technical id
     assert.match(bundle.en.text, new RegExp(literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.match(rendered, new RegExp(address));
-  assert.equal(bundle.version, 21);
+  assert.equal(bundle.version, 23);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.match(rendered, /^🔴 强提醒 \| STRONG ALERT\n🇨🇳 中文\n/);
   assert.match(rendered, /\n\n🇬🇧 English\n/);
@@ -204,7 +209,7 @@ test("Binance connector cards state the one concrete diff and never disguise SDK
     assert.ok(bundle.en.text.includes(item.stageEn));
     assert.equal(bundle.zh.text.split("\n").length, 2);
     assert.equal(bundle.en.text.split("\n").length, 2);
-    assert.equal(bundle.version, 21);
+    assert.equal(bundle.version, 23);
     assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   }
 });
@@ -567,7 +572,7 @@ test("Binance Agent Native developer diff renders the new MCP entry without sign
   assert.equal(bundle.zh.status, "not_needed");
   assert.equal(bundle.en.status, "not_needed");
   assert.equal(providerCalls, 0);
-  assert.equal(bundle.version, 21);
+  assert.equal(bundle.version, 23);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.equal(bundle.zh.text.split("\n").length, 2);
   assert.equal(bundle.en.text.split("\n").length, 2);
@@ -1036,7 +1041,7 @@ test("Flap tracked pool-token cards are local five-line bilingual monitor-only a
     assert.match(blocks.zh[4], /^风险\/时间：非自动交易｜/u);
     assert.match(blocks.en[4], /^Risk\/Time: No automatic trading \|/u);
     assert.doesNotMatch(rendered, /selector=|security=|liquidityConfirmed=|路径=|flow=|入场=|entry=/iu);
-    assert.equal(bundle.version, 21);
+    assert.equal(bundle.version, 23);
     if (item.decision === "pass") passEvent = event;
   }
   assert.equal(providerCalls, 0);
@@ -1765,20 +1770,94 @@ test("Four.Meme named-mode and official campaign cards expose the trading mechan
   const templateRendered = renderBilingualTelegramText(templateBundle, true);
 
   for (const [rendered, expected] of [
-    [listaRendered, ["ListaYield", "交易税分成→Lista 收益产品", "流动性默认迁移 Lista DEX", "等待首个安全代币 CA", "2095361508700258731"]],
+    [listaRendered, ["ListaYield", "交易税分成→Lista 收益产品", "流动性默认迁移 Lista DEX", "等待首个 TokenCreated CA，再做安全检查", "await the first TokenCreated CA, then run safety checks", "2095361508700258731"]],
     [campaignRendered, ["150,000 USDT", "50,000 USDT", "Top 500", "流量催化；非协议升级；暂无指定 CA", "延迟补报｜勿追价", "2095713912188739967"]],
     [githubRendered, ["ListaYield", "Lista V2 stake-tax", "StrategyTaxToken", "尚未确认产品上线", "four-meme-community/openfour-docs#bcf52911"]],
-    [templateRendered, ["Bonding Lista V2 Stake Tax V1", "参数 10% → 25%", "结构性更新；等待链上启用/首个安全代币", "four.meme/meme-api/v1/public/token_template/search"]],
+    [templateRendered, ["Bonding Lista V2 Stake Tax V1", "参数 10% → 25%", "等待链上启用及首个 TokenCreated CA，再做安全检查", "await on-chain activation and the first TokenCreated CA, then run safety checks", "four.meme/meme-api/v1/public/token_template/search"]],
   ]) {
     assertShortFieldLayout(rendered);
     for (const literal of expected) assert.ok(rendered.includes(literal), literal);
     assert.doesNotMatch(rendered, /selector=|security=|liquidityConfirmed=|Translation unavailable|\[object Object\]/i);
+    assert.doesNotMatch(rendered, /首个安全代币|first safety-cleared token/iu);
   }
   assert.match(listaBundle.en.text, /ListaYield/);
   assert.match(campaignBundle.en.text, /150,000 USDT/);
   assert.doesNotMatch(renderedLanguageBlocks(listaRendered).en.join("\n"), /[\u3400-\u9fff]/u);
   assert.doesNotMatch(renderedLanguageBlocks(campaignRendered).en.join("\n"), /[\u3400-\u9fff]/u);
   assert.equal(translationCalls, 0);
+});
+
+test("real Four policy-fix producer events show the source, recovery, and true lag clocks", async () => {
+  const recoveredAt = "2026-09-04T11:06:29.000Z";
+  const project = {
+    id: "fourmeme",
+    name: "Four.meme",
+    website: "https://four.meme",
+    twitter: "https://x.com/fourdotmemezh",
+    handle: "fourdotmemezh",
+    xUserId: "1816036559864619011",
+    match: "official_x",
+    priority: true,
+  };
+  const texts = {
+    named_mode: "Yield is now built into the launch.\n\nIntroducing ListaYield on http://Four.Meme — a new OpenFour mode powered by @lista_dao. \n\nEvery trade can route a share of trading tax into yield-bearing products, creating ongoing yield for eligible holders.\n\nAnd once the token graduates, liquidity moves to Lista DEX by default. 🧵",
+    market_campaign: "bStocks szn just got competitive. 🟢\n\n150,000 USDT is now live with @AveaiGlobal × @BNBCHAIN — including a 50,000 USDT leaderboard exclusively for http://Four.Meme traders.\n\nTrade http://Four.Meme Stock Memes on http://Ave.ai.\nClimb the Top 500.\nTake your share.\n\nThe sprint is on. 🏁",
+  };
+  const expected = {
+    named_mode: {
+      lagMs: 111_901_000,
+      zh: "原始发生 09-03 12:01 CST｜恢复 09-04 19:06 CST｜真实延迟 31小时5分",
+      en: "Original 09-03 12:01 CST | recovered 09-04 19:06 CST | actual lag 31h5m",
+      falseDelay: /延迟\s*1秒|1s delay/iu,
+    },
+    market_campaign: {
+      lagMs: 27_882_000,
+      zh: "原始发生 09-04 11:21 CST｜恢复 09-04 19:06 CST｜真实延迟 7小时44分",
+      en: "Original 09-04 11:21 CST | recovered 09-04 19:06 CST | actual lag 7h44m",
+      falseDelay: /延迟\s*0秒|0s delay/iu,
+    },
+  };
+
+  for (const spec of FOUR_TWITTER_POLICY_RECOVERY_SPECS) {
+    const tweet = {
+      id: spec.tweetId,
+      text: texts[spec.kind],
+      createdAt: spec.createdAt,
+      authorName: "Four.meme-華語",
+      handle: "fourdotmemezh",
+      xUserId: "1816036559864619011",
+      authorId: "1816036559864619011",
+      url: `https://x.com/fourdotmemezh/status/${spec.tweetId}`,
+      isReply: false,
+      expandedUrls: spec.kind === "market_campaign" ? ["http://Four.Meme", "http://Ave.ai"] : ["http://Four.Meme"],
+      sourceVerifiedBy: "official_x_oembed",
+      identityVerifiedBy: "fxtwitter_exact_numeric_id",
+    };
+    const rawEvent = buildFourPolicyRecoveryEvent({
+      project,
+      tweet,
+      signal: structuredClone(FOUR_TWITTER_POLICY_RECOVERY_SIGNAL_SHAPES[spec.kind]),
+      spec,
+      recoveredAt,
+    });
+    assert.ok(rawEvent, spec.kind);
+    assert.equal(rawEvent.policyFixRecovery.lagMs, expected[spec.kind].lagMs);
+    const event = withTradingPriority(rawEvent, { nowMs: Date.parse(recoveredAt) + 1_000 });
+    assert.equal(event.tradingPriority.tier, "T2");
+    const falseDelay = spec.kind === "named_mode" ? "延迟1秒" : "延迟0秒";
+    const bundle = await buildBilingualAlertBundle(
+      {},
+      event,
+      `Four.Meme official X update\n时间: 2026-09-04T11:06:30.000Z · ${falseDelay}`,
+    );
+    const rendered = renderBilingualTelegramText(bundle, false);
+    assertShortFieldLayout(rendered);
+    assert.ok(rendered.includes(expected[spec.kind].zh), spec.kind);
+    assert.ok(rendered.includes(expected[spec.kind].en), spec.kind);
+    assert.equal(bundle.focusModel.time.zh, expected[spec.kind].zh);
+    assert.equal(bundle.focusModel.time.en, expected[spec.kind].en);
+    assert.doesNotMatch(rendered, expected[spec.kind].falseDelay);
+  }
 });
 
 test("Four.Meme Registry capability and first-token cards separate provenance from token safety", async (t) => {
@@ -1875,7 +1954,7 @@ test("Binance funding notices lead with the actual rule change instead of an int
   ].join("\n"));
   const rendered = renderBilingualTelegramText(bundle, false);
 
-  assert.equal(bundle.version, 21);
+  assert.equal(bundle.version, 23);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.match(bundle.zh.text, /^平台：Binance/m);
   assert.match(bundle.zh.text, /更新了什么：UNITREEUSDT 永续：8小时→4小时，费率上下限 \+2\.00%\/-2\.00%/);
@@ -2162,7 +2241,7 @@ test("real hooklist registrations distinguish the Hook file address from an unre
   const rendered = renderBilingualTelegramText(bundle, true);
 
   assert.deepEqual(event, original);
-  assert.equal(bundle.version, 21);
+  assert.equal(bundle.version, 23);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.match(bundle.zh.text, /^平台：Uniswap/m);
   assert.match(bundle.en.text, /^Platform: Uniswap/m);
@@ -2412,7 +2491,7 @@ test("Telegram news renders the two-field bilingual template and can never becom
   const en = bundle.en.text.split("\n");
 
   assert.ok(providerCalls > 0, "the existing translation provider path must be preferred");
-  assert.equal(bundle.version, 21);
+  assert.equal(bundle.version, 23);
   assert.equal(bundle.eventType, "telegram_news_update");
   assert.equal(bundle.focusModel.telegramNews.messageUrl, event.messageUrl);
   assert.equal(zh.length, 2);
@@ -2810,7 +2889,7 @@ test("every supported Telegram event type uses the same compact bilingual envelo
     ].join("\n"));
     const rendered = renderBilingualTelegramText(bundle, false);
 
-    assert.equal(bundle.version, 21, type);
+    assert.equal(bundle.version, 23, type);
     assert.equal(bundle.format, "telegram_zh_en_compact_v13", type);
     assert.match(bundle.zh.text, /[\u3400-\u9fff]/, type);
     assert.match(bundle.en.text, /[A-Za-z]{3,}/, type);
@@ -2846,7 +2925,7 @@ test("every bilingual alert persists a one-glance before/after model and fails o
     source: { name: "Binance Wallet 官方公告" },
   }, "🚨 Binance Wallet 更新\n事件: Wallet API v2\n状态: 官方公告已确认\n时间: 2026-08-13 00:00:00");
 
-  assert.equal(bundle.version, 21);
+  assert.equal(bundle.version, 23);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.equal(bundle.changeModel.basis, "exact_snapshot");
   assert.match(bundle.zh.text, /更新了什么：中文翻译暂不可用；请看英文原文/);
@@ -3174,7 +3253,7 @@ test("Telegram retries reuse the persisted bilingual render bundle without retra
   assert.equal((await sendAlerts(config, event)).status, "queued");
   const firstOutbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   const entry = firstOutbox.events[Object.keys(firstOutbox.events)[0]];
-  assert.equal(entry.renderBundle.version, 21);
+  assert.equal(entry.renderBundle.version, 23);
   const callsAfterFirstRender = translationCalls;
   entry.destinations.telegram.nextAttemptAt = null;
   await fs.writeFile(path.join(dataDir, "alert-outbox.json"), `${JSON.stringify(firstOutbox, null, 2)}\n`);
@@ -3189,12 +3268,12 @@ test("Telegram retries reuse the persisted bilingual render bundle without retra
 
   const finalOutbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   const finalEntry = finalOutbox.events[Object.keys(finalOutbox.events)[0]];
-  assert.equal(finalEntry.destinations.telegram.receipt.renderVersion, 21);
+  assert.equal(finalEntry.destinations.telegram.receipt.renderVersion, 23);
   assert.equal(finalEntry.destinations.telegram.receipt.translation.zh.status, finalEntry.renderBundle.zh.status);
   assert.equal(finalEntry.destinations.telegram.receipt.translation.en.status, finalEntry.renderBundle.en.status);
 });
 
-test("a pending v14 card is rebuilt once as v21 while terminal v14 is not migrated", async (t) => {
+test("a pending v14 card is rebuilt once as v23 while terminal v14 is not migrated", async (t) => {
   clearTranslationCache();
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-bilingual-v6-migration-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -3262,7 +3341,7 @@ test("a pending v14 card is rebuilt once as v21 while terminal v14 is not migrat
 
   const migrated = JSON.parse(await fs.readFile(file, "utf8"));
   const migratedEntry = migrated.events[Object.keys(migrated.events)[0]];
-  assert.equal(migratedEntry.renderBundle.version, 21);
+  assert.equal(migratedEntry.renderBundle.version, 23);
   assert.equal(migratedEntry.renderBundle.format, "telegram_zh_en_compact_v13");
   assert.notEqual(migratedEntry.renderBundle.sourceHash, "V14_SENTINEL_HASH");
   assert.equal(migratedEntry.renderBundle.zh.text.split("\n").length, 2);

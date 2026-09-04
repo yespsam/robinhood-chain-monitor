@@ -22,7 +22,7 @@ import {
   isStrictFourRegistryFirstTokenUpdate,
 } from "./source-controls.js";
 
-export const BILINGUAL_RENDER_VERSION = 21;
+export const BILINGUAL_RENDER_VERSION = 23;
 const MAX_CARD_LINES = 2;
 const MAX_LINE_LENGTH = 230;
 const MAX_DISPLAY_LINE_LENGTH = 138;
@@ -3315,7 +3315,36 @@ function englishDelay(value) {
     .replace(/延迟\s*(\d+)\s*秒/gu, "$1s delay");
 }
 
+function fourPolicyFixRecoveryLag(value, language = "zh") {
+  const milliseconds = Number(value);
+  if (!Number.isFinite(milliseconds) || milliseconds < 0) return language === "zh" ? "未知" : "unknown";
+  const totalMinutes = Math.floor(milliseconds / 60_000);
+  if (totalMinutes < 1) {
+    const seconds = Math.floor(milliseconds / 1_000);
+    return language === "zh" ? `${seconds}秒` : `${seconds}s`;
+  }
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours < 1) return language === "zh" ? `${minutes}分钟` : `${minutes}m`;
+  return language === "zh"
+    ? `${hours}小时${minutes ? `${minutes}分` : ""}`
+    : `${hours}h${minutes ? `${minutes}m` : ""}`;
+}
+
+function fourPolicyFixRecoveryTime(event, language = "zh") {
+  const recovery = event?.policyFixRecovery;
+  if (recovery?.version !== 1 || recovery?.stale !== true || recovery?.noChase !== true) return null;
+  const occurred = beijingMinute(recovery.sourceOccurredAt);
+  const recovered = beijingMinute(recovery.recoveredAt);
+  const lag = fourPolicyFixRecoveryLag(recovery.lagMs, language);
+  return language === "zh"
+    ? `原始发生 ${occurred || "未取得"} CST｜恢复 ${recovered || "未取得"} CST｜真实延迟 ${lag}`
+    : `Original ${occurred || "unavailable"} CST | recovered ${recovered || "unavailable"} CST | actual lag ${lag}`;
+}
+
 function focusTime(event, sourceTime, language = "zh") {
+  const policyFixRecovery = fourPolicyFixRecoveryTime(event, language);
+  if (policyFixRecovery) return policyFixRecovery;
   const flapQuote = flapQuotePairDetails(event);
   if (flapQuote?.recovery) {
     const occurred = beijingMinute(event?.delayedRecovery?.sourceOccurredAt || event?.occurredAt);
@@ -4452,16 +4481,20 @@ export function renderBilingualTelegramText(bundle, strong = false) {
       const source = focusModel.evidence?.map((item) => item?.[language]).filter(Boolean).join(" · ")
         || (zh ? "Four.Meme 官方 X" : "Four.Meme official X");
       const time = localizedCstTime(focusModel.time?.[language], language);
+      const riskTime = fourMeme.recovery
+        ? [
+            `${zh ? "风险：延迟补报｜勿追价｜非自动交易" : "Risk: delayed recovery | do not chase | no automatic trading"}`,
+            `${zh ? "时间：" : "Time: "}${time}`,
+          ]
+        : [`${zh ? "风险/时间：链上启用待确认｜非自动交易｜" : "Risk/Time: on-chain activation pending | no automatic trading | "}${time}`];
       return [
         `${zh ? "平台：" : "Platform: "}Four.Meme｜${fourMeme.name} ${zh ? "新模式" : "new mode"}${prioritySuffix}`,
         `${zh ? "机制：" : "Mechanism: "}${fourMeme.partnerHandle ? `@${fourMeme.partnerHandle}｜` : ""}${zh ? "交易税分成→Lista 收益产品" : "trading-tax share→Lista yield products"}`,
         `${zh ? `毕业：流动性默认迁移 ${fourMeme.destination}${fourMeme.holderYield ? "｜符合条件持有人获持续收益" : ""}`
           : `Graduation: liquidity defaults to ${fourMeme.destination}${fourMeme.holderYield ? " | ongoing yield for eligible holders" : ""}`}`,
-        `${zh ? "结论：平台级催化；等待首个安全代币 CA" : "Decision: platform catalyst; wait for the first safety-cleared token CA"}`,
+        `${zh ? "结论：平台级催化；等待首个 TokenCreated CA，再做安全检查" : "Decision: platform catalyst; await the first TokenCreated CA, then run safety checks"}`,
         `${zh ? "来源：" : "Source: "}${source}`,
-        `${zh ? "风险/时间：" : "Risk/Time: "}${fourMeme.recovery
-          ? (zh ? "延迟补报｜勿追价｜非自动交易｜" : "Delayed recovery | do not chase | no automatic trading | ")
-          : (zh ? "链上启用待确认｜非自动交易｜" : "On-chain activation pending | no automatic trading | ")}${time}`,
+        ...riskTime,
       ].join("\n");
     }
     if (fourMeme?.kind === "listayield_github") {
@@ -4485,7 +4518,7 @@ export function renderBilingualTelegramText(bundle, strong = false) {
         `${zh ? "平台：" : "Platform: "}Four.Meme｜${fourMeme.name} ${zh ? "模板" : "template"}${prioritySuffix}`,
         `${zh ? "事件：" : "Event: "}${fourTemplateAction(fourMeme.changeType, language)}`,
         `${zh ? "变化：" : "Change: "}${change}`,
-        `${zh ? "结论：结构性更新；等待链上启用/首个安全代币" : "Decision: structural update; await on-chain activation/first safety-cleared token"}`,
+        `${zh ? "结论：结构性更新；等待链上启用及首个 TokenCreated CA，再做安全检查" : "Decision: structural update; await on-chain activation and the first TokenCreated CA, then run safety checks"}`,
         `${zh ? "来源：" : "Source: "}${source}`,
         `${zh ? "风险/时间：非自动交易｜" : "Risk/Time: no automatic trading | "}${time}`,
       ].join("\n");
@@ -4494,6 +4527,12 @@ export function renderBilingualTelegramText(bundle, strong = false) {
       const source = focusModel.evidence?.map((item) => item?.[language]).filter(Boolean).join(" · ")
         || (zh ? "Four.Meme 官方 X" : "Four.Meme official X");
       const time = localizedCstTime(focusModel.time?.[language], language);
+      const riskTime = fourMeme.recovery
+        ? [
+            `${zh ? "风险：延迟补报｜勿追价｜非自动交易" : "Risk: delayed recovery | do not chase | no automatic trading"}`,
+            `${zh ? "时间：" : "Time: "}${time}`,
+          ]
+        : [`${zh ? "风险/时间：不作为买入信号｜非自动交易｜" : "Risk/Time: not a buy signal | no automatic trading | "}${time}`];
       return [
         `${zh ? "平台：" : "Platform: "}Four.Meme｜bStocks ${zh ? "交易活动" : "trading campaign"}${prioritySuffix}`,
         `${zh ? "奖励：" : "Rewards: "}${exactUsdt(fourMeme.totalPrizeUsdt)}${zh ? " 总奖池" : " total"}｜${exactUsdt(fourMeme.fourMemePrizeUsdt)}${zh ? " Four.Meme 专属" : " for Four.Meme traders"}`,
@@ -4501,9 +4540,7 @@ export function renderBilingualTelegramText(bundle, strong = false) {
           : `Scope: ${fourMeme.venue} × BNB Chain | trade Stock Memes | Top ${fourMeme.topRanks}`}`,
         `${zh ? "结论：流量催化；非协议升级；暂无指定 CA" : "Decision: traffic catalyst; not a protocol upgrade; no specified CA"}`,
         `${zh ? "来源：" : "Source: "}${source}`,
-        `${zh ? "风险/时间：" : "Risk/Time: "}${fourMeme.recovery
-          ? (zh ? "延迟补报｜勿追价｜非自动交易｜" : "Delayed recovery | do not chase | no automatic trading | ")
-          : (zh ? "不作为买入信号｜非自动交易｜" : "Not a buy signal | no automatic trading | ")}${time}`,
+        ...riskTime,
       ].join("\n");
     }
     if (fourMeme?.kind === "registry_preset") {
