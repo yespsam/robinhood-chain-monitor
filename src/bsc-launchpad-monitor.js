@@ -142,7 +142,11 @@ const BSC_FOCUS3_LAUNCH_TOPICS = [
 // this filter at nine topics also stays within the public BlockRazor fallback
 // limit, so a transient BlastAPI failure cannot force slow per-block recovery.
 const BSC_FOCUS3_TRIGGER_TOPICS = [...BSC_FOCUS3_LAUNCH_TOPICS, ...BSC_UPGRADE_TOPICS];
-const BSC_REALTIME_QUEUE_REASONS = new Set(["zero_mint", "known_launch", "official_upgrade", "official_lifecycle", "pool_created", "http_tail"]);
+const BSC_REALTIME_QUEUE_REASONS = new Set(["zero_mint", "known_launch", "official_upgrade", "official_lifecycle", "pool_created", "http_tail", "near_head_gap_recovery"]);
+const BSC_UNSCOPED_LOG_MAX_BLOCKS = 10;
+const BSC_REALTIME_PENDING_MAX_ENTRIES = 25_000;
+const BSC_REALTIME_OLDEST_RESERVE = 2;
+const BSC_NEAR_HEAD_ATTEMPTS_PER_HISTORICAL_BATCH = 5;
 
 function bscQueuePosition(value) {
   let numeric;
@@ -164,14 +168,27 @@ export function selectBscRealtimeEntries(entries, confirmedBlock, seenTransactio
   const nearHeadFrom = Math.max(0, Number(confirmedBlock) - Math.max(1, Number(nearHeadWindowBlocks) || 1) + 1);
   const nearHead = realtime.filter((entry) => Number(entry.blockNumber) >= nearHeadFrom).sort(compareBscQueueEntries);
   const nearHeadHashes = new Set(nearHead.map((entry) => entry.transactionHash));
+  const older = [
+    ...realtime.filter((entry) => !nearHeadHashes.has(entry.transactionHash)),
+    ...candidates.filter((entry) => !isBscRealtimeQueueEntry(entry)),
+  ].sort(compareBscQueueEntries);
+  const boundedLimit = Math.max(0, Number(limit) || 0);
+  if (nearHead.length + older.length <= boundedLimit || nearHead.length === 0 || older.length === 0 || boundedLimit <= 1) {
+    return [...nearHead, ...older].slice(0, boundedLimit);
+  }
+  // Reserve a small, fixed share for the oldest durable work. Fresh launches
+  // still own most capacity, while an endless near-head stream can no longer
+  // keep yesterday's exact candidate at the head of the queue forever.
+  const oldestReserve = Math.min(BSC_REALTIME_OLDEST_RESERVE, boundedLimit - 1, older.length);
+  const freshLimit = boundedLimit - oldestReserve;
   // A historical ordinary-token backlog must not delay a just-confirmed mode
-  // candidate. Preserve chain order inside the near-head window, then spend
-  // remaining capacity draining the oldest durable work.
+  // candidate. Preserve chain order inside both shares, then spend any unused
+  // fresh capacity on additional oldest durable work.
   return [
-    ...nearHead,
-    ...realtime.filter((entry) => !nearHeadHashes.has(entry.transactionHash)).sort(compareBscQueueEntries),
-    ...candidates.filter((entry) => !isBscRealtimeQueueEntry(entry)).sort(compareBscQueueEntries),
-  ].slice(0, Math.max(0, Number(limit) || 0));
+    ...nearHead.slice(0, freshLimit),
+    ...older.slice(0, oldestReserve),
+    ...older.slice(oldestReserve),
+  ].slice(0, boundedLimit);
 }
 
 function isBscRealtimeQueueEntry(entry) {
@@ -244,28 +261,33 @@ export function compactFocus3LiveCoverageState(targetState, {
   }
   const retainFromBlock = Math.max(0, tailCovered - Math.max(1, Number(replayLookbackBlocks) || 1) + 1);
   const previousGaps = Array.isArray(targetState.nearHeadRecoveryGaps) ? targetState.nearHeadRecoveryGaps : [];
-  const retainedGaps = previousGaps
-    .filter((gap) => Number(gap?.toBlock) >= retainFromBlock)
-    .map((gap) => ({
-      ...gap,
-      fromBlock: Math.max(retainFromBlock, Number(gap.fromBlock)),
-      nextBlock: Math.max(retainFromBlock, Number(gap.nextBlock ?? gap.fromBlock)),
-    }));
-  targetState.lastFinalizedBlock = tailCovered;
-  targetState.nearHeadRecoveryGaps = retainedGaps;
-  targetState.coverageRecoveryHistory = [...(targetState.coverageRecoveryHistory || []), {
+  // This used to advance lastFinalizedBlock to the live tail and discard old
+  // gaps. That made the health cursor claim continuous coverage over blocks
+  // that had never been read. Keep this exported compatibility hook, but make
+  // it lossless: live ingestion is already bounded by the tail cursor and the
+  // historical cursor must move only after exact recovery succeeds.
+  const refusal = {
     scheduledAt: new Date(current).toISOString(),
-    reason: "focus3_live_baseline_compaction",
+    reason: "focus3_live_compaction_refused_uncovered",
     previousLastFinalizedBlock: historicalCovered,
     realtimeTailCoveredBlock: tailCovered,
     replayLookbackFromBlock: retainFromBlock,
-    droppedGapCount: previousGaps.length - retainedGaps.length,
-    retainedGapCount: retainedGaps.length,
-  }].slice(-20);
+    droppedGapCount: 0,
+    retainedGapCount: previousGaps.length,
+  };
+  const priorHistory = targetState.coverageRecoveryHistory || [];
+  const previousRefusal = priorHistory.at(-1);
+  if (previousRefusal?.reason !== refusal.reason
+    || previousRefusal.previousLastFinalizedBlock !== refusal.previousLastFinalizedBlock
+    || previousRefusal.realtimeTailCoveredBlock !== refusal.realtimeTailCoveredBlock
+    || previousRefusal.retainedGapCount !== refusal.retainedGapCount) {
+    targetState.coverageRecoveryHistory = [...priorHistory, refusal].slice(-20);
+  }
   return {
-    changed: true,
-    droppedGapCount: previousGaps.length - retainedGaps.length,
-    retainedGapCount: retainedGaps.length,
+    changed: false,
+    refusedLossyCompaction: true,
+    droppedGapCount: 0,
+    retainedGapCount: previousGaps.length,
     previousLastFinalizedBlock: historicalCovered,
     tailCovered,
     retainFromBlock,
@@ -2238,6 +2260,49 @@ function normalizeNearHeadRecoveryGaps(gaps = []) {
   return normalized.sort((left, right) => right.toBlock - left.toBlock || left.nextBlock - right.nextBlock || left.id.localeCompare(right.id));
 }
 
+function isPristineNearHeadRecoveryGap(gap) {
+  return Number(gap?.nextBlock) === Number(gap?.fromBlock)
+    && Number(gap?.attempts || 0) === 0
+    && !gap?.nextAttemptAt
+    && !gap?.lastAttemptAt
+    && !gap?.lastSuccessAt
+    && !gap?.lastErrorAt
+    && !gap?.lastError;
+}
+
+export function compactBscNearHeadRecoveryGaps(gaps = [], segmentSize = 2_000) {
+  const boundedSegmentSize = Math.max(1, Math.floor(Number(segmentSize) || 1));
+  const normalized = normalizeNearHeadRecoveryGaps(gaps);
+  const pristine = normalized
+    .filter(isPristineNearHeadRecoveryGap)
+    .sort((left, right) => left.fromBlock - right.fromBlock || left.toBlock - right.toBlock);
+  const retained = normalized.filter((gap) => !isPristineNearHeadRecoveryGap(gap));
+  const merged = [];
+  for (const gap of pristine) {
+    const previous = merged.at(-1);
+    const sameReason = String(previous?.reason || "") === String(gap.reason || "");
+    const combinedSize = previous ? gap.toBlock - previous.fromBlock + 1 : Number.POSITIVE_INFINITY;
+    if (previous && sameReason && gap.fromBlock <= previous.toBlock + 1 && combinedSize <= boundedSegmentSize) {
+      previous.toBlock = Math.max(previous.toBlock, gap.toBlock);
+      const detected = [Date.parse(previous.detectedAt || ""), Date.parse(gap.detectedAt || "")]
+        .filter(Number.isFinite);
+      previous.detectedAt = detected.length ? new Date(Math.min(...detected)).toISOString() : previous.detectedAt || gap.detectedAt;
+      previous.id = `realtime-tail-gap:${previous.fromBlock}:${previous.toBlock}`;
+      continue;
+    }
+    merged.push({
+      ...gap,
+      nextBlock: gap.fromBlock,
+      attempts: 0,
+      nextAttemptAt: null,
+    });
+  }
+  // Never compact an attempted/partially-scanned gap: its identity and retry
+  // metadata are an active cursor. Pristine adjacency alone is rewritten, so
+  // the represented pending block union is byte-for-byte equivalent.
+  return normalizeNearHeadRecoveryGaps([...retained, ...merged]);
+}
+
 function emptyState() {
   return {
     version: STATE_VERSION,
@@ -2261,6 +2326,7 @@ function emptyState() {
     nearHeadRecoveryGaps: [],
     coverageGaps: [],
     coverageRecoveryHistory: [],
+    coverageContinuity: null,
     officialSources: {
       flap: {
         pools: {},
@@ -3981,7 +4047,6 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
   if (!circuitRegistryMeta) {
     circuitRegistryMeta = {
       recoveryProbeAfter: new Map(),
-      recoveryProbeCursor: new Map(),
       recoveryProbeInFlight: new Map(),
     };
     BSC_RPC_CIRCUIT_REGISTRY_META.set(hostCircuitRegistry, circuitRegistryMeta);
@@ -4071,9 +4136,8 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
   const archiveUnique = [...new Set(archiveUrls.filter(Boolean))];
   const archiveProviders = archiveUnique.map((url, index) => providerFactory(url, { kind: "archive", index }));
   const archiveCircuits = archiveUnique.map(circuitForUrl);
-  const operationRecoveryProbeAfter = circuitRegistryMeta.recoveryProbeAfter;
-  const operationRecoveryProbeCursor = circuitRegistryMeta.recoveryProbeCursor;
-  const operationRecoveryProbeInFlight = circuitRegistryMeta.recoveryProbeInFlight;
+  const hostMethodRecoveryProbeAfter = circuitRegistryMeta.recoveryProbeAfter;
+  const hostMethodRecoveryProbeInFlight = circuitRegistryMeta.recoveryProbeInFlight;
   const archiveWaiters = [];
   const standardWaiters = [];
   let activeArchiveRequests = 0;
@@ -4226,14 +4290,21 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     || (operation === "eth_getLogs"
       && !isGlobalRateLimit(message, error)
       && /\blimit exceeded\b|archive requests require|missing trie node|block range|range (?:is )?too (?:large|wide)|too many (?:logs|results)|response size|header not found|block not found/i.test(message));
-  const isTransientMethodTimeout = (operation, message) => operation === "eth_getLogs"
-    && /timed out|\btimeout\b|operation was aborted/i.test(message);
+  const isTransientMethodTimeout = (_operation, message) => /timed out|\btimeout\b|operation was aborted/i.test(message);
+  const isMethodAccessFailure = (_operation, message, error = null) => !isGlobalRateLimit(message, error)
+    && (rpcStatusCode(error) === 403 || /\b403\b|forbidden|unauthorized/i.test(message));
   const exponentialCooldown = (base, count, maximum) => Math.min(maximum, base * (2 ** Math.min(Math.max(0, count - 1), 10)));
   const recordFailureCooldown = (circuits, index, operation, error) => {
     const message = error?.info?.error?.message || error?.error?.message || error?.shortMessage || error?.message || "unknown error";
     const current = clockNow();
     const rateLimited = isGlobalRateLimit(message, error);
-    const methodScoped = isMethodScopedFailure(operation, message, error) || isTransientMethodTimeout(operation, message);
+    const methodScoped = isMethodScopedFailure(operation, message, error)
+      || isTransientMethodTimeout(operation, message)
+      || isMethodAccessFailure(operation, message, error);
+    if (error && typeof error === "object") {
+      error.rpcOperation = operation;
+      error.rpcFailureScope = methodScoped ? "method" : "host";
+    }
     const circuit = circuits[index];
     const method = methodCircuit(circuit, operation, methodScoped);
     const failureCount = methodScoped
@@ -4287,23 +4358,34 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
       method.failures = 0;
     }
   };
-  const retryDelayForCircuits = (capable, circuits, recoveryProbeAfter, operation) => {
+  const recoveryProbeKey = (circuits, index, operation) => {
+    const circuit = circuits[index];
+    // A 429 opens the physical-host circuit, so its half-open lease must also
+    // be shared across methods and pools. Method-only failures retain an
+    // independent host+operation probe.
+    return `${circuit?.host || index}:${Number(circuit?.globalFailures || 0) > 0 ? "*" : operation}`;
+  };
+  const retryDelayForCircuits = (capable, circuits, operation) => {
     const current = clockNow();
-    const earliestCircuit = Math.min(...capable.map((index) => cooldownUntil(circuits, index, operation)));
-    return Math.max(1, Math.max(earliestCircuit, recoveryProbeAfter.get(operation) || 0) - current);
+    const earliestCircuit = Math.min(...capable.map((index) => Math.max(
+      cooldownUntil(circuits, index, operation),
+      Number(hostMethodRecoveryProbeAfter.get(recoveryProbeKey(circuits, index, operation)) || 0),
+    )));
+    return Math.max(1, earliestCircuit - current);
   };
-  const acquireRecoveryProbe = (operation) => {
-    if (operationRecoveryProbeInFlight.has(operation)) return null;
-    const lease = Symbol(operation);
-    operationRecoveryProbeInFlight.set(operation, lease);
-    return lease;
+  const acquireRecoveryProbe = (circuits, index, operation) => {
+    const key = recoveryProbeKey(circuits, index, operation);
+    if (hostMethodRecoveryProbeInFlight.has(key)) return null;
+    const lease = Symbol(key);
+    hostMethodRecoveryProbeInFlight.set(key, lease);
+    return { key, lease };
   };
-  const releaseRecoveryProbe = (operation, lease) => {
-    if (lease && operationRecoveryProbeInFlight.get(operation) === lease) {
-      operationRecoveryProbeInFlight.delete(operation);
+  const releaseRecoveryProbe = (probe) => {
+    if (probe && hostMethodRecoveryProbeInFlight.get(probe.key) === probe.lease) {
+      hostMethodRecoveryProbeInFlight.delete(probe.key);
     }
   };
-  const recoveryProbeBusyError = (operation, current, probeBlockedUntil = 0) => {
+  const recoveryProbeBusyError = (operation, current, probeBlockedUntil = 0, failureScope = "method") => {
     const retryInMs = Math.max(
       1,
       Number(probeBlockedUntil || 0) - current,
@@ -4312,6 +4394,8 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     const error = new Error(`${operation} failed on every BSC RPC: recovery probe already in flight; retry in ${retryInMs}ms`);
     error.code = "SERVER_ERROR";
     error.retryAfterMs = retryInMs;
+    error.rpcOperation = operation;
+    error.rpcFailureScope = failureScope;
     return error;
   };
   const invokeWithTimeout = async (operation, label) => {
@@ -4343,42 +4427,57 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
   const invoke = (method, args) => withStandardSlot(async () => {
     const operation = operationName(method, args);
     const errors = [];
+    const failureScopes = [];
     const start = nextProvider++ % providers.length;
     const rotated = providers.map((_, offset) => (start + offset) % providers.length);
     const capable = orderForOperation(rotated, operation, unique, args);
     if (!capable.length) {
       const error = new Error(`${operation} failed on every BSC RPC: no log-capable standard providers configured`);
       error.code = "SERVER_ERROR";
+      error.rpcOperation = operation;
+      error.rpcFailureScope = "method";
       throw error;
     }
     const current = clockNow();
     const available = capable.filter((index) => cooldownUntil(providerCircuits, index, operation) <= current);
     if (!available.length) {
-      const retryInMs = retryDelayForCircuits(capable, providerCircuits, operationRecoveryProbeAfter, operation);
+      const retryInMs = retryDelayForCircuits(capable, providerCircuits, operation);
       const error = new Error(`${operation} failed on every BSC RPC: providers cooling down; retry in ${retryInMs}ms`);
       error.code = "SERVER_ERROR";
       error.retryAfterMs = retryInMs;
+      error.rpcOperation = operation;
+      error.rpcFailureScope = capable.every((index) => Number(providerCircuits[index]?.globalUntil || 0) > current)
+        ? "host"
+        : "method";
       throw error;
     }
     const closed = available.filter((index) => !circuitFailed(providerCircuits, index, operation));
-    const probeBlockedUntil = operationRecoveryProbeAfter.get(operation) || 0;
-    if (!closed.length && probeBlockedUntil > current) {
-      const retryInMs = Math.max(1, probeBlockedUntil - current);
-      const error = new Error(`${operation} failed on every BSC RPC: recovery probe cooling down; retry in ${retryInMs}ms`);
-      error.code = "SERVER_ERROR";
-      error.retryAfterMs = retryInMs;
-      throw error;
-    }
     // Closed endpoints retain the existing ordered fallback. Once every host
-    // has an open circuit, probe only one due endpoint per invocation; the
-    // rotating start index gives each host a recovery opportunity without a
-    // burst across all providers.
+    // has an open circuit, probe one due physical host per invocation. Probe
+    // leases and cooldowns are keyed by host+method, so a slow historical
+    // state probe on host A cannot suppress a ready host B (or its log lane).
     const recoveryProbe = closed.length === 0;
-    const probeCursor = Number(operationRecoveryProbeCursor.get(operation) || 0);
-    const order = recoveryProbe ? [available[probeCursor % available.length]] : closed;
-    const recoveryProbeLease = recoveryProbe ? acquireRecoveryProbe(operation) : null;
-    if (recoveryProbe && !recoveryProbeLease) throw recoveryProbeBusyError(operation, current, probeBlockedUntil);
-    if (recoveryProbe) operationRecoveryProbeCursor.set(operation, probeCursor + 1);
+    const probeIndex = recoveryProbe ? available.find((index) => {
+      const key = recoveryProbeKey(providerCircuits, index, operation);
+      return Number(hostMethodRecoveryProbeAfter.get(key) || 0) <= current
+        && !hostMethodRecoveryProbeInFlight.has(key);
+    }) : null;
+    if (recoveryProbe && probeIndex === undefined) {
+      const blockedUntil = Math.min(...available.map((index) => {
+        const key = recoveryProbeKey(providerCircuits, index, operation);
+        return hostMethodRecoveryProbeInFlight.has(key)
+          ? current + recoveryProbeIntervalMs
+          : Math.max(current + 1, Number(hostMethodRecoveryProbeAfter.get(key) || 0));
+      }));
+      const failureScope = available.every((index) => Number(providerCircuits[index]?.globalUntil || 0) <= current
+        && Number(providerCircuits[index]?.globalFailures || 0) > 0) ? "host" : "method";
+      throw recoveryProbeBusyError(operation, current, blockedUntil, failureScope);
+    }
+    const order = recoveryProbe ? [probeIndex] : closed;
+    const recoveryProbeLease = recoveryProbe ? acquireRecoveryProbe(providerCircuits, probeIndex, operation) : null;
+    if (recoveryProbe && !recoveryProbeLease) {
+      throw recoveryProbeBusyError(operation, current, current + recoveryProbeIntervalMs);
+    }
     try {
       for (const index of order) {
         const generationAtStart = circuitGeneration(providerCircuits, index, operation);
@@ -4388,22 +4487,33 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
             `${operation} ${new URL(unique[index]).host}`,
           );
           if (result == null && NULL_RETRY_RPC_METHODS.has(method)) throw new Error(`${method} returned null for finalized BSC data`);
+          const probeKeyAtStart = recoveryProbeLease?.key || recoveryProbeKey(providerCircuits, index, operation);
           clearCircuit(providerCircuits, index, operation, generationAtStart);
-          operationRecoveryProbeAfter.delete(operation);
+          hostMethodRecoveryProbeAfter.delete(probeKeyAtStart);
           return result;
         } catch (error) {
           if (NON_RETRYABLE_RPC_CODES.has(error.code)) throw error;
           recordFailureCooldown(providerCircuits, index, operation, error);
+          failureScopes.push(error?.rpcFailureScope || null);
           errors.push(`${new URL(unique[index]).host}: ${errorSummary(error)}`);
         }
       }
-      operationRecoveryProbeAfter.set(operation, clockNow() + recoveryProbeIntervalMs);
+      if (recoveryProbe && probeIndex !== undefined) {
+        hostMethodRecoveryProbeAfter.set(
+          recoveryProbeLease?.key || recoveryProbeKey(providerCircuits, probeIndex, operation),
+          clockNow() + recoveryProbeIntervalMs,
+        );
+      }
       const error = new Error(`${operation} failed on every BSC RPC: ${errors.join("; ")}`);
       error.code = "SERVER_ERROR";
-      error.retryAfterMs = retryDelayForCircuits(capable, providerCircuits, operationRecoveryProbeAfter, operation);
+      error.retryAfterMs = retryDelayForCircuits(capable, providerCircuits, operation);
+      error.rpcOperation = operation;
+      error.rpcFailureScope = failureScopes.length > 0 && failureScopes.every((scope) => scope === "host")
+        ? "host"
+        : "method";
       throw error;
     } finally {
-      releaseRecoveryProbe(operation, recoveryProbeLease);
+      releaseRecoveryProbe(recoveryProbeLease);
     }
   });
   const withArchiveSlot = async (operation) => {
@@ -4418,31 +4528,53 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
   const invokeArchive = (method, args) => withArchiveSlot(async () => {
     const operation = operationName(method, args);
     const errors = [];
+    const failureScopes = [];
     const start = nextArchiveProvider++ % archiveProviders.length;
     const rotated = archiveProviders.map((_, offset) => (start + offset) % archiveProviders.length);
     const capable = orderForOperation(rotated, operation, archiveUnique, args);
     if (!capable.length) {
       const error = new Error(`${operation} failed on every BSC archive RPC: no capable archive providers configured`);
       error.code = "SERVER_ERROR";
+      error.rpcOperation = operation;
+      error.rpcFailureScope = "method";
       throw error;
     }
     const current = clockNow();
     const available = capable.filter((index) => cooldownUntil(archiveCircuits, index, operation) <= current);
     const closed = available.filter((index) => !circuitFailed(archiveCircuits, index, operation));
-    const probeBlockedUntil = operationRecoveryProbeAfter.get(operation) || 0;
-    if (!available.length || (!closed.length && probeBlockedUntil > current)) {
-      const retryInMs = retryDelayForCircuits(capable, archiveCircuits, operationRecoveryProbeAfter, operation);
+    if (!available.length) {
+      const retryInMs = retryDelayForCircuits(capable, archiveCircuits, operation);
       const error = new Error(`${operation} archive RPCs are cooling down; retry in ${retryInMs}ms`);
       error.code = "SERVER_ERROR";
       error.retryAfterMs = retryInMs;
+      error.rpcOperation = operation;
+      error.rpcFailureScope = capable.every((index) => Number(archiveCircuits[index]?.globalUntil || 0) > current)
+        ? "host"
+        : "method";
       throw error;
     }
     const recoveryProbe = closed.length === 0;
-    const probeCursor = Number(operationRecoveryProbeCursor.get(operation) || 0);
-    const order = recoveryProbe ? [available[probeCursor % available.length]] : closed;
-    const recoveryProbeLease = recoveryProbe ? acquireRecoveryProbe(operation) : null;
-    if (recoveryProbe && !recoveryProbeLease) throw recoveryProbeBusyError(operation, current, probeBlockedUntil);
-    if (recoveryProbe) operationRecoveryProbeCursor.set(operation, probeCursor + 1);
+    const probeIndex = recoveryProbe ? available.find((index) => {
+      const key = recoveryProbeKey(archiveCircuits, index, operation);
+      return Number(hostMethodRecoveryProbeAfter.get(key) || 0) <= current
+        && !hostMethodRecoveryProbeInFlight.has(key);
+    }) : null;
+    if (recoveryProbe && probeIndex === undefined) {
+      const blockedUntil = Math.min(...available.map((index) => {
+        const key = recoveryProbeKey(archiveCircuits, index, operation);
+        return hostMethodRecoveryProbeInFlight.has(key)
+          ? current + recoveryProbeIntervalMs
+          : Math.max(current + 1, Number(hostMethodRecoveryProbeAfter.get(key) || 0));
+      }));
+      const failureScope = available.every((index) => Number(archiveCircuits[index]?.globalUntil || 0) <= current
+        && Number(archiveCircuits[index]?.globalFailures || 0) > 0) ? "host" : "method";
+      throw recoveryProbeBusyError(operation, current, blockedUntil, failureScope);
+    }
+    const order = recoveryProbe ? [probeIndex] : closed;
+    const recoveryProbeLease = recoveryProbe ? acquireRecoveryProbe(archiveCircuits, probeIndex, operation) : null;
+    if (recoveryProbe && !recoveryProbeLease) {
+      throw recoveryProbeBusyError(operation, current, current + recoveryProbeIntervalMs);
+    }
     try {
       for (const index of order) {
         const generationAtStart = circuitGeneration(archiveCircuits, index, operation);
@@ -4452,26 +4584,32 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
             `${operation} ${new URL(archiveUnique[index]).host}`,
           );
           if (result == null && NULL_RETRY_RPC_METHODS.has(method)) throw new Error(`${method} returned null for finalized BSC data`);
+          const probeKeyAtStart = recoveryProbeLease?.key || recoveryProbeKey(archiveCircuits, index, operation);
           clearCircuit(archiveCircuits, index, operation, generationAtStart);
-          operationRecoveryProbeAfter.delete(operation);
+          hostMethodRecoveryProbeAfter.delete(probeKeyAtStart);
           return result;
         } catch (error) {
           recordFailureCooldown(archiveCircuits, index, operation, error);
+          failureScopes.push(error?.rpcFailureScope || null);
           errors.push(`${new URL(archiveUnique[index]).host}: ${errorSummary(error)}`);
         }
       }
-      operationRecoveryProbeAfter.set(operation, clockNow() + recoveryProbeIntervalMs);
+      if (recoveryProbe && probeIndex !== undefined) {
+        hostMethodRecoveryProbeAfter.set(
+          recoveryProbeLease?.key || recoveryProbeKey(archiveCircuits, probeIndex, operation),
+          clockNow() + recoveryProbeIntervalMs,
+        );
+      }
       const error = new Error(`${operation} failed on every BSC archive RPC: ${errors.join("; ")}`);
       error.code = "SERVER_ERROR";
-      error.retryAfterMs = retryDelayForCircuits(
-        capable,
-        archiveCircuits,
-        operationRecoveryProbeAfter,
-        operation,
-      );
+      error.retryAfterMs = retryDelayForCircuits(capable, archiveCircuits, operation);
+      error.rpcOperation = operation;
+      error.rpcFailureScope = failureScopes.length > 0 && failureScopes.every((scope) => scope === "host")
+        ? "host"
+        : "method";
       throw error;
     } finally {
-      releaseRecoveryProbe(operation, recoveryProbeLease);
+      releaseRecoveryProbe(recoveryProbeLease);
     }
   });
   const combinedRpcError = (message, ...causes) => {
@@ -4479,6 +4617,9 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     error.code = "SERVER_ERROR";
     const retryAfterMs = Math.max(0, ...causes.map((cause) => Number(cause?.retryAfterMs) || 0));
     if (retryAfterMs > 0) error.retryAfterMs = retryAfterMs;
+    const scopes = causes.map((cause) => cause?.rpcFailureScope).filter(Boolean);
+    if (scopes.length) error.rpcFailureScope = scopes.every((scope) => scope === "host") ? "host" : "method";
+    error.rpcOperation = causes.find((cause) => cause?.rpcOperation)?.rpcOperation || null;
     return error;
   };
   const invokeArchiveFirst = async (method, args) => {
@@ -4683,10 +4824,14 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   // RPC can still raise this explicitly.
   const nearHeadRecoveryBatchSize = Math.max(1, Number(config.bscNearHeadRecoveryBatchSize || recoveryLogBatchSize));
   const nearHeadRecoverySegmentSize = Math.max(nearHeadRecoveryBatchSize, Number(config.bscNearHeadRecoverySegmentSize || 2_000));
+  const realtimePendingMaxEntries = Math.max(1, Math.floor(Number(
+    dependencies.realtimePendingMaxEntries || BSC_REALTIME_PENDING_MAX_ENTRIES,
+  )));
   const coverageRetryBaseMs = Math.max(100, Number(config.bscCoverageRetryBaseMs || 5_000));
   const coverageRetryMaxMs = Math.max(coverageRetryBaseMs, Number(config.bscCoverageRetryMaxMs || 60_000));
   const nearHeadRecoveryRetryBaseMs = Math.max(100, Number(config.bscNearHeadRecoveryRetryBaseMs || 1_000));
   const nearHeadRecoveryRetryMaxMs = Math.max(nearHeadRecoveryRetryBaseMs, Number(config.bscNearHeadRecoveryRetryMaxMs || coverageRetryMaxMs));
+  const nearHeadRecoverySuccessIntervalMs = Math.max(250, Number(config.bscNearHeadRecoverySuccessIntervalMs || 5_000));
   // This file is multi-megabyte in production. Pure checkedAt/head telemetry
   // is bounded to one flush per 30 seconds; cursor, queue, proof, dedup and
   // delivery mutations continue through the immediate save() path below.
@@ -4721,8 +4866,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   let nearHeadRecoveryRunning = false;
   let nearHeadRecoveryRequested = false;
   let nearHeadRecoveryRetryAt = 0;
+  let nearHeadRecoveryPacedUntil = 0;
   let flapReplayRetryAt = 0;
   let nearHeadNewestSelectionStreak = 0;
+  let nearHeadRecoveryAttemptsSinceCoverage = 0;
   let reconnectAttempts = 0;
   let currentHead = 0;
   let desiredCoverage = 0;
@@ -4743,6 +4890,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   const websocketProofContexts = new Map();
   const websocketProofTasks = new Set();
   const websocketProofReservations = new Set();
+  const websocketHttpFallbackRetryAt = new Map();
   let websocketProofCandidateActive = false;
   const requiredSubscriptionKinds = focus3ChainScope ? ["heads", "protocol"] : ["heads", "mints", "protocol"];
   const dynamicOfficialRoots = new Map();
@@ -5080,6 +5228,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   const sharedRpcRetryDelayMs = (error) => {
     const retryAfterMs = Number(error?.retryAfterMs);
     if (!Number.isFinite(retryAfterMs) || retryAfterMs <= 0) return 0;
+    if (error?.rpcFailureScope !== "host") return 0;
     return /failed on every BSC (?:archive )?RPC|providers cooling down|archive RPCs are cooling down|recovery probe|rate.?limit|too many requests|\b429\b|timed out|\btimeout\b/i.test(errorSummary(error))
       ? Math.ceil(retryAfterMs)
       : 0;
@@ -5415,6 +5564,8 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       }
       state = loaded;
       state.realtimePendingEntries ||= {};
+      compactNearHeadRecoveryState();
+      markLegacyLossyFocus3Coverage();
       const persistedRealtimeRetryAt = Date.parse(state._health?.realtimeQueue?.nextRetryAt || "");
       realtimeRetryAt = Number.isFinite(persistedRealtimeRetryAt) && persistedRealtimeRetryAt > now()
         ? persistedRealtimeRetryAt
@@ -9016,6 +9167,29 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     };
   }
 
+  function persistRealtimePendingHandoff(entries) {
+    const candidates = entries.filter((entry) => !state.seenTransactions[entry.transactionHash]
+      && !state.deferredCreationEvidence[entry.transactionHash]);
+    const newKeys = new Set(candidates
+      .map((entry) => normalizeTransactionHash(entry.transactionHash))
+      .filter((transactionHash) => transactionHash && !state.realtimePendingEntries[transactionHash]));
+    const pendingCount = Object.keys(state.realtimePendingEntries || {}).length;
+    if (pendingCount + newKeys.size > realtimePendingMaxEntries) {
+      const error = new Error(`BSC realtime pending capacity ${pendingCount}+${newKeys.size}>${realtimePendingMaxEntries}`);
+      error.code = "BSC_REALTIME_PENDING_CAPACITY";
+      throw error;
+    }
+    // Capacity is checked for the complete recovered range before mutating a
+    // single record. Cursor advancement and every candidate are therefore an
+    // all-or-none state/WAL transaction.
+    for (const entry of candidates) {
+      state.realtimePendingEntries[entry.transactionHash] = serializeRealtimePendingEntry(
+        entry,
+        state.realtimePendingEntries[entry.transactionHash],
+      );
+    }
+  }
+
   function deserializeRealtimePendingEntry(record) {
     const hookPools = new Map();
     for (const pool of record.hookPools || []) hookPools.set(`${pool.factory}:${pool.poolId || pool.pool}`, pool);
@@ -9796,6 +9970,11 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           // transient retry path rather than becoming a poison transaction.
           unavailable.code = "NETWORK_ERROR";
           unavailable.rpcCodes = [historicalError?.code, latestError?.code].filter(Boolean);
+          unavailable.rpcOperation = "getCode";
+          unavailable.rpcFailureScope = [historicalError, latestError]
+            .every((error) => error?.rpcFailureScope === "method") ? "method" : undefined;
+          const retryAfterMs = Math.max(Number(historicalError?.retryAfterMs) || 0, Number(latestError?.retryAfterMs) || 0);
+          if (retryAfterMs > 0) unavailable.retryAfterMs = retryAfterMs;
           throw unavailable;
         }
       }
@@ -11064,7 +11243,8 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     const transientRpcFailures = results.filter((result) => result.status === "rejected"
       && result.reason?.code !== "ALERT_DELIVERY_PENDING"
       && isTransientCoverageError(result.reason));
-    let globalRpcUnavailable = transientRpcFailures.some((result) => /failed on every BSC RPC/i.test(result.reason?.message || ""));
+    let globalRpcUnavailable = transientRpcFailures.length > 0
+      && transientRpcFailures.every((result) => result.reason?.rpcFailureScope === "host");
     if (transientRpcFailures.length) {
       if (!globalRpcUnavailable) {
         try { await provider.getBlockNumber(); }
@@ -11099,6 +11279,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         const alertPending = result.reason?.code === "ALERT_DELIVERY_PENDING";
         const creationEvidencePending = result.reason?.code === "BSC_CREATION_EVIDENCE_PENDING";
         const transientRpc = !alertPending && isTransientCoverageError(result.reason);
+        const methodScopedRpc = transientRpc
+          && !globalRpcUnavailable
+          && result.reason?.rpcFailureScope === "method";
         // A WebSocket proof attempt is only an optional latency shortcut. If
         // any later enrichment or safety proof fails, leave the authoritative
         // realtime pending record, retry counters and coverage state exactly
@@ -11135,8 +11318,13 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
             error: String(result.reason?.message || result.reason).slice(0, 300),
           };
           state.transactionFailures[entry.transactionHash] = failure;
-          const minimumAttempts = transientRpc ? 8 : 3;
-          const minimumAgeMs = transientRpc ? 30_000 : 15_000;
+          // A method-specific outage (most commonly historical getCode) is not
+          // evidence that block/log/receipt discovery is unavailable. Move the
+          // exact candidate to the durable retry lane immediately so one state
+          // method cannot head-of-line block every later launch. Host-wide 429s
+          // still take the shared lane backoff above.
+          const minimumAttempts = methodScopedRpc ? 1 : transientRpc ? 8 : 3;
+          const minimumAgeMs = methodScopedRpc ? 0 : transientRpc ? 30_000 : 15_000;
           const oldEnough = now() - Date.parse(failure.firstFailureAt) >= minimumAgeMs;
           if (failure.attempts < minimumAttempts || !oldEnough) {
             await save();
@@ -11205,6 +11393,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         delete state.transactionFailures[entry.transactionHash];
         delete state.deferredCreationEvidence[entry.transactionHash];
         delete state.realtimePendingEntries[entry.transactionHash];
+        websocketHttpFallbackRetryAt.delete(entry.transactionHash);
         for (const gap of state.coverageGaps || []) {
           if (gap.transactionHash !== entry.transactionHash || gap.resolvedAt || gap.status === "resolved") continue;
           gap.status = "resolved";
@@ -11247,6 +11436,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       // released.
       if (websocketProofReservations.has(entry.transactionHash)
         && options.websocketProofOwner !== true) continue;
+      const websocketFallbackAt = Number(websocketHttpFallbackRetryAt.get(entry.transactionHash) || 0);
+      if (options.websocketProofOwner !== true && websocketFallbackAt > Number(now())) continue;
+      if (websocketFallbackAt > 0) websocketHttpFallbackRetryAt.delete(entry.transactionHash);
       const existing = inFlightEntries.get(entry.transactionHash);
       if (existing) waits.add(existing);
       else claimed.push(entry);
@@ -11355,11 +11547,41 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       attempts: 0,
       nextAttemptAt: null,
     }));
-    if (added.length) state.nearHeadRecoveryGaps = normalizeNearHeadRecoveryGaps([
+    if (!added.length) return [];
+    const addedBlocks = added.map((gap) => [gap.fromBlock, gap.toBlock]);
+    state.nearHeadRecoveryGaps = normalizeNearHeadRecoveryGaps([
       ...(state.nearHeadRecoveryGaps || []),
       ...added,
     ]);
-    return added;
+    compactNearHeadRecoveryState();
+    return state.nearHeadRecoveryGaps.filter((gap) => addedBlocks.some(([left, right]) => gap.toBlock >= left && gap.nextBlock <= right));
+  }
+
+  function compactNearHeadRecoveryState() {
+    if (!state) return false;
+    const previous = normalizeNearHeadRecoveryGaps(state.nearHeadRecoveryGaps);
+    const compacted = compactBscNearHeadRecoveryGaps(previous, nearHeadRecoverySegmentSize);
+    if (JSON.stringify(previous) === JSON.stringify(compacted)) {
+      state.nearHeadRecoveryGaps = previous;
+      return false;
+    }
+    const priorById = new Map(previous.map((gap) => [gap.id, gap]));
+    const remapIds = (ids) => [...new Set((Array.isArray(ids) ? ids : []).flatMap((id) => {
+      const old = priorById.get(id);
+      if (!old) return [];
+      return compacted
+        .filter((gap) => gap.toBlock >= old.nextBlock && gap.nextBlock <= old.toBlock)
+        .map((gap) => gap.id);
+    }))];
+    const tailHealth = state._health?.realtimeTail;
+    if (tailHealth?.handoffGapIds) tailHealth.handoffGapIds = remapIds(tailHealth.handoffGapIds);
+    const recoveryHealth = state._health?.nearHeadRecovery;
+    if (recoveryHealth?.activeGapId && priorById.has(recoveryHealth.activeGapId)) {
+      const mapped = remapIds([recoveryHealth.activeGapId]);
+      recoveryHealth.activeGapId = mapped.length === 1 ? mapped[0] : null;
+    }
+    state.nearHeadRecoveryGaps = compacted;
+    return true;
   }
 
   function migrateLegacyRealtimeTailHandoff() {
@@ -11380,6 +11602,113 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     realtimeTail.handoffMigrationFromBlock = migrationFrom <= legacyThrough ? migrationFrom : null;
     realtimeTail.handoffMigrationThroughBlock = migrationFrom <= legacyThrough ? legacyThrough : null;
     return true;
+  }
+
+  function markLegacyLossyFocus3Coverage() {
+    if (!focus3ChainScope) return false;
+    const history = Array.isArray(state.coverageRecoveryHistory) ? state.coverageRecoveryHistory : [];
+    const lossy = history.filter((entry) => entry?.reason === "focus3_live_baseline_compaction");
+    const rawHandoffCompaction = state._health?.realtimeTail?.handoffCompaction;
+    const handoffKeys = rawHandoffCompaction && typeof rawHandoffCompaction === "object" && !Array.isArray(rawHandoffCompaction)
+      ? Object.keys(rawHandoffCompaction).sort()
+      : [];
+    const expectedHandoffKeys = [
+      "compactedThroughBlock",
+      "droppedGapCount",
+      "previousLastFinalizedBlock",
+      "replayLookbackFromBlock",
+      "retainedGapCount",
+    ];
+    const closedLegacyHandoff = handoffKeys.length === expectedHandoffKeys.length
+      && handoffKeys.every((key, index) => key === expectedHandoffKeys[index])
+      && Number.isSafeInteger(Number(rawHandoffCompaction.previousLastFinalizedBlock))
+      && Number(rawHandoffCompaction.previousLastFinalizedBlock) >= 0
+      && Number.isSafeInteger(Number(rawHandoffCompaction.compactedThroughBlock))
+      && Number(rawHandoffCompaction.compactedThroughBlock) > Number(rawHandoffCompaction.previousLastFinalizedBlock)
+      && Number.isSafeInteger(Number(rawHandoffCompaction.replayLookbackFromBlock))
+      && Number(rawHandoffCompaction.replayLookbackFromBlock) >= 0
+      && Number(rawHandoffCompaction.replayLookbackFromBlock) <= Number(rawHandoffCompaction.compactedThroughBlock)
+      && Number.isSafeInteger(Number(rawHandoffCompaction.droppedGapCount))
+      && Number(rawHandoffCompaction.droppedGapCount) > 0
+      && Number.isSafeInteger(Number(rawHandoffCompaction.retainedGapCount))
+      && Number(rawHandoffCompaction.retainedGapCount) >= 0
+      && Number.isSafeInteger(Number(state.lastFinalizedBlock))
+      && Number(state.lastFinalizedBlock) >= Number(rawHandoffCompaction.compactedThroughBlock)
+      ? {
+        previousLastFinalizedBlock: Number(rawHandoffCompaction.previousLastFinalizedBlock),
+        compactedThroughBlock: Number(rawHandoffCompaction.compactedThroughBlock),
+        replayLookbackFromBlock: Number(rawHandoffCompaction.replayLookbackFromBlock),
+        droppedGapCount: Number(rawHandoffCompaction.droppedGapCount),
+        retainedGapCount: Number(rawHandoffCompaction.retainedGapCount),
+      }
+      : null;
+    const existingContinuity = state.coverageContinuity?.source === "legacy_focus3_lossy_compaction"
+      ? state.coverageContinuity
+      : null;
+    if (!lossy.length && !closedLegacyHandoff && !existingContinuity) return false;
+    const currentCursor = Number(state.lastFinalizedBlock);
+    const baseline = Number(state.alertSuppressedThroughBlock);
+    const earliestRetainedClaim = Math.min(...lossy
+      .map((entry) => Number(entry.previousLastFinalizedBlock))
+      .filter((value) => Number.isSafeInteger(value) && value >= 0));
+    const abandonedFromBlock = Number.isSafeInteger(baseline) && baseline >= 0
+      ? baseline + 1
+      : null;
+    let changed = false;
+    if (!existingContinuity) {
+      state.coverageContinuity = {
+        version: 1,
+        status: "partial_legacy_abandoned",
+        source: "legacy_focus3_lossy_compaction",
+        recordedAt: iso(now),
+        abandonedFromBlock,
+        abandonedThroughBlock: closedLegacyHandoff?.previousLastFinalizedBlock
+          ?? (Number.isSafeInteger(currentCursor) ? currentCursor : null),
+        earliestRetainedCompactionCursor: Number.isSafeInteger(earliestRetainedClaim) ? earliestRetainedClaim : null,
+        reason: "legacy compaction discarded uncovered gap records; retained history cannot prove an earlier continuous cursor",
+      };
+      changed = true;
+    }
+    if (closedLegacyHandoff && !state.coverageContinuity.latestConservativeRescan) {
+      // The final legacy handoff record is a closed, durable proof of the
+      // newest discarded interval even though the individual gaps are gone.
+      // Reopen that entire interval through the truthful full-history cursor;
+      // this is a conservative exact superset and never guesses from the
+      // rolling 20-entry diagnostic history.
+      state.lastFinalizedBlock = Math.min(
+        Number(state.lastFinalizedBlock),
+        closedLegacyHandoff.previousLastFinalizedBlock,
+      );
+      state.coverageContinuity.latestConservativeRescan = {
+        version: 1,
+        status: "pending",
+        source: "legacy_realtime_tail_handoff_compaction",
+        recordedAt: iso(now),
+        rescanFromBlock: closedLegacyHandoff.previousLastFinalizedBlock + 1,
+        rescanThroughBlock: closedLegacyHandoff.compactedThroughBlock,
+        ...closedLegacyHandoff,
+      };
+      state.coverageContinuity.abandonedThroughBlock = closedLegacyHandoff.previousLastFinalizedBlock;
+      state.coverageRecoveryHistory = [...state.coverageRecoveryHistory, {
+        scheduledAt: iso(now),
+        reason: "focus3_latest_lossy_compaction_conservative_reopen",
+        fromBlock: closedLegacyHandoff.previousLastFinalizedBlock + 1,
+        toBlock: closedLegacyHandoff.compactedThroughBlock,
+        previousLastFinalizedBlock: closedLegacyHandoff.previousLastFinalizedBlock,
+        droppedGapCount: closedLegacyHandoff.droppedGapCount,
+      }].slice(-20);
+      changed = true;
+    } else if (changed) {
+      state.coverageRecoveryHistory = [...state.coverageRecoveryHistory, {
+        scheduledAt: iso(now),
+        reason: "focus3_legacy_lossy_compaction_marked_partial",
+        abandonedFromBlock,
+        abandonedThroughBlock: state.coverageContinuity.abandonedThroughBlock,
+        earliestRetainedCompactionCursor: state.coverageContinuity.earliestRetainedCompactionCursor,
+        droppedGapCount: 0,
+      }].slice(-20);
+    }
+    return changed;
   }
 
   function dueNearHeadRecoveryGap(referenceTime = now()) {
@@ -11538,6 +11867,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     }
     if (unresolvedCoverageGaps.length || nearHeadRecoveryGaps.length) status = "critical";
     else if (deferredTransactions && status !== "critical") status = "degraded";
+    if (state.coverageContinuity?.status === "partial_legacy_abandoned") status = "critical";
     state._health.coverage = {
       status,
       checkedAt: iso(now),
@@ -11555,12 +11885,19 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       estimatedBlockTimeMs: expectedBlockTimeMs,
       degradedLagBlocks: healthDegradedLagBlocks,
       criticalLagBlocks: healthCriticalLagBlocks,
+      continuity: state.coverageContinuity?.status || "continuous_from_baseline",
+      abandonedFromBlock: state.coverageContinuity?.abandonedFromBlock ?? null,
+      abandonedThroughBlock: state.coverageContinuity?.abandonedThroughBlock ?? null,
+      legacyConservativeRescanStatus: state.coverageContinuity?.latestConservativeRescan?.status || null,
+      legacyConservativeRescanFromBlock: state.coverageContinuity?.latestConservativeRescan?.rescanFromBlock ?? null,
+      legacyConservativeRescanThroughBlock: state.coverageContinuity?.latestConservativeRescan?.rescanThroughBlock ?? null,
     };
     return previous.status !== status
       || previousRealtimeTail.status !== realtimeTailStatus
       || Number(previous.unresolvedGapCount || 0) !== unresolvedCoverageGaps.length
       || Number(previous.nearHeadRecoveryGapCount || 0) !== nearHeadRecoveryGaps.length
-      || Number(previous.deferredTransactionCount || 0) !== deferredTransactions;
+      || Number(previous.deferredTransactionCount || 0) !== deferredTransactions
+      || previous.continuity !== state._health.coverage.continuity;
   }
 
   function ingestRecoveryLogs(transactionHash, blockNumber, logs, reason = "gap_recovery", details = {}) {
@@ -11700,9 +12037,29 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
 
   async function recoverLogRange(fromBlock, toBlock, reason = "gap_recovery", rpc = provider) {
     const range = { fromBlock: hexBlock(fromBlock), toBlock: hexBlock(toBlock) };
+    const queryLogFilter = async (filter) => {
+      if (filter.address || toBlock - fromBlock + 1 <= BSC_UNSCOPED_LOG_MAX_BLOCKS) {
+        return rpc.send("eth_getLogs", [filter]);
+      }
+      const logs = [];
+      // Public Blast accepts addressless topic queries only up to ten blocks.
+      // Enforce that boundary here regardless of deployment configuration so
+      // widening a tail/history batch cannot silently remove a quorum member.
+      for (let start = fromBlock; start <= toBlock; start += BSC_UNSCOPED_LOG_MAX_BLOCKS) {
+        const end = Math.min(toBlock, start + BSC_UNSCOPED_LOG_MAX_BLOCKS - 1);
+        const batch = await rpc.send("eth_getLogs", [{
+          ...filter,
+          fromBlock: hexBlock(start),
+          toBlock: hexBlock(end),
+        }]);
+        if (!Array.isArray(batch)) throw new Error(`eth_getLogs missing range ${start}-${end}`);
+        logs.push(...batch);
+      }
+      return logs;
+    };
     const [mintLogs, protocolLogBatches] = await Promise.all([
-      focus3ChainScope ? Promise.resolve([]) : rpc.send("eth_getLogs", [{ ...range, topics: [BSC_TRANSFER_TOPIC, BSC_ZERO_TOPIC] }]),
-      Promise.all(protocolLogFilters(range).map((filter) => rpc.send("eth_getLogs", [filter]))),
+      focus3ChainScope ? Promise.resolve([]) : queryLogFilter({ ...range, topics: [BSC_TRANSFER_TOPIC, BSC_ZERO_TOPIC] }),
+      Promise.all(protocolLogFilters(range).map(queryLogFilter)),
     ]);
     if (!Array.isArray(mintLogs)
       || !Array.isArray(protocolLogBatches)
@@ -11744,6 +12101,20 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     await withState(async () => {
       if (Object.keys(state.seenTransactions).length > 21_000) pruneState(state, now());
       state.lastFinalizedBlock = blockNumber;
+      const legacyRescan = state.coverageContinuity?.latestConservativeRescan;
+      if (legacyRescan?.status === "pending"
+        && Number.isSafeInteger(Number(legacyRescan.rescanThroughBlock))
+        && blockNumber >= Number(legacyRescan.rescanThroughBlock)) {
+        legacyRescan.status = "rescanned";
+        legacyRescan.completedAt = iso(now);
+        legacyRescan.coveredThroughBlock = blockNumber;
+        state.coverageRecoveryHistory = [...(state.coverageRecoveryHistory || []), {
+          scheduledAt: iso(now),
+          reason: "focus3_latest_lossy_compaction_conservative_rescan_completed",
+          fromBlock: legacyRescan.rescanFromBlock,
+          toBlock: legacyRescan.rescanThroughBlock,
+        }].slice(-20);
+      }
       state.nearHeadRecoveryGaps = (state.nearHeadRecoveryGaps || []).flatMap((gap) => {
         if (gap.toBlock <= blockNumber) return [];
         if (gap.nextBlock <= blockNumber) return [{ ...gap, nextBlock: blockNumber + 1 }];
@@ -11786,21 +12157,27 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       scheduleCoverage(250);
       return;
     }
-    if (realtimeTailBehind && (state.nearHeadRecoveryGaps || []).length) {
-      scheduleRealtimeTail();
+    const dueNearHeadGap = Boolean(dueNearHeadRecoveryGap());
+    if ((state.nearHeadRecoveryGaps || []).length) {
+      if (realtimeTailBehind) scheduleRealtimeTail();
       scheduleNearHeadRecovery();
-      scheduleCoverage(250);
-      return;
-    }
-    if (!realtimeTailBehind && (nearHeadRecoveryRunning || dueNearHeadRecoveryGap())) {
-      scheduleNearHeadRecovery();
-      scheduleCoverage(250);
-      return;
+      // Interleave one truthful full-history batch after a bounded number of
+      // near-head attempt slots. Counting failures as well as successes keeps
+      // a stream of method-specific poison gaps from starving history forever.
+      if (nearHeadRecoveryRunning
+        || (dueNearHeadGap && nearHeadRecoveryAttemptsSinceCoverage < BSC_NEAR_HEAD_ATTEMPTS_PER_HISTORICAL_BATCH)) {
+        scheduleCoverage(250);
+        return;
+      }
     }
     coverageRunning = true;
     let failurePhase = "range_recovery";
     try {
       if (!stopped && Number(state.lastFinalizedBlock || 0) < desiredCoverage) {
+        // Spending the slot means a real history attempt, whether it succeeds
+        // or not. A method-specific archive failure must not then freeze the
+        // live repair lane until the history retry deadline.
+        if ((state.nearHeadRecoveryGaps || []).length) nearHeadRecoveryAttemptsSinceCoverage = 0;
         if (state.lastFinalizedBlock === null) {
           await withState(async () => {
             state.lastFinalizedBlock = desiredCoverage;
@@ -11816,11 +12193,23 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         try {
           await recoverLogRange(from, batchEnd);
         } catch (rangeError) {
+          // A typed host-wide cooldown (notably HTTP 429) applies to receipts
+          // as well as logs. Preserve the provider deadline instead of
+          // multiplying the outage into one fallback request per block.
+          if (sharedRpcRetryDelayMs(rangeError) > 0) throw rangeError;
           const blockNumbers = Array.from({ length: batchEnd - from + 1 }, (_, index) => from + index);
           const recovered = await mapLimit(blockNumbers, recoveryBlockConcurrency, recoverBlock);
           const failed = recovered.find((result) => result.status === "rejected");
           if (isBlockCacheStoppedError(failed?.reason)) throw failed.reason;
-          if (failed) throw new Error(`range recovery failed: ${errorSummary(rangeError)}; block fallback failed: ${errorSummary(failed.reason)}`);
+          if (failed) {
+            const failure = new Error(`range recovery failed: ${errorSummary(rangeError)}; block fallback failed: ${errorSummary(failed.reason)}`);
+            failure.code = failed.reason?.code || rangeError?.code;
+            failure.rpcFailureScope = failed.reason?.rpcFailureScope || rangeError?.rpcFailureScope;
+            failure.rpcOperation = failed.reason?.rpcOperation || rangeError?.rpcOperation;
+            const retryAfterMs = Math.max(Number(rangeError?.retryAfterMs) || 0, Number(failed.reason?.retryAfterMs) || 0);
+            if (retryAfterMs > 0) failure.retryAfterMs = retryAfterMs;
+            throw failure;
+          }
         }
         failurePhase = "entry_processing";
         await commitCoveredRange(batchEnd);
@@ -11857,6 +12246,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     } finally {
       coverageRunning = false;
       if (!stopped && Number(state.lastFinalizedBlock || 0) < desiredCoverage) scheduleCoverage();
+      if (!stopped && (state.nearHeadRecoveryGaps || []).length) scheduleNearHeadRecovery();
     }
   }
 
@@ -11884,10 +12274,14 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     realtimeRunning = true;
     let retryDelayMs = 25;
     try {
-      const confirmed = Math.max(0, currentHead - (config.bscConfirmations ?? 2));
+      const durableTailConfirmed = Number.isSafeInteger(Number(state.realtimeTailNextBlock))
+        ? Math.max(0, Number(state.realtimeTailNextBlock) - 1)
+        : 0;
+      const confirmed = Math.max(0, currentHead - (config.bscConfirmations ?? 2), durableTailConfirmed);
       // Keep first-launch/mode ordering inside each lane, but never let a large
       // historical gap-recovery queue starve confirmed WebSocket observations.
-      const queuedEntries = [...queue.values()];
+      const queuedEntries = [...queue.values()].filter((entry) =>
+        Number(websocketHttpFallbackRetryAt.get(entry.transactionHash) || 0) <= current);
       const processLimit = bscRealtimeProcessLimit(queuedEntries, confirmed, state.seenTransactions, {
         nearHeadWindowBlocks: realtimeTailLookbackBlocks,
         normalLimit: processBatchSize,
@@ -11946,10 +12340,21 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       logRealtimeFailure(error);
     } finally {
       realtimeRunning = false;
-      const confirmed = Math.max(0, currentHead - (config.bscConfirmations ?? 2));
-      const hasReadyEntry = [...queue.values()].some((entry) =>
+      const durableTailConfirmed = Number.isSafeInteger(Number(state.realtimeTailNextBlock))
+        ? Math.max(0, Number(state.realtimeTailNextBlock) - 1)
+        : 0;
+      const confirmed = Math.max(0, currentHead - (config.bscConfirmations ?? 2), durableTailConfirmed);
+      const pendingEntries = [...queue.values()].filter((entry) =>
         Number(entry.blockNumber) <= confirmed && !state.seenTransactions[entry.transactionHash]);
+      const hasReadyEntry = pendingEntries.some((entry) =>
+        Number(websocketHttpFallbackRetryAt.get(entry.transactionHash) || 0) <= Number(now()));
+      const nextWebsocketFallbackAt = Math.min(...pendingEntries
+        .map((entry) => Number(websocketHttpFallbackRetryAt.get(entry.transactionHash) || 0))
+        .filter((value) => value > Number(now())));
       if (hasReadyEntry && !stopped) scheduleRealtime(retryDelayMs);
+      else if (Number.isFinite(nextWebsocketFallbackAt) && !stopped) {
+        scheduleRealtime(Math.max(25, nextWebsocketFallbackAt - Number(now())));
+      }
     }
   }
 
@@ -12019,14 +12424,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         // Deep contract/security analysis then runs independently, so one
         // busy token cannot prevent the tail from covering later blocks. A
         // restart restores these entries before any cursor work resumes.
-        for (const entry of entries) {
-          if (state.seenTransactions[entry.transactionHash]
-            || state.deferredCreationEvidence[entry.transactionHash]) continue;
-          state.realtimePendingEntries[entry.transactionHash] = serializeRealtimePendingEntry(
-            entry,
-            state.realtimePendingEntries[entry.transactionHash],
-          );
-        }
+        persistRealtimePendingHandoff(entries);
         state.realtimeTailNextBlock = toBlock + 1;
         state.realtimeTailInitializedAt ||= iso(now);
         const previous = state._health.realtimeTail || {};
@@ -12120,6 +12518,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     let fromBlock = null;
     let toBlock = null;
     let shouldContinue = false;
+    let continuationDelayMs = 25;
     try {
       await initialize();
       if (!(state.nearHeadRecoveryGaps || []).length) return { skipped: true, reason: "empty" };
@@ -12138,6 +12537,21 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         return { skipped: true, reason: "realtime_priority" };
       }
 
+      if (nearHeadRecoveryAttemptsSinceCoverage >= BSC_NEAR_HEAD_ATTEMPTS_PER_HISTORICAL_BATCH
+        && Number(state.lastFinalizedBlock || 0) < desiredCoverage
+        && (coverageRunning || coverageRetryAt <= Date.now())) {
+        // Once the bounded near-head quota is spent, do not let a 25ms repair
+        // timer race a runnable history turn. A history lane still inside its
+        // own retry window cannot freeze independent live repair; once that
+        // deadline expires, advanceCoverage owns and resets the next slot.
+        if (!coverageRunning) {
+          shouldContinue = true;
+          continuationDelayMs = Math.max(250, nearHeadRecoverySuccessIntervalMs);
+          scheduleCoverage(25);
+        }
+        return { skipped: true, reason: "historical_fairness" };
+      }
+
       const gap = dueNearHeadRecoveryGap();
       if (!gap) {
         shouldContinue = true;
@@ -12148,6 +12562,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       activeGapId = gap.id;
       fromBlock = gap.nextBlock;
       toBlock = Math.min(gap.toBlock, fromBlock + nearHeadRecoveryBatchSize - 1);
+      nearHeadRecoveryAttemptsSinceCoverage += 1;
       await withState(() => {
         const current = state.nearHeadRecoveryGaps.find((item) => item.id === activeGapId);
         if (!current) return;
@@ -12163,8 +12578,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         updateCoverageHealth();
       });
 
+      let recoveredRange = null;
       try {
-        await recoverLogRange(fromBlock, toBlock, "near_head_gap_recovery");
+        recoveredRange = await recoverLogRange(fromBlock, toBlock, "near_head_gap_recovery");
       } catch (rangeError) {
         // A pool-level cooling/429/timeout already proves that every physical
         // RPC is unavailable for this method. Do not expand it into per-block
@@ -12180,6 +12596,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         const failed = recovered.find((result) => result.status === "rejected");
         if (failed) {
           const failure = new Error(`near-head gap recovery failed: ${errorSummary(rangeError)}; block fallback failed: ${errorSummary(failed.reason)}`);
+          failure.code = failed.reason?.code || rangeError?.code;
+          failure.rpcFailureScope = failed.reason?.rpcFailureScope || rangeError?.rpcFailureScope;
+          failure.rpcOperation = failed.reason?.rpcOperation || rangeError?.rpcOperation;
           const retryAfterMs = Math.max(
             sharedRpcRetryDelayMs(rangeError),
             sharedRpcRetryDelayMs(failed.reason),
@@ -12195,12 +12614,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           && entry.reasons.has("near_head_gap_recovery")
           && !state.seenTransactions[entry.transactionHash])
         .sort(compareBscQueueEntries);
-      // Deep analysis uses the shared historical provider. Keep this repair
-      // lane at one entry so newly confirmed WebSocket/tail candidates retain
-      // the remaining provider capacity and cannot be delayed by a busy gap.
-      if (entries.length) await processEntryBatches(entries, 1);
-
       await withState(async () => {
+        // Mirror the realtime-tail handoff: the recovered candidate set and the
+        // exact gap cursor advance share one fsynced WAL frame. Deep runtime and
+        // security analysis is intentionally independent. A crash before this
+        // frame replays the range; a crash after it restores every candidate.
+        persistRealtimePendingHandoff(entries);
         const currentIndex = state.nearHeadRecoveryGaps.findIndex((item) => item.id === activeGapId);
         if (currentIndex >= 0) {
           const current = state.nearHeadRecoveryGaps[currentIndex];
@@ -12231,9 +12650,13 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         updateCoverageHealth();
         await save();
       });
+      if (entries.length) scheduleRealtime();
+      if (recoveredRange?.flapReplayNeeded) void replayPendingFlapActivations();
       nearHeadRecoveryRetryAt = 0;
+      nearHeadRecoveryPacedUntil = Number(now()) + nearHeadRecoverySuccessIntervalMs;
       resetNearHeadRecoveryFailureLog();
       shouldContinue = state.nearHeadRecoveryGaps.length > 0;
+      continuationDelayMs = nearHeadRecoverySuccessIntervalMs;
       scheduleCoverage();
       return { skipped: false, gapId: activeGapId, fromBlock, toBlock, completed: !state.nearHeadRecoveryGaps.some((item) => item.id === activeGapId) };
     } catch (error) {
@@ -12249,9 +12672,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         const sharedRetryDelayMs = sharedRpcRetryDelayMs(error);
         const retryDelayMs = Math.max(localRetryDelayMs, sharedRetryDelayMs);
         if (sharedRetryDelayMs > 0) {
-          nearHeadRecoveryRetryAt = Math.max(nearHeadRecoveryRetryAt, failedAt + retryDelayMs);
+          // The lane-wide deadline belongs only to the physical-host outage.
+          // A high-attempt poison gap keeps its own local 60s deadline without
+          // freezing every other due gap for that extra time.
+          nearHeadRecoveryRetryAt = Math.max(nearHeadRecoveryRetryAt, failedAt + sharedRetryDelayMs);
         }
-        const retryAt = sharedRetryDelayMs > 0 ? nearHeadRecoveryRetryAt : failedAt + retryDelayMs;
+        const retryAt = failedAt + retryDelayMs;
         const nextRetryAt = iso(retryAt);
         if (gap) {
           gap.attempts = attempts;
@@ -12270,7 +12696,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           nextRetryAt,
           activeGapId: null,
           ...(sharedRetryDelayMs > 0 ? {
-            sharedRpcRetryAt: nextRetryAt,
+            sharedRpcRetryAt: iso(nearHeadRecoveryRetryAt),
             sharedRpcBackoff: true,
           } : {}),
         };
@@ -12289,7 +12715,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       if (!stopped) scheduleCoverage();
       if ((shouldContinue || nearHeadRecoveryRequested) && !stopped) {
         nearHeadRecoveryRequested = false;
-        scheduleNearHeadRecovery();
+        scheduleNearHeadRecovery(continuationDelayMs);
       }
     }
   }
@@ -12302,7 +12728,11 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     }
     const dueNow = Boolean(dueNearHeadRecoveryGap());
     const nextAttemptAt = dueNow ? null : nextNearHeadRecoveryAttemptAt();
-    const delay = Math.max(minDelayMs, nextAttemptAt === null ? 0 : nextAttemptAt - now());
+    const delay = Math.max(
+      minDelayMs,
+      nextAttemptAt === null ? 0 : nextAttemptAt - now(),
+      nearHeadRecoveryPacedUntil - now(),
+    );
     const dueAt = now() + delay;
     if (nearHeadRecoveryTimer) {
       if (nearHeadRecoveryTimerDueAt <= dueAt) return;
@@ -12602,7 +13032,14 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       return { status: "processed", requests: requestBudget.count };
     } catch (error) {
       blockReservation?.fail(error);
-      scheduleRealtime();
+      const fallbackAt = Date.parse(deliverySla?.deadlineAt || "");
+      if (ownsSlot && Number.isFinite(fallbackAt) && fallbackAt > Number(now())) {
+        // A focused WS attempt already used the same HTTP enrichment lane and
+        // left the durable candidate untouched. Avoid racing it immediately
+        // through the ordinary queue; resume at the original bounded SLA.
+        websocketHttpFallbackRetryAt.set(entry.transactionHash, fallbackAt);
+        scheduleRealtime(fallbackAt - Number(now()));
+      } else scheduleRealtime();
       return { status: "http_fallback", requests: requestBudget.count };
     } finally {
       if (ownsSlot) {
@@ -12783,6 +13220,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     deferredEvidenceTimer = null;
     pendingSubscriptions.clear();
     subscriptions.clear();
+    websocketHttpFallbackRetryAt.clear();
     wsOpenedAt = 0;
     const socket = websocket;
     rejectPendingWebsocketRpc(socket, "connection closed");
@@ -13083,7 +13521,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     return attempt;
   }
 
-  const monitor = { start, stop, awaitIdle, observe, registerDiscoveryCandidates, registerFlapFeatureActivations, registerFlapQuotePoolLifecycle, replayFlapFeatureActivations: replayPendingFlapActivations, replayFlapQuotePoolFirstThree: replayPendingFlapQuoteFirstThreeGenerations, registerFourMemeFeatureActivations, checkOfficialSources: checkOfficialFourMeme, checkHttpHead: pollHttpHead, retryDeferredCreationEvidence, processRealtimeQueue, scanRealtimeTail, scanNearHeadRecovery, getState: async () => {
+  const monitor = { start, stop, awaitIdle, observe, registerDiscoveryCandidates, registerFlapFeatureActivations, registerFlapQuotePoolLifecycle, replayFlapFeatureActivations: replayPendingFlapActivations, replayFlapQuotePoolFirstThree: replayPendingFlapQuoteFirstThreeGenerations, registerFourMemeFeatureActivations, checkOfficialSources: checkOfficialFourMeme, checkHttpHead: pollHttpHead, retryDeferredCreationEvidence, processRealtimeQueue, scanRealtimeTail, scanNearHeadRecovery, advanceCoverage, getState: async () => {
     await initialize();
     return withState(async () => structuredClone(state));
   } };

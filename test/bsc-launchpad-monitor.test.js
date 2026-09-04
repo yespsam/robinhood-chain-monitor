@@ -29,6 +29,7 @@ import {
   RUG_LAUNCH_SUCCEEDED_TOPIC,
   bscRealtimeProcessLimit,
   commitBscDecision,
+  compactBscNearHeadRecoveryGaps,
   compactFocus3LiveCoverageState,
   createBscLaunchpadMonitor,
   createRpcPool,
@@ -463,9 +464,33 @@ test("near-head BSC candidates outrank an old durable realtime backlog", () => {
   ], 1_000, {}, 3, 10);
   assert.deepEqual(selected.map((item) => item.transactionHash), [
     "fresh-first",
-    "fresh-second",
     "oldest",
+    "old",
   ]);
+});
+
+test("a continuous fresh BSC stream reserves bounded capacity for the oldest durable work", () => {
+  const old = Array.from({ length: 20 }, (_, index) => ({
+    transactionHash: `old-${index}`,
+    blockNumber: 100 + index,
+    reasons: new Set(["near_head_gap_recovery"]),
+  }));
+  let pending = [...old];
+  const processedOld = [];
+  for (let round = 0; round < 10; round += 1) {
+    const fresh = Array.from({ length: 12 }, (_, index) => ({
+      transactionHash: `fresh-${round}-${index}`,
+      blockNumber: 990 + index,
+      reasons: new Set(["http_tail"]),
+    }));
+    const selected = selectBscRealtimeEntries([...pending, ...fresh], 1_000, {}, 12, 64);
+    for (const entry of selected.filter((entry) => entry.transactionHash.startsWith("old-"))) {
+      processedOld.push(entry.transactionHash);
+      pending = pending.filter((candidate) => candidate.transactionHash !== entry.transactionHash);
+    }
+  }
+  assert.deepEqual(processedOld, old.map((entry) => entry.transactionHash),
+    "two oldest slots per full fresh batch drain the complete initial backlog in bounded rounds");
 });
 
 test("near-head recovery only yields to an active or more-than-one-batch-lagging tail", () => {
@@ -537,7 +562,7 @@ test("Four.Meme stock and RWA templates stay out of alerts and active first-toke
   assert.equal(snapshot.officialSources.fourMeme.featureActivations.royalty.active, true);
 });
 
-test("focus3 compacts multi-day historical recovery but retains the activation replay window", () => {
+test("focus3 refuses lossy live compaction and keeps the truthful historical cursor", () => {
   const snapshot = {
     lastFinalizedBlock: 100,
     realtimeTailNextBlock: 100_001,
@@ -554,14 +579,188 @@ test("focus3 compacts multi-day historical recovery but retains the activation r
     replayLookbackBlocks: 2_400,
     current: Date.parse("2026-08-11T00:00:00Z"),
   });
-  assert.equal(result.changed, true);
-  assert.equal(snapshot.lastFinalizedBlock, 100_000);
+  assert.equal(result.changed, false);
+  assert.equal(result.refusedLossyCompaction, true);
+  assert.equal(snapshot.lastFinalizedBlock, 100);
   assert.deepEqual(snapshot.nearHeadRecoveryGaps.map((gap) => [gap.id, gap.fromBlock, gap.nextBlock]), [
-    ["overlap", 97_601, 97_601],
+    ["old", 1_000, 1_500],
+    ["overlap", 97_000, 97_100],
     ["recent", 99_000, 99_100],
   ]);
   assert.ok(snapshot.realtimePendingEntries.keep, "durable creation candidates must survive baseline compaction");
-  assert.equal(snapshot.coverageRecoveryHistory.at(-1).reason, "focus3_live_baseline_compaction");
+  assert.equal(snapshot.coverageRecoveryHistory.at(-1).reason, "focus3_live_compaction_refused_uncovered");
+});
+
+test("latest closed legacy lossy handoff reopens a conservative full-history superset exactly once", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-legacy-lossy-reopen-"));
+  const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const previousLastFinalizedBlock = 119_869_645;
+  const compactedThroughBlock = 119_920_033;
+  await fs.writeFile(stateFile, JSON.stringify({
+    version: 6,
+    initializedAt: "2026-09-04T12:00:00.000Z",
+    lastFinalizedBlock: compactedThroughBlock,
+    realtimeTailNextBlock: compactedThroughBlock + 1_000,
+    alertSuppressedThroughBlock: 113_595_826,
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    nearHeadRecoveryGaps: [],
+    coverageGaps: [],
+    coverageRecoveryHistory: [{
+      scheduledAt: "2026-09-04T12:39:15.572Z",
+      reason: "focus3_live_baseline_compaction",
+      previousLastFinalizedBlock,
+      realtimeTailCoveredBlock: compactedThroughBlock,
+      droppedGapCount: 203,
+      retainedGapCount: 3,
+    }],
+    _health: {
+      realtimeTail: {
+        handoffCompaction: {
+          previousLastFinalizedBlock,
+          compactedThroughBlock,
+          replayLookbackFromBlock: 119_917_634,
+          droppedGapCount: 203,
+          retainedGapCount: 3,
+        },
+      },
+    },
+  }));
+  const dependencies = {
+    autoStart: false,
+    provider: { destroy() {} },
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  };
+  const first = createBscLaunchpadMonitor({ dataDir, monitorScope: "focus3" }, dependencies);
+  const migrated = await first.getState();
+  assert.equal(migrated.lastFinalizedBlock, previousLastFinalizedBlock,
+    "the last durable pre-loss cursor is the only safe rescan boundary");
+  assert.equal(migrated.coverageContinuity.status, "partial_legacy_abandoned");
+  assert.equal(migrated.coverageContinuity.abandonedThroughBlock, previousLastFinalizedBlock);
+  assert.deepEqual(migrated.coverageContinuity.latestConservativeRescan, {
+    version: 1,
+    status: "pending",
+    source: "legacy_realtime_tail_handoff_compaction",
+    recordedAt: migrated.coverageContinuity.latestConservativeRescan.recordedAt,
+    rescanFromBlock: previousLastFinalizedBlock + 1,
+    rescanThroughBlock: compactedThroughBlock,
+    previousLastFinalizedBlock,
+    compactedThroughBlock,
+    replayLookbackFromBlock: 119_917_634,
+    droppedGapCount: 203,
+    retainedGapCount: 3,
+  });
+  const marker = structuredClone(migrated.coverageContinuity);
+  await first.stop();
+
+  // The diagnostic history is intentionally rolling. Losing the old entry
+  // must neither erase the permanent continuity marker nor reopen twice.
+  const compactedSnapshot = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  compactedSnapshot.coverageRecoveryHistory = Array.from({ length: 20 }, (_, index) => ({
+    scheduledAt: new Date(Date.parse("2026-09-05T00:00:00.000Z") + index * 1_000).toISOString(),
+    reason: "focus3_live_compaction_refused_uncovered",
+    previousLastFinalizedBlock,
+    realtimeTailCoveredBlock: compactedThroughBlock + index,
+    droppedGapCount: 0,
+    retainedGapCount: 3,
+  }));
+  await fs.writeFile(stateFile, `${JSON.stringify(compactedSnapshot)}\n`, { mode: 0o600 });
+  const restarted = createBscLaunchpadMonitor({ dataDir, monitorScope: "focus3" }, dependencies);
+  const durable = await restarted.getState();
+  assert.equal(durable.lastFinalizedBlock, previousLastFinalizedBlock);
+  assert.deepEqual(durable.coverageContinuity, marker);
+  assert.equal(durable.coverageRecoveryHistory.filter((entry) =>
+    entry.reason === "focus3_latest_lossy_compaction_conservative_reopen").length, 0,
+  "the top-level marker, not rolling history, makes migration idempotent");
+  await restarted.stop();
+
+  const refusalOnlyDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-new-refusal-not-legacy-"));
+  t.after(() => fs.rm(refusalOnlyDir, { recursive: true, force: true }));
+  await fs.writeFile(path.join(refusalOnlyDir, "bsc-launchpad-state.json"), JSON.stringify({
+    version: 6,
+    initializedAt: "2026-09-05T00:00:00.000Z",
+    lastFinalizedBlock: 100,
+    realtimeTailNextBlock: 60_000,
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    nearHeadRecoveryGaps: [],
+    coverageGaps: [],
+    coverageRecoveryHistory: [{
+      reason: "focus3_live_compaction_refused_uncovered",
+      previousLastFinalizedBlock: 100,
+      realtimeTailCoveredBlock: 59_999,
+      droppedGapCount: 0,
+      retainedGapCount: 0,
+    }],
+  }));
+  const refusalOnly = createBscLaunchpadMonitor({ dataDir: refusalOnlyDir, monitorScope: "focus3" }, dependencies);
+  const refusalState = await refusalOnly.getState();
+  assert.equal(refusalState.lastFinalizedBlock, 100);
+  assert.equal(refusalState.coverageContinuity, null,
+    "the new lossless refusal record is never misclassified as a legacy loss");
+  await refusalOnly.stop();
+});
+
+test("pristine adjacent near-head gaps compact without changing the exact pending block union", () => {
+  const gaps = [
+    { id: "a", fromBlock: 100, toBlock: 109, nextBlock: 100, reason: "realtime_tail_stale_rebuild", attempts: 0 },
+    { id: "b", fromBlock: 110, toBlock: 119, nextBlock: 110, reason: "realtime_tail_stale_rebuild", attempts: 0 },
+    { id: "active", fromBlock: 120, toBlock: 139, nextBlock: 125, reason: "realtime_tail_stale_rebuild", attempts: 1, lastAttemptAt: "2026-08-11T00:00:00.000Z" },
+    { id: "other", fromBlock: 140, toBlock: 149, nextBlock: 140, reason: "legacy_historical_handoff_migration", attempts: 0 },
+  ];
+  const pendingUnion = (records) => records.flatMap((gap) => Array.from(
+    { length: gap.toBlock - gap.nextBlock + 1 },
+    (_, index) => gap.nextBlock + index,
+  )).sort((left, right) => left - right);
+  const compacted = compactBscNearHeadRecoveryGaps(gaps, 100);
+  assert.deepEqual(pendingUnion(compacted), pendingUnion(gaps));
+  assert.ok(compacted.some((gap) => gap.fromBlock === 100 && gap.toBlock === 119));
+  assert.ok(compacted.some((gap) => gap.id === "active" && gap.nextBlock === 125), "processed prefixes and active retry identity are never rewritten");
+  assert.ok(compacted.some((gap) => gap.id === "other"), "different gap reasons remain independently auditable");
+
+  let seed = 0x5eed1234;
+  const random = () => {
+    seed = (Math.imul(seed, 1_664_525) + 1_013_904_223) >>> 0;
+    return seed / 0x1_0000_0000;
+  };
+  const uniquePendingUnion = (records) => [...new Set(pendingUnion(records))].sort((left, right) => left - right);
+  for (let fixture = 0; fixture < 200; fixture += 1) {
+    const segmentSize = 5 + Math.floor(random() * 26);
+    let cursor = 1_000;
+    const generated = Array.from({ length: 20 }, (_, index) => {
+      cursor += Math.floor(random() * 4) - 1;
+      const length = 1 + Math.floor(random() * Math.min(8, segmentSize));
+      const fromBlock = Math.max(0, cursor);
+      const toBlock = fromBlock + length - 1;
+      cursor = toBlock;
+      const attempted = random() < 0.35;
+      const progressed = attempted ? Math.floor(random() * length) : 0;
+      return {
+        id: `fixture-${fixture}-${index}`,
+        fromBlock,
+        toBlock,
+        nextBlock: fromBlock + progressed,
+        reason: random() < 0.7 ? "realtime_tail_stale_rebuild" : "legacy_historical_handoff_migration",
+        attempts: attempted ? 1 + Math.floor(random() * 3) : 0,
+        ...(attempted ? { lastAttemptAt: "2026-09-04T00:00:00.000Z" } : {}),
+      };
+    });
+    const propertyCompacted = compactBscNearHeadRecoveryGaps(generated, segmentSize);
+    assert.deepEqual(uniquePendingUnion(propertyCompacted), uniquePendingUnion(generated),
+      `fixture ${fixture} must preserve every and only uncovered block`);
+    for (const active of generated.filter((gap) => gap.attempts > 0)) {
+      const retainedActive = propertyCompacted.find((gap) => gap.id === active.id);
+      assert.ok(retainedActive, `fixture ${fixture} retains attempted gap ${active.id}`);
+      assert.deepEqual(
+        [retainedActive.fromBlock, retainedActive.toBlock, retainedActive.nextBlock, retainedActive.reason, retainedActive.attempts],
+        [active.fromBlock, active.toBlock, active.nextBlock, active.reason, active.attempts],
+      );
+    }
+  }
 });
 
 test("near-head gaps keep a missing retry timestamp as null", async (t) => {
@@ -1519,7 +1718,9 @@ test("timed-out BSC hosts use exponential method circuits and only one rotating 
   clock += 1_000;
   await assert.rejects(
     () => pool.send("eth_getLogs", [{ fromBlock: "0x3", toBlock: "0x3" }]),
-    (error) => error.retryAfterMs >= 250,
+    // The other physical host is independently eligible immediately. A
+    // method-only timeout must not serialize recovery probes across hosts.
+    (error) => error.retryAfterMs >= 1,
   );
   assert.equal(calls.length, 3, "only one due host is probed after all circuits open");
   clock += 250;
@@ -1528,7 +1729,7 @@ test("timed-out BSC hosts use exponential method circuits and only one rotating 
     () => pool.send("eth_getLogs", [{ fromBlock: "0x4", toBlock: "0x4" }]),
     (error) => {
       secondProbeError = error;
-      return error.retryAfterMs > 1_000;
+      return error.retryAfterMs >= 250;
     },
   );
   assert.equal(calls.length, 4, "the next low-frequency probe rotates to one other due host");
@@ -1537,6 +1738,86 @@ test("timed-out BSC hosts use exponential method circuits and only one rotating 
   recovered = true;
   assert.deepEqual(await pool.send("eth_getLogs", [{ fromBlock: "0x5", toBlock: "0x5" }]), []);
   assert.equal(calls.length, 5, "recovery still costs one probe, never a burst across hosts");
+  pool.destroy();
+});
+
+test("getCode timeout and 403 circuits are method-only and leave the same host log lane available", async () => {
+  for (const failure of ["timeout", "forbidden"]) {
+    let codeCalls = 0;
+    let logCalls = 0;
+    const pool = createRpcPool([`https://${failure}.test`], [], 1, {
+      providerFactory: () => ({
+        async getCode() {
+          codeCalls += 1;
+          const error = new Error(failure === "timeout" ? "getCode timed out after 1000ms" : "HTTP 403 Forbidden");
+          if (failure === "forbidden") error.status = 403;
+          throw error;
+        },
+        async send(method) {
+          assert.equal(method, "eth_getLogs");
+          logCalls += 1;
+          return [];
+        },
+        async getBlockNumber() { return 123; },
+      }),
+    });
+    await assert.rejects(
+      () => pool.getCode("0x1111111111111111111111111111111111111111", 100),
+      (error) => error.rpcFailureScope === "method" && error.rpcOperation === "getCode",
+    );
+    await assert.rejects(() => pool.getCode("0x1111111111111111111111111111111111111111", 100), /cooling down/);
+    assert.equal(codeCalls, 1);
+    assert.deepEqual(await pool.send("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x1" }]), []);
+    assert.equal(logCalls, 1, `${failure} getCode must not close eth_getLogs on the same physical host`);
+    assert.equal(await pool.getBlockNumber(), 123);
+    pool.destroy();
+  }
+});
+
+test("a host-global 429 permits only one cross-method half-open probe", async () => {
+  let clock = Date.parse("2026-08-24T09:00:00.000Z");
+  let physicalCalls = 0;
+  let releaseProbe;
+  let signalProbe;
+  const probeGate = new Promise((resolve) => { releaseProbe = resolve; });
+  const probeStarted = new Promise((resolve) => { signalProbe = resolve; });
+  const request = async (kind) => {
+    physicalCalls += 1;
+    if (physicalCalls === 1) {
+      const error = new Error("HTTP 429");
+      error.status = 429;
+      error.retryAfterMs = 1_000;
+      throw error;
+    }
+    signalProbe(kind);
+    await probeGate;
+    return kind === "code" ? "0x6000" : [];
+  };
+  const pool = createRpcPool(["https://shared-429.test"], [], 1, {
+    now: () => clock,
+    standardConcurrency: 4,
+    providerFactory: () => ({
+      async send(method) { assert.equal(method, "eth_getLogs"); return request("logs"); },
+      async getCode() { return request("code"); },
+    }),
+  });
+  await assert.rejects(() => pool.send("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x1" }]), /429/);
+  // A host-global 429 has a hard five-second minimum circuit even when the
+  // server advertises a shorter Retry-After value.
+  clock += 5_000;
+  const attempts = [
+    pool.send("eth_getLogs", [{ fromBlock: "0x2", toBlock: "0x2" }]),
+    pool.getCode("0x1111111111111111111111111111111111111111", 100),
+  ];
+  const settledPromise = Promise.allSettled(attempts);
+  await probeStarted;
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(physicalCalls, 2, "different methods share one physical-host recovery lease after a 429");
+  releaseProbe();
+  const settled = await settledPromise;
+  assert.equal(settled.filter((result) => result.status === "fulfilled").length, 1);
+  assert.equal(settled.filter((result) => result.status === "rejected").length, 1);
+  assert.match(settled.find((result) => result.status === "rejected").reason.message, /recovery probe already in flight/);
   pool.destroy();
 });
 
@@ -3592,6 +3873,8 @@ test("Flap replay shares one persisted RPC backoff across features and resumes w
         const error = new Error("eth_getTransaction failed on every BSC RPC: providers cooling down; retry in 5000ms");
         error.code = "SERVER_ERROR";
         error.retryAfterMs = 5_000;
+        error.rpcOperation = "getTransaction";
+        error.rpcFailureScope = "host";
         throw error;
       }
       return { hash, to: launcher, from: creator, data: `0x8cb5772c${"0".repeat(64)}` };
@@ -5888,8 +6171,8 @@ test("realtime processing persists shared RPC cooling without retry loops or dro
     seenTransactions: {},
     coverageGaps: [],
   }));
-  const iface = new Interface(["event FlapTokenCreated(address indexed token,address indexed creator)"]);
-  const encoded = iface.encodeEventLog(iface.getEvent("FlapTokenCreated"), [token, creator]);
+  const iface = new Interface(["event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)"]);
+  const encoded = iface.encodeEventLog(iface.getEvent("TokenCreated"), [1n, creator, 1n, token, "WAL", "WAL", "ipfs://wal"]);
   const log = {
     address: launcher,
     topics: encoded.topics,
@@ -6076,6 +6359,56 @@ test("focus3 realtime recovery excludes ordinary BSC mints and unrelated launchp
   assert.notDeepEqual(launchRequests[0].topics, [BSC_TRANSFER_TOPIC, BSC_ZERO_TOPIC]);
 });
 
+test("every addressless recovery log request is hard-bounded to ten blocks", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-unscoped-log-bound-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  await fs.writeFile(path.join(dataDir, "bsc-launchpad-state.json"), JSON.stringify({
+    version: 6,
+    initializedAt: "2026-08-24T10:00:00.000Z",
+    lastFinalizedBlock: 50,
+    realtimeTailNextBlock: 130,
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    nearHeadRecoveryGaps: [{ id: "realtime-tail-gap:90:114", fromBlock: 90, toBlock: 114, nextBlock: 90 }],
+    coverageGaps: [],
+  }));
+  const requests = [];
+  const provider = {
+    async send(method, [request]) {
+      assert.equal(method, "eth_getLogs");
+      requests.push(structuredClone(request));
+      return [];
+    },
+    destroy() {},
+  };
+  const monitor = createBscLaunchpadMonitor({
+    dataDir,
+    bscNearHeadRecoveryBatchSize: 25,
+    bscNearHeadRecoverySegmentSize: 100,
+  }, {
+    autoStart: false,
+    provider,
+    logger: { error() {}, info() {} },
+  });
+  t.after(() => monitor.stop());
+  const result = await monitor.scanNearHeadRecovery();
+  assert.equal(result.completed, true);
+  const unscoped = requests.filter((request) => !request.address);
+  assert.ok(unscoped.length >= 6, "both global mint and protocol filters are split across the 25-block range");
+  assert.ok(unscoped.every((request) => Number.parseInt(request.toBlock, 16) - Number.parseInt(request.fromBlock, 16) + 1 <= 10));
+  const perFilterRanges = new Map();
+  for (const request of unscoped) {
+    const key = JSON.stringify(request.topics);
+    const ranges = perFilterRanges.get(key) || [];
+    ranges.push([Number.parseInt(request.fromBlock, 16), Number.parseInt(request.toBlock, 16)]);
+    perFilterRanges.set(key, ranges);
+  }
+  for (const ranges of perFilterRanges.values()) {
+    assert.deepEqual(ranges, [[90, 99], [100, 109], [110, 114]], "bounded chunks exactly cover the configured range without gaps or overlap");
+  }
+});
+
 test("realtime tail durably advances before a candidate's deep analysis completes", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-tail-durable-pending-"));
   let monitor;
@@ -6169,6 +6502,502 @@ test("realtime tail durably advances before a candidate's deep analysis complete
       && paths.some((value) => value === `realtimePendingEntries.${transactionHash}`);
   }), "tail cursor and its pending candidate must share one checksummed WAL frame");
   releaseTransaction();
+});
+
+test("near-head recovery commits every candidate and its gap cursor in one WAL revision", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-near-head-wal-handoff-"));
+  const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
+  const transactionHash = `0x${"31".repeat(32)}`;
+  const launcher = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
+  const token = "0x3111111111111111111111111111111111111111";
+  const creator = "0x3222222222222222222222222222222222222222";
+  const iface = new Interface(["event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)"]);
+  const encoded = iface.encodeEventLog(iface.getEvent("TokenCreated"), [1n, creator, 1n, token, "WAL", "WAL", "ipfs://wal"]);
+  const creationLog = {
+    address: launcher,
+    topics: encoded.topics,
+    data: encoded.data,
+    transactionHash,
+    blockNumber: "0x5a",
+    transactionIndex: "0x1",
+    logIndex: "0x2",
+    removed: false,
+  };
+  await fs.writeFile(stateFile, JSON.stringify({
+    version: 6,
+    initializedAt: "2026-08-24T10:00:00.000Z",
+    lastFinalizedBlock: 50,
+    realtimeTailNextBlock: 101,
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    nearHeadRecoveryGaps: [{
+      id: "realtime-tail-gap:90:90",
+      fromBlock: 90,
+      toBlock: 90,
+      nextBlock: 90,
+      reason: "realtime_tail_stale_rebuild",
+      attempts: 0,
+    }],
+    coverageGaps: [],
+  }));
+  let deepReads = 0;
+  let releaseDeepRead;
+  const deepReadGate = new Promise((resolve) => { releaseDeepRead = resolve; });
+  const provider = {
+    async send(method, [request]) {
+      assert.equal(method, "eth_getLogs");
+      return Array.isArray(request.topics?.[0]) && request.topics[0].includes(FLAP_TOKEN_CREATED_TOPIC)
+        ? [creationLog]
+        : [];
+    },
+    async getTransaction() {
+      deepReads += 1;
+      await deepReadGate;
+      return null;
+    },
+    destroy() {},
+  };
+  const dependencies = {
+    autoStart: false,
+    provider,
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  };
+  const first = createBscLaunchpadMonitor({ dataDir, monitorScope: "focus3", bscNearHeadRecoveryBatchSize: 1 }, dependencies);
+  let restarted;
+  t.after(async () => {
+    releaseDeepRead();
+    await Promise.allSettled([first.stop(), restarted?.stop()]);
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+  const result = await first.scanNearHeadRecovery();
+  assert.equal(result.completed, true);
+  assert.ok(deepReads <= 1, "deep analysis may start only after the durable log-lane handoff returns");
+  const snapshot = await first.getState();
+  assert.deepEqual(snapshot.nearHeadRecoveryGaps, []);
+  assert.equal(snapshot.realtimePendingEntries[transactionHash].transactionIndex, 1);
+  assert.equal(snapshot.realtimePendingEntries[transactionHash].logIndex, 2);
+  const walFrames = (await fs.readFile(`${stateFile}.wal`, "utf8"))
+    .trim().split("\n").filter(Boolean).map(JSON.parse);
+  assert.ok(walFrames.some((frame) => {
+    const paths = frame.ops.map((operation) => operation.path.join("."));
+    return paths.includes(`realtimePendingEntries.${transactionHash}`)
+      && paths.includes("nearHeadRecoveryGaps");
+  }), "candidate handoff and gap deletion must share one checksummed WAL frame");
+  const laggingSnapshot = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  assert.equal(laggingSnapshot.realtimePendingEntries?.[transactionHash], undefined);
+  assert.equal(laggingSnapshot.nearHeadRecoveryGaps?.[0]?.nextBlock, 90,
+    "after WAL fsync and before snapshot compaction, the JSON snapshot may still hold the old cursor");
+
+  restarted = createBscLaunchpadMonitor({ dataDir, monitorScope: "focus3" }, dependencies);
+  const durable = await restarted.getState();
+  assert.deepEqual(durable.nearHeadRecoveryGaps, []);
+  assert.ok(durable.realtimePendingEntries[transactionHash], "restart restores the complete candidate whenever it observes the advanced cursor");
+});
+
+test("a durable near-head candidate registered after restart bypasses the warmed ordinary fast exit for its Flap activation", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-near-head-late-flap-activation-"));
+  const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
+  const clock = Date.parse("2026-08-24T12:00:00.000Z");
+  const launcher = "0x90497450f2a706f1951b5bdda52b4e5d16f34c06";
+  const vaultFactory = "0xfab75dc774cb9b38b91749b8833360b46a52345f";
+  const vault = "0x4111111111111111111111111111111111111111";
+  const creator = "0x4222222222222222222222222222222222222222";
+  const warmToken = "0x4333333333333333333333333333333333333333";
+  const targetToken = "0x4444444444444444444444444444444444444444";
+  const warmTransactionHash = `0x${"41".repeat(32)}`;
+  const targetTransactionHash = `0x${"42".repeat(32)}`;
+  const warmBlockHash = `0x${"43".repeat(32)}`;
+  const targetBlockHash = `0x${"44".repeat(32)}`;
+  const vaultInterface = new Interface([
+    "event FlapTaxVaultTokenCreated(address indexed token,address indexed vault,address indexed vaultFactory)",
+  ]);
+  const makeLog = (token, transactionHash, blockNumber, blockHash) => {
+    const encoded = vaultInterface.encodeEventLog(
+      vaultInterface.getEvent("FlapTaxVaultTokenCreated"),
+      [token, vault, vaultFactory],
+    );
+    return {
+      address: launcher,
+      topics: encoded.topics,
+      data: encoded.data,
+      transactionHash,
+      blockHash,
+      blockNumber,
+      transactionIndex: 1,
+      logIndex: 2,
+      removed: false,
+    };
+  };
+  const warmLog = makeLog(warmToken, warmTransactionHash, 80, warmBlockHash);
+  const targetLog = makeLog(targetToken, targetTransactionHash, 90, targetBlockHash);
+  const transactions = new Map([
+    [warmTransactionHash, {
+      hash: warmTransactionHash,
+      blockNumber: 80,
+      blockHash: warmBlockHash,
+      transactionIndex: 1,
+      to: launcher,
+      from: creator,
+      data: `0x8cb5772c${"00".repeat(32)}`,
+    }],
+    [targetTransactionHash, {
+      hash: targetTransactionHash,
+      blockNumber: 90,
+      blockHash: targetBlockHash,
+      transactionIndex: 1,
+      to: launcher,
+      from: creator,
+      data: `0x8cb5772c${"00".repeat(32)}`,
+    }],
+  ]);
+  const receipts = new Map([
+    [warmTransactionHash, {
+      hash: warmTransactionHash,
+      transactionHash: warmTransactionHash,
+      blockNumber: 80,
+      blockHash: warmBlockHash,
+      index: 1,
+      transactionIndex: 1,
+      status: 1,
+      logs: [warmLog],
+    }],
+    [targetTransactionHash, {
+      hash: targetTransactionHash,
+      transactionHash: targetTransactionHash,
+      blockNumber: 90,
+      blockHash: targetBlockHash,
+      index: 1,
+      transactionIndex: 1,
+      status: 1,
+      logs: [targetLog],
+    }],
+  ]);
+  const blocks = new Map([
+    [80, { number: 80, hash: warmBlockHash, timestamp: Math.floor((clock - 20 * 60_000) / 1_000), transactions: [warmTransactionHash] }],
+    [90, { number: 90, hash: targetBlockHash, timestamp: Math.floor(clock / 1_000), transactions: [targetTransactionHash] }],
+  ]);
+  await fs.writeFile(stateFile, JSON.stringify({
+    version: 6,
+    initializedAt: new Date(clock - 60 * 60_000).toISOString(),
+    lastFinalizedBlock: 79,
+    realtimeTailNextBlock: 89,
+    realtimeTailInitializedAt: new Date(clock - 60 * 60_000).toISOString(),
+    realtimePendingEntries: {
+      [warmTransactionHash]: {
+        transactionHash: warmTransactionHash,
+        blockNumber: 80,
+        transactionIndex: 1,
+        logIndex: 2,
+        reasons: ["near_head_gap_recovery"],
+        mintEmitters: [],
+        candidateTokens: [warmToken],
+        verifiedNewContracts: [warmToken],
+        upgradeEmitters: [],
+        lifecycleEmitters: [],
+        hookPools: [],
+        hasProtocolTrigger: true,
+        observedAt: new Date(clock - 20 * 60_000).toISOString(),
+      },
+    },
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    nearHeadRecoveryGaps: [{
+      id: "realtime-tail-gap:90:90",
+      fromBlock: 90,
+      toBlock: 90,
+      nextBlock: 90,
+      reason: "realtime_tail_stale_rebuild",
+      attempts: 0,
+    }],
+    coverageGaps: [],
+  }));
+  let head = 88;
+  let recoveryLogsVisible = true;
+  const controllerCode = `0x${"60".repeat(700)}`;
+  const tokenCode = "0x6001600055";
+  const provider = {
+    async getNetwork() { return { chainId: 56n }; },
+    async getBlockNumber() { return head; },
+    async send(method, [request]) {
+      assert.equal(method, "eth_getLogs");
+      return recoveryLogsVisible
+        && Array.isArray(request.topics?.[0])
+        && request.topics[0].includes(FLAP_VAULT_TOKEN_CREATED_TOPIC)
+        ? [{ ...targetLog, blockNumber: "0x5a", transactionIndex: "0x1", logIndex: "0x2" }]
+        : [];
+    },
+    async getTransaction(hash) { return transactions.get(hash) || null; },
+    async getTransactionReceipt(hash) { return receipts.get(hash) || null; },
+    async getBlock(number) { return blocks.get(Number(number)) || { number: Number(number), hash: `0x${"45".repeat(32)}`, timestamp: Math.floor(clock / 1_000), transactions: [] }; },
+    async getCode(address) {
+      const normalized = String(address).toLowerCase();
+      if (normalized === launcher) return controllerCode;
+      if ([warmToken, targetToken].includes(normalized)) return tokenCode;
+      return "0x6000";
+    },
+    async getStorage() { return "0x"; },
+    async call() { throw new Error("optional view unavailable"); },
+    destroy() {},
+  };
+  class IdleWebSocket {
+    addEventListener() {}
+    close() {}
+  }
+  const fetchImpl = async (url) => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ code: 0, data: url.includes("/address")
+      ? [{ name: "TokenManager3", address: "0x5c952063c7fc8610ffdb798152d69f0b9550762b", networkCode: "BSC" }]
+      : [{ id: 1, name: "Baseline", tag: "Curve", codeType: "SOLIDITY", descr: "base", status: "PUBLISHED" }] }),
+  });
+  const alerts = [];
+  const dependencies = {
+    autoStart: false,
+    externalAttribution: false,
+    provider,
+    WebSocketImpl: IdleWebSocket,
+    fetchImpl,
+    now: () => clock,
+    logger: { error() {}, info() {} },
+    sendAlertsImpl: async (_config, event) => {
+      alerts.push(structuredClone(event));
+      return { status: "delivered", eventId: event.eventKey };
+    },
+    ...disabledJournalTimerDependencies(),
+  };
+  const config = {
+    dataDir,
+    monitorScope: "focus3",
+    bscMonitorEnabled: true,
+    bscWsUrl: "wss://example.invalid",
+    bscRpcUrl: "https://example.invalid",
+    bscConfirmations: 2,
+    bscNearHeadRecoveryBatchSize: 1,
+    bscHttpHeadPollIntervalMs: 60_000,
+    bscOfficialPollIntervalMs: 60_000,
+  };
+  let first = createBscLaunchpadMonitor(config, dependencies);
+  let restarted;
+  t.after(async () => {
+    await Promise.allSettled([first?.stop(), restarted?.stop()]);
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  const handoff = await first.scanNearHeadRecovery();
+  assert.equal(handoff.completed, true);
+  let snapshot = await first.getState();
+  assert.ok(snapshot.realtimePendingEntries[targetTransactionHash], "the future feature candidate is durable before registration");
+  assert.ok(snapshot.realtimePendingEntries[warmTransactionHash], "the process-local identity warmup remains queued across the handoff");
+  await first.stop();
+
+  recoveryLogsVisible = false;
+  restarted = createBscLaunchpadMonitor(config, dependencies);
+  await restarted.getState();
+  await restarted.processRealtimeQueue();
+  snapshot = await restarted.getState();
+  assert.equal(snapshot.seenTransactions[warmTransactionHash], 80, "restart fully profiles one ordinary token before enabling the shortcut");
+  assert.ok(snapshot.realtimePendingEntries[targetTransactionHash], "the not-yet-confirmed activation candidate stays pending");
+  assert.equal(alerts.length, 0, "the ordinary warm profile stays silent");
+
+  assert.equal(await restarted.registerFlapFeatureActivations([{
+    pool: {
+      identity: `vault:SPLIT:${vaultFactory}`,
+      category: "SPLIT",
+      vaultFactory,
+      sourceUrl: "https://flap.sh/board",
+    },
+    confirmed: true,
+    observations: 2,
+    firstObservedAt: new Date(clock - 30_000).toISOString(),
+    confirmedAt: new Date(clock - 10_000).toISOString(),
+    observedAt: new Date(clock - 10_000).toISOString(),
+  }]), 1);
+  head = 92;
+  await restarted.start();
+  await waitUntil(() => alerts.length === 1, 3_000);
+  await restarted.awaitIdle();
+  snapshot = await restarted.getState();
+  assert.equal(alerts.length, 1, "the late activation must emit its first token exactly once");
+  assert.equal(alerts[0].transactionHash, targetTransactionHash);
+  assert.equal(alerts[0].tokens[0].token.toLowerCase(), targetToken);
+  assert.equal(alerts[0].featureFirstToken, true);
+  assert.equal(alerts[0].featurePlatform, "flap");
+  assert.equal(alerts[0].structural.fastPath, "known_official_mode", "the activation survives the warmed ordinary fast path");
+  assert.equal(snapshot.realtimePendingEntries[targetTransactionHash], undefined);
+  const activation = Object.values(snapshot.officialSources.flap.featureActivations)[0];
+  assert.equal(activation.firstTokenTransactionHash, targetTransactionHash);
+  await restarted.processRealtimeQueue();
+  assert.equal(alerts.length, 1);
+});
+
+test("near-head handoff replays its whole range after a pre-append WAL failure", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-near-head-wal-preappend-"));
+  const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
+  const walFile = `${stateFile}.wal`;
+  const transactionHash = `0x${"33".repeat(32)}`;
+  const launcher = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
+  const token = "0x3311111111111111111111111111111111111111";
+  const creator = "0x3322222222222222222222222222222222222222";
+  const iface = new Interface(["event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)"]);
+  const encoded = iface.encodeEventLog(iface.getEvent("TokenCreated"), [1n, creator, 1n, token, "Preappend", "PRE", "ipfs://preappend"]);
+  const creationLog = {
+    address: launcher,
+    topics: encoded.topics,
+    data: encoded.data,
+    transactionHash,
+    blockNumber: "0x5a",
+    transactionIndex: "0x1",
+    logIndex: "0x2",
+    removed: false,
+  };
+  await fs.writeFile(stateFile, JSON.stringify({
+    version: 6,
+    initializedAt: "2026-08-24T10:00:00.000Z",
+    lastFinalizedBlock: 50,
+    realtimeTailNextBlock: 101,
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    nearHeadRecoveryGaps: [{
+      id: "realtime-tail-gap:90:90",
+      fromBlock: 90,
+      toBlock: 90,
+      nextBlock: 90,
+      reason: "realtime_tail_stale_rebuild",
+      attempts: 0,
+    }],
+    coverageGaps: [],
+  }));
+  let failWalAppendOpen = false;
+  let rejectedAppendOpens = 0;
+  const journalFsImpl = new Proxy(fs, {
+    get(target, property) {
+      if (property !== "open") {
+        const value = target[property];
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+      return async (file, flags, mode) => {
+        if (String(file) === walFile && flags === "a" && failWalAppendOpen) {
+          rejectedAppendOpens += 1;
+          const error = new Error("simulated near-head WAL failure before append");
+          error.code = "EIO";
+          throw error;
+        }
+        return fs.open(file, flags, mode);
+      };
+    },
+  });
+  let releaseDeepRead;
+  const deepReadGate = new Promise((resolve) => { releaseDeepRead = resolve; });
+  const provider = {
+    async send(method, [request]) {
+      assert.equal(method, "eth_getLogs");
+      return Array.isArray(request.topics?.[0]) && request.topics[0].includes(FLAP_TOKEN_CREATED_TOPIC)
+        ? [creationLog]
+        : [];
+    },
+    async getTransaction() { await deepReadGate; return null; },
+    destroy() {},
+  };
+  const baseDependencies = {
+    autoStart: false,
+    provider,
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  };
+  const failedMonitor = createBscLaunchpadMonitor({ dataDir, monitorScope: "focus3", bscNearHeadRecoveryBatchSize: 1 }, {
+    ...baseDependencies,
+    journalFsImpl,
+  });
+  let restarted;
+  t.after(async () => {
+    releaseDeepRead();
+    await Promise.allSettled([failedMonitor.stop(), restarted?.stop()]);
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+  await failedMonitor.getState();
+  failWalAppendOpen = true;
+  await assert.rejects(
+    () => failedMonitor.scanNearHeadRecovery(),
+    /simulated near-head WAL failure before append/,
+  );
+  assert.ok(rejectedAppendOpens >= 1);
+  const afterFailure = await readBscLaunchpadDurableState(stateFile);
+  assert.equal(afterFailure.nearHeadRecoveryGaps[0].nextBlock, 90);
+  assert.equal(afterFailure.realtimePendingEntries[transactionHash], undefined,
+    "a candidate and cursor are both absent when their shared frame never appends");
+
+  // Simulate the process dying with its mutated in-memory object. A clean
+  // reader must start from the old durable range and hand it off once.
+  await failedMonitor.stop();
+  failWalAppendOpen = false;
+  restarted = createBscLaunchpadMonitor({ dataDir, monitorScope: "focus3", bscNearHeadRecoveryBatchSize: 1 }, baseDependencies);
+  const beforeReplay = await restarted.getState();
+  assert.equal(beforeReplay.nearHeadRecoveryGaps[0].nextBlock, 90);
+  assert.equal(beforeReplay.realtimePendingEntries[transactionHash], undefined);
+  const replay = await restarted.scanNearHeadRecovery();
+  assert.equal(replay.completed, true);
+  const afterReplay = await restarted.getState();
+  assert.deepEqual(afterReplay.nearHeadRecoveryGaps, []);
+  assert.deepEqual(Object.keys(afterReplay.realtimePendingEntries), [transactionHash]);
+});
+
+test("near-head handoff capacity is all-or-none and cannot advance a partially persisted range", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-near-head-capacity-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const launcher = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
+  const iface = new Interface(["event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)"]);
+  const logs = [0, 1].map((index) => {
+    const token = `0x3${String(index + 1).repeat(39)}`;
+    const creator = `0x4${String(index + 1).repeat(39)}`;
+    const encoded = iface.encodeEventLog(iface.getEvent("TokenCreated"), [1n, creator, BigInt(index + 1), token, `Capacity ${index}`, `C${index}`, "ipfs://capacity"]);
+    return {
+      address: launcher,
+      topics: encoded.topics,
+      data: encoded.data,
+      transactionHash: `0x${String(index + 4).repeat(64)}`,
+      blockNumber: "0x5a",
+      transactionIndex: `0x${index.toString(16)}`,
+      logIndex: `0x${index.toString(16)}`,
+    };
+  });
+  await fs.writeFile(path.join(dataDir, "bsc-launchpad-state.json"), JSON.stringify({
+    version: 6,
+    initializedAt: "2026-08-24T10:00:00.000Z",
+    lastFinalizedBlock: 50,
+    realtimeTailNextBlock: 101,
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    nearHeadRecoveryGaps: [{ id: "realtime-tail-gap:90:90", fromBlock: 90, toBlock: 90, nextBlock: 90 }],
+    coverageGaps: [],
+  }));
+  const provider = {
+    async send(method, [request]) {
+      assert.equal(method, "eth_getLogs");
+      return Array.isArray(request.topics?.[0]) && request.topics[0].includes(FLAP_TOKEN_CREATED_TOPIC) ? logs : [];
+    },
+    destroy() {},
+  };
+  const monitor = createBscLaunchpadMonitor({ dataDir, monitorScope: "focus3", bscNearHeadRecoveryBatchSize: 1 }, {
+    autoStart: false,
+    provider,
+    realtimePendingMaxEntries: 1,
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  t.after(() => monitor.stop());
+  await assert.rejects(() => monitor.scanNearHeadRecovery(), (error) => error.code === "BSC_REALTIME_PENDING_CAPACITY");
+  const snapshot = await monitor.getState();
+  assert.deepEqual(Object.keys(snapshot.realtimePendingEntries), []);
+  assert.equal(snapshot.nearHeadRecoveryGaps[0].nextBlock, 90);
+  assert.equal(snapshot.nearHeadRecoveryGaps[0].attempts, 1);
+  const durable = await readBscLaunchpadDurableState(path.join(dataDir, "bsc-launchpad-state.json"));
+  assert.deepEqual(Object.keys(durable.realtimePendingEntries), []);
+  assert.equal(durable.nearHeadRecoveryGaps[0].nextBlock, 90);
 });
 
 test("a saturated recovery pool cannot block the isolated realtime tail", async (t) => {
@@ -6333,6 +7162,7 @@ test("stale realtime tail is rebuilt near head while historical coverage remains
     bscRealtimeTailBatchSize: 4,
     bscRealtimeTailMaxLagBlocks: 10,
     bscNearHeadRecoveryBatchSize: 10,
+    bscNearHeadRecoverySuccessIntervalMs: 250,
     bscExpectedBlockTimeMs: 500,
     bscHealthDegradedLagBlocks: 5,
     bscHealthCriticalLagBlocks: 10,
@@ -6453,7 +7283,323 @@ test("near-head recovery yields its RPC work until the realtime tail is durable"
   assert.equal(snapshot.lastFinalizedBlock, 50, "fair near-head progress must not advance full-history coverage");
 });
 
-test("focus3 runtime stale-tail rebuild compacts a million-block handoff before saving", async (t) => {
+test("five successful near-head batches admit one truthful full-history batch while gaps remain", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-near-head-history-fairness-"));
+  let monitor;
+  t.after(async () => {
+    await monitor?.stop();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+  await fs.writeFile(path.join(dataDir, "bsc-launchpad-state.json"), JSON.stringify({
+    version: 6,
+    initializedAt: "2026-09-04T00:00:00.000Z",
+    lastFinalizedBlock: 50,
+    realtimeTailNextBlock: 201,
+    realtimeTailInitializedAt: "2026-09-04T00:00:00.000Z",
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    nearHeadRecoveryGaps: [{
+      id: "realtime-tail-gap:100:199",
+      fromBlock: 100,
+      toBlock: 199,
+      nextBlock: 100,
+      reason: "realtime_tail_stale_rebuild",
+      detectedAt: "2026-09-04T00:00:00.000Z",
+      attempts: 0,
+      nextAttemptAt: null,
+    }],
+    coverageGaps: [],
+  }));
+  const firstSeenRanges = [];
+  const seenRanges = new Set();
+  const provider = {
+    async getNetwork() { return { chainId: 56n }; },
+    async getBlockNumber() { return 202; },
+    async send(method, [request]) {
+      assert.equal(method, "eth_getLogs");
+      const range = [Number.parseInt(request.fromBlock, 16), Number.parseInt(request.toBlock, 16)];
+      const key = range.join(":");
+      if (!seenRanges.has(key)) {
+        seenRanges.add(key);
+        firstSeenRanges.push(range);
+      }
+      return [];
+    },
+    destroy() {},
+  };
+  class IdleWebSocket { addEventListener() {} close() {} }
+  const fetchImpl = async () => ({ ok: false, status: 403, headers: { get() { return null; } }, text: async () => "forbidden" });
+  monitor = createBscLaunchpadMonitor({
+    dataDir,
+    monitorScope: "focus3",
+    bscMonitorEnabled: true,
+    bscWsUrl: "wss://example.invalid",
+    bscRpcUrl: "https://example.invalid",
+    bscConfirmations: 2,
+    bscRecoveryLogBatchSize: 10,
+    bscNearHeadRecoveryBatchSize: 1,
+    bscNearHeadRecoverySuccessIntervalMs: 60_000,
+    bscHttpHeadPollIntervalMs: 60_000,
+    bscOfficialPollIntervalMs: 60_000,
+  }, {
+    autoStart: false,
+    provider,
+    WebSocketImpl: IdleWebSocket,
+    fetchImpl,
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+
+  await monitor.start();
+  await waitUntil(async () => (await monitor.getState()).nearHeadRecoveryGaps[0]?.nextBlock >= 101, 2_000);
+  while ((await monitor.getState()).nearHeadRecoveryGaps[0].nextBlock < 105) {
+    const result = await monitor.scanNearHeadRecovery();
+    assert.equal(result.skipped, false);
+  }
+  await waitUntil(async () => {
+    await monitor.advanceCoverage();
+    return (await monitor.getState()).lastFinalizedBlock >= 60;
+  }, 2_000);
+  const snapshot = await monitor.getState();
+  assert.equal(snapshot.lastFinalizedBlock, 60, "one exact ten-block history batch advances the truthful cursor");
+  assert.equal(snapshot.nearHeadRecoveryGaps[0].nextBlock, 105, "the live repair gap remains independently durable");
+  const historyIndex = firstSeenRanges.findIndex(([from, to]) => from === 51 && to === 60);
+  assert.ok(historyIndex >= 0, "the admitted work is a real eth_getLogs history scan, not a synthetic cursor bump");
+  const nearHeadBeforeHistory = firstSeenRanges.slice(0, historyIndex)
+    .filter(([from, to]) => from >= 100 && from <= 104 && to === from);
+  assert.deepEqual(nearHeadBeforeHistory, [[100, 100], [101, 101], [102, 102], [103, 103], [104, 104]]);
+});
+
+test("five failed near-head attempt slots still admit one real full-history request", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-near-head-failure-fairness-"));
+  let monitor;
+  t.after(async () => {
+    await monitor?.stop();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+  await fs.writeFile(path.join(dataDir, "bsc-launchpad-state.json"), JSON.stringify({
+    version: 6,
+    initializedAt: "2026-09-04T00:00:00.000Z",
+    lastFinalizedBlock: 50,
+    realtimeTailNextBlock: 201,
+    realtimeTailInitializedAt: "2026-09-04T00:00:00.000Z",
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    nearHeadRecoveryGaps: Array.from({ length: 6 }, (_, index) => ({
+      id: `realtime-tail-gap:${100 + (index * 2)}:${100 + (index * 2)}`,
+      fromBlock: 100 + (index * 2),
+      toBlock: 100 + (index * 2),
+      nextBlock: 100 + (index * 2),
+      reason: "realtime_tail_stale_rebuild",
+      attempts: 0,
+      nextAttemptAt: null,
+    })),
+    coverageGaps: [],
+  }));
+  const timeline = [];
+  const recorded = new Set();
+  const provider = {
+    async getNetwork() { return { chainId: 56n }; },
+    async getBlockNumber() { return 202; },
+    async getBlock(blockNumber) { return { number: blockNumber, transactions: [] }; },
+    async send(method, [request]) {
+      if (method === "eth_getBlockReceipts") {
+        const error = new Error("receipt method unavailable");
+        error.code = "SERVER_ERROR";
+        error.retryAfterMs = 1_000;
+        error.rpcOperation = method;
+        error.rpcFailureScope = "method";
+        throw error;
+      }
+      assert.equal(method, "eth_getLogs");
+      const from = Number.parseInt(request.fromBlock, 16);
+      const to = Number.parseInt(request.toBlock, 16);
+      const key = `${from}:${to}`;
+      if (!recorded.has(key)) {
+        recorded.add(key);
+        timeline.push([from, to]);
+      }
+      if (from === 51 && to === 60) return [];
+      const error = new Error("eth_getLogs timed out after 1000ms");
+      error.code = "TIMEOUT";
+      error.retryAfterMs = 1_000;
+      error.rpcOperation = method;
+      error.rpcFailureScope = "method";
+      throw error;
+    },
+    destroy() {},
+  };
+  class IdleWebSocket { addEventListener() {} close() {} }
+  monitor = createBscLaunchpadMonitor({
+    dataDir,
+    monitorScope: "focus3",
+    bscMonitorEnabled: true,
+    bscWsUrl: "wss://example.invalid",
+    bscRpcUrl: "https://example.invalid",
+    bscConfirmations: 2,
+    bscRecoveryLogBatchSize: 10,
+    bscNearHeadRecoveryBatchSize: 1,
+    bscNearHeadRecoveryRetryBaseMs: 60_000,
+    bscNearHeadRecoveryRetryMaxMs: 60_000,
+    bscHttpHeadPollIntervalMs: 60_000,
+    bscOfficialPollIntervalMs: 60_000,
+  }, {
+    autoStart: false,
+    provider,
+    WebSocketImpl: IdleWebSocket,
+    fetchImpl: async () => ({ ok: false, status: 403, headers: { get() { return null; } }, text: async () => "forbidden" }),
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  await monitor.start();
+  await waitUntil(async () => (await monitor.getState()).lastFinalizedBlock === 60, 3_000);
+  const historyIndex = timeline.findIndex(([from, to]) => from === 51 && to === 60);
+  assert.equal(historyIndex, 5, "history receives a slot after five failed live-repair ranges, not after a success that may never occur");
+  assert.ok(timeline.slice(0, historyIndex).every(([from, to]) => from >= 100 && to === from));
+  assert.equal((await monitor.getState()).nearHeadRecoveryGaps.length, 6,
+    "the method-failed gap cursors remain durable while independent history progresses");
+});
+
+test("history backoff leaves live repair runnable and a slow history attempt cannot erase its five-slot quota", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-near-head-history-backoff-fairness-"));
+  let monitor;
+  let releaseSlowHistory;
+  const slowHistoryGate = new Promise((resolve) => { releaseSlowHistory = resolve; });
+  t.after(async () => {
+    releaseSlowHistory();
+    await monitor?.stop();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+  await fs.writeFile(path.join(dataDir, "bsc-launchpad-state.json"), JSON.stringify({
+    version: 6,
+    initializedAt: "2026-09-04T00:00:00.000Z",
+    lastFinalizedBlock: 50,
+    realtimeTailNextBlock: 201,
+    realtimeTailInitializedAt: "2026-09-04T00:00:00.000Z",
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    nearHeadRecoveryGaps: Array.from({ length: 40 }, (_, index) => ({
+      id: `realtime-tail-gap:${100 + (index * 2)}:${100 + (index * 2)}`,
+      fromBlock: 100 + (index * 2),
+      toBlock: 100 + (index * 2),
+      nextBlock: 100 + (index * 2),
+      reason: "realtime_tail_stale_rebuild",
+      attempts: 0,
+      nextAttemptAt: null,
+    })),
+    coverageGaps: [],
+  }));
+  const timeline = [];
+  const nearRanges = new Set();
+  let failFirstHistoryWave = true;
+  let firstHistoryFailureScheduled = false;
+  let slowHistoryStarted = false;
+  const provider = {
+    async getNetwork() { return { chainId: 56n }; },
+    async getBlockNumber() { return 202; },
+    async getBlock(blockNumber) { return { number: blockNumber, transactions: [] }; },
+    async send(method, [request]) {
+      if (method === "eth_getBlockReceipts") {
+        const error = new Error("receipt method unavailable");
+        error.code = "SERVER_ERROR";
+        error.rpcOperation = method;
+        error.rpcFailureScope = "method";
+        throw error;
+      }
+      assert.equal(method, "eth_getLogs");
+      const from = Number.parseInt(request.fromBlock, 16);
+      const to = Number.parseInt(request.toBlock, 16);
+      if (from >= 100) {
+        if (!nearRanges.has(from)) {
+          nearRanges.add(from);
+          timeline.push(`near:${from}`);
+        }
+        const error = new Error("near-head log method unavailable");
+        error.code = "TIMEOUT";
+        error.rpcOperation = method;
+        error.rpcFailureScope = "method";
+        throw error;
+      }
+      if (from === 51 && to === 60 && failFirstHistoryWave) {
+        if (!firstHistoryFailureScheduled) {
+          firstHistoryFailureScheduled = true;
+          timeline.push("history:failed");
+          queueMicrotask(() => { failFirstHistoryWave = false; });
+        }
+        const error = new Error("history host temporarily unavailable");
+        error.code = "SERVER_ERROR";
+        error.retryAfterMs = 250;
+        error.rpcOperation = method;
+        error.rpcFailureScope = "host";
+        throw error;
+      }
+      if (from === 51 && to === 60) {
+        if (!slowHistoryStarted) {
+          slowHistoryStarted = true;
+          timeline.push("history:slow-start");
+        }
+        await slowHistoryGate;
+        return [];
+      }
+      if (from === 61 && to === 70 && !timeline.includes("history:next")) timeline.push("history:next");
+      return [];
+    },
+    destroy() {},
+  };
+  class IdleWebSocket { addEventListener() {} close() {} }
+  monitor = createBscLaunchpadMonitor({
+    dataDir,
+    monitorScope: "focus3",
+    bscMonitorEnabled: true,
+    bscWsUrl: "wss://example.invalid",
+    bscRpcUrl: "https://example.invalid",
+    bscConfirmations: 2,
+    bscRecoveryLogBatchSize: 10,
+    bscNearHeadRecoveryBatchSize: 1,
+    bscCoverageRetryBaseMs: 500,
+    bscCoverageRetryMaxMs: 500,
+    bscNearHeadRecoveryRetryBaseMs: 60_000,
+    bscNearHeadRecoveryRetryMaxMs: 60_000,
+    bscHttpHeadPollIntervalMs: 60_000,
+    bscOfficialPollIntervalMs: 60_000,
+  }, {
+    autoStart: false,
+    provider,
+    WebSocketImpl: IdleWebSocket,
+    fetchImpl: async () => ({ ok: false, status: 403, headers: { get() { return null; } }, text: async () => "forbidden" }),
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+
+  await monitor.start();
+  await waitUntil(() => timeline.includes("history:slow-start"), 3_000);
+  assert.ok(nearRanges.size >= 6,
+    "the sixth independent live gap must run while the failed history lane is still cooling");
+  const slowHistoryIndex = timeline.indexOf("history:slow-start");
+  const liveAttemptsDuringSlowHistory = () => timeline.slice(slowHistoryIndex + 1)
+    .filter((item) => item.startsWith("near:")).length;
+  await waitUntil(() => liveAttemptsDuringSlowHistory() >= 5, 3_000);
+  const beforeHold = nearRanges.size;
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.equal(nearRanges.size, beforeHold,
+    `a slow in-flight history request holds the sixth live slot without a 25ms repair spin: ${JSON.stringify(timeline)}`);
+  assert.equal(liveAttemptsDuringSlowHistory(), 5,
+    "the slow history owns a single slot after five additional live attempts");
+
+  const attemptedBeforeRelease = new Set(nearRanges);
+  releaseSlowHistory();
+  await waitUntil(() => timeline.includes("history:next"), 3_000);
+  await waitUntil(() => nearRanges.size > attemptedBeforeRelease.size, 3_000);
+  const resumedNearIndex = timeline.findIndex((item) => item.startsWith("near:")
+    && !attemptedBeforeRelease.has(Number(item.slice("near:".length))));
+  assert.ok(resumedNearIndex >= 0 && timeline.indexOf("history:next") < resumedNearIndex,
+    "the accumulated five attempts survive history completion and admit the next history batch first");
+});
+
+test("focus3 runtime stale-tail rebuild retains every uncovered block instead of falsifying coverage", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-runtime-gap-compaction-"));
   const blockedRequests = [];
   let monitor;
@@ -6509,12 +7655,12 @@ test("focus3 runtime stale-tail rebuild compacts a million-block handoff before 
   await monitor.start();
   const snapshot = await monitor.getState();
   assert.equal(snapshot.realtimeTailNextBlock, 1_000_097);
-  assert.equal(snapshot.lastFinalizedBlock, 1_000_096);
-  assert.ok(snapshot.nearHeadRecoveryGaps.length <= 2, "the million-block handoff must not remain as hundreds of cloned gap records");
-  assert.ok(snapshot.nearHeadRecoveryGaps.every((gap) => gap.fromBlock >= 997_697));
-  assert.equal(snapshot.coverageRecoveryHistory.at(-1).reason, "focus3_live_baseline_compaction");
-  assert.ok(snapshot._health.realtimeTail.handoffCompaction.droppedGapCount > 400);
-  assert.equal(snapshot._health.realtimeTail.handoffCompaction.retainedGapCount, snapshot.nearHeadRecoveryGaps.length);
+  assert.equal(snapshot.lastFinalizedBlock, 99);
+  assert.equal(snapshot.nearHeadRecoveryGaps.length, 500, "bounded segments retain the complete million-block pending union");
+  assert.equal(Math.min(...snapshot.nearHeadRecoveryGaps.map((gap) => gap.fromBlock)), 100);
+  assert.equal(Math.max(...snapshot.nearHeadRecoveryGaps.map((gap) => gap.toBlock)), 1_000_096);
+  assert.equal(snapshot.coverageRecoveryHistory.at(-1).reason, "focus3_live_compaction_refused_uncovered");
+  assert.equal(snapshot._health.realtimeTail.handoffCompaction, undefined);
 });
 
 test("a 20-hour stale tail persists every segment but recovers the head-facing segment first", async (t) => {
@@ -6550,9 +7696,9 @@ test("a 20-hour stale tail persists every segment but recovers the head-facing s
         seenRanges.add(key);
         distinctRanges.push(range);
       }
-      if (key === "160097-160100" || key === "158097-158136") return [];
-      if (key === "158137-158176") return new Promise((resolve) => blockedGapRequests.push(resolve));
-      throw new Error(`unexpected range ${key}`);
+      if (key === "160097-160100" || key === "158097-158106") return [];
+      if (key === "158107-158116") return new Promise((resolve) => blockedGapRequests.push(resolve));
+      return [];
     },
     destroy() {},
   };
@@ -6578,6 +7724,7 @@ test("a 20-hour stale tail persists every segment but recovers the head-facing s
     bscRealtimeTailMaxLagBlocks: 10,
     bscNearHeadRecoveryBatchSize: 40,
     bscNearHeadRecoverySegmentSize: 2_000,
+    bscNearHeadRecoverySuccessIntervalMs: 250,
     bscHttpHeadPollIntervalMs: 60_000,
     bscOfficialPollIntervalMs: 60_000,
   }, { autoStart: false, provider, WebSocketImpl: IdleWebSocket, fetchImpl, logger: { error() {}, info() {} } });
@@ -6586,8 +7733,8 @@ test("a 20-hour stale tail persists every segment but recovers the head-facing s
   const snapshot = await monitor.getState();
   assert.deepEqual(distinctRanges.slice(0, 3), [
     [160_097, 160_100],
-    [158_097, 158_136],
-    [158_137, 158_176],
+    [158_097, 158_106],
+    [158_107, 158_116],
   ]);
   assert.equal(snapshot.nearHeadRecoveryGaps.length, 80, "the complete 20-hour interval must remain represented by bounded durable segments");
   assert.equal(Math.min(...snapshot.nearHeadRecoveryGaps.map((gap) => gap.fromBlock)), 100);
@@ -6598,7 +7745,7 @@ test("a 20-hour stale tail persists every segment but recovers the head-facing s
       toBlock: snapshot.nearHeadRecoveryGaps[0].toBlock,
       nextBlock: snapshot.nearHeadRecoveryGaps[0].nextBlock,
     },
-    { fromBlock: 158_097, toBlock: 160_096, nextBlock: 158_137 },
+    { fromBlock: 158_097, toBlock: 160_096, nextBlock: 158_097 },
   );
   assert.equal(snapshot.lastFinalizedBlock, 99, "head-first repair must not falsify full historical coverage");
 });
@@ -6667,6 +7814,7 @@ test("shared RPC cooling backs off the whole near-head lane without walking ever
       fromBlock: blockNumber,
       toBlock: blockNumber,
       nextBlock: blockNumber,
+      reason: `test_gap_${blockNumber}`,
       detectedAt: "2026-08-24T10:00:00.000Z",
       attempts: 0,
       nextAttemptAt: null,
@@ -6686,6 +7834,8 @@ test("shared RPC cooling backs off the whole near-head lane without walking ever
         const error = new Error("eth_getLogs failed on every BSC RPC: providers cooling down; retry in 5000ms");
         error.code = "SERVER_ERROR";
         error.retryAfterMs = 5_000;
+        error.rpcOperation = "eth_getLogs";
+        error.rpcFailureScope = "host";
         throw error;
       }
       blockFallbackCalls += 1;
@@ -6734,6 +7884,151 @@ test("shared RPC cooling backs off the whole near-head lane without walking ever
   assert.equal(snapshot.nearHeadRecoveryGaps.length, 2, "the lane resumes from a retained gap when the shared backoff is due");
   assert.equal(snapshot._health.nearHeadRecovery.sharedRpcRetryAt, undefined);
   await monitor.stop();
+});
+
+test("a host-global fallback 429 propagates through the near-head wrapper and gates every gap", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-near-head-fallback-429-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  let current = Date.parse("2026-08-24T10:14:18.000Z");
+  await fs.writeFile(path.join(dataDir, "bsc-launchpad-state.json"), JSON.stringify({
+    version: 6,
+    initializedAt: "2026-08-24T10:00:00.000Z",
+    lastFinalizedBlock: 50,
+    realtimeTailNextBlock: 101,
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    nearHeadRecoveryGaps: [90, 91].map((blockNumber) => ({
+      id: `realtime-tail-gap:${blockNumber}:${blockNumber}`,
+      fromBlock: blockNumber,
+      toBlock: blockNumber,
+      nextBlock: blockNumber,
+      reason: "realtime_tail_stale_rebuild",
+      attempts: 0,
+      nextAttemptAt: null,
+    })),
+    coverageGaps: [],
+  }));
+  let logCalls = 0;
+  let receiptCalls = 0;
+  const provider = {
+    async send(method) {
+      if (method === "eth_getLogs") {
+        logCalls += 1;
+        const error = new Error("eth_getLogs timed out after 4000ms");
+        error.code = "TIMEOUT";
+        error.retryAfterMs = 4_000;
+        error.rpcOperation = "eth_getLogs";
+        error.rpcFailureScope = "method";
+        throw error;
+      }
+      assert.equal(method, "eth_getBlockReceipts");
+      receiptCalls += 1;
+      const error = new Error("HTTP 429 fallback host rate limited");
+      error.code = "SERVER_ERROR";
+      error.retryAfterMs = 12_000;
+      error.rpcOperation = "eth_getBlockReceipts";
+      error.rpcFailureScope = "host";
+      throw error;
+    },
+    async getBlock(blockNumber) { return { number: blockNumber, transactions: [] }; },
+    destroy() {},
+  };
+  const monitor = createBscLaunchpadMonitor({
+    dataDir,
+    bscNearHeadRecoveryBatchSize: 1,
+    bscNearHeadRecoveryRetryBaseMs: 100,
+    bscNearHeadRecoveryRetryMaxMs: 1_000,
+  }, {
+    autoStart: false,
+    provider,
+    now: () => current,
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  t.after(() => monitor.stop());
+  await assert.rejects(
+    () => monitor.scanNearHeadRecovery(),
+    (error) => error.rpcFailureScope === "host"
+      && error.rpcOperation === "eth_getBlockReceipts"
+      && error.retryAfterMs === 12_000,
+  );
+  const callsAfterOutage = { logCalls, receiptCalls };
+  const snapshot = await monitor.getState();
+  assert.equal(snapshot._health.nearHeadRecovery.sharedRpcRetryAt, "2026-08-24T10:14:30.000Z");
+  assert.equal(snapshot.nearHeadRecoveryGaps.filter((gap) => gap.attempts > 0).length, 1);
+  assert.deepEqual(await monitor.scanNearHeadRecovery(), { skipped: true, reason: "backoff" });
+  assert.deepEqual({ logCalls, receiptCalls }, callsAfterOutage,
+    "the second due gap cannot probe during a physical-host fallback cooldown");
+  current += 12_000;
+});
+
+test("a method-scoped getCode outage defers one candidate without blocking the next near-head log gap", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-near-head-method-scope-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const transactionHash = `0x${"81".repeat(32)}`;
+  const implementation = "0x8111111111111111111111111111111111111111";
+  const upgradeLog = {
+    address: "0x8b4329947e34b6d56d71a3385cac122bade7d78d",
+    transactionHash,
+    blockNumber: "0x5b",
+    transactionIndex: "0x0",
+    logIndex: "0x0",
+    topics: [BSC_UPGRADED_TOPIC, `0x${"0".repeat(24)}${implementation.slice(2)}`],
+    data: "0x",
+  };
+  await fs.writeFile(path.join(dataDir, "bsc-launchpad-state.json"), JSON.stringify({
+    version: 6,
+    initializedAt: "2026-08-24T10:00:00.000Z",
+    lastFinalizedBlock: 50,
+    realtimeTailNextBlock: 101,
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    nearHeadRecoveryGaps: [
+      { id: "new", fromBlock: 91, toBlock: 91, nextBlock: 91, reason: "new", attempts: 0 },
+      { id: "old", fromBlock: 90, toBlock: 90, nextBlock: 90, reason: "old", attempts: 0 },
+    ],
+    coverageGaps: [],
+  }));
+  const logRanges = [];
+  const provider = {
+    async getBlockNumber() { return 101; },
+    async send(method, [request]) {
+      assert.equal(method, "eth_getLogs");
+      const from = Number.parseInt(request.fromBlock, 16);
+      logRanges.push(from);
+      return from === 91 && Array.isArray(request.topics?.[0]) ? [upgradeLog] : [];
+    },
+    async getTransaction() { return { hash: transactionHash, to: upgradeLog.address, from: "0x8222222222222222222222222222222222222222", data: "0x" }; },
+    async getTransactionReceipt() { return { transactionHash, status: 1, blockNumber: 91, logs: [upgradeLog] }; },
+    async getBlock() { return { number: 91, timestamp: 1_786_000_000, transactions: [transactionHash] }; },
+    async getCode() {
+      const error = new Error("getCode timed out after 4000ms");
+      error.code = "TIMEOUT";
+      error.retryAfterMs = 4_000;
+      error.rpcOperation = "getCode";
+      error.rpcFailureScope = "method";
+      throw error;
+    },
+    destroy() {},
+  };
+  const monitor = createBscLaunchpadMonitor({ dataDir, bscNearHeadRecoveryBatchSize: 1 }, {
+    autoStart: false,
+    provider,
+    logger: { error() {}, info() {} },
+  });
+  t.after(() => monitor.stop());
+  assert.equal((await monitor.scanNearHeadRecovery()).fromBlock, 91);
+  await monitor.processRealtimeQueue();
+  let snapshot = await monitor.getState();
+  assert.ok(snapshot.deferredCreationEvidence[transactionHash]);
+  assert.equal(snapshot._health.nearHeadRecovery.sharedRpcRetryAt, undefined,
+    "getCode retry timing belongs to the candidate, never the log lane");
+  assert.equal((await monitor.scanNearHeadRecovery()).fromBlock, 90);
+  snapshot = await monitor.getState();
+  assert.deepEqual(snapshot.nearHeadRecoveryGaps, []);
+  assert.ok(logRanges.includes(91) && logRanges.includes(90));
 });
 
 test("near-head gap recovery survives failure and restart, then deletes the gap without replaying a seen transaction", async (t) => {
@@ -6867,6 +8162,7 @@ test("historical near-head lifecycle and upgrade alerts carry their real block t
   const receipt = { hash: transactionHash, transactionHash, blockNumber: 90, status: 1, logs: [lifecycleLog, upgradeLog] };
   const alerts = [];
   const provider = {
+    async getBlockNumber() { return 101; },
     async send(method, [request]) {
       assert.equal(method, "eth_getLogs");
       return Array.isArray(request.topics?.[0]) ? [lifecycleLog, upgradeLog] : [];
@@ -6892,6 +8188,10 @@ test("historical near-head lifecycle and upgrade alerts carry their real block t
     logger: { error() {}, info() {} },
   });
   await monitor.scanNearHeadRecovery();
+  let handoff = await monitor.getState();
+  assert.ok(handoff.realtimePendingEntries[transactionHash], "the canonical candidate is durable before deep lifecycle/code reads");
+  assert.deepEqual(handoff.nearHeadRecoveryGaps, []);
+  await monitor.processRealtimeQueue();
   assert.equal(alerts.length, 2);
   assert.deepEqual(new Set(alerts.map((event) => event.mode.selector)), new Set(["official-lifecycle", "proxy-upgrade"]));
   for (const event of alerts) {
@@ -6933,6 +8233,7 @@ test("official upgrade verification stays retryable when historical and latest c
   let clock = Date.parse("2026-08-06T04:00:00.000Z");
   const alerts = [];
   const provider = {
+    async getBlockNumber() { return 101; },
     async send(method, [request]) {
       assert.equal(method, "eth_getLogs");
       return Array.isArray(request.topics?.[0]) ? [upgradeLog] : [];
@@ -6953,6 +8254,9 @@ test("official upgrade verification stays retryable when historical and latest c
       if (!verificationAvailable) {
         const error = new Error("code RPC unavailable");
         error.code = "NETWORK_ERROR";
+        error.retryAfterMs = 100;
+        error.rpcOperation = "getCode";
+        error.rpcFailureScope = "method";
         throw error;
       }
       return "0x6000";
@@ -6976,26 +8280,26 @@ test("official upgrade verification stays retryable when historical and latest c
     await fs.rm(dataDir, { recursive: true, force: true });
   });
 
-  await assert.rejects(
-    () => monitor.scanNearHeadRecovery(),
-    /implementation verification unavailable/,
-  );
+  const handoff = await monitor.scanNearHeadRecovery();
+  assert.equal(handoff.completed, true, "log coverage advances independently of implementation code availability");
+  await monitor.processRealtimeQueue();
   let snapshot = await monitor.getState();
   assert.equal(codeReads, 2, "historical and latest code checks must both be attempted");
   assert.equal(alerts.length, 0);
   assert.equal(snapshot.seenTransactions[transactionHash], undefined);
   assert.deepEqual(Object.keys(snapshot.officialUpgrades), []);
-  assert.equal(snapshot.nearHeadRecoveryGaps[0].nextBlock, 90, "failed verification must retain the exact retry cursor");
+  assert.deepEqual(snapshot.nearHeadRecoveryGaps, [], "deep getCode failure must not roll back verified log coverage");
+  assert.ok(snapshot.deferredCreationEvidence[transactionHash], "the exact candidate moves immediately to durable method retry");
 
   verificationAvailable = true;
-  clock += 101;
-  const retry = await monitor.scanNearHeadRecovery();
-  assert.equal(retry.completed, true);
+  clock = Date.parse(snapshot.deferredCreationEvidence[transactionHash].nextAttemptAt) + 1;
+  await monitor.retryDeferredCreationEvidence();
   snapshot = await monitor.getState();
   assert.equal(alerts.length, 1);
   assert.equal(snapshot.seenTransactions[transactionHash], 90);
   assert.equal(Object.keys(snapshot.officialUpgrades).length, 1);
   assert.deepEqual(snapshot.nearHeadRecoveryGaps, []);
+  assert.equal(snapshot.deferredCreationEvidence[transactionHash], undefined);
 });
 
 test("a hook alert recovered from a historical gap uses block time rather than recovery time", async (t) => {
@@ -7104,6 +8408,10 @@ test("a hook alert recovered from a historical gap uses block time rather than r
     logger: { error() {}, info() {} },
   });
   await monitor.scanNearHeadRecovery();
+  const handoff = await monitor.getState();
+  assert.ok(handoff.realtimePendingEntries[transactionHash]);
+  assert.deepEqual(handoff.nearHeadRecoveryGaps, []);
+  await monitor.processRealtimeQueue();
   assert.equal(alerts.length, 1);
   assert.equal(alerts[0].mode.selector, "v4-hook");
   assert.equal(alerts[0].blockTimestamp, blockTimestamp);
@@ -7383,8 +8691,8 @@ test("HTTP tail cursor is failure-closed while historical coverage health remain
         if (tailFailure) throw new Error("tail log RPC unavailable");
         return [];
       }
-      if (range[0] === 51 && range[1] === 82) return [];
-      if (range[0] === 83 && range[1] === 100) {
+      if (range[0] >= 51 && range[1] <= 82) return [];
+      if (range[0] >= 83 && range[1] <= 100) {
         return new Promise((_resolve, reject) => blockedHistorical.push(reject));
       }
       throw new Error(`unexpected log range ${range.join("-")}`);
