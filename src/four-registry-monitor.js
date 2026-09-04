@@ -5,6 +5,11 @@ import { Interface, keccak256, toUtf8Bytes } from "ethers";
 export const FOUR_REGISTRY_CHAIN_ID = 56;
 export const FOUR_REGISTRY_ADDRESS = "0x912cef0c3ae9ab6eb3ec87cab69371cfb317ab94";
 export const FOUR_CORE_ADDRESS = "0xebe7b6c1089d9f72ad07f34e36d898e44e5e27f3";
+// Canonical Multicall3 deployment for BNB Smart Chain (chain 56). The runtime
+// hash is pinned as well as the address so batching cannot silently redirect
+// exact-block Registry reads through an unrelated contract.
+export const FOUR_REGISTRY_MULTICALL3_ADDRESS = "0xca11bde05977b3631167028862be2a173976ca11";
+export const FOUR_REGISTRY_MULTICALL3_CODE_HASH = "0xd5c15df687b16f2ff992fc8d767b4216323184a2bbc6ee2f9c398c318e770891";
 export const FOUR_REGISTRY_STATE_VERSION = 11;
 export const FOUR_REGISTRY_EVENT_SCHEMA_VERSION = 1;
 export const FOUR_REGISTRY_DEFAULT_CONFIRMATIONS = 3;
@@ -84,6 +89,11 @@ const PROTOCOL_CAPABILITY_BY_EVENT = Object.freeze({
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const MODULE_KIND_NAMES = Object.freeze(["token", "vault", "curve", "trade", "migrate", "custom_data"]);
 const INVENTORY_READ_CONCURRENCY = 4;
+const MULTICALL3_MAX_SUBCALLS = 192;
+const RUNTIME_IDENTITY_RECHECK_BLOCKS = 256;
+export const FOUR_REGISTRY_RPC_CALLS_PER_HOST_PER_MINUTE = 108;
+const RPC_BUDGET_WINDOW_MS = 60_000;
+const MIN_RPC_SCHEDULER_INTERVAL_MS = 5_000;
 const MAX_PROCESSED_KEYS = 10_000;
 const MAX_OUTBOX_EVENTS = 512;
 const MAX_LOGS_PER_QUERY = 4_096;
@@ -134,6 +144,10 @@ export const FOUR_REGISTRY_INTERFACE = new Interface([
 export const FOUR_CORE_INTERFACE = new Interface([
   "function registry() view returns (address)",
   "event TokenCreated(uint256 requestId,uint256 indexed presetId,address indexed creator,address indexed token,string name,string symbol,uint256 maxSupply,uint256 saleAmount,uint256 raiseAmount,uint256 initialPrice,address quoteAsset,address vault,address curveModule,address tradeModule,address migrateModule,address customData,address tokenModule,string tokenMetaUri,uint256 flags,bytes encodedTags)",
+]);
+
+export const FOUR_REGISTRY_MULTICALL3_INTERFACE = new Interface([
+  "function aggregate3((address target,bool allowFailure,bytes callData)[] calls) payable returns ((bool success,bytes returnData)[] returnData)",
 ]);
 
 export const FOUR_REGISTRY_EVENT_TOPICS = Object.freeze([
@@ -1390,6 +1404,160 @@ export async function readFourRegistryInventory(provider, blockNumber) {
     }
   }));
   return Object.fromEntries(records.map((preset) => [preset.id, preset]));
+}
+
+function multicallRead(target, iface, functionName, args, label) {
+  return {
+    target,
+    iface,
+    functionName,
+    args,
+    label,
+    callData: iface.encodeFunctionData(functionName, args),
+  };
+}
+
+async function executeFourRegistryMulticall(provider, reads, blockNumber) {
+  const decoded = [];
+  for (let offset = 0; offset < reads.length; offset += MULTICALL3_MAX_SUBCALLS) {
+    const batch = reads.slice(offset, offset + MULTICALL3_MAX_SUBCALLS);
+    const aggregate = await contractCall(
+      provider,
+      FOUR_REGISTRY_MULTICALL3_INTERFACE,
+      "aggregate3",
+      FOUR_REGISTRY_MULTICALL3_ADDRESS,
+      [batch.map((read) => ({
+        target: read.target,
+        allowFailure: false,
+        callData: read.callData,
+      }))],
+      blockNumber,
+    );
+    const results = aggregate[0];
+    if (!Array.isArray(results) || results.length !== batch.length) {
+      throw fourError(
+        "FOUR_REGISTRY_MULTICALL_INVALID",
+        `Multicall3 returned ${results?.length ?? "invalid"} results for ${batch.length} exact reads`,
+      );
+    }
+    for (let index = 0; index < batch.length; index += 1) {
+      const result = results[index];
+      const success = result?.success ?? result?.[0];
+      const returnData = result?.returnData ?? result?.[1];
+      if (success !== true || typeof returnData !== "string" || !/^0x(?:[a-f0-9]{2})*$/iu.test(returnData)) {
+        throw fourError("FOUR_REGISTRY_MULTICALL_INVALID", `${batch[index].label} did not return exact ABI data`);
+      }
+      try {
+        decoded.push(batch[index].iface.decodeFunctionResult(batch[index].functionName, returnData));
+      } catch (error) {
+        throw fourError("FOUR_REGISTRY_MULTICALL_INVALID", `${batch[index].label} returned undecodable ABI data`, error);
+      }
+    }
+  }
+  return decoded;
+}
+
+async function runtimeIdentityAt(provider, blockNumber, cache) {
+  const cached = cache.get(provider);
+  if (cached
+    && blockNumber >= cached.verifiedAtBlock
+    && blockNumber - cached.verifiedAtBlock < RUNTIME_IDENTITY_RECHECK_BLOCKS) return cached;
+  let network;
+  let liveChainId = null;
+  let registryCode;
+  let coreCode;
+  let multicallCode;
+  try {
+    [network, registryCode, coreCode, multicallCode, liveChainId] = await Promise.all([
+      provider.getNetwork(),
+      provider.getCode(FOUR_REGISTRY_ADDRESS, blockNumber),
+      provider.getCode(FOUR_CORE_ADDRESS, blockNumber),
+      provider.getCode(FOUR_REGISTRY_MULTICALL3_ADDRESS, blockNumber),
+      typeof provider.send === "function" ? provider.send("eth_chainId", []) : null,
+    ]);
+  } catch (error) {
+    throw fourError("FOUR_REGISTRY_IDENTITY_UNAVAILABLE", `Four Registry runtime identity lookup failed: ${error.message}`, error);
+  }
+  parseRpcChainId(network?.chainId, "provider.getNetwork()");
+  if (liveChainId !== null) parseRpcChainId(liveChainId, "eth_chainId");
+  const normalizedRegistryCode = normalizedRuntimeCode(registryCode, "Four Registry runtime");
+  const normalizedCoreCode = normalizedRuntimeCode(coreCode, "OpenFour Core runtime");
+  const normalizedMulticallCode = normalizedRuntimeCode(multicallCode, "Multicall3 runtime");
+  if (normalizedRegistryCode === "0x") {
+    throw fourError("FOUR_REGISTRY_CODE_EMPTY", "pinned Four Registry has no finalized runtime code");
+  }
+  if (normalizedCoreCode === "0x") {
+    throw fourError("FOUR_CORE_CODE_EMPTY", "pinned OpenFour Core has no finalized runtime code");
+  }
+  const multicallCodeHash = keccak256(normalizedMulticallCode).toLowerCase();
+  if (multicallCodeHash !== cache.expectedMulticall3CodeHash) {
+    throw fourError("FOUR_REGISTRY_MULTICALL_IDENTITY_MISMATCH", "pinned BSC Multicall3 runtime hash is invalid");
+  }
+  const verified = {
+    verifiedAtBlock: blockNumber,
+    registryCodeHash: keccak256(normalizedRegistryCode).toLowerCase(),
+    coreCodeHash: keccak256(normalizedCoreCode).toLowerCase(),
+    multicallCodeHash,
+  };
+  cache.set(provider, verified);
+  return verified;
+}
+
+async function readFourRegistryMulticallSnapshot(provider, block, runtimeCache) {
+  const runtimePromise = runtimeIdentityAt(provider, block.number, runtimeCache);
+  const headerReads = [
+    multicallRead(FOUR_REGISTRY_ADDRESS, FOUR_REGISTRY_INTERFACE, "openFourCore", [], "registry.openFourCore"),
+    multicallRead(FOUR_CORE_ADDRESS, FOUR_CORE_INTERFACE, "registry", [], "core.registry"),
+    multicallRead(FOUR_REGISTRY_ADDRESS, FOUR_REGISTRY_INTERFACE, "getPresetIds", [], "registry.getPresetIds"),
+  ];
+  const [runtime, headerResults] = await Promise.all([
+    runtimePromise,
+    executeFourRegistryMulticall(provider, headerReads, block.number),
+  ]);
+  const registryCore = address(headerResults[0]?.[0], "registry.openFourCore");
+  const coreRegistry = address(headerResults[1]?.[0], "core.registry");
+  if (registryCore !== FOUR_CORE_ADDRESS || coreRegistry !== FOUR_REGISTRY_ADDRESS) {
+    throw fourError("FOUR_REGISTRY_BINDING_MISMATCH", "pinned Registry and Core do not bind to each other at the finalized block");
+  }
+  if (!Array.isArray(headerResults[2]?.[0])) {
+    throw fourError("FOUR_REGISTRY_INVENTORY_INVALID", "getPresetIds returned a non-array");
+  }
+  const ids = headerResults[2][0].map((value, index) => uintString(value, `presetIds[${index}]`));
+  if (new Set(ids).size !== ids.length) {
+    throw fourError("FOUR_REGISTRY_INVENTORY_INVALID", "getPresetIds returned duplicate ids");
+  }
+  ids.sort((left, right) => (BigInt(left) < BigInt(right) ? -1 : BigInt(left) > BigInt(right) ? 1 : 0));
+  const presetReads = ids.flatMap((id) => [
+    multicallRead(FOUR_REGISTRY_ADDRESS, FOUR_REGISTRY_INTERFACE, "getPreset", [id], `preset ${id} tuple`),
+    multicallRead(FOUR_REGISTRY_ADDRESS, FOUR_REGISTRY_INTERFACE, "isPresetActive", [id], `preset ${id} active`),
+    multicallRead(FOUR_REGISTRY_ADDRESS, FOUR_REGISTRY_INTERFACE, "isPresetCreateEnabled", [id], `preset ${id} createEnabled`),
+  ]);
+  const presetResults = presetReads.length > 0
+    ? await executeFourRegistryMulticall(provider, presetReads, block.number)
+    : [];
+  const inventory = {};
+  for (let index = 0; index < ids.length; index += 1) {
+    const id = ids[index];
+    const preset = normalizePreset(presetResults[index * 3]?.[0], id);
+    const active = presetResults[index * 3 + 1]?.[0];
+    const createEnabled = presetResults[index * 3 + 2]?.[0];
+    if (typeof active !== "boolean" || typeof createEnabled !== "boolean"
+      || preset.active !== active || preset.createEnabled !== createEnabled) {
+      throw fourError("FOUR_REGISTRY_STATUS_MISMATCH", `preset ${id} tuple and status getters disagree at block ${block.number}`);
+    }
+    inventory[id] = preset;
+  }
+  return {
+    identity: {
+      chainId: FOUR_REGISTRY_CHAIN_ID,
+      registry: FOUR_REGISTRY_ADDRESS,
+      core: FOUR_CORE_ADDRESS,
+      block: clone(block),
+      registryCodeHash: runtime.registryCodeHash,
+      coreCodeHash: runtime.coreCodeHash,
+    },
+    inventory,
+  };
 }
 
 async function readFourRegistryTupleInventory(provider, blockNumber) {
@@ -3070,6 +3238,175 @@ function normalizeVerificationProviders(value, label, { logs = false } = {}) {
   return providers;
 }
 
+const TELEMETRY_PROVIDER_METHODS = new Set([
+  "getNetwork",
+  "getBlockNumber",
+  "getBlock",
+  "getHistoricalBlock",
+  "getCode",
+  "call",
+  "getLogs",
+  "getTransaction",
+  "getHistoricalTransaction",
+  "getTransactionReceipt",
+  "getHistoricalTransactionReceipt",
+  "send",
+]);
+
+function rateLimitFailure(error) {
+  const seen = new Set();
+  const queue = [error];
+  while (queue.length > 0) {
+    const candidate = queue.shift();
+    if (!candidate || seen.has(candidate)) continue;
+    if (typeof candidate === "string") {
+      if (/(?:\b429\b|rate.?limit|too many requests|compute units?)/iu.test(candidate)) return true;
+      continue;
+    }
+    if (typeof candidate !== "object") continue;
+    seen.add(candidate);
+    if (Number(candidate.status) === 429 || Number(candidate.code) === 429) return true;
+    queue.push(candidate.message, candidate.cause, candidate.error, candidate.info?.error);
+  }
+  return false;
+}
+
+function emptyRpcCounter() {
+  return { calls: 0, failures: 0, rateLimited: 0, latencyMs: 0 };
+}
+
+function incrementRpcCounter(counter, elapsedMs, error) {
+  counter.calls += 1;
+  counter.latencyMs += elapsedMs;
+  if (error) counter.failures += 1;
+  if (error && rateLimitFailure(error)) counter.rateLimited += 1;
+}
+
+async function acquirePhysicalHostBudget(entry, lane, method, rpcBudget) {
+  let totalWaitMs = 0;
+  const starts = rpcBudget.callStarts.get(entry.sourceId) || [];
+  rpcBudget.callStarts.set(entry.sourceId, starts);
+  while (true) {
+    if (rpcBudget.stopped) {
+      throw fourError("FOUR_REGISTRY_STOPPED", "Four Registry RPC budget wait was stopped");
+    }
+    const nowMs = rpcBudget.nowMs();
+    const cutoff = nowMs - RPC_BUDGET_WINDOW_MS;
+    while (starts.length > 0 && starts[0] <= cutoff) starts.shift();
+    if (starts.length < FOUR_REGISTRY_RPC_CALLS_PER_HOST_PER_MINUTE) {
+      starts.push(nowMs);
+      rpcBudget.onCallStart?.({ sourceId: entry.sourceId, lane, method, atMs: nowMs });
+      return totalWaitMs;
+    }
+    const waitMs = Math.max(1, starts[0] + RPC_BUDGET_WINDOW_MS - nowMs + 1);
+    totalWaitMs += waitMs;
+    await new Promise((resolve, reject) => {
+      let settled = false;
+      let timer = null;
+      const finish = (callback, value) => {
+        if (settled) return;
+        settled = true;
+        rpcBudget.waiters.delete(cancel);
+        if (timer !== null) clearTimeout(timer);
+        callback(value);
+      };
+      const cancel = () => finish(
+        reject,
+        fourError("FOUR_REGISTRY_STOPPED", "Four Registry RPC budget wait was stopped"),
+      );
+      rpcBudget.waiters.add(cancel);
+      if (rpcBudget.stopped) {
+        cancel();
+        return;
+      }
+      const delay = rpcBudget.sleep
+        ? Promise.resolve().then(() => rpcBudget.sleep(waitMs))
+        : new Promise((delayResolve) => { timer = setTimeout(delayResolve, waitMs); });
+      delay.then(
+        () => finish(resolve),
+        (error) => finish(reject, error),
+      );
+    });
+  }
+}
+
+function instrumentVerificationProvider(entry, lane, telemetry, rpcBudget, logger) {
+  const wrappers = new Map();
+  const provider = new Proxy(entry.provider, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target);
+      if (typeof value !== "function" || !TELEMETRY_PROVIDER_METHODS.has(property)) {
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+      if (wrappers.has(property)) return wrappers.get(property);
+      const wrapped = async (...args) => {
+        const method = property === "send" ? String(args[0] || "send") : String(property);
+        const throttledMs = await acquirePhysicalHostBudget(entry, lane, method, rpcBudget);
+        const startedAt = Date.now();
+        let failure = null;
+        try {
+          // Resolve again at invocation time. Tests and circuit-breaker
+          // facades may atomically replace a provider method after monitor
+          // construction; telemetry must not pin the stale implementation.
+          const current = Reflect.get(target, property, target);
+          return await current.apply(target, args);
+        } catch (error) {
+          failure = error;
+          throw error;
+        } finally {
+          const elapsedMs = Math.max(0, Date.now() - startedAt);
+          const host = telemetry.hosts[entry.sourceId] ||= {
+            ...emptyRpcCounter(),
+            throttleWaits: 0,
+            throttledMs: 0,
+            lanes: {},
+            methods: {},
+            lastErrorAt: null,
+            lastRateLimitAt: null,
+            lastRateLimitLogAtMs: 0,
+          };
+          const laneCounter = host.lanes[lane] ||= emptyRpcCounter();
+          const methodCounter = host.methods[method] ||= emptyRpcCounter();
+          incrementRpcCounter(host, elapsedMs, failure);
+          incrementRpcCounter(laneCounter, elapsedMs, failure);
+          incrementRpcCounter(methodCounter, elapsedMs, failure);
+          if (throttledMs > 0) {
+            host.throttleWaits += 1;
+            host.throttledMs += throttledMs;
+          }
+          if (failure) host.lastErrorAt = new Date().toISOString();
+          if (failure && rateLimitFailure(failure)) {
+            const nowMs = Date.now();
+            host.lastRateLimitAt = new Date(nowMs).toISOString();
+            if (nowMs - host.lastRateLimitLogAtMs >= 30_000) {
+              host.lastRateLimitLogAtMs = nowMs;
+              logger.error?.(`[four-registry][rpc] ${entry.sourceId} ${lane}/${method} rate limited`);
+            }
+          }
+        }
+      };
+      wrappers.set(property, wrapped);
+      return wrapped;
+    },
+  });
+  return { sourceId: entry.sourceId, provider };
+}
+
+function rpcTelemetrySnapshot(telemetry, rpcBudget) {
+  const snapshot = clone(telemetry);
+  snapshot.elapsedMs = Math.max(0, Date.now() - telemetry.startedAtMs);
+  snapshot.perHostRollingLimit = FOUR_REGISTRY_RPC_CALLS_PER_HOST_PER_MINUTE;
+  snapshot.rollingWindowMs = RPC_BUDGET_WINDOW_MS;
+  delete snapshot.startedAtMs;
+  const nowMs = rpcBudget.nowMs();
+  for (const [sourceId, host] of Object.entries(snapshot.hosts)) {
+    delete host.lastRateLimitLogAtMs;
+    host.rollingWindowCalls = (rpcBudget.callStarts.get(sourceId) || [])
+      .filter((startedAtMs) => startedAtMs > nowMs - RPC_BUDGET_WINDOW_MS).length;
+  }
+  return snapshot;
+}
+
 function exactConsensus(value, label) {
   const serialized = value.map((entry) => JSON.stringify(entry));
   if (new Set(serialized).size !== 1) {
@@ -3087,47 +3424,17 @@ async function consensusBlockAt(providers, blockNumber, label) {
   return exactConsensus(records, label);
 }
 
-async function consensusStateSnapshotAt(providers, blockNumber) {
+async function consensusStateSnapshotAt(providers, blockNumber, runtimeCache) {
   const snapshots = await Promise.all(providers.map(async ({ provider }) => {
     const before = blockRecord(await exactBlock(provider, blockNumber), blockNumber, "state snapshot start block");
-    const identity = await verifyFourRegistryIdentity(provider, blockNumber);
-    const inventory = await readFourRegistryInventory(provider, blockNumber);
+    const snapshot = await readFourRegistryMulticallSnapshot(provider, before, runtimeCache);
     const after = blockRecord(await exactBlock(provider, blockNumber), blockNumber, "state snapshot end block");
-    if (before.hash !== identity.block.hash || after.hash !== before.hash) {
+    if (after.hash !== before.hash) {
       throw fourError("FOUR_REGISTRY_FINALIZED_BLOCK_CHANGED", `state snapshot changed at block ${blockNumber}`);
     }
-    return { identity, inventory };
+    return snapshot;
   }));
   return exactConsensus(snapshots, `state snapshot ${blockNumber}`);
-}
-
-async function consensusIdentityAt(providers, blockNumber) {
-  const identities = await Promise.all(providers.map(async ({ provider }) => {
-    const before = blockRecord(await exactBlock(provider, blockNumber), blockNumber, "identity snapshot start block");
-    const identity = await verifyFourRegistryIdentity(provider, blockNumber);
-    const after = blockRecord(await exactBlock(provider, blockNumber), blockNumber, "identity snapshot end block");
-    if (before.hash !== identity.block.hash || after.hash !== before.hash) {
-      throw fourError("FOUR_REGISTRY_FINALIZED_BLOCK_CHANGED", `identity snapshot changed at block ${blockNumber}`);
-    }
-    return identity;
-  }));
-  return exactConsensus(identities, `identity snapshot ${blockNumber}`);
-}
-
-async function consensusTupleInventoryAt(providers, blockNumber, expectedBlockHash) {
-  const results = await Promise.all(providers.map(async ({ provider }) => {
-    const before = blockRecord(await exactBlock(provider, blockNumber), blockNumber, "preset inventory start block");
-    if (before.hash !== expectedBlockHash) {
-      throw fourError("FOUR_REGISTRY_FINALIZED_BLOCK_CHANGED", `preset inventory is not on block ${expectedBlockHash}`);
-    }
-    const inventory = await readFourRegistryTupleInventory(provider, blockNumber);
-    const after = blockRecord(await exactBlock(provider, blockNumber), blockNumber, "preset inventory end block");
-    if (after.hash !== before.hash) {
-      throw fourError("FOUR_REGISTRY_FINALIZED_BLOCK_CHANGED", `preset inventory changed during block ${blockNumber} reads`);
-    }
-    return inventory;
-  }));
-  return exactConsensus(results, `preset tuple inventory at block ${blockNumber}`);
 }
 
 async function consensusPresetAt(providers, presetId, blockNumber, expectedBlockHash) {
@@ -3326,20 +3633,34 @@ async function fetchCanonicalEvents(
   let registryLogs;
   let tokenLogs;
   try {
-    [registryLogs, tokenLogs] = await Promise.all([
-      queryConsensusLogs(
-        logVerificationProviders,
-        { address: FOUR_REGISTRY_ADDRESS, fromBlock, toBlock, topics: [FOUR_REGISTRY_EVENT_TOPICS] },
-        "Registry events",
-        toBlockHash,
-      ),
-      queryConsensusLogs(
-        logVerificationProviders,
-        { address: FOUR_CORE_ADDRESS, fromBlock, toBlock, topics: [FOUR_TOKEN_CREATED_TOPIC] },
-        "Core TokenCreated events",
-        toBlockHash,
-      ),
-    ]);
+    // One range proof and one eth_getLogs call per fixed host cover both pinned
+    // contracts. The address/topic cross-product is checked below before the
+    // agreed set is partitioned, so batching does not broaden accepted logs.
+    const combinedLogs = await queryConsensusLogs(
+      logVerificationProviders,
+      {
+        address: [FOUR_REGISTRY_ADDRESS, FOUR_CORE_ADDRESS],
+        fromBlock,
+        toBlock,
+        topics: [[...FOUR_REGISTRY_EVENT_TOPICS, FOUR_TOKEN_CREATED_TOPIC]],
+      },
+      "Registry/Core events",
+      toBlockHash,
+    );
+    const registryTopicSet = new Set(FOUR_REGISTRY_EVENT_TOPICS);
+    for (const log of combinedLogs) {
+      const topic0 = log.topics[0];
+      const acceptedRegistryLog = log.address === FOUR_REGISTRY_ADDRESS && registryTopicSet.has(topic0);
+      const acceptedCoreLog = log.address === FOUR_CORE_ADDRESS && topic0 === FOUR_TOKEN_CREATED_TOPIC;
+      if (!acceptedRegistryLog && !acceptedCoreLog) {
+        throw fourError(
+          "FOUR_REGISTRY_LOG_QUERY_INVALID",
+          `combined log filter returned an invalid address/topic pair ${log.address}:${topic0}`,
+        );
+      }
+    }
+    registryLogs = combinedLogs.filter((log) => log.address === FOUR_REGISTRY_ADDRESS);
+    tokenLogs = combinedLogs.filter((log) => log.address === FOUR_CORE_ADDRESS);
   } catch (error) {
     throw fourError("FOUR_REGISTRY_LOG_QUERY_FAILED", `finalized event query failed: ${error.message}`, error);
   }
@@ -3641,16 +3962,16 @@ function appendCheckpoint(candidate, block, presets) {
 
 export function createFourRegistryMonitor(config = {}, dependencies = {}) {
   const provider = assertFourRegistryProvider(dependencies.provider);
-  const logVerificationProviders = normalizeVerificationProviders(
+  const rawLogVerificationProviders = normalizeVerificationProviders(
     dependencies.logVerificationProviders,
     "logVerificationProviders",
     { logs: true },
   );
-  const stateVerificationProviders = normalizeVerificationProviders(
+  const rawStateVerificationProviders = normalizeVerificationProviders(
     dependencies.stateVerificationProviders,
     "stateVerificationProviders",
   );
-  const combinedVerificationProviders = [...logVerificationProviders, ...stateVerificationProviders]
+  const combinedVerificationProviders = [...rawLogVerificationProviders, ...rawStateVerificationProviders]
     .filter((entry, index, all) => all.findIndex((candidate) => candidate.sourceId === entry.sourceId) === index);
   if (combinedVerificationProviders.length < 3) {
     throw fourError(
@@ -3661,6 +3982,21 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
   const fsImpl = dependencies.fsImpl || fs;
   const clock = dependencies.now || Date.now;
   const logger = dependencies.logger || console;
+  const rpcTelemetry = { startedAtMs: Date.now(), hosts: {} };
+  const rpcBudget = {
+    callStarts: new Map(),
+    nowMs: dependencies.rpcBudgetNowForTesting || Date.now,
+    sleep: dependencies.rpcBudgetSleepForTesting,
+    onCallStart: dependencies.onRpcCallStartForTesting,
+    waiters: new Set(),
+    stopped: false,
+  };
+  const logVerificationProviders = rawLogVerificationProviders.map((entry) => (
+    instrumentVerificationProvider(entry, "log", rpcTelemetry, rpcBudget, logger)
+  ));
+  const stateVerificationProviders = rawStateVerificationProviders.map((entry) => (
+    instrumentVerificationProvider(entry, "state", rpcTelemetry, rpcBudget, logger)
+  ));
   const onEvent = dependencies.onEvent;
   const cancelPendingEvent = dependencies.cancelPendingEvent;
   if (typeof onEvent === "function" && typeof cancelPendingEvent !== "function") {
@@ -3679,16 +4015,19 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
     1,
   );
   const scanChunkSize = Math.max(1, Math.min(10_000, integer(
-    config.fourRegistryLogChunkSize ?? 10,
+    config.fourRegistryLogChunkSize ?? 64,
     "fourRegistryLogChunkSize",
   )));
   const reorgLookbackBlocks = Math.max(1, Math.min(10_000, integer(
     config.fourRegistryReorgLookbackBlocks ?? 64,
     "fourRegistryReorgLookbackBlocks",
   )));
-  const pollIntervalMs = Math.max(1_000, integer(config.fourRegistryPollIntervalMs ?? 30_000, "fourRegistryPollIntervalMs"));
-  const catchUpIntervalMs = Math.max(25, Math.min(pollIntervalMs, integer(
-    config.fourRegistryCatchUpIntervalMs ?? 1_000,
+  const pollIntervalMs = Math.max(
+    MIN_RPC_SCHEDULER_INTERVAL_MS,
+    integer(config.fourRegistryPollIntervalMs ?? 30_000, "fourRegistryPollIntervalMs"),
+  );
+  const catchUpIntervalMs = Math.max(MIN_RPC_SCHEDULER_INTERVAL_MS, Math.min(pollIntervalMs, integer(
+    config.fourRegistryCatchUpIntervalMs ?? MIN_RPC_SCHEDULER_INTERVAL_MS,
     "fourRegistryCatchUpIntervalMs",
   )));
   const setTimer = dependencies.setTimeoutImpl || setTimeout;
@@ -3698,6 +4037,10 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
   let activeCheck = null;
   let timer = null;
   let stopped = false;
+  const runtimeIdentityCache = new WeakMap();
+  runtimeIdentityCache.expectedMulticall3CodeHash = dependencies.multicall3CodeHashForTesting === undefined
+    ? FOUR_REGISTRY_MULTICALL3_CODE_HASH
+    : hash32(dependencies.multicall3CodeHashForTesting, "multicall3CodeHashForTesting");
 
   async function load() {
     if (!loaded) {
@@ -3911,7 +4254,11 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
       if (recoveryBlockNumber > finalizedHeadNumber) {
         throw fourError("FOUR_REGISTRY_HEAD_BEHIND", "finalized head is behind the durable first-run baseline");
       }
-      const recoverySnapshot = await consensusStateSnapshotAt(stateVerificationProviders, recoveryBlockNumber);
+      const recoverySnapshot = await consensusStateSnapshotAt(
+        stateVerificationProviders,
+        recoveryBlockNumber,
+        runtimeIdentityCache,
+      );
       baselineCheckpoint = {
         blockNumber: recoveryBlockNumber,
         blockHash: recoverySnapshot.identity.block.hash,
@@ -4188,7 +4535,11 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
       : Math.min(finalizedHeadNumber, state.cursor.nextBlock + scanChunkSize - 1);
 
     if (!state.initialized) {
-      const snapshot = await consensusStateSnapshotAt(stateVerificationProviders, scanNumber);
+      const snapshot = await consensusStateSnapshotAt(
+        stateVerificationProviders,
+        scanNumber,
+        runtimeIdentityCache,
+      );
       const finalizedBlock = snapshot.identity.block;
       const inventory = snapshot.inventory;
       const observedAt = iso(clock());
@@ -4251,19 +4602,21 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
       };
     }
 
-    const identity = await consensusIdentityAt(stateVerificationProviders, scanNumber);
-    const finalizedBlock = identity.block;
-    const [scanEndInventory, canonicalEvents] = await Promise.all([
-      consensusTupleInventoryAt(stateVerificationProviders, scanNumber, finalizedBlock.hash),
-      fetchCanonicalEvents(
-        logVerificationProviders,
-        stateVerificationProviders,
-        state.cursor.nextBlock,
-        scanNumber,
-        finalizedBlock.hash,
-        Object.keys(state.pendingConfirmations),
-      ),
-    ]);
+    const scanEndSnapshot = await consensusStateSnapshotAt(
+      stateVerificationProviders,
+      scanNumber,
+      runtimeIdentityCache,
+    );
+    const finalizedBlock = scanEndSnapshot.identity.block;
+    const scanEndInventory = scanEndSnapshot.inventory;
+    const canonicalEvents = await fetchCanonicalEvents(
+      logVerificationProviders,
+      stateVerificationProviders,
+      state.cursor.nextBlock,
+      scanNumber,
+      finalizedBlock.hash,
+      Object.keys(state.pendingConfirmations),
+    );
     const { registryEvents, tokenEvents } = canonicalEvents;
     const presetIds = Object.keys(scanEndInventory);
     const presetEventIds = new Set(registryEvents
@@ -4554,6 +4907,8 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
 
   async function stop() {
     stopped = true;
+    rpcBudget.stopped = true;
+    for (const cancel of [...rpcBudget.waiters]) cancel();
     if (timer) clearTimer(timer);
     timer = null;
     if (activeCheck) await activeCheck;
@@ -4564,8 +4919,12 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
     return clone(state);
   }
 
+  function getRpcTelemetry() {
+    return rpcTelemetrySnapshot(rpcTelemetry, rpcBudget);
+  }
+
   if (dependencies.autoStart === true) {
     void start().catch((error) => logger.error?.(`[four-registry] auto-start failed: ${error.message}`));
   }
-  return { check, start, stop, getState, stateFile };
+  return { check, start, stop, getState, getRpcTelemetry, stateFile };
 }

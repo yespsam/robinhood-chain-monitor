@@ -8,6 +8,10 @@ import {
   FOUR_CORE_INTERFACE,
   FOUR_REGISTRY_ADDRESS,
   FOUR_REGISTRY_INTERFACE,
+  FOUR_REGISTRY_MULTICALL3_ADDRESS,
+  FOUR_REGISTRY_MULTICALL3_CODE_HASH,
+  FOUR_REGISTRY_MULTICALL3_INTERFACE,
+  FOUR_REGISTRY_RPC_CALLS_PER_HOST_PER_MINUTE,
   atomicWriteFourRegistryState,
   classifyFourRegistryDelivery,
   createFourRegistryMonitor,
@@ -24,6 +28,7 @@ const ROUTER = "0x9999999999999999999999999999999999999999";
 const VALIDATOR = "0x3333333333333333333333333333333333333333";
 const AUTHOR = "0x4444444444444444444444444444444444444444";
 const MODULE_ADDRESSES = ["5", "6", "7", "8", "9", "a", "b"].map((digit) => `0x${digit.repeat(40)}`);
+const TEST_MULTICALL3_CODE_HASH = "0xa9c7ddf1ae0410c3a502ed7c7152ebd190fad85ab7fe3497c68869d5079c5219";
 
 function blockHash(number) {
   return `0x${BigInt(number).toString(16).padStart(64, "0")}`;
@@ -90,6 +95,7 @@ class FakeBscProvider {
     this.logQueries = [];
     this.blockHashOverrides = new Map();
     this.blockTimestampOverrides = new Map();
+    this.coreRegistry = FOUR_REGISTRY_ADDRESS;
   }
 
   setSnapshot(blockNumber, presets) {
@@ -125,14 +131,35 @@ class FakeBscProvider {
     return "0x6000600055";
   }
 
-  async call(request) {
-    this.calls.push({ name: "call", to: String(request.to).toLowerCase(), blockTag: request.blockTag, data: request.data });
+  async executeCall(request, track = true) {
+    if (track) this.calls.push({ name: "call", to: String(request.to).toLowerCase(), blockTag: request.blockTag, data: request.data });
     if (!Number.isSafeInteger(request.blockTag)) throw new Error("all contract reads must use an exact blockTag");
     const target = String(request.to).toLowerCase();
+    if (target === FOUR_REGISTRY_MULTICALL3_ADDRESS) {
+      const parsed = FOUR_REGISTRY_MULTICALL3_INTERFACE.parseTransaction({ data: request.data });
+      if (parsed.name !== "aggregate3") throw new Error(`unexpected Multicall3 call ${parsed.name}`);
+      const results = [];
+      for (const item of parsed.args[0]) {
+        try {
+          results.push({
+            success: true,
+            returnData: await this.executeCall({
+              to: item.target,
+              data: item.callData,
+              blockTag: request.blockTag,
+            }, false),
+          });
+        } catch (error) {
+          if (item.allowFailure !== true) throw error;
+          results.push({ success: false, returnData: "0x" });
+        }
+      }
+      return FOUR_REGISTRY_MULTICALL3_INTERFACE.encodeFunctionResult("aggregate3", [results]);
+    }
     if (target === FOUR_CORE_ADDRESS) {
       const parsed = FOUR_CORE_INTERFACE.parseTransaction({ data: request.data });
       if (parsed.name !== "registry") throw new Error(`unexpected Core call ${parsed.name}`);
-      return FOUR_CORE_INTERFACE.encodeFunctionResult("registry", [FOUR_REGISTRY_ADDRESS]);
+      return FOUR_CORE_INTERFACE.encodeFunctionResult("registry", [this.coreRegistry]);
     }
     if (target !== FOUR_REGISTRY_ADDRESS) throw new Error(`unexpected call target ${target}`);
     const parsed = FOUR_REGISTRY_INTERFACE.parseTransaction({ data: request.data });
@@ -152,10 +179,14 @@ class FakeBscProvider {
     throw new Error(`unexpected Registry call ${parsed.name}`);
   }
 
+  async call(request) { return this.executeCall(request); }
+
   async getLogs(filter) {
     this.logQueries.push(structuredClone(filter));
     const allowed = Array.isArray(filter.topics?.[0]) ? filter.topics[0] : [filter.topics?.[0]];
-    return this.logs.filter((log) => String(log.address).toLowerCase() === String(filter.address).toLowerCase()
+    const addresses = (Array.isArray(filter.address) ? filter.address : [filter.address])
+      .map((value) => String(value).toLowerCase());
+    return this.logs.filter((log) => addresses.includes(String(log.address).toLowerCase())
       && log.blockNumber >= filter.fromBlock
       && log.blockNumber <= filter.toBlock
       && allowed.map((topic) => String(topic).toLowerCase()).includes(String(log.topics[0]).toLowerCase()));
@@ -250,6 +281,7 @@ function providerFacade(provider, overrides = {}) {
 
 function verificationDependencies(provider) {
   return {
+    multicall3CodeHashForTesting: TEST_MULTICALL3_CODE_HASH,
     logVerificationProviders: [
       { sourceId: "log-a.test", provider: forwardingProvider(provider) },
       { sourceId: "log-b.test", provider: forwardingProvider(provider) },
@@ -649,18 +681,22 @@ test("wrong chain or broken fixed Registry/Core cross-link fails closed before c
 
   const broken = new FakeBscProvider({ head: 102 });
   broken.setSnapshot(100, [preset("1")]);
-  const originalCall = broken.call.bind(broken);
-  broken.call = async (request) => {
-    if (String(request.to).toLowerCase() === FOUR_CORE_ADDRESS) {
-      return FOUR_CORE_INTERFACE.encodeFunctionResult("registry", [CREATOR]);
-    }
-    return originalCall(request);
-  };
+  broken.coreRegistry = CREATOR;
   const mismatch = await fixture(t, broken);
   const mismatchResult = await mismatch.monitor.check();
   assert.equal(mismatchResult.status, "degraded");
   assert.equal(mismatchResult.errorCode, "FOUR_REGISTRY_BINDING_MISMATCH");
   await assert.rejects(fs.access(path.join(mismatch.dataDir, "four-registry-state.json")));
+
+  const wrongMulticall = new FakeBscProvider({ head: 102 });
+  wrongMulticall.setSnapshot(100, [preset("1")]);
+  const untrustedRuntime = await fixture(t, wrongMulticall, {
+    dependencies: { multicall3CodeHashForTesting: FOUR_REGISTRY_MULTICALL3_CODE_HASH },
+  });
+  const untrustedResult = await untrustedRuntime.monitor.check();
+  assert.equal(untrustedResult.status, "degraded");
+  assert.equal(untrustedResult.errorCode, "FOUR_REGISTRY_MULTICALL_IDENTITY_MISMATCH");
+  await assert.rejects(fs.access(path.join(untrustedRuntime.dataDir, "four-registry-state.json")));
 });
 
 test("a non-canonical receipt proof emits nothing and does not advance the cursor", async (t) => {
@@ -754,8 +790,236 @@ test("the monitor works through a createRpcPool-style raw eth_getLogs facade wit
   assert.equal(result.status, "ok");
   assert.equal(result.events.length, 1);
   assert.equal(result.events[0].kind, "four_registry_preset_added");
-  assert.equal(facade.rawFilters.length, 4);
+  assert.equal(facade.rawFilters.length, 2);
   assert.ok(facade.rawFilters.every((filter) => filter.fromBlock === "0x65" && filter.toBlock === "0x65"));
+  assert.ok(facade.rawFilters.every((filter) => Array.isArray(filter.address) && filter.address.length === 2));
+});
+
+test("Multicall3 keeps a 64-block steady scan within the fixed physical-host RPC budget", async (t) => {
+  const provider = new FakeBscProvider({ head: 102 });
+  provider.setSnapshot(100, Array.from({ length: 7 }, (_, index) => preset(String(1778027615800 + index))));
+  const dependencies = {
+    logVerificationProviders: [
+      { sourceId: "shared-budget.test", provider: forwardingProvider(provider) },
+      { sourceId: "log-budget.test", provider: forwardingProvider(provider) },
+    ],
+    stateVerificationProviders: [
+      { sourceId: "shared-budget.test", provider: forwardingProvider(provider) },
+      { sourceId: "state-budget.test", provider: forwardingProvider(provider) },
+    ],
+  };
+  const { monitor } = await fixture(t, provider, { dependencies });
+  assert.equal((await monitor.check()).status, "baseline");
+  const before = monitor.getRpcTelemetry();
+
+  provider.head = 166;
+  const result = await monitor.check();
+  const after = monitor.getRpcTelemetry();
+  assert.equal(result.status, "ok");
+  assert.equal(result.finalizedBlock.number, 164);
+  assert.equal(result.hasMore, false);
+
+  const delta = (host, lane) => (
+    (after.hosts[host].lanes[lane]?.calls || 0) - (before.hosts[host].lanes[lane]?.calls || 0)
+  );
+  assert.equal(delta("shared-budget.test", "state"), 7, "state quorum keeps anchor, pre/post snapshot, two multicalls, and commit checks");
+  assert.equal(delta("shared-budget.test", "log"), 2, "combined Registry/Core logs share one range hash and one eth_getLogs call");
+  assert.equal(
+    after.hosts["shared-budget.test"].calls - before.hosts["shared-budget.test"].calls,
+    9,
+    "the shared BlockMachine-style host stays below ten calls for a complete 64-block cycle",
+  );
+  assert.equal(after.hosts["shared-budget.test"].rateLimited, 0);
+});
+
+test("low-latency catch-up enforces the per-host rolling-minute ceiling across sixty 64-block cycles", async (t) => {
+  const provider = new FakeBscProvider({ head: 102 });
+  provider.setSnapshot(100, Array.from({ length: 7 }, (_, index) => preset(String(1778027615900 + index))));
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "four-registry-capacity-window-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  let rpcNowMs = 0;
+  const sharedCallStarts = [];
+  const timers = [];
+  const monitor = createFourRegistryMonitor({
+    dataDir,
+    fourRegistryConfirmations: 2,
+    fourRegistryLogChunkSize: 64,
+    fourRegistryPollIntervalMs: 1,
+    fourRegistryCatchUpIntervalMs: 1,
+  }, {
+    provider,
+    multicall3CodeHashForTesting: TEST_MULTICALL3_CODE_HASH,
+    logVerificationProviders: [
+      { sourceId: "shared-capacity.test", provider: forwardingProvider(provider) },
+      { sourceId: "log-capacity.test", provider: forwardingProvider(provider) },
+    ],
+    stateVerificationProviders: [
+      { sourceId: "shared-capacity.test", provider: forwardingProvider(provider) },
+      { sourceId: "state-capacity.test", provider: forwardingProvider(provider) },
+    ],
+    rpcBudgetNowForTesting: () => rpcNowMs,
+    rpcBudgetSleepForTesting: async (delayMs) => { rpcNowMs += delayMs; },
+    onRpcCallStartForTesting(record) {
+      if (record.sourceId === "shared-capacity.test") sharedCallStarts.push(record.atMs);
+    },
+    setTimeoutImpl(callback, delay) {
+      const timer = { callback, delay, cleared: false, unref() {} };
+      timers.push(timer);
+      return timer;
+    },
+    clearTimeoutImpl(timer) { timer.cleared = true; },
+    logger: { error() {} },
+  });
+
+  assert.equal((await monitor.start()).status, "baseline");
+  provider.head = 100 + 60 * 64 + 2;
+  for (let cycle = 0; cycle < 60; cycle += 1) {
+    const timer = timers.shift();
+    assert.ok(timer, `cycle ${cycle + 1} must remain scheduled`);
+    assert.equal(timer.delay, 5_000, "configured sub-five-second intervals are raised to the hard minimum");
+    rpcNowMs += timer.delay;
+    await timer.callback();
+  }
+  const state = await monitor.getState();
+  assert.equal(state.cursor.anchorBlock, provider.head - 2, "sixty cycles still consume sixty complete 64-block chunks");
+  for (let index = 0; index < sharedCallStarts.length; index += 1) {
+    const end = sharedCallStarts[index];
+    const callsInWindow = sharedCallStarts.filter((startedAt) => startedAt > end - 60_000 && startedAt <= end).length;
+    assert.ok(
+      callsInWindow <= FOUR_REGISTRY_RPC_CALLS_PER_HOST_PER_MINUTE,
+      `rolling window at ${end}ms used ${callsInWindow} shared-host calls`,
+    );
+  }
+  const telemetry = monitor.getRpcTelemetry();
+  assert.ok(telemetry.hosts["shared-capacity.test"].throttleWaits > 0, "the low-latency fixture must exercise the hard limiter");
+  assert.ok(telemetry.hosts["shared-capacity.test"].rollingWindowCalls <= FOUR_REGISTRY_RPC_CALLS_PER_HOST_PER_MINUTE);
+  assert.equal(telemetry.perHostRollingLimit, FOUR_REGISTRY_RPC_CALLS_PER_HOST_PER_MINUTE);
+  await monitor.stop();
+});
+
+test("stop cancels a saturated RPC budget wait without starting or committing the next call", async (t) => {
+  const provider = new FakeBscProvider({ head: 102 });
+  provider.setSnapshot(100, Array.from({ length: 7 }, (_, index) => preset(String(1778027616000 + index))));
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "four-registry-budget-stop-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  let rpcNowMs = 0;
+  let releaseBudgetWait;
+  const budgetWaitEntered = new Promise((resolve) => { releaseBudgetWait = resolve; });
+  const sharedCallStarts = [];
+  const monitor = createFourRegistryMonitor({
+    dataDir,
+    fourRegistryConfirmations: 2,
+    fourRegistryLogChunkSize: 1,
+  }, {
+    provider,
+    multicall3CodeHashForTesting: TEST_MULTICALL3_CODE_HASH,
+    logVerificationProviders: [
+      { sourceId: "shared-stop-budget.test", provider: forwardingProvider(provider) },
+      { sourceId: "log-stop-budget.test", provider: forwardingProvider(provider) },
+    ],
+    stateVerificationProviders: [
+      { sourceId: "shared-stop-budget.test", provider: forwardingProvider(provider) },
+      { sourceId: "state-stop-budget.test", provider: forwardingProvider(provider) },
+    ],
+    rpcBudgetNowForTesting: () => rpcNowMs,
+    rpcBudgetSleepForTesting: () => {
+      releaseBudgetWait();
+      return new Promise(() => {});
+    },
+    onRpcCallStartForTesting(record) {
+      if (record.sourceId === "shared-stop-budget.test") sharedCallStarts.push(record);
+    },
+    logger: { error() {} },
+  });
+
+  assert.equal((await monitor.check()).status, "baseline");
+  // Move beyond the baseline's rolling window, then consume exactly twelve
+  // ordinary nine-call cycles. The next cycle is stopped before its first RPC.
+  rpcNowMs = 60_001;
+  sharedCallStarts.length = 0;
+  provider.head = 100 + 20 + 2;
+  for (let cycle = 0; cycle < 12; cycle += 1) {
+    assert.equal((await monitor.check()).status, "ok");
+  }
+  assert.equal(sharedCallStarts.length, FOUR_REGISTRY_RPC_CALLS_PER_HOST_PER_MINUTE);
+  const anchorBeforeBlockedCycle = (await monitor.getState()).cursor.anchorBlock;
+  const active = monitor.check();
+  await budgetWaitEntered;
+
+  const stoppedQuickly = await Promise.race([
+    monitor.stop().then(() => true),
+    new Promise((resolve) => setTimeout(() => resolve(false), 250)),
+  ]);
+  assert.equal(stoppedQuickly, true, "stop must wake a saturated budget waiter immediately");
+  const activeResult = await active;
+  assert.equal(activeResult.status, "degraded");
+  assert.equal(activeResult.errorCode, "FOUR_REGISTRY_STOPPED");
+  assert.equal(sharedCallStarts.length, FOUR_REGISTRY_RPC_CALLS_PER_HOST_PER_MINUTE, "the blocked call never starts");
+  assert.equal((await monitor.getState()).cursor.anchorBlock, anchorBeforeBlockedCycle, "the interrupted cycle cannot commit a partial cursor");
+  assert.equal((await monitor.check()).status, "stopped");
+});
+
+test("physical-host telemetry exposes a 429 without advancing the durable cursor", async (t) => {
+  const provider = new FakeBscProvider({ head: 102 });
+  provider.setSnapshot(100, [preset("1778027615807")]);
+  let failLogs = false;
+  const limitedLogs = async (filter) => {
+    if (!failLogs) return provider.getLogs(filter);
+    const error = new Error("429 compute units exhausted");
+    error.status = 429;
+    throw error;
+  };
+  const dependencies = {
+    logVerificationProviders: [
+      { sourceId: "limited-rpc.test", provider: providerFacade(provider, { getLogs: limitedLogs }) },
+      { sourceId: "healthy-rpc.test", provider: forwardingProvider(provider) },
+    ],
+    stateVerificationProviders: [
+      { sourceId: "state-one.test", provider: forwardingProvider(provider) },
+      { sourceId: "state-two.test", provider: forwardingProvider(provider) },
+    ],
+  };
+  const { monitor, errors } = await fixture(t, provider, { dependencies });
+  await monitor.check();
+  failLogs = true;
+  provider.head = 103;
+  const result = await monitor.check();
+  assert.equal(result.status, "degraded");
+  assert.equal(result.errorCode, "FOUR_REGISTRY_LOG_QUERY_FAILED");
+  assert.equal((await monitor.getState()).cursor.anchorBlock, 100);
+  const telemetry = monitor.getRpcTelemetry();
+  assert.equal(telemetry.hosts["limited-rpc.test"].rateLimited, 1);
+  assert.equal(telemetry.hosts["limited-rpc.test"].lanes.log.rateLimited, 1);
+  assert.ok(errors.some((message) => message.includes("limited-rpc.test log/getLogs rate limited")));
+});
+
+test("a divergent Multicall3 state snapshot fails closed under the two fixed state readers", async (t) => {
+  const original = preset("1778027615808");
+  const changed = preset(original.id, { description: "different state result" });
+  const canonical = new FakeBscProvider({ head: 102 });
+  const divergent = new FakeBscProvider({ head: 102 });
+  canonical.setSnapshot(100, [original]);
+  divergent.setSnapshot(100, [original]);
+  const dependencies = {
+    logVerificationProviders: [
+      { sourceId: "log-state-a.test", provider: forwardingProvider(canonical) },
+      { sourceId: "log-state-b.test", provider: forwardingProvider(canonical) },
+    ],
+    stateVerificationProviders: [
+      { sourceId: "state-canonical.test", provider: forwardingProvider(canonical) },
+      { sourceId: "state-divergent.test", provider: forwardingProvider(divergent) },
+    ],
+  };
+  const { monitor } = await fixture(t, canonical, { dependencies });
+  assert.equal((await monitor.check()).status, "baseline");
+  canonical.head = 103;
+  divergent.head = 103;
+  canonical.setSnapshot(101, [original]);
+  divergent.setSnapshot(101, [changed]);
+  const result = await monitor.check();
+  assert.equal(result.status, "degraded");
+  assert.equal(result.errorCode, "FOUR_REGISTRY_STATE_CONSENSUS_MISMATCH");
+  assert.equal((await monitor.getState()).cursor.anchorBlock, 100);
 });
 
 test("policy/source suppression stays in the durable outbox and retries in lifecycle order", async (t) => {
@@ -1174,7 +1438,7 @@ test("a TokenCreated emitted by Core through a top-level router call keeps its c
   assert.equal(delivered.at(-1).evidence.canonical, true);
 });
 
-test("the scheduler switches to short catch-up polls and converges while the BSC head advances", async (t) => {
+test("the scheduler uses a capacity-safe catch-up cadence and converges while the BSC head advances", async (t) => {
   const existing = preset("1778027615723");
   const added = preset("1778027615732");
   const provider = new FakeBscProvider({ head: 102 });
@@ -1218,7 +1482,7 @@ test("the scheduler switches to short catch-up polls and converges while the BSC
     next = timers.shift();
     assert.ok(next, "scheduler must always leave exactly one next poll");
     if (next.delay === 30_000) break;
-    assert.equal(next.delay, 1_000, "a remaining backlog uses the short catch-up interval");
+    assert.equal(next.delay, 5_000, "a remaining backlog keeps the physical-host capacity reserve");
     provider.head += 1;
   }
   const state = await monitor.getState();

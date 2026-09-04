@@ -6,6 +6,8 @@ import {
   FOUR_CORE_INTERFACE,
   FOUR_REGISTRY_ADDRESS,
   FOUR_REGISTRY_INTERFACE,
+  FOUR_REGISTRY_MULTICALL3_ADDRESS,
+  FOUR_REGISTRY_MULTICALL3_INTERFACE,
   createFourRegistryMonitor,
 } from "../../src/four-registry-monitor.js";
 
@@ -14,6 +16,7 @@ export const FOUR_REGISTRY_FIXTURE_TOKEN = "0x2222222222222222222222222222222222
 const VALIDATOR = "0x3333333333333333333333333333333333333333";
 const AUTHOR = "0x4444444444444444444444444444444444444444";
 const MODULE_ADDRESSES = ["5", "6", "7", "8", "9", "a", "b"].map((digit) => `0x${digit.repeat(40)}`);
+const TEST_MULTICALL3_CODE_HASH = "0xa9c7ddf1ae0410c3a502ed7c7152ebd190fad85ab7fe3497c68869d5079c5219";
 
 export function fourRegistryBlockHash(number) {
   return `0x${BigInt(number).toString(16).padStart(64, "0")}`;
@@ -122,6 +125,27 @@ export class FourRegistryFakeProvider {
   async call(request) {
     if (!Number.isSafeInteger(request.blockTag)) throw new Error("all Registry reads need an exact blockTag");
     const target = String(request.to).toLowerCase();
+    if (target === FOUR_REGISTRY_MULTICALL3_ADDRESS) {
+      const parsed = FOUR_REGISTRY_MULTICALL3_INTERFACE.parseTransaction({ data: request.data });
+      if (parsed.name !== "aggregate3") throw new Error(`unexpected Multicall3 call ${parsed.name}`);
+      const results = [];
+      for (const item of parsed.args[0]) {
+        try {
+          results.push({
+            success: true,
+            returnData: await this.call({
+              to: item.target,
+              data: item.callData,
+              blockTag: request.blockTag,
+            }),
+          });
+        } catch (error) {
+          if (item.allowFailure !== true) throw error;
+          results.push({ success: false, returnData: "0x" });
+        }
+      }
+      return FOUR_REGISTRY_MULTICALL3_INTERFACE.encodeFunctionResult("aggregate3", [results]);
+    }
     if (target === FOUR_CORE_ADDRESS) {
       const parsed = FOUR_CORE_INTERFACE.parseTransaction({ data: request.data });
       if (parsed.name !== "registry") throw new Error(`unexpected Core call ${parsed.name}`);
@@ -147,7 +171,9 @@ export class FourRegistryFakeProvider {
 
   async getLogs(filter) {
     const allowed = Array.isArray(filter.topics?.[0]) ? filter.topics[0] : [filter.topics?.[0]];
-    return this.logs.filter((log) => String(log.address).toLowerCase() === String(filter.address).toLowerCase()
+    const addresses = (Array.isArray(filter.address) ? filter.address : [filter.address])
+      .map((address) => String(address).toLowerCase());
+    return this.logs.filter((log) => addresses.includes(String(log.address).toLowerCase())
       && log.blockNumber >= filter.fromBlock
       && log.blockNumber <= filter.toBlock
       && allowed.map((topic) => String(topic).toLowerCase()).includes(String(log.topics[0]).toLowerCase()));
@@ -202,6 +228,7 @@ function forwardingProvider(provider) {
 
 export function fourRegistryVerificationDependencies(provider) {
   return {
+    multicall3CodeHashForTesting: TEST_MULTICALL3_CODE_HASH,
     logVerificationProviders: [
       { sourceId: "fixture-log-a.test", provider: forwardingProvider(provider) },
       { sourceId: "fixture-log-b.test", provider: forwardingProvider(provider) },

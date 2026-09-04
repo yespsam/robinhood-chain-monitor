@@ -190,9 +190,9 @@ export const config = {
   // source, with a silent first baseline and durable post-baseline events.
   fourRegistryMonitorEnabled,
   fourRegistryPollIntervalMs: integer("FOUR_REGISTRY_POLL_INTERVAL_MS", 5_000),
-  fourRegistryCatchUpIntervalMs: integer("FOUR_REGISTRY_CATCH_UP_INTERVAL_MS", 1_000),
+  fourRegistryCatchUpIntervalMs: integer("FOUR_REGISTRY_CATCH_UP_INTERVAL_MS", 5_000),
   fourRegistryConfirmations: integer("FOUR_REGISTRY_CONFIRMATIONS", 3),
-  fourRegistryLogChunkSize: integer("FOUR_REGISTRY_LOG_CHUNK_SIZE", 10),
+  fourRegistryLogChunkSize: integer("FOUR_REGISTRY_LOG_CHUNK_SIZE", 64),
   fourRegistryReorgLookbackBlocks: integer("FOUR_REGISTRY_REORG_LOOKBACK_BLOCKS", 64),
   fourRegistryLogRpcUrls: parseDistinctRpcOrigins(
     "FOUR_REGISTRY_LOG_RPC_URLS",
