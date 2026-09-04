@@ -1369,6 +1369,10 @@ test("successful Flap deep processing atomically replaces pending raw evidence w
     confirmedAt: new Date(clock).toISOString(),
     observedAt: new Date(clock).toISOString(),
   }]), 1);
+  snapshot = await monitor.getState();
+  assert.ok(snapshot.realtimePendingEntries[transactionHash],
+    "registration durably admits the processed-hot replay before unified deep work");
+  await monitor.processRealtimeQueue();
   await monitor.awaitIdle();
   snapshot = await monitor.getState();
   const activation = Object.values(snapshot.officialSources.flap.featureActivations)[0];
@@ -2066,6 +2070,50 @@ test("getCode timeout and 403 circuits are method-only and leave the same host l
     assert.equal(await pool.getBlockNumber(), 123);
     pool.destroy();
   }
+});
+
+test("mixed archive 429 and standard method failure retain an independent host cooldown", async () => {
+  let clock = Date.parse("2026-09-05T00:00:00.000Z");
+  const calls = [];
+  const pool = createRpcPool(["https://mixed-standard.test"], ["https://mixed-archive.test"], 1, {
+    now: () => clock,
+    requestTimeoutMs: 1_000,
+    hostCircuitRegistry: new Map(),
+    providerFactory: (_url, context) => ({
+      async getCode() {
+        calls.push(context.kind);
+        if (context.kind === "archive") {
+          const error = new Error("HTTP 429");
+          error.status = 429;
+          error.retryAfterMs = 12_000;
+          throw error;
+        }
+        throw new Error("getCode timed out after 1000ms");
+      },
+    }),
+  });
+  let firstError;
+  await assert.rejects(
+    () => pool.getCode("0x1111111111111111111111111111111111111111", 100),
+    (error) => {
+      firstError = error;
+      return error.rpcFailureScope === "method"
+        && error.rpcOperation === "getCode"
+        && error.rpcHostRetryAfterMs === 12_000;
+    },
+  );
+  assert.deepEqual(calls, ["archive", "standard"]);
+  assert.match(firstError.rpcHostFailure, /429/);
+
+  clock += 1;
+  await assert.rejects(
+    () => pool.getCode("0x1111111111111111111111111111111111111111", 100),
+    (error) => error.rpcFailureScope === "method"
+      && error.rpcHostRetryAfterMs >= 11_999,
+  );
+  assert.deepEqual(calls, ["archive", "standard"],
+    "the aggregate host evidence prevents a physical archive probe while its 429 is active");
+  pool.destroy();
 });
 
 test("a host-global 429 permits only one cross-method half-open probe", async () => {
@@ -3873,6 +3921,7 @@ test("a Board-confirmed Flap quote pool activates exactly one locally safe first
 
 test("Flap Board replay keeps the earliest exact creation after more than 100 newer launcher tokens", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-flap-hot-index-volume-"));
+  const walFile = path.join(dataDir, "bsc-launchpad-state.json.wal");
   const clock = Date.parse("2026-08-10T14:00:00.000Z");
   const launcher = "0x90497450f2a706f1951b5bdda52b4e5d16f34c06";
   const vaultFactory = "0x6666666666666666666666666666666666666666";
@@ -3917,6 +3966,7 @@ test("Flap Board replay keeps the earliest exact creation after more than 100 ne
     version: 6,
     initializedAt: new Date(clock - 60 * 60_000).toISOString(),
     lastFinalizedBlock: 1_200,
+    realtimeTailNextBlock: 1_201,
     launchers: {
       [launcher]: {
         launcher,
@@ -3980,6 +4030,8 @@ test("Flap Board replay keeps the earliest exact creation after more than 100 ne
     externalAttribution: false,
     provider,
     now: () => clock,
+    backgroundSetTimeoutImpl: () => ({ unref() {} }),
+    backgroundClearTimeoutImpl() {},
     logger: { error() {}, info() {} },
     sendAlertsImpl: async (_config, event) => { alerts.push(event); return { status: "delivered" }; },
   });
@@ -4003,20 +4055,45 @@ test("Flap Board replay keeps the earliest exact creation after more than 100 ne
     confirmedAt: new Date(clock).toISOString(),
     observedAt: new Date(clock).toISOString(),
   }]), 1);
-  const after = await monitor.getState();
-  const activation = Object.values(after.officialSources.flap.featureActivations)[0];
+  let after = await monitor.getState();
+  let activation = Object.values(after.officialSources.flap.featureActivations)[0];
+  assert.deepEqual(requestedTransactions, [], "registration only durably admits the replay owner");
+  assert.equal(after.seenTransactions[first.transactionHash], undefined);
+  assert.ok(after.realtimePendingEntries[first.transactionHash]);
+  assert.equal(after.realtimePendingEntries[first.transactionHash].featureActivationReplayKey, activation.key);
+  assert.equal(alerts.length, 0);
+  let frames = (await fs.readFile(walFile, "utf8")).trim().split("\n").filter(Boolean).map(JSON.parse);
+  assert.ok(frames.some((frame) => {
+    const paths = frame.ops.map((operation) => operation.path.join("."));
+    return frame.ops.some((operation) => operation.op === "delete"
+      && operation.path.join(".") === `seenTransactions.${first.transactionHash}`)
+      && paths.includes(`realtimePendingEntries.${first.transactionHash}`)
+      && paths.some((value) => value.endsWith(`featureActivations.${activation.key}.replayLastAttemptAt`));
+  }), "seen reopening and exact replay admission share one WAL revision");
+
+  await monitor.processRealtimeQueue();
+  after = await monitor.getState();
+  activation = Object.values(after.officialSources.flap.featureActivations)[0];
   assert.deepEqual(requestedTransactions, [first.transactionHash]);
   assert.equal(alerts.length, 1);
   assert.equal(alerts[0].transactionHash, first.transactionHash);
   assert.equal(alerts[0].tokens[0].token.toLowerCase(), first.token);
   assert.equal(activation.firstTokenTransactionHash, first.transactionHash);
-  assert.ok(activation.replayCompletedAt);
+  assert.ok(activation.replayAttemptedTransactionHashes.includes(first.transactionHash));
+  assert.equal(after.realtimePendingEntries[first.transactionHash], undefined);
+  frames = (await fs.readFile(walFile, "utf8")).trim().split("\n").filter(Boolean).map(JSON.parse);
+  assert.ok(frames.some((frame) => {
+    const paths = frame.ops.map((operation) => operation.path.join("."));
+    return frame.ops.some((operation) => operation.op === "delete"
+      && operation.path.join(".") === `realtimePendingEntries.${first.transactionHash}`)
+      && paths.some((value) => value.endsWith(`featureActivations.${activation.key}.replayAttemptedTransactionHashes`));
+  }), "deep success, replay attempted ownership, and pending cleanup share one WAL revision");
   assert.equal(after.officialSources.flap.creationEventHotIndex.length, 151);
 });
 
-test("a failed new Flap activation replay rejects registration and remains retryable", async (t) => {
+test("a failed admitted Flap activation replay remains durable and retryable", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-flap-replay-checkpoint-"));
-  const clock = Date.parse("2026-08-10T14:00:00.000Z");
+  let clock = Date.parse("2026-08-10T14:00:00.000Z");
   const launcher = "0x90497450f2a706f1951b5bdda52b4e5d16f34c06";
   const token = "0x1111111111111111111111111111111111111111";
   const vault = "0x2222222222222222222222222222222222222222";
@@ -4029,6 +4106,7 @@ test("a failed new Flap activation replay rejects registration and remains retry
     version: 6,
     initializedAt: new Date(clock - 60 * 60_000).toISOString(),
     lastFinalizedBlock: 100,
+    realtimeTailNextBlock: 101,
     launchers: {},
     seenTransactions: { [transactionHash]: 99 },
     officialSources: { flap: { creationEventHotIndex: [{
@@ -4070,6 +4148,8 @@ test("a failed new Flap activation replay rejects registration and remains retry
     externalAttribution: false,
     provider,
     now: () => clock,
+    backgroundSetTimeoutImpl: () => ({ unref() {} }),
+    backgroundClearTimeoutImpl() {},
     logger: { error() {}, info() {} },
     sendAlertsImpl: async (_config, event) => { alerts.push(event); return { status: "delivered" }; },
   });
@@ -4085,16 +4165,26 @@ test("a failed new Flap activation replay rejects registration and remains retry
     confirmedAt: new Date(clock).toISOString(),
     observedAt: new Date(clock).toISOString(),
   };
-  await assert.rejects(monitor.registerFlapFeatureActivations([record]), /Flap replay RPC unavailable/);
+  assert.equal(await monitor.registerFlapFeatureActivations([record]), 1);
   let activation = Object.values((await monitor.getState()).officialSources.flap.featureActivations)[0];
+  let snapshot = await monitor.getState();
   assert.equal(activation.replayCompletedAt, null);
   assert.equal(activation.firstTokenTransactionHash, null);
-  assert.match(activation.replayLastError, /Flap replay RPC unavailable/);
+  assert.ok(snapshot.realtimePendingEntries[transactionHash]);
+  assert.equal(snapshot.seenTransactions[transactionHash], undefined);
+  await monitor.processRealtimeQueue();
+  snapshot = await monitor.getState();
+  assert.ok(snapshot.realtimePendingEntries[transactionHash]);
+  assert.equal(snapshot.transactionFailures[transactionHash].attempts, 1);
+  assert.equal(activation.replayAttemptedTransactionHashes.includes(transactionHash), false);
   failReplay = false;
+  clock += 1_001;
   assert.equal(await monitor.registerFlapFeatureActivations([record]), 0, "the existing activation retries without being recreated");
+  await monitor.processRealtimeQueue();
   activation = Object.values((await monitor.getState()).officialSources.flap.featureActivations)[0];
   assert.equal(alerts.length, 1);
   assert.equal(activation.firstTokenTransactionHash, transactionHash);
+  assert.ok(activation.replayAttemptedTransactionHashes.includes(transactionHash));
 });
 
 test("Flap replay shares one persisted RPC backoff across features and resumes without losing candidates", async (t) => {
@@ -4128,6 +4218,7 @@ test("Flap replay shares one persisted RPC backoff across features and resumes w
     version: 6,
     initializedAt: new Date(current - 60 * 60_000).toISOString(),
     lastFinalizedBlock: 100,
+    realtimeTailNextBlock: 101,
     launchers: {},
     seenTransactions: Object.fromEntries(records.map((record) => [record.transactionHash, record.blockNumber])),
     officialSources: {
@@ -4205,6 +4296,8 @@ test("Flap replay shares one persisted RPC backoff across features and resumes w
     externalAttribution: false,
     provider,
     now: () => current,
+    backgroundSetTimeoutImpl: () => ({ unref() {} }),
+    backgroundClearTimeoutImpl() {},
     logger: { error(message) { errors.push(String(message)); }, info() {} },
     atomicWriteImpl: async (file, snapshot) => {
       writes += 1;
@@ -4226,58 +4319,64 @@ test("Flap replay shares one persisted RPC backoff across features and resumes w
     observedAt: new Date(current).toISOString(),
   }));
 
-  let monitor = createBscLaunchpadMonitor({ dataDir }, dependencies);
+  const monitorConfig = {
+    dataDir,
+    bscEntryRpcConcurrency: 1,
+    bscProcessBatchSize: 1,
+    bscBacklogProcessBatchSize: 1,
+  };
+  let monitor = createBscLaunchpadMonitor(monitorConfig, dependencies);
   t.after(async () => {
     await monitor?.stop();
     await fs.rm(dataDir, { recursive: true, force: true });
   });
-  await assert.rejects(
-    monitor.registerFlapFeatureActivations(activationRecords),
-    /providers cooling down/,
-  );
+  assert.equal(await monitor.registerFlapFeatureActivations(activationRecords), 2);
   let snapshot = await monitor.getState();
+  assert.equal(Object.keys(snapshot.realtimePendingEntries).length, 2);
+  assert.equal(transactionRequests.length, 0, "registration performs no deep RPC");
+  await monitor.processRealtimeQueue();
+  snapshot = await monitor.getState();
   assert.equal(transactionRequests.length, 1, "the first shared outage stops the remaining feature probes");
-  assert.equal(snapshot.officialSources.flap.replayControl.nextRetryAt, "2026-08-24T10:22:17.000Z");
-  assert.equal(Object.values(snapshot.officialSources.flap.featureActivations).filter((activation) => activation.replayLastAttemptAt).length, 1);
+  assert.equal(snapshot._health.backgroundDeepRpc.nextRetryAt, "2026-08-24T10:22:17.000Z");
+  assert.equal(Object.keys(snapshot.realtimePendingEntries).length, 2);
   const writesAfterFailure = writes;
-  assert.equal((await monitor.replayFlapFeatureActivations()).reason, "backoff");
-  assert.equal((await monitor.replayFlapFeatureActivations()).reason, "backoff");
+  await monitor.replayFlapFeatureActivations();
+  await monitor.processRealtimeQueue();
   assert.equal(transactionRequests.length, 1);
   assert.equal(writes, writesAfterFailure, "cooling wakeups must not rewrite the multi-megabyte state");
-  assert.equal(errors.filter((message) => message.startsWith("[bsc][flap] activation replay")).length, 1);
 
   await monitor.stop();
-  monitor = createBscLaunchpadMonitor({ dataDir }, dependencies);
+  monitor = createBscLaunchpadMonitor(monitorConfig, dependencies);
   await monitor.getState();
   const writesAfterRestart = writes;
-  assert.equal((await monitor.replayFlapFeatureActivations()).reason, "backoff");
+  await monitor.processRealtimeQueue();
   assert.equal(transactionRequests.length, 1, "a restart must restore the feature-lane deadline");
   assert.equal(writes, writesAfterRestart);
 
   current += 5_000;
-  await monitor.replayFlapFeatureActivations();
+  await monitor.processRealtimeQueue();
   assert.equal(transactionRequests.length, 2, "the due lane permits exactly the first feature probe");
-  assert.equal(errors.filter((message) => message.startsWith("[bsc][flap] activation replay")).length, 1,
-    "the same shared outage fingerprint is logged at most once per minute");
   snapshot = await monitor.getState();
-  assert.equal(snapshot.officialSources.flap.replayControl.nextRetryAt, "2026-08-24T10:22:22.000Z");
+  assert.equal(snapshot._health.backgroundDeepRpc.nextRetryAt, "2026-08-24T10:22:22.000Z");
   assert.equal(Object.values(snapshot.officialSources.flap.featureActivations).every((activation) => !activation.replayCompletedAt), true);
 
   cooling = false;
   current += 5_000;
-  await monitor.replayFlapFeatureActivations();
+  await monitor.processRealtimeQueue();
+  current += 1_001;
+  await monitor.processRealtimeQueue();
   snapshot = await monitor.getState();
   assert.equal(alerts.length, 2);
   assert.equal(Object.values(snapshot.officialSources.flap.featureActivations).every((activation) => activation.firstTokenTransactionHash), true);
-  assert.equal(snapshot.officialSources.flap.replayControl.status, "healthy");
-  assert.equal(snapshot.officialSources.flap.replayControl.nextRetryAt, null);
+  assert.ok(Date.parse(snapshot._health.backgroundDeepRpc.nextRetryAt) <= current,
+    "the persisted host deadline no longer blocks either admitted replay owner");
   assert.equal(snapshot.officialSources.flap.creationEventHotIndex.length, 2, "replay recovery must not delete retained candidates");
 });
 
-test("a background Flap activation replay preserves the durable checkpoint and retries idempotently", async (t) => {
+test("a background Flap activation replay preserves its durable admission and retries idempotently", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-flap-background-replay-"));
   const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
-  const clock = Date.parse("2026-08-10T14:30:00.000Z");
+  let clock = Date.parse("2026-08-10T14:30:00.000Z");
   const launcher = "0x90497450f2a706f1951b5bdda52b4e5d16f34c06";
   const token = "0x1111111111111111111111111111111111111111";
   const vault = "0x2222222222222222222222222222222222222222";
@@ -4290,6 +4389,7 @@ test("a background Flap activation replay preserves the durable checkpoint and r
     version: 6,
     initializedAt: new Date(clock - 60 * 60_000).toISOString(),
     lastFinalizedBlock: 100,
+    realtimeTailNextBlock: 101,
     launchers: {},
     seenTransactions: { [transactionHash]: 99 },
     officialSources: { flap: { creationEventHotIndex: [{
@@ -4345,7 +4445,7 @@ test("a background Flap activation replay preserves the durable checkpoint and r
     now: () => clock,
     logger: {
       error(message) {
-        if (/\[bsc\]\[flap\] activation replay/.test(String(message))) signalReplayFailureLogged();
+        if (/\[bsc\]\[realtime\]/.test(String(message))) signalReplayFailureLogged();
       },
       info() {},
     },
@@ -4387,20 +4487,26 @@ test("a background Flap activation replay preserves the durable checkpoint and r
   assert.ok(activation, "the activation is durable while the background RPC is still blocked");
   assert.equal(activation.replayCompletedAt, null);
   assert.equal(activation.firstTokenTransactionHash, null);
+  assert.ok(durable.realtimePendingEntries[transactionHash]);
   assert.equal(alerts.length, 0);
 
   releaseFirstReplay();
   await waitUntil(async () => {
-    activation = Object.values((await monitor.getState()).officialSources.flap.featureActivations)[0];
-    return /Flap background replay RPC unavailable/.test(activation?.replayLastError || "");
+    const snapshot = await monitor.getState();
+    return /Flap background replay RPC unavailable/.test(snapshot?._health?.realtimeQueue?.lastError || "");
   });
-  assert.match(activation.replayLastError, /Flap background replay RPC unavailable/);
+  let failed = await monitor.getState();
+  activation = Object.values(failed.officialSources.flap.featureActivations)[0];
+  assert.match(failed._health.realtimeQueue.lastError, /Flap background replay RPC unavailable/);
   assert.equal(activation.replayCompletedAt, null);
+  assert.ok(failed.realtimePendingEntries[transactionHash]);
   await replayFailureLogged;
 
   failReplay = false;
+  clock += 1_001;
   assert.equal(await monitor.registerFlapFeatureActivations([record], { awaitReplay: false }), 0,
     "retrying a persisted activation must not recreate it");
+  await monitor.processRealtimeQueue();
   await waitUntil(async () => {
     activation = Object.values((await monitor.getState()).officialSources.flap.featureActivations)[0];
     return activation?.firstTokenTransactionHash === transactionHash;
@@ -4414,7 +4520,183 @@ test("a background Flap activation replay preserves the durable checkpoint and r
   assert.equal(alerts.length, 1, "a repeated durable handoff must not alert the first token twice");
 });
 
-test("stop aborts a blocked Flap replay and a restart resumes its durable candidate", async (t) => {
+test("focus3 Flap activation replay performs zero deep RPC until two healthy tail batches", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-flap-replay-tail-priority-"));
+  let clock = Date.parse("2026-09-04T13:30:00.000Z");
+  const launcher = "0x90497450f2a706f1951b5bdda52b4e5d16f34c06";
+  const token = "0x1811111111111111111111111111111111111111";
+  const vault = "0x2822222222222222222222222222222222222222";
+  const vaultFactory = "0x3833333333333333333333333333333333333333";
+  const creator = "0x4844444444444444444444444444444444444444";
+  const transactionHash = `0x${"58".repeat(32)}`;
+  const blockHash = `0x${"68".repeat(32)}`;
+  const observedAt = new Date(clock - 60_000).toISOString();
+  await fs.writeFile(path.join(dataDir, "bsc-launchpad-state.json"), JSON.stringify({
+    version: 6,
+    initializedAt: new Date(clock - 60 * 60_000).toISOString(),
+    lastFinalizedBlock: 77,
+    realtimeTailNextBlock: 78,
+    realtimeTailInitializedAt: new Date(clock - 60_000).toISOString(),
+    launchers: {},
+    seenTransactions: { [transactionHash]: 98 },
+    officialSources: { flap: { creationEventHotIndex: [{
+      launcher,
+      token,
+      transactionHash,
+      blockHash,
+      blockNumber: 98,
+      transactionIndex: 0,
+      logIndex: 0,
+      topic: FLAP_VAULT_TOKEN_CREATED_TOPIC,
+      observedAt,
+      indexedAt: observedAt,
+      vaultFactory,
+      quoteAssets: [],
+    }] } },
+    _health: { realtimeTail: {
+      status: "healthy",
+      consecutiveFailures: 0,
+      nextBlock: 78,
+      lastSuccessAt: new Date(clock - 1_000).toISOString(),
+    } },
+  }));
+  const iface = new Interface(["event FlapTaxVaultTokenCreated(address indexed token,address indexed vault,address indexed vaultFactory)"]);
+  const encoded = iface.encodeEventLog(iface.getEvent("FlapTaxVaultTokenCreated"), [token, vault, vaultFactory]);
+  const log = {
+    address: launcher,
+    topics: encoded.topics,
+    data: encoded.data,
+    transactionHash,
+    blockHash,
+    blockNumber: 98,
+    transactionIndex: 0,
+    logIndex: 0,
+    removed: false,
+  };
+  const deepTransactions = [];
+  const alerts = [];
+  const provider = {
+    async getNetwork() { return { chainId: 56n }; },
+    async getBlockNumber() { return 100; },
+    async getTransaction(hash) {
+      deepTransactions.push(hash);
+      return { hash, blockNumber: 98, blockHash, index: 0, transactionIndex: 0, to: launcher, from: creator, data: `0x8cb5772c${"0".repeat(64)}` };
+    },
+    async getTransactionReceipt(hash) {
+      return { transactionHash: hash, blockHash, status: 1, blockNumber: 98, index: 0, transactionIndex: 0, logs: [log] };
+    },
+    async getBlock(number) {
+      return { number: Number(number), hash: blockHash, timestamp: Math.floor(Date.parse(observedAt) / 1_000), transactions: [transactionHash] };
+    },
+    async getCode(address) { return String(address).toLowerCase() === token ? `0x${"6000".repeat(300)}` : `0x${"6000".repeat(400)}`; },
+    async getStorage() { return "0x"; },
+    async call() { return "0x"; },
+    async send() { return []; },
+    destroy() {},
+  };
+  class IdleWebSocket { addEventListener() {} close() {} }
+  const fetchImpl = async (url) => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ code: 0, data: url.includes("/address")
+      ? [{ name: "TokenManager3", address: "0x5c952063c7fc8610ffdb798152d69f0b9550762b", networkCode: "BSC" }]
+      : [{ id: 1, name: "Baseline", tag: "Curve", codeType: "SOLIDITY", descr: "base", status: "PUBLISHED" }] }),
+  });
+  const monitor = createBscLaunchpadMonitor({
+    dataDir,
+    monitorScope: "focus3",
+    bscMonitorEnabled: true,
+    bscWsUrl: "wss://example.invalid",
+    bscRpcUrl: "https://example.invalid",
+    bscConfirmations: 2,
+    bscHttpHeadPollIntervalMs: 60_000,
+    bscOfficialPollIntervalMs: 60_000,
+    bscDeferredRetryIntervalMs: 60_000,
+  }, {
+    autoStart: false,
+    externalAttribution: false,
+    provider,
+    WebSocketImpl: IdleWebSocket,
+    fetchImpl,
+    now: () => clock,
+    backgroundSetTimeoutImpl: () => ({ unref() {} }),
+    backgroundClearTimeoutImpl() {},
+    logger: { error() {}, info() {} },
+    sendAlertsImpl: async (_config, event) => { alerts.push(event); return { status: "delivered" }; },
+    ...disabledJournalTimerDependencies(),
+  });
+  t.after(async () => {
+    await monitor.stop();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+  assert.equal(await monitor.registerFlapFeatureActivations([{
+    pool: { identity: `vault:INDEX:${vaultFactory}`, category: "INDEX", vaultFactory, sourceUrl: "https://flap.sh/board" },
+    confirmed: true,
+    observations: 2,
+    firstObservedAt: new Date(clock - 30_000).toISOString(),
+    confirmedAt: new Date(clock).toISOString(),
+    observedAt: new Date(clock).toISOString(),
+  }]), 1);
+  // Register before start so the initial assertion observes the configured
+  // lag-21 cursor before activation work can run. The production 25ms tail
+  // timer may own any of the rebuilding batches, so the remainder of this
+  // fixture follows durable tail state rather than assuming that four direct
+  // calls correspond to four completed scans.
+  await monitor.start();
+  let snapshot = await monitor.getState();
+  assert.ok(snapshot.realtimePendingEntries[transactionHash]);
+  await monitor.processRealtimeQueue();
+  assert.deepEqual(deepTransactions, [], "a nominally healthy tail at lag 21 blocks admitted replay deep reads");
+
+  let firstHealthyObserved = false;
+  for (let attempt = 0; attempt < 40 && !firstHealthyObserved; attempt += 1) {
+    snapshot = await monitor.getState();
+    if (snapshot._health.realtimeTail.status === "healthy"
+      && Number(snapshot.realtimeTailNextBlock) > 98) {
+      firstHealthyObserved = true;
+      break;
+    }
+    const result = await monitor.scanRealtimeTail();
+    if (result?.skipped !== false) {
+      await monitor.awaitIdle();
+      continue;
+    }
+    snapshot = await monitor.getState();
+    await monitor.processRealtimeQueue();
+    assert.deepEqual(deepTransactions, [], snapshot._health.realtimeTail.status === "healthy"
+      ? "the first actually healthy tail batch is not sufficient"
+      : "a rebuilding batch cannot open the deep lane");
+    firstHealthyObserved = snapshot._health.realtimeTail.status === "healthy"
+      && Number(snapshot.realtimeTailNextBlock) > 98;
+  }
+  assert.equal(firstHealthyObserved, true, "the tail must durably reach its first healthy caught-up batch");
+  await monitor.processRealtimeQueue();
+  assert.deepEqual(deepTransactions, [], "one healthy caught-up batch cannot release replay deep work");
+
+  let secondHealthyCompleted = false;
+  for (let attempt = 0; attempt < 20 && !secondHealthyCompleted; attempt += 1) {
+    const result = await monitor.scanRealtimeTail();
+    if (result?.skipped !== false) {
+      await monitor.awaitIdle();
+      continue;
+    }
+    snapshot = await monitor.getState();
+    assert.equal(snapshot._health.realtimeTail.status, "healthy");
+    assert.ok(Number(snapshot.realtimeTailNextBlock) > 98);
+    secondHealthyCompleted = true;
+  }
+  assert.equal(secondHealthyCompleted, true, "a second real healthy tail scan must own the lane");
+  await monitor.processRealtimeQueue();
+  assert.deepEqual(deepTransactions, [transactionHash], "the second healthy tail batch releases exactly one replay");
+  snapshot = await monitor.getState();
+  assert.equal(snapshot.realtimePendingEntries[transactionHash], undefined);
+  assert.ok(snapshot.officialSources.flap.featureActivations[
+    Object.keys(snapshot.officialSources.flap.featureActivations)[0]
+  ].replayAttemptedTransactionHashes.includes(transactionHash));
+  assert.equal(alerts.length, 1);
+});
+
+test("stop before unified deep work preserves an admitted Flap replay for restart", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-flap-replay-stop-"));
   const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
   const clock = Date.parse("2026-08-29T01:30:00.000Z");
@@ -4443,6 +4725,7 @@ test("stop aborts a blocked Flap replay and a restart resumes its durable candid
     version: 6,
     initializedAt: new Date(clock - 60 * 60_000).toISOString(),
     lastFinalizedBlock: 100,
+    realtimeTailNextBlock: 101,
     launchers: {},
     seenTransactions: { [transactionHash]: 99 },
     officialSources: { flap: { creationEventHotIndex: [candidate] } },
@@ -4476,6 +4759,8 @@ test("stop aborts a blocked Flap replay and a restart resumes its durable candid
     externalAttribution: false,
     provider: blockedProvider,
     now: () => clock,
+    backgroundSetTimeoutImpl: () => ({ unref() {} }),
+    backgroundClearTimeoutImpl() {},
     logger: { error() {}, info() {} },
   });
   let restarted;
@@ -4494,8 +4779,8 @@ test("stop aborts a blocked Flap replay and a restart resumes its durable candid
     confirmedAt: new Date(clock).toISOString(),
     observedAt: new Date(clock).toISOString(),
   };
-  assert.equal(await monitor.registerFlapFeatureActivations([record], { awaitReplay: false }), 1);
-  await blockedReadStarted;
+  assert.equal(await monitor.registerFlapFeatureActivations([record]), 1);
+  assert.equal((await monitor.getState()).realtimePendingEntries[transactionHash].featureActivationReplayKey != null, true);
 
   let timeout;
   const stopStartedAt = Date.now();
@@ -4504,7 +4789,7 @@ test("stop aborts a blocked Flap replay and a restart resumes its durable candid
     new Promise((resolve) => { timeout = setTimeout(() => resolve("timed_out"), 750); }),
   ]);
   clearTimeout(timeout);
-  assert.equal(stopOutcome, "stopped", "a blocked replay read must not hold the stop boundary");
+  assert.equal(stopOutcome, "stopped", "an admitted replay with no active deep RPC stops promptly");
   assert.ok(Date.now() - stopStartedAt < 750);
   assert.equal(destroyCalls, 1);
 
@@ -4513,6 +4798,7 @@ test("stop aborts a blocked Flap replay and a restart resumes its durable candid
   assert.equal(activation.replayCompletedAt, null);
   assert.equal(activation.firstTokenTransactionHash, null);
   assert.equal(activation.replayAttemptedTransactionHashes.includes(transactionHash), false);
+  assert.ok(durable.realtimePendingEntries[transactionHash]);
   assert.equal(durable.officialSources.flap.creationEventHotIndex.some((item) => item.transactionHash === transactionHash), true,
     "shutdown must retain the replay cursor for restart");
 
@@ -4543,7 +4829,7 @@ test("stop aborts a blocked Flap replay and a restart resumes its durable candid
     sendAlertsImpl: async (_config, event) => { alerts.push(event); return { status: "delivered" }; },
   });
   await restarted.getState();
-  await restarted.replayFlapFeatureActivations();
+  await restarted.processRealtimeQueue();
   const resumed = await restarted.getState();
   activation = Object.values(resumed.officialSources.flap.featureActivations)[0];
   assert.equal(activation.firstTokenTransactionHash, transactionHash);
@@ -7154,14 +7440,15 @@ test("focus3 background deep RPC preserves feature and first-three causal order 
   })}`);
 });
 
-test("focus3 host-wide deep RPC cooldown survives restart and wakes both lanes without charging deferred attempts", async (t) => {
+test("focus3 mixed archive 429 and method failure share one durable deep RPC gate across both lanes", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-deep-rpc-host-cooldown-"));
   const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
   let clock = Date.parse("2026-08-24T14:00:00.000Z");
   const head = 1_000;
   const queueHash = `0x${"51".repeat(32)}`;
   const deferredHash = `0x${"52".repeat(32)}`;
-  const trigger = "0x1111111111111111111111111111111111111111";
+  const trigger = "0x8b4329947e34b6d56d71a3385cac122bade7d78d";
+  const implementation = "0x1111111111111111111111111111111111111111";
   const baseRecord = (transactionHash, blockNumber) => ({
     transactionHash,
     blockNumber,
@@ -7199,29 +7486,75 @@ test("focus3 host-wide deep RPC cooldown survives restart and wakes both lanes w
     coverageGaps: [],
     _health: { realtimeTail: { status: "healthy", consecutiveFailures: 0 } },
   }));
-  let hostUnavailable = true;
+  let mixedFailure = true;
   const deepCalls = [];
-  const provider = {
-    async getNetwork() { return { chainId: 56n }; },
-    async getBlockNumber() { return head; },
-    async getTransaction(hash) {
-      deepCalls.push(hash);
-      if (hostUnavailable) {
-        const error = new Error("shared physical host rate limited");
-        error.code = 429;
-        error.retryAfterMs = 1_000;
-        error.rpcFailureScope = "host";
-        error.rpcOperation = "getTransaction";
-        throw error;
-      }
-      return { hash, blockNumber: hash === queueHash ? 900 : 901, to: null, from: `0x${"9".repeat(40)}`, data: "0x" };
+  const codeCalls = [];
+  const provider = createRpcPool(
+    ["https://mixed-monitor-standard.test"],
+    ["https://mixed-monitor-archive.test"],
+    1,
+    {
+      now: () => clock,
+      requestTimeoutMs: 1_000,
+      hostCircuitRegistry: new Map(),
+      providerFactory: (_url, context) => ({
+        async getNetwork() { return { chainId: 56n }; },
+        async getBlockNumber() { return head; },
+        async getTransaction(hash) {
+          deepCalls.push(hash);
+          const blockNumber = hash === queueHash ? 900 : 901;
+          return { hash, blockNumber, blockHash: `0x${String(blockNumber).padStart(64, "0")}`, index: 1, transactionIndex: 1, to: trigger, from: `0x${"9".repeat(40)}`, data: "0x" };
+        },
+        async getTransactionReceipt(hash) {
+          const blockNumber = hash === queueHash ? 900 : 901;
+          const blockHash = `0x${String(blockNumber).padStart(64, "0")}`;
+          return {
+            hash,
+            transactionHash: hash,
+            blockNumber,
+            blockHash,
+            status: 1,
+            index: 1,
+            transactionIndex: 1,
+            logs: [{
+              address: trigger,
+              transactionHash: hash,
+              blockNumber,
+              blockHash,
+              transactionIndex: 1,
+              logIndex: 0,
+              removed: false,
+              topics: [BSC_UPGRADED_TOPIC, `0x${"0".repeat(24)}${implementation.slice(2)}`],
+              data: "0x",
+            }],
+          };
+        },
+        async getBlock(blockNumber) {
+          const numeric = Number(blockNumber);
+          return {
+            number: numeric,
+            hash: `0x${String(numeric).padStart(64, "0")}`,
+            timestamp: Math.floor(clock / 1_000),
+            transactions: [`0x${"0".repeat(64)}`, numeric === 900 ? queueHash : deferredHash],
+          };
+        },
+        async getCode() {
+          codeCalls.push(context.kind);
+          if (!mixedFailure) return "0x6000";
+          if (context.kind === "archive") {
+            const error = new Error("HTTP 429 archive host rate limited");
+            error.status = 429;
+            error.retryAfterMs = 12_000;
+            throw error;
+          }
+          throw new Error("getCode timed out after 1000ms");
+        },
+        async getStorage() { return "0x"; },
+        async call() { return "0x"; },
+        async send() { return []; },
+      }),
     },
-    async getTransactionReceipt(hash) {
-      return { hash, transactionHash: hash, blockNumber: hash === queueHash ? 900 : 901, status: 1, logs: [] };
-    },
-    async send() { return []; },
-    destroy() {},
-  };
+  );
   const timers = [];
   const backgroundSetTimeoutImpl = (callback, delay) => {
     const timer = { callback, delay, dueAt: clock + delay, cancelled: false, unref() {} };
@@ -7257,11 +7590,13 @@ test("focus3 host-wide deep RPC cooldown survives restart and wakes both lanes w
     backgroundSetTimeoutImpl,
     backgroundClearTimeoutImpl,
     logger: { error() {}, info() {} },
+    sendAlertsImpl: async () => ({ status: "delivered" }),
     ...disabledJournalTimerDependencies(),
   });
   let monitor = makeMonitor();
   t.after(async () => {
     await monitor?.stop();
+    provider.destroy();
     await fs.rm(dataDir, { recursive: true, force: true });
   });
   await monitor.start();
@@ -7270,14 +7605,21 @@ test("focus3 host-wide deep RPC cooldown survives restart and wakes both lanes w
   await monitor.scanRealtimeTail();
   await monitor.processRealtimeQueue();
   assert.deepEqual(deepCalls, [queueHash]);
+  assert.deepEqual(codeCalls, ["archive", "standard"],
+    "the official-upgrade wrapper observes one archive 429 plus one standard method failure");
   let snapshot = await monitor.getState();
   const retryAt = Date.parse(snapshot._health.backgroundDeepRpc.nextRetryAt);
+  assert.equal(snapshot._health.backgroundDeepRpc.rpcFailureScope, "host");
+  assert.equal(snapshot.transactionFailures[queueHash], undefined,
+    "mixed host evidence is installed before a candidate attempt is charged");
   assert.equal(snapshot.deferredCreationEvidence[deferredHash].attempts, 2);
   clock += 500;
   await monitor.retryDeferredCreationEvidence();
   await monitor.processRealtimeQueue();
   snapshot = await monitor.getState();
   assert.deepEqual(deepCalls, [queueHash], "neither lane makes a physical call during the shared host cooldown");
+  assert.deepEqual(codeCalls, ["archive", "standard"]);
+  assert.equal(snapshot.transactionFailures[queueHash], undefined);
   assert.equal(snapshot.deferredCreationEvidence[deferredHash].attempts, 2,
     "a host outage is not charged as a candidate-specific deferred failure");
 
@@ -7290,7 +7632,11 @@ test("focus3 host-wide deep RPC cooldown survives restart and wakes both lanes w
   await monitor.processRealtimeQueue();
   await monitor.retryDeferredCreationEvidence();
   assert.deepEqual(deepCalls, [queueHash], "the persisted host gate remains closed after restart");
-  hostUnavailable = false;
+  assert.deepEqual(codeCalls, ["archive", "standard"]);
+  snapshot = await monitor.getState();
+  assert.equal(snapshot.transactionFailures[queueHash], undefined);
+  assert.equal(snapshot.deferredCreationEvidence[deferredHash].attempts, 2);
+  mixedFailure = false;
   clock = retryAt + 1;
   for (const timer of timers.filter((item) => !item.cancelled && item.dueAt <= clock)) {
     timer.cancelled = true;
@@ -7519,7 +7865,7 @@ test("near-head handoff replaces a deferred transaction's orphaned fork coordina
 test("a durable near-head candidate registered after restart bypasses the warmed ordinary fast exit for its Flap activation", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-near-head-late-flap-activation-"));
   const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
-  const clock = Date.parse("2026-08-24T12:00:00.000Z");
+  let clock = Date.parse("2026-08-24T12:00:00.000Z");
   const launcher = "0x90497450f2a706f1951b5bdda52b4e5d16f34c06";
   const vaultFactory = "0xfab75dc774cb9b38b91749b8833360b46a52345f";
   const vault = "0x4111111111111111111111111111111111111111";
@@ -7681,6 +8027,8 @@ test("a durable near-head candidate registered after restart bypasses the warmed
     WebSocketImpl: IdleWebSocket,
     fetchImpl,
     now: () => clock,
+    backgroundSetTimeoutImpl: () => ({ unref() {} }),
+    backgroundClearTimeoutImpl() {},
     logger: { error() {}, info() {} },
     sendAlertsImpl: async (_config, event) => {
       alerts.push(structuredClone(event));
@@ -7736,11 +8084,35 @@ test("a durable near-head candidate registered after restart bypasses the warmed
     observedAt: new Date(clock - 10_000).toISOString(),
   }]), 1);
   head = 92;
+  clock += 751;
   await restarted.start();
+  // start() also schedules a tail pass. Count two completed explicit scans,
+  // rather than sleeps or calls, so a concurrent `skipped: running` result
+  // cannot masquerade as either healthy observation.
+  let completedTailScans = 0;
+  for (let pass = 0; pass < 100 && completedTailScans < 2; pass += 1) {
+    const tail = await restarted.scanRealtimeTail();
+    if (tail?.skipped === false) completedTailScans += 1;
+    else await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.equal(completedTailScans, 2);
+  for (let turn = 0; turn < 4 && alerts.length === 0; turn += 1) {
+    await restarted.replayFlapFeatureActivations();
+    await restarted.processRealtimeQueue();
+    clock += 751;
+  }
   await waitUntil(() => alerts.length === 1, 3_000);
   await restarted.awaitIdle();
   snapshot = await restarted.getState();
-  assert.equal(alerts.length, 1, "the late activation must emit its first token exactly once");
+  assert.equal(alerts.length, 1, `the late activation must emit its first token exactly once: ${JSON.stringify({
+    pending: snapshot.realtimePendingEntries[targetTransactionHash],
+    deferred: snapshot.deferredCreationEvidence[targetTransactionHash],
+    failure: snapshot.transactionFailures[targetTransactionHash],
+    activation: Object.values(snapshot.officialSources.flap.featureActivations || {})[0],
+    tail: snapshot._health?.realtimeTail,
+    realtime: snapshot._health?.realtimeQueue,
+    deep: snapshot._health?.backgroundDeepRpc,
+  })}`);
   assert.equal(alerts[0].transactionHash, targetTransactionHash);
   assert.equal(alerts[0].tokens[0].token.toLowerCase(), targetToken);
   assert.equal(alerts[0].featureFirstToken, true);

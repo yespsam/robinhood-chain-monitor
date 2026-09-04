@@ -4560,6 +4560,19 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     )));
     return Math.max(1, earliestCircuit - current);
   };
+  const hostRetryDelayForCircuits = (capable, circuits, current = clockNow()) => Math.max(
+    0,
+    ...capable
+      .filter((index) => Number(circuits[index]?.globalFailures || 0) > 0)
+      .map((index) => Number(circuits[index]?.globalUntil || 0) - current),
+  );
+  const attachHostRetryEvidence = (error, retryAfterMs, cause = null) => {
+    const delay = Math.max(0, Number(retryAfterMs) || 0);
+    if (delay <= 0 || !error || typeof error !== "object") return error;
+    error.rpcHostRetryAfterMs = Math.max(Number(error.rpcHostRetryAfterMs) || 0, Math.ceil(delay));
+    if (!error.rpcHostFailure && cause) error.rpcHostFailure = errorSummary(cause).slice(0, 300);
+    return error;
+  };
   const acquireRecoveryProbe = (circuits, index, operation) => {
     const key = recoveryProbeKey(circuits, index, operation);
     if (hostMethodRecoveryProbeInFlight.has(key)) return null;
@@ -4636,6 +4649,7 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
       error.rpcFailureScope = capable.every((index) => Number(providerCircuits[index]?.globalUntil || 0) > current)
         ? "host"
         : "method";
+      attachHostRetryEvidence(error, hostRetryDelayForCircuits(capable, providerCircuits, current), error);
       throw error;
     }
     const closed = available.filter((index) => !circuitFailed(providerCircuits, index, operation));
@@ -4698,6 +4712,7 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
       error.rpcFailureScope = failureScopes.length > 0 && failureScopes.every((scope) => scope === "host")
         ? "host"
         : "method";
+      attachHostRetryEvidence(error, hostRetryDelayForCircuits(capable, providerCircuits), error);
       throw error;
     } finally {
       releaseRecoveryProbe(recoveryProbeLease);
@@ -4738,6 +4753,7 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
       error.rpcFailureScope = capable.every((index) => Number(archiveCircuits[index]?.globalUntil || 0) > current)
         ? "host"
         : "method";
+      attachHostRetryEvidence(error, hostRetryDelayForCircuits(capable, archiveCircuits, current), error);
       throw error;
     }
     const recoveryProbe = closed.length === 0;
@@ -4794,6 +4810,7 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
       error.rpcFailureScope = failureScopes.length > 0 && failureScopes.every((scope) => scope === "host")
         ? "host"
         : "method";
+      attachHostRetryEvidence(error, hostRetryDelayForCircuits(capable, archiveCircuits), error);
       throw error;
     } finally {
       releaseRecoveryProbe(recoveryProbeLease);
@@ -4807,6 +4824,13 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     const scopes = causes.map((cause) => cause?.rpcFailureScope).filter(Boolean);
     if (scopes.length) error.rpcFailureScope = scopes.every((scope) => scope === "host") ? "host" : "method";
     error.rpcOperation = causes.find((cause) => cause?.rpcOperation)?.rpcOperation || null;
+    const hostCause = causes.find((cause) => Number(cause?.rpcHostRetryAfterMs) > 0
+      || (cause?.rpcFailureScope === "host" && Number(cause?.retryAfterMs) > 0));
+    const hostRetryAfterMs = Math.max(0, ...causes.map((cause) => Math.max(
+      Number(cause?.rpcHostRetryAfterMs) || 0,
+      cause?.rpcFailureScope === "host" ? Number(cause?.retryAfterMs) || 0 : 0,
+    )));
+    attachHostRetryEvidence(error, hostRetryAfterMs, hostCause);
     return error;
   };
   const invokeArchiveFirst = async (method, args) => {
@@ -5844,7 +5868,26 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     suppressedTailFailureLogs = 0;
   };
 
+  const rpcHostRetryEvidenceMs = (error) => Math.max(
+    0,
+    Number.isFinite(Number(error?.rpcHostRetryAfterMs))
+      ? Math.ceil(Number(error.rpcHostRetryAfterMs)) : 0,
+    error?.rpcFailureScope === "host" && Number.isFinite(Number(error?.retryAfterMs))
+      ? Math.ceil(Number(error.retryAfterMs)) : 0,
+  );
+
+  const propagateRpcHostRetryEvidence = (target, causes) => {
+    const hostRetryAfterMs = Math.max(0, ...causes.map(rpcHostRetryEvidenceMs));
+    if (hostRetryAfterMs <= 0 || !target || typeof target !== "object") return target;
+    target.rpcHostRetryAfterMs = hostRetryAfterMs;
+    const hostCause = causes.find((cause) => rpcHostRetryEvidenceMs(cause) > 0);
+    target.rpcHostFailure = hostCause?.rpcHostFailure || errorSummary(hostCause).slice(0, 300);
+    return target;
+  };
+
   const sharedRpcRetryDelayMs = (error) => {
+    const propagatedHostRetryAfterMs = rpcHostRetryEvidenceMs(error);
+    if (propagatedHostRetryAfterMs > 0) return propagatedHostRetryAfterMs;
     const retryAfterMs = Number(error?.retryAfterMs);
     if (!Number.isFinite(retryAfterMs) || retryAfterMs <= 0) return 0;
     if (error?.rpcFailureScope !== "host") return 0;
@@ -7613,7 +7656,14 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       .sort((left, right) => left.blockNumber - right.blockNumber
         || Number(left.transactionIndex || 0) - Number(right.transactionIndex || 0)
         || Number(left.logIndex || 0) - Number(right.logIndex || 0)
-        || left.transactionHash.localeCompare(right.transactionHash));
+      || left.transactionHash.localeCompare(right.transactionHash));
+  }
+
+  function outstandingFlapActivationReplay(activationKey) {
+    const causalKey = `feature:${activationKey}`;
+    return outstandingCausalEntries()
+      .filter((record) => backgroundFeatureKeys(record).includes(causalKey))
+      .sort(compareBscQueueEntries)[0] || null;
   }
 
   async function processStoredFlapReplayCandidate(
@@ -7622,61 +7672,77 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     signal = flapReplayAbortController.signal,
   ) {
     throwIfFlapReplayStopped(signal);
-    const reserved = await withState(async () => {
+    const admitted = await withState(async () => {
       const activation = state.officialSources?.flap?.featureActivations?.[activationKey];
-      if (!activation || activation.active === false || activation.firstTokenAlertedAt || activation.firstTokenTransactionHash) return false;
-      if ((activation.replayAttemptedTransactionHashes || []).includes(candidate.transactionHash)) return false;
-      delete state.seenTransactions[candidate.transactionHash];
-      activation.replayLastAttemptAt = iso(now);
-      activation.replayLastError = null;
-      await save();
-      return true;
-    });
-    if (!reserved) return false;
-    throwIfFlapReplayStopped(signal);
-    try {
-      enqueue(candidate.transactionHash, candidate.blockNumber, "flap_feature_replay", {
-        transactionIndex: candidate.transactionIndex,
-        logIndex: candidate.logIndex,
-        mintEmitters: [candidate.token],
-        candidateTokens: [candidate.token],
-        verifiedNewContracts: [candidate.token],
-        featureActivationReplayKey: activationKey,
-        protocol: true,
-      });
-      const entry = queue.get(candidate.transactionHash);
-      if (!entry) throw new Error(`Flap replay could not reserve ${candidate.transactionHash}`);
-      await processEntries([entry], entryRpcConcurrency, { flapReplaySignal: signal });
-      throwIfFlapReplayStopped(signal);
-      const alerted = await withState(async () => {
-        const activation = state.officialSources?.flap?.featureActivations?.[activationKey];
-        if (!activation) return false;
-        activation.replayAttemptedTransactionHashes = [...new Set([
-          ...(activation.replayAttemptedTransactionHashes || []),
-          candidate.transactionHash,
-        ])].slice(-FLAP_REPLAY_ATTEMPTED_TRANSACTIONS_MAX);
+      if (!activation || activation.active === false || activation.firstTokenAlertedAt
+        || activation.firstTokenTransactionHash
+        || (activation.replayAttemptedTransactionHashes || []).includes(candidate.transactionHash)) {
+        return "skipped";
+      }
+      if (outstandingFlapActivationReplay(activationKey)) return "waiting";
+      const existingTransaction = state.realtimePendingEntries[candidate.transactionHash]
+        || state.deferredCreationEvidence[candidate.transactionHash]
+        || queue.get(candidate.transactionHash);
+      if (existingTransaction?.featureActivationReplayKey
+        && existingTransaction.featureActivationReplayKey !== activationKey) return "waiting";
+
+      const previousSeen = state.seenTransactions[candidate.transactionHash];
+      const previousPending = state.realtimePendingEntries[candidate.transactionHash];
+      const previousDeferred = state.deferredCreationEvidence[candidate.transactionHash];
+      const previousQueueEntry = queue.has(candidate.transactionHash)
+        ? structuredClone(queue.get(candidate.transactionHash)) : undefined;
+      const previousActivation = structuredClone(activation);
+      try {
+        // enqueue() intentionally rejects a seen transaction. Re-open it only
+        // inside the same state/WAL transaction that admits the exact replay
+        // owner, so a crash can never expose an unowned replay gap.
+        delete state.seenTransactions[candidate.transactionHash];
+        enqueue(candidate.transactionHash, candidate.blockNumber, "flap_feature_replay", {
+          blockHash: candidate.blockHash,
+          transactionIndex: candidate.transactionIndex,
+          logIndex: candidate.logIndex,
+          mintEmitters: [candidate.token],
+          candidateTokens: [candidate.token],
+          verifiedNewContracts: [candidate.token],
+          featureActivationReplayKey: activationKey,
+          causalBarrierKeys: [`feature:${activationKey}`],
+          flapCreationHotCandidates: candidate.topic ? [candidate] : [],
+          protocol: true,
+        });
+        const entry = queue.get(candidate.transactionHash);
+        if (!entry) throw new Error(`Flap replay could not reserve ${candidate.transactionHash}`);
+        persistRealtimePendingHandoff([entry]);
+        activation.replayLastAttemptAt = iso(now);
+        activation.replayLastError = null;
+        activation.replayNextAttemptAt = null;
         await save();
-        return Boolean(activation.firstTokenAlertedAt || activation.firstTokenTransactionHash);
-      });
-      throwIfFlapReplayStopped(signal);
-      return alerted;
-    } catch (error) {
-      if (isFlapReplayStoppedError(error)) {
-        // enqueue() is in-memory only here. Removing its abandoned work does
-        // not remove the durable hot-index candidate used on the next start.
-        queue.delete(candidate.transactionHash);
+        return "admitted";
+      } catch (error) {
+        // save() resolves only after the state/WAL boundary is durable. A
+        // synchronous capacity failure or rejected append therefore restores
+        // the exact pre-admission owner in memory before any scheduler can see
+        // this transaction as eligible deep work.
+        if (previousSeen === undefined) delete state.seenTransactions[candidate.transactionHash];
+        else state.seenTransactions[candidate.transactionHash] = previousSeen;
+        if (previousPending === undefined) delete state.realtimePendingEntries[candidate.transactionHash];
+        else state.realtimePendingEntries[candidate.transactionHash] = previousPending;
+        if (previousDeferred === undefined) delete state.deferredCreationEvidence[candidate.transactionHash];
+        else state.deferredCreationEvidence[candidate.transactionHash] = previousDeferred;
+        if (previousQueueEntry === undefined) queue.delete(candidate.transactionHash);
+        else queue.set(candidate.transactionHash, previousQueueEntry);
+        state.officialSources.flap.featureActivations[activationKey] = previousActivation;
+        if (error?.code === "BSC_REALTIME_PENDING_CAPACITY") {
+          wakeBackgroundDeepRpc();
+          return "capacity";
+        }
         throw error;
       }
-      await withState(async () => {
-        const activation = state.officialSources?.flap?.featureActivations?.[activationKey];
-        if (activation) {
-          activation.replayLastAttemptAt = iso(now);
-          activation.replayLastError = errorSummary(error);
-        }
-        await save().catch(() => {});
-      });
-      throw error;
+    });
+    if (admitted === "admitted") {
+      scheduleRealtime();
+      wakeBackgroundDeepRpc();
     }
+    return admitted;
   }
 
   async function runFlapActivationReplay(
@@ -7695,10 +7761,16 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           hotWatermark: flapActivationHotWatermark(state, activation),
         };
       });
-      if (!phase) return false;
+      if (!phase) return "done";
+      if (await withState(() => Boolean(outstandingFlapActivationReplay(activationKey)))) {
+        scheduleRealtime();
+        wakeBackgroundDeepRpc();
+        return "waiting";
+      }
       for (const candidate of phase.candidates) {
         throwIfFlapReplayStopped(signal);
-        if (await processStoredFlapReplayCandidate(activationKey, candidate, signal)) return true;
+        const result = await processStoredFlapReplayCandidate(activationKey, candidate, signal);
+        if (["admitted", "waiting", "capacity"].includes(result)) return result;
       }
       throwIfFlapReplayStopped(signal);
       const completion = await withState(async () => {
@@ -7720,7 +7792,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         return "done";
       });
       throwIfFlapReplayStopped(signal);
-      if (completion !== "rescan") return false;
+      if (completion !== "rescan") return "done";
     }
   }
 
@@ -7837,10 +7909,15 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     const failures = [];
     for (const key of requested) {
       try {
+        let waiting = false;
         while (true) {
           throwIfFlapReplayStopped(signal);
-          await replayFlapActivation(key, signal);
+          const outcome = await replayFlapActivation(key, signal);
           throwIfFlapReplayStopped(signal);
+          if (["admitted", "waiting", "capacity"].includes(outcome)) {
+            waiting = true;
+            break;
+          }
           const stillPending = await withState(() => {
             const activation = state.officialSources?.flap?.featureActivations?.[key];
             return Boolean(activation && activation.active !== false
@@ -7850,6 +7927,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           });
           if (!stillPending) break;
         }
+        if (waiting) continue;
         throwIfFlapReplayStopped(signal);
         await clearFlapReplayBackoff(key);
       } catch (error) {
@@ -11067,6 +11145,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
             .every((error) => error?.rpcFailureScope === "method") ? "method" : undefined;
           const retryAfterMs = Math.max(Number(historicalError?.retryAfterMs) || 0, Number(latestError?.retryAfterMs) || 0);
           if (retryAfterMs > 0) unavailable.retryAfterMs = retryAfterMs;
+          propagateRpcHostRetryEvidence(unavailable, [historicalError, latestError]);
           throw unavailable;
         }
       }
@@ -12701,8 +12780,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     const transientRpcFailures = results.filter((result) => result.status === "rejected"
       && result.reason?.code !== "ALERT_DELIVERY_PENDING"
       && isTransientCoverageError(result.reason));
-    let globalRpcUnavailable = transientRpcFailures.length > 0
-      && transientRpcFailures.every((result) => result.reason?.rpcFailureScope === "host");
+    let globalRpcUnavailable = transientRpcFailures.some((result) => sharedRpcRetryDelayMs(result.reason) > 0)
+      || (transientRpcFailures.length > 0
+        && transientRpcFailures.every((result) => result.reason?.rpcFailureScope === "host"));
     if (transientRpcFailures.length) {
       if (!globalRpcUnavailable) {
         try { await provider.getBlockNumber(); }
@@ -12713,6 +12793,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     let stateChanged = false;
     let flapReplayNeeded = false;
     const fourMemeReplayKeys = new Set();
+    const completedFlapReplayKeys = new Set();
     const dirtyEntries = [];
     const orderedResultIndexes = results.map((_result, index) => index)
       .sort((left, right) => compareBscQueueEntries(entries[left], entries[right]));
@@ -12865,6 +12946,21 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         for (const key of fourMemeAppend.replayKeys) fourMemeReplayKeys.add(key);
         const flapAppend = appendFlapCreationHotIndex(state, result.value.flapCreationCandidates || []);
         flapReplayNeeded ||= flapAppend.replayNeeded;
+        if (entry.reasons?.has("flap_feature_replay") && entry.featureActivationReplayKey) {
+          const activation = state.officialSources?.flap?.featureActivations?.[entry.featureActivationReplayKey];
+          if (activation) {
+            activation.replayAttemptedTransactionHashes = [...new Set([
+              ...(activation.replayAttemptedTransactionHashes || []),
+              entry.transactionHash,
+            ])].slice(-FLAP_REPLAY_ATTEMPTED_TRANSACTIONS_MAX);
+            activation.replayLastAttemptAt = iso(now);
+            activation.replayLastError = null;
+            activation.replayNextAttemptAt = null;
+            activation.replayConsecutiveFailures = 0;
+            activation.replayRetryDelayMs = null;
+            completedFlapReplayKeys.add(entry.featureActivationReplayKey);
+          }
+        }
         delete state.transactionFailures[entry.transactionHash];
         delete state.deferredCreationEvidence[entry.transactionHash];
         delete state.realtimePendingEntries[entry.transactionHash];
@@ -12889,6 +12985,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     }
     if (stateChanged) await save();
     if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
+    if (completedFlapReplayKeys.size && !stopped) {
+      void replayPendingFlapActivations([...completedFlapReplayKeys]);
+    }
     if (flapReplayNeeded && !stopped) void replayPendingFlapActivations();
     if (fourMemeReplayKeys.size) void replayPendingFourMemeActivations([...fourMemeReplayKeys]);
     if (retryError) {
@@ -12981,12 +13080,13 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           await withState(async () => {
             const current = state.deferredCreationEvidence[record.transactionHash];
             if (!current) return;
-            if (error?.rpcFailureScope === "host") {
+            if (sharedRpcRetryDelayMs(error) > 0) {
               const providerRetryAfterMs = Number(error?.retryAfterMs);
               const hostRetryDelayMs = Math.max(
                 1_000,
                 sharedRpcRetryDelayMs(error),
-                Number.isFinite(providerRetryAfterMs) && providerRetryAfterMs > 0
+                error?.rpcFailureScope === "host"
+                  && Number.isFinite(providerRetryAfterMs) && providerRetryAfterMs > 0
                   ? Math.ceil(providerRetryAfterMs)
                   : 0,
               );
@@ -14141,15 +14241,17 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       }
     } catch (error) {
       const providerRetryAfterMs = Number(error?.retryAfterMs);
-      retryDelayMs = Math.max(
-        1_000,
-        sharedRpcRetryDelayMs(error),
-        Number.isFinite(providerRetryAfterMs) && providerRetryAfterMs > 0 ? Math.ceil(providerRetryAfterMs) : 0,
-      );
+      const sharedHostRetryDelayMs = sharedRpcRetryDelayMs(error);
+      retryDelayMs = sharedHostRetryDelayMs > 0
+        ? Math.max(1_000, sharedHostRetryDelayMs)
+        : Math.max(
+          1_000,
+          Number.isFinite(providerRetryAfterMs) && providerRetryAfterMs > 0 ? Math.ceil(providerRetryAfterMs) : 0,
+        );
       const failedAt = Number(now());
       realtimeRetryAt = Math.max(realtimeRetryAt, failedAt + retryDelayMs);
       await withState(async () => {
-        if (error?.rpcFailureScope === "host") {
+        if (sharedHostRetryDelayMs > 0) {
           backgroundDeepHostRetryAt = Math.max(backgroundDeepHostRetryAt, failedAt + retryDelayMs);
           state._health.backgroundDeepRpc = {
             status: "backoff",
