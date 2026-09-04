@@ -1,3 +1,14 @@
+import {
+  isStrictBscOpenFourFirstTokenUpdate,
+  isFourMemePolicyFixRecoveryEvent,
+  isOfficialFourMemeCapabilityUpdate,
+  isStrictFourRegistryCapabilityForPriority,
+  isStrictFourRegistryCanonicalRevisionForPriority,
+  isStrictFourRegistryDelayedRecoveryForPriority,
+  isStrictFourRegistryFirstTokenForPriority,
+  isStrictFourMemeMarketCampaign,
+} from "./source-controls.js";
+
 const PRIORITY_SCHEMA = "news_trading_priority_v2";
 
 export const TRADING_PRIORITY_VERSION = 2;
@@ -269,6 +280,13 @@ function structuredBinanceTargetSet(event = {}) {
 
 function exactTarget(event = {}, text = eventText(event)) {
   const platform = normalizedPlatform(event);
+  if (isStrictFourRegistryCapabilityForPriority(event)) {
+    return {
+      type: "registry_subject",
+      value: clean(event.subject?.id),
+      exact: Boolean(clean(event.subject?.id)),
+    };
+  }
   if (focusPlatform(platform)) {
     const firstToken = [
       event.token,
@@ -408,6 +426,21 @@ function officialPonFunTwitterEvidence(event = {}) {
 }
 
 function trustedConfirmation(event = {}) {
+  if (isStrictFourRegistryFirstTokenForPriority(event)) return {
+    trusted: true,
+    kind: "official_openfour_core_token_created",
+    value: `${event.transactionHash}#${event.logIndex}`,
+  };
+  if (isStrictFourRegistryCapabilityForPriority(event)) return {
+    trusted: true,
+    kind: "official_openfour_registry_log",
+    value: `${event.transactionHash}#${event.logIndex}`,
+  };
+  if (isStrictBscOpenFourFirstTokenUpdate(event)) return {
+    trusted: true,
+    kind: "official_openfour_core_log",
+    value: `${event.transactionHash}#${event.logIndex}`,
+  };
   if (officialBinanceEvidence(event)) return { trusted: true, kind: "official", value: event.source.id };
   if (officialPonFunEvidence(event)) return {
     trusted: true,
@@ -514,6 +547,7 @@ function sourceTime(event = {}) {
     event.timestamp,
     event.tweet?.createdAt,
     event.committedAt,
+    isOfficialFourMemeCapabilityUpdate(event) ? event.observedAt : null,
     ["platform_capability_update", "launchpad_site_update"].includes(event.type) ? event.observedAt : null,
     event.type === "binance_official_update" && event.kind === "developer_update"
       && event.comparisonBasis === "exact_snapshot" ? event.observedAt : null,
@@ -681,6 +715,13 @@ function category(event = {}, text = eventText(event)) {
   // information. Headline words or optional platform metadata cannot promote
   // them into a market-catalyst lane.
   if (event.type === "telegram_news_update" || event.type === "fomo_monitor_health_update") return "information";
+  if (isFourMemePolicyFixRecoveryEvent(event)) return "focus_policy_recovery";
+  if (isStrictFourRegistryCanonicalRevisionForPriority(event)) return "focus_registry_canonical_revision";
+  if (isStrictFourRegistryFirstTokenForPriority(event)) return "focus_registry_first_token";
+  if (isStrictFourRegistryCapabilityForPriority(event)) return isStrictFourRegistryDelayedRecoveryForPriority(event)
+    ? "focus_registry_delayed_recovery"
+    : "focus_registry_capability";
+  if (isStrictBscOpenFourFirstTokenUpdate(event)) return "focus_registry_first_token";
   if (event.type === "fomo_family_top_call") {
     if (event.signalKind === "top_blogger_convergence" && fomoClusterSize(event) >= 2) return "fomo_cluster";
     if (FOMO_OFFICIAL_KINDS.has(event.signalKind)) return "fomo_official_exact";
@@ -733,6 +774,8 @@ function category(event = {}, text = eventText(event)) {
     if (event.kind === "developer_update" || event.type === "github_module_update") return "developer_maintenance";
     return "binance_information";
   }
+  if (isStrictFourMemeMarketCampaign(event)) return "focus_market_campaign";
+  if (isOfficialFourMemeCapabilityUpdate(event)) return "focus_official";
   if (focusPlatform(platform)) {
     if (event.type === "bsc_launchpad_update" && event.kind === "flap_pool_token") {
       return isClosedFlapTrackedTokenMonitor(event) ? "focus_onchain" : "information";
@@ -746,9 +789,10 @@ function category(event = {}, text = eventText(event)) {
 }
 
 const FOCUS_STRUCTURAL_CHANGE_KEYS = [
-  "newFlapPools", "updatedFlapPools", "newQuoteTokens", "newQuoteConfigs", "updatedQuoteConfigs",
-  "quoteConfigChanges", "newContracts", "newModules", "newVersions", "newPackages", "updatedPackages",
-  "packageVersionChanges", "newChains",
+  "newFlapPools", "updatedFlapPools", "newQuoteTokens", "removedQuoteTokens", "newQuoteConfigs",
+  "removedQuoteConfigs", "updatedQuoteConfigs", "quoteConfigChanges", "newContracts", "removedContracts",
+  "newModules", "removedModules", "newVersions", "removedVersions", "newPackages", "removedPackages",
+  "updatedPackages", "packageVersionChanges", "newChains",
 ];
 
 function explicitTradingPath(event = {}, eventCategory, target) {
@@ -759,8 +803,11 @@ function explicitTradingPath(event = {}, eventCategory, target) {
         && event.signal?.platformStructural === true
         && event.signal?.majorProductUpdate === true);
   }
+  if (["focus_registry_first_token", "focus_registry_delayed_recovery", "focus_registry_canonical_revision"].includes(eventCategory)) return false;
+  if (eventCategory === "focus_registry_capability") return isStrictFourRegistryCapabilityForPriority(event);
   if (eventCategory === "focus_onchain") return onchainEvidence(event);
   if (eventCategory === "focus_official") {
+    if (isOfficialFourMemeCapabilityUpdate(event)) return true;
     if (event.type === "github_module_update") return materialFocusGithub(event);
     if (isFlapQuoteFirstObservedAfterGap(event)) return false;
     const flapQuotePools = [
@@ -811,8 +858,11 @@ function explicitTradingPath(event = {}, eventCategory, target) {
 function catalystScore(eventCategory) {
   if (eventCategory === "pon_structural") return 3;
   if (eventCategory === "pon_information") return 1;
+  if (eventCategory === "focus_registry_capability") return 3;
+  if (["focus_registry_first_token", "focus_registry_delayed_recovery", "focus_registry_canonical_revision"].includes(eventCategory)) return 1;
   if (["binance_market_catalyst", "binance_security_emergency", "focus_onchain", "fomo_cluster", "fomo_official_exact"].includes(eventCategory)) return 5;
   if (["binance_product", "focus_official", "fomo_single", "fomo_signal"].includes(eventCategory)) return 3;
+  if (eventCategory === "focus_market_campaign") return 1;
   if (eventCategory === "binance_information") return 1;
   return 0;
 }
@@ -820,9 +870,11 @@ function catalystScore(eventCategory) {
 function capitalFlowScore(eventCategory) {
   if (eventCategory === "pon_structural") return 1;
   if (eventCategory === "pon_information") return 0;
+  if (["focus_registry_capability", "focus_registry_first_token", "focus_registry_delayed_recovery", "focus_registry_canonical_revision"].includes(eventCategory)) return 0;
   if (["binance_market_catalyst", "binance_security_emergency", "fomo_cluster", "fomo_official_exact"].includes(eventCategory)) return 3;
   if (["focus_onchain", "fomo_single"].includes(eventCategory)) return 2;
   if (["binance_product", "focus_official"].includes(eventCategory)) return 1;
+  if (eventCategory === "focus_market_campaign") return 1;
   return 0;
 }
 
@@ -876,6 +928,169 @@ export function deriveEventLifecycle(event = {}) {
 function tradePlan(event, eventCategory, tier, target) {
   const noAutoZh = "仅作决策支持，非自动交易";
   const noAutoEn = "Decision support only; no automatic trading";
+  if (eventCategory === "focus_policy_recovery") {
+    return {
+      conclusion: { zh: "历史补报｜勿追价", en: "Historical recovery | do not chase" },
+      mainline: {
+        zh: "Four.Meme 历史漏报修复→仅补齐监控记录",
+        en: "Four.Meme historical policy fix→restore monitoring coverage only",
+      },
+      capitalPath: {
+        zh: "事件已过时；不据此推导当前资金路径",
+        en: "The event is stale; do not infer a current capital path",
+      },
+      entryCondition: {
+        zh: "不执行买入；如需评估，仅使用当前标的、流动性与量价",
+        en: "Do not execute a buy; any reassessment must use current asset, liquidity, and price-volume data",
+      },
+      invalidation: {
+        zh: "原事件已被市场消化、活动结束或产品状态已变化",
+        en: "The original event is priced in, the campaign has ended, or product state has changed",
+      },
+      risk: {
+        zh: `历史补报，勿追价；${noAutoZh}`,
+        en: `Historical recovery; do not chase; ${noAutoEn}`,
+      },
+    };
+  }
+  if (eventCategory === "focus_registry_canonical_revision") {
+    const firstToken = isStrictFourRegistryFirstTokenForPriority(event);
+    return {
+      conclusion: {
+        zh: "链重组修订｜旧证据失效｜以本条为准｜勿买",
+        en: "Chain-reorg revision | prior proof invalid | use this update | do not buy",
+      },
+      mainline: {
+        zh: firstToken
+          ? "OpenFour Core canonical TokenCreated 修订→仅更新首币来源证明"
+          : "OpenFour Registry canonical 修订→更新协议/创建能力状态",
+        en: firstToken
+          ? "Canonical OpenFour Core TokenCreated revision→updates first-token provenance only"
+          : "Canonical OpenFour Registry revision→updates protocol or creation-capability state",
+      },
+      capitalPath: {
+        zh: "链重组修订不建立新的可执行资金路径",
+        en: "A chain-reorg revision does not establish a new executable capital path",
+      },
+      entryCondition: {
+        zh: "不执行买入；按本条 canonical 证据重新核验状态与安全性",
+        en: "Do not buy; reassess state and safety from this canonical proof",
+      },
+      invalidation: {
+        zh: "后续 canonical 证据再次修订或该能力失效",
+        en: "A later canonical revision or capability invalidation",
+      },
+      risk: {
+        zh: `旧区块证据已失效，勿追价；${noAutoZh}`,
+        en: `The prior-block proof is invalid; do not chase; ${noAutoEn}`,
+      },
+    };
+  }
+  if (["focus_registry_capability", "focus_registry_delayed_recovery"].includes(eventCategory)) {
+    const delayed = eventCategory === "focus_registry_delayed_recovery";
+    return {
+      conclusion: delayed
+        ? { zh: "延迟补报｜勿追价", en: "Delayed recovery | do not chase" }
+        : { zh: "观察结构变化｜不买入", en: "Watch the structural change | no buy" },
+      mainline: {
+        zh: "OpenFour Registry 官方链上变更→协议/创建能力更新",
+        en: "Official OpenFour Registry change→protocol or creation capability update",
+      },
+      capitalPath: {
+        zh: "结构变化不等于代币安全、流动性或可执行资金路径",
+        en: "A structural change does not establish token safety, liquidity, or an executable capital path",
+      },
+      entryCondition: {
+        zh: "等待能力实际使用后的 TokenCreated CA，再独立做安全检查",
+        en: "Wait for a TokenCreated CA using the capability, then run an independent safety review",
+      },
+      invalidation: {
+        zh: "能力停用、后续未被采用或链上状态再次变化",
+        en: "Capability disabled, no subsequent adoption, or another on-chain state change",
+      },
+      risk: delayed
+        ? { zh: `补扫事件可能已被市场消化，勿追价；${noAutoZh}`, en: `The catch-up event may already be priced in; do not chase; ${noAutoEn}` }
+        : { zh: `仅结构信息；${noAutoZh}`, en: `Structural information only; ${noAutoEn}` },
+    };
+  }
+  if (eventCategory === "focus_registry_first_token") {
+    return {
+      conclusion: { zh: "观察｜不买入", en: "Watch | no buy" },
+      mainline: {
+        zh: "OpenFour 官方 Core 首币证明→仅确认新能力已被实际使用",
+        en: "Official OpenFour Core first-token proof→confirms only that the capability was used",
+      },
+      capitalPath: {
+        zh: "首币出现不等于安全、流动性或持续资金流",
+        en: "A first token does not establish safety, liquidity, or durable capital flow",
+      },
+      entryCondition: {
+        zh: "不自动交易；独立核验合约、安全、池深与可卖性后再评估",
+        en: "No automatic trading; independently verify contract safety, pool depth, and sellability",
+      },
+      invalidation: {
+        zh: "能力回滚、代币风险、流动性不足或无法卖出",
+        en: "Capability rollback, token risk, weak liquidity, or impaired selling",
+      },
+      risk: { zh: `首币卡仅作来源证明；${noAutoZh}`, en: `The first-token card proves provenance only; ${noAutoEn}` },
+    };
+  }
+  if (eventCategory === "focus_market_campaign") {
+    return {
+      conclusion: { zh: "观察", en: "Watch" },
+      mainline: {
+        zh: "Four.Meme bStock 合作榜单→短期平台流量与交易注意力",
+        en: "Four.Meme bStock partner leaderboard→short-term platform traffic and trading attention",
+      },
+      capitalPath: {
+        zh: "奖池激励→活动成交量与注意力；不是协议升级",
+        en: "Prize incentives→campaign volume and attention; not a protocol upgrade",
+      },
+      entryCondition: {
+        zh: "未指定代币 CA；仅在具体标的、池子深度与成交可核验后再评估",
+        en: "No token CA is specified; reassess only after a concrete asset, pool depth, and volume are verifiable",
+      },
+      invalidation: {
+        zh: "活动结束、榜单规则变化或无真实成交承接",
+        en: "Campaign expiry, leaderboard-rule changes, or no real trading follow-through",
+      },
+      risk: {
+        zh: `流量活动不等于协议能力或买入信号；${noAutoZh}`,
+        en: `A traffic campaign is neither a protocol capability nor a buy signal; ${noAutoEn}`,
+      },
+    };
+  }
+  if (eventCategory === "focus_official" && isOfficialFourMemeCapabilityUpdate(event)) {
+    const unpublished = event.changeType === "template_unpublished";
+    const templateName = clean(event.currentTemplate?.name || event.mode?.officialName) || "Four.Meme 模板";
+    return {
+      conclusion: { zh: unpublished ? "停止沿用" : "观察", en: unpublished ? "Stop relying on it" : "Watch" },
+      mainline: {
+        zh: unpublished
+          ? `Four.Meme 官方下架 ${templateName}→该模板不再视为当前可用`
+          : `Four.Meme 官方模板 ${templateName} 更新→等待真实启用与后续首币`,
+        en: unpublished
+          ? `Four.Meme officially unpublished ${templateName}→do not treat the template as currently available`
+          : `Four.Meme official template ${templateName} changed→await real activation and a subsequent first token`,
+      },
+      capitalPath: {
+        zh: unpublished ? "能力撤回→不建立买入路径" : "模板能力→真实启用→后续发行流动性",
+        en: unpublished ? "Capability withdrawal→no buy path" : "Template capability→real activation→subsequent launch liquidity",
+      },
+      entryCondition: {
+        zh: unpublished ? "不执行买入；等待官方重新发布和链上启用" : "未指定代币 CA；仅在启用后首币安全、流动性与成交确认时再评估",
+        en: unpublished ? "Do not buy; await official republication and on-chain activation" : "No token CA is specified; reassess only after activation and first-token safety, liquidity, and volume confirmation",
+      },
+      invalidation: {
+        zh: unpublished ? "官方重新发布且链上状态重新启用" : "模板撤回、未启用或没有安全首币",
+        en: unpublished ? "Official republication plus renewed on-chain activation" : "Template withdrawal, no activation, or no safe first token",
+      },
+      risk: {
+        zh: `官方 API 变化不等于可交易代币；${noAutoZh}`,
+        en: `An official API change is not a tradable token; ${noAutoEn}`,
+      },
+    };
+  }
   if (["pon_structural", "pon_information"].includes(eventCategory)) {
     const structural = eventCategory === "pon_structural";
     return {
@@ -1237,6 +1452,12 @@ export function deriveTradingPriority(event = {}, { nowMs = null } = {}) {
     && hardGates.validWindow
     && hardGates.safetyPassed
     && hardGates.explicitPath;
+  if (["focus_registry_capability", "focus_registry_first_token", "focus_registry_delayed_recovery", "focus_registry_canonical_revision"].includes(eventCategory)) {
+    hardGates.t0Eligible = false;
+  }
+  if (["focus_registry_first_token", "focus_registry_delayed_recovery", "focus_registry_canonical_revision"].includes(eventCategory)) {
+    hardGates.t1Eligible = false;
+  }
 
   const components = {
     catalyst: catalystScore(eventCategory),
@@ -1248,7 +1469,8 @@ export function deriveTradingPriority(event = {}, { nowMs = null } = {}) {
   };
   const score = Object.values(components).reduce((total, value) => total + value, 0);
   let tier;
-  if (trackedTokenCanonicalRevision || trackedTokenDelayedRecovery) tier = "T2";
+  if (["focus_policy_recovery", "focus_registry_first_token", "focus_registry_delayed_recovery", "focus_registry_canonical_revision"].includes(eventCategory)) tier = "T2";
+  else if (trackedTokenCanonicalRevision || trackedTokenDelayedRecovery) tier = "T2";
   else if (hardGates.t0Eligible && score >= 10) tier = "T0";
   else if (["developer_maintenance", "binance_low_value"].includes(eventCategory)) tier = "T3";
   else if (eventCategory === "pon_information") tier = "T2";

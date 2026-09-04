@@ -12,8 +12,17 @@ import {
   interpretTwitterWeb3Update,
 } from "./web3-alert-interpreter.js";
 import { isTradingPriority, tradingPriorityForEvent } from "./trading-priority.js";
+import {
+  isStrictBscOpenFourFirstTokenUpdate,
+  isStrictFourRegistryCapabilityUpdate,
+  isStrictFourRegistryCanonicalRestoration,
+  isStrictFourRegistryCanonicalRevision,
+  isStrictFourRegistryCanonicalSupersession,
+  isStrictFourRegistryDelayedRecovery,
+  isStrictFourRegistryFirstTokenUpdate,
+} from "./source-controls.js";
 
-export const BILINGUAL_RENDER_VERSION = 19;
+export const BILINGUAL_RENDER_VERSION = 21;
 const MAX_CARD_LINES = 2;
 const MAX_LINE_LENGTH = 230;
 const MAX_DISPLAY_LINE_LENGTH = 138;
@@ -1438,6 +1447,377 @@ function focusAgentSkillDetails(event) {
   };
 }
 
+function fourRegistryRecoveryDetails(event) {
+  if (isStrictFourRegistryCanonicalRevision(event)) {
+    return {
+      kind: "revision",
+      sourceOccurredAt: event.blockTimestamp,
+      recoveredAt: event.canonicalRevision.recoveryDetectedAt,
+      lagMs: Math.max(0, Date.parse(event.canonicalRevision.recoveryDetectedAt) - Date.parse(event.blockTimestamp)),
+      previousBlockHash: event.canonicalRevision.replacesBlockHash,
+      newBlockHash: event.canonicalRevision.newBlockHash,
+    };
+  }
+  if (isStrictFourRegistryCanonicalRestoration(event)) {
+    return {
+      kind: "restoration",
+      sourceOccurredAt: event.blockTimestamp,
+      recoveredAt: event.canonicalRestoration.detectedAt,
+      lagMs: Math.max(0, Date.parse(event.canonicalRestoration.detectedAt) - Date.parse(event.blockTimestamp)),
+      previousBlockHash: event.canonicalRestoration.blockHash,
+      newBlockHash: event.blockHash,
+    };
+  }
+  if (isStrictFourRegistryCanonicalSupersession(event)) {
+    return {
+      kind: "supersession",
+      sourceOccurredAt: event.blockTimestamp,
+      recoveredAt: event.canonicalSupersession.detectedAt,
+      lagMs: Math.max(0, Date.parse(event.canonicalSupersession.detectedAt) - Date.parse(event.blockTimestamp)),
+      previousBlockHash: event.canonicalSupersession.cancelledBlockHash,
+      newBlockHash: event.canonicalSupersession.newBlockHash,
+    };
+  }
+  if (isStrictFourRegistryDelayedRecovery(event)) {
+    return {
+      kind: "recovery",
+      sourceOccurredAt: event.delayedRecovery.sourceOccurredAt,
+      recoveredAt: event.delayedRecovery.recoveredAt,
+      lagMs: event.delayedRecovery.lagMs,
+    };
+  }
+  const freshness = event?.freshness;
+  const decision = freshness?.deliveryDecision || freshness?.decision;
+  if (!["late", "suppress"].includes(decision)) return null;
+  const producerObservedMs = Date.parse(String(event?.deliveryPolicy?.firstObservedAt || ""));
+  const pipelineDiscoveredMs = Date.parse(String(freshness?.discoveredAt || ""));
+  const delayedAfterProducerCommit = Number.isFinite(producerObservedMs)
+    && Number.isFinite(pipelineDiscoveredMs)
+    && pipelineDiscoveredMs - producerObservedMs > 1_000;
+  const deliveryEvaluatedMs = Date.parse(String(freshness?.deliveryEvaluatedAt || ""));
+  const waitedInAlertOutbox = Number.isFinite(deliveryEvaluatedMs)
+    && Number.isFinite(pipelineDiscoveredMs)
+    && deliveryEvaluatedMs - pipelineDiscoveredMs > 1_000;
+  return {
+    kind: freshness?.decision === "realtime" || delayedAfterProducerCommit || waitedInAlertOutbox
+      ? "delivery"
+      : "discovery",
+    sourceOccurredAt: freshness?.sourceOccurredAt || event?.blockTimestamp,
+    recoveredAt: freshness?.deliveryEvaluatedAt || freshness?.discoveredAt || event?.observedAt,
+    lagMs: freshness?.deliveryLagMs ?? freshness?.lagMs,
+  };
+}
+
+function fourMemeUpdateDetails(event) {
+  const project = String(event?.project?.id || event?.platform?.id || event?.featurePlatform
+    || (typeof event?.launchpad === "string" ? event.launchpad : event?.launchpad?.id) || "")
+    .toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (project !== "fourmeme") return null;
+  const recovery = event?.policyFixRecovery?.version === 1
+    && event.policyFixRecovery?.stale === true
+    && event.policyFixRecovery?.noChase === true;
+  const namedMode = event?.signal?.namedMode;
+  if (namedMode?.version === 1
+    && String(namedMode.id || "").toLowerCase() === "listayield"
+    && namedMode.name === "ListaYield"
+    && namedMode.parent === "OpenFour"
+    && namedMode.stage === "announced") {
+    return {
+      kind: "named_mode",
+      name: namedMode.name,
+      parent: namedMode.parent,
+      partnerHandle: String(namedMode.partnerHandle || "").replace(/^@/, ""),
+      destination: namedMode.graduationLiquidityDestination || "Lista DEX",
+      holderYield: namedMode.holderYield === true,
+      recovery,
+    };
+  }
+  const campaign = event?.signal?.marketCampaign;
+  if (campaign?.version === 1
+    && campaign.kind === "bstock_partner_leaderboard"
+    && campaign.assetClass === "bstock"
+    && campaign.stage === "live") {
+    return {
+      kind: "market_campaign",
+      venue: campaign.venue || "Ave.ai",
+      totalPrizeUsdt: Number(campaign.totalPrizeUsdt),
+      fourMemePrizeUsdt: Number(campaign.fourMemePrizeUsdt),
+      topRanks: Number(campaign.topRanks),
+      recovery,
+    };
+  }
+  const capability = event?.officialCapability;
+  if (event?.type === "bsc_launchpad_update"
+    && capability?.version === 1
+    && capability.platform === "fourmeme"
+    && capability.kind === "template"
+    && capability.sourceId === "fourmeme_public_template_api"
+    && event?.source?.id === capability.sourceId
+    && event?.sourceTrust === "official_verified") {
+    const current = event?.currentTemplate || null;
+    const previous = event?.previousTemplate || null;
+    const name = current?.name || previous?.name || event?.mode?.officialName || event?.mode?.componentMode || "Template";
+    return {
+      kind: "official_template",
+      name,
+      changeType: capability.changeType || event.changeType || event?.mode?.template?.changeType || "template_updated",
+      changedFields: list(event?.changedFields).map(String),
+      previous,
+      current,
+      sourceUrl: capability.sourceUrl,
+      recovery: false,
+    };
+  }
+  if (isStrictBscOpenFourFirstTokenUpdate(event)) {
+    const token = list(event?.tokens)[0] || {};
+    const metadata = token?.metadata || {};
+    return {
+      kind: event?.security?.decision === "pass"
+        && event?.security?.metrics?.liquidityConfirmed === true
+        ? "core_first_token_safety"
+        : "core_first_token",
+      name: event?.mode?.componentMode || event?.mode?.officialName || "OpenFour capability",
+      presetId: String(event?.mode?.presetId || event?.mode?.templateId || "?"),
+      tokenName: metadata?.name || token?.name || "Unknown token",
+      tokenSymbol: metadata?.symbol || token?.symbol || "?",
+      tokenAddress: token?.token || token?.address || null,
+      explorerUrl: event?.explorerUrl || null,
+      recovery: false,
+    };
+  }
+  if (isStrictFourRegistryCapabilityUpdate(event)) {
+    const registryRecovery = fourRegistryRecoveryDetails(event);
+    if (event.kind === "four_registry_module_upserted") {
+      return {
+        kind: "registry_module",
+        moduleKey: event.module.moduleKey,
+        moduleKind: event.module.kindName,
+        beacon: event.module.beacon,
+        implementation: event.module.implementation,
+        active: event.module.active,
+        implementationCodePresent: event.module.implementationCodePresent,
+        beaconCodePresent: event.module.beaconCodePresent,
+        explorerUrl: event.explorerUrl,
+        recovery: Boolean(registryRecovery),
+        recoveryDetails: registryRecovery,
+      };
+    }
+    if (event.kind === "four_registry_token_impl_upserted") {
+      return {
+        kind: "registry_token_impl",
+        tokenImplId: event.tokenImplementation.tokenImplId,
+        implementation: event.tokenImplementation.implementation,
+        version: event.tokenImplementation.version,
+        implementationCodePresent: event.tokenImplementation.implementationCodePresent,
+        explorerUrl: event.explorerUrl,
+        recovery: Boolean(registryRecovery),
+        recoveryDetails: registryRecovery,
+      };
+    }
+    if (event.kind === "four_registry_tag_registered") {
+      return {
+        kind: "registry_tag",
+        tagId: event.tag.tagId,
+        tag: event.tag.tag,
+        explorerUrl: event.explorerUrl,
+        recovery: Boolean(registryRecovery),
+        recoveryDetails: registryRecovery,
+      };
+    }
+    const current = event?.currentPreset || null;
+    const previous = event?.previousPreset || null;
+    return {
+      kind: "registry_preset",
+      name: current?.name || previous?.name || "OpenFour preset",
+      presetId: String(event?.presetId || current?.id || previous?.id || "?"),
+      changeType: String(event?.changeType || "updated"),
+      snapshotScope: event.snapshotScope,
+      previous,
+      current,
+      explorerUrl: event.explorerUrl,
+      recovery: Boolean(registryRecovery),
+      recoveryDetails: registryRecovery,
+    };
+  }
+  if (isStrictFourRegistryFirstTokenUpdate(event)) {
+    const registryRecovery = fourRegistryRecoveryDetails(event);
+    const token = event?.token || list(event?.tokens)[0] || {};
+    return {
+      kind: "registry_first_token",
+      name: event?.preset?.name || event?.mode?.name || "OpenFour preset",
+      presetId: String(event?.presetId || event?.preset?.id || "?"),
+      tokenName: token?.name || "Unknown token",
+      tokenSymbol: token?.symbol || "?",
+      tokenAddress: token?.address || token?.token || null,
+      presetSnapshotScope: event.presetSnapshotScope,
+      explorerUrl: event.explorerUrl,
+      recovery: Boolean(registryRecovery),
+      recoveryDetails: registryRecovery,
+    };
+  }
+  const repository = String(event?.repository || "").toLowerCase();
+  const githubPaths = list(event?.files)
+    .map((file) => String(typeof file === "string" ? file : file?.filename || "").toLowerCase());
+  if (event?.type === "github_module_update"
+    && repository === "four-meme-community/openfour-docs"
+    && event?.sourceTrust === "official_verified"
+    && githubPaths.some((pathname) => /(?:^|\/)mechanisms\/lista-v2-stake\.md$/.test(pathname))
+    && githubPaths.some((pathname) => /(?:^|\/)strategytaxtoken\.(?:sol|json)$/.test(pathname))) {
+    return {
+      kind: "listayield_github",
+      name: "ListaYield",
+      repository: event.repository,
+      revision: String(event.commit || event.headCommit || "").slice(0, 8),
+      recovery: false,
+    };
+  }
+  return null;
+}
+
+function exactUsdt(value) {
+  return Number.isSafeInteger(value) && value >= 0
+    ? `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value)} USDT`
+    : "? USDT";
+}
+
+function fourTemplateValue(value) {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean).join(" + ") || "∅";
+  if (value === null || value === undefined || value === "") return "∅";
+  return String(value).replace(/\s+/g, " ").trim();
+}
+
+function fourTemplateChangeSummary(details, language = "zh") {
+  const zh = language === "zh";
+  const labels = {
+    status: zh ? "状态" : "status",
+    amount: zh ? "金额" : "amount",
+    mechanismTerms: zh ? "机制" : "mechanisms",
+    numericParameters: zh ? "参数" : "parameters",
+    codeType: zh ? "代码类型" : "code type",
+    tag: zh ? "标签" : "tag",
+    name: zh ? "名称" : "name",
+    description: zh ? "描述" : "description",
+  };
+  const priority = ["status", "amount", "numericParameters", "mechanismTerms", "codeType", "tag", "name", "description"];
+  const changed = priority.filter((field) => details.changedFields.includes(field));
+  if (!details.previous && details.current) {
+    const facts = [
+      details.current.status ? `${labels.status}=${fourTemplateValue(details.current.status)}` : null,
+      list(details.current.mechanismTerms).length ? `${labels.mechanismTerms}=${fourTemplateValue(details.current.mechanismTerms)}` : null,
+      list(details.current.numericParameters).length ? `${labels.numericParameters}=${fourTemplateValue(details.current.numericParameters)}` : null,
+    ].filter(Boolean);
+    return facts.slice(0, 2).join(zh ? "；" : "; ") || (zh ? "官方模板已记录" : "Official template recorded");
+  }
+  const transitions = changed.map((field) => {
+    const before = fourTemplateValue(details.previous?.[field]);
+    const after = fourTemplateValue(details.current?.[field]);
+    return `${labels[field] || field} ${before} → ${after}`;
+  });
+  return transitions.slice(0, 2).join(zh ? "；" : "; ") || (zh ? "模板结构已更新" : "Template structure updated");
+}
+
+function fourTemplateAction(changeType, language = "zh") {
+  const zh = language === "zh";
+  const value = String(changeType || "").toLowerCase();
+  if (/unpublish|remove|disable|deactiv/.test(value)) return zh ? "已下架/停用" : "unpublished/disabled";
+  if (/publish|add|new|create/.test(value)) return zh ? "新增/发布" : "added/published";
+  return zh ? "配置变更" : "configuration changed";
+}
+
+function fourRegistryAction(changeType, language = "zh") {
+  const zh = language === "zh";
+  const actions = {
+    added: zh ? "新增预设" : "preset added",
+    activated: zh ? "预设启用" : "preset activated",
+    deactivated: zh ? "预设停用" : "preset deactivated",
+    create_enabled: zh ? "开放创建" : "creation enabled",
+    create_disabled: zh ? "关闭创建" : "creation disabled",
+    updated: zh ? "配置更新" : "configuration updated",
+  };
+  return actions[String(changeType || "")] || (zh ? "链上配置更新" : "on-chain configuration updated");
+}
+
+function fourRegistryStatus(details, language = "zh") {
+  const zh = language === "zh";
+  const previous = details.previous;
+  const current = details.current;
+  if (!current) return zh ? "当前状态待确认" : "Current status pending";
+  const active = current.active === true ? (zh ? "已启用" : "active") : (zh ? "未启用" : "inactive");
+  const creation = current.createEnabled === true ? (zh ? "可创建" : "creation open") : (zh ? "不可创建" : "creation closed");
+  if (!previous) return `${active}｜${creation}`;
+  const changed = [];
+  if (previous.active !== current.active) {
+    changed.push(`${zh ? "启用" : "active"} ${previous.active === true ? "true" : "false"} → ${current.active === true ? "true" : "false"}`);
+  }
+  if (previous.createEnabled !== current.createEnabled) {
+    changed.push(`${zh ? "创建" : "creation"} ${previous.createEnabled === true ? "true" : "false"} → ${current.createEnabled === true ? "true" : "false"}`);
+  }
+  return changed.slice(0, 2).join(zh ? "；" : "; ") || `${active}｜${creation}`;
+}
+
+function fourRegistryRecoveryLabel(details, language = "zh") {
+  const zh = language === "zh";
+  if (details?.recoveryDetails?.kind === "revision") return zh
+    ? "链重组修订｜旧证据失效｜以本条为准｜勿买"
+    : "Canonical reorg revision | prior proof invalid | use this update | do not buy";
+  if (details?.recoveryDetails?.kind === "restoration") return zh
+    ? "链重组后原证据恢复"
+    : "Original proof restored after reorg";
+  if (details?.recoveryDetails?.kind === "supersession") return zh
+    ? "链重组后确认当前证据"
+    : "Current proof confirmed after reorg";
+  if (details?.recoveryDetails?.kind === "recovery") return zh ? "延迟补报｜勿追价" : "Delayed recovery | do not chase";
+  if (details?.recoveryDetails?.kind === "discovery") return zh ? "延迟发现｜勿追价" : "Late discovery | do not chase";
+  if (details?.recoveryDetails?.kind === "delivery") return zh ? "延迟送达｜勿追价" : "Delayed delivery | do not chase";
+  return null;
+}
+
+function fourRegistryRiskTime(details, focusTimeValue, language = "zh") {
+  const zh = language === "zh";
+  const recovery = details?.recoveryDetails;
+  if (!recovery) return `${zh ? "非自动交易｜" : "no automatic trading | "}${localizedCstTime(focusTimeValue, language)}`;
+  const label = fourRegistryRecoveryLabel(details, language);
+  const source = beijingMinute(recovery.sourceOccurredAt);
+  const recovered = beijingMinute(recovery.recoveredAt);
+  const lag = ponFunRecoveryLag(recovery.lagMs, language);
+  return zh
+    ? `${label}｜源 ${source || "未知"} CST｜恢复 ${recovered || "未知"} CST｜延迟 ${lag}｜非自动交易`
+    : `${label} | source ${source || "unknown"} CST | recovered ${recovered || "unknown"} CST | lag ${lag} | no automatic trading`;
+}
+
+function fourRegistrySnapshotQualifier(details, language = "zh", { firstToken = false } = {}) {
+  const zh = language === "zh";
+  const scope = firstToken ? details?.presetSnapshotScope : details?.snapshotScope;
+  if (scope === "canonical_event_status_only_metadata_deferred_within_block") {
+    return firstToken
+      ? (zh
+          ? `配置名称（区块前态）：${details.name}｜同块静态字段沿用前态；非 TokenCreated 时点精确值`
+          : `Config name (prior same-block state): ${details.name} | static fields retain the prior state; not exact at TokenCreated time`)
+      : (zh
+          ? `配置名称（区块前态）：${details.name}｜同块多次更新；本交易仅确认状态`
+          : `Config name (prior same-block state): ${details.name} | multiple same-block updates; this transaction proves status only`);
+  }
+  if ([
+    "canonical_event_status_plus_same_block_final_metadata_settlement",
+    "canonical_event_status_plus_unattributed_same_block_metadata_snapshot",
+  ].includes(scope)) {
+    return firstToken
+      ? (zh
+          ? `配置名称（区块末态）：${details.name}｜同块最终状态；非 TokenCreated 时点精确值`
+          : `Config name (block-end snapshot): ${details.name} | same-block final state; not exact at TokenCreated time`)
+      : (zh
+          ? `配置名称（区块末态）：${details.name}｜同块最终状态；具体交易归因未确认`
+          : `Config name (block-end snapshot): ${details.name} | same-block final state; not attributable to this transaction`);
+  }
+  return null;
+}
+
+function fourRegistryPresetHeadline(details, { firstToken = false } = {}) {
+  const scope = firstToken ? details?.presetSnapshotScope : details?.snapshotScope;
+  if (scope === "canonical_event_status_plus_block_end_metadata") return details.name;
+  return `OpenFour Preset ${details.presetId}`;
+}
+
 function beijingMinute(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
@@ -1509,6 +1889,34 @@ function focusTitle(event, language = "zh") {
   if (flapAgenticFirstTokenCandidate(event)) return zh
     ? "Flap｜Skill首币候选"
     : "Flap｜Skill token candidate";
+  const fourUpdate = fourMemeUpdateDetails(event);
+  if (fourUpdate?.kind === "named_mode") return zh
+    ? `Four.Meme｜${fourUpdate.name} 新模式`
+    : `Four.Meme｜New ${fourUpdate.name} mode`;
+  if (fourUpdate?.kind === "market_campaign") return zh
+    ? "Four.Meme｜bStocks 交易活动"
+    : "Four.Meme｜bStocks trading campaign";
+  if (fourUpdate?.kind === "listayield_github") return zh
+    ? "Four.Meme｜ListaYield 代码更新"
+    : "Four.Meme｜ListaYield code update";
+  if (fourUpdate?.kind === "official_template") return zh
+    ? `Four.Meme｜${fourUpdate.name} 模板更新`
+    : `Four.Meme｜${fourUpdate.name} template update`;
+  if (fourUpdate?.kind === "registry_preset") return zh
+    ? `Four.Meme｜${fourUpdate.name} 链上更新`
+    : `Four.Meme｜${fourUpdate.name} on-chain update`;
+  if (fourUpdate?.kind === "registry_module") return zh
+    ? "Four.Meme｜OpenFour Module 更新"
+    : "Four.Meme｜OpenFour Module update";
+  if (fourUpdate?.kind === "registry_token_impl") return zh
+    ? "Four.Meme｜OpenFour TokenImpl 更新"
+    : "Four.Meme｜OpenFour TokenImpl update";
+  if (fourUpdate?.kind === "registry_tag") return zh
+    ? "Four.Meme｜OpenFour Tag 登记"
+    : "Four.Meme｜OpenFour Tag registration";
+  if (fourUpdate?.kind === "registry_first_token") return zh
+    ? `Four.Meme｜${fourUpdate.name} 首个代币`
+    : `Four.Meme｜First ${fourUpdate.name} token`;
   const agentNative = binanceAgentNativeDetails(event);
   if (agentNative?.launch) return zh ? "Binance Agent OS｜正式发布" : "Binance Agent OS｜Official launch";
   if (agentNative?.developer) return zh ? "Binance Agent Native｜Developer 更新" : "Binance Agent Native｜Developer update";
@@ -2231,6 +2639,30 @@ function focusKey(event, changeModel, language = "zh", priority = null) {
   if (agentSkill) return zh
     ? "Agentic Wallet/AI Agent 新增平台发币 skill 入口"
     : "Agentic Wallet/AI Agent added a platform token-launch skill entry";
+  const fourUpdate = fourMemeUpdateDetails(event);
+  if (fourUpdate?.kind === "named_mode") return zh
+    ? `${fourUpdate.name}：交易税分成→Lista 收益产品；毕业后流动性→${fourUpdate.destination}`
+    : `${fourUpdate.name}: trading-tax share→Lista yield products; post-graduation liquidity→${fourUpdate.destination}`;
+  if (fourUpdate?.kind === "market_campaign") return zh
+    ? `bStocks 榜单：总奖池 ${exactUsdt(fourUpdate.totalPrizeUsdt)}；Four.Meme 专属 ${exactUsdt(fourUpdate.fourMemePrizeUsdt)}；Top ${fourUpdate.topRanks}`
+    : `bStocks leaderboard: ${exactUsdt(fourUpdate.totalPrizeUsdt)} total; ${exactUsdt(fourUpdate.fourMemePrizeUsdt)} for Four.Meme traders; Top ${fourUpdate.topRanks}`;
+  if (fourUpdate?.kind === "listayield_github") return zh
+    ? "ListaYield：新增 Lista V2 stake-tax 策略与 StrategyTaxToken"
+    : "ListaYield: added the Lista V2 stake-tax strategy and StrategyTaxToken";
+  if (fourUpdate?.kind === "official_template") return `${fourUpdate.name}：${fourTemplateChangeSummary(fourUpdate, language)}`;
+  if (fourUpdate?.kind === "registry_preset") return `${fourUpdate.name}：${fourRegistryAction(fourUpdate.changeType, language)}；${fourRegistryStatus(fourUpdate, language)}`;
+  if (fourUpdate?.kind === "registry_module") return zh
+    ? `Module ${fourUpdate.moduleKind}｜active=${fourUpdate.active}｜implementation ${fourUpdate.implementation}`
+    : `Module ${fourUpdate.moduleKind} | active=${fourUpdate.active} | implementation ${fourUpdate.implementation}`;
+  if (fourUpdate?.kind === "registry_token_impl") return zh
+    ? `TokenImpl ${fourUpdate.version || "∅"}｜implementation ${fourUpdate.implementation}`
+    : `TokenImpl ${fourUpdate.version || "∅"} | implementation ${fourUpdate.implementation}`;
+  if (fourUpdate?.kind === "registry_tag") return zh
+    ? `Tag ${fourUpdate.tag}｜id ${fourUpdate.tagId}`
+    : `Tag ${fourUpdate.tag} | id ${fourUpdate.tagId}`;
+  if (fourUpdate?.kind === "registry_first_token") return zh
+    ? `${fourUpdate.tokenName} (${fourUpdate.tokenSymbol})｜CA ${fourUpdate.tokenAddress || "待解析"}`
+    : `${fourUpdate.tokenName} (${fourUpdate.tokenSymbol}) | CA ${fourUpdate.tokenAddress || "unresolved"}`;
   const twitterUpdate = interpretTwitterWeb3Update(event, language);
   if (twitterUpdate) return twitterUpdate;
   const hooklist = hooklistRegistryFacts(event);
@@ -2735,6 +3167,39 @@ function bscStage(event, language) {
 function focusStage(event, language = "zh", sourceStatus = "") {
   const zh = language === "zh";
   if (isPonFunRenderEvent(event)) return ponFunFocusStage(event, language);
+  const fourUpdate = fourMemeUpdateDetails(event);
+  if (fourUpdate?.kind === "named_mode") return fourUpdate.recovery
+    ? (zh
+        ? "规则修复延迟补报；官方 X 已核；链上启用待确认；勿追价；非自动交易"
+        : "Delayed policy-fix recovery; official X verified; on-chain activation pending; do not chase; no automatic trading")
+    : (zh
+        ? "官方 X 已核；链上启用待确认；非自动交易"
+        : "Official X verified; on-chain activation pending; no automatic trading");
+  if (fourUpdate?.kind === "market_campaign") return fourUpdate.recovery
+    ? (zh
+        ? "规则修复延迟补报；流量催化，非协议升级；勿追价；非自动交易"
+        : "Delayed policy-fix recovery; traffic catalyst, not a protocol upgrade; do not chase; no automatic trading")
+    : (zh
+        ? "官方 X 已核；流量催化，非协议升级；非自动交易"
+        : "Official X verified; traffic catalyst, not a protocol upgrade; no automatic trading");
+  if (fourUpdate?.kind === "listayield_github") return zh
+    ? "官方 GitHub 已提交；产品发布与链上启用未确认；非自动交易"
+    : "Committed to official GitHub; product release and on-chain activation unconfirmed; no automatic trading";
+  if (fourUpdate?.kind === "official_template") return zh
+    ? "Four.Meme 官方模板 API 已核；链上启用待确认；非自动交易"
+    : "Four.Meme official template API verified; on-chain activation pending; no automatic trading";
+  if (["registry_preset", "registry_module", "registry_token_impl", "registry_tag"].includes(fourUpdate?.kind)) {
+    const recovery = fourRegistryRecoveryLabel(fourUpdate, language);
+    return zh
+      ? `${recovery ? `${recovery}；` : ""}官方 Registry finalized 日志已核；安全性未知；非自动交易`
+      : `${recovery ? `${recovery}; ` : ""}Official finalized Registry log verified; safety unknown; no automatic trading`;
+  }
+  if (fourUpdate?.kind === "registry_first_token") {
+    const recovery = fourRegistryRecoveryLabel(fourUpdate, language);
+    return zh
+      ? `${recovery ? `${recovery}；` : ""}官方 Core TokenCreated 已核；仅确认归属，安全未完成；不买；非自动交易`
+      : `${recovery ? `${recovery}; ` : ""}Official Core TokenCreated verified; provenance only, safety incomplete; do not buy; no automatic trading`;
+  }
   const flapQuote = flapQuotePairDetails(event);
   if (flapQuote) {
     if (flapQuote.firstObservedAfterGap) {
@@ -2991,6 +3456,7 @@ function buildFocusModel(event, changeModel, sourceLines, tradingPriority, showP
       }
     : null;
   const flapQuoteDetails = flapQuotePairDetails(event);
+  const fourMeme = fourMemeUpdateDetails(event);
   const flapQuote = flapQuoteDetails
     ? {
         verification: {
@@ -3069,6 +3535,7 @@ function buildFocusModel(event, changeModel, sourceLines, tradingPriority, showP
     ...(fomo ? { fomo } : {}),
     ...(pon ? { pon } : {}),
     ...(flapQuote ? { flapQuote } : {}),
+    ...(fourMeme ? { fourMeme } : {}),
     ...(trackedToken ? { flapTrackedToken: trackedToken } : {}),
   };
 }
@@ -3708,6 +4175,7 @@ function usesLocalStructuredBilingualFocus(event) {
     || event?.type === "github_module_update"
     || event?.type === "uniswap_official_update"
     || Boolean(binanceAgentNativeDetails(event))
+    || Boolean(fourMemeUpdateDetails(event))
     || flapAgenticFirstTokenCandidate(event)
     || flapQuotePairDetails(event)?.recovery === true
     || Boolean(interpretPlatformPoolChange(event, "zh"))
@@ -3918,6 +4386,7 @@ export function renderBilingualTelegramText(bundle, strong = false) {
     const zh = language === "zh";
     const focusModel = bundle?.focusModel || {};
     const tier = focusModel.priority?.tier || bundle?.priority?.tier;
+    const prioritySuffix = focusModel.showPriority && tier ? ` · ${tier}` : "";
     const fallbackPlatform = focusModel.platform?.[language] || focusModel.title?.[language]
       || (zh ? "监控" : "Monitor");
     const platform = lines[0]
@@ -3976,6 +4445,152 @@ export function renderBilingualTelegramText(bundle, strong = false) {
         field(zh ? "验证：" : "Verification: ", focusModel.stage?.[language], 108),
         field(zh ? "时间：" : "Time: ", localizedCstTime(focusModel.time?.[language], language), 104),
       ].filter(Boolean).join("\n");
+    }
+
+    const fourMeme = focusModel.fourMeme;
+    if (fourMeme?.kind === "named_mode") {
+      const source = focusModel.evidence?.map((item) => item?.[language]).filter(Boolean).join(" · ")
+        || (zh ? "Four.Meme 官方 X" : "Four.Meme official X");
+      const time = localizedCstTime(focusModel.time?.[language], language);
+      return [
+        `${zh ? "平台：" : "Platform: "}Four.Meme｜${fourMeme.name} ${zh ? "新模式" : "new mode"}${prioritySuffix}`,
+        `${zh ? "机制：" : "Mechanism: "}${fourMeme.partnerHandle ? `@${fourMeme.partnerHandle}｜` : ""}${zh ? "交易税分成→Lista 收益产品" : "trading-tax share→Lista yield products"}`,
+        `${zh ? `毕业：流动性默认迁移 ${fourMeme.destination}${fourMeme.holderYield ? "｜符合条件持有人获持续收益" : ""}`
+          : `Graduation: liquidity defaults to ${fourMeme.destination}${fourMeme.holderYield ? " | ongoing yield for eligible holders" : ""}`}`,
+        `${zh ? "结论：平台级催化；等待首个安全代币 CA" : "Decision: platform catalyst; wait for the first safety-cleared token CA"}`,
+        `${zh ? "来源：" : "Source: "}${source}`,
+        `${zh ? "风险/时间：" : "Risk/Time: "}${fourMeme.recovery
+          ? (zh ? "延迟补报｜勿追价｜非自动交易｜" : "Delayed recovery | do not chase | no automatic trading | ")
+          : (zh ? "链上启用待确认｜非自动交易｜" : "On-chain activation pending | no automatic trading | ")}${time}`,
+      ].join("\n");
+    }
+    if (fourMeme?.kind === "listayield_github") {
+      const source = [fourMeme.repository, fourMeme.revision].filter(Boolean).join("#")
+        || (zh ? "Four.Meme 官方 GitHub" : "Four.Meme official GitHub");
+      const time = localizedCstTime(focusModel.time?.[language], language);
+      return [
+        `${zh ? "平台：" : "Platform: "}Four.Meme｜ListaYield ${zh ? "代码更新" : "code update"}${prioritySuffix}`,
+        `${zh ? "机制：新增 Lista V2 stake-tax 策略" : "Mechanism: added the Lista V2 stake-tax strategy"}`,
+        `${zh ? "实现：StrategyTaxToken + 税费收益路由" : "Implementation: StrategyTaxToken + tax-yield routing"}`,
+        `${zh ? "结论：代码/文档级催化；尚未确认产品上线" : "Decision: code/docs catalyst; product launch unconfirmed"}`,
+        `${zh ? "来源：" : "Source: "}${source}`,
+        `${zh ? "风险/时间：链上启用待确认｜非自动交易｜" : "Risk/Time: on-chain activation pending | no automatic trading | "}${time}`,
+      ].join("\n");
+    }
+    if (fourMeme?.kind === "official_template") {
+      const time = localizedCstTime(focusModel.time?.[language], language);
+      const change = fourTemplateChangeSummary(fourMeme, language);
+      const source = fourMeme.sourceUrl || (zh ? "Four.Meme 官方模板 API" : "Four.Meme official template API");
+      return [
+        `${zh ? "平台：" : "Platform: "}Four.Meme｜${fourMeme.name} ${zh ? "模板" : "template"}${prioritySuffix}`,
+        `${zh ? "事件：" : "Event: "}${fourTemplateAction(fourMeme.changeType, language)}`,
+        `${zh ? "变化：" : "Change: "}${change}`,
+        `${zh ? "结论：结构性更新；等待链上启用/首个安全代币" : "Decision: structural update; await on-chain activation/first safety-cleared token"}`,
+        `${zh ? "来源：" : "Source: "}${source}`,
+        `${zh ? "风险/时间：非自动交易｜" : "Risk/Time: no automatic trading | "}${time}`,
+      ].join("\n");
+    }
+    if (fourMeme?.kind === "market_campaign") {
+      const source = focusModel.evidence?.map((item) => item?.[language]).filter(Boolean).join(" · ")
+        || (zh ? "Four.Meme 官方 X" : "Four.Meme official X");
+      const time = localizedCstTime(focusModel.time?.[language], language);
+      return [
+        `${zh ? "平台：" : "Platform: "}Four.Meme｜bStocks ${zh ? "交易活动" : "trading campaign"}${prioritySuffix}`,
+        `${zh ? "奖励：" : "Rewards: "}${exactUsdt(fourMeme.totalPrizeUsdt)}${zh ? " 总奖池" : " total"}｜${exactUsdt(fourMeme.fourMemePrizeUsdt)}${zh ? " Four.Meme 专属" : " for Four.Meme traders"}`,
+        `${zh ? `范围：${fourMeme.venue} × BNB Chain｜交易 Stock Memes｜Top ${fourMeme.topRanks}`
+          : `Scope: ${fourMeme.venue} × BNB Chain | trade Stock Memes | Top ${fourMeme.topRanks}`}`,
+        `${zh ? "结论：流量催化；非协议升级；暂无指定 CA" : "Decision: traffic catalyst; not a protocol upgrade; no specified CA"}`,
+        `${zh ? "来源：" : "Source: "}${source}`,
+        `${zh ? "风险/时间：" : "Risk/Time: "}${fourMeme.recovery
+          ? (zh ? "延迟补报｜勿追价｜非自动交易｜" : "Delayed recovery | do not chase | no automatic trading | ")
+          : (zh ? "不作为买入信号｜非自动交易｜" : "Not a buy signal | no automatic trading | ")}${time}`,
+      ].join("\n");
+    }
+    if (fourMeme?.kind === "registry_preset") {
+      const time = localizedCstTime(focusModel.time?.[language], language);
+      const recovery = fourRegistryRecoveryLabel(fourMeme, language);
+      const attribution = fourRegistrySnapshotQualifier(fourMeme, language);
+      const presetHeadline = fourRegistryPresetHeadline(fourMeme);
+      const directSnapshot = fourMeme.snapshotScope === "canonical_event_status_plus_block_end_metadata";
+      return [
+        `${zh ? "平台：" : "Platform: "}Four.Meme｜${recovery ? `${recovery}｜` : ""}OpenFour Registry${prioritySuffix}`,
+        `${zh ? "模式：" : "Mode: "}${presetHeadline}${directSnapshot ? `｜Preset ${fourMeme.presetId}` : ""}`,
+        `${zh ? "事件：" : "Event: "}${fourRegistryAction(fourMeme.changeType, language)}｜${fourRegistryStatus(fourMeme, language)}`,
+        attribution,
+        `${zh ? "结论：官方链上能力变更；等待该能力启用后的首个代币 CA（安全性另行核验）" : "Decision: official on-chain capability change; await its first token CA after activation (verify safety separately)"}`,
+        `${zh ? "证明：" : "Proof: "}${fourMeme.explorerUrl || (zh ? "BNB Chain finalized 状态" : "BNB Chain finalized state")}`,
+        `${zh ? "风险/时间：" : "Risk/Time: "}${fourRegistryRiskTime(fourMeme, time, language)}`,
+      ].filter(Boolean).join("\n");
+    }
+    if (fourMeme?.kind === "registry_module") {
+      const time = localizedCstTime(focusModel.time?.[language], language);
+      const recovery = fourRegistryRecoveryLabel(fourMeme, language);
+      return [
+        `${zh ? "平台：" : "Platform: "}Four.Meme｜${recovery ? `${recovery}｜` : ""}OpenFour Module${prioritySuffix}`,
+        `${zh ? "事件：ModuleUpserted" : "Event: ModuleUpserted"}｜kind=${fourMeme.moduleKind}｜active=${fourMeme.active}`,
+        `${zh ? "实现：" : "Implementation: "}${fourMeme.implementation}｜code=${fourMeme.implementationCodePresent}`,
+        `${zh ? "Beacon：" : "Beacon: "}${fourMeme.beacon}｜code=${fourMeme.beaconCodePresent}`,
+        `${zh ? "结论：协议组件登记/更新；安全性未知｜不买" : "Decision: protocol component registered/updated; safety unknown | do not buy"}`,
+        `${zh ? "证明：" : "Proof: "}${fourMeme.explorerUrl}`,
+        `${zh ? "风险/时间：" : "Risk/Time: "}${fourRegistryRiskTime(fourMeme, time, language)}`,
+      ].join("\n");
+    }
+    if (fourMeme?.kind === "registry_token_impl") {
+      const time = localizedCstTime(focusModel.time?.[language], language);
+      const recovery = fourRegistryRecoveryLabel(fourMeme, language);
+      return [
+        `${zh ? "平台：" : "Platform: "}Four.Meme｜${recovery ? `${recovery}｜` : ""}OpenFour TokenImpl${prioritySuffix}`,
+        `${zh ? "事件：TokenImplUpserted" : "Event: TokenImplUpserted"}｜version=${fourMeme.version || "∅"}`,
+        `${zh ? "实现：" : "Implementation: "}${fourMeme.implementation}｜code=${fourMeme.implementationCodePresent}`,
+        `${zh ? "标识：" : "ID: "}${fourMeme.tokenImplId}`,
+        `${zh ? "结论：代币实现登记/更新；安全性未知｜不买" : "Decision: token implementation registered/updated; safety unknown | do not buy"}`,
+        `${zh ? "证明：" : "Proof: "}${fourMeme.explorerUrl}`,
+        `${zh ? "风险/时间：" : "Risk/Time: "}${fourRegistryRiskTime(fourMeme, time, language)}`,
+      ].join("\n");
+    }
+    if (fourMeme?.kind === "registry_tag") {
+      const time = localizedCstTime(focusModel.time?.[language], language);
+      const recovery = fourRegistryRecoveryLabel(fourMeme, language);
+      return [
+        `${zh ? "平台：" : "Platform: "}Four.Meme｜${recovery ? `${recovery}｜` : ""}OpenFour Tag${prioritySuffix}`,
+        `${zh ? "事件：TagRegistered" : "Event: TagRegistered"}｜${fourMeme.tag}`,
+        `${zh ? "标识：" : "ID: "}${fourMeme.tagId}`,
+        `${zh ? "结论：官方标签登记；不代表代币或组件安全｜不买" : "Decision: official tag registered; not a token/component safety verdict | do not buy"}`,
+        `${zh ? "证明：" : "Proof: "}${fourMeme.explorerUrl}`,
+        `${zh ? "风险/时间：" : "Risk/Time: "}${fourRegistryRiskTime(fourMeme, time, language)}`,
+      ].join("\n");
+    }
+    if (fourMeme?.kind === "registry_first_token") {
+      const time = localizedCstTime(focusModel.time?.[language], language);
+      const recovery = fourRegistryRecoveryLabel(fourMeme, language);
+      const attribution = fourRegistrySnapshotQualifier(fourMeme, language, { firstToken: true });
+      const presetHeadline = fourRegistryPresetHeadline(fourMeme, { firstToken: true });
+      return [
+        `${zh ? "平台：" : "Platform: "}Four.Meme｜${recovery ? `${recovery}｜` : ""}${presetHeadline}${zh ? " 首个代币" : " first token"}${prioritySuffix}`,
+        `${zh ? "代币：" : "Token: "}${fourMeme.tokenName} (${fourMeme.tokenSymbol})｜CA ${fourMeme.tokenAddress || (zh ? "待解析" : "unresolved")}`,
+        `${zh ? "确认：官方 Core TokenCreated｜Preset " : "Proof: official Core TokenCreated | Preset "}${fourMeme.presetId}`,
+        attribution,
+        `${zh ? "结论：链上归属已确认；安全未完成｜不买" : "Decision: on-chain provenance confirmed; safety incomplete | do not buy"}`,
+        `${zh ? "证明：" : "Evidence: "}${fourMeme.explorerUrl || (zh ? "BNB Chain finalized 交易" : "BNB Chain finalized transaction")}`,
+        `${zh ? "风险/时间：" : "Risk/Time: "}${fourRegistryRiskTime(fourMeme, time, language)}`,
+      ].filter(Boolean).join("\n");
+    }
+    if (["core_first_token", "core_first_token_safety"].includes(fourMeme?.kind)) {
+      const time = localizedCstTime(focusModel.time?.[language], language);
+      const safetyPass = fourMeme.kind === "core_first_token_safety";
+      return [
+        `${zh ? "平台：" : "Platform: "}Four.Meme｜OpenFour ${safetyPass
+          ? (zh ? "首币｜安全检查通过" : "first token | safety check passed")
+          : (zh ? "首币来源确认" : "first-token provenance")}${prioritySuffix}`,
+        `${zh ? "功能：" : "Capability: "}${fourMeme.name}`,
+        `${zh ? "代币：" : "Token: "}${fourMeme.tokenName} (${fourMeme.tokenSymbol})｜CA ${fourMeme.tokenAddress || (zh ? "待解析" : "unresolved")}`,
+        `${zh ? "确认：官方 Core TokenCreated" : "Proof: official Core TokenCreated"}${fourMeme.presetId === "?" ? "" : `｜Preset ${fourMeme.presetId}`}`,
+        safetyPass
+          ? `${zh ? "结论：本地流动性安全初筛已通过；仍非买入信号" : "Decision: local liquidity safety screening passed; still not a buy signal"}`
+          : `${zh ? "结论：仅确认链上归属；安全未完成｜不买" : "Decision: provenance only; safety incomplete | do not buy"}`,
+        `${zh ? "证明：" : "Evidence: "}${fourMeme.explorerUrl || (zh ? "BNB Chain finalized 交易" : "BNB Chain finalized transaction")}`,
+        `${zh ? "风险/时间：需继续核验可卖、税费、持仓集中与 LP｜非自动交易｜" : "Risk/Time: still verify sellability, taxes, concentration, and LP | no automatic trading | "}${time}`,
+      ].join("\n");
     }
 
     const prefix = lines[1]?.match(/^(?:更新了什么|What changed)[:：]\s*/u)?.[0];

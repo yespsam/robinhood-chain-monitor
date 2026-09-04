@@ -13,6 +13,10 @@ test("independent update monitors start before fallible chain initialization", a
   assert.ok(chain > independent);
   assert.match(independentBody, /createBscLaunchpadMonitor/);
   assert.match(independentBody, /createFlapQuoteMonitor/);
+  assert.match(independentBody, /createFourRegistryMonitor/);
+  assert.match(independentBody, /if \(config\.fourRegistryMonitorEnabled\) startMonitor\("four-registry"/);
+  assert.match(independentBody, /onEvent: \(event\) => sendAlerts\(config, event\)/);
+  assert.match(independentBody, /cancelPendingEvent: \(evidence\) => cancelPendingFourRegistryEvent\(config, evidence\)/);
   assert.match(independentBody, /onFlapQuotePoolLifecycle:\s*async \(record\)/);
   assert.match(independentBody, /bscLaunchpadMonitor\.registerFlapQuotePoolLifecycle\(record\)/);
   assert.match(independentBody, /lifecycle registry is not ready/,
@@ -84,6 +88,7 @@ test("graceful shutdown covers every independently created monitor and stops new
     "twitterMonitor",
     "platformCapabilityMonitor",
     "flapQuoteMonitor",
+    "fourRegistryMonitor",
     "ponsVersionMonitor",
     "binanceMonitor",
     "bscLaunchpadMonitor",
@@ -97,6 +102,13 @@ test("graceful shutdown covers every independently created monitor and stops new
   ];
 
   for (const handle of expectedHandles) assert.match(entries, new RegExp(`\\b${handle}\\b`));
+  assert.match(source, /fourRegistryRpcProvider/);
+  assert.match(source, /const fourRegistryLogProviders = new Map\(\)/);
+  assert.match(source, /const fourRegistryStateProviders = new Map\(\)/);
+  assert.match(source, /fourRegistryLogProviders\.set\(sourceId, createAbortableJsonRpcProvider\(rpcUrl, 56,/);
+  assert.match(source, /fourRegistryStateProviders\.set\(sourceId, createAbortableJsonRpcProvider\(rpcUrl, 56,/);
+  assert.match(source, /logVerificationProviders: \[\.\.\.fourRegistryLogProviders\]/);
+  assert.match(source, /stateVerificationProviders: \[\.\.\.fourRegistryStateProviders\]/);
   assert.match(source, /while \(!shutdownRequested && next <= safeHead\)/);
   assert.match(source, /if \(shutdownRequested\) return;\s+startIndependentMonitors\(\)/);
 });

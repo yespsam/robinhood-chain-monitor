@@ -2,11 +2,25 @@ import { isEventBlocked } from "./blocklist.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
+  claimsBscOpenFourFirstTokenUpdate,
+  claimsFourRegistryUpdate,
   isMonitoringSourceEnabled,
   isFomoMonitorHealthUpdateAllowed,
+  isFourMemePolicyFixRecoveryEvent,
+  isOfficialFourMemeCapabilityUpdate,
   isOfficialPonFunUpdate,
+  isStrictBscOpenFourFirstTokenUpdate,
+  isStrictFourRegistryCapabilityUpdate,
+  isStrictFourRegistryCanonicalRestoration,
+  isStrictFourRegistryCanonicalRevision,
+  isStrictFourRegistryCanonicalSupersession,
+  isStrictFourRegistryDelayedRecovery,
+  isStrictFourRegistryFirstTokenUpdate,
+  isStrictFourMemeMarketCampaign,
   isTelegramNewsUpdateAllowed,
   isThreePlatformScope,
+  openFourCoreTokenCreatedSafetyPassSemanticKey,
+  openFourCoreTokenCreatedSemanticKey,
 } from "./source-controls.js";
 import { createHash } from "node:crypto";
 import { localizeAlertEvent } from "./chinese-localizer.js";
@@ -68,13 +82,19 @@ const STRONG_PLATFORM_CHANGE_KEYS = [
   "updatedFlapPools",
   "flapPoolChanges",
   "newQuoteTokens",
+  "removedQuoteTokens",
   "newQuoteConfigs",
+  "removedQuoteConfigs",
   "updatedQuoteConfigs",
   "quoteConfigChanges",
   "newContracts",
+  "removedContracts",
   "newModules",
+  "removedModules",
   "newVersions",
+  "removedVersions",
   "newPackages",
+  "removedPackages",
   "updatedPackages",
   "packageVersionChanges",
   "newPages",
@@ -433,6 +453,54 @@ function freshnessSource(event) {
   if (event.type === "telegram_news_update") {
     return { scope: "telegram_news", basis: "sourceOccurredAt", value: event.sourceOccurredAt };
   }
+  if (isFourMemePolicyFixRecoveryEvent(event)) {
+    return {
+      scope: "fourmeme_policy_fix_recovery",
+      basis: "policyFixRecovery.recoveredAt_continuous_recovery",
+      value: event.policyFixRecovery.recoveredAt,
+    };
+  }
+  if (isStrictFourRegistryCanonicalRevision(event)) {
+    return {
+      scope: "four_registry_canonical_revision",
+      basis: "canonicalRevision.recoveryDetectedAt_finalized_reorg",
+      value: event.canonicalRevision.recoveryDetectedAt,
+    };
+  }
+  if (isStrictFourRegistryCanonicalRestoration(event)) {
+    return {
+      scope: "four_registry_canonical_restoration",
+      basis: "canonicalRestoration.detectedAt_recanonicalized",
+      value: event.canonicalRestoration.detectedAt,
+    };
+  }
+  if (isStrictFourRegistryCanonicalSupersession(event)) {
+    return {
+      scope: "four_registry_canonical_supersession",
+      basis: "canonicalSupersession.detectedAt_replacement",
+      value: event.canonicalSupersession.detectedAt,
+    };
+  }
+  if (isStrictFourRegistryDelayedRecovery(event)) {
+    return {
+      scope: "four_registry_delayed_recovery",
+      basis: "delayedRecovery.recoveredAt_continuous_recovery",
+      value: event.delayedRecovery.recoveredAt,
+    };
+  }
+  if (isStrictFourRegistryFirstTokenUpdate(event)) {
+    return { scope: "four_registry_first_token", basis: "blockTimestamp", value: event.blockTimestamp };
+  }
+  if (isStrictFourRegistryCapabilityUpdate(event)) {
+    return { scope: "four_registry_capability", basis: "blockTimestamp", value: event.blockTimestamp };
+  }
+  if (isOfficialFourMemeCapabilityUpdate(event)) {
+    return {
+      scope: "fourmeme_official_capability",
+      basis: "observedAt_continuous_coverage",
+      value: event.observedAt,
+    };
+  }
   if (event.type === "bsc_launchpad_update") {
     const value = firstValue(event.blockTimestamp, event.timestamp);
     return { scope: "bsc_chain", basis: hasValue(event.blockTimestamp) ? "blockTimestamp" : "timestamp", value };
@@ -530,6 +598,14 @@ function freshnessLimits(config, scope) {
   }
   const names = {
     bsc_chain: ["alertBscRealtimeMaxAgeMs", "alertBscTelegramMaxAgeMs"],
+    fourmeme_official_capability: ["alertBscRealtimeMaxAgeMs", "alertBscTelegramMaxAgeMs"],
+    fourmeme_policy_fix_recovery: ["alertTwitterRealtimeMaxAgeMs", "alertTwitterTelegramMaxAgeMs"],
+    four_registry_capability: ["alertBscRealtimeMaxAgeMs", "alertBscTelegramMaxAgeMs"],
+    four_registry_first_token: ["alertBscRealtimeMaxAgeMs", "alertBscTelegramMaxAgeMs"],
+    four_registry_delayed_recovery: ["alertBscRealtimeMaxAgeMs", "alertBscTelegramMaxAgeMs"],
+    four_registry_canonical_revision: ["alertBscRealtimeMaxAgeMs", "alertBscTelegramMaxAgeMs"],
+    four_registry_canonical_restoration: ["alertBscRealtimeMaxAgeMs", "alertBscTelegramMaxAgeMs"],
+    four_registry_canonical_supersession: ["alertBscRealtimeMaxAgeMs", "alertBscTelegramMaxAgeMs"],
     morph_chain: ["alertMorphRealtimeMaxAgeMs", "alertMorphTelegramMaxAgeMs"],
     robinhood_chain: ["alertRobinhoodRealtimeMaxAgeMs", "alertRobinhoodTelegramMaxAgeMs"],
     twitter: ["alertTwitterRealtimeMaxAgeMs", "alertTwitterTelegramMaxAgeMs"],
@@ -2024,6 +2100,18 @@ export function telegramButtons(event) {
       && event.messageUrl === expectedUrl;
     return { inline_keyboard: validMessage ? [[{ text: "查看原消息", url: expectedUrl }]] : [] };
   }
+  if (isStrictFourRegistryFirstTokenUpdate(event)) {
+    return { inline_keyboard: [
+      [copyButton(event.token.address, "📋 复制首个 TokenCreated CA")].filter(Boolean),
+      [{ text: "🔍 查看 Core TokenCreated", url: `https://bscscan.com/tx/${event.transactionHash}` }],
+    ].filter((row) => row.length) };
+  }
+  if (isStrictFourRegistryCapabilityUpdate(event)) {
+    return { inline_keyboard: [
+      [copyButton(event.registry, "📋 复制 OpenFour Registry")].filter(Boolean),
+      [{ text: "🔍 查看 Registry 交易", url: `https://bscscan.com/tx/${event.transactionHash}` }],
+    ].filter((row) => row.length) };
+  }
   if (isPonFunEvent(event)) {
     const rows = [
       [copyButton(event.token || event.contractAddress, "📋 复制 Pon 标的")].filter(Boolean),
@@ -2049,12 +2137,16 @@ export function telegramButtons(event) {
     return { inline_keyboard: rows.filter((row) => row.length) };
   }
   if (event.type === "twitter_update") {
-    const rows = [[{ text: "𝕏 查看原推", url: absoluteTweetUrl(event.tweet) }]];
+    const exactTweetUrl = absoluteTweetUrl(event.tweet);
+    if (isStrictFourMemeMarketCampaign(event)) {
+      return { inline_keyboard: [[{ text: "𝕏 查看原推", url: exactTweetUrl }]] };
+    }
+    const rows = [[{ text: "𝕏 查看原推", url: exactTweetUrl }]];
     const official = [];
     const projectTwitter = httpsUrl(event.project?.twitter);
     const website = httpsUrl(event.project?.website);
     const docs = httpsUrl(event.project?.docs);
-    if (projectTwitter && projectTwitter !== absoluteTweetUrl(event.tweet)) official.push({ text: "𝕏 项目官方", url: projectTwitter });
+    if (projectTwitter && projectTwitter !== exactTweetUrl) official.push({ text: "𝕏 项目官方", url: projectTwitter });
     if (website) official.push({ text: "🌐 项目官网", url: website });
     if (official.length) rows.push(official.slice(0, 2));
     if (docs) rows.push([{ text: "📘 官方文档", url: docs }]);
@@ -2168,6 +2260,12 @@ export function telegramButtons(event) {
   if (event.type === "bsc_launchpad_update") {
     const token = event.tokens?.[0]?.token;
     const metadata = event.tokens?.[0]?.metadata || {};
+    if (isStrictBscOpenFourFirstTokenUpdate(event)) {
+      const rows = [[copyButton(token, "📋 复制 OpenFour 首币 CA")].filter(Boolean)];
+      if (httpsUrl(event.explorerUrl)) rows.push([{ text: "🔍 查看 Core TokenCreated", url: event.explorerUrl }]);
+      if (httpsUrl(event.sourceUrl)) rows.push([{ text: "📡 查看官方功能来源", url: event.sourceUrl }]);
+      return { inline_keyboard: rows.filter((row) => row.length) };
+    }
     const trackedToken = flapTrackedTokenIdentity(event);
     const declaredMonitorOnlyTrackedToken = event.kind === "flap_pool_token"
       && event.featureTrackedToken === true
@@ -2315,6 +2413,9 @@ export function telegramButtons(event) {
 
 const OUTBOX_VERSION = 2;
 const OUTBOX_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
+const MAX_IMMUTABLE_OPENFOUR_SIGNAL_OWNERS = 100_000;
+const MAX_FOUR_REGISTRY_DELIVERY_OWNERS = 100_000;
+const IMMUTABLE_OPENFOUR_SIGNAL = /^fourmeme:openfour-core-token-created:56:0x[a-f0-9]{64}:(?:0|[1-9]\d*):0x[a-f0-9]{40}(?::canonical-revision:0x[a-f0-9]{64}:[1-9]\d*)?(?::safety-pass-v1)?$/u;
 const FOCUS_NOVELTY_DEDUP_MS = 30 * 24 * 60 * 60 * 1_000;
 const OUTBOX_LEASE_MS = 30_000;
 const OUTBOX_IDLE_RECHECK_MS = 5 * 60_000;
@@ -2672,6 +2773,31 @@ export function focusNoveltyKeys(event) {
   if (event?.type === "telegram_news_update") return [];
   const platform = focusNoveltyPlatform(event);
   if (!platform) return [];
+  if (isFourMemePolicyFixRecoveryEvent(event)) {
+    return [`fourmeme:policy-fix-recovery:x:${event.tweet.id}:v1`];
+  }
+  if (isStrictFourRegistryCapabilityUpdate(event)) {
+    return [isStrictFourRegistryCanonicalRevision(event)
+      ? `${event.lifecycleKey}:canonical-revision:${String(event.blockHash).toLowerCase()}:${Number(event.canonicalRevision.recoveryEpoch)}`
+      : event.lifecycleKey];
+  }
+  if (isOfficialFourMemeCapabilityUpdate(event)) {
+    const templateId = noveltySlug(event.currentTemplate?.id);
+    const changeType = noveltySlug(event.changeType);
+    if (!templateId || !changeType) return [];
+    const revision = digest({
+      fingerprint: event.mode?.fingerprint,
+      changedFields: event.changedFields,
+      previousTemplate: event.previousTemplate,
+      currentTemplate: event.currentTemplate,
+    }).slice(0, 24);
+    return [`fourmeme:official-template:${templateId}:${changeType}:${revision}`];
+  }
+  const openFourCoreTokenKey = openFourCoreTokenCreatedSemanticKey(event);
+  if (openFourCoreTokenKey) {
+    const safetyPassKey = openFourCoreTokenCreatedSafetyPassSemanticKey(event);
+    return safetyPassKey ? [openFourCoreTokenKey, safetyPassKey] : [openFourCoreTokenKey];
+  }
   const trackedToken = flapTrackedTokenIdentity(event);
   if (trackedToken) {
     const activationGeneration = digest({
@@ -2745,6 +2871,42 @@ export function focusNoveltyKeys(event) {
   ].filter(Boolean);
   const keys = new Set();
   const conceptKeys = new Set();
+
+  // Authoritative removals are their own lifecycle facts. They must not reuse
+  // an earlier add/update identity, otherwise a delivered activation can hide
+  // the later delisting. Only stable, bounded identifiers enter this namespace.
+  const removedIdentities = [
+    ["quote", [...(changes.removedQuoteTokens || []), ...(changes.removedQuoteConfigs || [])]],
+    ["contract", changes.removedContracts || []],
+    ["module", changes.removedModules || []],
+    ["version", changes.removedVersions || []],
+    ["package", changes.removedPackages || []],
+  ];
+  for (const [kind, values] of removedIdentities) {
+    for (const value of values) {
+      const address = /^0x[a-fA-F0-9]{40}$/.test(String(value?.address || value || ""))
+        ? String(value?.address || value).toLowerCase()
+        : null;
+      const identity = address || noveltySlug(value?.symbol || value?.name || noveltyValue(value));
+      if (identity) keys.add(`${platform}:${kind}:${identity}:removed`);
+    }
+  }
+
+  const namedMode = event.signal?.namedMode;
+  if (platform === "fourmeme"
+    && namedMode?.version === 1
+    && /^[a-z0-9][a-z0-9-]{0,63}$/.test(String(namedMode.id || ""))
+    && ["announced", "live", "observed"].includes(namedMode.stage)) {
+    keys.add(`fourmeme:lifecycle:${namedMode.id}:${namedMode.stage}`);
+    keys.add(`fourmeme:module:${namedMode.id}`);
+  }
+  const marketCampaign = event.signal?.marketCampaign;
+  if (platform === "fourmeme"
+    && marketCampaign?.version === 1
+    && marketCampaign.kind === "bstock_partner_leaderboard"
+    && /^fourmeme:market-campaign:bstock:[a-z0-9_]+:\d+-usdt:top-\d+$/.test(String(marketCampaign.campaignKey || ""))) {
+    keys.add(marketCampaign.campaignKey);
+  }
 
   // Product lifecycle milestones are separate semantic events even when the
   // same legacy concept name appears in both. For example, a historical
@@ -3462,12 +3624,136 @@ function flapTrackedTokenRetryDisposition(entry, event, fallback) {
   });
 }
 
+const DURABLE_FOUR_REGISTRY_DISPOSITIONS = new Set([
+  "four_registry_capability",
+  "four_registry_first_token_monitor_only",
+  "four_registry_delayed_recovery",
+  "four_registry_delayed_delivery",
+  "four_registry_canonical_revision",
+]);
+
+function isStrictFourRegistryUpdate(event) {
+  return isStrictFourRegistryCapabilityUpdate(event) || isStrictFourRegistryFirstTokenUpdate(event);
+}
+
+function fourRegistryEnqueueValidationEvent(event) {
+  if (Object.prototype.hasOwnProperty.call(event || {}, "alertQueuedAt")) return event;
+  if (!event?.freshness?.discoveredAt || !event?.tradingPriority) return event;
+  // `sendAlerts` has authenticated the raw producer payload before deriving
+  // canonical ids, freshness, and priority. Enqueue is the one internal stage
+  // immediately before alertQueuedAt is persisted; validate that exact staged
+  // shape by supplying only the timestamp enqueue itself is about to add.
+  return { ...event, alertQueuedAt: event.freshness.discoveredAt };
+}
+
+function isStrictFourRegistryEnqueueUpdate(event) {
+  return isStrictFourRegistryUpdate(fourRegistryEnqueueValidationEvent(event));
+}
+
+function isStrictFourRegistryCanonicalRestorationForEnqueue(event) {
+  return isStrictFourRegistryCanonicalRestoration(fourRegistryEnqueueValidationEvent(event));
+}
+
+function isStrictFourRegistryCanonicalSupersessionForEnqueue(event) {
+  return isStrictFourRegistryCanonicalSupersession(fourRegistryEnqueueValidationEvent(event));
+}
+
+function isDurablyAcceptedFourRegistryEntry(entry) {
+  const disposition = entry?.deliveryDisposition;
+  const retryableDestination = Object.values(entry?.destinations || {})
+    .some((destination) => ["pending", "failed", "delivering"].includes(destination?.status));
+  return Boolean(
+    isStrictFourRegistryUpdate(entry?.event)
+      && entry?.status === "pending"
+      && retryableDestination
+      && disposition?.deliverImmediately === true
+      && DURABLE_FOUR_REGISTRY_DISPOSITIONS.has(disposition?.reason)
+      && entry.event.deliveryPolicy?.durableRetry === true
+      && entry.event.deliveryPolicy?.ttlExemptAfterFirstObserved === true,
+  );
+}
+
+function isAuthenticatedInitialFourRegistryDelivery(event, disposition) {
+  const priority = isTradingPriority(event?.tradingPriority) ? event.tradingPriority : null;
+  const policy = event?.deliveryPolicy;
+  return Boolean(
+    isStrictFourRegistryUpdate(event)
+      && effectiveFreshnessDecision(event) === "suppress"
+      && disposition?.mode === "immediate"
+      && disposition?.deliverImmediately === true
+      && disposition?.tier === "T2"
+      && DURABLE_FOUR_REGISTRY_DISPOSITIONS.has(disposition?.reason)
+      && priority?.tier === "T2"
+      && priority?.hardGates?.trustedConfirmation === true
+      && priority?.hardGates?.t1Eligible === false
+      && priority?.plan?.automaticExecution === false
+      && policy?.mode === "immediate_monitor_only"
+      && policy?.noChase === true
+      && policy?.automaticExecution === false
+      && policy?.durableRetry === true
+      && policy?.ttlExemptAfterFirstObserved === true
+      && policy?.firstObservedAt === event.observedAt,
+  );
+}
+
+function fourRegistryRetryDisposition(entry, event, fallback) {
+  if (!isDurablyAcceptedFourRegistryEntry(entry) || fallback?.deliverImmediately === true) return fallback;
+  const priority = isTradingPriority(event?.tradingPriority) ? event.tradingPriority : null;
+  if (!isStrictFourRegistryUpdate(event)
+    || priority?.tier !== "T2"
+    || priority?.hardGates?.trustedConfirmation !== true
+    || priority?.hardGates?.t1Eligible !== false
+    || priority?.plan?.automaticExecution !== false) return fallback;
+  return Object.freeze({
+    mode: "immediate",
+    deliverImmediately: true,
+    tier: "T2",
+    reason: "four_registry_delayed_delivery",
+  });
+}
+
 function isFocusOnchainTokenActivation(event) {
   if (flapTrackedTokenIdentity(event)) return true;
+  if (openFourCoreTokenCreatedSemanticKey(event)) return true;
   const supportedType = event?.type === "bsc_launchpad_update"
     || (isMorphLaunchpadEvent(event) && event.kind === "new_mode");
   if (!supportedType || !["new_mode", "new_launchpad"].includes(event.kind)) return false;
   return (event.tokens || []).some((token) => /^0x[a-fA-F0-9]{40}$/.test(String(token?.token || token || "")));
+}
+
+function deliveredImmutableOpenFourDuplicate(outbox, eventId, event) {
+  const incoming = immutableOpenFourSignalKeys(event);
+  if (!incoming.length) return null;
+  const coverage = new Map();
+  for (const key of incoming) {
+    const owner = outbox.immutableOpenFourSignalOwners?.[key];
+    if (owner && owner.eventId !== eventId) {
+      coverage.set(key, { id: owner.eventId, status: "delivered", immutableSignalOwner: true });
+    }
+  }
+  for (const candidate of Object.values(outbox.events || {})) {
+    if (candidate?.id === eventId || candidate?.status !== "delivered") continue;
+    for (const key of immutableOpenFourSignalKeys(candidate.event)) {
+      if (incoming.includes(key) && !coverage.has(key)) coverage.set(key, candidate);
+    }
+  }
+  if (!incoming.every((key) => coverage.has(key))) return null;
+  return coverage.get(incoming[0]);
+}
+
+function hasDeliveringOpenFourEntry(outbox, eventId, event, now) {
+  const incoming = immutableOpenFourSignalKeys(event);
+  if (!incoming.length) return false;
+  const base = incoming[0];
+  return Object.values(outbox.events || {}).some((candidate) => {
+    if (candidate?.id === eventId || candidate?.status !== "pending") return false;
+    const prior = immutableOpenFourSignalKeys(candidate.event);
+    if (!prior.includes(base)) return false;
+    return Object.values(candidate.destinations || {}).some((destination) => (
+      destination?.status === "delivering"
+      && new Date(destination.leaseUntil || 0).getTime() > now
+    ));
+  });
 }
 
 function semanticDuplicate(outbox, eventId, event, now = Date.now()) {
@@ -3494,6 +3780,14 @@ function semanticDuplicate(outbox, eventId, event, now = Date.now()) {
     : aiSignal || telegramSignal ? 24 * 60 * 60 * 1_000 : FOCUS_NOVELTY_DEDUP_MS;
   const incomingIsActivation = isFocusOnchainTokenActivation(event);
   const coverage = new Map();
+  // Delivered OpenFour Core proofs outlive the ordinary 30-day event archive.
+  // They are immutable on-chain identities, so a Registry catch-up months
+  // later must still fold into the original provenance/safety owner.
+  for (const key of incoming) {
+    const owner = outbox.immutableOpenFourSignalOwners?.[key];
+    if (!IMMUTABLE_OPENFOUR_SIGNAL.test(key) || !owner) continue;
+    coverage.set(key, { id: owner.eventId, status: "delivered", immutableSignalOwner: true });
+  }
   for (const entry of Object.values(outbox.events || {})) {
     if (telegramSignal !== (entry.event?.type === "telegram_news_update")) continue;
     const eligibleStatus = ["pending", "delivered"].includes(entry.status)
@@ -3522,7 +3816,9 @@ function semanticDuplicate(outbox, eventId, event, now = Date.now()) {
     if (orphanedEventKeys.has(entry.id)
       || orphanedEventKeys.has(entry.event?.originalEventKey)) continue;
     const createdAt = Date.parse(entry.createdAt || "");
-    if (!Number.isFinite(createdAt) || now - createdAt > dedupWindowMs) continue;
+    const immutableOpenFourIdentity = [...incoming].every((key) => IMMUTABLE_OPENFOUR_SIGNAL.test(key));
+    if (!immutableOpenFourIdentity
+      && (!Number.isFinite(createdAt) || now - createdAt > dedupWindowMs)) continue;
     // Product announcements and the first token created through that product
     // are separate milestones. Keep cross-source dedup within each lane so a
     // GitHub/X announcement cannot hide the first on-chain activation, while
@@ -3644,7 +3940,251 @@ function configuredDestinations(config) {
 }
 
 function emptyOutbox() {
-  return { version: OUTBOX_VERSION, events: {} };
+  return {
+    version: OUTBOX_VERSION,
+    events: {},
+    immutableOpenFourSignalOwners: {},
+    fourRegistryDeliveryOwners: {},
+  };
+}
+
+function immutableOpenFourSignalKeys(event) {
+  const base = openFourCoreTokenCreatedSemanticKey(event);
+  if (!base || !IMMUTABLE_OPENFOUR_SIGNAL.test(base)) return [];
+  const safetyPass = openFourCoreTokenCreatedSafetyPassSemanticKey(event);
+  return safetyPass && IMMUTABLE_OPENFOUR_SIGNAL.test(safetyPass)
+    ? [base, safetyPass]
+    : [base];
+}
+
+function normalizeImmutableOpenFourSignalOwners(value) {
+  if (value == null) return {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError("immutable OpenFour signal owners must be an object");
+  }
+  const entries = Object.entries(value);
+  if (entries.length > MAX_IMMUTABLE_OPENFOUR_SIGNAL_OWNERS) {
+    throw new TypeError("immutable OpenFour signal owner capacity exceeded");
+  }
+  const normalizedOwners = {};
+  for (const [signal, owner] of entries) {
+    const keys = owner && typeof owner === "object" && !Array.isArray(owner)
+      ? Object.keys(owner)
+      : [];
+    const exactKeys = keys.length === 3
+      && ["version", "eventId", "deliveredAt"].every((key) => Object.prototype.hasOwnProperty.call(owner, key));
+    const deliveredAt = Date.parse(owner?.deliveredAt || "");
+    if (!IMMUTABLE_OPENFOUR_SIGNAL.test(signal)
+      || !exactKeys
+      || owner.version !== 1
+      || typeof owner.eventId !== "string"
+      || owner.eventId.length < 1
+      || owner.eventId.length > 512
+      || !Number.isFinite(deliveredAt)) {
+      throw new TypeError(`invalid immutable OpenFour signal owner ${signal}`);
+    }
+    normalizedOwners[signal] = {
+      version: 1,
+      eventId: owner.eventId,
+      deliveredAt: new Date(deliveredAt).toISOString(),
+    };
+  }
+  return normalizedOwners;
+}
+
+function normalizeFourRegistryDeliveryOwners(value) {
+  if (value == null) return {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError("Four Registry delivery owners must be an object");
+  }
+  const entries = Object.entries(value);
+  if (entries.length > MAX_FOUR_REGISTRY_DELIVERY_OWNERS) {
+    throw new TypeError("Four Registry delivery owner capacity exceeded");
+  }
+  const normalizedOwners = {};
+  for (const [eventId, owner] of entries) {
+    const keys = owner && typeof owner === "object" && !Array.isArray(owner)
+      ? Object.keys(owner)
+      : [];
+    const deliveredOwner = keys.length === 7
+      && [
+        "version", "eventId", "baseEventKey", "blockHash", "payloadDigest",
+        "deliveryEvidenceDigest", "deliveredAt",
+      ]
+        .every((key) => Object.prototype.hasOwnProperty.call(owner, key));
+    const semanticOwner = keys.length === 10
+      && [
+        "version", "eventId", "baseEventKey", "blockHash", "payloadDigest",
+        "deliveryEvidenceDigest", "status", "duplicateOf", "canonicalOwnerDelivered",
+        "ownerDeliveredAt",
+      ].every((key) => Object.prototype.hasOwnProperty.call(owner, key));
+    const deliveredAt = Date.parse(deliveredOwner ? owner?.deliveredAt || "" : owner?.ownerDeliveredAt || "");
+    if ((!deliveredOwner && !semanticOwner)
+      || owner.version !== 1
+      || owner.eventId !== eventId
+      || eventId.length < 1
+      || eventId.length > 512
+      || typeof owner.baseEventKey !== "string"
+      || owner.baseEventKey.length < 1
+      || owner.baseEventKey.length > 512
+      || !/^0x[a-f0-9]{64}$/u.test(owner.blockHash)
+      || !/^0x[a-f0-9]{64}$/u.test(owner.payloadDigest)
+      || !/^0x[a-f0-9]{64}$/u.test(owner.deliveryEvidenceDigest)
+      || (semanticOwner && (owner.status !== "semantic_duplicate"
+        || typeof owner.duplicateOf !== "string"
+        || owner.duplicateOf.length < 1
+        || owner.duplicateOf.length > 512
+        || owner.canonicalOwnerDelivered !== true))
+      || !Number.isFinite(deliveredAt)) {
+      throw new TypeError(`invalid Four Registry delivery owner ${eventId}`);
+    }
+    normalizedOwners[eventId] = deliveredOwner ? {
+      version: 1,
+      eventId,
+      baseEventKey: owner.baseEventKey,
+      blockHash: owner.blockHash,
+      payloadDigest: owner.payloadDigest,
+      deliveryEvidenceDigest: owner.deliveryEvidenceDigest,
+      deliveredAt: new Date(deliveredAt).toISOString(),
+    } : {
+      version: 1,
+      eventId,
+      baseEventKey: owner.baseEventKey,
+      blockHash: owner.blockHash,
+      payloadDigest: owner.payloadDigest,
+      deliveryEvidenceDigest: owner.deliveryEvidenceDigest,
+      status: "semantic_duplicate",
+      duplicateOf: owner.duplicateOf,
+      canonicalOwnerDelivered: true,
+      ownerDeliveredAt: new Date(deliveredAt).toISOString(),
+    };
+  }
+  return normalizedOwners;
+}
+
+function semanticFourRegistryOwnerDeliveredAt(outbox, entry) {
+  if (typeof entry?.semanticDuplicateOf !== "string"
+    || !entry.semanticDuplicateOf) return null;
+  const direct = outbox.events?.[entry.semanticDuplicateOf];
+  if (direct?.status === "delivered"
+    || Object.values(direct?.destinations || {}).some((destination) => destination?.status === "delivered")) {
+    const destinationAt = Object.values(direct?.destinations || {})
+      .filter((destination) => destination?.status === "delivered")
+      .map((destination) => Date.parse(destination.deliveredAt || ""))
+      .find(Number.isFinite);
+    const directAt = Date.parse(direct.deliveredAt || direct.updatedAt || "");
+    if (Number.isFinite(destinationAt)) return new Date(destinationAt).toISOString();
+    if (Number.isFinite(directAt)) return new Date(directAt).toISOString();
+  }
+  const registryOwner = outbox.fourRegistryDeliveryOwners?.[entry.semanticDuplicateOf];
+  const registryAt = Date.parse(registryOwner?.deliveredAt || registryOwner?.ownerDeliveredAt || "");
+  if (Number.isFinite(registryAt)) return new Date(registryAt).toISOString();
+  const immutableOwner = Object.values(outbox.immutableOpenFourSignalOwners || {})
+    .find((owner) => owner?.eventId === entry.semanticDuplicateOf);
+  const immutableAt = Date.parse(immutableOwner?.deliveredAt || "");
+  return Number.isFinite(immutableAt) ? new Date(immutableAt).toISOString() : null;
+}
+
+function rememberFourRegistryDeliveryOwner(outbox, entry) {
+  if (entry?.fourRegistryCompactedOwnerReplay === true || !isStrictFourRegistryUpdate(entry?.event)) return 0;
+  const eventId = String(entry.id || "");
+  const common = {
+    version: 1,
+    eventId,
+    baseEventKey: String(fourRegistryBaseEventKey(entry.event) || ""),
+    blockHash: String(entry.event.blockHash || ""),
+    payloadDigest: String(entry.event.payloadDigest || ""),
+    deliveryEvidenceDigest: String(entry.event.deliveryEvidenceDigest || ""),
+  };
+  const semanticOwnerDeliveredAt = semanticFourRegistryOwnerDeliveredAt(outbox, entry);
+  const owner = entry.status === "delivered"
+    ? {
+        ...common,
+        deliveredAt: new Date(entry.deliveredAt || entry.updatedAt || Date.now()).toISOString(),
+      }
+    : entry.status === "suppressed"
+      && entry.semanticDuplicateOwnerDelivered === true
+      && typeof entry.semanticDuplicateOf === "string"
+      && semanticOwnerDeliveredAt
+      ? {
+          ...common,
+          status: "semantic_duplicate",
+          duplicateOf: entry.semanticDuplicateOf,
+          canonicalOwnerDelivered: true,
+          ownerDeliveredAt: semanticOwnerDeliveredAt,
+        }
+      : null;
+  if (!owner) return 0;
+  // Reuse the read-time validator here so a future producer schema change
+  // cannot silently persist an unauthenticated compact owner.
+  normalizeFourRegistryDeliveryOwners({ [eventId]: owner });
+  outbox.fourRegistryDeliveryOwners ||= {};
+  const existing = outbox.fourRegistryDeliveryOwners[eventId];
+  if (existing) {
+    if (JSON.stringify(existing) !== JSON.stringify(owner)) {
+      throw new Error(`Four Registry delivery owner conflict for ${eventId}`);
+    }
+    return 0;
+  }
+  if (Object.keys(outbox.fourRegistryDeliveryOwners).length >= MAX_FOUR_REGISTRY_DELIVERY_OWNERS) {
+    throw new Error("Four Registry delivery owner capacity exceeded");
+  }
+  outbox.fourRegistryDeliveryOwners[eventId] = Object.freeze(owner);
+  return 1;
+}
+
+function assertFourRegistryDeliveryOwnerCapacity(outbox, event) {
+  if (!isStrictFourRegistryEnqueueUpdate(event)) return;
+  const eventId = alertEventKey(event);
+  const persistedOwner = outbox.fourRegistryDeliveryOwners?.[eventId];
+  if (persistedOwner
+    && (persistedOwner.baseEventKey !== fourRegistryBaseEventKey(event)
+      || persistedOwner.blockHash !== event.blockHash
+      || persistedOwner.payloadDigest !== event.payloadDigest
+      || persistedOwner.deliveryEvidenceDigest !== event.deliveryEvidenceDigest)) {
+    throw new Error(`Four Registry delivery owner conflict for ${eventId}`);
+  }
+  const occupied = new Set(Object.keys(outbox.fourRegistryDeliveryOwners || {}));
+  for (const entry of Object.values(outbox.events || {})) {
+    if (isStrictFourRegistryUpdate(entry?.event)) occupied.add(String(entry.id || ""));
+  }
+  occupied.add(eventId);
+  if (occupied.size > MAX_FOUR_REGISTRY_DELIVERY_OWNERS) {
+    throw new Error("Four Registry delivery owner capacity exceeded");
+  }
+}
+
+function rememberImmutableOpenFourSignalOwner(outbox, entry) {
+  if (entry?.status !== "delivered") return 0;
+  const keys = immutableOpenFourSignalKeys(entry.event);
+  if (!keys.length) return 0;
+  outbox.immutableOpenFourSignalOwners ||= {};
+  const missing = keys.filter((key) => !Object.prototype.hasOwnProperty.call(outbox.immutableOpenFourSignalOwners, key));
+  if (Object.keys(outbox.immutableOpenFourSignalOwners).length + missing.length > MAX_IMMUTABLE_OPENFOUR_SIGNAL_OWNERS) {
+    throw new Error("immutable OpenFour signal owner capacity exceeded");
+  }
+  const deliveredAt = new Date(entry.deliveredAt || entry.updatedAt || Date.now()).toISOString();
+  for (const key of missing) {
+    outbox.immutableOpenFourSignalOwners[key] = Object.freeze({
+      version: 1,
+      eventId: String(entry.id || entry.event?.eventKey || key).slice(0, 512),
+      deliveredAt,
+    });
+  }
+  return missing.length;
+}
+
+function assertImmutableOpenFourSignalCapacity(outbox, event) {
+  const incoming = immutableOpenFourSignalKeys(event);
+  if (!incoming.length) return;
+  const occupied = new Set(Object.keys(outbox.immutableOpenFourSignalOwners || {}));
+  for (const entry of Object.values(outbox.events || {})) {
+    for (const key of immutableOpenFourSignalKeys(entry?.event)) occupied.add(key);
+  }
+  for (const key of incoming) occupied.add(key);
+  if (occupied.size > MAX_IMMUTABLE_OPENFOUR_SIGNAL_OWNERS) {
+    throw new Error("immutable OpenFour signal owner capacity exceeded");
+  }
 }
 
 function pruneOutbox(outbox, now = Date.now()) {
@@ -3653,6 +4193,12 @@ function pruneOutbox(outbox, now = Date.now()) {
     if (!["delivered", "suppressed"].includes(entry.status)) continue;
     const terminalAt = new Date(entry.deliveredAt || entry.suppressedAt || entry.updatedAt || 0).getTime();
     if (Number.isFinite(terminalAt) && now - terminalAt > OUTBOX_RETENTION_MS) {
+      // Compact an authenticated, delivered Core proof into a permanent
+      // ownership tombstone before pruning its much larger alert/render
+      // payload. The immutable tx/log/token identity and its optional
+      // safety-pass strength therefore survive normal 30-day retention.
+      rememberImmutableOpenFourSignalOwner(outbox, entry);
+      rememberFourRegistryDeliveryOwner(outbox, entry);
       delete outbox.events[key];
       removed += 1;
     }
@@ -3663,7 +4209,14 @@ function pruneOutbox(outbox, now = Date.now()) {
 async function readOutbox(file) {
   try {
     const parsed = JSON.parse(await fs.readFile(file, "utf8"));
-    return { ...emptyOutbox(), ...parsed, version: OUTBOX_VERSION, events: parsed.events || {} };
+    return {
+      ...emptyOutbox(),
+      ...parsed,
+      version: OUTBOX_VERSION,
+      events: parsed.events || {},
+      immutableOpenFourSignalOwners: normalizeImmutableOpenFourSignalOwners(parsed.immutableOpenFourSignalOwners),
+      fourRegistryDeliveryOwners: normalizeFourRegistryDeliveryOwners(parsed.fourRegistryDeliveryOwners),
+    };
   } catch (error) {
     if (error.code === "ENOENT") return emptyOutbox();
     throw error;
@@ -3966,6 +4519,117 @@ export function alertDeliveryDisposition(event = {}) {
   }
   const priority = isTradingPriority(event.tradingPriority) ? event.tradingPriority : null;
   const tier = priority?.tier || null;
+  if (isFourMemePolicyFixRecoveryEvent(event)
+    && tier === "T2"
+    && priority?.category === "focus_policy_recovery"
+    && priority?.hardGates?.validWindow === true
+    && priority?.hardGates?.t1Eligible === false
+    && priority?.plan?.automaticExecution === false) {
+    return Object.freeze({
+      mode: "immediate",
+      deliverImmediately: true,
+      tier,
+      reason: "fourmeme_policy_fix_recovery",
+    });
+  }
+  if (isStrictFourMemeMarketCampaign(event)
+    && tier === "T2"
+    && priority?.category === "focus_market_campaign"
+    && priority?.hardGates?.trustedConfirmation === true
+    && priority?.hardGates?.validWindow === true
+    && priority?.hardGates?.t1Eligible === false
+    && priority?.plan?.automaticExecution === false) {
+    return Object.freeze({
+      mode: "immediate",
+      deliverImmediately: true,
+      tier,
+      reason: "fourmeme_market_campaign",
+    });
+  }
+  if (isStrictFourRegistryCanonicalRevision(event)
+    && tier === "T2"
+    && priority?.category === "focus_registry_canonical_revision"
+    && priority?.hardGates?.trustedConfirmation === true
+    && priority?.hardGates?.t1Eligible === false
+    && priority?.plan?.automaticExecution === false) {
+    return Object.freeze({
+      mode: "immediate",
+      deliverImmediately: true,
+      tier,
+      reason: "four_registry_canonical_revision",
+    });
+  }
+  if (isStrictFourRegistryDelayedRecovery(event)
+    && tier === "T2"
+    && priority?.category === "focus_registry_delayed_recovery"
+    && priority?.hardGates?.trustedConfirmation === true
+    && priority?.hardGates?.t1Eligible === false
+    && priority?.plan?.automaticExecution === false) {
+    return Object.freeze({
+      mode: "immediate",
+      deliverImmediately: true,
+      tier,
+      reason: "four_registry_delayed_recovery",
+    });
+  }
+  if (isStrictFourRegistryFirstTokenUpdate(event)
+    && tier === "T2"
+    && priority?.category === "focus_registry_first_token"
+    && priority?.hardGates?.trustedConfirmation === true
+    && priority?.hardGates?.t1Eligible === false
+    && priority?.plan?.automaticExecution === false) {
+    return Object.freeze({
+      mode: "immediate",
+      deliverImmediately: true,
+      tier,
+      reason: isStrictFourRegistryDelayedRecovery(event)
+        ? "four_registry_delayed_recovery"
+        : effectiveFreshnessDecision(event) === "realtime"
+          ? "four_registry_first_token_monitor_only"
+          : "four_registry_delayed_delivery",
+    });
+  }
+  if (isStrictFourRegistryCapabilityUpdate(event)
+    && tier === "T1"
+    && priority?.category === "focus_registry_capability"
+    && priority?.hardGates?.trustedConfirmation === true
+    && priority?.hardGates?.t1Eligible === true
+    && priority?.plan?.automaticExecution === false) {
+    return Object.freeze({
+      mode: "immediate",
+      deliverImmediately: true,
+      tier,
+      reason: "four_registry_capability",
+    });
+  }
+  if (isStrictFourRegistryCapabilityUpdate(event)
+    && !isStrictFourRegistryDelayedRecovery(event)
+    && tier === "T2"
+    && priority?.category === "focus_registry_capability"
+    && priority?.hardGates?.trustedConfirmation === true
+    && priority?.hardGates?.t1Eligible === false
+    && priority?.plan?.automaticExecution === false) {
+    return Object.freeze({
+      mode: "immediate",
+      deliverImmediately: true,
+      tier,
+      reason: "four_registry_delayed_delivery",
+    });
+  }
+  if (isStrictBscOpenFourFirstTokenUpdate(event)
+    && tier === "T2"
+    && priority?.category === "focus_registry_first_token"
+    && priority?.hardGates?.trustedConfirmation === true
+    && priority?.hardGates?.validWindow === true
+    && priority?.hardGates?.t1Eligible === false
+    && priority?.plan?.automaticExecution === false) {
+    return Object.freeze({
+      mode: "immediate",
+      deliverImmediately: true,
+      tier,
+      reason: "four_registry_first_token_monitor_only",
+    });
+  }
   if (isPonFunDelayedRecoveryEvent(event)) {
     return Object.freeze({ mode: "audit_only", deliverImmediately: false, tier, reason: "pon_delayed_recovery" });
   }
@@ -4053,13 +4717,18 @@ function disablePolicySuppressedDestinations(destinationState, disposition, now)
   return changed;
 }
 
-function disableFreshnessSuppressedTelegram(destinationState, event, now, { preserveFlapTrackedToken = false } = {}) {
+function disableFreshnessSuppressedTelegram(destinationState, event, now, {
+  preserveFlapTrackedToken = false,
+  preserveFourRegistry = false,
+} = {}) {
   // A strict Flap Portal recovery is a durable structural fact, not an old
   // trade call. Once authenticated and queued it remains retryable as T2 with
   // an explicit no-chase warning until Telegram actually accepts it.
   if (isDurableFlapQuoteNotificationEvent(event)
     || isVerifiedFlapTrackedTokenRecovery(event)
-    || preserveFlapTrackedToken) return false;
+    || isFourMemePolicyFixRecoveryEvent(event)
+    || preserveFlapTrackedToken
+    || preserveFourRegistry) return false;
   if (effectiveFreshnessDecision(event) !== "suppress") return false;
   const telegram = destinationState.telegram;
   if (!telegram || telegram.status === "delivered") return false;
@@ -4085,6 +4754,8 @@ function disableExpiredTelegramDelivery(config, entry, evaluatedAt = Date.now())
   if (entry.event?.type === "fomo_monitor_health_update") return false;
   if (isDurableFlapQuoteNotificationEvent(entry.event)) return false;
   if (isDurablyAcceptedFlapTrackedTokenEntry(entry)) return false;
+  if (isDurablyAcceptedFourRegistryEntry(entry)) return false;
+  if (isFourMemePolicyFixRecoveryEvent(entry.event)) return false;
 
   const isFomo = entry.event?.type === "fomo_family_top_call";
   const isPonDelayedRecovery = isPonFunDelayedRecoveryEvent(entry.event);
@@ -4136,6 +4807,8 @@ async function enqueueAlert(config, event) {
   const requestedEventId = alertEventKey(event);
   const persistedEventId = await mutateOutbox(config, (outbox) => {
     const now = new Date(alertPipelineNow(config)).toISOString();
+    assertImmutableOpenFourSignalCapacity(outbox, event);
+    assertFourRegistryDeliveryOwnerCapacity(outbox, event);
     let eventId = requestedEventId;
     const flapProofBase = isFlapPortalQuoteEvent(event)
       ? event.originalEventKey || event.eventKey
@@ -4203,6 +4876,61 @@ async function enqueueAlert(config, event) {
       return inFlightFlapQuoteEntry.id;
     }
     const existing = outbox.events[eventId];
+    const fourRegistryReactivation = fourRegistryReactivationKind(existing, event, eventId);
+    const persistedFourRegistryOwner = outbox.fourRegistryDeliveryOwners?.[eventId];
+    if (!existing && persistedFourRegistryOwner && isStrictFourRegistryEnqueueUpdate(event)) {
+      // The full alert entry may have been compacted after 30 days while the
+      // producer was waiting to persist its acknowledgement. Re-materialize a
+      // terminal receipt only; the exact delivered proof must never POST a
+      // second time. Identity mismatches were rejected by the capacity guard.
+      const duplicateOf = persistedFourRegistryOwner.status === "semantic_duplicate"
+        ? persistedFourRegistryOwner.duplicateOf
+        : persistedFourRegistryOwner.eventId;
+      const queuedEvent = { ...event, alertQueuedAt: event.alertQueuedAt || now };
+      const destinationState = Object.fromEntries(destinations.map((destination) => [destination, {
+        status: "disabled",
+        attempts: 0,
+        nextAttemptAt: null,
+        receipt: null,
+        lastError: null,
+        disabledReason: "semantic_duplicate",
+        duplicateOf,
+        updatedAt: now,
+        leaseUntil: null,
+      }]));
+      outbox.events[eventId] = {
+        id: eventId,
+        event: queuedEvent,
+        eventType: event.type,
+        status: "suppressed",
+        destinations: destinationState,
+        createdAt: now,
+        updatedAt: now,
+        deliveredAt: null,
+        suppressedAt: now,
+        duplicateCount: 1,
+        duplicateObservations: [],
+        sideEffectsCommitted: true,
+        semanticDuplicateOf: duplicateOf,
+        semanticDuplicateOwnerDelivered: true,
+        deliveryDisposition: alertDeliveryDisposition(queuedEvent),
+        renderBundle: null,
+        fourRegistryCompactedOwnerReplay: true,
+      };
+      return eventId;
+    }
+    if (existing
+      && isStrictFourRegistryEnqueueUpdate(event)
+      && !fourRegistryReactivation
+      && (fourRegistryBaseEventKey(existing.event) !== fourRegistryBaseEventKey(event)
+        || existing.event?.blockHash !== event.blockHash
+        || existing.event?.payloadDigest !== event.payloadDigest
+        || existing.event?.deliveryEvidenceDigest !== event.deliveryEvidenceDigest)) {
+      // The same base id cannot acknowledge a different fork/payload. A
+      // canonical re-inclusion must carry the producer's closed revision
+      // envelope and therefore a revision-specific event id.
+      throw new Error(`Four Registry event identity conflict for ${eventId}`);
+    }
     // Generic draining is forbidden for this entry. Therefore a new strict
     // Portal sendAlerts call for the exact original proof and quote address is
     // the producer's current finalized-state authorization to undo a cancel.
@@ -4238,27 +4966,35 @@ async function enqueueAlert(config, event) {
     const activeExisting = existing && !["delivered", "suppressed"].includes(existing.status);
     const retryingDurableFlapTrackedToken = activeExisting
       && isDurablyAcceptedFlapTrackedTokenEntry(existing);
+    const retryingDurableFourRegistry = activeExisting
+      && isDurablyAcceptedFourRegistryEntry(existing);
     const refreshingFlapNotification = activeExisting
       && isDurableFlapQuoteNotificationEvent(event)
       && existing.event?.eventKey === event.eventKey
       && (!isFlapQuoteRecoveryEvent(event)
         || existing.event?.originalEventKey === event.originalEventKey);
-    let queuedEvent = reactivatingCancelledFlapQuote
+    let queuedEvent = fourRegistryReactivation
+      ? { ...event, alertQueuedAt: event.alertQueuedAt || now }
+      : reactivatingCancelledFlapQuote
       ? { ...event, alertQueuedAt: existing.event?.alertQueuedAt || existing.createdAt || now }
       : refreshingFlapNotification
       ? { ...event, alertQueuedAt: existing.event?.alertQueuedAt || existing.createdAt || now }
       : existing?.event || { ...event, alertQueuedAt: event.alertQueuedAt || now };
-    if ((activeExisting || reactivatingCancelledFlapQuote) && queuedEvent.type !== "fomo_monitor_health_update") {
+    if ((activeExisting || reactivatingCancelledFlapQuote || fourRegistryReactivation)
+      && queuedEvent.type !== "fomo_monitor_health_update") {
       // A valid schema is not a timeless eligibility grant. Re-score active
       // retries at the duplicate observation time so a formerly fresh T1
       // cannot be delivered after its trading window has closed.
       queuedEvent = withTradingPriority(queuedEvent, { nowMs: Date.parse(now) });
     }
-    if (refreshingFlapNotification || retryingDurableFlapTrackedToken) {
+    if (refreshingFlapNotification || retryingDurableFlapTrackedToken || retryingDurableFourRegistry) {
       // Refresh delivery age for a producer-authorized Portal observation or
       // an already-admitted tracked-token retry so the rebuilt card reports
       // the real wait when the destination finally returns.
       queuedEvent = refreshDeliveryFreshness(config, queuedEvent, Date.parse(now));
+      if (retryingDurableFourRegistry) {
+        queuedEvent = withTradingPriority(queuedEvent, { nowMs: Date.parse(now) });
+      }
     }
     const flapQuoteSignal = eventPlatform(queuedEvent) === "flap"
       && queuedEvent.canonicalSignalIds?.length === 1
@@ -4319,12 +5055,14 @@ async function enqueueAlert(config, event) {
         stale.updatedAt = now;
       }
     }
-    const ordinaryDeliveryDisposition = activeExisting || reactivatingCancelledFlapQuote
+    const ordinaryDeliveryDisposition = activeExisting || reactivatingCancelledFlapQuote || fourRegistryReactivation
       ? alertDeliveryDisposition(queuedEvent)
       : existing?.deliveryDisposition || alertDeliveryDisposition(queuedEvent);
     const deliveryDisposition = retryingDurableFlapTrackedToken
       ? flapTrackedTokenRetryDisposition({ ...existing, event: queuedEvent }, queuedEvent, ordinaryDeliveryDisposition)
-      : ordinaryDeliveryDisposition;
+      : retryingDurableFourRegistry
+        ? fourRegistryRetryDisposition({ ...existing, event: queuedEvent }, queuedEvent, ordinaryDeliveryDisposition)
+        : ordinaryDeliveryDisposition;
     const destinationState = { ...(existing?.destinations || {}) };
     if (reactivatingCancelledFlapQuote) {
       for (const [destination, state] of Object.entries(destinationState)) {
@@ -4341,6 +5079,21 @@ async function enqueueAlert(config, event) {
           ...preserved,
           status: "pending",
           nextAttemptAt: null,
+          leaseUntil: null,
+          updatedAt: now,
+        };
+      }
+    }
+    if (fourRegistryReactivation) {
+      for (const [destination, state] of Object.entries(destinationState)) {
+        if (state.status !== "disabled" || state.disabledReason !== "four_registry_canonical_reorg") continue;
+        destinationState[destination] = {
+          status: "pending",
+          attempts: 0,
+          nextAttemptAt: null,
+          receipt: null,
+          lastError: null,
+          lastTiming: null,
           leaseUntil: null,
           updatedAt: now,
         };
@@ -4380,6 +5133,8 @@ async function enqueueAlert(config, event) {
     // delivery eligibility established by the first payload for this event key.
     disableFreshnessSuppressedTelegram(destinationState, queuedEvent, now, {
       preserveFlapTrackedToken: retryingDurableFlapTrackedToken,
+      preserveFourRegistry: retryingDurableFourRegistry
+        || isAuthenticatedInitialFourRegistryDelivery(queuedEvent, deliveryDisposition),
     });
     disableExpiredTelegramDelivery(config, {
       createdAt,
@@ -4408,21 +5163,35 @@ async function enqueueAlert(config, event) {
       createdAt,
       updatedAt: now,
       deliveredAt: existing?.deliveredAt || null,
-      suppressedAt: status === "suppressed" ? existing?.suppressedAt || now : reactivatingCancelledFlapQuote ? null : existing?.suppressedAt || null,
+      suppressedAt: status === "suppressed"
+        ? existing?.suppressedAt || now
+        : reactivatingCancelledFlapQuote || fourRegistryReactivation
+          ? null
+          : existing?.suppressedAt || null,
       duplicateCount: Number(existing?.duplicateCount || 0) + (existing ? 1 : 0),
       duplicateObservations: duplicateObservation
         ? [...(existing?.duplicateObservations || []), duplicateObservation].slice(-20)
         : existing?.duplicateObservations || [],
       sideEffectsCommitted: Boolean(existing?.sideEffectsCommitted),
-      semanticDuplicateOf: existing?.semanticDuplicateOf || semanticDuplicateOf?.id || null,
-      ...((existing?.semanticDuplicateOf || semanticDuplicateOf) ? { semanticDuplicateOwnerDelivered } : {}),
+      semanticDuplicateOf: fourRegistryReactivation
+        ? null
+        : existing?.semanticDuplicateOf || semanticDuplicateOf?.id || null,
+      ...(!fourRegistryReactivation && (existing?.semanticDuplicateOf || semanticDuplicateOf)
+        ? { semanticDuplicateOwnerDelivered }
+        : {}),
       deliveryDisposition,
       ...(flapQuoteProducerGate ? { flapQuoteProducerGate } : {}),
-      ...(refreshingFlapNotification || reactivatingCancelledFlapQuote || retryingDurableFlapTrackedToken
+      ...(fourRegistryReactivation ? {
+        fourRegistryReactivation: { version: 1, kind: fourRegistryReactivation, reactivatedAt: now },
+      } : {}),
+      ...(refreshingFlapNotification || reactivatingCancelledFlapQuote || fourRegistryReactivation
+        || retryingDurableFlapTrackedToken || retryingDurableFourRegistry
         ? { renderBundle: null }
         : {}),
     };
+    if (fourRegistryReactivation) delete outbox.events[eventId].semanticDuplicateOwnerDelivered;
     if (reactivatingCancelledFlapQuote) delete outbox.events[eventId].flapQuoteCancellation;
+    rememberFourRegistryDeliveryOwner(outbox, outbox.events[eventId]);
     return eventId;
   });
   return persistedEventId || requestedEventId;
@@ -4577,6 +5346,224 @@ export async function cancelPendingFlapQuoteActivation(config, cancellation) {
   return result;
 }
 
+const FOUR_REGISTRY_CANCELLATION_KEYS = Object.freeze([
+  "eventId",
+  "baseEventKey",
+  "blockHash",
+  "payloadDigest",
+  "deliveryEvidenceDigest",
+  "reason",
+]);
+
+function validateFourRegistryCancellation(value) {
+  const exactKeys = value
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && Object.keys(value).length === FOUR_REGISTRY_CANCELLATION_KEYS.length
+    && FOUR_REGISTRY_CANCELLATION_KEYS.every((key) => Object.prototype.hasOwnProperty.call(value, key));
+  if (!exactKeys
+    || typeof value.eventId !== "string"
+    || value.eventId.length < 1
+    || value.eventId.length > 512
+    || typeof value.baseEventKey !== "string"
+    || value.baseEventKey.length < 1
+    || value.baseEventKey.length > 512
+    || !/^0x[a-f0-9]{64}$/u.test(value.blockHash)
+    || !/^0x[a-f0-9]{64}$/u.test(value.payloadDigest)
+    || !/^0x[a-f0-9]{64}$/u.test(value.deliveryEvidenceDigest)
+    || value.reason !== "canonical_reorg") {
+    throw new TypeError("Four Registry cancellation must use the exact schema");
+  }
+  return Object.freeze({ ...value });
+}
+
+function fourRegistryBaseEventKey(event) {
+  return typeof event?.canonicalRevision?.baseEventKey === "string"
+    ? event.canonicalRevision.baseEventKey
+    : event?.eventKey;
+}
+
+function fourRegistryReactivationKind(existing, event, eventId) {
+  if (!existing
+    || existing.id !== eventId
+    || !isStrictFourRegistryUpdate(existing.event)
+    || !isStrictFourRegistryEnqueueUpdate(event)
+    || Object.values(existing.destinations || {}).some((destination) => destination?.status === "delivered")
+    || !Object.values(existing.destinations || {}).some((destination) => (
+      destination?.status === "disabled"
+      && destination?.disabledReason === "four_registry_canonical_reorg"
+    ))) return null;
+  let cancellation;
+  try {
+    cancellation = validateFourRegistryCancellation(existing.fourRegistryCancellation);
+  } catch {
+    return null;
+  }
+  if (cancellation.eventId !== eventId
+    || cancellation.baseEventKey !== fourRegistryBaseEventKey(existing.event)
+    || cancellation.blockHash !== existing.event.blockHash
+    || cancellation.payloadDigest !== existing.event.payloadDigest
+    || cancellation.deliveryEvidenceDigest !== existing.event.deliveryEvidenceDigest) return null;
+
+  if (isStrictFourRegistryCanonicalRestorationForEnqueue(event)) {
+    const restoration = event.canonicalRestoration;
+    if (restoration.cancelledEventId === eventId
+      && restoration.blockHash === cancellation.blockHash
+      && restoration.payloadDigest === cancellation.payloadDigest
+      && event.blockHash === cancellation.blockHash) return "canonical_restoration";
+    return null;
+  }
+  if (isStrictFourRegistryCanonicalSupersessionForEnqueue(event)) {
+    const supersession = event.canonicalSupersession;
+    if (supersession.cancelledEventId === eventId
+      && supersession.cancelledBaseEventKey === cancellation.baseEventKey
+      && supersession.cancelledBlockHash === cancellation.blockHash
+      && supersession.cancelledPayloadDigest === cancellation.payloadDigest
+      && supersession.baseEventKey === fourRegistryBaseEventKey(event)
+      && supersession.newBlockHash === event.blockHash) return "canonical_supersession";
+  }
+  return null;
+}
+
+/**
+ * Stop a previously persisted Registry proof before the producer advances its
+ * reorg cursor. The exact old block and payload digest are checked under the
+ * same outbox lock as destination state. An active HTTP lease is never
+ * overwritten; the producer must retry this handshake after it settles.
+ */
+export async function cancelPendingFourRegistryEvent(config, cancellation) {
+  const evidence = validateFourRegistryCancellation(cancellation);
+  const mutation = await mutateOutbox(config, (outbox) => {
+    const entry = outbox.events?.[evidence.eventId];
+    if (!entry) {
+      const owner = outbox.fourRegistryDeliveryOwners?.[evidence.eventId];
+      if (owner) {
+        if (owner.baseEventKey !== evidence.baseEventKey
+          || owner.blockHash !== evidence.blockHash
+          || owner.payloadDigest !== evidence.payloadDigest
+          || owner.deliveryEvidenceDigest !== evidence.deliveryEvidenceDigest) {
+          throw new TypeError("Four Registry cancellation does not match the persisted delivery owner");
+        }
+        return {
+          changed: false,
+          status: "delivered_orphaned",
+          reason: evidence.reason,
+          persisted: true,
+          terminal: true,
+          eventId: evidence.eventId,
+          deliveredAt: owner.deliveredAt || owner.ownerDeliveredAt,
+        };
+      }
+      return {
+        changed: false,
+        status: "not_found",
+        reason: "registry_event_not_found",
+        persisted: false,
+        terminal: false,
+        eventId: evidence.eventId,
+      };
+    }
+    const event = entry.event;
+    if (!isStrictFourRegistryUpdate(event)
+      || alertEventKey(event) !== evidence.eventId
+      || fourRegistryBaseEventKey(event) !== evidence.baseEventKey
+      || event.blockHash !== evidence.blockHash
+      || event.payloadDigest !== evidence.payloadDigest
+      || event.deliveryEvidenceDigest !== evidence.deliveryEvidenceDigest) {
+      throw new TypeError("Four Registry cancellation does not match the persisted proof");
+    }
+    const registryCoreSignal = immutableOpenFourSignalKeys(event)[0] || null;
+    const relatedEntries = registryCoreSignal && !event.canonicalRevision
+      ? Object.values(outbox.events || {}).filter((candidate) => (
+        immutableOpenFourSignalKeys(candidate?.event)[0] === registryCoreSignal
+        && candidate?.event?.blockHash === evidence.blockHash
+      ))
+      : [entry];
+    const delivering = relatedEntries.some((candidate) => Object.values(candidate.destinations || {})
+      .some((destination) => destination?.status === "delivering"));
+    if (delivering) {
+      return {
+        changed: false,
+        status: "queued",
+        reason: "delivery_in_flight",
+        persisted: true,
+        terminal: false,
+        eventId: evidence.eventId,
+      };
+    }
+    const now = new Date(alertPipelineNow(config)).toISOString();
+    let semanticFolded = false;
+    const immutableDuplicate = deliveredImmutableOpenFourDuplicate(outbox, evidence.eventId, event);
+    const deliveredRelated = relatedEntries.find((candidate) => candidate.id !== evidence.eventId
+      && (candidate.status === "delivered"
+        || Object.values(candidate.destinations || {}).some((destination) => destination?.status === "delivered")));
+    const deliveredOwner = deliveredRelated || immutableDuplicate;
+    if (deliveredOwner) {
+      if (entry.semanticDuplicateOf !== deliveredOwner.id
+        || entry.semanticDuplicateOwnerDelivered !== true) semanticFolded = true;
+      entry.semanticDuplicateOf = deliveredOwner.id;
+      entry.semanticDuplicateOwnerDelivered = true;
+    } else if (entry.semanticDuplicateOf
+      && semanticFourRegistryOwnerDeliveredAt(outbox, entry)
+      && entry.semanticDuplicateOwnerDelivered !== true) {
+      entry.semanticDuplicateOwnerDelivered = true;
+      semanticFolded = true;
+    }
+    let changed = semanticFolded
+      || JSON.stringify(entry.fourRegistryCancellation) !== JSON.stringify(evidence);
+    entry.fourRegistryCancellation = evidence;
+    for (const candidate of relatedEntries) {
+      for (const [destination, state] of Object.entries(candidate.destinations || {})) {
+        if (state.status === "delivered") continue;
+        const replacement = {
+          ...state,
+          status: "disabled",
+          disabledReason: "four_registry_canonical_reorg",
+          cancellationReason: evidence.reason,
+          cancelledByRegistryEventId: evidence.eventId,
+          updatedAt: now,
+          leaseUntil: null,
+          nextAttemptAt: null,
+        };
+        if (JSON.stringify(state) !== JSON.stringify(replacement)) changed = true;
+        candidate.destinations[destination] = replacement;
+      }
+      candidate.status = outboxEntryStatus(candidate.destinations || {});
+      if (candidate.status === "suppressed") candidate.suppressedAt ||= now;
+      if (candidate.status === "delivered") candidate.deliveredAt ||= now;
+      if (changed) candidate.updatedAt = now;
+    }
+    const ownerChanged = rememberFourRegistryDeliveryOwner(outbox, entry);
+    const compactOwner = outbox.fourRegistryDeliveryOwners?.[evidence.eventId];
+    const delivered = entry.status === "delivered"
+      || entry.semanticDuplicateOwnerDelivered === true
+      || Boolean(deliveredRelated)
+      || Object.values(entry.destinations || {}).some((destination) => destination?.status === "delivered");
+    changed ||= Boolean(ownerChanged);
+    if (changed) entry.updatedAt = now;
+    return delivered
+      ? {
+          changed,
+          status: "delivered_orphaned",
+          reason: evidence.reason,
+          persisted: true,
+          terminal: true,
+          eventId: evidence.eventId,
+          deliveredAt: entry.deliveredAt || compactOwner?.deliveredAt || compactOwner?.ownerDeliveredAt,
+        }
+      : {
+          changed,
+          status: "superseded",
+          reason: evidence.reason,
+          persisted: true,
+          terminal: true,
+          eventId: evidence.eventId,
+        };
+  }, { writeIf: (result) => result.changed });
+  const { changed: _changed, ...result } = mutation;
+  return result;
+}
+
 async function claimAlertDestinations(config, eventId, force = false) {
   return mutateOutbox(config, (outbox) => {
     const entry = outbox.events[eventId];
@@ -4596,6 +5583,54 @@ async function claimAlertDestinations(config, eventId, force = false) {
         destinationRetries: {},
         createdAt: entry.createdAt,
         claimedAt: new Date(now).toISOString(),
+        renderBundle: entry.renderBundle?.version === BILINGUAL_RENDER_VERSION ? entry.renderBundle : null,
+        tradingPriority: entry.event?.tradingPriority || null,
+      };
+    }
+    const immutableDuplicate = deliveredImmutableOpenFourDuplicate(outbox, eventId, entry.event);
+    if (immutableDuplicate) {
+      const updatedAt = new Date(now).toISOString();
+      for (const [destination, state] of Object.entries(entry.destinations || {})) {
+        if (state.status === "delivered") continue;
+        entry.destinations[destination] = {
+          ...state,
+          status: "disabled",
+          disabledReason: "semantic_duplicate",
+          duplicateOf: immutableDuplicate.id,
+          updatedAt,
+          leaseUntil: null,
+          nextAttemptAt: null,
+        };
+      }
+      entry.status = outboxEntryStatus(entry.destinations);
+      entry.semanticDuplicateOf = immutableDuplicate.id;
+      entry.semanticDuplicateOwnerDelivered = true;
+      if (entry.status === "suppressed") entry.suppressedAt ||= updatedAt;
+      if (entry.status === "delivered") entry.deliveredAt ||= updatedAt;
+      entry.updatedAt = updatedAt;
+      rememberFourRegistryDeliveryOwner(outbox, entry);
+      return {
+        event: entry.event,
+        destinations: [],
+        destinationRetries: {},
+        createdAt: entry.createdAt,
+        claimedAt: updatedAt,
+        renderBundle: entry.renderBundle?.version === BILINGUAL_RENDER_VERSION ? entry.renderBundle : null,
+        tradingPriority: entry.event?.tradingPriority || null,
+      };
+    }
+    // Serialize every immutable Core proof by its base identity. Whichever
+    // strength already owns the in-flight HTTP attempt determines the visible
+    // ordering; the waiter is rechecked against delivered ownership before it
+    // can claim a destination.
+    if (hasDeliveringOpenFourEntry(outbox, eventId, entry.event, now)) {
+      entry.updatedAt = new Date(now).toISOString();
+      return {
+        event: entry.event,
+        destinations: [],
+        destinationRetries: {},
+        createdAt: entry.createdAt,
+        claimedAt: entry.updatedAt,
         renderBundle: entry.renderBundle?.version === BILINGUAL_RENDER_VERSION ? entry.renderBundle : null,
         tradingPriority: entry.event?.tradingPriority || null,
       };
@@ -4669,6 +5704,8 @@ async function completeAlertDestinations(config, eventId, destinations, results)
     entry.status = outboxEntryStatus(entry.destinations);
     if (entry.status === "delivered") {
       entry.deliveredAt ||= new Date(now).toISOString();
+      rememberImmutableOpenFourSignalOwner(outbox, entry);
+      rememberFourRegistryDeliveryOwner(outbox, entry);
     } else if (entry.status === "suppressed") {
       entry.suppressedAt ||= new Date(now).toISOString();
     }
@@ -4773,8 +5810,10 @@ export async function drainAlertOutbox(config) {
       if (isFlapQuoteProducerGatedEntry(entry)) continue;
       changed = true;
       const retryingDurableFlapTrackedToken = isDurablyAcceptedFlapTrackedTokenEntry(entry);
-      const flapNotificationRenderState = isDurableFlapQuoteNotificationEvent(entry.event)
+      const retryingDurableFourRegistry = isDurablyAcceptedFourRegistryEntry(entry);
+      const durableNotificationRenderState = isDurableFlapQuoteNotificationEvent(entry.event)
         || retryingDurableFlapTrackedToken
+        || retryingDurableFourRegistry
         ? JSON.stringify({
             observedAt: entry.event.observedAt,
             delayedRecovery: entry.event.delayedRecovery,
@@ -4795,7 +5834,13 @@ export async function drainAlertOutbox(config) {
       }
       entry.event = withAlertFreshness(config, entry.event || {}, entry.createdAt || now);
       entry.event = refreshDeliveryFreshness(config, entry.event, now);
-      if (flapNotificationRenderState !== null && flapNotificationRenderState !== JSON.stringify({
+      if (retryingDurableFourRegistry) {
+        // Registry delivery freshness is evaluated after the first priority
+        // pass. Re-score once more so an expired T1 becomes the closed T2
+        // no-chase retry lane before source-control revalidation.
+        entry.event = withTradingPriority(entry.event, { nowMs: now });
+      }
+      if (durableNotificationRenderState !== null && durableNotificationRenderState !== JSON.stringify({
         observedAt: entry.event.observedAt,
         delayedRecovery: entry.event.delayedRecovery,
         freshness: entry.event.freshness,
@@ -4804,7 +5849,7 @@ export async function drainAlertOutbox(config) {
       // Block rules are hot-reloaded. Re-evaluate undelivered durable entries
       // as well as newly observed events, otherwise a contract blocked during
       // Telegram downtime could still be delivered by the retry worker.
-      if (await isEventBlocked(config, entry.event || {})) {
+      if (!isStrictFourRegistryUpdate(entry.event) && await isEventBlocked(config, entry.event || {})) {
         for (const destination of Object.values(entry.destinations || {})) {
           if (destination.status === "delivered") continue;
           destination.status = "disabled";
@@ -4840,9 +5885,12 @@ export async function drainAlertOutbox(config) {
       const ordinaryDeliveryDisposition = alertDeliveryDisposition(entry.event || {});
       entry.deliveryDisposition = retryingDurableFlapTrackedToken
         ? flapTrackedTokenRetryDisposition(entry, entry.event, ordinaryDeliveryDisposition)
-        : ordinaryDeliveryDisposition;
+        : retryingDurableFourRegistry
+          ? fourRegistryRetryDisposition(entry, entry.event, ordinaryDeliveryDisposition)
+          : ordinaryDeliveryDisposition;
       disableFreshnessSuppressedTelegram(entry.destinations || {}, entry.event, new Date(now).toISOString(), {
         preserveFlapTrackedToken: retryingDurableFlapTrackedToken,
+        preserveFourRegistry: retryingDurableFourRegistry,
       });
       disableExpiredTelegramDelivery(config, entry, now);
       disablePolicySuppressedDestinations(
@@ -5288,6 +6336,9 @@ export function isRelevantAlert(event) {
     return isFomoMonitorHealthUpdateAllowed({ fomoHealthMonitorEnabled: true }, event);
   }
   if (event?.type === "telegram_news_update") return isTelegramNewsUpdateAllowed(event);
+  if (Object.prototype.hasOwnProperty.call(event || {}, "policyFixRecovery")) {
+    return isFourMemePolicyFixRecoveryEvent(event);
+  }
   if (isPonFunEvent(event)) return PON_FUN_ALLOWED_KINDS.has(event.kind);
   if (isMorphLaunchpadEvent(event)) {
     const platform = eventPlatform(event);
@@ -5297,7 +6348,12 @@ export function isRelevantAlert(event) {
       && event.structural?.eligible === true;
   }
   if (event.type === "bsc_launchpad_update") {
+    if (claimsFourRegistryUpdate(event)) return isStrictFourRegistryFirstTokenUpdate(event);
     if (event.kind === "flap_pool_token") return Boolean(flapTrackedTokenIdentity(event));
+    if (claimsBscOpenFourFirstTokenUpdate(event)) return isStrictBscOpenFourFirstTokenUpdate(event);
+    if (event.kind === "new_mode" && event.structural?.source === "official_api") {
+      return isOfficialFourMemeCapabilityUpdate(event);
+    }
     return ["new_launchpad", "new_mode", "new_factory"].includes(event.kind);
   }
   if (event.type === "fomo_family_top_call") {
@@ -5351,7 +6407,10 @@ export function isRelevantAlert(event) {
   if (event.type === "uniswap_official_update") return event.strong === true && Boolean(event.url && (event.labels?.length || event.title));
   if (event.type === "ai_official_update") return event.strong === true && Boolean(event.url && event.title && event.source?.id);
   if (["pons_v2_factory_discovered", "pons_v2_factory_status_update", "github_repository_verified"].includes(event.type)) return true;
-  if (event.type === "platform_capability_update") return isFocusPlatformEvent(event);
+  if (event.type === "platform_capability_update") {
+    if (claimsFourRegistryUpdate(event)) return isStrictFourRegistryCapabilityUpdate(event);
+    return isFocusPlatformEvent(event);
+  }
   if (event.type === "github_module_update") {
     if (event.xaiOfficial === true) return event.sourceTrust === "official_verified" && event.strong === true;
     if (isUniswapPlatformEvent(event)) return event.sourceTrust === "official_verified" && event.strong === true;
@@ -5371,6 +6430,7 @@ export function isRelevantAlert(event) {
       return event.signal?.relevant === true || binanceAgentNativeNovelty(event)?.stage === "launch";
     }
     if (isUniswapPlatformEvent(event)) return event.signal?.relevant === true && event.signal?.strong === true;
+    if (event.signal?.marketCampaign != null) return isStrictFourMemeMarketCampaign(event);
     if (eventPlatform(event) === "long") {
       return event.signal?.relevant === true
         && event.signal?.strong === true
@@ -5415,7 +6475,13 @@ function terminalAlertSuppression(eventType, reason, details = {}) {
 
 export async function sendAlerts(config, event) {
   if (!isMonitoringSourceEnabled(config, event)) return terminalAlertSuppression(event?.type, "monitoring_source_disabled");
-  if (await isEventBlocked(config, event)) return terminalAlertSuppression(event?.type, "blocked_event");
+  // A closed Four Registry event is already informational-only/no-auto and
+  // its addresses are the subject of the governance update. A local address
+  // block must not wedge the producer cursor and hide every later Registry
+  // event; the dedicated card remains an explicit do-not-buy monitor.
+  if (!isStrictFourRegistryUpdate(event) && await isEventBlocked(config, event)) {
+    return terminalAlertSuppression(event?.type, "blocked_event");
+  }
   if (!isRelevantAlert(event)) return terminalAlertSuppression(event?.type, "not_relevant");
   const pipelineStartedAtMs = alertPipelineNow(config);
   // Keep freshness, priority, enqueue, and delivery on the same injectable
@@ -5439,7 +6505,7 @@ export async function sendAlerts(config, event) {
     ? [{ destination, ...(state.receipt?.messageId === undefined ? {} : { messageId: state.receipt.messageId }) }]
     : []);
   if (entry?.status === "delivered") {
-    return { status: "delivered", eventType: queuedEvent.type, eventId, deliveredAt: entry.deliveredAt, destinations: configuredDestinations(config), receipts };
+    return { status: "delivered", eventType: queuedEvent.type, eventId, persisted: true, deliveredAt: entry.deliveredAt, destinations: configuredDestinations(config), receipts };
   }
   if (entry?.status === "suppressed") {
     const disabledReasons = Object.values(entry?.destinations || {})
@@ -5453,6 +6519,7 @@ export async function sendAlerts(config, event) {
       eventId,
       persisted: true,
       ...(semanticDuplicate ? {
+        duplicateOf: entry?.semanticDuplicateOf || null,
         canonicalOwnerDelivered: entry?.semanticDuplicateOwnerDelivered === true,
       } : {}),
       suppressedAt: entry.suppressedAt,
@@ -5465,5 +6532,5 @@ export async function sendAlerts(config, event) {
     ? [{ destination, message: state.lastError }]
     : []);
   console.error(`[alert] queued event=${queuedEvent.type} id=${eventId} pending=${failures.map(({ destination }) => destination).join(",") || "delivery"}`);
-  return { status: "queued", eventType: queuedEvent.type, eventId, destinations: configuredDestinations(config), receipts, failures };
+  return { status: "queued", eventType: queuedEvent.type, eventId, persisted: true, destinations: configuredDestinations(config), receipts, failures };
 }

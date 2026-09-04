@@ -1,0 +1,46 @@
+{
+  "version": 2,
+  "events": {
+    "twitter:fourdotmemezh:2095361508700258731": {
+      "id": "twitter:fourdotmemezh:2095361508700258731",
+      "event": {
+        "type": "twitter_update",
+        "project": {
+          "id": "fourmeme",
+          "name": "Four.meme",
+          "website": "https://four.meme",
+          "twitter": "https://x.com/fourdotmemezh",
+          "handle": "fourdotmemezh",
+          "xUserId": "1816036559864619011",
+          "match": "official_x",
+          "priority": true
+        },
+        "tweet": {
+          "id": "2095361508700258731",
+          "text": "Yield is now built into the launch.\n\nIntroducing ListaYield on http://Four.Meme — a new OpenFour mode powered by @lista_dao. \n\nEvery trade can route a share of trading tax into yield-bearing products, creating ongoing yield for eligible holders.\n\nAnd once the token graduates, liquidity moves to Lista DEX by default. 🧵",
+          "createdAt": "2026-09-03T04:01:28.000Z",
+          "authorName": "Four.meme-華語",
+          "handle": "fourdotmemezh",
+          "xUserId": "1816036559864619011",
+          "authorId": "1816036559864619011",
+          "url": "https://x.com/fourdotmemezh/status/2095361508700258731",
+          "isReply": false,
+          "expandedUrls": [
+            "http://Four.Meme"
+          ],
+          "sourceVerifiedBy": "official_x_oembed"
+        },
+        "observedAt": "2026-09-03T04:01:30.523Z"
+      },
+      "status": "suppressed",
+      "destinations": {
+        "telegram": {
+          "status": "disabled",
+          "disabledReason": "semantic_duplicate",
+          "duplicateOf": "twitter:fourdotmemezh:2084706267562709294"
+        }
+      },
+      "semanticDuplicateOf": "twitter:fourdotmemezh:2084706267562709294"
+    }
+  }
+}

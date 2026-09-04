@@ -62,8 +62,11 @@ import {
   suppressExcludedFourMemeTemplateActivations,
   waifuModeFingerprint,
 } from "../src/bsc-launchpad-monitor.js";
-import { classifyAlertFreshness } from "../src/alerts.js";
-import { isStrictFlapTrackedPoolTokenUpdate } from "../src/source-controls.js";
+import { classifyAlertFreshness, sendAlerts } from "../src/alerts.js";
+import {
+  isStrictBscOpenFourFirstTokenUpdate,
+  isStrictFlapTrackedPoolTokenUpdate,
+} from "../src/source-controls.js";
 
 const old = Date.parse("2026-08-02T00:00:00Z");
 const current = Date.parse("2026-08-02T01:00:00Z");
@@ -101,6 +104,35 @@ function observation({
     sampleToken: token,
     observedAt: "2026-08-02T01:00:00.000Z",
   };
+}
+
+function openFourTokenCreatedEvidence({
+  token,
+  transactionHash,
+  blockHash,
+  blockNumber,
+  transactionIndex,
+  logIndex,
+  presetId = 2n,
+  quoteAsset = "0x0000000000000000000000000000000000000000",
+} = {}) {
+  const iface = new Interface(["event TokenCreated(uint256 requestId,uint256 indexed presetId,address indexed creator,address indexed token,string name,string symbol,uint256 maxSupply,uint256 saleAmount,uint256 raiseAmount,uint256 initialPrice,address quoteAsset,address vault,address curveModule,address tradeModule,address migrateModule,address customData,address tokenModule,string tokenMetaUri,uint256 flags,bytes encodedTags)"]);
+  const zero = "0x0000000000000000000000000000000000000000";
+  const encoded = iface.encodeEventLog(iface.getEvent("TokenCreated"), [
+    1n, presetId, "0x1111111111111111111111111111111111111111", token,
+    "Open", "OPEN", 1n, 1n, 1n, 1n, quoteAsset,
+    zero, zero, zero, zero, zero, zero, "ipfs://meta", 0n, "0x",
+  ]);
+  return parseKnownBscLaunchEvidence([{
+    address: "0xebe7b6c1089d9f72ad07f34e36d898e44e5e27f3",
+    topics: encoded.topics,
+    data: encoded.data,
+    transactionHash,
+    blockHash,
+    blockNumber,
+    transactionIndex,
+    index: logIndex,
+  }]);
 }
 
 function testBscWalFrame(revision, ops) {
@@ -1215,6 +1247,32 @@ test("historical transaction objects use the archive pool first and retry null r
   assert.equal((await fallback.getHistoricalTransactionReceipt(hash)).source, "standard");
   assert.deepEqual(fallbackCalls, ["archive", "standard"]);
   fallback.destroy();
+});
+
+test("historical eth_call uses archive state while untagged and latest calls stay on standard RPC", async () => {
+  const calls = [];
+  const pool = createRpcPool(["https://standard.test"], ["https://archive.test"], 1, {
+    providerFactory: (_url, context) => ({
+      async call(transaction) {
+        calls.push({ kind: context.kind, blockTag: transaction.blockTag });
+        if (context.kind === "standard" && transaction.blockTag === 100) {
+          throw new Error("missing trie node");
+        }
+        return context.kind === "archive" ? "0xaaaa" : "0xbbbb";
+      },
+    }),
+  });
+  const transaction = { to: "0x1111111111111111111111111111111111111111", data: "0x1234" };
+
+  assert.equal(await pool.call({ ...transaction, blockTag: 100 }), "0xaaaa");
+  assert.equal(await pool.call(transaction), "0xbbbb");
+  assert.equal(await pool.call({ ...transaction, blockTag: "latest" }), "0xbbbb");
+  assert.deepEqual(calls, [
+    { kind: "archive", blockTag: 100 },
+    { kind: "standard", blockTag: undefined },
+    { kind: "standard", blockTag: "latest" },
+  ]);
+  pool.destroy();
 });
 
 test("RPC timeouts release archive slots and fall back from hung archive and standard providers", async () => {
@@ -3982,9 +4040,10 @@ test("a Four.Meme quote-pool first safe token reaches focus3 Telegram once with 
     return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: payloads.length } }) };
   });
   t.mock.method(console, "info", () => {});
-  const monitor = createBscLaunchpadMonitor({
+  const config = {
     dataDir,
     monitorScope: "focus3",
+    alertBilingualEnabled: true,
     alertChineseTranslationEnabled: false,
     blockedContracts: new Set(),
     telegramToken: "isolated-test-token",
@@ -3992,7 +4051,8 @@ test("a Four.Meme quote-pool first safe token reaches focus3 Telegram once with 
     telegramStrongAlerts: false,
     alertTelegramDeliveryMaxAgeMs: 7_200_000,
     webhookUrl: "",
-  }, {
+  };
+  const monitor = createBscLaunchpadMonitor(config, {
     autoStart: false,
     provider: {
       destroy() {},
@@ -4016,9 +4076,38 @@ test("a Four.Meme quote-pool first safe token reaches focus3 Telegram once with 
   assert.equal(await monitor.registerFourMemeFeatureActivations([{ quoteConfig, observedAt: new Date(liveNow).toISOString() }]), 1);
   const snapshot = await monitor.getState();
   const [activationKey, activation] = Object.entries(snapshot.officialSources.fourMeme.featureActivations)[0];
-  const platform = { id: "fourmeme", name: "Four.Meme", trust: "official_verified", website: "https://four.meme", twitter: "https://x.com/fourdotmemezh" };
-  const first = observation({ platform, fingerprint: "spcxb-first-mode" });
+  const platform = {
+    id: "fourmeme",
+    name: "Four.Meme / OpenFour",
+    trust: "official_verified",
+    website: "https://four.meme",
+    twitter: "https://x.com/fourdotmemezh",
+    github: null,
+    notifyFirstToken: false,
+    notifyFirstInfrastructureActivation: false,
+    evidenceUrl: "https://four.meme/meme-api/v1/public/address",
+  };
+  const first = observation({
+    launcher: "0xebe7b6c1089d9f72ad07f34e36d898e44e5e27f3",
+    platform,
+    fingerprint: "spcxb-first-mode",
+  });
   first.observedAt = new Date(liveNow).toISOString();
+  first.blockHash = "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+  first.transactionIndex = 2;
+  first.canonical = true;
+  first.confirmations = 3;
+  first.requiredConfirmations = 2;
+  first.launchEvidence = openFourTokenCreatedEvidence({
+    token: first.tokens[0].token,
+    transactionHash: first.transactionHash,
+    blockHash: first.blockHash,
+    blockNumber: first.blockNumber,
+    transactionIndex: first.transactionIndex,
+    logIndex: 7,
+    quoteAsset: quoteConfig.address,
+  });
+  first.tokens[0].launchEvidence = first.launchEvidence[0];
   first.deliverySla = {
     startedAt: new Date(liveNow).toISOString(),
     deadlineAt: new Date(liveNow + 5_000).toISOString(),
@@ -4038,11 +4127,44 @@ test("a Four.Meme quote-pool first safe token reaches focus3 Telegram once with 
   const event = await monitor.observe(first);
   assert.equal(event.kind, "new_mode");
   assert.equal(event.featureFirstToken, true);
+  assert.equal(event.officialFirstToken, true);
+  assert.equal(event.logIndex, 7);
+  assert.equal(event.informationalOnly, true);
+  assert.equal(event.autoTradeEligible, false);
+  assert.equal(event.automaticExecution, false);
+  assert.equal(isStrictBscOpenFourFirstTokenUpdate(event), true, JSON.stringify(event, null, 2));
   assert.deepEqual(event.deliverySla, first.deliverySla);
   assert.equal(payloads.length, 1);
-  assert.match(payloads[0].text, /Four\.Meme 新功能首币/);
-  assert.match(payloads[0].text, /官方新底池 SPCXB/);
+  assert.match(payloads[0].text, /(?:OpenFour 首币｜安全检查通过|Four\.Meme \/ OpenFour 新功能首币)/);
+  assert.match(payloads[0].text, /SPCXB 新底池/);
   assert.match(payloads[0].text, new RegExp(first.tokens[0].token, "i"));
+  assert.doesNotMatch(JSON.stringify(payloads[0].reply_markup), /gmgn|买入|swap/i);
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  const [entry] = Object.values(outbox.events);
+  assert.equal(isStrictBscOpenFourFirstTokenUpdate(entry.event), true, JSON.stringify(entry.event, null, 2));
+  assert.equal(entry.renderBundle.focusModel.fourMeme?.kind, "core_first_token_safety", JSON.stringify(entry.renderBundle.focusModel, null, 2));
+  const canonicalCoreSignal = `fourmeme:openfour-core-token-created:56:${first.transactionHash}:7:${first.tokens[0].token}`;
+  assert.deepEqual(entry.event.canonicalSignalIds, [canonicalCoreSignal, `${canonicalCoreSignal}:safety-pass-v1`]);
+  assert.equal(outbox.immutableOpenFourSignalOwners[canonicalCoreSignal].eventId, entry.id);
+  assert.equal(outbox.immutableOpenFourSignalOwners[`${canonicalCoreSignal}:safety-pass-v1`].eventId, entry.id);
+  assert.equal(entry.event.tradingPriority.tier, "T2");
+  assert.equal(entry.event.tradingPriority.category, "focus_registry_first_token");
+  assert.equal(entry.event.tradingPriority.hardGates.t1Eligible, false);
+  assert.equal(entry.event.tradingPriority.plan.automaticExecution, false);
+  assert.deepEqual(entry.deliveryDisposition, {
+    mode: "immediate",
+    deliverImmediately: true,
+    tier: "T2",
+    reason: "four_registry_first_token_monitor_only",
+  });
+  const malformed = await sendAlerts(config, {
+    ...structuredClone(event),
+    eventKey: `${event.eventKey}:forged`,
+    attackerUrl: "https://attacker.example/buy",
+  });
+  assert.equal(malformed.status, "suppressed");
+  assert.equal(malformed.reason, "monitoring_source_disabled");
+  assert.equal(payloads.length, 1);
   assert.equal(await monitor.observe({
     ...structuredClone(first),
     transactionHash: "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
@@ -4670,6 +4792,26 @@ test("Four.Meme official API baselines silently and requires two identical obser
   assert.equal(newTemplateAlert.currentTemplate.id, "2");
   assert.equal(newTemplateAlert.currentTemplate.name, "New Mode");
   assert.deepEqual(newTemplateAlert.changedFields, ["template"]);
+  assert.equal(newTemplateAlert.changeType, "new_published_template");
+  assert.deepEqual(newTemplateAlert.officialCapability, {
+    version: 1,
+    platform: "fourmeme",
+    kind: "template",
+    changeType: "new_published_template",
+    sourceId: "fourmeme_public_template_api",
+    sourceUrl: "https://four.meme/meme-api/v1/public/token_template/search",
+    observedAt: newTemplateAlert.observedAt,
+  });
+  assert.deepEqual(newTemplateAlert.source, {
+    id: "fourmeme_public_template_api",
+    name: "Four.Meme public template API",
+    url: "https://four.meme/meme-api/v1/public/token_template/search",
+    trust: "official_verified",
+    official: true,
+  });
+  assert.equal(newTemplateAlert.sourceTrust, "official_verified");
+  assert.equal(newTemplateAlert.mode.officialName, "New Mode");
+  assert.equal(newTemplateAlert.mode.componentMode, "New Mode");
   const accepted = await monitor.getState();
   assert.equal(Object.values(accepted.officialSources.fourMeme.featureActivations).some((activation) => activation.type === "quote_config" && activation.quoteSymbol === "SPCXB"), true);
   await monitor.checkOfficialSources();
@@ -4685,6 +4827,25 @@ test("Four.Meme official API baselines silently and requires two identical obser
   assert.equal(changedTemplateAlert.previousTemplate.description, "new mechanism");
   assert.equal(changedTemplateAlert.currentTemplate.description, "new oracle mechanism costs 0.3 BNB");
   assert.deepEqual(changedTemplateAlert.changedFields, ["description", "amount", "mechanismTerms", "numericParameters"]);
+
+  templates = templates.map((template) => template.id === 2
+    ? { ...template, status: "DISABLED" }
+    : template);
+  await monitor.checkOfficialSources();
+  assert.equal(alerts.length, 3, "one explicit unpublish observation remains pending");
+  await monitor.checkOfficialSources();
+  assert.equal(alerts.length, 4);
+  const unpublished = alerts.at(-1);
+  assert.equal(unpublished.changeType, "template_unpublished");
+  assert.equal(unpublished.previousTemplate.status, "PUBLISHED");
+  assert.equal(unpublished.currentTemplate.status, "DISABLED");
+  assert.deepEqual(unpublished.changedFields, ["status"]);
+  const afterUnpublish = await monitor.getState();
+  const templateActivations = Object.values(afterUnpublish.officialSources.fourMeme.featureActivations)
+    .filter((activation) => activation.type === "template" && activation.templateId === "2");
+  assert.ok(templateActivations.length > 0);
+  assert.equal(templateActivations.every((activation) => activation.active === false), true);
+  assert.equal(templateActivations.every((activation) => activation.deactivationReason === "official_template_unpublished"), true);
 });
 
 test("Four.Meme 403 source circuits batch one checkpoint per failed round across two hours and restart", async (t) => {

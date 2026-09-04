@@ -1270,6 +1270,15 @@ export function parseKnownBscLaunchEvidence(logs = []) {
         creator: item.creator ? getAddress(item.creator) : null,
         emitter: getAddress(log.address),
         topic: log.topics[0],
+        ...(log.transactionHash ? { transactionHash: String(log.transactionHash).toLowerCase() } : {}),
+        ...(log.blockHash ? { blockHash: String(log.blockHash).toLowerCase() } : {}),
+        ...(Number.isSafeInteger(Number(log.blockNumber)) ? { blockNumber: Number(log.blockNumber) } : {}),
+        ...(Number.isSafeInteger(Number(log.transactionIndex))
+          ? { transactionIndex: Number(log.transactionIndex) }
+          : {}),
+        ...(Number.isSafeInteger(Number(log.index ?? log.logIndex))
+          ? { logIndex: Number(log.index ?? log.logIndex) }
+          : {}),
       });
     } catch {
       // A copied or malformed topic is not sufficient evidence.
@@ -3779,13 +3788,25 @@ export function commitBscDecision(state, decision) {
 function eventFromDecision(decision, observation) {
   const sample = (observation.tokens || []).find((token) => token.token.toLowerCase() === observation.sampleToken?.toLowerCase()) || observation.tokens?.[0] || null;
   const focusPlatform = String(decision.featurePlatform || observation.platform?.id || "").toLowerCase();
+  const sampleAddress = String(sample?.token || "").toLowerCase();
+  const coreEvidence = (observation.launchEvidence || []).find((item) =>
+    String(item?.event || "") === "TokenCreated"
+      && String(item?.topic || "").toLowerCase() === OPENFOUR_TOKEN_CREATED_TOPIC
+      && String(item?.emitter || "").toLowerCase() === FOUR_MEME_OPENFOUR_CORE
+      && String(item?.token || "").toLowerCase() === sampleAddress);
+  const openFourFirstToken = Boolean(
+    decision.featureFirstToken === true
+      && isFourMemePlatformId(focusPlatform)
+      && String(observation.launcher || "").toLowerCase() === FOUR_MEME_OPENFOUR_CORE
+      && coreEvidence,
+  );
   const deliverySla = focusPlatform === "flap" || isFourMemePlatformId(focusPlatform)
     ? normalizeBscWebsocketDeliverySla(observation.deliverySla)
     : null;
   return {
     type: "bsc_launchpad_update",
     kind: decision.kind,
-    officialFirstToken: decision.officialFirstToken === true,
+    officialFirstToken: decision.officialFirstToken === true || openFourFirstToken,
     featureFirstToken: decision.featureFirstToken === true,
     featurePlatform: decision.featurePlatform || null,
     featureActivationKey: decision.featureActivationKey || null,
@@ -3801,6 +3822,20 @@ function eventFromDecision(decision, observation) {
     uniqueTokens: decision.uniqueTokens,
     transactionHash: observation.transactionHash,
     blockNumber: observation.blockNumber,
+    ...(observation.blockHash ? { blockHash: String(observation.blockHash).toLowerCase() } : {}),
+    ...(Number.isSafeInteger(Number(observation.transactionIndex))
+      ? { transactionIndex: Number(observation.transactionIndex) }
+      : {}),
+    ...(Number.isSafeInteger(Number(coreEvidence?.logIndex))
+      ? { logIndex: Number(coreEvidence.logIndex) }
+      : {}),
+    ...(typeof observation.canonical === "boolean" ? { canonical: observation.canonical } : {}),
+    ...(Number.isSafeInteger(Number(observation.confirmations))
+      ? { confirmations: Number(observation.confirmations) }
+      : {}),
+    ...(Number.isSafeInteger(Number(observation.requiredConfirmations))
+      ? { requiredConfirmations: Number(observation.requiredConfirmations) }
+      : {}),
     tokens: sample ? [{ ...sample, metadata: sample.metadata || null }] : [],
     pools: observation.pools || [],
     mode: { ...observation.mode, ...(decision.novelty ? { novelty: decision.novelty } : {}) },
@@ -3836,6 +3871,11 @@ function eventFromDecision(decision, observation) {
     blockTimestamp: observation.observedAt,
     observedAt: observation.observedAt,
     strong: true,
+    ...(openFourFirstToken ? {
+      informationalOnly: true,
+      autoTradeEligible: false,
+      automaticExecution: false,
+    } : {}),
     ...(deliverySla ? { deliverySla } : {}),
   };
 }
@@ -4105,7 +4145,7 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
         .sort((left, right) => getLogsPreference(sourceUrls[left.index]) - getLogsPreference(sourceUrls[right.index]) || left.order - right.order)
         .map(({ index }) => index);
     }
-    if (["getTransaction", "getTransactionReceipt", "getBlock", "getCode", "getStorage"].includes(operation)) {
+    if (["getTransaction", "getTransactionReceipt", "getBlock", "getCode", "getStorage", "call"].includes(operation)) {
       return capable.map((index, order) => ({ index, order }))
         .sort((left, right) => historicalObjectPreference(sourceUrls[left.index]) - historicalObjectPreference(sourceUrls[right.index]) || left.order - right.order)
         .map(({ index }) => index);
@@ -4177,6 +4217,7 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     "getBlock",
     "getCode",
     "getStorage",
+    "call",
   ].includes(operation)
     && !isGlobalRateLimit(message, error)
     && isBscArchiveStateUnavailable(error || message);
@@ -4456,8 +4497,9 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
       );
     }
   };
-  const invokeState = async (method, args, blockIndex) => {
-    const historical = args[blockIndex] !== null && args[blockIndex] !== undefined && args[blockIndex] !== "latest";
+  const invokeState = async (method, args, blockIndex, resolveBlockTag = null) => {
+    const blockTag = typeof resolveBlockTag === "function" ? resolveBlockTag(args) : args[blockIndex];
+    const historical = blockTag !== null && blockTag !== undefined && blockTag !== "latest";
     let archiveError = null;
     if (historical && archiveProviders.length) {
       try { return await invokeArchive(method, args); }
@@ -4508,7 +4550,9 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     getHistoricalBlock: (...args) => invokeArchiveFirst("getBlock", args),
     getCode: (...args) => invokeState("getCode", args, 1),
     getStorage: (...args) => invokeState("getStorage", args, 2),
-    call: (...args) => invoke("call", args),
+    call: (...args) => Object.prototype.hasOwnProperty.call(args[0] || {}, "blockTag")
+      ? invokeState("call", args, 0, (callArgs) => callArgs[0]?.blockTag)
+      : invoke("call", args),
     send: (method, ...args) => method === "eth_getLogs"
       ? invokeLogs([method, ...args])
       : invoke("send", [method, ...args]),
@@ -4727,6 +4771,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   let lastJournalSnapshotAt = 0;
   let journalCompactionTimer = null;
   let journalCompactionTimerDueAt = 0;
+  let journalCompactionTask = Promise.resolve();
   let journalIoLock = Promise.resolve();
   let journalWritePoisonedError = null;
   let journalResetPoisonedError = null;
@@ -4833,7 +4878,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     journalCompactionTimer = journalSetTimeout(() => {
       journalCompactionTimer = null;
       journalCompactionTimerDueAt = 0;
-      void compactStateJournal().catch((error) => {
+      journalCompactionTask = compactStateJournal().catch((error) => {
         logger.error(`[bsc][state-journal] snapshot compaction failed: ${errorSummary(error)}`);
         scheduleJournalCompaction(journalSnapshotIntervalMs);
       });
@@ -5573,6 +5618,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     return {
       type: "bsc_launchpad_update",
       kind: "new_mode",
+      changeType,
       eventKey: `bsc-official-mode:fourmeme:${template.id}:${template.fingerprint}`,
       chainId: BSC_CHAIN_ID,
       launcher: getAddress(FOUR_MEME_OPENFOUR_CORE),
@@ -5587,10 +5633,29 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       mode: {
         selector: "official-template",
         fingerprint: template.fingerprint,
+        officialName: template.name,
+        componentMode: template.name,
         template: { ...template, changeType },
         sourceUrl: FOUR_MEME_TEMPLATE_URL,
       },
       structural: { eligible: true, source: "official_api" },
+      officialCapability: {
+        version: 1,
+        platform: "fourmeme",
+        kind: "template",
+        changeType,
+        sourceId: "fourmeme_public_template_api",
+        sourceUrl: FOUR_MEME_TEMPLATE_URL,
+        observedAt,
+      },
+      source: {
+        id: "fourmeme_public_template_api",
+        name: "Four.Meme public template API",
+        url: FOUR_MEME_TEMPLATE_URL,
+        trust: "official_verified",
+        official: true,
+      },
+      sourceTrust: "official_verified",
       security: null,
       explorerUrl: `https://bscscan.com/address/${FOUR_MEME_OPENFOUR_CORE}`,
       launcherUrl: `https://bscscan.com/address/${FOUR_MEME_OPENFOUR_CORE}`,
@@ -5852,14 +5917,21 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         const becamePublished = template.status === "PUBLISHED" && previous?.status !== "PUBLISHED";
         const newPublished = template.status === "PUBLISHED" && !previous;
         const publishedMechanismChanged = template.status === "PUBLISHED" && previous?.status === "PUBLISHED" && previous.fingerprint !== template.fingerprint;
-        if (newPublished || becamePublished || publishedMechanismChanged) {
-          const changeType = newPublished ? "new_published_template" : becamePublished ? "template_published" : "published_template_changed";
+        const becameUnpublished = template.status !== "PUBLISHED" && previous?.status === "PUBLISHED";
+        if (newPublished || becamePublished || publishedMechanismChanged || becameUnpublished) {
+          const changeType = newPublished
+            ? "new_published_template"
+            : becamePublished
+              ? "template_published"
+              : publishedMechanismChanged
+                ? "published_template_changed"
+                : "template_unpublished";
           if (isExcludedFourMemeTemplate(template)) {
             official.templates[id] = template;
             delete official.pendingTemplates[id];
             continue;
           }
-          const lane = verificationLane(template);
+          const lane = becameUnpublished ? "official_template_api" : verificationLane(template);
           // A transient Registry read must not permanently consume a newly
           // published template. Leave it pending and retry on the next poll.
           if (!lane) continue;
@@ -5869,9 +5941,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
             template,
             changeType,
             firstObservedAt: pending.firstObservedAt || observedAt,
-            activationKey: fourMemeActivationKey(template),
+            activationKey: becameUnpublished ? null : fourMemeActivationKey(template),
             verificationLane: lane,
-            firstTokenEligible: lane === "openfour_registry" || newPublished || becamePublished,
+            firstTokenEligible: !becameUnpublished && (lane === "openfour_registry" || newPublished || becamePublished),
             event: officialTemplateEvent(template, changeType, observedAt, previous),
           });
           continue;
@@ -5889,6 +5961,16 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         const pending = official.pendingTemplates[plan.id];
         if (pending?.fingerprint !== plan.fingerprint) return false;
         official.templates[plan.id] = plan.template;
+        if (plan.changeType === "template_unpublished") {
+          for (const activation of Object.values(official.featureActivations || {})) {
+            if (activation?.type !== "template" || activation.active === false
+              || String(activation.templateId || "") !== String(plan.id)) continue;
+            activation.active = false;
+            activation.deactivatedAt = observedAt;
+            activation.deactivationReason = "official_template_unpublished";
+            activation.deactivatedByEventKey = plan.event.eventKey;
+          }
+        }
         if (plan.firstTokenEligible && plan.activationKey && !official.featureActivations[plan.activationKey]) {
           official.featureActivations[plan.activationKey] = templateActivationRecord(plan.template, observedAt, {
             changeType: plan.changeType,
@@ -12901,6 +12983,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       const observedStateLock = stateLock;
       const observedSaveLock = saveLock;
       const observedJournalIoLock = journalIoLock;
+      const observedJournalCompactionTask = journalCompactionTask;
       const observedInitialize = initializePromise;
       const observedFlapReplaySweep = flapReplaySweepLock;
       const processors = [...activeObservationProcessors];
@@ -12912,6 +12995,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         observedStateLock,
         observedSaveLock,
         observedJournalIoLock,
+        observedJournalCompactionTask,
         observedFlapReplaySweep,
         ...(observedInitialize ? [observedInitialize] : []),
         ...processors,
@@ -12945,6 +13029,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         && observedStateLock === stateLock
         && observedSaveLock === saveLock
         && observedJournalIoLock === journalIoLock
+        && observedJournalCompactionTask === journalCompactionTask
         && observedFlapReplaySweep === flapReplaySweepLock) return;
     }
   }

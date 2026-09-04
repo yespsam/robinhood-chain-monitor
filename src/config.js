@@ -28,6 +28,7 @@ export const parseDistinctRpcOrigins = (name, rawValue, fallbackValue, { require
 };
 
 const flapQuoteMonitorEnabled = !/^false$/i.test(process.env.FLAP_QUOTE_MONITOR_ENABLED || "true");
+const fourRegistryMonitorEnabled = !/^false$/i.test(process.env.FOUR_REGISTRY_MONITOR_ENABLED || "true");
 
 export const config = {
   monitorScope: String(process.env.MONITOR_SCOPE || "all").trim().toLowerCase(),
@@ -183,6 +184,27 @@ export const config = {
     process.env.FLAP_QUOTE_STATE_RPC_URLS,
     "https://rpc-bnb.blockmachine.io,https://bsc-mainnet.public.blastapi.io",
     { required: flapQuoteMonitorEnabled },
+  ),
+  // Four.Meme's public REST inventory can be unavailable by geography. Keep
+  // the official OpenFour Registry/Core as an independent finalized-chain
+  // source, with a silent first baseline and durable post-baseline events.
+  fourRegistryMonitorEnabled,
+  fourRegistryPollIntervalMs: integer("FOUR_REGISTRY_POLL_INTERVAL_MS", 5_000),
+  fourRegistryCatchUpIntervalMs: integer("FOUR_REGISTRY_CATCH_UP_INTERVAL_MS", 1_000),
+  fourRegistryConfirmations: integer("FOUR_REGISTRY_CONFIRMATIONS", 3),
+  fourRegistryLogChunkSize: integer("FOUR_REGISTRY_LOG_CHUNK_SIZE", 10),
+  fourRegistryReorgLookbackBlocks: integer("FOUR_REGISTRY_REORG_LOOKBACK_BLOCKS", 64),
+  fourRegistryLogRpcUrls: parseDistinctRpcOrigins(
+    "FOUR_REGISTRY_LOG_RPC_URLS",
+    process.env.FOUR_REGISTRY_LOG_RPC_URLS,
+    "https://rpc-bnb.blockmachine.io,https://rpc.48.club",
+    { required: fourRegistryMonitorEnabled },
+  ),
+  fourRegistryStateRpcUrls: parseDistinctRpcOrigins(
+    "FOUR_REGISTRY_STATE_RPC_URLS",
+    process.env.FOUR_REGISTRY_STATE_RPC_URLS,
+    "https://rpc-bnb.blockmachine.io,https://bsc-mainnet.public.blastapi.io",
+    { required: fourRegistryMonitorEnabled },
   ),
   ponsMonitorEnabled: !/^false$/i.test(process.env.PONS_MONITOR_ENABLED || "true"),
   ponsVersionPollIntervalMs: integer("PONS_VERSION_POLL_INTERVAL_MS", 5_000),

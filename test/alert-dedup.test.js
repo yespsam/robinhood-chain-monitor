@@ -24,7 +24,7 @@ import {
   startAlertOutboxWorker,
   telegramButtons,
 } from "../src/alerts.js";
-import { classifyFlapQuotePairSignalCore, isMonitoringSourceEnabled } from "../src/source-controls.js";
+import { classifyFlapQuotePairSignalCore, classifyFourMemeOfficialSignalCore, isMonitoringSourceEnabled } from "../src/source-controls.js";
 
 function publicTelegramNewsEvent({
   messageId = "271828",
@@ -642,7 +642,7 @@ test("a durably queued Flap tracked token survives the two-hour TTL and delivers
   assert.equal(entry.event.tradingPriority.tier, "T2");
   assert.equal(entry.deliveryDisposition.reason, "flap_tracked_token_delayed_delivery");
   assert.equal(entry.destinations.telegram.receipt.messageId, 7301);
-  assert.equal(entry.renderBundle.version, 19);
+  assert.equal(entry.renderBundle.version, 21);
   assert.equal(await drainAlertOutbox(config), 0);
   assert.equal(payloads.length, 2, "terminal delivery is exact-once across later drains");
 });
@@ -1014,6 +1014,50 @@ test("Flap bStock quote-pair announcement and live confirmation use distinct sta
   const replacementKeys = focusNoveltyKeys(replacement);
   assert.ok(replacementKeys.includes("flap:quote-pair:soxlb:ca:0x1111111111111111111111111111111111111111:live"));
   assert.ok(liveKeys.some((key) => !replacementKeys.includes(key)), "the same ticker on a replacement CA must retain a distinct live identity");
+});
+
+test("ListaYield and the Four.Meme partner leaderboard retain child-specific semantic identities", () => {
+  const listaText = "Yield is now built into the launch.\n\nIntroducing ListaYield on http://Four.Meme — a new OpenFour mode powered by @lista_dao. \n\nEvery trade can route a share of trading tax into yield-bearing products, creating ongoing yield for eligible holders.\n\nAnd once the token graduates, liquidity moves to Lista DEX by default. 🧵";
+  const listaSignal = classifyFourMemeOfficialSignalCore(listaText);
+  const lista = {
+    type: "twitter_update",
+    project: { id: "fourmeme", name: "Four.Meme" },
+    tweet: { id: "2095361508700258731", text: listaText },
+    signal: listaSignal,
+    mode: { officialName: "ListaYield", componentMode: "ListaYield", parentMode: "OpenFour" },
+    productLifecycle: {
+      product: "listayield",
+      stage: "announced",
+      key: "fourmeme:lifecycle:listayield:announced",
+    },
+  };
+  const oldOpenFour = {
+    type: "twitter_update",
+    project: { id: "fourmeme", name: "Four.Meme" },
+    tweet: { id: "2084706267562709294", text: "Four.Meme Royalty ecosystem update for OpenFour vaults." },
+    signal: { relevant: true, strong: true, platformStructural: true, labels: ["OpenFour"] },
+  };
+  const listaKeys = focusNoveltyKeys(lista);
+  const oldKeys = focusNoveltyKeys(oldOpenFour);
+  assert.ok(listaKeys.includes("fourmeme:lifecycle:listayield:announced"));
+  assert.ok(listaKeys.includes("fourmeme:module:listayield"));
+  assert.equal(oldKeys.includes("fourmeme:lifecycle:listayield:announced"), false);
+  assert.equal(oldKeys.includes("fourmeme:module:listayield"), false);
+  assert.equal(listaKeys.every((key) => oldKeys.includes(key)), false, "the older broad OpenFour owner cannot swallow ListaYield");
+
+  const campaignText = `bStocks szn just got competitive. 🟢
+
+150,000 USDT is now live with @AveaiGlobal × @BNBCHAIN — including a 50,000 USDT leaderboard exclusively for http://Four.Meme traders.
+
+Trade http://Four.Meme Stock Memes on http://Ave.ai.
+Climb the Top 500.`;
+  const campaignKeys = focusNoveltyKeys({
+    type: "twitter_update",
+    project: { id: "fourmeme", name: "Four.Meme" },
+    tweet: { id: "2095713912188739967", text: campaignText },
+    signal: classifyFourMemeOfficialSignalCore(campaignText),
+  });
+  assert.ok(campaignKeys.includes("fourmeme:market-campaign:bstock:aveaiglobal:50000-usdt:top-500"));
 });
 
 test("focus3 keeps distinct feature activations alertable and deduplicates repeats of the same activation", async (t) => {
@@ -6062,6 +6106,6 @@ test("pon.fun producer events pass the closed gate, render durably, and deduplic
   assert.deepEqual(outbox.events[first.eventId].event.canonicalSignalIds, [`pon:${coin}:created`]);
   assert.equal(outbox.events[graduatedResult.eventId].deliveryDisposition.reason, "pon_exact_onchain_realtime");
   assert.equal(outbox.events[graduatedResult.eventId].event.tradingPriority.tier, "T2");
-  assert.equal(outbox.events[first.eventId].renderBundle.version, 19);
+  assert.equal(outbox.events[first.eventId].renderBundle.version, 21);
   assert.equal(outbox.events[duplicate.eventId].semanticDuplicateOf, first.eventId);
 });

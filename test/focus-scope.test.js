@@ -7,6 +7,9 @@ import path from "node:path";
 import { drainAlertOutbox, isTerminalAlertSuppression, sendAlerts } from "../src/alerts.js";
 import {
   isOfficialFlapQuotePairUpdate,
+  isOfficialFourMemeCapabilityUpdate,
+  isOfficialFourMemeNamedModeUpdate,
+  isFourMemePolicyFixRecoveryEvent,
   isOfficialPonFunUpdate,
   isMonitoringSourceEnabled,
   isPonFunSource,
@@ -14,10 +17,15 @@ import {
   isStrictFlapQuoteAssetUpdate,
   isStrictFlapPortalQuoteAssetUpdate,
   isStrictFlapTrackedPoolTokenUpdate,
+  isStrictFourMemeMarketCampaign,
   isTelegramNewsUpdateAllowed,
   isThreePlatformSource,
 } from "../src/source-controls.js";
-import { classifyFocusLaunchpadText, createTwitterMonitor } from "../src/twitter-monitor.js";
+import { classifyFocusLaunchpadText, classifyFourMemeOfficialText, createTwitterMonitor } from "../src/twitter-monitor.js";
+import {
+  buildFourPolicyRecoveryEvent,
+  FOUR_TWITTER_POLICY_RECOVERY_SPECS,
+} from "../src/four-twitter-policy-recovery.js";
 
 const focusConfig = { monitorScope: "focus3", ponsMonitorEnabled: false };
 const binanceFocusConfig = { ...focusConfig, binanceMonitorEnabled: true };
@@ -90,6 +98,119 @@ const exactFlapQuotePairEvent = (text = FLAP_BSTOCK_PAIRS_TEXT) => ({
   },
   signal: classifyFocusLaunchpadText(text),
 });
+
+const FOUR_LISTAYIELD_TEXT = "Yield is now built into the launch.\n\nIntroducing ListaYield on http://Four.Meme — a new OpenFour mode powered by @lista_dao. \n\nEvery trade can route a share of trading tax into yield-bearing products, creating ongoing yield for eligible holders.\n\nAnd once the token graduates, liquidity moves to Lista DEX by default. 🧵";
+const FOUR_BSTOCK_CAMPAIGN_TEXT = `bStocks szn just got competitive. 🟢
+
+150,000 USDT is now live with @AveaiGlobal × @BNBCHAIN — including a 50,000 USDT leaderboard exclusively for http://Four.Meme traders.
+
+Trade http://Four.Meme Stock Memes on http://Ave.ai.
+Climb the Top 500.
+Take your share.
+
+The sprint is on. 🏁`;
+
+const exactFourMemeTweetEvent = (text, id) => {
+  const signal = classifyFourMemeOfficialText(text);
+  const namedMode = signal.namedMode;
+  return {
+    type: "twitter_update",
+    project: {
+      id: "fourmeme",
+      name: "Four.meme",
+      website: "https://four.meme",
+      twitter: "https://x.com/fourdotmemezh",
+      handle: "fourdotmemezh",
+      xUserId: "1816036559864619011",
+      match: "official_x",
+    },
+    tweet: {
+      id,
+      text,
+      createdAt: id === "2095361508700258731"
+        ? "2026-09-03T04:01:28.000Z"
+        : id === "2095713912188739967" ? "2026-09-04T03:21:47.000Z" : "2026-09-04T03:30:00.000Z",
+      handle: "fourdotmemezh",
+      xUserId: "1816036559864619011",
+      authorId: "1816036559864619011",
+      url: `https://x.com/fourdotmemezh/status/${id}`,
+      sourceVerifiedBy: "official_x_oembed",
+      identityVerifiedBy: "fxtwitter_exact_numeric_id",
+      isReply: false,
+    },
+    signal,
+    observedAt: "2026-09-04T03:30:00.000Z",
+    ...(namedMode ? {
+      mode: {
+        officialName: namedMode.name,
+        componentMode: namedMode.name,
+        parentMode: namedMode.parent,
+      },
+      productLifecycle: {
+        product: namedMode.id,
+        stage: namedMode.stage,
+        key: `fourmeme:lifecycle:${namedMode.id}:${namedMode.stage}`,
+      },
+    } : {}),
+  };
+};
+
+const exactFourMemeTemplateEvent = (overrides = {}) => {
+  const observedAt = "2026-09-04T05:00:00.000Z";
+  const fingerprint = "template-fingerprint-v2";
+  const template = {
+    id: "9",
+    name: "ListaYield",
+    status: "PUBLISHED",
+    fingerprint,
+    changeType: "new_published_template",
+  };
+  return {
+    type: "bsc_launchpad_update",
+    kind: "new_mode",
+    changeType: "new_published_template",
+    eventKey: `bsc-official-mode:fourmeme:9:${fingerprint}`,
+    chainId: 56,
+    platform: { id: "fourmeme", name: "Four.Meme", trust: "official_verified" },
+    launchCount: 0,
+    uniqueTokens: 0,
+    tokens: [],
+    pools: [],
+    previousTemplate: null,
+    currentTemplate: { id: "9", name: "ListaYield", status: "PUBLISHED" },
+    changedFields: ["template"],
+    mode: {
+      selector: "official-template",
+      fingerprint,
+      officialName: "ListaYield",
+      componentMode: "ListaYield",
+      template,
+      sourceUrl: "https://four.meme/meme-api/v1/public/token_template/search",
+    },
+    structural: { eligible: true, source: "official_api" },
+    officialCapability: {
+      version: 1,
+      platform: "fourmeme",
+      kind: "template",
+      changeType: "new_published_template",
+      sourceId: "fourmeme_public_template_api",
+      sourceUrl: "https://four.meme/meme-api/v1/public/token_template/search",
+      observedAt,
+    },
+    source: {
+      id: "fourmeme_public_template_api",
+      name: "Four.Meme public template API",
+      url: "https://four.meme/meme-api/v1/public/token_template/search",
+      trust: "official_verified",
+      official: true,
+    },
+    sourceTrust: "official_verified",
+    sourceUrl: "https://four.meme/meme-api/v1/public/token_template/search",
+    observedAt,
+    strong: true,
+    ...overrides,
+  };
+};
 
 const FLAP_BOARD_URL = "https://flap.sh/board";
 const FLAP_QUOTE_ADDRESS = "0xe28c09e21db5bb63c4821c3f44c26ee5aee8280f";
@@ -524,6 +645,11 @@ test("focus3 accepts only structural first-party updates from Flap, Four.Meme, a
       changes: { newChains: [{ name: "Base", chainId: 8453, environment: "mainnet" }] },
     },
     {
+      type: "platform_capability_update",
+      platform: { id: "fourmeme", name: "Four.meme" },
+      changes: { removedQuoteConfigs: [{ symbol: "UUSD", address: "0x1111111111111111111111111111111111111111" }] },
+    },
+    {
       type: "github_module_update",
       launchpad: "Flap",
       repository: "flap-sh/flap-skills",
@@ -688,6 +814,110 @@ Trade & Win for a 50,000 USDT prize pool.`);
   impersonator.tweet.authorId = "1816036559864619011";
   impersonator.tweet.url = `https://x.com/fourdotmemezh/status/${FLAP_BSTOCK_PAIRS_TWEET_ID}`;
   assert.equal(isMonitoringSourceEnabled(focusConfig, impersonator), false);
+});
+
+test("focus3 admits only exact official Four.Meme ListaYield and complete bStock campaign structures", () => {
+  const lista = exactFourMemeTweetEvent(FOUR_LISTAYIELD_TEXT, "2095361508700258731");
+  const campaign = exactFourMemeTweetEvent(FOUR_BSTOCK_CAMPAIGN_TEXT, "2095713912188739967");
+  assert.equal(isOfficialFourMemeNamedModeUpdate(lista), true);
+  assert.equal(isMonitoringSourceEnabled(focusConfig, lista), true);
+  assert.equal(isStrictFourMemeMarketCampaign(campaign), true);
+  assert.equal(isMonitoringSourceEnabled(focusConfig, campaign), true);
+
+  for (const [label, mutate] of [
+    ["named signal projection", (event) => { event.signal.namedMode.holderYield = false; }],
+    ["named promoted mode", (event) => { event.mode.officialName = "OpenFour"; }],
+    ["named lifecycle", (event) => { event.productLifecycle.key = "fourmeme:lifecycle:openfour:announced"; }],
+    ["named oEmbed proof", (event) => { event.tweet.sourceVerifiedBy = "copied_json"; }],
+  ]) {
+    const forged = structuredClone(lista);
+    mutate(forged);
+    assert.equal(isOfficialFourMemeNamedModeUpdate(forged), false, label);
+    assert.equal(isMonitoringSourceEnabled(focusConfig, forged), false, label);
+  }
+
+  for (const [label, mutate] of [
+    ["project id", (event) => { event.project.id = "flap"; }],
+    ["project website", (event) => { event.project.website = "https://example.com"; }],
+    ["project numeric id", (event) => { event.project.xUserId = "1"; }],
+    ["tweet author id", (event) => { event.tweet.authorId = "1"; }],
+    ["status URL", (event) => { event.tweet.url = `https://x.com/attacker/status/${event.tweet.id}`; }],
+    ["project docs injection", (event) => { event.project.docs = "https://attacker.example"; }],
+    ["root source link injection", (event) => { event.sourceUrl = "https://attacker.example"; }],
+    ["oEmbed proof", (event) => { event.tweet.sourceVerifiedBy = "copied_json"; }],
+    ["reply", (event) => { event.tweet.isReply = true; }],
+    ["prize projection", (event) => { event.signal.marketCampaign.fourMemePrizeUsdt = 60_000; }],
+    ["ranking projection", (event) => { event.signal.marketCampaign.topRanks = 100; }],
+    ["extra signal field", (event) => { event.signal.stockMarketing = true; }],
+    ["tweet body after classification", (event) => { event.tweet.text = event.tweet.text.replace("Top 500", "Top 50"); }],
+  ]) {
+    const forged = structuredClone(campaign);
+    mutate(forged);
+    assert.equal(isStrictFourMemeMarketCampaign(forged), false, label);
+    assert.equal(isMonitoringSourceEnabled(focusConfig, forged), false, label);
+  }
+
+  for (const text of [
+    "Four.Meme bStocks trading competition with @AveaiGlobal and a 150,000 USDT prize pool.",
+    "Trade Four.Meme Stock Memes on Ave.ai and climb the Top 500.",
+    "50,000 USDT leaderboard exclusively for Four.Meme traders.",
+  ]) {
+    const ordinary = exactFourMemeTweetEvent(text, "2095713912188739999");
+    assert.equal(ordinary.signal.marketCampaign, undefined, text);
+    assert.equal(isMonitoringSourceEnabled(focusConfig, ordinary), false, text);
+  }
+});
+
+test("Four.Meme policy recovery accepts only the closed immutable producer shape", () => {
+  const spec = FOUR_TWITTER_POLICY_RECOVERY_SPECS.find(({ kind }) => kind === "named_mode");
+  const original = exactFourMemeTweetEvent(FOUR_LISTAYIELD_TEXT, spec.tweetId);
+  const recovery = buildFourPolicyRecoveryEvent({
+    project: original.project,
+    tweet: original.tweet,
+    signal: original.signal,
+    spec,
+    recoveredAt: "2026-09-04T09:00:00.000Z",
+  });
+  assert.ok(recovery);
+  assert.equal(isFourMemePolicyFixRecoveryEvent(recovery), true);
+  assert.equal(isMonitoringSourceEnabled(focusConfig, recovery), true);
+
+  for (const [label, mutate] of [
+    ["unknown root field", (event) => { event.attacker = true; }],
+    ["root attacker URL", (event) => { event.explorerUrl = "https://attacker.example/tx"; }],
+    ["project extension", (event) => { event.project.docs = "https://attacker.example/docs"; }],
+    ["tweet extension", (event) => { event.tweet.buttonUrl = "https://attacker.example/buy"; }],
+    ["expanded URL injection", (event) => { event.tweet.expandedUrls.push("https://attacker.example"); }],
+    ["status URL mutation", (event) => { event.tweet.url = `https://attacker.example/${event.tweet.id}`; }],
+    ["self-reported recovery key", (event) => { event.eventKey = "twitter:fourdotmemezh:2095361508700258731:policy-fix-recovery:v2"; }],
+    ["self-reported signal mutation", (event) => { event.signal.namedMode.holderYield = false; }],
+  ]) {
+    const forged = structuredClone(recovery);
+    mutate(forged);
+    assert.equal(isFourMemePolicyFixRecoveryEvent(forged), false, label);
+    assert.equal(isMonitoringSourceEnabled(focusConfig, forged), false, label);
+  }
+});
+
+test("focus3 treats only the provenance-bound Four.Meme template snapshot as an official capability", () => {
+  const exact = exactFourMemeTemplateEvent();
+  assert.equal(isOfficialFourMemeCapabilityUpdate(exact), true);
+  assert.equal(isMonitoringSourceEnabled(focusConfig, exact), true);
+
+  for (const [label, mutate] of [
+    ["source id", (event) => { event.source.id = "copied_api"; }],
+    ["source URL", (event) => { event.source.url = "https://example.com/template"; }],
+    ["capability extension", (event) => { event.officialCapability.attacker = true; }],
+    ["mismatched observed time", (event) => { event.officialCapability.observedAt = "2026-09-04T05:00:01.000Z"; }],
+    ["mismatched change", (event) => { event.mode.template.changeType = "template_unpublished"; }],
+    ["missing diff", (event) => { event.changedFields = []; }],
+    ["wrong status", (event) => { event.currentTemplate.status = "DRAFT"; }],
+  ]) {
+    const forged = structuredClone(exact);
+    mutate(forged);
+    assert.equal(isOfficialFourMemeCapabilityUpdate(forged), false, label);
+    assert.equal(isMonitoringSourceEnabled(focusConfig, forged), false, label);
+  }
 });
 
 test("focus3 Flap board stock-quote exception requires a complete BSC quote_asset and coherent optional proof", () => {

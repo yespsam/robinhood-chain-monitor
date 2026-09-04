@@ -5,6 +5,7 @@ export const FOCUS3_MONITOR_START_DELAYS_MS = Object.freeze({
   github: 1_000,
   binance: 2_000,
   "platform-capability": 3_000,
+  "four-registry": 3_500,
   twitter: 4_000,
   uniswap: 5_000,
   site: 10_000,

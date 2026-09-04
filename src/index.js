@@ -3,7 +3,7 @@ import { id } from "ethers";
 import { config } from "./config.js";
 import { Storage } from "./storage.js";
 import { analyzeReceipt, bytecodeFeatures, classifyModeObservation, jaccard, modeFamilyKey, readTokenMetadata, V4_INITIALIZE_TOPIC } from "./detector.js";
-import { sendAlerts, startAlertOutboxWorker } from "./alerts.js";
+import { cancelPendingFourRegistryEvent, sendAlerts, startAlertOutboxWorker } from "./alerts.js";
 import { launchpadByFactory, launchpadByGmgnPlatform, publicLaunchpadProfile, launchpadFactoryAddresses, registerLaunchpadFactory } from "./launchpad-catalog.js";
 import { createGithubMonitor } from "./github-monitor.js";
 import { assessLocalTokenSecurity } from "./local-security.js";
@@ -22,6 +22,7 @@ import { createPonMonitor } from "./pon-monitor.js";
 import { createBinanceMonitor } from "./binance-monitor.js";
 import { createBscLaunchpadMonitor, createRpcPool } from "./bsc-launchpad-monitor.js";
 import { createFlapQuoteMonitor } from "./flap-quote-monitor.js";
+import { createFourRegistryMonitor } from "./four-registry-monitor.js";
 import { createAbortableJsonRpcProvider, createMorphLaunchpadMonitor, mapWithConcurrency } from "./morph-launchpad-monitor.js";
 import { createFomoCallMonitor } from "./fomo-call-monitor.js";
 import { createFomoHealthMonitor } from "./fomo-health-monitor.js";
@@ -71,7 +72,10 @@ const provider = createAbortableJsonRpcProvider(config.rpcUrl, config.chainId, {
 const flapQuoteMetadataProviders = new Map();
 const flapQuoteLogProviders = new Map();
 const flapQuoteStateProviders = new Map();
+const fourRegistryLogProviders = new Map();
+const fourRegistryStateProviders = new Map();
 let flapQuoteRpcProvider = null;
+let fourRegistryRpcProvider = null;
 async function resolveFlapQuoteAssetMetadata({ address, chainId }) {
   if (shutdownRequested) return null;
   const numericChainId = Number(chainId);
@@ -118,6 +122,7 @@ let earlyActivityMonitor;
 let twitterMonitor;
 let platformCapabilityMonitor;
 let flapQuoteMonitor;
+let fourRegistryMonitor;
 let ponsVersionMonitor;
 let ponMonitor;
 let binanceMonitor;
@@ -534,6 +539,49 @@ function startIndependentMonitors() {
       },
     });
   });
+  if (config.fourRegistryMonitorEnabled) startMonitor("four-registry", () => {
+    fourRegistryRpcProvider ||= createRpcPool(
+      config.bscRpcUrls || [config.bscRpcUrl],
+      config.bscArchiveRpcUrls || [],
+      Math.max(1, Number(config.bscArchiveConcurrency || 4)),
+      {
+        requestTimeoutMs: Math.max(1_000, Number(config.bscRpcRequestTimeoutMs || 7_000)),
+        standardConcurrency: Math.max(1, Number(config.bscRpcConcurrency || 4)),
+      },
+    );
+    for (const rpcUrl of config.fourRegistryLogRpcUrls) {
+      const sourceId = new URL(rpcUrl).origin.toLowerCase();
+      if (!fourRegistryLogProviders.has(sourceId)) {
+        fourRegistryLogProviders.set(sourceId, createAbortableJsonRpcProvider(rpcUrl, 56, {
+          requestTimeoutMs: Math.max(1_000, Math.min(7_000, Number(config.bscRpcRequestTimeoutMs || 7_000))),
+          batchMaxCount: 1,
+        }));
+      }
+    }
+    for (const rpcUrl of config.fourRegistryStateRpcUrls) {
+      const sourceId = new URL(rpcUrl).origin.toLowerCase();
+      if (!fourRegistryStateProviders.has(sourceId)) {
+        fourRegistryStateProviders.set(sourceId, createAbortableJsonRpcProvider(rpcUrl, 56, {
+          requestTimeoutMs: Math.max(1_000, Math.min(7_000, Number(config.bscRpcRequestTimeoutMs || 7_000))),
+          batchMaxCount: 1,
+        }));
+      }
+    }
+    fourRegistryMonitor = createFourRegistryMonitor(config, {
+      provider: fourRegistryRpcProvider,
+      logVerificationProviders: [...fourRegistryLogProviders].map(([sourceId, logProvider]) => ({
+        sourceId,
+        provider: logProvider,
+      })),
+      stateVerificationProviders: [...fourRegistryStateProviders].map(([sourceId, stateProvider]) => ({
+        sourceId,
+        provider: stateProvider,
+      })),
+      onEvent: (event) => sendAlerts(config, event),
+      cancelPendingEvent: (evidence) => cancelPendingFourRegistryEvent(config, evidence),
+      autoStart: true,
+    });
+  });
   if (config.binanceMonitorEnabled) startMonitor("binance", () => {
     binanceMonitor = createBinanceMonitor(config);
   });
@@ -691,6 +739,7 @@ function createdMonitorEntries() {
     ["twitter", twitterMonitor],
     ["platform-capability", platformCapabilityMonitor],
     ["flap-quote", flapQuoteMonitor],
+    ["four-registry", fourRegistryMonitor],
     ["pons-version", ponsVersionMonitor],
     ["pon", ponMonitor],
     ["binance", binanceMonitor],
@@ -728,9 +777,12 @@ function gracefulShutdown(signal) {
     const ownedProviders = [...new Set([
       provider,
       flapQuoteRpcProvider,
+      fourRegistryRpcProvider,
       ...flapQuoteMetadataProviders.values(),
       ...flapQuoteLogProviders.values(),
       ...flapQuoteStateProviders.values(),
+      ...fourRegistryLogProviders.values(),
+      ...fourRegistryStateProviders.values(),
     ].filter(Boolean))];
     const providerResults = await Promise.allSettled(
       ownedProviders.map((rpc) => Promise.resolve().then(() => rpc.destroy?.())),
@@ -743,6 +795,8 @@ function gracefulShutdown(signal) {
     flapQuoteMetadataProviders.clear();
     flapQuoteLogProviders.clear();
     flapQuoteStateProviders.clear();
+    fourRegistryLogProviders.clear();
+    fourRegistryStateProviders.clear();
 
     const [heartbeatResult] = await Promise.allSettled([
       Promise.resolve().then(() => runtimeHeartbeat?.stop()),

@@ -1,4 +1,10 @@
 import { createHash } from "node:crypto";
+import {
+  FOUR_REGISTRY_CAPABILITY_KINDS,
+  FOUR_REGISTRY_FIRST_TOKEN_KIND,
+  isFourRegistryCapabilityEvent as isRawFourRegistryCapabilityEvent,
+  isFourRegistryFirstTokenEvent as isRawFourRegistryFirstTokenEvent,
+} from "./four-registry-monitor.js";
 
 const PONS_REPOSITORIES = new Set([
   "ponsdotdev/ponsfamily",
@@ -96,6 +102,36 @@ const PON_FUN_X_SIGNAL_RULES = new Map([
 
 const FLAP_X_HANDLE = "flapdotsh";
 const FLAP_X_USER_ID = "1749114887807320064";
+const FOUR_MEME_X_HANDLE = "fourdotmemezh";
+const FOUR_MEME_X_USER_ID = "1816036559864619011";
+const FOUR_MEME_TEMPLATE_SOURCE_ID = "fourmeme_public_template_api";
+const FOUR_MEME_TEMPLATE_URL = "https://four.meme/meme-api/v1/public/token_template/search";
+const FOUR_MEME_TEMPLATE_CHANGE_TYPES = new Set([
+  "new_published_template",
+  "template_published",
+  "published_template_changed",
+  "template_unpublished",
+]);
+const FOUR_MEME_POLICY_RECOVERY_SPECS = new Map([
+  ["2095361508700258731", {
+    kind: "named_mode",
+    allowlistId: "four-twitter-policy-fix-2026-09-v1:listayield",
+    originalEventKey: "twitter:fourdotmemezh:2095361508700258731",
+    derivedEventKey: "twitter:fourdotmemezh:2095361508700258731:policy-fix-recovery:v1",
+    createdAt: "2026-09-03T04:01:28.000Z",
+    textSha256: "d9997debab05aa886ffa9b95cc0de3fda27bf6a59e23a04328868f99338edd29",
+    evidenceSource: "durable_suppressed_outbox+verified_exact_status",
+  }],
+  ["2095713912188739967", {
+    kind: "market_campaign",
+    allowlistId: "four-twitter-policy-fix-2026-09-v1:bstock-campaign",
+    originalEventKey: "twitter:fourdotmemezh:2095713912188739967",
+    derivedEventKey: "twitter:fourdotmemezh:2095713912188739967:policy-fix-recovery:v1",
+    createdAt: "2026-09-04T03:21:47.000Z",
+    textSha256: "548a09c8436c71905c131c732c258125ba1a66c7baea83a0ecbe65539a606b5c",
+    evidenceSource: "verified_recent_timeline+verified_exact_status",
+  }],
+]);
 const FLAP_BOARD_URL = "https://flap.sh/board";
 const FLAP_BSC_CHAIN_ID = 56;
 const FLAP_BSC_QUOTE_PORTAL = "0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0";
@@ -120,6 +156,25 @@ const FLAP_TRACKED_TOKEN_PORTAL = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
 const FLAP_TRACKED_TOKEN_CREATED_TOPIC = "0x504e7f360b2e5fe33cbaaae4c593bc55305328341bf79009e43e0e3b7f699603";
 const FLAP_TRACKED_TOKEN_TARGET = 3;
 const FLAP_TRACKED_TOKEN_RECOVERY_REASON = "verified_generation_archive_catch_up";
+const FOUR_MEME_OPENFOUR_CORE = "0xebe7b6c1089d9f72ad07f34e36d898e44e5e27f3";
+const FOUR_MEME_OPENFOUR_TOKEN_CREATED_TOPIC = "0x7dae4dcd1b20eb0445e7cc1d02b3e2e7f32fa63081a0e764732c269f2b8f228f";
+const FOUR_MEME_OPENFOUR_TEMPLATE_SOURCE_URL = "https://four.meme/meme-api/v1/public/token_template/search";
+const FOUR_MEME_OPENFOUR_CONFIG_SOURCE_URL = "https://four.meme/meme-api/v1/public/config";
+const FOUR_REGISTRY_FIRST_TOKEN_SOURCE_ID = "fourmeme_openfour_core";
+const FOUR_REGISTRY_CAPABILITY_SOURCE_ID = "fourmeme_openfour_registry";
+const FOUR_REGISTRY_DERIVED_EVENT_KEYS = new Set([
+  "canonicalSignalId", "canonicalSignalIds", "freshness", "tradingPriority", "alertQueuedAt",
+]);
+const FOUR_MEME_OPENFOUR_EVENT_KEYS = new Set([
+  "type", "kind", "eventKey", "officialFirstToken", "featureFirstToken", "featurePlatform",
+  "featureActivationKey", "chainId", "launcher", "platform", "launchCount", "uniqueTokens",
+  "transactionHash", "blockNumber", "blockHash", "transactionIndex", "logIndex", "canonical",
+  "confirmations", "requiredConfirmations", "tokens", "pools", "mode", "structural", "security",
+  "attribution", "deployer", "controllerKind", "launchEvidence", "explorerEvidence", "marketContext",
+  "explorerUrl", "launcherUrl", "sourceUrl", "blockTimestamp", "observedAt", "strong",
+  "informationalOnly", "autoTradeEligible", "automaticExecution", "deliverySla",
+  "canonicalSignalId", "canonicalSignalIds", "freshness", "tradingPriority", "alertQueuedAt",
+]);
 const FLAP_TRACKED_TOKEN_DEX_FACTORIES = new Map([
   ["0xca143ce32fe78f1f7019d7d551a6402fc5350c73", "v2"],
   ["0x0bfbcf9fa4f9c56b0f40a671ad40e0805a091865", "v3"],
@@ -525,13 +580,19 @@ const FOCUS3_CAPABILITY_KEYS = [
   "newFlapPools",
   "updatedFlapPools",
   "newQuoteTokens",
+  "removedQuoteTokens",
   "newQuoteConfigs",
+  "removedQuoteConfigs",
   "updatedQuoteConfigs",
   "quoteConfigChanges",
   "newContracts",
+  "removedContracts",
   "newModules",
+  "removedModules",
   "newVersions",
+  "removedVersions",
   "newPackages",
+  "removedPackages",
   "updatedPackages",
   "packageVersionChanges",
   "newChains",
@@ -666,6 +727,361 @@ function sameFlapValue(left, right) {
   const rightKeys = Object.keys(right);
   return leftKeys.length === rightKeys.length
     && leftKeys.every((key) => Object.hasOwn(right, key) && sameFlapValue(left[key], right[key]));
+}
+
+function normalizedFourMemeText(value) {
+  return String(value || "")
+    .replace(/&amp;/gi, "&")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\r\n?/g, "\n")
+    .trim();
+}
+
+function boundedFourMemeInteger(value, maximum = 10_000_000) {
+  const normalizedValue = String(value || "").replace(/,/g, "");
+  if (!/^[1-9]\d*$/.test(normalizedValue)) return null;
+  const parsed = Number(normalizedValue);
+  return Number.isSafeInteger(parsed) && parsed <= maximum ? parsed : null;
+}
+
+export function classifyFourMemeNamedModeCore(text = "") {
+  const source = normalizedFourMemeText(text);
+  const namedIntroduction = /\bintroduc(?:e|es|ed|ing)\s+ListaYield\s+on\s+(?:https?:\/\/)?(?:www\.)?Four\.Meme\b/i.test(source);
+  const parentMode = /\b(?:new\s+)?Open\s*Four\s+mode\b/i.test(source);
+  const partner = /\bpowered\s+by\s+@lista_dao\b/i.test(source);
+  const taxRoute = /\bevery\s+trade\b[\s\S]{0,180}\btrading\s+tax\b[\s\S]{0,180}\byield[- ]bearing\s+products?\b/i.test(source);
+  const holderYield = /(?:\bholders?\s+earn\b|\bcreating\s+ongoing\s+yield\s+for\s+eligible\s+holders\b)/i.test(source);
+  const graduationRoute = /\b(?:when|once)\s+(?:the\s+)?token\s+graduates?\b[\s\S]{0,180}\bliquidity\s+moves?\s+to\s+Lista\s+DEX\b[\s\S]{0,80}\bby\s+default\b/i.test(source);
+  if (!namedIntroduction || !parentMode || !partner || !taxRoute || !holderYield || !graduationRoute) return null;
+  return {
+    relevant: true,
+    strong: true,
+    platformStructural: true,
+    labels: ["新发射/新模式", "OpenFour", "税收/募资/报价代币"],
+    reason: "fourmeme_named_mode_listayield",
+    namedMode: {
+      version: 1,
+      id: "listayield",
+      name: "ListaYield",
+      parent: "OpenFour",
+      stage: "announced",
+      partnerHandle: "lista_dao",
+      tradingTaxRoute: "yield_bearing_products",
+      holderYield: true,
+      graduationLiquidityDestination: "Lista DEX",
+    },
+  };
+}
+
+export function classifyFourMemeMarketCampaignCore(text = "") {
+  const source = normalizedFourMemeText(text);
+  if (!/\bbStocks?\b/i.test(source) || !/\bStock\s+Memes?\b/i.test(source)) return null;
+  const partnership = source.match(/\bwith\s+@([A-Za-z0-9_]{1,15})\s*(?:×|x|&|and)\s*@([A-Za-z0-9_]{1,15})\b/i);
+  if (!partnership || normalized(partnership[2]) !== "bnbchain") return null;
+  const partnerHandle = partnership[1];
+  if (["fourdotmemezh", "bnbchain"].includes(normalized(partnerHandle))) return null;
+
+  const totalMatch = source.match(/\b([1-9]\d{0,2}(?:,\d{3})+|[1-9]\d*)\s*USDT\s+(?:is\s+)?now\s+live\b/i);
+  const exclusiveMatch = source.match(/\b(?:including\s+(?:a\s+)?)?([1-9]\d{0,2}(?:,\d{3})+|[1-9]\d*)\s*USDT\s+leaderboard\s+exclusively\s+for\s+(?:https?:\/\/)?(?:www\.)?Four\.Meme\/?\s+traders?\b/i);
+  const topMatch = source.match(/\b(?:climb\s+the\s+)?Top\s*([1-9]\d{0,4})\b/i);
+  const venueMatch = source.match(/\bTrade\s+(?:https?:\/\/)?(?:www\.)?Four\.Meme\/?\s+Stock\s+Memes?\s+on\s+(?:https?:\/\/)?(?:www\.)?([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)\/?/i);
+  const totalPrizeUsdt = boundedFourMemeInteger(totalMatch?.[1]);
+  const fourMemePrizeUsdt = boundedFourMemeInteger(exclusiveMatch?.[1]);
+  const topRanks = boundedFourMemeInteger(topMatch?.[1], 10_000);
+  const venue = venueMatch?.[1] || null;
+  if (!totalPrizeUsdt || !fourMemePrizeUsdt || fourMemePrizeUsdt > totalPrizeUsdt || !topRanks || !venue) return null;
+  const venueName = venue.toLowerCase() === "ave.ai" ? "Ave.ai" : venue;
+  return {
+    relevant: true,
+    strong: true,
+    platformStructural: false,
+    labels: ["Four.Meme bStock 合作榜单"],
+    reason: "fourmeme_bstock_partner_leaderboard_live",
+    marketCampaign: {
+      version: 1,
+      kind: "bstock_partner_leaderboard",
+      assetClass: "bstock",
+      stage: "live",
+      partnerHandle,
+      chainHandle: partnership[2],
+      venue: venueName,
+      totalPrizeUsdt,
+      fourMemePrizeUsdt,
+      topRanks,
+      exclusiveToFourMemeTraders: true,
+      campaignKey: `fourmeme:market-campaign:bstock:${normalized(partnerHandle)}:${fourMemePrizeUsdt}-usdt:top-${topRanks}`,
+    },
+  };
+}
+
+export function classifyFourMemeOfficialSignalCore(text = "") {
+  return classifyFourMemeNamedModeCore(text) || classifyFourMemeMarketCampaignCore(text);
+}
+
+function isOfficialFourMemeXSource(source) {
+  const project = source?.project;
+  const tweet = source?.tweet;
+  const tweetId = typeof tweet?.id === "string" ? tweet.id : "";
+  const projectKeys = new Set([
+    "id", "name", "website", "twitter", "handle", "xUserId", "match", "priority",
+    "backfillOnFirstSeen", "baselineOnFirstSeen", "criticalFastLane", "criticalProfile",
+    "fallbackOfficialSources",
+  ]);
+  const projectRequired = ["id", "name", "website", "twitter", "handle", "xUserId", "match"];
+  const tweetKeys = new Set([
+    "id", "text", "createdAt", "authorName", "handle", "xUserId", "authorId", "userId",
+    "replies", "reposts", "likes", "url", "isReply", "expandedUrls", "sourceVerifiedBy",
+    "identityVerifiedBy", "discoveredBy",
+  ]);
+  const tweetRequired = ["id", "text", "createdAt", "handle", "xUserId", "authorId", "url", "isReply", "sourceVerifiedBy"];
+  const fallbackSources = project?.fallbackOfficialSources;
+  const fallbackSourcesValid = fallbackSources === undefined || sameFlapValue(fallbackSources, [
+    { name: "Four.Meme 公告", url: "https://four.meme/en/announcement", coveredBy: "platform-capability-monitor" },
+    { name: "Four.Meme 产品配置", url: "https://four.meme/meme-api/v1/public/config", coveredBy: "platform-capability-monitor" },
+  ]);
+  const expandedUrls = tweet?.expandedUrls;
+  const expandedUrlsValid = expandedUrls === undefined || (Array.isArray(expandedUrls)
+    && expandedUrls.length <= 8
+    && expandedUrls.every((value) => {
+      try {
+        const url = new URL(String(value));
+        const host = url.hostname.toLowerCase().replace(/^www\./, "");
+        return ["http:", "https:"].includes(url.protocol)
+          && !url.username && !url.password
+          && ["four.meme", "ave.ai"].includes(host);
+      } catch {
+        return false;
+      }
+    }));
+  const forbiddenRootLink = ["url", "sourceUrl", "explorerUrl", "launcherUrl", "transactionUrl", "marketUrl", "docs"]
+    .some((key) => Object.prototype.hasOwnProperty.call(source || {}, key));
+  return source?.type === "twitter_update"
+    && !forbiddenRootLink
+    && exactFlapKeys(project, projectKeys, projectRequired)
+    && normalized(project?.id) === "fourmeme"
+    && normalized(project?.name) === "four.meme"
+    && project?.website === "https://four.meme"
+    && project?.twitter === `https://x.com/${FOUR_MEME_X_HANDLE}`
+    && normalized(project?.handle).replace(/^@/, "") === FOUR_MEME_X_HANDLE
+    && project?.xUserId === FOUR_MEME_X_USER_ID
+    && normalized(project?.match) === "official_x"
+    && (project?.priority === undefined || project.priority === true)
+    && (project?.backfillOnFirstSeen === undefined || typeof project.backfillOnFirstSeen === "boolean")
+    && (project?.baselineOnFirstSeen === undefined || project.baselineOnFirstSeen === true)
+    && (project?.criticalFastLane === undefined || project.criticalFastLane === true)
+    && (project?.criticalProfile === undefined || project.criticalProfile === "focus_launchpad")
+    && fallbackSourcesValid
+    && exactFlapKeys(tweet, tweetKeys, tweetRequired)
+    && /^\d{10,25}$/.test(tweetId)
+    && normalized(tweet?.handle).replace(/^@/, "") === FOUR_MEME_X_HANDLE
+    && tweet?.xUserId === FOUR_MEME_X_USER_ID
+    && tweet?.authorId === FOUR_MEME_X_USER_ID
+    && (tweet?.userId == null || tweet.userId === FOUR_MEME_X_USER_ID)
+    && tweet?.url === `https://x.com/${FOUR_MEME_X_HANDLE}/status/${tweetId}`
+    && tweet?.sourceVerifiedBy === "official_x_oembed"
+    && tweet?.isReply === false
+    && strictFourMemeInstant(tweet?.createdAt) !== null
+    && expandedUrlsValid
+    && typeof tweet?.text === "string"
+    && tweet.text.length > 0
+    && tweet.text.length <= 20_000
+    && !/[\u0000\u0008\u000B\u000C\u000E-\u001F\u007F]/u.test(tweet.text);
+}
+
+export function isOfficialFourMemeNamedModeUpdate(source) {
+  const recomputed = classifyFourMemeNamedModeCore(source?.tweet?.text);
+  const signalKeys = new Set(["relevant", "strong", "platformStructural", "labels", "reason", "namedMode"]);
+  const namedMode = recomputed?.namedMode;
+  const promotedShapeValid = Object.prototype.hasOwnProperty.call(source || {}, "policyFixRecovery") || (
+    sameFlapValue(source?.mode, {
+      officialName: namedMode?.name,
+      componentMode: namedMode?.name,
+      parentMode: namedMode?.parent,
+    })
+    && sameFlapValue(source?.productLifecycle, {
+      product: namedMode?.id,
+      stage: namedMode?.stage,
+      key: `fourmeme:lifecycle:${namedMode?.id}:${namedMode?.stage}`,
+    })
+  );
+  return isOfficialFourMemeXSource(source)
+    && recomputed !== null
+    && promotedShapeValid
+    && exactFlapKeys(source.signal, signalKeys, [...signalKeys])
+    && sameFlapValue(source.signal, recomputed);
+}
+
+export function isStrictFourMemeMarketCampaign(source) {
+  const recomputed = classifyFourMemeMarketCampaignCore(source?.tweet?.text);
+  const signalKeys = new Set(["relevant", "strong", "platformStructural", "labels", "reason", "marketCampaign"]);
+  return isOfficialFourMemeXSource(source)
+    && recomputed !== null
+    && exactFlapKeys(source.signal, signalKeys, [...signalKeys])
+    && sameFlapValue(source.signal, recomputed);
+}
+
+function strictFourMemeInstant(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value ? parsed : null;
+}
+
+export function isFourMemePolicyFixRecoveryEvent(source) {
+  const tweetId = String(source?.tweet?.id || "");
+  const spec = FOUR_MEME_POLICY_RECOVERY_SPECS.get(tweetId);
+  const recovery = source?.policyFixRecovery;
+  const recoveryKeys = new Set([
+    "version", "allowlistId", "reason", "originalEventKey", "derivedEventKey",
+    "sourceOccurredAt", "recoveredAt", "lagMs", "evidenceSource", "expectedAuthorId",
+    "tweetTextSha256", "stale", "noChase", "automaticExecution",
+  ]);
+  const rootRequired = ["type", "eventKey", "originalEventKey", "project", "tweet", "signal", "observedAt", "policyFixRecovery"];
+  const rootKeys = new Set([
+    ...rootRequired,
+    "canonicalSignalId", "canonicalSignalIds", "freshness", "tradingPriority", "alertQueuedAt",
+  ]);
+  const projectKeys = new Set(["id", "name", "website", "twitter", "handle", "xUserId", "match", "priority"]);
+  const tweetKeys = new Set([
+    "id", "text", "createdAt", "authorName", "handle", "xUserId", "authorId", "url", "isReply",
+    "expandedUrls", "sourceVerifiedBy", "identityVerifiedBy",
+  ]);
+  const expectedRecoveryKey = `fourmeme:policy-fix-recovery:x:${tweetId}:v1`;
+  const canonicalKeysPresent = Object.prototype.hasOwnProperty.call(source || {}, "canonicalSignalId")
+    || Object.prototype.hasOwnProperty.call(source || {}, "canonicalSignalIds");
+  const canonicalKeysValid = !canonicalKeysPresent || (
+    source.canonicalSignalId === expectedRecoveryKey
+    && sameFlapValue(source.canonicalSignalIds, [expectedRecoveryKey])
+  );
+  const freshness = source?.freshness;
+  const freshnessValid = freshness === undefined || (
+    freshness?.version === 1
+    && freshness.scope === "fourmeme_policy_fix_recovery"
+    && freshness.basis === "policyFixRecovery.recoveredAt_continuous_recovery"
+    && freshness.sourceOccurredAt === recovery?.recoveredAt
+    && freshness.sourceTimeReliable === true
+    && strictFourMemeInstant(freshness.discoveredAt) !== null
+    && Number.isSafeInteger(freshness.lagMs)
+    && freshness.lagMs === Math.max(0, Date.parse(freshness.discoveredAt) - Date.parse(recovery?.recoveredAt || ""))
+    && Number.isFinite(freshness.realtimeMaxAgeMs) && freshness.realtimeMaxAgeMs >= 0
+    && Number.isFinite(freshness.telegramMaxAgeMs) && freshness.telegramMaxAgeMs >= freshness.realtimeMaxAgeMs
+    && ["realtime", "late", "suppress"].includes(freshness.decision)
+  );
+  const priority = source?.tradingPriority;
+  const priorityValid = priority === undefined || (
+    priority?.version === 2
+    && priority.schema === "news_trading_priority_v2"
+    && priority.deterministic === true
+    && priority.tier === "T2"
+    && priority.rank === 2
+    && priority.category === "focus_policy_recovery"
+    && priority.hardGates?.t1Eligible === false
+    && priority.plan?.automaticExecution === false
+  );
+  const expectedExpandedUrls = spec?.kind === "market_campaign"
+    ? ["http://Four.Meme", "http://Ave.ai"]
+    : ["http://Four.Meme"];
+  if (!spec
+    || !exactFlapKeys(source, rootKeys, rootRequired)
+    || !exactFlapKeys(source?.project, projectKeys, [...projectKeys])
+    || !sameFlapValue(source.project, {
+      id: "fourmeme",
+      name: "Four.meme",
+      website: "https://four.meme",
+      twitter: `https://x.com/${FOUR_MEME_X_HANDLE}`,
+      handle: FOUR_MEME_X_HANDLE,
+      xUserId: FOUR_MEME_X_USER_ID,
+      match: "official_x",
+      priority: true,
+    })
+    || !exactFlapKeys(source?.tweet, tweetKeys, [...tweetKeys])
+    || source.tweet.authorName !== "Four.meme-華語"
+    || !sameFlapValue(source.tweet.expandedUrls, expectedExpandedUrls)
+    || !canonicalKeysValid
+    || !freshnessValid
+    || !priorityValid
+    || (source.alertQueuedAt !== undefined && strictFourMemeInstant(source.alertQueuedAt) === null)
+    || !exactFlapKeys(recovery, recoveryKeys, [...recoveryKeys])
+    || recovery.version !== 1
+    || recovery.allowlistId !== spec.allowlistId
+    || recovery.reason !== "historical_policy_false_negative"
+    || recovery.originalEventKey !== spec.originalEventKey
+    || recovery.derivedEventKey !== spec.derivedEventKey
+    || recovery.sourceOccurredAt !== spec.createdAt
+    || recovery.evidenceSource !== spec.evidenceSource
+    || recovery.expectedAuthorId !== FOUR_MEME_X_USER_ID
+    || recovery.tweetTextSha256 !== spec.textSha256
+    || recovery.stale !== true
+    || recovery.noChase !== true
+    || recovery.automaticExecution !== false
+    || source?.eventKey !== spec.derivedEventKey
+    || source?.originalEventKey !== spec.originalEventKey
+    || source?.observedAt !== recovery.recoveredAt
+    || source?.tweet?.createdAt !== spec.createdAt
+    || source?.tweet?.identityVerifiedBy !== "fxtwitter_exact_numeric_id"
+    || createHash("sha256").update(source.tweet.text, "utf8").digest("hex") !== spec.textSha256) return false;
+  const sourceOccurredAt = strictFourMemeInstant(recovery.sourceOccurredAt);
+  const recoveredAt = strictFourMemeInstant(recovery.recoveredAt);
+  if (sourceOccurredAt === null
+    || recoveredAt === null
+    || recoveredAt < sourceOccurredAt
+    || !Number.isSafeInteger(recovery.lagMs)
+    || recovery.lagMs !== recoveredAt - sourceOccurredAt) return false;
+  return spec.kind === "named_mode"
+    ? isOfficialFourMemeNamedModeUpdate(source)
+    : isStrictFourMemeMarketCampaign(source);
+}
+
+export function isOfficialFourMemeCapabilityUpdate(source) {
+  const capability = source?.officialCapability;
+  const evidence = source?.source;
+  const template = source?.mode?.template;
+  const current = source?.currentTemplate;
+  const previous = source?.previousTemplate;
+  const changeType = source?.changeType;
+  const observedAt = typeof source?.observedAt === "string" ? Date.parse(source.observedAt) : NaN;
+  const capabilityKeys = new Set(["version", "platform", "kind", "changeType", "sourceId", "sourceUrl", "observedAt"]);
+  const sourceKeys = new Set(["id", "name", "url", "trust", "official"]);
+  const published = ["new_published_template", "template_published", "published_template_changed"].includes(changeType);
+  return source?.type === "bsc_launchpad_update"
+    && source?.kind === "new_mode"
+    && Number(source?.chainId) === 56
+    && compact(source?.platform?.id || source?.platform?.name) === "fourmeme"
+    && source?.strong === true
+    && source?.structural?.eligible === true
+    && source?.structural?.source === "official_api"
+    && source?.mode?.selector === "official-template"
+    && source?.mode?.sourceUrl === FOUR_MEME_TEMPLATE_URL
+    && source?.sourceUrl === FOUR_MEME_TEMPLATE_URL
+    && source?.sourceTrust === "official_verified"
+    && exactFlapKeys(capability, capabilityKeys, [...capabilityKeys])
+    && capability.version === 1
+    && capability.platform === "fourmeme"
+    && capability.kind === "template"
+    && FOUR_MEME_TEMPLATE_CHANGE_TYPES.has(changeType)
+    && capability.changeType === changeType
+    && capability.sourceId === FOUR_MEME_TEMPLATE_SOURCE_ID
+    && capability.sourceUrl === FOUR_MEME_TEMPLATE_URL
+    && capability.observedAt === source.observedAt
+    && Number.isFinite(observedAt)
+    && new Date(observedAt).toISOString() === source.observedAt
+    && exactFlapKeys(evidence, sourceKeys, [...sourceKeys])
+    && evidence.id === FOUR_MEME_TEMPLATE_SOURCE_ID
+    && evidence.name === "Four.Meme public template API"
+    && evidence.url === FOUR_MEME_TEMPLATE_URL
+    && evidence.trust === "official_verified"
+    && evidence.official === true
+    && template?.changeType === changeType
+    && String(template?.id || "") === String(current?.id || "")
+    && template?.fingerprint === source?.mode?.fingerprint
+    && source?.eventKey === `bsc-official-mode:fourmeme:${template.id}:${template.fingerprint}`
+    && Array.isArray(source?.tokens) && source.tokens.length === 0
+    && Array.isArray(source?.pools) && source.pools.length === 0
+    && Array.isArray(source?.changedFields) && source.changedFields.length > 0
+    && (published
+      ? current?.status === "PUBLISHED"
+      : changeType === "template_unpublished"
+        && previous?.status === "PUBLISHED"
+        && current?.status !== "PUBLISHED");
 }
 
 function validFlapQuotePairChange(value) {
@@ -950,6 +1366,460 @@ function validFlapTrackedTokenDerivedFields(source) {
       || priority.plan?.automaticExecution !== false) return false;
   }
   return true;
+}
+
+function validOpenFourPlatform(value) {
+  const keys = new Set([
+    "id", "name", "trust", "website", "twitter", "github", "notifyFirstToken",
+    "notifyFirstInfrastructureActivation", "evidenceUrl",
+  ]);
+  return exactFlapKeys(value, keys, [...keys])
+    && value.id === "fourmeme"
+    && value.name === "Four.Meme / OpenFour"
+    && value.trust === "official_verified"
+    && value.website === "https://four.meme"
+    && value.twitter === "https://x.com/fourdotmemezh"
+    && value.github === null
+    && value.notifyFirstToken === false
+    && value.notifyFirstInfrastructureActivation === false
+    && value.evidenceUrl === "https://four.meme/meme-api/v1/public/address";
+}
+
+function validOpenFourDeliverySla(value) {
+  if (value === undefined) return true;
+  const keys = new Set(["startedAt", "deadlineAt", "budgetMs", "pollAllowanceMs", "basis"]);
+  const startedAt = exactFlapIso(value?.startedAt);
+  const deadlineAt = exactFlapIso(value?.deadlineAt);
+  return exactFlapKeys(value, keys, [...keys])
+    && startedAt !== null
+    && deadlineAt !== null
+    && deadlineAt >= startedAt
+    && deadlineAt - startedAt <= 5_000
+    && value.budgetMs === 5_000
+    && value.pollAllowanceMs === 0
+    && value.basis === "bsc_websocket_ingest";
+}
+
+function validOpenFourFeatureActivation(mode, featureActivationKey, sourceUrl) {
+  if (!flapRecord(mode)
+    || mode.featureActivationEligible !== true
+    || mode.featureActivationKey !== featureActivationKey
+    || typeof featureActivationKey !== "string"
+    || featureActivationKey.length < 3
+    || featureActivationKey.length > 512) return false;
+  if (sourceUrl === FOUR_MEME_OPENFOUR_CONFIG_SOURCE_URL) {
+    const symbol = String(mode.quoteSymbol || "");
+    const quoteAddress = String(mode.quoteAsset || "").toLowerCase();
+    const fingerprint = String(mode.quoteFingerprint || "");
+    return /^[A-Z0-9][A-Z0-9._-]{0,31}$/.test(symbol)
+      && /^0x[a-f0-9]{40}$/.test(quoteAddress)
+      && fingerprint.length > 0
+      && featureActivationKey === `quote:${symbol}:${quoteAddress}:${fingerprint}`;
+  }
+  if (sourceUrl !== FOUR_MEME_OPENFOUR_TEMPLATE_SOURCE_URL) return false;
+  const templateId = String(mode.templateId || mode.presetId || "");
+  const fingerprint = String(mode.templateFingerprint || "");
+  return /^[1-9]\d{0,39}$/.test(templateId)
+    && fingerprint.length > 0
+    && featureActivationKey === `template:${templateId}:${fingerprint}`;
+}
+
+function openFourCoreTokenIdentity(transactionHash, logIndex, token) {
+  return `fourmeme:openfour-core-token-created:56:${transactionHash}:${logIndex}:${token}`;
+}
+
+function fourRegistryFreshnessSource(raw) {
+  if (raw?.canonicalRevision) {
+    return {
+      scope: "four_registry_canonical_revision",
+      basis: "canonicalRevision.recoveryDetectedAt_finalized_reorg",
+      value: raw.canonicalRevision.recoveryDetectedAt,
+    };
+  }
+  if (raw?.canonicalRestoration) {
+    return {
+      scope: "four_registry_canonical_restoration",
+      basis: "canonicalRestoration.detectedAt_recanonicalized",
+      value: raw.canonicalRestoration.detectedAt,
+    };
+  }
+  if (raw?.canonicalSupersession) {
+    return {
+      scope: "four_registry_canonical_supersession",
+      basis: "canonicalSupersession.detectedAt_replacement",
+      value: raw.canonicalSupersession.detectedAt,
+    };
+  }
+  if (raw?.delayedRecovery) {
+    return {
+      scope: "four_registry_delayed_recovery",
+      basis: "delayedRecovery.recoveredAt_continuous_recovery",
+      value: raw.delayedRecovery.recoveredAt,
+    };
+  }
+  return {
+    scope: raw?.kind === FOUR_REGISTRY_FIRST_TOKEN_KIND
+      ? "four_registry_first_token"
+      : "four_registry_capability",
+    basis: "blockTimestamp",
+    value: raw?.blockTimestamp,
+  };
+}
+
+function validFourRegistryPipelineFreshness(value, raw) {
+  const source = fourRegistryFreshnessSource(raw);
+  const baseKeys = [
+    "version", "scope", "basis", "sourceOccurredAt", "discoveredAt", "lagMs", "sourceTimeReliable",
+    "realtimeMaxAgeMs", "telegramMaxAgeMs", "decision", "reason",
+  ];
+  const deliveryKeys = ["deliveryEvaluatedAt", "deliveryLagMs", "deliveryDecision"];
+  const hasDelivery = deliveryKeys.some((key) => Object.hasOwn(value || {}, key));
+  const expectedKeys = [...baseKeys, ...(hasDelivery ? deliveryKeys : [])];
+  if (!exactFlapKeys(value, new Set(expectedKeys), expectedKeys)) return false;
+  const sourceMs = exactFlapIso(source.value);
+  const sourceOccurredAtMs = exactFlapIso(value.sourceOccurredAt);
+  const discoveredMs = exactFlapIso(value.discoveredAt);
+  const realtimeMaxAgeMs = Number(value.realtimeMaxAgeMs);
+  const telegramMaxAgeMs = Number(value.telegramMaxAgeMs);
+  if (value.version !== 1
+    || value.scope !== source.scope
+    || value.basis !== source.basis
+    || sourceMs === null
+    || sourceOccurredAtMs !== sourceMs
+    || discoveredMs === null
+    || value.sourceTimeReliable !== true
+    || !Number.isSafeInteger(realtimeMaxAgeMs)
+    || realtimeMaxAgeMs < 0
+    || !Number.isSafeInteger(telegramMaxAgeMs)
+    || telegramMaxAgeMs < realtimeMaxAgeMs) return false;
+  const classify = (evaluatedMs) => {
+    const lagMs = Math.max(0, evaluatedMs - sourceMs);
+    if (lagMs <= realtimeMaxAgeMs) return {
+      lagMs,
+      decision: "realtime",
+      reason: sourceMs > evaluatedMs ? "source_clock_ahead" : "within_realtime_window",
+    };
+    if (lagMs <= telegramMaxAgeMs) return { lagMs, decision: "late", reason: "late_backfill_downgrade" };
+    return { lagMs, decision: "suppress", reason: "too_old_for_telegram" };
+  };
+  const initial = classify(discoveredMs);
+  if (value.lagMs !== initial.lagMs
+    || value.decision !== initial.decision
+    || value.reason !== initial.reason) return false;
+  if (!hasDelivery) return true;
+  const deliveryMs = exactFlapIso(value.deliveryEvaluatedAt);
+  if (deliveryMs === null || deliveryMs < discoveredMs) return false;
+  const delivery = classify(deliveryMs);
+  return value.deliveryLagMs === delivery.lagMs
+    && value.deliveryDecision === delivery.decision;
+}
+
+function validFourRegistryPipelinePriority(value, raw, freshness) {
+  const firstToken = raw.kind === FOUR_REGISTRY_FIRST_TOKEN_KIND;
+  const expectedConfirmationKind = firstToken
+    ? "official_openfour_core_token_created"
+    : "official_openfour_registry_log";
+  if (!flapRecord(value)
+    || value.version !== 2
+    || value.schema !== "news_trading_priority_v2"
+    || value.deterministic !== true
+    || value.plan?.automaticExecution !== false
+    || value.confirmation?.trusted !== true
+    || value.confirmation?.kind !== expectedConfirmationKind
+    || value.confirmation?.value !== `${raw.transactionHash}#${raw.logIndex}`
+    || value.hardGates?.trustedConfirmation !== true
+    || value.hardGates?.t0Eligible !== false) return false;
+  const delayedRecovery = Boolean(raw.delayedRecovery);
+  const canonicalRevision = Boolean(raw.canonicalRevision);
+  const delayedDelivery = [freshness?.decision, freshness?.deliveryDecision]
+    .some((decision) => ["late", "suppress"].includes(decision));
+  const expectedCategory = canonicalRevision
+    ? "focus_registry_canonical_revision"
+    : firstToken
+    ? "focus_registry_first_token"
+    : delayedRecovery ? "focus_registry_delayed_recovery" : "focus_registry_capability";
+  const expectedTier = firstToken || delayedRecovery || delayedDelivery || canonicalRevision ? "T2" : "T1";
+  return value.category === expectedCategory
+    && value.tier === expectedTier
+    && value.rank === (expectedTier === "T1" ? 3 : 2)
+    && value.hardGates.t1Eligible === (expectedTier === "T1");
+}
+
+function rawFourRegistrySignalKeys(raw) {
+  if (raw?.kind === FOUR_REGISTRY_FIRST_TOKEN_KIND) {
+    const base = openFourCoreTokenIdentity(
+      normalized(raw.transactionHash),
+      Number(raw.logIndex),
+      normalized(raw.token?.address),
+    );
+    return [raw.canonicalRevision
+      ? `${base}:canonical-revision:${normalized(raw.blockHash)}:${Number(raw.canonicalRevision.recoveryEpoch)}`
+      : base];
+  }
+  return typeof raw?.lifecycleKey === "string" && raw.lifecycleKey
+    ? [raw.canonicalRevision
+      ? `${raw.lifecycleKey}:canonical-revision:${normalized(raw.blockHash)}:${Number(raw.canonicalRevision.recoveryEpoch)}`
+      : raw.lifecycleKey]
+    : [];
+}
+
+function fourRegistryRawEvent(source) {
+  if (!source || typeof source !== "object" || Array.isArray(source)) return null;
+  if (isRawFourRegistryCapabilityEvent(source) || isRawFourRegistryFirstTokenEvent(source)) return source;
+  const presentDerived = [...FOUR_REGISTRY_DERIVED_EVENT_KEYS].filter((key) => Object.hasOwn(source, key));
+  if (!presentDerived.length) return null;
+  const raw = { ...source };
+  for (const key of FOUR_REGISTRY_DERIVED_EVENT_KEYS) delete raw[key];
+  if (!isRawFourRegistryCapabilityEvent(raw) && !isRawFourRegistryFirstTokenEvent(raw)) return null;
+  const expectedSignals = [...rawFourRegistrySignalKeys(raw)].sort();
+  const canonicalPresent = ["canonicalSignalId", "canonicalSignalIds"].filter((key) => Object.hasOwn(source, key));
+  if (canonicalPresent.length !== 0 && canonicalPresent.length !== 2) return null;
+  if (canonicalPresent.length === 2
+    && (source.canonicalSignalId !== expectedSignals[0]
+      || !sameFlapValue(source.canonicalSignalIds, expectedSignals))) return null;
+  const runtimePresent = ["freshness", "tradingPriority", "alertQueuedAt"]
+    .filter((key) => Object.hasOwn(source, key));
+  if (runtimePresent.length === 0) return raw;
+  if (runtimePresent.length !== 3
+    || canonicalPresent.length !== 2
+    || !validFourRegistryPipelineFreshness(source.freshness, raw)
+    || !validFourRegistryPipelinePriority(source.tradingPriority, raw, source.freshness)) return null;
+  const queuedAtMs = exactFlapIso(source.alertQueuedAt);
+  const discoveredAtMs = exactFlapIso(source.freshness.discoveredAt);
+  if (queuedAtMs === null
+    || discoveredAtMs === null
+    || queuedAtMs < discoveredAtMs
+    || queuedAtMs - discoveredAtMs > 60_000) return null;
+  return raw;
+}
+
+function fourRegistryPriorityRawEvent(source) {
+  const finalOrRaw = fourRegistryRawEvent(source);
+  if (finalOrRaw) return finalOrRaw;
+  if (!source || typeof source !== "object" || Array.isArray(source)) return null;
+  const presentDerived = [...FOUR_REGISTRY_DERIVED_EVENT_KEYS].filter((key) => Object.hasOwn(source, key));
+  const expectedDerived = ["canonicalSignalId", "canonicalSignalIds", "freshness"];
+  if (!sameFlapValue([...presentDerived].sort(), [...expectedDerived].sort())) return null;
+  const raw = { ...source };
+  for (const key of FOUR_REGISTRY_DERIVED_EVENT_KEYS) delete raw[key];
+  if (!isRawFourRegistryCapabilityEvent(raw) && !isRawFourRegistryFirstTokenEvent(raw)) return null;
+  const expectedSignals = [...rawFourRegistrySignalKeys(raw)].sort();
+  return source.canonicalSignalId === expectedSignals[0]
+    && sameFlapValue(source.canonicalSignalIds, expectedSignals)
+    && validFourRegistryPipelineFreshness(source.freshness, raw)
+    ? raw
+    : null;
+}
+
+export function claimsFourRegistryUpdate(source) {
+  if (!source || typeof source !== "object" || Array.isArray(source)) return false;
+  if (source.type === "platform_capability_update") {
+    return FOUR_REGISTRY_CAPABILITY_KINDS.includes(source.kind)
+      || source.source?.id === FOUR_REGISTRY_CAPABILITY_SOURCE_ID;
+  }
+  return source.type === "bsc_launchpad_update"
+    && (source.kind === FOUR_REGISTRY_FIRST_TOKEN_KIND
+      || (source.schemaVersion === 1 && source.source?.id === FOUR_REGISTRY_FIRST_TOKEN_SOURCE_ID));
+}
+
+export function isStrictFourRegistryCapabilityUpdate(source) {
+  const raw = fourRegistryRawEvent(source);
+  return Boolean(raw && isRawFourRegistryCapabilityEvent(raw));
+}
+
+export function isStrictFourRegistryFirstTokenUpdate(source) {
+  const raw = fourRegistryRawEvent(source);
+  return Boolean(raw && isRawFourRegistryFirstTokenEvent(raw));
+}
+
+export function isStrictFourRegistryDelayedRecovery(source) {
+  const raw = fourRegistryRawEvent(source);
+  return Boolean(raw?.delayedRecovery
+    && (isRawFourRegistryCapabilityEvent(raw) || isRawFourRegistryFirstTokenEvent(raw)));
+}
+
+export function isStrictFourRegistryCanonicalRevision(source) {
+  const raw = fourRegistryRawEvent(source);
+  return Boolean(raw?.canonicalRevision
+    && (isRawFourRegistryCapabilityEvent(raw) || isRawFourRegistryFirstTokenEvent(raw)));
+}
+
+export function isStrictFourRegistryCanonicalRestoration(source) {
+  const raw = fourRegistryRawEvent(source);
+  return Boolean(raw?.canonicalRestoration
+    && (isRawFourRegistryCapabilityEvent(raw) || isRawFourRegistryFirstTokenEvent(raw)));
+}
+
+export function isStrictFourRegistryCanonicalSupersession(source) {
+  const raw = fourRegistryRawEvent(source);
+  return Boolean(raw?.canonicalSupersession
+    && (isRawFourRegistryCapabilityEvent(raw) || isRawFourRegistryFirstTokenEvent(raw)));
+}
+
+export function isStrictFourRegistryCapabilityForPriority(source) {
+  const raw = fourRegistryPriorityRawEvent(source);
+  return Boolean(raw && isRawFourRegistryCapabilityEvent(raw));
+}
+
+export function isStrictFourRegistryFirstTokenForPriority(source) {
+  const raw = fourRegistryPriorityRawEvent(source);
+  return Boolean(raw && isRawFourRegistryFirstTokenEvent(raw));
+}
+
+export function isStrictFourRegistryDelayedRecoveryForPriority(source) {
+  const raw = fourRegistryPriorityRawEvent(source);
+  return Boolean(raw?.delayedRecovery
+    && (isRawFourRegistryCapabilityEvent(raw) || isRawFourRegistryFirstTokenEvent(raw)));
+}
+
+export function isStrictFourRegistryCanonicalRevisionForPriority(source) {
+  const raw = fourRegistryPriorityRawEvent(source);
+  return Boolean(raw?.canonicalRevision
+    && (isRawFourRegistryCapabilityEvent(raw) || isRawFourRegistryFirstTokenEvent(raw)));
+}
+
+export function claimsBscOpenFourFirstTokenUpdate(source) {
+  return source?.type === "bsc_launchpad_update"
+    && (source.featureFirstToken === true
+      || source.officialFirstToken === true)
+    && (normalized(source.featurePlatform) === "fourmeme"
+      || normalized(source.launcher) === FOUR_MEME_OPENFOUR_CORE);
+}
+
+/**
+ * Authenticate the legacy BSC producer's OpenFour first-token observation.
+ * A display label, activation key, or token CA alone cannot enter this lane:
+ * the event must bind the exact finalized Core TokenCreated log and preserve
+ * the producer's monitor-only execution boundary.
+ */
+export function isStrictBscOpenFourFirstTokenUpdate(source) {
+  const required = [
+    "type", "kind", "eventKey", "officialFirstToken", "featureFirstToken", "featurePlatform",
+    "featureActivationKey", "chainId", "launcher", "platform", "launchCount", "uniqueTokens",
+    "transactionHash", "blockNumber", "blockHash", "transactionIndex", "logIndex", "canonical",
+    "confirmations", "requiredConfirmations", "tokens", "pools", "mode", "structural", "security",
+    "attribution", "deployer", "controllerKind", "launchEvidence", "explorerEvidence", "marketContext",
+    "explorerUrl", "launcherUrl", "sourceUrl", "blockTimestamp", "observedAt", "strong",
+    "informationalOnly", "autoTradeEligible", "automaticExecution",
+  ];
+  if (!exactFlapKeys(source, FOUR_MEME_OPENFOUR_EVENT_KEYS, required)) return false;
+  const transactionHash = normalized(source.transactionHash);
+  const blockHash = normalized(source.blockHash);
+  const tokenEntry = Array.isArray(source.tokens) && source.tokens.length === 1 ? source.tokens[0] : null;
+  const token = normalized(tokenEntry?.token);
+  const blockNumber = Number(source.blockNumber);
+  const transactionIndex = Number(source.transactionIndex);
+  const logIndex = Number(source.logIndex);
+  const confirmations = Number(source.confirmations);
+  const requiredConfirmations = Number(source.requiredConfirmations);
+  const blockTimestamp = exactFlapIso(source.blockTimestamp);
+  const observedAt = exactFlapIso(source.observedAt);
+  const evidence = Array.isArray(source.launchEvidence)
+    ? source.launchEvidence.filter((item) => normalized(item?.event) === "tokencreated"
+      && normalized(item?.topic) === FOUR_MEME_OPENFOUR_TOKEN_CREATED_TOPIC
+      && normalized(item?.emitter) === FOUR_MEME_OPENFOUR_CORE
+      && normalized(item?.token) === token)
+    : [];
+  const proof = evidence.length === 1 ? evidence[0] : null;
+  const canonicalSignal = openFourCoreTokenIdentity(transactionHash, logIndex, token);
+  const expectedSignals = source.security?.decision === "pass"
+    && source.security?.metrics?.liquidityConfirmed === true
+    ? [canonicalSignal, `${canonicalSignal}:safety-pass-v1`]
+    : [canonicalSignal];
+  const derivedSignalsValid = !Object.hasOwn(source, "canonicalSignalId")
+    || (source.canonicalSignalId === canonicalSignal
+      && Array.isArray(source.canonicalSignalIds)
+      && source.canonicalSignalIds.length === expectedSignals.length
+      && source.canonicalSignalIds.every((value, index) => value === expectedSignals[index]));
+  const featureActivationValid = validOpenFourFeatureActivation(
+    source.mode,
+    source.featureActivationKey,
+    source.sourceUrl,
+  );
+  const infrastructureSafety = source.security?.decision === "pass"
+    ? source.security?.metrics?.liquidityConfirmed === true
+    : source.security?.decision === "block"
+      ? Array.isArray(source.security?.reasons)
+        && source.security.reasons.length > 0
+        && source.security.reasons.every((reason) => reason === "池子实际流动性未确认")
+      : false;
+  return source.type === "bsc_launchpad_update"
+    && source.kind === "new_mode"
+    && source.officialFirstToken === true
+    && source.featureFirstToken === true
+    && source.featurePlatform === "fourmeme"
+    && source.chainId === FLAP_BSC_CHAIN_ID
+    && normalized(source.launcher) === FOUR_MEME_OPENFOUR_CORE
+    && source.eventKey === `bsc-fourmeme-feature-token:${source.featureActivationKey}`
+    && validOpenFourPlatform(source.platform)
+    && Number.isSafeInteger(source.launchCount) && source.launchCount > 0
+    && Number.isSafeInteger(source.uniqueTokens) && source.uniqueTokens > 0
+    && /^0x[a-f0-9]{64}$/.test(transactionHash)
+    && source.transactionHash === transactionHash
+    && /^0x[a-f0-9]{64}$/.test(blockHash)
+    && source.blockHash === blockHash
+    && Number.isSafeInteger(blockNumber) && blockNumber > 0 && source.blockNumber === blockNumber
+    && Number.isSafeInteger(transactionIndex) && transactionIndex >= 0 && source.transactionIndex === transactionIndex
+    && Number.isSafeInteger(logIndex) && logIndex >= 0 && source.logIndex === logIndex
+    && source.canonical === true
+    && Number.isSafeInteger(confirmations) && confirmations >= 0 && source.confirmations === confirmations
+    && Number.isSafeInteger(requiredConfirmations) && requiredConfirmations >= 1
+    && source.requiredConfirmations === requiredConfirmations
+    && confirmations >= requiredConfirmations
+    && /^0x[a-f0-9]{40}$/.test(token)
+    && flapRecord(tokenEntry)
+    && sameFlapValue(tokenEntry.launchEvidence, proof)
+    && proof?.transactionHash === transactionHash
+    && proof?.blockHash === blockHash
+    && proof?.blockNumber === blockNumber
+    && proof?.transactionIndex === transactionIndex
+    && proof?.logIndex === logIndex
+    && blockTimestamp !== null
+    && observedAt !== null
+    && blockTimestamp === observedAt
+    && source.strong === true
+    && source.informationalOnly === true
+    && source.autoTradeEligible === false
+    && source.automaticExecution === false
+    && source.structural?.eligible === true
+    && source.structural?.mechanismEvidence === true
+    && infrastructureSafety
+    && source.explorerUrl === `https://bscscan.com/tx/${transactionHash}`
+    && source.launcherUrl === `https://bscscan.com/address/${FOUR_MEME_OPENFOUR_CORE}`
+    && featureActivationValid
+    && validOpenFourDeliverySla(source.deliverySla)
+    && derivedSignalsValid
+    && validFlapTrackedTokenDerivedFields(source);
+}
+
+export function openFourCoreTokenCreatedSemanticKey(source) {
+  if (isStrictBscOpenFourFirstTokenUpdate(source)) {
+    return openFourCoreTokenIdentity(
+      normalized(source.transactionHash),
+      Number(source.logIndex),
+      normalized(source.tokens[0].token),
+    );
+  }
+  if (isStrictFourRegistryFirstTokenUpdate(source)) {
+    const base = openFourCoreTokenIdentity(
+      normalized(source.transactionHash),
+      Number(source.logIndex),
+      normalized(source.token?.address),
+    );
+    return source.canonicalRevision
+      ? `${base}:canonical-revision:${normalized(source.blockHash)}:${Number(source.canonicalRevision.recoveryEpoch)}`
+      : base;
+  }
+  return null;
+}
+
+export function openFourCoreTokenCreatedSafetyPassSemanticKey(source) {
+  const base = openFourCoreTokenCreatedSemanticKey(source);
+  return base
+    && source.security?.decision === "pass"
+    && source.security?.metrics?.liquidityConfirmed === true
+    ? `${base}:safety-pass-v1`
+    : null;
 }
 
 function validFlapTrackedTokenPlatform(value) {
@@ -3681,9 +4551,19 @@ function focus3FomoCallAllowed(config, source) {
 function focus3EventAllowed(source) {
   if (!source?.type) return isThreePlatformSource(source);
   if (FOCUS3_BLOCKED_EVENT_TYPES.has(source.type) || !isThreePlatformSource(source)) return false;
+  // A recovery envelope is a privileged, finite migration lane. Its mere
+  // presence must never inherit admission from the ordinary Twitter signal;
+  // revalidate the immutable tweet, exact source proofs and full envelope.
+  if (Object.prototype.hasOwnProperty.call(source, "policyFixRecovery")) {
+    return isFourMemePolicyFixRecoveryEvent(source);
+  }
   const officialFlapQuotePair = isOfficialFlapQuotePairUpdate(source);
   const strictFlapQuoteAsset = isStrictFlapQuoteAssetUpdate(source);
   const strictFlapTrackedToken = isStrictFlapTrackedPoolTokenUpdate(source);
+  const strictBscOpenFourFirstToken = isStrictBscOpenFourFirstTokenUpdate(source);
+  const strictFourRegistryCapability = isStrictFourRegistryCapabilityUpdate(source);
+  const strictFourRegistryFirstToken = isStrictFourRegistryFirstTokenUpdate(source);
+  const strictFourMemeMarketCampaign = isStrictFourMemeMarketCampaign(source);
   // Stock/equity/RWA issuance is deliberately out of scope across every
   // first-party lane. Keep this final routing gate in addition to individual
   // source classifiers so queued or newly introduced event shapes cannot leak
@@ -3693,10 +4573,19 @@ function focus3EventAllowed(source) {
   if (focus3StockRwaSignal(source)
     && !officialFlapQuotePair
     && !strictFlapQuoteAsset
-    && !strictFlapTrackedToken) return false;
+    && !strictFlapTrackedToken
+    && !strictBscOpenFourFirstToken
+    && !strictFourRegistryCapability
+    && !strictFourRegistryFirstToken
+    && !strictFourMemeMarketCampaign) return false;
   if (source.type === "uniswap_official_update") return source.strong === true && focus3UniswapSignal(source);
   if (source.type === "bsc_launchpad_update") {
+    if (claimsFourRegistryUpdate(source)) return strictFourRegistryFirstToken;
     if (source.kind === FLAP_TRACKED_TOKEN_KIND) return strictFlapTrackedToken;
+    if (claimsBscOpenFourFirstTokenUpdate(source)) return strictBscOpenFourFirstToken;
+    if (source.kind === "new_mode" && source.structural?.source === "official_api") {
+      return isOfficialFourMemeCapabilityUpdate(source);
+    }
     const focusKind = ["new_mode", "new_factory"].includes(source.kind)
       || (source.kind === "new_launchpad" && source.officialFirstToken === true);
     return focusKind
@@ -3716,6 +4605,7 @@ function focus3EventAllowed(source) {
       && Number(source.modeConfirmation?.observations || 0) >= 2;
   }
   if (source.type === "platform_capability_update") {
+    if (claimsFourRegistryUpdate(source)) return strictFourRegistryCapability;
     if (claimsFlapQuoteAssetCapability(source)) return strictFlapQuoteAsset;
     return hasFocus3CapabilityChange(source);
   }
@@ -3749,6 +4639,12 @@ function focus3EventAllowed(source) {
     }
     if (source.signal?.quotePairChange != null || classifyFlapQuotePairSignalCore(source.tweet?.text)) {
       return officialFlapQuotePair;
+    }
+    if (source.signal?.namedMode != null || classifyFourMemeNamedModeCore(source.tweet?.text)) {
+      return isOfficialFourMemeNamedModeUpdate(source);
+    }
+    if (source.signal?.marketCampaign != null || classifyFourMemeMarketCampaignCore(source.tweet?.text)) {
+      return strictFourMemeMarketCampaign;
     }
     return source.signal?.platformStructural === true
       && source.signal?.labels?.some((label) => FOCUS3_TWITTER_SIGNALS.has(label)) === true;

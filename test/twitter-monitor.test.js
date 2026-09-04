@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { OFFICIAL_TWITTER_TARGETS, atomicWriteTwitterState, classifyAiOfficialText, classifyBinanceCriticalProductText, classifyFocusLaunchpadText, classifyPonFunOfficialText, classifyTweet, classifyTwitterAlertDelivery, classifyUniswapOfficialText, createTwitterMonitor, parseCriticalXDirectDiscovery, parseFxTwitterExactStatus, parseFxTwitterTimeline, parseJinaReaderPayload, parseOfficialXOembed, parseTimelineHtml, twitterHandle, twitterStateControlKey } from "../src/twitter-monitor.js";
+import { OFFICIAL_TWITTER_TARGETS, atomicWriteTwitterState, classifyAiOfficialText, classifyBinanceCriticalProductText, classifyFocusLaunchpadText, classifyFourMemeOfficialText, classifyPonFunOfficialText, classifyTweet, classifyTwitterAlertDelivery, classifyUniswapOfficialText, createTwitterMonitor, parseCriticalXDirectDiscovery, parseFxTwitterExactStatus, parseFxTwitterTimeline, parseJinaReaderPayload, parseOfficialXOembed, parseTimelineHtml, twitterHandle, twitterStateControlKey } from "../src/twitter-monitor.js";
 
 function timelineHtml(handle, tweets = []) {
   const entries = tweets.map((tweet) => ({
@@ -485,6 +485,73 @@ Trade tokens launched on https://four.meme/ for a chance to compete for a 50,000
   assert.equal(expansionWithCampaign.relevant, true);
   assert.equal(expansionWithCampaign.reason, "new_chain_support");
   assert.equal(expansionWithCampaign.chainSupport[0].name, "Base");
+});
+
+test("Four.Meme classifier preserves the named ListaYield mode as an independent structured lifecycle", () => {
+  const text = "Yield is now built into the launch.\n\nIntroducing ListaYield on http://Four.Meme — a new OpenFour mode powered by @lista_dao. \n\nEvery trade can route a share of trading tax into yield-bearing products, creating ongoing yield for eligible holders.\n\nAnd once the token graduates, liquidity moves to Lista DEX by default. 🧵";
+  assert.deepEqual(classifyFourMemeOfficialText(text), {
+    relevant: true,
+    strong: true,
+    platformStructural: true,
+    labels: ["新发射/新模式", "OpenFour", "税收/募资/报价代币"],
+    reason: "fourmeme_named_mode_listayield",
+    namedMode: {
+      version: 1,
+      id: "listayield",
+      name: "ListaYield",
+      parent: "OpenFour",
+      stage: "announced",
+      partnerHandle: "lista_dao",
+      tradingTaxRoute: "yield_bearing_products",
+      holderYield: true,
+      graduationLiquidityDestination: "Lista DEX",
+    },
+  });
+  for (const malformed of [
+    text.replace("@lista_dao", "@attacker"),
+    text.replace("creating ongoing yield for eligible holders", "creating rewards"),
+    text.replace("Lista DEX by default", "a DEX later"),
+  ]) assert.equal(classifyFourMemeOfficialText(malformed).namedMode, undefined, malformed);
+});
+
+test("Four.Meme classifier admits only the complete bStock partner leaderboard campaign", () => {
+  const text = `bStocks szn just got competitive. 🟢
+
+150,000 USDT is now live with @AveaiGlobal × @BNBCHAIN — including a 50,000 USDT leaderboard exclusively for http://Four.Meme traders.
+
+Trade http://Four.Meme Stock Memes on http://Ave.ai.
+Climb the Top 500.
+Take your share.
+
+The sprint is on. 🏁`;
+  const result = classifyFourMemeOfficialText(text);
+  assert.equal(result.relevant, true);
+  assert.equal(result.strong, true);
+  assert.equal(result.platformStructural, false);
+  assert.equal(result.reason, "fourmeme_bstock_partner_leaderboard_live");
+  assert.deepEqual(result.marketCampaign, {
+    version: 1,
+    kind: "bstock_partner_leaderboard",
+    assetClass: "bstock",
+    stage: "live",
+    partnerHandle: "AveaiGlobal",
+    chainHandle: "BNBCHAIN",
+    venue: "Ave.ai",
+    totalPrizeUsdt: 150_000,
+    fourMemePrizeUsdt: 50_000,
+    topRanks: 500,
+    exclusiveToFourMemeTraders: true,
+    campaignKey: "fourmeme:market-campaign:bstock:aveaiglobal:50000-usdt:top-500",
+  });
+  for (const malformed of [
+    text.replace("bStocks", "Stocks"),
+    text.replace("@AveaiGlobal × ", ""),
+    text.replace("leaderboard exclusively for http://Four.Meme traders", "rewards for all traders"),
+    text.replace("Top 500", "leaderboard"),
+    text.replace("Stock Memes on http://Ave.ai", "tokens on another venue"),
+  ]) assert.equal(classifyFourMemeOfficialText(malformed).marketCampaign, undefined, malformed);
+
+  assert.equal(classifyFourMemeOfficialText("Trade Four.Meme stock memes and share a 150,000 USDT prize pool.").relevant, false);
 });
 
 test("uses Binance-specific X filtering while retaining priority token and Alpha listings", () => {
@@ -1530,6 +1597,197 @@ test("focus critical X emits the real Flap bStock quote-pair structure after off
       { symbol: "SOXSB", name: "Bear Semiconductors 3X ETF" },
     ],
   });
+});
+
+test("focus critical X emits Four.Meme named-mode lifecycle and strict market-campaign structures", async (t) => {
+  const nowMs = Date.parse("2026-09-04T12:00:00.000Z");
+  const listaId = "2095361508700258731";
+  const campaignId = "2095713912188739967";
+  const listaText = "Yield is now built into the launch.\n\nIntroducing ListaYield on http://Four.Meme — a new OpenFour mode powered by @lista_dao. \n\nEvery trade can route a share of trading tax into yield-bearing products, creating ongoing yield for eligible holders.\n\nAnd once the token graduates, liquidity moves to Lista DEX by default. 🧵";
+  const campaignText = `bStocks szn just got competitive. 🟢
+
+150,000 USDT is now live with @AveaiGlobal × @BNBCHAIN — including a 50,000 USDT leaderboard exclusively for http://Four.Meme traders.
+
+Trade http://Four.Meme Stock Memes on http://Ave.ai.
+Climb the Top 500.
+Take your share.
+
+The sprint is on. 🏁`;
+  const dataDir = await fixture(t, {
+    flapdotsh: { latestId: "2095000000000000000", checkedAt: "old" },
+    fourdotmemezh: { latestId: "2095000000000000000", checkedAt: "old" },
+  });
+  const timelines = {
+    flapdotsh: [{ id: "2095000000000000000", text: "Flap community recap.", createdTimestamp: nowMs / 1_000 - 30 }],
+    fourdotmemezh: [
+      { id: campaignId, text: campaignText, createdTimestamp: nowMs / 1_000 - 20 },
+      { id: listaId, text: listaText, createdTimestamp: nowMs / 1_000 - 40 },
+    ],
+  };
+  const delivered = [];
+  const monitor = createTwitterMonitor(config(dataDir, {
+    twitterMonitorEnabled: false,
+    binanceCriticalXMonitorEnabled: false,
+    focusCriticalXMonitorEnabled: true,
+    twitterDirectXEnabled: false,
+    twitterFxTwitterEnabled: true,
+    twitterFxTwitterApiBase: "https://api.fxtwitter.test",
+    twitterFallbackApiBases: [],
+  }), {
+    autoStart: false,
+    now: () => nowMs,
+    logger: { error() {} },
+    fetchImpl: criticalTestFetch(timelines),
+    sendAlertsImpl: async (_config, event) => { delivered.push(event); return { status: "queued" }; },
+  });
+
+  await monitor.check();
+
+  assert.deepEqual(delivered.map((event) => event.tweet.id), [listaId, campaignId]);
+  assert.deepEqual(delivered[0].mode, {
+    officialName: "ListaYield",
+    componentMode: "ListaYield",
+    parentMode: "OpenFour",
+  });
+  assert.deepEqual(delivered[0].productLifecycle, {
+    product: "listayield",
+    stage: "announced",
+    key: "fourmeme:lifecycle:listayield:announced",
+  });
+  assert.equal(delivered[1].signal.marketCampaign.campaignKey, "fourmeme:market-campaign:bstock:aveaiglobal:50000-usdt:top-500");
+  assert.equal(delivered[1].mode, undefined);
+});
+
+test("Four.Meme policy recovery runs exact X verification through T2 immediate outbox delivery", async (t) => {
+  let clock = Date.parse("2026-09-04T09:00:00.000Z");
+  const listaId = "2095361508700258731";
+  const campaignId = "2095713912188739967";
+  const listaText = "Yield is now built into the launch.\n\nIntroducing ListaYield on http://Four.Meme — a new OpenFour mode powered by @lista_dao. \n\nEvery trade can route a share of trading tax into yield-bearing products, creating ongoing yield for eligible holders.\n\nAnd once the token graduates, liquidity moves to Lista DEX by default. 🧵";
+  const campaignText = `bStocks szn just got competitive. 🟢
+
+150,000 USDT is now live with @AveaiGlobal × @BNBCHAIN — including a 50,000 USDT leaderboard exclusively for http://Four.Meme traders.
+
+Trade http://Four.Meme Stock Memes on http://Ave.ai.
+Climb the Top 500.
+Take your share.
+
+The sprint is on. 🏁`;
+  const dataDir = await fixture(t, {
+    flapdotsh: { latestId: "2095000000000000000", checkedAt: "old" },
+    fourdotmemezh: { latestId: campaignId, checkedAt: "old" },
+  });
+  await fs.copyFile(
+    new URL("./fixtures/four-listayield-suppressed-outbox.json", import.meta.url),
+    path.join(dataDir, "alert-outbox.json"),
+  );
+  const timelines = {
+    flapdotsh: [{
+      id: "2095000000000000000",
+      text: "Flap community recap.",
+      createdTimestamp: Date.parse("2026-09-02T00:00:00.000Z") / 1_000,
+    }],
+    fourdotmemezh: [
+      { id: campaignId, text: campaignText, createdTimestamp: Date.parse("2026-09-04T03:21:47.000Z") / 1_000 },
+      { id: listaId, text: listaText, createdTimestamp: Date.parse("2026-09-03T04:01:28.000Z") / 1_000 },
+    ],
+  };
+  const timelineFetch = criticalTestFetch(timelines);
+  const fetchImpl = async (url) => {
+    const value = String(url);
+    const match = value.match(/^https:\/\/api\.fxtwitter\.test\/fourdotmemezh\/status\/(\d+)$/);
+    if (!match) return timelineFetch(url);
+    const tweet = timelines.fourdotmemezh.find((item) => item.id === match[1]);
+    if (!tweet) return textResponse("", 404);
+    return textResponse({
+      code: 200,
+      tweet: {
+        id: tweet.id,
+        text: tweet.text,
+        created_timestamp: tweet.createdTimestamp,
+        author: {
+          id: CRITICAL_TEST_ACCOUNTS.fourdotmemezh.userId,
+          name: "Four.meme-華語",
+          screen_name: "fourdotmemezh",
+        },
+        url: `https://x.com/fourdotmemezh/status/${tweet.id}`,
+        replying_to: null,
+        replies: 0,
+        retweets: 0,
+        likes: 0,
+        raw_text: {
+          facets: (tweet.id === campaignId
+            ? ["http://Four.Meme", "http://Ave.ai"]
+            : ["http://Four.Meme"]
+          ).map((replacement) => ({ type: "url", replacement })),
+        },
+      },
+    });
+  };
+  const telegramPayloads = [];
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    telegramPayloads.push(JSON.parse(options.body));
+    return textResponse({ ok: true, result: { message_id: telegramPayloads.length } });
+  });
+  t.mock.method(console, "info", () => {});
+  const monitor = createTwitterMonitor(config(dataDir, {
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    twitterMonitorEnabled: false,
+    binanceCriticalXMonitorEnabled: false,
+    focusCriticalXMonitorEnabled: true,
+    twitterDirectXEnabled: false,
+    twitterFxTwitterEnabled: true,
+    twitterFxTwitterApiBase: "https://api.fxtwitter.test",
+    twitterFallbackApiBases: [],
+    twitterPriorityPollConcurrency: 2,
+    fourTwitterPolicyRecoveryEnabled: true,
+    telegramToken: "test-bot-token-secret",
+    telegramChatId: "1234567890",
+    telegramStrongAlerts: false,
+    alertBilingualEnabled: true,
+    alertChineseTranslationEnabled: false,
+    alertEnglishTranslationEnabled: false,
+    blockedContracts: new Set(),
+    alertNow: () => clock,
+  }), {
+    autoStart: false,
+    now: () => clock,
+    logger: { error() {}, info() {} },
+    fetchImpl,
+  });
+
+  await monitor.check();
+  clock += 5_001;
+  await monitor.check();
+  clock += 5_001;
+  await monitor.check();
+
+  assert.equal(telegramPayloads.length, 2, "each immutable missed tweet is recovered exactly once");
+  assert.ok(telegramPayloads.every((payload) => /勿追价|do not chase/iu.test(payload.text)));
+  assert.ok(telegramPayloads.every((payload) => payload.reply_markup.inline_keyboard[0][0].url
+    === `https://x.com/fourdotmemezh/status/${payload.text.includes("ListaYield") ? listaId : campaignId}`));
+
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  for (const tweetId of [listaId, campaignId]) {
+    const id = `twitter:fourdotmemezh:${tweetId}:policy-fix-recovery:v1`;
+    const entry = outbox.events[id];
+    assert.equal(entry.status, "delivered");
+    assert.deepEqual(entry.event.canonicalSignalIds, [`fourmeme:policy-fix-recovery:x:${tweetId}:v1`]);
+    assert.equal(entry.event.tradingPriority.tier, "T2");
+    assert.equal(entry.event.tradingPriority.category, "focus_policy_recovery");
+    assert.equal(entry.event.tradingPriority.hardGates.t1Eligible, false);
+    assert.equal(entry.event.tradingPriority.plan.automaticExecution, false);
+    assert.match(entry.event.tradingPriority.plan.risk.zh, /勿追价/);
+    assert.deepEqual(entry.deliveryDisposition, {
+      mode: "immediate",
+      deliverImmediately: true,
+      tier: "T2",
+      reason: "fourmeme_policy_fix_recovery",
+    });
+  }
+  const state = JSON.parse(await fs.readFile(path.join(dataDir, "twitter-state.json"), "utf8"));
+  assert.equal(state._meta.policyFixRecovery.fourTwitterV1.items[listaId].status, "durably_accepted");
+  assert.equal(state._meta.policyFixRecovery.fourTwitterV1.items[campaignId].status, "durably_accepted");
 });
 
 test("focus critical Jina discovery keeps the complete exact Fx body after truncated oEmbed verification", async (t) => {

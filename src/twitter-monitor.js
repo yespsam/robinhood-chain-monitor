@@ -6,7 +6,14 @@ import { PLATFORM_CAPABILITY_TARGETS } from "./platform-capability-monitor.js";
 import { extractGithubRepositories } from "./github-monitor.js";
 import { classifyBinanceOfficialText } from "./binance-monitor.js";
 import { parseXDirectTimeline } from "./x-direct-timeline.js";
-import { classifyFlapQuotePairSignalCore, classifyPonFunSignalCore, isMonitoringSourceEnabled, isThreePlatformScope } from "./source-controls.js";
+import { recoverFourTwitterPolicyFixes } from "./four-twitter-policy-recovery.js";
+import {
+  classifyFlapQuotePairSignalCore,
+  classifyFourMemeOfficialSignalCore,
+  classifyPonFunSignalCore,
+  isMonitoringSourceEnabled,
+  isThreePlatformScope,
+} from "./source-controls.js";
 import { extractChainSupportSignals } from "./chain-support.js";
 
 const SIGNALS = [
@@ -781,17 +788,23 @@ export function classifyFocusLaunchpadText(text = "") {
   }, source);
 }
 
+export function classifyFourMemeOfficialText(text = "") {
+  return classifyFourMemeOfficialSignalCore(text) || classifyFocusLaunchpadText(text);
+}
+
 function classifyProjectTweet(text, project, config, expandedUrls = []) {
   const ponEvidenceText = [text, ...(Array.isArray(expandedUrls) ? expandedUrls : [])].filter(Boolean).join("\n");
   if (project?.criticalFastLane) {
     if (project.criticalProfile === "binance_product") return classifyBinanceCriticalProductText(text);
-    if (project.criticalProfile === "focus_launchpad") return classifyFocusLaunchpadText(text);
+    if (project.criticalProfile === "focus_launchpad") {
+      return project.id === "fourmeme" ? classifyFourMemeOfficialText(text) : classifyFocusLaunchpadText(text);
+    }
     if (project.criticalProfile === "pon_fun") return classifyPonFunOfficialText(ponEvidenceText);
     return { relevant: false, strong: false, labels: [], reason: "unknown_critical_x_profile" };
   }
   if (project?.id === "ponfun") return classifyPonFunOfficialText(ponEvidenceText);
   if (isThreePlatformScope(config) && ["flap", "fourmeme", "long"].includes(project?.id)) {
-    return classifyFocusLaunchpadText(text);
+    return project.id === "fourmeme" ? classifyFourMemeOfficialText(text) : classifyFocusLaunchpadText(text);
   }
   return classifyTweet(text, project?.signalProfile);
 }
@@ -1519,6 +1532,8 @@ function updateGlobalHealth(state, targets, now) {
 export function createTwitterMonitor(config, dependencies = {}) {
   const fetchImpl = dependencies.fetchImpl || fetch;
   const sendAlertsImpl = dependencies.sendAlertsImpl || sendAlerts;
+  const recoverFourTwitterPolicyFixesImpl = dependencies.recoverFourTwitterPolicyFixesImpl
+    || recoverFourTwitterPolicyFixes;
   const onOfficialRepository = dependencies.onOfficialRepository || (async () => {});
   const logger = dependencies.logger || console;
   const now = dependencies.now || Date.now;
@@ -2532,6 +2547,10 @@ export function createTwitterMonitor(config, dependencies = {}) {
         return { ok: true, skipped: false, auxiliaryOnly: true, degraded: true };
       }
       const tweets = result.tweets.sort((a, b) => compareTweetIds(b.id, a.id));
+      const recoveryCursorId = state[key]?.latestId || null;
+      const policyRecoveryRecentTweets = recoveryCursorId
+        ? tweets.filter((tweet) => compareTweetIds(tweet.id, recoveryCursorId) <= 0)
+        : [];
       let previous = state[key];
       let candidates;
       if (previous?.latestId) {
@@ -2657,6 +2676,21 @@ export function createTwitterMonitor(config, dependencies = {}) {
           ? classifiedSignal
           : { relevant: false, strong: false, labels: [], reason: "outside_critical_x_freshness_window" };
         if (signal.relevant) {
+          const namedMode = signal.namedMode;
+          const fourMemeNamedMode = project.id === "fourmeme" && namedMode?.version === 1
+            ? {
+                mode: {
+                  officialName: namedMode.name,
+                  componentMode: namedMode.name,
+                  parentMode: namedMode.parent,
+                },
+                productLifecycle: {
+                  product: namedMode.id,
+                  stage: namedMode.stage,
+                  key: `fourmeme:lifecycle:${namedMode.id}:${namedMode.stage}`,
+                },
+              }
+            : {};
           let delivery;
           try {
             if (isCriticalFastLane(project) && !delayedRecovery && now() >= criticalDeadlineAtMs) {
@@ -2669,6 +2703,7 @@ export function createTwitterMonitor(config, dependencies = {}) {
               project,
               tweet,
               signal,
+              ...fourMemeNamedMode,
               observedAt,
               ...(delayedRecovery ? { delayedRecovery } : {}),
               ...(deliverySla && !delayedRecovery ? { deliverySla } : {}),
@@ -2698,6 +2733,40 @@ export function createTwitterMonitor(config, dependencies = {}) {
         };
         state[key] = previous;
         await persistState(state, { durable: true });
+      }
+
+      if (project.id === "fourmeme" && config.fourTwitterPolicyRecoveryEnabled !== false) {
+        const recovery = await recoverFourTwitterPolicyFixesImpl({
+          config,
+          project,
+          state,
+          recentTweets: policyRecoveryRecentTweets,
+          classifyTweetImpl: (text, exactProject, exactConfig, expandedUrls) => (
+            classifyProjectTweet(text, exactProject, exactConfig, expandedUrls)
+          ),
+          verifyExactTweetImpl: async (exactProject, tweetId, sourceTweet) => {
+            const [verified] = await verifyCriticalJinaTweets(
+              exactProject,
+              [{ ...sourceTweet, id: tweetId }],
+              criticalTiming?.verifyTimeoutMs || criticalLatencySettings(config).verifyTimeoutMs,
+            );
+            if (!verified || String(verified.id) !== String(tweetId)) {
+              throw new Error(`Four policy recovery exact-status verification missed status/${tweetId}`);
+            }
+            return verified;
+          },
+          sendAlertsImpl,
+          persistStateImpl: persistState,
+          now,
+        });
+        if (recovery?.recovered?.length) {
+          health.coverage ||= {};
+          health.coverage.fourPolicyFixRecovery = {
+            status: recovery.status,
+            recovered: recovery.recovered.map((item) => item.eventKey),
+            checkedAt: timestamp(now),
+          };
+        }
       }
 
       if (!candidates.length && tweets[0] && previous) {

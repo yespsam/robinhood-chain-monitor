@@ -12,12 +12,15 @@ import {
 } from "../src/trading-priority.js";
 import {
   alertDeliveryDisposition,
+  classifyAlertFreshness,
   drainAlertOutbox,
   focusNoveltyKeys,
   isRelevantAlert,
   sendAlerts,
+  telegramButtons,
 } from "../src/alerts.js";
-import { isMonitoringSourceEnabled } from "../src/source-controls.js";
+import { isMonitoringSourceEnabled, isOfficialFourMemeCapabilityUpdate } from "../src/source-controls.js";
+import { classifyFourMemeOfficialText } from "../src/twitter-monitor.js";
 import {
   buildBilingualAlertBundle,
   renderBilingualTelegramText,
@@ -26,6 +29,57 @@ import {
 const fixtureFile = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures/trading-priority/events.json");
 const fixtures = JSON.parse(await fs.readFile(fixtureFile, "utf8"));
 const copy = (value) => structuredClone(value);
+const FOUR_TEMPLATE_URL = "https://four.meme/meme-api/v1/public/token_template/search";
+const fourMemeTemplateEvent = ({ changeType = "published_template_changed", currentStatus = "PUBLISHED" } = {}) => {
+  const observedAt = "2026-09-04T05:00:00.000Z";
+  const fingerprint = `template-${changeType}`;
+  const currentTemplate = { id: "9", name: "ListaYield", status: currentStatus };
+  const previousTemplate = changeType === "new_published_template"
+    ? null
+    : { id: "9", name: "ListaYield", status: "PUBLISHED" };
+  return {
+    type: "bsc_launchpad_update",
+    kind: "new_mode",
+    changeType,
+    eventKey: `bsc-official-mode:fourmeme:9:${fingerprint}`,
+    chainId: 56,
+    platform: { id: "fourmeme", name: "Four.Meme", trust: "official_verified" },
+    tokens: [],
+    pools: [],
+    previousTemplate,
+    currentTemplate,
+    changedFields: changeType === "new_published_template" ? ["template"] : ["status"],
+    mode: {
+      selector: "official-template",
+      fingerprint,
+      officialName: "ListaYield",
+      componentMode: "ListaYield",
+      template: { id: "9", name: "ListaYield", status: currentStatus, fingerprint, changeType },
+      sourceUrl: FOUR_TEMPLATE_URL,
+    },
+    structural: { eligible: true, source: "official_api" },
+    officialCapability: {
+      version: 1,
+      platform: "fourmeme",
+      kind: "template",
+      changeType,
+      sourceId: "fourmeme_public_template_api",
+      sourceUrl: FOUR_TEMPLATE_URL,
+      observedAt,
+    },
+    source: {
+      id: "fourmeme_public_template_api",
+      name: "Four.Meme public template API",
+      url: FOUR_TEMPLATE_URL,
+      trust: "official_verified",
+      official: true,
+    },
+    sourceTrust: "official_verified",
+    sourceUrl: FOUR_TEMPLATE_URL,
+    observedAt,
+    strong: true,
+  };
+};
 const withInstrumentChange = (source, {
   action = "launch",
   market = "usd_m_perpetual",
@@ -70,6 +124,162 @@ test("Binance MARSCOIN launchAt and HK0625 satisfy every deterministic T0 hard g
     assert.deepEqual(priority.targets.map((target) => target.value), [expectedTarget]);
     assert.equal(priority.plan.automaticExecution, false);
   }
+});
+
+test("Four.Meme strict bStock campaign is T2 immediate while incomplete stock marketing stays closed", () => {
+  const createdAt = "2026-09-04T03:21:47.000Z";
+  const text = `bStocks szn just got competitive. 🟢
+
+150,000 USDT is now live with @AveaiGlobal × @BNBCHAIN — including a 50,000 USDT leaderboard exclusively for http://Four.Meme traders.
+
+Trade http://Four.Meme Stock Memes on http://Ave.ai.
+Climb the Top 500.
+Take your share.
+
+The sprint is on. 🏁`;
+  const event = {
+    type: "twitter_update",
+    project: {
+      id: "fourmeme",
+      name: "Four.meme",
+      website: "https://four.meme",
+      twitter: "https://x.com/fourdotmemezh",
+      handle: "fourdotmemezh",
+      xUserId: "1816036559864619011",
+      match: "official_x",
+    },
+    tweet: {
+      id: "2095713912188739967",
+      text,
+      createdAt,
+      handle: "fourdotmemezh",
+      xUserId: "1816036559864619011",
+      authorId: "1816036559864619011",
+      url: "https://x.com/fourdotmemezh/status/2095713912188739967",
+      sourceVerifiedBy: "official_x_oembed",
+      identityVerifiedBy: "fxtwitter_exact_numeric_id",
+      isReply: false,
+    },
+    signal: classifyFourMemeOfficialText(text),
+    observedAt: "2026-09-04T03:22:00.000Z",
+  };
+  assert.equal(isMonitoringSourceEnabled({ monitorScope: "focus3" }, event), true);
+  const prioritized = withTradingPriority(event, { nowMs: Date.parse(event.observedAt) });
+  assert.equal(prioritized.tradingPriority.category, "focus_market_campaign");
+  assert.equal(prioritized.tradingPriority.tier, "T2");
+  assert.equal(prioritized.tradingPriority.hardGates.explicitPath, false);
+  assert.equal(prioritized.tradingPriority.hardGates.t1Eligible, false);
+  assert.match(prioritized.tradingPriority.plan.entryCondition.zh, /未指定代币 CA/);
+  assert.match(prioritized.tradingPriority.plan.capitalPath.zh, /不是协议升级/);
+  assert.equal(prioritized.tradingPriority.plan.automaticExecution, false);
+  assert.deepEqual(alertDeliveryDisposition(prioritized), {
+    mode: "immediate",
+    deliverImmediately: true,
+    tier: "T2",
+    reason: "fourmeme_market_campaign",
+  });
+  assert.deepEqual(telegramButtons(prioritized), {
+    inline_keyboard: [[{
+      text: "𝕏 查看原推",
+      url: "https://x.com/fourdotmemezh/status/2095713912188739967",
+    }]],
+  });
+
+  const incomplete = copy(event);
+  incomplete.tweet.text = "Four.Meme bStocks competition with @AveaiGlobal: share 150,000 USDT.";
+  incomplete.signal = classifyFourMemeOfficialText(incomplete.tweet.text);
+  assert.equal(isMonitoringSourceEnabled({ monitorScope: "focus3" }, incomplete), false);
+});
+
+test("Four.Meme official template snapshots and authoritative removals use the T1 official lane", () => {
+  for (const templateEvent of [
+    fourMemeTemplateEvent(),
+    fourMemeTemplateEvent({ changeType: "template_unpublished", currentStatus: "DISABLED" }),
+  ]) {
+    assert.equal(isOfficialFourMemeCapabilityUpdate(templateEvent), true);
+    assert.equal(isMonitoringSourceEnabled({ monitorScope: "focus3" }, templateEvent), true);
+    const freshness = classifyAlertFreshness({}, templateEvent, Date.parse(templateEvent.observedAt) + 30_000);
+    assert.equal(freshness.scope, "fourmeme_official_capability");
+    assert.equal(freshness.basis, "observedAt_continuous_coverage");
+    assert.equal(freshness.decision, "realtime");
+    const prioritized = withTradingPriority({ ...templateEvent, freshness }, { nowMs: Date.parse(templateEvent.observedAt) + 30_000 });
+    assert.equal(prioritized.tradingPriority.category, "focus_official");
+    assert.equal(prioritized.tradingPriority.tier, "T1");
+    assert.equal(prioritized.tradingPriority.hardGates.explicitPath, true);
+    assert.equal(isRelevantAlert(prioritized), true);
+    assert.equal(alertDeliveryDisposition(prioritized).deliverImmediately, true);
+  }
+
+  const removal = {
+    type: "platform_capability_update",
+    platform: { id: "fourmeme", name: "Four.Meme", website: "https://four.meme" },
+    url: "https://four.meme/meme-api/v1/public/config",
+    observedAt: "2026-09-04T05:00:00.000Z",
+    changes: {
+      removedQuoteConfigs: [{ symbol: "UUSD", address: "0x1111111111111111111111111111111111111111" }],
+    },
+  };
+  assert.equal(isMonitoringSourceEnabled({ monitorScope: "focus3" }, removal), true);
+  const prioritizedRemoval = withTradingPriority(removal, { nowMs: Date.parse(removal.observedAt) + 30_000 });
+  assert.equal(prioritizedRemoval.tradingPriority.tier, "T1");
+  assert.equal(prioritizedRemoval.tradingPriority.hardGates.explicitPath, true);
+  assert.equal(isRelevantAlert(prioritizedRemoval), true);
+  assert.deepEqual(focusNoveltyKeys(removal), [
+    "fourmeme:quote:0x1111111111111111111111111111111111111111:removed",
+  ]);
+});
+
+test("Four.Meme official template publish and unpublish traverse source, priority, outbox, and Telegram once each", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "fourmeme-template-outbox-"));
+  const payloads = [];
+  const nowMs = Date.parse("2026-09-04T05:00:30.000Z");
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    payloads.push(JSON.parse(options.body));
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ ok: true, result: { message_id: payloads.length } }),
+    };
+  });
+  t.mock.method(console, "info", () => {});
+  const config = {
+    dataDir,
+    monitorScope: "focus3",
+    ponsMonitorEnabled: false,
+    blockedContracts: new Set(),
+    telegramToken: "test-bot-token-secret",
+    telegramChatId: "1234567890",
+    telegramStrongAlerts: false,
+    webhookUrl: "",
+    alertNow: () => nowMs,
+    alertBilingualEnabled: true,
+    alertChineseTranslationEnabled: false,
+    alertEnglishTranslationEnabled: false,
+  };
+  const published = fourMemeTemplateEvent();
+  const unpublished = fourMemeTemplateEvent({ changeType: "template_unpublished", currentStatus: "DISABLED" });
+
+  const first = await sendAlerts(config, published);
+  const second = await sendAlerts(config, unpublished);
+  assert.equal(first.status, "delivered");
+  assert.equal(second.status, "delivered");
+  assert.equal(payloads.length, 2);
+
+  const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
+  const publishedEntry = outbox.events[published.eventKey];
+  const unpublishedEntry = outbox.events[unpublished.eventKey];
+  assert.equal(publishedEntry.status, "delivered");
+  assert.equal(unpublishedEntry.status, "delivered");
+  assert.equal(publishedEntry.event.tradingPriority.tier, "T1");
+  assert.equal(unpublishedEntry.event.tradingPriority.tier, "T1");
+  assert.equal(publishedEntry.deliveryDisposition.deliverImmediately, true);
+  assert.equal(unpublishedEntry.deliveryDisposition.deliverImmediately, true);
+  assert.match(publishedEntry.event.canonicalSignalIds[0], /^fourmeme:official-template:9:published-template-changed:/u);
+  assert.match(unpublishedEntry.event.canonicalSignalIds[0], /^fourmeme:official-template:9:template-unpublished:/u);
+  assert.notDeepEqual(publishedEntry.event.canonicalSignalIds, unpublishedEntry.event.canonicalSignalIds);
+  assert.equal(unpublishedEntry.event.tradingPriority.plan.automaticExecution, false);
+  assert.match(unpublishedEntry.event.tradingPriority.plan.entryCondition.zh, /重新发布|恢复/u);
 });
 
 test("crypto perpetual and perpetual-delist cards use action-aware derivatives paths", async () => {

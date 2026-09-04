@@ -16,6 +16,10 @@ import {
   parseGithubPatchFiles,
   parseGithubPatchMessage,
 } from "../src/github-monitor.js";
+import {
+  produceFourRegistryPresetAndFirstToken,
+  produceFourRegistryProtocolEvents,
+} from "./helpers/four-registry-fixture.js";
 
 function googleResponse(translated) {
   return {
@@ -132,7 +136,7 @@ test("bilingual rendering preserves layout, entities, and protected technical id
     assert.match(bundle.en.text, new RegExp(literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.match(rendered, new RegExp(address));
-  assert.equal(bundle.version, 19);
+  assert.equal(bundle.version, 21);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.match(rendered, /^🔴 强提醒 \| STRONG ALERT\n🇨🇳 中文\n/);
   assert.match(rendered, /\n\n🇬🇧 English\n/);
@@ -200,7 +204,7 @@ test("Binance connector cards state the one concrete diff and never disguise SDK
     assert.ok(bundle.en.text.includes(item.stageEn));
     assert.equal(bundle.zh.text.split("\n").length, 2);
     assert.equal(bundle.en.text.split("\n").length, 2);
-    assert.equal(bundle.version, 19);
+    assert.equal(bundle.version, 21);
     assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   }
 });
@@ -563,7 +567,7 @@ test("Binance Agent Native developer diff renders the new MCP entry without sign
   assert.equal(bundle.zh.status, "not_needed");
   assert.equal(bundle.en.status, "not_needed");
   assert.equal(providerCalls, 0);
-  assert.equal(bundle.version, 19);
+  assert.equal(bundle.version, 21);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.equal(bundle.zh.text.split("\n").length, 2);
   assert.equal(bundle.en.text.split("\n").length, 2);
@@ -1032,7 +1036,7 @@ test("Flap tracked pool-token cards are local five-line bilingual monitor-only a
     assert.match(blocks.zh[4], /^风险\/时间：非自动交易｜/u);
     assert.match(blocks.en[4], /^Risk\/Time: No automatic trading \|/u);
     assert.doesNotMatch(rendered, /selector=|security=|liquidityConfirmed=|路径=|flow=|入场=|entry=/iu);
-    assert.equal(bundle.version, 19);
+    assert.equal(bundle.version, 21);
     if (item.decision === "pass") passEvent = event;
   }
   assert.equal(providerCalls, 0);
@@ -1610,6 +1614,230 @@ test("representative Flap, Four.Meme, X, and Binance Wallet cards use concise ca
   assert.ok(renderBilingualTelegramText(cards.binance, true).length <= 450);
 });
 
+test("Four.Meme named-mode and official campaign cards expose the trading mechanism instead of generic slogans", async () => {
+  let translationCalls = 0;
+  const config = {
+    alertTranslationFetchImpl: async () => {
+      translationCalls += 1;
+      throw new Error("structured Four.Meme cards must not call translation");
+    },
+  };
+  const project = { id: "fourmeme", name: "Four.meme" };
+  const officialTweet = (id, createdAt, text) => ({
+    id,
+    handle: "fourdotmemezh",
+    authorId: "1816036559864619011",
+    xUserId: "1816036559864619011",
+    sourceVerifiedBy: "official_x_oembed",
+    url: `https://x.com/fourdotmemezh/status/${id}`,
+    createdAt,
+    text,
+  });
+  const listaYield = withTradingPriority({
+    type: "twitter_update",
+    project,
+    tweet: officialTweet(
+      "2095361508700258731",
+      "2026-09-03T04:01:28.000Z",
+      "Introducing ListaYield on Four.Meme — a new OpenFour mode powered by @lista_dao.",
+    ),
+    signal: {
+      relevant: true,
+      strong: true,
+      platformStructural: true,
+      namedMode: {
+        version: 1,
+        id: "listayield",
+        name: "ListaYield",
+        parent: "OpenFour",
+        stage: "announced",
+        partnerHandle: "lista_dao",
+        tradingTaxRoute: "yield_bearing_products",
+        holderYield: true,
+        graduationLiquidityDestination: "Lista DEX",
+      },
+    },
+    productLifecycle: {
+      product: "listayield",
+      stage: "announced",
+      key: "fourmeme:lifecycle:listayield:announced",
+    },
+    mode: { officialName: "ListaYield", componentMode: "ListaYield" },
+    observedAt: "2026-09-03T04:01:30.523Z",
+  }, { nowMs: Date.parse("2026-09-03T04:01:31.000Z") });
+  const campaign = withTradingPriority({
+    type: "twitter_update",
+    project,
+    tweet: officialTweet(
+      "2095713912188739967",
+      "2026-09-04T03:21:47.000Z",
+      "bStocks szn just got competitive: 150,000 USDT with 50,000 USDT for Four.Meme traders. Top 500 on Ave.ai.",
+    ),
+    signal: {
+      relevant: true,
+      strong: false,
+      platformStructural: false,
+      marketCampaign: {
+        version: 1,
+        kind: "bstock_partner_leaderboard",
+        assetClass: "bstock",
+        stage: "live",
+        partnerHandle: "AveaiGlobal",
+        chainHandle: "BNBCHAIN",
+        venue: "Ave.ai",
+        totalPrizeUsdt: 150000,
+        fourMemePrizeUsdt: 50000,
+        topRanks: 500,
+        exclusiveToFourMemeTraders: true,
+        campaignKey: "fourmeme:market-campaign:bstock:aveaiglobal:50000-usdt:top-500",
+      },
+    },
+    policyFixRecovery: { version: 1, stale: true, noChase: true },
+    observedAt: "2026-09-04T08:00:00.000Z",
+  }, { nowMs: Date.parse("2026-09-04T08:00:01.000Z") });
+  const github = withTradingPriority({
+    type: "github_module_update",
+    launchpad: "Four.meme",
+    repository: "four-meme-community/openfour-docs",
+    sourceTrust: "official_verified",
+    commit: "bcf52911c992994af5d71ace12f90488be574949",
+    message: "docs: update OpenFour integration and tax references",
+    committedAt: "2026-09-03T02:07:41.000Z",
+    observedAt: "2026-09-03T02:07:56.183Z",
+    files: [
+      { filename: "mechanisms/lista-v2-stake.md", status: "added" },
+      { filename: "contracts/token/StrategyTaxToken.sol", status: "added" },
+    ],
+    githubChange: {
+      classification: "substantive",
+      primaryFact: { file: "contracts/interfaces/IOpenFourCore.sol", kind: "function", subject: "zapRouter", action: "added" },
+    },
+  }, { nowMs: Date.parse("2026-09-03T02:07:57.000Z") });
+  const template = withTradingPriority({
+    type: "bsc_launchpad_update",
+    kind: "new_mode",
+    changeType: "template_updated",
+    chainId: 56,
+    platform: { id: "fourmeme", name: "Four.meme" },
+    source: {
+      id: "fourmeme_public_template_api",
+      name: "Four.Meme public template API",
+      url: "https://four.meme/meme-api/v1/public/token_template/search",
+      trust: "official_verified",
+      official: true,
+    },
+    sourceTrust: "official_verified",
+    officialCapability: {
+      version: 1,
+      platform: "fourmeme",
+      kind: "template",
+      changeType: "template_updated",
+      sourceId: "fourmeme_public_template_api",
+      sourceUrl: "https://four.meme/meme-api/v1/public/token_template/search",
+      observedAt: "2026-09-04T04:00:00.000Z",
+    },
+    previousTemplate: {
+      id: "1778027615732", name: "Bonding Lista V2 Stake Tax V1", status: "PUBLISH",
+      numericParameters: ["10%"], mechanismTerms: ["tax", "dex"],
+    },
+    currentTemplate: {
+      id: "1778027615732", name: "Bonding Lista V2 Stake Tax V1", status: "PUBLISH",
+      numericParameters: ["25%"], mechanismTerms: ["tax", "dex"],
+    },
+    changedFields: ["numericParameters"],
+    mode: {
+      selector: "official-template",
+      officialName: "Bonding Lista V2 Stake Tax V1",
+      componentMode: "Bonding Lista V2 Stake Tax V1",
+    },
+    structural: { eligible: true, source: "official_api" },
+    observedAt: "2026-09-04T04:00:00.000Z",
+    strong: true,
+  }, { nowMs: Date.parse("2026-09-04T04:00:01.000Z") });
+
+  const listaBundle = await buildBilingualAlertBundle(config, listaYield, "Four.Meme official X update");
+  const campaignBundle = await buildBilingualAlertBundle(config, campaign, "Four.Meme official X update");
+  const githubBundle = await buildBilingualAlertBundle(config, github, "Four.Meme official GitHub update");
+  const templateBundle = await buildBilingualAlertBundle(config, template, "Four.Meme official template update");
+  const listaRendered = renderBilingualTelegramText(listaBundle, true);
+  const campaignRendered = renderBilingualTelegramText(campaignBundle, false);
+  const githubRendered = renderBilingualTelegramText(githubBundle, true);
+  const templateRendered = renderBilingualTelegramText(templateBundle, true);
+
+  for (const [rendered, expected] of [
+    [listaRendered, ["ListaYield", "交易税分成→Lista 收益产品", "流动性默认迁移 Lista DEX", "等待首个安全代币 CA", "2095361508700258731"]],
+    [campaignRendered, ["150,000 USDT", "50,000 USDT", "Top 500", "流量催化；非协议升级；暂无指定 CA", "延迟补报｜勿追价", "2095713912188739967"]],
+    [githubRendered, ["ListaYield", "Lista V2 stake-tax", "StrategyTaxToken", "尚未确认产品上线", "four-meme-community/openfour-docs#bcf52911"]],
+    [templateRendered, ["Bonding Lista V2 Stake Tax V1", "参数 10% → 25%", "结构性更新；等待链上启用/首个安全代币", "four.meme/meme-api/v1/public/token_template/search"]],
+  ]) {
+    assertShortFieldLayout(rendered);
+    for (const literal of expected) assert.ok(rendered.includes(literal), literal);
+    assert.doesNotMatch(rendered, /selector=|security=|liquidityConfirmed=|Translation unavailable|\[object Object\]/i);
+  }
+  assert.match(listaBundle.en.text, /ListaYield/);
+  assert.match(campaignBundle.en.text, /150,000 USDT/);
+  assert.doesNotMatch(renderedLanguageBlocks(listaRendered).en.join("\n"), /[\u3400-\u9fff]/u);
+  assert.doesNotMatch(renderedLanguageBlocks(campaignRendered).en.join("\n"), /[\u3400-\u9fff]/u);
+  assert.equal(translationCalls, 0);
+});
+
+test("Four.Meme Registry capability and first-token cards separate provenance from token safety", async (t) => {
+  const produced = await produceFourRegistryPresetAndFirstToken(t, {
+    now: () => Date.parse("2026-09-04T08:00:00.000Z"),
+  });
+  const [rawCapability, rawFirstToken] = produced.events;
+  const capability = rawCapability;
+  const firstToken = rawFirstToken;
+
+  const capabilityBundle = await buildBilingualAlertBundle({}, capability, "Four.Meme Registry update");
+  const tokenBundle = await buildBilingualAlertBundle({}, firstToken, "Four.Meme Core TokenCreated");
+  const capabilityText = renderBilingualTelegramText(capabilityBundle, true);
+  const tokenText = renderBilingualTelegramText(tokenBundle, true);
+
+  for (const [rendered, expected] of [
+    [capabilityText, ["OpenFour Registry", produced.added.name, `Preset ${produced.added.id}`, "新增预设", "等待该能力启用后的首个代币 CA", "安全性另行核验", rawCapability.explorerUrl]],
+    [tokenText, [produced.added.name, "First Confirmed (FIRST)", `CA ${rawFirstToken.token.address}`, "官方 Core TokenCreated", "安全未完成｜不买", rawFirstToken.explorerUrl]],
+  ]) {
+    assertShortFieldLayout(rendered);
+    for (const literal of expected) assert.ok(rendered.includes(literal), literal);
+    assert.doesNotMatch(rendered, /selector=|security=|Translation unavailable|自动买入|buy now/i);
+  }
+});
+
+test("Four.Meme Registry protocol cards name Module, TokenImpl, Tag, and authenticated recovery facts", async (t) => {
+  const fresh = await produceFourRegistryProtocolEvents(t);
+  assert.deepEqual(fresh.events.map((event) => event.kind), [
+    "four_registry_module_upserted",
+    "four_registry_token_impl_upserted",
+    "four_registry_tag_registered",
+  ]);
+  const freshRendered = await Promise.all(fresh.events.map(async (event) => renderBilingualTelegramText(
+    await buildBilingualAlertBundle({}, event, event.signal.headline),
+    true,
+  )));
+  for (const [rendered, expected] of [
+    [freshRendered[0], ["OpenFour Module", "ModuleUpserted", "kind=curve", "active=true", fresh.events[0].module.implementation, "安全性未知｜不买"]],
+    [freshRendered[1], ["OpenFour TokenImpl", "TokenImplUpserted", "version=2.0.0", fresh.events[1].tokenImplementation.tokenImplId, "安全性未知｜不买"]],
+    [freshRendered[2], ["OpenFour Tag", "TagRegistered", "module.curve.lista_yield", fresh.events[2].tag.tagId, "不代表代币或组件安全｜不买"]],
+  ]) {
+    assertShortFieldLayout(rendered);
+    for (const literal of expected) assert.ok(rendered.includes(literal), literal);
+    assert.doesNotMatch(rendered, /自动买入|buy now|GMGN/i);
+  }
+
+  const recovered = await produceFourRegistryProtocolEvents(t, {
+    now: () => Date.parse("2026-09-04T12:00:00.000Z"),
+  });
+  assert.ok(recovered.events.every((event) => event.delayedRecovery?.reason === "verified_contiguous_registry_cursor_catch_up"));
+  const recoveredText = renderBilingualTelegramText(
+    await buildBilingualAlertBundle({}, recovered.events[0], recovered.events[0].signal.headline),
+    true,
+  );
+  for (const literal of ["延迟补报｜勿追价", "源 09-04 15:58 CST", "恢复 09-04 20:00 CST", "延迟 4小时1分", "非自动交易"]) {
+    assert.ok(recoveredText.includes(literal), literal);
+  }
+});
+
 test("Binance funding notices lead with the actual rule change instead of an internal version", async () => {
   clearTranslationCache();
   const event = {
@@ -1647,7 +1875,7 @@ test("Binance funding notices lead with the actual rule change instead of an int
   ].join("\n"));
   const rendered = renderBilingualTelegramText(bundle, false);
 
-  assert.equal(bundle.version, 19);
+  assert.equal(bundle.version, 21);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.match(bundle.zh.text, /^平台：Binance/m);
   assert.match(bundle.zh.text, /更新了什么：UNITREEUSDT 永续：8小时→4小时，费率上下限 \+2\.00%\/-2\.00%/);
@@ -1934,7 +2162,7 @@ test("real hooklist registrations distinguish the Hook file address from an unre
   const rendered = renderBilingualTelegramText(bundle, true);
 
   assert.deepEqual(event, original);
-  assert.equal(bundle.version, 19);
+  assert.equal(bundle.version, 21);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.match(bundle.zh.text, /^平台：Uniswap/m);
   assert.match(bundle.en.text, /^Platform: Uniswap/m);
@@ -2184,7 +2412,7 @@ test("Telegram news renders the two-field bilingual template and can never becom
   const en = bundle.en.text.split("\n");
 
   assert.ok(providerCalls > 0, "the existing translation provider path must be preferred");
-  assert.equal(bundle.version, 19);
+  assert.equal(bundle.version, 21);
   assert.equal(bundle.eventType, "telegram_news_update");
   assert.equal(bundle.focusModel.telegramNews.messageUrl, event.messageUrl);
   assert.equal(zh.length, 2);
@@ -2582,7 +2810,7 @@ test("every supported Telegram event type uses the same compact bilingual envelo
     ].join("\n"));
     const rendered = renderBilingualTelegramText(bundle, false);
 
-    assert.equal(bundle.version, 19, type);
+    assert.equal(bundle.version, 21, type);
     assert.equal(bundle.format, "telegram_zh_en_compact_v13", type);
     assert.match(bundle.zh.text, /[\u3400-\u9fff]/, type);
     assert.match(bundle.en.text, /[A-Za-z]{3,}/, type);
@@ -2618,7 +2846,7 @@ test("every bilingual alert persists a one-glance before/after model and fails o
     source: { name: "Binance Wallet 官方公告" },
   }, "🚨 Binance Wallet 更新\n事件: Wallet API v2\n状态: 官方公告已确认\n时间: 2026-08-13 00:00:00");
 
-  assert.equal(bundle.version, 19);
+  assert.equal(bundle.version, 21);
   assert.equal(bundle.format, "telegram_zh_en_compact_v13");
   assert.equal(bundle.changeModel.basis, "exact_snapshot");
   assert.match(bundle.zh.text, /更新了什么：中文翻译暂不可用；请看英文原文/);
@@ -2946,7 +3174,7 @@ test("Telegram retries reuse the persisted bilingual render bundle without retra
   assert.equal((await sendAlerts(config, event)).status, "queued");
   const firstOutbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   const entry = firstOutbox.events[Object.keys(firstOutbox.events)[0]];
-  assert.equal(entry.renderBundle.version, 19);
+  assert.equal(entry.renderBundle.version, 21);
   const callsAfterFirstRender = translationCalls;
   entry.destinations.telegram.nextAttemptAt = null;
   await fs.writeFile(path.join(dataDir, "alert-outbox.json"), `${JSON.stringify(firstOutbox, null, 2)}\n`);
@@ -2961,12 +3189,12 @@ test("Telegram retries reuse the persisted bilingual render bundle without retra
 
   const finalOutbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   const finalEntry = finalOutbox.events[Object.keys(finalOutbox.events)[0]];
-  assert.equal(finalEntry.destinations.telegram.receipt.renderVersion, 19);
+  assert.equal(finalEntry.destinations.telegram.receipt.renderVersion, 21);
   assert.equal(finalEntry.destinations.telegram.receipt.translation.zh.status, finalEntry.renderBundle.zh.status);
   assert.equal(finalEntry.destinations.telegram.receipt.translation.en.status, finalEntry.renderBundle.en.status);
 });
 
-test("a pending v14 card is rebuilt once as v19 while terminal v14 is not migrated", async (t) => {
+test("a pending v14 card is rebuilt once as v21 while terminal v14 is not migrated", async (t) => {
   clearTranslationCache();
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-bilingual-v6-migration-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -3034,13 +3262,13 @@ test("a pending v14 card is rebuilt once as v19 while terminal v14 is not migrat
 
   const migrated = JSON.parse(await fs.readFile(file, "utf8"));
   const migratedEntry = migrated.events[Object.keys(migrated.events)[0]];
-  assert.equal(migratedEntry.renderBundle.version, 19);
+  assert.equal(migratedEntry.renderBundle.version, 21);
   assert.equal(migratedEntry.renderBundle.format, "telegram_zh_en_compact_v13");
   assert.notEqual(migratedEntry.renderBundle.sourceHash, "V14_SENTINEL_HASH");
   assert.equal(migratedEntry.renderBundle.zh.text.split("\n").length, 2);
   assert.equal(migratedEntry.renderBundle.en.text.split("\n").length, 2);
   assert.equal((await sendAlerts(config, event)).status, "delivered");
-  assert.equal(translationCalls, callsAfterMigration, "the persisted v19 bundle must not be translated again");
+  assert.equal(translationCalls, callsAfterMigration, "the persisted v20 bundle must not be translated again");
   assert.equal(telegramCalls, 2, "a terminal delivered event must not be sent again");
 
   migratedEntry.renderBundle.version = 14;
