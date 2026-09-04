@@ -147,6 +147,52 @@ const BSC_UNSCOPED_LOG_MAX_BLOCKS = 10;
 const BSC_REALTIME_PENDING_MAX_ENTRIES = 25_000;
 const BSC_REALTIME_OLDEST_RESERVE = 2;
 const BSC_NEAR_HEAD_ATTEMPTS_PER_HISTORICAL_BATCH = 5;
+const BSC_DEEP_RPC_PRIORITY_LAG_BLOCKS = 20;
+const BSC_DEEP_RPC_HEALTHY_TAIL_BATCHES = 2;
+// Production observed at least 0.473 durable candidates/second before any
+// successful removals were counted. A two-second cadence therefore cannot
+// drain even a healthy queue. Keep one expensive transaction proof in flight,
+// but admit the next one after 750ms when the live tail is continuously
+// healthy. Slow RPCs naturally reduce this rate because the lease is serial.
+const BSC_DEEP_RPC_PACE_MS = 750;
+const BSC_DEEP_RPC_OLD_WITH_GAPS_PACE_MS = 30_000;
+const BSC_DEEP_RPC_FRESH_WINDOW_MS = 15 * 60_000;
+const BSC_DEEP_RPC_BLOCKING_TAIL_STATUSES = new Set([
+  "error",
+  "degraded",
+  "critical",
+  "rebuilding",
+]);
+const BSC_CAUSAL_BARRIER_KEYS_MAX = 64;
+
+function isBscDurableHandoffCapacityError(error) {
+  return error?.code === "BSC_REALTIME_PENDING_CAPACITY";
+}
+
+function normalizeBscCausalBarrierKeys(values = []) {
+  if (!Array.isArray(values)) return [];
+  const normalized = [...new Set(values
+    .map((value) => String(value || ""))
+    .filter((value) => /^(?:feature|first3):[^\s]{1,480}$/.test(value)))]
+    .sort();
+  if (normalized.length > BSC_CAUSAL_BARRIER_KEYS_MAX) {
+    const error = new Error(`BSC causal barrier capacity ${normalized.length}>${BSC_CAUSAL_BARRIER_KEYS_MAX}`);
+    error.code = "BSC_CAUSAL_BARRIER_CAPACITY";
+    throw error;
+  }
+  return normalized;
+}
+
+function readBscCausalBarrierKeys(value, label) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error(`${label} causalBarrierKeys must be an array`);
+  const normalized = normalizeBscCausalBarrierKeys(value);
+  if (normalized.length !== value.length
+    || JSON.stringify(normalized) !== JSON.stringify(value)) {
+    throw new Error(`${label} causalBarrierKeys are not canonical`);
+  }
+  return normalized;
+}
 
 function bscQueuePosition(value) {
   let numeric;
@@ -208,6 +254,56 @@ export function bscRealtimeProcessLimit(entries, confirmedBlock, seenTransaction
   return hasNearHeadWork
     ? Math.max(1, Number(normalLimit) || 1)
     : Math.max(1, Math.min(Number(normalLimit) || 1, Number(backlogLimit) || 1));
+}
+
+export function bscDeepRpcPriority({
+  realtimeTailRunning = false,
+  realtimeTailNextBlock,
+  confirmedBlock,
+  realtimeTailStatus = null,
+  realtimeTailBackpressure = null,
+  consecutiveHealthyTailBatches = 0,
+  nearHeadGapCount = 0,
+} = {}) {
+  const nextBlock = Number(realtimeTailNextBlock);
+  const confirmed = Number(confirmedBlock);
+  const validCursor = Number.isSafeInteger(nextBlock) && nextBlock >= 0;
+  const validConfirmed = Number.isSafeInteger(confirmed) && confirmed >= 0;
+  const tailLagBlocks = validCursor && validConfirmed
+    ? Math.max(0, confirmed - Math.max(0, nextBlock - 1))
+    : Number.POSITIVE_INFINITY;
+  const blockingStatus = BSC_DEEP_RPC_BLOCKING_TAIL_STATUSES.has(String(realtimeTailStatus || "").toLowerCase());
+  const capacityBackpressure = realtimeTailBackpressure === "realtime_pending_capacity";
+  const reportedHealthy = String(realtimeTailStatus || "").toLowerCase() === "healthy";
+  const tailPriority = Boolean(realtimeTailRunning)
+    || !validCursor
+    || !validConfirmed
+    || tailLagBlocks > BSC_DEEP_RPC_PRIORITY_LAG_BLOCKS
+    || blockingStatus;
+  const tailReady = !tailPriority
+    && reportedHealthy
+    && Number(consecutiveHealthyTailBatches || 0) >= BSC_DEEP_RPC_HEALTHY_TAIL_BATCHES;
+  const capacityDrainReady = capacityBackpressure
+    && !realtimeTailRunning
+    && validCursor
+    && validConfirmed;
+  const gapFree = Number(nearHeadGapCount || 0) === 0;
+  return {
+    tailLagBlocks,
+    tailPriority,
+    tailReady,
+    capacityBackpressure,
+    capacityDrainReady,
+    nearHeadGapCount: Math.max(0, Number(nearHeadGapCount) || 0),
+    allowFreshQueue: tailReady || capacityDrainReady,
+    allowOldQueue: tailReady || capacityDrainReady,
+    allowFreshDeferred: tailReady,
+    allowOldDeferred: tailReady,
+    deepIntervalMs: BSC_DEEP_RPC_PACE_MS,
+    oldDeepIntervalMs: gapFree || capacityDrainReady
+      ? BSC_DEEP_RPC_PACE_MS
+      : BSC_DEEP_RPC_OLD_WITH_GAPS_PACE_MS,
+  };
 }
 
 export function shouldYieldBscNearHeadRecovery({
@@ -740,7 +836,8 @@ const FLAP_QUOTE_FIRST_THREE_PAIR_FACTORIES = new Set([
 // transactions the realtime lane already classified without first walking a
 // 15-minute archive-log window. Archive replay remains the completeness lane.
 const FOUR_MEME_CREATION_HOT_INDEX_TTL_MS = 30 * 60_000;
-const FOUR_MEME_CREATION_HOT_INDEX_MAX = 2_000;
+const FOUR_MEME_CREATION_HOT_INDEX_MAX = 6_000;
+const BSC_TRANSACTION_CREATION_EVIDENCE_MAX = 64;
 const FOUR_MEME_REPLAY_ATTEMPTED_CANDIDATES_MAX = 2_000;
 // The primary public BSC archive endpoint rejects ranges wider than 10.
 const FOUR_MEME_REPLAY_LOG_BATCH_BLOCKS = 10;
@@ -2070,6 +2167,7 @@ function normalizeFlapCreationHotIndex(entries = [], current = null) {
     const logIndex = Number(entry?.logIndex || 0);
     const topic = String(entry?.topic || "").toLowerCase();
     const observedMs = Date.parse(entry?.observedAt || entry?.indexedAt || "");
+    const indexedMs = Date.parse(entry?.indexedAt || entry?.observedAt || "");
     const vaultFactory = String(entry?.vaultFactory || "").toLowerCase();
     const confirmations = Number(entry?.confirmations);
     const requiredConfirmations = Number(entry?.requiredConfirmations);
@@ -2084,7 +2182,8 @@ function normalizeFlapCreationHotIndex(entries = [], current = null) {
       || !Number.isSafeInteger(logIndex)
       || logIndex < 0
       || !Number.isFinite(observedMs)
-      || (cutoff !== null && observedMs < cutoff)
+      || !Number.isFinite(indexedMs)
+      || (cutoff !== null && indexedMs < cutoff)
       || (topic === FLAP_VAULT_TOKEN_CREATED_TOPIC && !ADDRESS.test(vaultFactory))) continue;
     const quoteAssets = [...new Set((Array.isArray(entry?.quoteAssets) ? entry.quoteAssets : [])
       .map((address) => String(address || "").toLowerCase())
@@ -2101,16 +2200,30 @@ function normalizeFlapCreationHotIndex(entries = [], current = null) {
       logIndex,
       topic,
       observedAt: new Date(observedMs).toISOString(),
-      indexedAt: Number.isFinite(Date.parse(entry?.indexedAt || ""))
-        ? new Date(Date.parse(entry.indexedAt)).toISOString()
-        : new Date(observedMs).toISOString(),
+      indexedAt: new Date(indexedMs).toISOString(),
       confirmations: Number.isSafeInteger(confirmations) && confirmations >= 0 ? confirmations : null,
       requiredConfirmations: Number.isSafeInteger(requiredConfirmations) && requiredConfirmations >= 0
         ? requiredConfirmations : null,
       vaultFactory: topic === FLAP_VAULT_TOKEN_CREATED_TOPIC ? vaultFactory : null,
       quoteAssets: topic === FLAP_TOKEN_CREATED_TOPIC ? quoteAssets : [],
     };
-    normalized.set(flapCreationCandidateKey(candidate), candidate);
+    const key = flapCreationCandidateKey(candidate);
+    const previous = normalized.get(key);
+    normalized.set(key, previous ? {
+      ...previous,
+      ...candidate,
+      blockHash: candidate.blockHash || previous.blockHash,
+      observedAt: new Date(Math.min(Date.parse(previous.observedAt), Date.parse(candidate.observedAt))).toISOString(),
+      indexedAt: new Date(Math.max(Date.parse(previous.indexedAt), Date.parse(candidate.indexedAt))).toISOString(),
+      confirmations: Math.max(Number(previous.confirmations ?? -1), Number(candidate.confirmations ?? -1)) >= 0
+        ? Math.max(Number(previous.confirmations ?? -1), Number(candidate.confirmations ?? -1))
+        : null,
+      requiredConfirmations: Math.max(Number(previous.requiredConfirmations ?? -1), Number(candidate.requiredConfirmations ?? -1)) >= 0
+        ? Math.max(Number(previous.requiredConfirmations ?? -1), Number(candidate.requiredConfirmations ?? -1))
+        : null,
+      vaultFactory: candidate.vaultFactory || previous.vaultFactory,
+      quoteAssets: [...new Set([...(previous.quoteAssets || []), ...(candidate.quoteAssets || [])])].sort().slice(0, 16),
+    } : candidate);
   }
   return [...normalized.values()]
     .sort((left, right) => left.blockNumber - right.blockNumber
@@ -2184,6 +2297,7 @@ function normalizeFourMemeCreationHotIndex(entries = [], current = null) {
     const logIndex = Number(entry?.logIndex || 0);
     const topic = String(entry?.topic || "").toLowerCase();
     const observedMs = Date.parse(entry?.observedAt || entry?.indexedAt || "");
+    const indexedMs = Date.parse(entry?.indexedAt || entry?.observedAt || "");
     if (!ADDRESS.test(launcher)
       || !ADDRESS.test(token)
       || !/^0x[0-9a-f]{64}$/.test(transactionHash)
@@ -2195,7 +2309,8 @@ function normalizeFourMemeCreationHotIndex(entries = [], current = null) {
       || logIndex < 0
       || ![FOUR_MEME_TOKEN_CREATE_TOPIC, FOUR_MEME_PRESALE_TOKEN_CREATE_TOPIC, OPENFOUR_TOKEN_CREATED_TOPIC].includes(topic)
       || !Number.isFinite(observedMs)
-      || (cutoff !== null && observedMs < cutoff)) continue;
+      || !Number.isFinite(indexedMs)
+      || (cutoff !== null && indexedMs < cutoff)) continue;
     const candidate = {
       launcher,
       token,
@@ -2205,15 +2320,22 @@ function normalizeFourMemeCreationHotIndex(entries = [], current = null) {
       logIndex,
       topic,
       observedAt: new Date(observedMs).toISOString(),
-      indexedAt: Number.isFinite(Date.parse(entry?.indexedAt || ""))
-        ? new Date(Date.parse(entry.indexedAt)).toISOString()
-        : new Date(observedMs).toISOString(),
+      indexedAt: new Date(indexedMs).toISOString(),
       presetId: entry?.presetId === null || entry?.presetId === undefined ? null : String(entry.presetId),
       quoteAsset: ADDRESS.test(String(entry?.quoteAsset || "").toLowerCase())
         ? String(entry.quoteAsset).toLowerCase()
         : null,
     };
-    normalized.set(fourMemeCreationCandidateKey(candidate), candidate);
+    const key = fourMemeCreationCandidateKey(candidate);
+    const previous = normalized.get(key);
+    normalized.set(key, previous ? {
+      ...previous,
+      ...candidate,
+      observedAt: new Date(Math.min(Date.parse(previous.observedAt), Date.parse(candidate.observedAt))).toISOString(),
+      indexedAt: new Date(Math.max(Date.parse(previous.indexedAt), Date.parse(candidate.indexedAt))).toISOString(),
+      presetId: candidate.presetId ?? previous.presetId,
+      quoteAsset: candidate.quoteAsset || previous.quoteAsset,
+    } : candidate);
   }
   return [...normalized.values()]
     .sort((left, right) => left.blockNumber - right.blockNumber
@@ -2221,6 +2343,33 @@ function normalizeFourMemeCreationHotIndex(entries = [], current = null) {
       || left.logIndex - right.logIndex
       || left.transactionHash.localeCompare(right.transactionHash))
     .slice(-FOUR_MEME_CREATION_HOT_INDEX_MAX);
+}
+
+function readBscTransactionCreationEvidence(value, transactionHash, label, normalize) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > BSC_TRANSACTION_CREATION_EVIDENCE_MAX) {
+    throw new Error(`${label} creation evidence is not a bounded array`);
+  }
+  const normalizedHash = normalizeTransactionHash(transactionHash);
+  const normalized = normalize(value, null);
+  if (normalized.length !== value.length
+    || normalized.some((candidate) => candidate.transactionHash !== normalizedHash)
+    || JSON.stringify(normalized) !== JSON.stringify(value)) {
+    throw new Error(`${label} creation evidence is not canonical`);
+  }
+  return normalized;
+}
+
+function normalizeBscTransactionCreationEvidence(values, transactionHash, label, normalize) {
+  const normalizedHash = normalizeTransactionHash(transactionHash);
+  const normalized = normalize(Array.isArray(values) ? values : [], null);
+  if (normalized.some((candidate) => candidate.transactionHash !== normalizedHash)
+    || normalized.length > BSC_TRANSACTION_CREATION_EVIDENCE_MAX) {
+    const error = new Error(`${label} transaction creation evidence capacity exceeded`);
+    error.code = "BSC_TRANSACTION_CREATION_EVIDENCE_INVALID";
+    throw error;
+  }
+  return normalized;
 }
 
 function normalizeNearHeadRecoveryGaps(gaps = []) {
@@ -2533,13 +2682,51 @@ async function readState(file, metadata = null) {
       deferredCreationEvidence: parsed.deferredCreationEvidence && typeof parsed.deferredCreationEvidence === "object" && !Array.isArray(parsed.deferredCreationEvidence)
         ? Object.fromEntries(Object.entries(parsed.deferredCreationEvidence).map(([transactionHash, record]) => {
           const normalized = normalizeTransactionHash(record?.transactionHash || transactionHash);
-          return [normalized, { ...record, transactionHash: normalized }];
+          return [normalized, {
+            ...record,
+            transactionHash: normalized,
+            flapCreationHotCandidates: readBscTransactionCreationEvidence(
+              record?.flapCreationHotCandidates,
+              normalized,
+              `deferred ${normalized} Flap`,
+              normalizeFlapCreationHotIndex,
+            ),
+            fourMemeCreationHotCandidates: readBscTransactionCreationEvidence(
+              record?.fourMemeCreationHotCandidates,
+              normalized,
+              `deferred ${normalized} Four.Meme`,
+              normalizeFourMemeCreationHotIndex,
+            ),
+            causalBarrierKeys: readBscCausalBarrierKeys(record?.causalBarrierKeys, `deferred ${normalized}`),
+            ...(!Object.hasOwn(record || {}, "causalBarrierKeys")
+              ? { causalBarrierMigrationPending: true }
+              : {}),
+          }];
         }))
         : {},
       realtimePendingEntries: parsed.realtimePendingEntries && typeof parsed.realtimePendingEntries === "object" && !Array.isArray(parsed.realtimePendingEntries)
         ? Object.fromEntries(Object.entries(parsed.realtimePendingEntries).map(([transactionHash, record]) => {
           const normalized = normalizeTransactionHash(record?.transactionHash || transactionHash);
-          return [normalized, { ...record, transactionHash: normalized }];
+          return [normalized, {
+            ...record,
+            transactionHash: normalized,
+            flapCreationHotCandidates: readBscTransactionCreationEvidence(
+              record?.flapCreationHotCandidates,
+              normalized,
+              `pending ${normalized} Flap`,
+              normalizeFlapCreationHotIndex,
+            ),
+            fourMemeCreationHotCandidates: readBscTransactionCreationEvidence(
+              record?.fourMemeCreationHotCandidates,
+              normalized,
+              `pending ${normalized} Four.Meme`,
+              normalizeFourMemeCreationHotIndex,
+            ),
+            causalBarrierKeys: readBscCausalBarrierKeys(record?.causalBarrierKeys, `pending ${normalized}`),
+            ...(!Object.hasOwn(record || {}, "causalBarrierKeys")
+              ? { causalBarrierMigrationPending: true }
+              : {}),
+          }];
         }))
         : {},
       launchers: migratedLaunchers,
@@ -4772,6 +4959,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   );
   const healthSetTimeout = dependencies.healthSetTimeoutImpl || setTimeout;
   const healthClearTimeout = dependencies.healthClearTimeoutImpl || clearTimeout;
+  const backgroundSetTimeout = dependencies.backgroundSetTimeoutImpl || setTimeout;
+  const backgroundClearTimeout = dependencies.backgroundClearTimeoutImpl || clearTimeout;
+  const beforeCausalGroupReservation = dependencies.beforeCausalGroupReservationImpl || null;
   const autoStart = dependencies.autoStart !== false;
   const externalAttributionEnabled = dependencies.externalAttribution ?? autoStart;
   const focus3ChainScope = String(config.monitorScope || "").toLowerCase() === "focus3";
@@ -4846,7 +5036,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   let startRetryTimer = null;
   let watchdogTimer = null;
   let coverageTimer = null;
+  let coverageTimerDueAt = 0;
   let realtimeTimer = null;
+  let realtimeTimerDueAt = 0;
   let realtimeTailTimer = null;
   let nearHeadRecoveryTimer = null;
   let nearHeadRecoveryTimerDueAt = 0;
@@ -4876,6 +5068,15 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   let recoveryTarget = 0;
   let coverageRunning = false;
   let coverageRetryAt = 0;
+  let consecutiveHealthyRealtimeTailBatches = 0;
+  let backgroundDeepRpcInFlight = false;
+  let backgroundDeepRpcNextAt = 0;
+  let backgroundDeepHostRetryAt = 0;
+  let backgroundOldDeepRpcNextAt = 0;
+  const backgroundDeepPreferredLane = { sla: "realtime", fresh: "realtime", old: "realtime" };
+  let backgroundFreshDeepRpcStreak = 0;
+  let deferredEvidenceWakeTimer = null;
+  let deferredEvidenceWakeTimerDueAt = 0;
   let rpcId = 0;
   let fourMemeFastReplayRpcId = 0;
   let persistedCoverage = 0;
@@ -4906,6 +5107,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   const backgroundReplayTasks = new Set();
   const activeObservationProcessors = new Set();
   const pendingEventDeliveries = new Map();
+  // Runtime linearization for causal first-token claims. The reservation is
+  // created under stateLock only after every durable/in-progress predecessor
+  // has been checked; it is intentionally not held across process restarts.
+  const causalGroupReservations = new Map();
   let stateLock = Promise.resolve();
   let saveLock = Promise.resolve();
   let stateRevision = 0;
@@ -4939,6 +5144,420 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   let lastFlapReplayFailureFingerprint = null;
   let lastFlapReplayFailureLoggedAt = 0;
   let suppressedFlapReplayFailureLogs = 0;
+
+  const backgroundDeepPriorityEnabled = () => focus3ChainScope && started;
+
+  const currentDeepRpcPriority = () => bscDeepRpcPriority({
+    realtimeTailRunning,
+    realtimeTailNextBlock: state?.realtimeTailNextBlock,
+    confirmedBlock: Math.max(0, currentHead - (config.bscConfirmations ?? 2)),
+    realtimeTailStatus: state?._health?.realtimeTail?.status,
+    realtimeTailBackpressure: state?._health?.realtimeTail?.backpressureReason,
+    consecutiveHealthyTailBatches: consecutiveHealthyRealtimeTailBatches,
+    nearHeadGapCount: state?.nearHeadRecoveryGaps?.length || 0,
+  });
+
+  const isFreshBackgroundEntry = (entry, confirmedBlock, current = Number(now())) => {
+    const freshWindowBlocks = Math.max(
+      realtimeTailLookbackBlocks,
+      Math.ceil(BSC_DEEP_RPC_FRESH_WINDOW_MS / expectedBlockTimeMs),
+    );
+    const freshFromBlock = Math.max(0, Number(confirmedBlock) - freshWindowBlocks + 1);
+    const deliveryStartedAt = Date.parse(entry?.deliverySla?.startedAt || "");
+    return Number(entry?.blockNumber) >= freshFromBlock
+      || (Number.isFinite(deliveryStartedAt)
+        && deliveryStartedAt >= current - BSC_DEEP_RPC_FRESH_WINDOW_MS);
+  };
+
+  const backgroundDeliveryDeadline = (entry) => {
+    const deadline = Date.parse(entry?.deliverySla?.deadlineAt || "");
+    return Number.isFinite(deadline) && deadline > 0 ? deadline : Number.POSITIVE_INFINITY;
+  };
+
+  const hasActiveBackgroundDeliverySla = (entry, current) =>
+    backgroundDeliveryDeadline(entry) > current
+    && Number.isFinite(backgroundDeliveryDeadline(entry));
+
+  const backgroundFeatureKeys = (entry) => [
+    entry?.featureActivationReplayKey ? `feature:${entry.featureActivationReplayKey}` : null,
+    entry?.flapQuoteFirstThreeReplayGenerationKey
+      ? `first3:${entry.flapQuoteFirstThreeReplayGenerationKey}`
+      : null,
+    ...normalizeBscCausalBarrierKeys(entry?.causalBarrierKeys),
+  ].filter(Boolean);
+
+  const outstandingCausalEntries = () => {
+    const records = new Map();
+    for (const record of [
+      ...Object.values(state?.realtimePendingEntries || {}),
+      ...Object.values(state?.deferredCreationEvidence || {}),
+      // recoverLogRange populates queue before the state/WAL handoff. Official
+      // raw-evidence barriers in that interval must block a later fast claim.
+      ...[...queue.values()].filter((entry) => backgroundFeatureKeys(entry).length),
+    ]) {
+      const transactionHash = normalizeTransactionHash(record?.transactionHash);
+      if (!/^0x[0-9a-f]{64}$/.test(transactionHash)
+        || state?.seenTransactions?.[transactionHash]) continue;
+      const previous = records.get(transactionHash);
+      if (!previous) {
+        records.set(transactionHash, {
+          ...record,
+          transactionHash,
+          causalBarrierKeys: normalizeBscCausalBarrierKeys(record?.causalBarrierKeys),
+        });
+        continue;
+      }
+      previous.causalBarrierKeys = normalizeBscCausalBarrierKeys([
+        ...(previous.causalBarrierKeys || []),
+        ...(record.causalBarrierKeys || []),
+      ]);
+      for (const field of ["featureActivationReplayKey", "flapQuoteFirstThreeReplayGenerationKey"]) {
+        if (previous[field] && record?.[field] && previous[field] !== record[field]) {
+          throw new Error(`BSC causal key conflict for ${transactionHash} ${field}`);
+        }
+        previous[field] ||= record?.[field] || null;
+      }
+      if (compareBscQueueEntries(record, previous) < 0) {
+        previous.blockNumber = record.blockNumber;
+        previous.transactionIndex = record.transactionIndex;
+        previous.logIndex = record.logIndex;
+      }
+    }
+    return [...records.values()];
+  };
+
+  const isDurableBackgroundQueueEntry = (entry) => {
+    if (state?.realtimePendingEntries?.[entry.transactionHash]) return true;
+    const migration = (state?.migrationReplayTransactions || []).find((record) =>
+      normalizeTransactionHash(record?.transactionHash) === entry.transactionHash
+      && Number(record?.blockNumber) === Number(entry.blockNumber));
+    if (!migration || !entry.reasons?.has?.("v5_targeted_causal_attribution")) return false;
+    const candidates = new Set([...(entry.candidateTokens || [])].map((value) => String(value).toLowerCase()));
+    const verified = new Set([...(entry.verifiedNewContracts || [])].map((value) => String(value).toLowerCase()));
+    const tokens = [...new Set((migration.tokens || []).map((value) => String(value).toLowerCase()))];
+    return tokens.length > 0 && tokens.every((token) => ADDRESS.test(token)
+      && candidates.has(token)
+      && verified.has(token));
+  };
+
+  const isDurableCausalGroupHead = (entry) => {
+    const keys = backgroundFeatureKeys(entry);
+    if (!keys.length) return true;
+    const transactionHash = normalizeTransactionHash(entry?.transactionHash);
+    const outstanding = outstandingCausalEntries();
+    for (const key of keys) {
+      const reservation = causalGroupReservations.get(key);
+      if (reservation) {
+        if (reservation.transactionHash !== transactionHash) return false;
+        continue;
+      }
+      const head = outstanding
+        .filter((record) => backgroundFeatureKeys(record).includes(key))
+        .sort(compareBscQueueEntries)[0];
+      if (head && normalizeTransactionHash(head.transactionHash) !== transactionHash) return false;
+    }
+    return true;
+  };
+
+  const reserveDurableCausalGroups = (entry) => {
+    const transactionHash = normalizeTransactionHash(entry?.transactionHash);
+    const keys = backgroundFeatureKeys(entry);
+    if (!keys.length) return { transactionHash, keys: [] };
+    if (!isDurableCausalGroupHead(entry)) return null;
+    for (const key of keys) {
+      const current = causalGroupReservations.get(key);
+      if (current && current.transactionHash !== transactionHash) return null;
+    }
+    const reservation = { transactionHash, keys, nonce: Symbol(transactionHash) };
+    for (const key of keys) causalGroupReservations.set(key, reservation);
+    return reservation;
+  };
+
+  const releaseDurableCausalGroups = (reservation) => {
+    for (const key of reservation?.keys || []) {
+      if (causalGroupReservations.get(key)?.nonce === reservation.nonce) {
+        causalGroupReservations.delete(key);
+      }
+    }
+  };
+
+  const compareBackgroundEntries = (left, right) => {
+    const leftGroups = backgroundFeatureKeys(left);
+    const rightGroups = new Set(backgroundFeatureKeys(right));
+    if (leftGroups.some((key) => rightGroups.has(key))) return compareBscQueueEntries(left, right);
+    return backgroundDeliveryDeadline(left) - backgroundDeliveryDeadline(right)
+      || compareBscQueueEntries(left, right)
+      || Date.parse(left?.nextAttemptAt || 0) - Date.parse(right?.nextAttemptAt || 0);
+  };
+
+  const resetRealtimeTailDeepReadiness = () => {
+    consecutiveHealthyRealtimeTailBatches = 0;
+  };
+
+  const recordRealtimeTailDeepReadiness = () => {
+    const priority = bscDeepRpcPriority({
+      realtimeTailRunning: false,
+      realtimeTailNextBlock: state?.realtimeTailNextBlock,
+      confirmedBlock: Math.max(0, currentHead - (config.bscConfirmations ?? 2)),
+      realtimeTailStatus: state?._health?.realtimeTail?.status,
+      realtimeTailBackpressure: state?._health?.realtimeTail?.backpressureReason,
+      consecutiveHealthyTailBatches: consecutiveHealthyRealtimeTailBatches,
+      nearHeadGapCount: state?.nearHeadRecoveryGaps?.length || 0,
+    });
+    if (priority.tailPriority || state?._health?.realtimeTail?.status !== "healthy") {
+      resetRealtimeTailDeepReadiness();
+      return;
+    }
+    consecutiveHealthyRealtimeTailBatches = Math.min(
+      BSC_DEEP_RPC_HEALTHY_TAIL_BATCHES,
+      consecutiveHealthyRealtimeTailBatches + 1,
+    );
+  };
+
+  const backgroundDeepEligibility = (current = Number(now())) => {
+    const durableTailConfirmed = Number.isSafeInteger(Number(state?.realtimeTailNextBlock))
+      ? Math.max(0, Number(state.realtimeTailNextBlock) - 1)
+      : 0;
+    const confirmed = Math.max(
+      0,
+      currentHead - (config.bscConfirmations ?? 2),
+      durableTailConfirmed,
+    );
+    const priority = currentDeepRpcPriority();
+    const allQueued = [...queue.values()]
+      .filter((entry) => Number(entry.blockNumber) <= confirmed
+        && !state?.seenTransactions?.[entry.transactionHash]
+        // Every focus3 background candidate must cross a checksummed state/WAL
+        // handoff before deep reads or alerting. recoverLogRange also populates
+        // the process-local queue, so filtering only during capacity errors
+        // would let a failed history/tail commit leak an un-durable candidate.
+        && isDurableBackgroundQueueEntry(entry));
+    const allDeferredForDependencies = Object.values(state?.deferredCreationEvidence || {});
+    const featureHeads = new Map();
+    const causalGroupDeadlines = new Map();
+    for (const entry of [...allQueued, ...allDeferredForDependencies]) {
+      for (const key of backgroundFeatureKeys(entry)) {
+        const previous = featureHeads.get(key);
+        if (!previous || compareBscQueueEntries(entry, previous) < 0) featureHeads.set(key, entry);
+        if (hasActiveBackgroundDeliverySla(entry, current)) {
+          causalGroupDeadlines.set(key, Math.min(
+            causalGroupDeadlines.get(key) ?? Number.POSITIVE_INFINITY,
+            backgroundDeliveryDeadline(entry),
+          ));
+        }
+      }
+    }
+    const effectiveSlaDeadlines = new Map();
+    for (const [key, head] of featureHeads) {
+      const inheritedDeadline = causalGroupDeadlines.get(key);
+      if (!Number.isFinite(inheritedDeadline)) continue;
+      effectiveSlaDeadlines.set(head.transactionHash, Math.min(
+        effectiveSlaDeadlines.get(head.transactionHash) ?? Number.POSITIVE_INFINITY,
+        inheritedDeadline,
+      ));
+    }
+    const effectiveDeadline = (entry) => Math.min(
+      backgroundDeliveryDeadline(entry),
+      effectiveSlaDeadlines.get(entry.transactionHash) ?? Number.POSITIVE_INFINITY,
+    );
+    const hasEffectiveSla = (entry) => Number.isFinite(effectiveDeadline(entry))
+      && effectiveDeadline(entry) > current;
+    const compareEffectiveBackgroundEntries = (left, right) =>
+      effectiveDeadline(left) - effectiveDeadline(right)
+      || compareBackgroundEntries(left, right);
+    const isFeatureHead = (entry) => backgroundFeatureKeys(entry)
+      .every((key) => featureHeads.get(key)?.transactionHash === entry.transactionHash);
+    const hostCooling = backgroundDeepHostRetryAt > current;
+    const queued = (realtimeRetryAt > current || hostCooling ? [] : allQueued)
+      .filter((entry) => isFeatureHead(entry)
+        && !inFlightEntries.has(entry.transactionHash)
+        && !websocketProofReservations.has(entry.transactionHash)
+        && Number(websocketHttpFallbackRetryAt.get(entry.transactionHash) || 0) <= current)
+      .sort(compareEffectiveBackgroundEntries);
+    const queuedCausalGroups = new Set(allQueued.flatMap((entry) => backgroundFeatureKeys(entry)));
+    const deferredCapacityUnlocks = allDeferredForDependencies.filter((record) =>
+      isFeatureHead(record)
+      && backgroundFeatureKeys(record).some((key) => queuedCausalGroups.has(key)));
+    // During capacity backpressure, first drain any safe durable pending entry.
+    // If every pending entry is causally blocked by an earlier deferred record,
+    // admit only that exact group head so the queue can subsequently drain
+    // without ever allowing the later first-token candidate to overtake it.
+    const allDeferred = hostCooling
+      ? []
+      : priority.capacityBackpressure
+      ? (queued.length > 0 ? [] : deferredCapacityUnlocks)
+      : allDeferredForDependencies;
+    const deferred = allDeferred
+      .filter((record) => isFeatureHead(record)
+        && (Date.parse(record.nextAttemptAt || 0) <= current || hasEffectiveSla(record))
+        && !inFlightEntries.has(record.transactionHash))
+      .sort(compareEffectiveBackgroundEntries);
+    return {
+      current,
+      confirmed,
+      hostRetryAt: backgroundDeepHostRetryAt,
+      capacityDependencyUnlock: priority.capacityBackpressure && deferred.length > 0,
+      effectiveSlaDeadlines,
+      priority,
+      realtime: {
+        sla: queued.filter((entry) => hasEffectiveSla(entry)),
+        fresh: queued.filter((entry) => !hasEffectiveSla(entry)
+          && isFreshBackgroundEntry(entry, confirmed, current)),
+        old: queued.filter((entry) => !hasEffectiveSla(entry)
+          && !isFreshBackgroundEntry(entry, confirmed, current)),
+      },
+      deferred: {
+        sla: deferred.filter((entry) => hasEffectiveSla(entry)),
+        fresh: deferred.filter((entry) => !hasEffectiveSla(entry)
+          && isFreshBackgroundEntry(entry, confirmed, current)),
+        old: deferred.filter((entry) => !hasEffectiveSla(entry)
+          && !isFreshBackgroundEntry(entry, confirmed, current)),
+      },
+    };
+  };
+
+  const backgroundDeepTarget = (eligibility) => {
+    const hasSla = eligibility.realtime.sla.length > 0 || eligibility.deferred.sla.length > 0;
+    const hasFresh = eligibility.realtime.fresh.length > 0 || eligibility.deferred.fresh.length > 0;
+    const hasOld = eligibility.realtime.old.length > 0 || eligibility.deferred.old.length > 0;
+    if (hasSla) return "sla";
+    if (!hasFresh && !hasOld) return null;
+    const oldDue = eligibility.current >= backgroundOldDeepRpcNextAt;
+    // Fresh work always receives the first slot. Once at least one fresh item
+    // has run, an already-due old item receives the next slot. With a durable
+    // repair gap that old slot is shared by both lanes only once per 30s;
+    // without gaps it alternates at the normal 750ms cadence.
+    if (hasFresh && (!hasOld || !oldDue || backgroundFreshDeepRpcStreak === 0)) return "fresh";
+    return hasOld && oldDue ? "old" : hasFresh ? "fresh" : null;
+  };
+
+  const backgroundDeepLane = (eligibility, workClass) => {
+    const realtimeReady = eligibility.realtime[workClass]?.length > 0;
+    const deferredReady = eligibility.deferred[workClass]?.length > 0;
+    if (realtimeReady && deferredReady) {
+      if (workClass === "sla") {
+        const effectiveDeadline = (entry) => Math.min(
+          backgroundDeliveryDeadline(entry),
+          eligibility.effectiveSlaDeadlines?.get(entry.transactionHash) ?? Number.POSITIVE_INFINITY,
+        );
+        const realtimeDeadline = effectiveDeadline(eligibility.realtime.sla[0]);
+        const deferredDeadline = effectiveDeadline(eligibility.deferred.sla[0]);
+        if (realtimeDeadline !== deferredDeadline) {
+          return realtimeDeadline < deferredDeadline ? "realtime" : "deferred";
+        }
+      }
+      return backgroundDeepPreferredLane[workClass];
+    }
+    if (realtimeReady) return "realtime";
+    if (deferredReady) return "deferred";
+    return null;
+  };
+
+  const backgroundDeepRpcDelayMs = (workClass = null, eligibility = null) => {
+    const current = Number(now());
+    const snapshot = eligibility || (state ? backgroundDeepEligibility(current) : null);
+    let targetClass = workClass || (snapshot ? backgroundDeepTarget(snapshot) : null);
+    if (!targetClass && snapshot
+      && (snapshot.realtime.old.length > 0 || snapshot.deferred.old.length > 0)) targetClass = "old";
+    return Math.max(
+      25,
+      backgroundDeepRpcNextAt - current,
+      backgroundDeepHostRetryAt - current,
+      targetClass === "old" && snapshot
+        ? backgroundOldDeepRpcNextAt - current
+        : 0,
+      backgroundDeepRpcInFlight ? BSC_DEEP_RPC_PACE_MS : 0,
+    );
+  };
+
+  const acquireBackgroundDeepRpc = (lane, workClass, eligibility = null) => {
+    const snapshot = eligibility || backgroundDeepEligibility();
+    if (!snapshot.priority.allowFreshQueue || backgroundDeepRpcInFlight) return null;
+    if (snapshot.current < backgroundDeepHostRetryAt) return null;
+    const targetClass = backgroundDeepTarget(snapshot);
+    if (targetClass !== workClass || backgroundDeepLane(snapshot, targetClass) !== lane) return null;
+    if (snapshot.current < backgroundDeepRpcNextAt) return null;
+    if (workClass === "old" && snapshot.current < backgroundOldDeepRpcNextAt) return null;
+    backgroundDeepRpcInFlight = true;
+    backgroundDeepRpcNextAt = snapshot.current + BSC_DEEP_RPC_PACE_MS;
+    if (workClass === "fresh" || workClass === "sla") backgroundFreshDeepRpcStreak += 1;
+    else {
+      backgroundFreshDeepRpcStreak = 0;
+      backgroundOldDeepRpcNextAt = snapshot.current + snapshot.priority.oldDeepIntervalMs;
+    }
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      backgroundDeepRpcInFlight = false;
+      backgroundDeepPreferredLane[workClass] = lane === "realtime" ? "deferred" : "realtime";
+    };
+  };
+
+  function scheduleDeferredEvidence(delay = 25) {
+    if (stopped || deferredEvidenceRunning) return;
+    const current = Number(now());
+    const requestedDelay = Math.max(25, Number(delay) || 25);
+    const dueAt = current + requestedDelay;
+    if (deferredEvidenceWakeTimer) {
+      if (dueAt >= deferredEvidenceWakeTimerDueAt) return;
+      backgroundClearTimeout(deferredEvidenceWakeTimer);
+    }
+    deferredEvidenceWakeTimerDueAt = dueAt;
+    deferredEvidenceWakeTimer = backgroundSetTimeout(() => {
+      deferredEvidenceWakeTimer = null;
+      deferredEvidenceWakeTimerDueAt = 0;
+      void retryDeferredCreationEvidence();
+    }, requestedDelay);
+    deferredEvidenceWakeTimer.unref?.();
+  }
+
+  function wakeBackgroundDeepRpc(delay = 25) {
+    if (stopped || !state || !backgroundDeepPriorityEnabled()) return;
+    const eligibility = backgroundDeepEligibility();
+    if (eligibility.hostRetryAt > eligibility.current) {
+      const retryDelay = Math.max(25, eligibility.hostRetryAt - eligibility.current);
+      scheduleRealtime(retryDelay);
+      scheduleDeferredEvidence(retryDelay);
+      return;
+    }
+    if (!eligibility.priority.allowFreshQueue) {
+      if (eligibility.priority.tailPriority) scheduleRealtimeTail();
+      return;
+    }
+    let workClass = backgroundDeepTarget(eligibility);
+    if (!workClass) {
+      const hasOld = eligibility.realtime.old.length > 0 || eligibility.deferred.old.length > 0;
+      if (!hasOld) return;
+      workClass = "old";
+    }
+    if (backgroundDeepRpcInFlight) return;
+    const lane = backgroundDeepLane(eligibility, workClass);
+    const pacedDelay = Math.max(
+      Number(delay) || 25,
+      backgroundDeepRpcDelayMs(workClass, eligibility),
+    );
+    if (lane === "realtime") scheduleRealtime(pacedDelay);
+    else if (lane === "deferred") scheduleDeferredEvidence(pacedDelay);
+  }
+
+  async function markBackgroundDeepHostRecovered() {
+    if (backgroundDeepHostRetryAt <= 0 || Number(now()) < backgroundDeepHostRetryAt) return;
+    await withState(async () => {
+      if (backgroundDeepHostRetryAt <= 0 || Number(now()) < backgroundDeepHostRetryAt) return;
+      backgroundDeepHostRetryAt = 0;
+      state._health.backgroundDeepRpc = {
+        status: "healthy",
+        checkedAt: iso(now),
+        lastSuccessAt: iso(now),
+        rpcFailureScope: null,
+        rpcOperation: null,
+        retryDelayMs: null,
+        nextRetryAt: null,
+      };
+      await save();
+    });
+  }
 
   const flapReplayStoppedError = () => {
     const error = new Error("Flap activation replay stopped");
@@ -5564,11 +6183,48 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       }
       state = loaded;
       state.realtimePendingEntries ||= {};
+      // WAL frames are replayed after readState(), so an old-process frame can
+      // insert a record that never passed the snapshot migration/validator.
+      // Revalidate the authoritative post-WAL view before any scheduler can
+      // observe it; missing fields become conservative migration work, while
+      // malformed or over-capacity arrays fail startup closed.
+      for (const collection of [state.realtimePendingEntries, state.deferredCreationEvidence || {}]) {
+        for (const record of Object.values(collection || {})) {
+          const transactionHash = normalizeTransactionHash(record.transactionHash);
+          record.flapCreationHotCandidates = readBscTransactionCreationEvidence(
+            record.flapCreationHotCandidates,
+            transactionHash,
+            `post-WAL ${transactionHash} Flap`,
+            normalizeFlapCreationHotIndex,
+          );
+          record.fourMemeCreationHotCandidates = readBscTransactionCreationEvidence(
+            record.fourMemeCreationHotCandidates,
+            transactionHash,
+            `post-WAL ${transactionHash} Four.Meme`,
+            normalizeFourMemeCreationHotIndex,
+          );
+          if (!Object.hasOwn(record || {}, "causalBarrierKeys")) {
+            record.causalBarrierKeys = [];
+            record.causalBarrierMigrationPending = true;
+          } else {
+            record.causalBarrierKeys = readBscCausalBarrierKeys(
+              record.causalBarrierKeys,
+              `post-WAL ${transactionHash}`,
+            );
+          }
+        }
+      }
       compactNearHeadRecoveryState();
       markLegacyLossyFocus3Coverage();
       const persistedRealtimeRetryAt = Date.parse(state._health?.realtimeQueue?.nextRetryAt || "");
       realtimeRetryAt = Number.isFinite(persistedRealtimeRetryAt) && persistedRealtimeRetryAt > now()
         ? persistedRealtimeRetryAt
+        : 0;
+      const persistedBackgroundHostRetryAt = Date.parse(state._health?.backgroundDeepRpc?.nextRetryAt || "");
+      backgroundDeepHostRetryAt = state._health?.backgroundDeepRpc?.rpcFailureScope === "host"
+        && Number.isFinite(persistedBackgroundHostRetryAt)
+        && persistedBackgroundHostRetryAt > now()
+        ? persistedBackgroundHostRetryAt
         : 0;
       const persistedTailRetryAt = Date.parse(state._health?.realtimeTail?.nextRetryAt || "");
       realtimeTailRetryAt = Number.isFinite(persistedTailRetryAt) && persistedTailRetryAt > now()
@@ -5609,7 +6265,58 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         now(),
       );
       suppressExcludedFourMemeTemplateActivations(state, iso(now));
+      if (focus3ChainScope) {
+        // State written before barrier-aware scheduling has no receipt topic
+        // identity, so it cannot be safely assigned to one exact activation.
+        // Conservatively bind each such durable candidate to every currently
+        // unresolved official group. Deep receipt classification removes the
+        // impossible keys in one later WAL frame. This is delay-only and makes
+        // upgrades fail closed instead of letting a new WS candidate overtake
+        // an older pre-upgrade record.
+        for (const collection of [state.realtimePendingEntries, state.deferredCreationEvidence]) {
+          for (const record of Object.values(collection || {})) {
+            if (record?.causalBarrierMigrationPending !== true) continue;
+            record.causalBarrierKeys = legacyCausalBarrierKeysForRecord(record);
+            delete record.causalBarrierMigrationPending;
+          }
+        }
+      } else {
+        for (const collection of [state.realtimePendingEntries, state.deferredCreationEvidence]) {
+          for (const record of Object.values(collection || {})) {
+            delete record.causalBarrierMigrationPending;
+          }
+        }
+      }
       migrateLegacyRealtimeTailHandoff();
+      // Normalize v5's durable targeted-replay list into the unified pending
+      // WAL before background scheduling. If the pending store is already at
+      // capacity, retain the closed legacy record as its own durable admission
+      // source so startup can drain space instead of deadlocking in init.
+      if (focus3ChainScope) {
+        const migrationReplayEntries = [];
+        for (const target of state.migrationReplayTransactions || []) {
+          enqueue(target.transactionHash, target.blockNumber, "v5_targeted_causal_attribution", {
+            mintEmitters: target.tokens,
+            candidateTokens: target.tokens,
+            verifiedNewContracts: target.tokens,
+          });
+          const entry = queue.get(normalizeTransactionHash(target.transactionHash));
+          if (entry) {
+            const barriers = legacyCausalBarrierKeysForRecord(entry);
+            if (JSON.stringify(barriers) !== JSON.stringify(entry.causalBarrierKeys || [])) {
+              entry.causalBarrierKeys = barriers;
+              entry.revision = Number(entry.revision || 0) + 1;
+            }
+            migrationReplayEntries.push(entry);
+          }
+        }
+        try {
+          persistRealtimePendingHandoff(migrationReplayEntries);
+          state.migrationReplayTransactions = [];
+        } catch (error) {
+          if (error?.code !== "BSC_REALTIME_PENDING_CAPACITY") throw error;
+        }
+      }
       if (focus3ChainScope) compactFocus3LiveCoverageState(state, {
         // Preserve more than the 15-minute Flap/Four activation replay
         // window, while dropping multi-day recovery work that cannot improve
@@ -5656,11 +6363,21 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         const entry = deserializeRealtimePendingEntry(record);
         queue.set(entry.transactionHash, entry);
       }
-      for (const target of state.migrationReplayTransactions || []) enqueue(target.transactionHash, target.blockNumber, "v5_targeted_causal_attribution", {
-        mintEmitters: target.tokens,
-        candidateTokens: target.tokens,
-        verifiedNewContracts: target.tokens,
-      });
+      for (const target of state.migrationReplayTransactions || []) {
+        enqueue(target.transactionHash, target.blockNumber, "v5_targeted_causal_attribution", {
+          mintEmitters: target.tokens,
+          candidateTokens: target.tokens,
+          verifiedNewContracts: target.tokens,
+        });
+        const entry = queue.get(normalizeTransactionHash(target.transactionHash));
+        if (entry) {
+          const barriers = legacyCausalBarrierKeysForRecord(entry);
+          if (JSON.stringify(barriers) !== JSON.stringify(entry.causalBarrierKeys || [])) {
+            entry.causalBarrierKeys = barriers;
+            entry.revision = Number(entry.revision || 0) + 1;
+          }
+        }
+      }
       return state;
     })().catch((error) => {
       state = null;
@@ -6129,6 +6846,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
             allowReplay: true,
             verificationLane: plan.verificationLane,
           });
+          backfillNewFeatureCausalBarrier(
+            draft,
+            "fourmeme",
+            plan.activationKey,
+            official.featureActivations[plan.activationKey],
+          );
         }
         delete official.pendingTemplates[plan.id];
         return true;
@@ -6275,14 +6998,15 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     const official = targetState.officialSources?.fourMeme;
     if (!official) return { changed: false, replayKeys: [] };
     const previous = normalizeFourMemeCreationHotIndex(official.creationEventHotIndex, now());
-    const previousKeys = new Set(previous.map(fourMemeCreationCandidateKey));
     const next = normalizeFourMemeCreationHotIndex([...previous, ...candidates], now());
-    const added = next.filter((candidate) => !previousKeys.has(fourMemeCreationCandidateKey(candidate)));
+    const inputKeys = new Set(normalizeFourMemeCreationHotIndex(candidates, null)
+      .map(fourMemeCreationCandidateKey));
+    const classified = next.filter((candidate) => inputKeys.has(fourMemeCreationCandidateKey(candidate)));
     official.creationEventHotIndex = next;
     const replayKeys = [];
     for (const [key, activation] of Object.entries(official.featureActivations || {})) {
       if (activation.active === false || activation.firstTokenAlertedAt || activation.firstTokenTransactionHash) continue;
-      if (!added.some((candidate) => !fourMemeReplayCandidateWasAttempted(activation, candidate)
+      if (!classified.some((candidate) => !fourMemeReplayCandidateWasAttempted(activation, candidate)
         && fourMemeCandidateMatchesActivation(candidate, activation))) continue;
       // A completed archive replay can race with the realtime candidate that
       // it was meant to protect. Reopen it atomically with the hot-index
@@ -6294,8 +7018,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       replayKeys.push(key);
     }
     return {
-      changed: previous.length !== next.length
-        || previous.some((candidate, index) => fourMemeCreationCandidateKey(candidate) !== fourMemeCreationCandidateKey(next[index])),
+      changed: JSON.stringify(previous) !== JSON.stringify(next),
       replayKeys,
     };
   }
@@ -6801,9 +7524,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     const official = targetState.officialSources?.flap;
     if (!official) return { changed: false, replayNeeded: false };
     const previous = normalizeFlapCreationHotIndex(official.creationEventHotIndex, now());
-    const previousKeys = new Set(previous.map(flapCreationCandidateKey));
     const next = normalizeFlapCreationHotIndex([...previous, ...candidates], now());
-    const added = next.filter((candidate) => !previousKeys.has(flapCreationCandidateKey(candidate)));
+    const inputKeys = new Set(normalizeFlapCreationHotIndex(candidates, null)
+      .map(flapCreationCandidateKey));
+    const classified = next.filter((candidate) => inputKeys.has(flapCreationCandidateKey(candidate)));
     official.creationEventHotIndex = next;
     let replayNeeded = false;
     for (const activation of Object.values(official.featureActivations || {})) {
@@ -6811,7 +7535,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       const attempted = new Set((Array.isArray(activation.replayAttemptedTransactionHashes)
         ? activation.replayAttemptedTransactionHashes
         : []).map(normalizeTransactionHash));
-      if (!added.some((candidate) => !attempted.has(candidate.transactionHash)
+      if (!classified.some((candidate) => !attempted.has(candidate.transactionHash)
         && flapCandidateMatchesActivation(candidate, activation))) continue;
       replayNeeded = true;
       // A chain observation can finish preparation just before Board
@@ -6823,8 +7547,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       }
     }
     return {
-      changed: previous.length !== next.length
-        || previous.some((candidate, index) => flapCreationCandidateKey(candidate) !== flapCreationCandidateKey(next[index])),
+      changed: JSON.stringify(previous) !== JSON.stringify(next),
       replayNeeded,
     };
   }
@@ -7323,6 +8046,11 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           window.replayLastError = null;
         }
         firstThree.activeByQuote[record.quoteAddress] = window.generationKey;
+        // A candidate can be durably handed off while this generation is
+        // disabled. Re-attach the causal key in the same lifecycle commit that
+        // makes the generation claimable again, before archive replay or a
+        // later WebSocket candidate can reserve an ordinal.
+        backfillNewFlapFirstThreeBarrier(state, window.generationKey, window);
         firstThree.lifecycleEvents[record.activationEventKey] = {
           action: "restored",
           quoteAddress: record.quoteAddress,
@@ -7449,6 +8177,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           createdAt: iso(now),
         };
         firstThree.windows[generationKey] = window;
+        backfillNewFlapFirstThreeBarrier(state, generationKey, window);
       } else if (window.activationEventKey !== record.activationEventKey
         || window.quoteAddress !== record.quoteAddress
         || window.activationBlockHash !== record.blockHash
@@ -7520,6 +8249,117 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     }) > 0;
   }
 
+  function addCausalBarrierToTransaction(targetState, transactionHash, causalKey) {
+    const normalizedHash = normalizeTransactionHash(transactionHash);
+    let changed = false;
+    for (const collection of [
+      targetState?.realtimePendingEntries || {},
+      targetState?.deferredCreationEvidence || {},
+    ]) {
+      const record = collection[normalizedHash];
+      if (!record || targetState?.seenTransactions?.[normalizedHash]) continue;
+      const next = normalizeBscCausalBarrierKeys([...(record.causalBarrierKeys || []), causalKey]);
+      if (JSON.stringify(next) === JSON.stringify(record.causalBarrierKeys || [])) continue;
+      record.causalBarrierKeys = next;
+      record.revision = Number(record.revision || 0) + 1;
+      changed = true;
+    }
+    const queued = queue.get(normalizedHash);
+    if (queued && !targetState?.seenTransactions?.[normalizedHash]) {
+      const next = normalizeBscCausalBarrierKeys([...(queued.causalBarrierKeys || []), causalKey]);
+      if (JSON.stringify(next) !== JSON.stringify(queued.causalBarrierKeys || [])) {
+        queued.causalBarrierKeys = next;
+        queued.revision = Number(queued.revision || 0) + 1;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  function queuedFlapCreationHotCandidates() {
+    return [...queue.values()].flatMap((entry) => [
+      ...(entry.flapCreationHotCandidates?.values?.() || []),
+    ]);
+  }
+
+  function durableFlapCreationHotCandidates(targetState = state) {
+    return [
+      ...Object.values(targetState?.realtimePendingEntries || {}),
+      ...Object.values(targetState?.deferredCreationEvidence || {}),
+    ].flatMap((record) => record?.flapCreationHotCandidates || []);
+  }
+
+  function queuedFourMemeCreationHotCandidates() {
+    return [...queue.values()].flatMap((entry) => [
+      ...(entry.fourMemeCreationHotCandidates?.values?.() || []),
+    ]);
+  }
+
+  function durableFourMemeCreationHotCandidates(targetState = state) {
+    return [
+      ...Object.values(targetState?.realtimePendingEntries || {}),
+      ...Object.values(targetState?.deferredCreationEvidence || {}),
+    ].flatMap((record) => record?.fourMemeCreationHotCandidates || []);
+  }
+
+  function backfillNewFeatureCausalBarrier(targetState, platform, activationKey, activation) {
+    if (!activationKey || activation?.allowReplay !== true || activation?.active === false) return 0;
+    const causalKey = `feature:${activationKey}`;
+    let candidates = [];
+    if (platform === "flap") {
+      candidates = normalizeFlapCreationHotIndex([
+        ...normalizeFlapCreationHotIndex(targetState?.officialSources?.flap?.creationEventHotIndex, now()),
+        ...durableFlapCreationHotCandidates(targetState),
+        ...queuedFlapCreationHotCandidates(),
+      ], null).filter((candidate) => flapRawCandidateMatchesActivation(candidate, activation)
+        && candidateInActivationBlockWindow(
+          candidate,
+          activation,
+          FLAP_ACTIVATION_REPLAY_LOOKBACK_MS,
+          targetState,
+          { conservative: true },
+        ));
+    } else if (platform === "fourmeme") {
+      candidates = normalizeFourMemeCreationHotIndex([
+        ...normalizeFourMemeCreationHotIndex(targetState?.officialSources?.fourMeme?.creationEventHotIndex, now()),
+        ...durableFourMemeCreationHotCandidates(targetState),
+        ...queuedFourMemeCreationHotCandidates(),
+      ], null).filter((candidate) => fourMemeCandidateMatchesActivation(
+        candidate,
+        activation,
+        { requireEventTime: false },
+      ) && candidateInActivationBlockWindow(
+        candidate,
+        activation,
+        FOUR_MEME_ACTIVATION_REPLAY_LOOKBACK_MS,
+        targetState,
+        { conservative: true },
+      ));
+    }
+    let changed = 0;
+    for (const transactionHash of new Set(candidates.map((candidate) => candidate.transactionHash))) {
+      if (addCausalBarrierToTransaction(targetState, transactionHash, causalKey)) changed += 1;
+    }
+    return changed;
+  }
+
+  function backfillNewFlapFirstThreeBarrier(targetState, generationKey, window) {
+    if (!generationKey || window?.active !== true) return 0;
+    const causalKey = `first3:${generationKey}`;
+    const candidates = normalizeFlapCreationHotIndex([
+      ...normalizeFlapCreationHotIndex(targetState?.officialSources?.flap?.creationEventHotIndex, now()),
+      ...durableFlapCreationHotCandidates(targetState),
+      ...queuedFlapCreationHotCandidates(),
+    ], null).filter((candidate) => candidate.topic === FLAP_TOKEN_CREATED_TOPIC
+      && candidate.launcher === FLAP_PORTAL_ADDRESS
+      && flapQuoteCandidateAfterActivation(candidate, window));
+    let changed = 0;
+    for (const transactionHash of new Set(candidates.map((candidate) => candidate.transactionHash))) {
+      if (addCausalBarrierToTransaction(targetState, transactionHash, causalKey)) changed += 1;
+    }
+    return changed;
+  }
+
   function verifiedFlapQuotePair(pools = [], tokenAddress, quoteAddress) {
     const token = String(tokenAddress || "").toLowerCase();
     const quote = String(quoteAddress || "").toLowerCase();
@@ -7537,8 +8377,16 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     }).sort((left, right) => String(left.pool).toLowerCase().localeCompare(String(right.pool).toLowerCase()))[0] || null;
   }
 
-  function coarseFlapQuoteFirstThreeMatches(snapshot, observation, candidates = []) {
-    const replayGenerationKey = observation?.flapQuoteFirstThreeReplayGenerationKey || null;
+  function coarseFlapQuoteFirstThreeMatches(
+    snapshot,
+    observation,
+    candidates = [],
+    authorizedGenerationKeys = [],
+  ) {
+    const replayGenerationKeys = new Set([
+      observation?.flapQuoteFirstThreeReplayGenerationKey,
+      ...authorizedGenerationKeys,
+    ].filter(Boolean));
     const windows = activeFlapQuoteFirstThreeWindows(snapshot);
     const matches = [];
     for (const candidate of [...candidates].sort(compareFlapQuoteTokenCandidates)) {
@@ -7549,7 +8397,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       const token = (observation?.tokens || []).find((item) => String(item?.token || "").toLowerCase() === tokenAddress);
       if (!token) continue;
       for (const [generationKey, window] of windows) {
-        if (!window.replayCompletedAt && replayGenerationKey !== generationKey) continue;
+        if (!window.replayCompletedAt && !replayGenerationKeys.has(generationKey)) continue;
         if (!flapQuoteCandidateAfterActivation(candidate, window)) continue;
         const pair = verifiedFlapQuotePair(observation?.pools, tokenAddress, window.quoteAddress);
         if (!pair) continue;
@@ -7560,8 +8408,13 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       || left.window.quoteAddress.localeCompare(right.window.quoteAddress));
   }
 
-  function hasFlapQuoteFirstThreeMatch(snapshot, observation, candidates = []) {
-    return coarseFlapQuoteFirstThreeMatches(snapshot, observation, candidates).length > 0;
+  function hasFlapQuoteFirstThreeMatch(snapshot, observation, candidates = [], authorizedGenerationKeys = []) {
+    return coarseFlapQuoteFirstThreeMatches(
+      snapshot,
+      observation,
+      candidates,
+      authorizedGenerationKeys,
+    ).length > 0;
   }
 
   function normalizedFlapEventPool(pool) {
@@ -7823,7 +8676,18 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       logIndex: match.candidate.logIndex,
       token: tokenAddress,
     });
+    if (beforeCausalGroupReservation) {
+      await beforeCausalGroupReservation({
+        transactionHash: normalizeTransactionHash(observation.transactionHash),
+        causalKeys: [`first3:${match.generationKey}`],
+        claim: "flap_first_three",
+      });
+    }
     return withState(async () => {
+      if (!isDurableCausalGroupHead({
+        transactionHash: normalizeTransactionHash(observation.transactionHash),
+        flapQuoteFirstThreeReplayGenerationKey: match.generationKey,
+      })) return null;
       const firstThree = state.officialSources?.flap?.quotePoolFirstThree;
       const window = firstThree?.windows?.[match.generationKey];
       if (!window || window.active !== true
@@ -7938,14 +8802,28 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     return delivery.value || slot.event;
   }
 
-  async function processFlapQuoteFirstThreeCandidates(observation, candidates = []) {
-    let matches = await withState(() => coarseFlapQuoteFirstThreeMatches(state, observation, candidates));
+  async function processFlapQuoteFirstThreeCandidates(
+    observation,
+    candidates = [],
+    authorizedGenerationKeys = [],
+  ) {
+    let matches = await withState(() => coarseFlapQuoteFirstThreeMatches(
+      state,
+      observation,
+      candidates,
+      authorizedGenerationKeys,
+    ));
     if (!matches.length) return [];
     if (!observation.tokenAssessments) {
       const snapshot = await withState(() => structuredClone(state));
       await enrich(observation, snapshot);
     }
-    matches = await withState(() => coarseFlapQuoteFirstThreeMatches(state, observation, candidates));
+    matches = await withState(() => coarseFlapQuoteFirstThreeMatches(
+      state,
+      observation,
+      candidates,
+      authorizedGenerationKeys,
+    ));
     if (!matches.length) return [];
     if (observation.canonical !== true
       || !/^0x[0-9a-f]{64}$/.test(String(observation.blockHash || "").toLowerCase())
@@ -8076,6 +8954,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           if (!flapQuoteCandidateAfterActivation(log, phase.window)) continue;
           const group = transactions.get(log.transactionHash) || {
             transactionHash: log.transactionHash,
+            blockHash: log.blockHash,
             blockNumber: log.blockNumber,
             transactionIndex: log.transactionIndex,
             logIndex: log.logIndex,
@@ -8088,23 +8967,45 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           transactions.set(log.transactionHash, group);
         }
         for (const group of [...transactions.values()].sort(compareBscQueueEntries)) {
+          let entry;
           await withState(async () => {
-            delete state.seenTransactions[group.transactionHash];
-            delete state.deferredCreationEvidence[group.transactionHash];
-            delete state.realtimePendingEntries[group.transactionHash];
+            const previousSeen = state.seenTransactions[group.transactionHash];
+            const previousPending = state.realtimePendingEntries[group.transactionHash];
+            const previousDeferred = state.deferredCreationEvidence[group.transactionHash];
+            const previousQueueEntry = queue.has(group.transactionHash)
+              ? structuredClone(queue.get(group.transactionHash)) : undefined;
+            try {
+              delete state.seenTransactions[group.transactionHash];
+              enqueue(group.transactionHash, group.blockNumber, "flap_quote_first_three_replay", {
+                blockHash: group.blockHash,
+                transactionIndex: group.transactionIndex,
+                logIndex: group.logIndex,
+                mintEmitters: group.tokens,
+                candidateTokens: group.tokens,
+                verifiedNewContracts: group.tokens,
+                flapQuoteFirstThreeReplayGenerationKey: generationKey,
+                protocol: true,
+              });
+              entry = queue.get(group.transactionHash);
+              if (!entry) throw new Error(`Flap first-three replay could not reserve ${group.transactionHash}`);
+              // Exact replay admission and removal of an obsolete seen owner
+              // are one WAL boundary. A restart, or a later WebSocket
+              // claimant, must never observe the old durable owner removed
+              // while the canonical predecessor exists only in memory.
+              persistRealtimePendingHandoff([entry]);
+            } catch (error) {
+              if (previousSeen === undefined) delete state.seenTransactions[group.transactionHash];
+              else state.seenTransactions[group.transactionHash] = previousSeen;
+              if (previousPending === undefined) delete state.realtimePendingEntries[group.transactionHash];
+              else state.realtimePendingEntries[group.transactionHash] = previousPending;
+              if (previousDeferred === undefined) delete state.deferredCreationEvidence[group.transactionHash];
+              else state.deferredCreationEvidence[group.transactionHash] = previousDeferred;
+              if (previousQueueEntry === undefined) queue.delete(group.transactionHash);
+              else queue.set(group.transactionHash, previousQueueEntry);
+              throw error;
+            }
             await save();
           });
-          enqueue(group.transactionHash, group.blockNumber, "flap_quote_first_three_replay", {
-            transactionIndex: group.transactionIndex,
-            logIndex: group.logIndex,
-            mintEmitters: group.tokens,
-            candidateTokens: group.tokens,
-            verifiedNewContracts: group.tokens,
-            flapQuoteFirstThreeReplayGenerationKey: generationKey,
-            protocol: true,
-          });
-          const entry = queue.get(group.transactionHash);
-          if (!entry) throw new Error(`Flap first-three replay could not reserve ${group.transactionHash}`);
           await processEntries([entry], 1);
           await withState(async () => {
             const window = state.officialSources?.flap?.quotePoolFirstThree?.windows?.[generationKey];
@@ -8215,6 +9116,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
             }
           }
           official.featureActivations[key] = flapActivationRecord(pool);
+          backfillNewFeatureCausalBarrier(state, "flap", key, official.featureActivations[key]);
           createdCount += 1;
         }
         const activation = official.featureActivations[key];
@@ -8283,6 +9185,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
             changeType: eligibleRecords.find((record) => String((record.quoteConfig || record).address || "").toLowerCase() === config.address)?.changeType,
             firstObservedAt: eligibleRecords.find((record) => String((record.quoteConfig || record).address || "").toLowerCase() === config.address)?.firstObservedAt || observedAt,
           });
+          backfillNewFeatureCausalBarrier(state, "fourmeme", key, official.featureActivations[key]);
           created.push(key);
         }
         const external = state.discoverySources?.external?.contracts?.[config.address];
@@ -8342,6 +9245,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
             changeType: previous ? "published_quote_address_changed" : "new_published_quote",
             firstObservedAt: next.firstObservedAt,
           });
+          backfillNewFeatureCausalBarrier(state, "fourmeme", key, official.featureActivations[key]);
           created.push(key);
         }
       }
@@ -9073,14 +9977,38 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
 
   function enqueue(transactionHash, blockNumber, reason, details = {}) {
     const normalizedTransactionHash = normalizeTransactionHash(transactionHash);
-    if (!normalizedTransactionHash || state?.seenTransactions?.[normalizedTransactionHash] || state?.deferredCreationEvidence?.[normalizedTransactionHash]) return;
-    const entry = queue.get(normalizedTransactionHash) || { transactionHash: normalizedTransactionHash, blockNumber: Number(blockNumber), transactionIndex: bscQueuePosition(details.transactionIndex), logIndex: bscQueuePosition(details.logIndex), reasons: new Set(), mintEmitters: new Set(), candidateTokens: new Set(), upgradeEmitters: new Set(), lifecycleEmitters: new Set(), hookPools: new Map(), verifiedNewContracts: new Set(), hasProtocolTrigger: false, deliverySla: null, revision: 0 };
+    if (!normalizedTransactionHash || state?.seenTransactions?.[normalizedTransactionHash]) return;
+    const entry = queue.get(normalizedTransactionHash)
+      || (state?.deferredCreationEvidence?.[normalizedTransactionHash]
+        ? deserializeDeferredEntry(state.deferredCreationEvidence[normalizedTransactionHash])
+        : { transactionHash: normalizedTransactionHash, blockHash: null, blockNumber: Number(blockNumber), transactionIndex: bscQueuePosition(details.transactionIndex), logIndex: bscQueuePosition(details.logIndex), reasons: new Set(), mintEmitters: new Set(), candidateTokens: new Set(), upgradeEmitters: new Set(), lifecycleEmitters: new Set(), hookPools: new Map(), verifiedNewContracts: new Set(), flapCreationHotCandidates: new Map(), fourMemeCreationHotCandidates: new Map(), hasProtocolTrigger: false, deliverySla: null, causalBarrierKeys: [], revision: 0 });
+    entry.flapCreationHotCandidates ||= new Map();
+    entry.fourMemeCreationHotCandidates ||= new Map();
     let changed = !queue.has(normalizedTransactionHash);
-    const nextBlockNumber = Math.min(entry.blockNumber || Number(blockNumber), Number(blockNumber));
+    const incomingBlockNumber = Number(blockNumber);
+    const incomingBlockHash = normalizeTransactionHash(details.blockHash
+      || details.flapCreationHotCandidates?.[0]?.blockHash
+      || details.fourMemeCreationHotCandidates?.[0]?.blockHash);
+    const canonicalPositionChanged = Number.isSafeInteger(incomingBlockNumber)
+      && ((entry.blockNumber !== undefined && Number(entry.blockNumber) !== incomingBlockNumber)
+        || (/^0x[0-9a-f]{64}$/.test(incomingBlockHash)
+          && /^0x[0-9a-f]{64}$/.test(String(entry.blockHash || "").toLowerCase())
+          && incomingBlockHash !== String(entry.blockHash).toLowerCase()));
+    const nextBlockNumber = canonicalPositionChanged
+      ? incomingBlockNumber
+      : Math.min(entry.blockNumber || incomingBlockNumber, incomingBlockNumber);
     if (nextBlockNumber !== entry.blockNumber) changed = true;
     entry.blockNumber = nextBlockNumber;
-    const nextTransactionIndex = Math.min(bscQueuePosition(entry.transactionIndex), bscQueuePosition(details.transactionIndex));
-    const nextLogIndex = Math.min(bscQueuePosition(entry.logIndex), bscQueuePosition(details.logIndex));
+    if (/^0x[0-9a-f]{64}$/.test(incomingBlockHash) && entry.blockHash !== incomingBlockHash) {
+      entry.blockHash = incomingBlockHash;
+      changed = true;
+    }
+    const nextTransactionIndex = canonicalPositionChanged
+      ? bscQueuePosition(details.transactionIndex)
+      : Math.min(bscQueuePosition(entry.transactionIndex), bscQueuePosition(details.transactionIndex));
+    const nextLogIndex = canonicalPositionChanged
+      ? bscQueuePosition(details.logIndex)
+      : Math.min(bscQueuePosition(entry.logIndex), bscQueuePosition(details.logIndex));
     if (nextTransactionIndex !== entry.transactionIndex || nextLogIndex !== entry.logIndex) changed = true;
     entry.transactionIndex = nextTransactionIndex;
     entry.logIndex = nextLogIndex;
@@ -9134,6 +10062,32 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       entry.flapQuoteFirstThreeReplayGenerationKey = details.flapQuoteFirstThreeReplayGenerationKey;
       changed = true;
     }
+    const causalBarrierKeys = normalizeBscCausalBarrierKeys([
+      ...(entry.causalBarrierKeys || []),
+      ...(details.causalBarrierKeys || []),
+    ]);
+    if (JSON.stringify(causalBarrierKeys) !== JSON.stringify(entry.causalBarrierKeys || [])) {
+      entry.causalBarrierKeys = causalBarrierKeys;
+      changed = true;
+    }
+    for (const candidate of normalizeFlapCreationHotIndex(details.flapCreationHotCandidates || [], null)) {
+      const key = flapCreationCandidateKey(candidate);
+      const previous = entry.flapCreationHotCandidates.get(key);
+      const merged = normalizeFlapCreationHotIndex(previous ? [previous, candidate] : [candidate], null)[0];
+      if (!previous || JSON.stringify(previous) !== JSON.stringify(merged)) {
+        entry.flapCreationHotCandidates.set(key, merged);
+        changed = true;
+      }
+    }
+    for (const candidate of normalizeFourMemeCreationHotIndex(details.fourMemeCreationHotCandidates || [], null)) {
+      const key = fourMemeCreationCandidateKey(candidate);
+      const previous = entry.fourMemeCreationHotCandidates.get(key);
+      const merged = normalizeFourMemeCreationHotIndex(previous ? [previous, candidate] : [candidate], null)[0];
+      if (!previous || JSON.stringify(previous) !== JSON.stringify(merged)) {
+        entry.fourMemeCreationHotCandidates.set(key, merged);
+        changed = true;
+      }
+    }
     if (changed) entry.revision = Number(entry.revision || 0) + 1;
     queue.set(normalizedTransactionHash, entry);
   }
@@ -9142,11 +10096,75 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     return Math.min(300_000, 15_000 * (2 ** Math.min(Math.max(0, Number(attempts || 1) - 1), 5)));
   }
 
+  function mergeCurrentDurableEntry(entry, ...records) {
+    let mergedDurable = false;
+    for (const record of records.filter(Boolean)) {
+      mergedDurable = true;
+      // The entry is the current canonical handoff/retry proof. Never carry an
+      // older fork's position forward merely because its numeric block/index
+      // sorts first; only monotonic evidence fields are merged below.
+      for (const [field, kind] of [
+        ["reasons", "set"], ["mintEmitters", "set"], ["candidateTokens", "set"],
+        ["verifiedNewContracts", "set"], ["upgradeEmitters", "set"], ["lifecycleEmitters", "set"],
+      ]) {
+        entry[field] ||= new Set();
+        for (const value of record[field] || []) entry[field].add(value);
+      }
+      entry.hookPools ||= new Map();
+      for (const pool of record.hookPools || []) {
+        entry.hookPools.set(`${pool.factory}:${pool.poolId || pool.pool}`, pool);
+      }
+      entry.hasProtocolTrigger ||= Boolean(record.hasProtocolTrigger);
+      entry.deliverySla = earliestBscWebsocketDeliverySla(entry.deliverySla, record.deliverySla);
+      for (const field of ["featureActivationReplayKey", "flapQuoteFirstThreeReplayGenerationKey"]) {
+        if (entry[field] && record[field] && entry[field] !== record[field]) {
+          throw new Error(`${field} changed for ${entry.transactionHash}`);
+        }
+        entry[field] ||= record[field] || null;
+      }
+      entry.causalBarrierKeys = normalizeBscCausalBarrierKeys([
+        ...(entry.causalBarrierKeys || []),
+        ...(record.causalBarrierKeys || []),
+      ]);
+      entry.flapCreationHotCandidates ||= new Map();
+      for (const candidate of record.flapCreationHotCandidates || []) {
+        const key = flapCreationCandidateKey(candidate);
+        const previous = entry.flapCreationHotCandidates.get(key);
+        entry.flapCreationHotCandidates.set(
+          key,
+          normalizeFlapCreationHotIndex(previous ? [candidate, previous] : [candidate], null)[0],
+        );
+      }
+      entry.fourMemeCreationHotCandidates ||= new Map();
+      for (const candidate of record.fourMemeCreationHotCandidates || []) {
+        const key = fourMemeCreationCandidateKey(candidate);
+        const previous = entry.fourMemeCreationHotCandidates.get(key);
+        entry.fourMemeCreationHotCandidates.set(
+          key,
+          normalizeFourMemeCreationHotIndex(previous ? [candidate, previous] : [candidate], null)[0],
+        );
+      }
+      entry.revision = Math.max(Number(entry.revision || 0), Number(record.revision || 0));
+    }
+    if (mergedDurable) entry.revision = Number(entry.revision || 0) + 1;
+    return entry;
+  }
+
   function serializeRealtimePendingEntry(entry, previous = {}) {
     const observedAt = iso(now);
     const deliverySla = earliestBscWebsocketDeliverySla(entry.deliverySla, previous.deliverySla);
+    const flapCreationHotCandidates = normalizeBscTransactionCreationEvidence([
+      ...(previous.flapCreationHotCandidates || []),
+      ...(entry.flapCreationHotCandidates?.values?.() || []),
+    ], entry.transactionHash, "Flap", normalizeFlapCreationHotIndex);
+    const fourMemeCreationHotCandidates = normalizeBscTransactionCreationEvidence([
+      ...(previous.fourMemeCreationHotCandidates || []),
+      ...(entry.fourMemeCreationHotCandidates?.values?.() || []),
+    ], entry.transactionHash, "Four.Meme", normalizeFourMemeCreationHotIndex);
     return {
       transactionHash: normalizeTransactionHash(entry.transactionHash),
+      blockHash: /^0x[0-9a-f]{64}$/.test(String(entry.blockHash || "").toLowerCase())
+        ? String(entry.blockHash).toLowerCase() : null,
       blockNumber: Number(entry.blockNumber),
       transactionIndex: bscQueuePosition(entry.transactionIndex),
       logIndex: bscQueuePosition(entry.logIndex),
@@ -9161,32 +10179,58 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       ...(deliverySla ? { deliverySla } : {}),
       featureActivationReplayKey: entry.featureActivationReplayKey || null,
       flapQuoteFirstThreeReplayGenerationKey: entry.flapQuoteFirstThreeReplayGenerationKey || null,
+      causalBarrierKeys: normalizeBscCausalBarrierKeys(entry.causalBarrierKeys),
+      flapCreationHotCandidates,
+      fourMemeCreationHotCandidates,
       revision: Number(entry.revision || 0),
       queuedAt: previous.queuedAt || observedAt,
       updatedAt: observedAt,
     };
   }
 
+  function mergeDeferredRecordWithoutAttempt(entry, previous) {
+    const common = serializeRealtimePendingEntry(entry, previous);
+    return {
+      ...previous,
+      ...common,
+      deferredKind: previous.deferredKind || entry.deferredKind || "creation_evidence",
+      attempts: previous.attempts,
+      firstDeferredAt: previous.firstDeferredAt,
+      lastAttemptAt: previous.lastAttemptAt,
+      nextAttemptAt: previous.nextAttemptAt,
+      lastError: previous.lastError,
+    };
+  }
+
   function persistRealtimePendingHandoff(entries) {
-    const candidates = entries.filter((entry) => !state.seenTransactions[entry.transactionHash]
-      && !state.deferredCreationEvidence[entry.transactionHash]);
+    const candidates = entries.filter((entry) => !state.seenTransactions[entry.transactionHash]);
     const newKeys = new Set(candidates
       .map((entry) => normalizeTransactionHash(entry.transactionHash))
-      .filter((transactionHash) => transactionHash && !state.realtimePendingEntries[transactionHash]));
+      .filter((transactionHash) => transactionHash
+        && !state.realtimePendingEntries[transactionHash]
+        && !state.deferredCreationEvidence[transactionHash]));
     const pendingCount = Object.keys(state.realtimePendingEntries || {}).length;
     if (pendingCount + newKeys.size > realtimePendingMaxEntries) {
       const error = new Error(`BSC realtime pending capacity ${pendingCount}+${newKeys.size}>${realtimePendingMaxEntries}`);
       error.code = "BSC_REALTIME_PENDING_CAPACITY";
+      error.pendingEntryCount = pendingCount;
+      error.newEntryCount = newKeys.size;
+      error.pendingEntryCapacity = realtimePendingMaxEntries;
+      error.rangeExceedsCapacity = newKeys.size > realtimePendingMaxEntries;
       throw error;
     }
     // Capacity is checked for the complete recovered range before mutating a
     // single record. Cursor advancement and every candidate are therefore an
     // all-or-none state/WAL transaction.
     for (const entry of candidates) {
-      state.realtimePendingEntries[entry.transactionHash] = serializeRealtimePendingEntry(
-        entry,
-        state.realtimePendingEntries[entry.transactionHash],
-      );
+      const pending = state.realtimePendingEntries[entry.transactionHash];
+      const deferred = state.deferredCreationEvidence[entry.transactionHash];
+      mergeCurrentDurableEntry(entry, pending, deferred);
+      if (deferred) {
+        state.deferredCreationEvidence[entry.transactionHash] = mergeDeferredRecordWithoutAttempt(entry, deferred);
+      } else {
+        state.realtimePendingEntries[entry.transactionHash] = serializeRealtimePendingEntry(entry, pending);
+      }
     }
   }
 
@@ -9195,6 +10239,8 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     for (const pool of record.hookPools || []) hookPools.set(`${pool.factory}:${pool.poolId || pool.pool}`, pool);
     return {
       transactionHash: normalizeTransactionHash(record.transactionHash),
+      blockHash: /^0x[0-9a-f]{64}$/.test(String(record.blockHash || "").toLowerCase())
+        ? String(record.blockHash).toLowerCase() : null,
       blockNumber: Number(record.blockNumber),
       transactionIndex: bscQueuePosition(record.transactionIndex),
       logIndex: bscQueuePosition(record.logIndex),
@@ -9209,6 +10255,19 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       deliverySla: normalizeBscWebsocketDeliverySla(record.deliverySla),
       featureActivationReplayKey: record.featureActivationReplayKey || null,
       flapQuoteFirstThreeReplayGenerationKey: record.flapQuoteFirstThreeReplayGenerationKey || null,
+      causalBarrierKeys: normalizeBscCausalBarrierKeys(record.causalBarrierKeys),
+      flapCreationHotCandidates: new Map(readBscTransactionCreationEvidence(
+        record.flapCreationHotCandidates,
+        record.transactionHash,
+        `pending ${record.transactionHash} Flap`,
+        normalizeFlapCreationHotIndex,
+      ).map((candidate) => [flapCreationCandidateKey(candidate), candidate])),
+      fourMemeCreationHotCandidates: new Map(readBscTransactionCreationEvidence(
+        record.fourMemeCreationHotCandidates,
+        record.transactionHash,
+        `pending ${record.transactionHash} Four.Meme`,
+        normalizeFourMemeCreationHotIndex,
+      ).map((candidate) => [fourMemeCreationCandidateKey(candidate), candidate])),
       revision: Number(record.revision || 0),
     };
   }
@@ -9217,8 +10276,18 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     const attempts = Number(previous.attempts || 0) + 1;
     const observedAt = iso(now);
     const deliverySla = earliestBscWebsocketDeliverySla(entry.deliverySla, previous.deliverySla);
+    const flapCreationHotCandidates = normalizeBscTransactionCreationEvidence([
+      ...(previous.flapCreationHotCandidates || []),
+      ...(entry.flapCreationHotCandidates?.values?.() || []),
+    ], entry.transactionHash, "Flap", normalizeFlapCreationHotIndex);
+    const fourMemeCreationHotCandidates = normalizeBscTransactionCreationEvidence([
+      ...(previous.fourMemeCreationHotCandidates || []),
+      ...(entry.fourMemeCreationHotCandidates?.values?.() || []),
+    ], entry.transactionHash, "Four.Meme", normalizeFourMemeCreationHotIndex);
     return {
       transactionHash: normalizeTransactionHash(entry.transactionHash),
+      blockHash: /^0x[0-9a-f]{64}$/.test(String(entry.blockHash || "").toLowerCase())
+        ? String(entry.blockHash).toLowerCase() : null,
       blockNumber: Number(entry.blockNumber),
       transactionIndex: bscQueuePosition(entry.transactionIndex),
       logIndex: bscQueuePosition(entry.logIndex),
@@ -9233,6 +10302,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       ...(deliverySla ? { deliverySla } : {}),
       featureActivationReplayKey: entry.featureActivationReplayKey || null,
       flapQuoteFirstThreeReplayGenerationKey: entry.flapQuoteFirstThreeReplayGenerationKey || null,
+      causalBarrierKeys: normalizeBscCausalBarrierKeys(entry.causalBarrierKeys),
+      flapCreationHotCandidates,
+      fourMemeCreationHotCandidates,
       revision: Number(entry.revision || 0),
       deferredKind: previous.deferredKind || entry.deferredKind || "creation_evidence",
       attempts,
@@ -9248,6 +10320,8 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     for (const pool of record.hookPools || []) hookPools.set(`${pool.factory}:${pool.poolId || pool.pool}`, pool);
     return {
       transactionHash: normalizeTransactionHash(record.transactionHash),
+      blockHash: /^0x[0-9a-f]{64}$/.test(String(record.blockHash || "").toLowerCase())
+        ? String(record.blockHash).toLowerCase() : null,
       blockNumber: Number(record.blockNumber),
       transactionIndex: bscQueuePosition(record.transactionIndex),
       logIndex: bscQueuePosition(record.logIndex),
@@ -9262,6 +10336,19 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       deliverySla: normalizeBscWebsocketDeliverySla(record.deliverySla),
       featureActivationReplayKey: record.featureActivationReplayKey || null,
       flapQuoteFirstThreeReplayGenerationKey: record.flapQuoteFirstThreeReplayGenerationKey || null,
+      causalBarrierKeys: normalizeBscCausalBarrierKeys(record.causalBarrierKeys),
+      flapCreationHotCandidates: new Map(readBscTransactionCreationEvidence(
+        record.flapCreationHotCandidates,
+        record.transactionHash,
+        `deferred ${record.transactionHash} Flap`,
+        normalizeFlapCreationHotIndex,
+      ).map((candidate) => [flapCreationCandidateKey(candidate), candidate])),
+      fourMemeCreationHotCandidates: new Map(readBscTransactionCreationEvidence(
+        record.fourMemeCreationHotCandidates,
+        record.transactionHash,
+        `deferred ${record.transactionHash} Four.Meme`,
+        normalizeFourMemeCreationHotIndex,
+      ).map((candidate) => [fourMemeCreationCandidateKey(candidate), candidate])),
       revision: Number(record.revision || 0),
       deferredKind: record.deferredKind || "creation_evidence",
       deferredEvidence: true,
@@ -9271,6 +10358,11 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   async function deferCreationEvidence(entry, error) {
     await withState(async () => {
       const previous = state.deferredCreationEvidence[entry.transactionHash] || {};
+      mergeCurrentDurableEntry(
+        entry,
+        state.realtimePendingEntries[entry.transactionHash],
+        state.deferredCreationEvidence[entry.transactionHash],
+      );
       state.deferredCreationEvidence[entry.transactionHash] = {
         ...serializeDeferredEntry(entry, error, previous),
         deferredKind: "creation_evidence",
@@ -11023,6 +12115,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
 
       const phase = await withState((revision) => {
         if (state.seenTransactions[observation.transactionHash]) return { done: true, event: null, savePromise: null };
+        const causalEntry = {
+          transactionHash: observation.transactionHash,
+          featureActivationReplayKey: observation.mode?.featureActivationKey || null,
+          flapQuoteFirstThreeReplayGenerationKey: observation.flapQuoteFirstThreeReplayGenerationKey || null,
+        };
+        if (!isDurableCausalGroupHead(causalEntry)) return { causalBlocked: true };
         // Another observation may have reached a confirmation threshold while
         // this one was outside the lock. Re-snapshot and enrich before making
         // a decision rather than evaluating with incomplete safety evidence.
@@ -11055,37 +12153,64 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         enrichmentRevision = phase.revision;
         continue;
       }
+      if (phase.causalBlocked) {
+        const error = new Error(`earlier causal-group candidate is pending before ${observation.transactionHash}`);
+        error.code = "BSC_CAUSAL_GROUP_PENDING";
+        throw error;
+      }
       if (phase.done) {
         if (phase.savePromise) await phase.savePromise;
         return phase.event;
       }
 
       const delivery = await withEventDelivery(phase.event.eventKey, async () => {
-        try {
-          await alertSender(config, phase.event);
-        } catch (error) {
-          error.code ||= "ALERT_DELIVERY_PENDING";
+        const causalEntry = {
+          transactionHash: observation.transactionHash,
+          featureActivationReplayKey: observation.mode?.featureActivationKey || null,
+          flapQuoteFirstThreeReplayGenerationKey: observation.flapQuoteFirstThreeReplayGenerationKey || null,
+        };
+        if (beforeCausalGroupReservation && backgroundFeatureKeys(causalEntry).length) {
+          await beforeCausalGroupReservation({
+            transactionHash: observation.transactionHash,
+            causalKeys: backgroundFeatureKeys(causalEntry),
+            claim: "observation",
+          });
+        }
+        const causalReservation = await withState(() => reserveDurableCausalGroups(causalEntry));
+        if (!causalReservation) {
+          const error = new Error(`causal-group head changed before delivery ${observation.transactionHash}`);
+          error.code = "BSC_CAUSAL_GROUP_PENDING";
           throw error;
         }
-        const committed = await withState((revision) => {
-          // Never install the pre-delivery draft: state may have advanced while
-          // Telegram/external delivery was in flight. Re-evaluate against the
-          // latest revision, then commit the exact event key that was delivered.
-          const draft = structuredClone(state);
-          evaluateBscObservation(draft, observation, now());
-          draft.seenTransactions[observation.transactionHash] = observation.blockNumber;
-          commitDeliveredObservation(draft, phase.event, observation);
-          pruneState(draft, now());
-          state = draft;
-          return {
-            evaluatedRevision: phase.evaluatedRevision,
-            committedRevision: revision,
-            savePromise: save(draft),
-          };
-        });
-        await committed.savePromise;
-        if (onLaunchpadCandidate) void Promise.resolve(onLaunchpadCandidate(phase.event)).catch((error) => logger.error(`[bsc][followup] ${errorSummary(error)}`));
-        return phase.event;
+        try {
+          try {
+            await alertSender(config, phase.event);
+          } catch (error) {
+            error.code ||= "ALERT_DELIVERY_PENDING";
+            throw error;
+          }
+          const committed = await withState((revision) => {
+            // Never install the pre-delivery draft: state may have advanced while
+            // Telegram/external delivery was in flight. Re-evaluate against the
+            // latest revision, then commit the exact event key that was delivered.
+            const draft = structuredClone(state);
+            evaluateBscObservation(draft, observation, now());
+            draft.seenTransactions[observation.transactionHash] = observation.blockNumber;
+            commitDeliveredObservation(draft, phase.event, observation);
+            pruneState(draft, now());
+            state = draft;
+            return {
+              evaluatedRevision: phase.evaluatedRevision,
+              committedRevision: revision,
+              savePromise: save(draft),
+            };
+          });
+          await committed.savePromise;
+          if (onLaunchpadCandidate) void Promise.resolve(onLaunchpadCandidate(phase.event)).catch((error) => logger.error(`[bsc][followup] ${errorSummary(error)}`));
+          return phase.event;
+        } finally {
+          releaseDurableCausalGroups(causalReservation);
+        }
       });
       if (delivery.owner) return phase.event;
       // A concurrent transaction delivered the same semantic event. Re-run
@@ -11098,13 +12223,323 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     return trackObservationProcessor(() => observeInternal(observation, options));
   }
 
+  function canonicalReceiptObservationTime(entry, transaction, receipt, block) {
+    const numeric = (value) => {
+      if (typeof value === "bigint") return Number(value);
+      if (typeof value === "string" && /^0x[0-9a-f]+$/i.test(value)) return Number.parseInt(value, 16);
+      if (typeof value === "string" && /^\d+$/.test(value)) return Number.parseInt(value, 10);
+      return typeof value === "number" ? value : Number.NaN;
+    };
+    const nonnegative = (value, label) => {
+      const parsed = numeric(value);
+      if (!Number.isSafeInteger(parsed) || parsed < 0) {
+        const error = new Error(`BSC receipt causal classification invalid ${label}`);
+        error.code = "BSC_RECEIPT_CANONICAL_MISMATCH";
+        throw error;
+      }
+      return parsed;
+    };
+    const expectedHash = normalizeTransactionHash(entry.transactionHash);
+    const expectedBlockNumber = nonnegative(entry.blockNumber, "requested block number");
+    const blockNumber = nonnegative(block?.number, "block number");
+    const receiptBlockNumber = nonnegative(receipt?.blockNumber, "receipt block number");
+    const transactionBlockNumber = nonnegative(transaction?.blockNumber, "transaction block number");
+    const blockHash = normalizeTransactionHash(block?.hash);
+    const receiptBlockHash = normalizeTransactionHash(receipt?.blockHash);
+    const transactionBlockHash = normalizeTransactionHash(transaction?.blockHash);
+    const receiptTransactionHash = normalizeTransactionHash(receipt?.hash || receipt?.transactionHash);
+    const transactionIndex = nonnegative(
+      transaction?.index ?? transaction?.transactionIndex,
+      "transaction index",
+    );
+    const receiptTransactionIndex = nonnegative(
+      receipt?.index ?? receipt?.transactionIndex,
+      "receipt transaction index",
+    );
+    const receiptStatus = numeric(receipt?.status);
+    if (blockNumber !== expectedBlockNumber
+      || receiptBlockNumber !== expectedBlockNumber
+      || transactionBlockNumber !== expectedBlockNumber
+      || !/^0x[0-9a-f]{64}$/.test(blockHash)
+      || receiptBlockHash !== blockHash
+      || transactionBlockHash !== blockHash
+      || (/^0x[0-9a-f]{64}$/.test(String(entry.blockHash || "").toLowerCase())
+        && String(entry.blockHash).toLowerCase() !== blockHash)
+      || normalizeTransactionHash(transaction?.hash) !== expectedHash
+      || receiptTransactionHash !== expectedHash
+      || transactionIndex !== receiptTransactionIndex
+      || bscQueuePosition(entry.transactionIndex) !== transactionIndex
+      || receiptStatus !== 1) {
+      const error = new Error(`BSC receipt causal classification proof mismatch ${expectedHash}`);
+      error.code = "BSC_RECEIPT_CANONICAL_MISMATCH";
+      throw error;
+    }
+    if (!Array.isArray(block?.transactions)
+      || normalizeTransactionHash(
+        typeof block.transactions[transactionIndex] === "string"
+          ? block.transactions[transactionIndex]
+          : block.transactions[transactionIndex]?.hash,
+      ) !== expectedHash) {
+      const error = new Error(`BSC receipt causal classification transaction position mismatch ${expectedHash}`);
+      error.code = "BSC_RECEIPT_CANONICAL_MISMATCH";
+      throw error;
+    }
+    if (!Array.isArray(receipt?.logs)) {
+      const error = new Error(`BSC receipt causal classification invalid logs ${expectedHash}`);
+      error.code = "BSC_RECEIPT_CANONICAL_MISMATCH";
+      throw error;
+    }
+    const logIndexes = new Set();
+    for (let position = 0; position < receipt.logs.length; position += 1) {
+      const log = receipt.logs[position];
+      const logIndex = nonnegative(log?.index ?? log?.logIndex, `receipt log ${position} index`);
+      const logTransactionIndex = nonnegative(log?.transactionIndex, `receipt log ${position} transaction index`);
+      const logBlockNumber = nonnegative(log?.blockNumber, `receipt log ${position} block number`);
+      const address = String(log?.address || "").toLowerCase();
+      const topics = log?.topics;
+      if (!log || log.removed === true
+        || logIndexes.has(logIndex)
+        || normalizeTransactionHash(log.transactionHash) !== expectedHash
+        || normalizeTransactionHash(log.blockHash) !== blockHash
+        || logBlockNumber !== expectedBlockNumber
+        || logTransactionIndex !== transactionIndex
+        || !ADDRESS.test(address)
+        || !Array.isArray(topics)
+        || topics.some((topic) => !/^0x[0-9a-fA-F]{64}$/.test(String(topic)))
+        || typeof log.data !== "string"
+        || !/^0x(?:[0-9a-fA-F]{2})*$/.test(log.data)) {
+        const error = new Error(`BSC receipt causal classification log identity mismatch ${expectedHash}#${position}`);
+        error.code = "BSC_RECEIPT_CANONICAL_MISMATCH";
+        throw error;
+      }
+      logIndexes.add(logIndex);
+    }
+    const timestamp = nonnegative(block?.timestamp, "block timestamp");
+    return new Date(timestamp * 1_000).toISOString();
+  }
+
+  async function commitReceiptCausalClassification(entry, transaction, receipt, block) {
+    const logs = Array.isArray(receipt?.logs) ? receipt.logs : [];
+    const observedAt = canonicalReceiptObservationTime(entry, transaction, receipt, block);
+    const bscPools = parseBscPoolLogs(logs);
+    const flapCreationCandidates = parseFlapCreationHotCandidates(logs, {
+      transactionHash: entry.transactionHash,
+      blockHash: receipt.blockHash,
+      blockNumber: entry.blockNumber,
+      transactionIndex: receipt.index ?? receipt.transactionIndex ?? entry.transactionIndex ?? 0,
+      observedAt,
+      indexedAt: iso(now),
+      current: entry.flapQuoteFirstThreeReplayGenerationKey ? null : now(),
+      confirmations: Math.max(0, Number(currentHead || 0) - Number(entry.blockNumber)),
+      requiredConfirmations: Math.max(0, Number(config.bscConfirmations ?? 2)),
+      pools: bscPools,
+    });
+    const fourMemeCreationCandidates = logs.map((log, logIndex) => fourMemeCreationCandidateFromLog(log, {
+      transactionHash: entry.transactionHash,
+      blockNumber: entry.blockNumber,
+      transactionIndex: receipt.index ?? receipt.transactionIndex ?? entry.transactionIndex ?? 0,
+      logIndex,
+      observedAt,
+    })).filter(Boolean);
+    const canClassifyFlap = flapCreationCandidates.length > 0;
+    // OpenFour carries preset+quote in the canonical event. Classic manager
+    // events need _tokenInfos / official API reads later, so their broad
+    // feature barrier cannot be contracted from the receipt alone.
+    const canClassifyFour = fourMemeCreationCandidates.some((candidate) =>
+      candidate.topic === OPENFOUR_TOKEN_CREATED_TOPIC);
+    const hasClassicFour = fourMemeCreationCandidates.some((candidate) =>
+      candidate.topic !== OPENFOUR_TOKEN_CREATED_TOPIC);
+    const committed = await withState(async () => {
+      const pending = state.realtimePendingEntries[entry.transactionHash];
+      const deferred = state.deferredCreationEvidence[entry.transactionHash];
+      const durableBarrierKeys = normalizeBscCausalBarrierKeys([
+        ...(entry.causalBarrierKeys || []),
+        ...(pending?.causalBarrierKeys || []),
+        ...(deferred?.causalBarrierKeys || []),
+      ]);
+      const fourFeatureKeys = new Set(Object.keys(state.officialSources?.fourMeme?.featureActivations || {}));
+      const liveFirstThree = activeFlapQuoteFirstThreeWindows(state);
+      const exactKeys = new Set([
+        entry.featureActivationReplayKey,
+        pending?.featureActivationReplayKey,
+        deferred?.featureActivationReplayKey,
+      ].filter(Boolean).map((key) => `feature:${key}`));
+      for (const key of [
+        entry.flapQuoteFirstThreeReplayGenerationKey,
+        pending?.flapQuoteFirstThreeReplayGenerationKey,
+        deferred?.flapQuoteFirstThreeReplayGenerationKey,
+      ].filter(Boolean)) exactKeys.add(`first3:${key}`);
+      const retained = durableBarrierKeys.filter((key) => {
+        if (exactKeys.has(key)) return true;
+        if (key.startsWith("feature:")) {
+          const activationKey = key.slice("feature:".length);
+          // Classic Four manager logs prove that this is not Flap, but their
+          // receipt does not carry enough template/quote identity to choose a
+          // Four activation until the manager read later in preparation.
+          return hasClassicFour && fourFeatureKeys.has(activationKey);
+        }
+        return false;
+      });
+      const exact = new Set(retained);
+      if (canClassifyFlap) {
+        for (const [activationKey, activation] of Object.entries(
+          state.officialSources?.flap?.featureActivations || {},
+        )) {
+          if (activation?.active === false || activation.firstTokenAlertedAt
+            || activation.firstTokenTransactionHash) continue;
+          if (flapCreationCandidates.some((candidate) => flapCandidateMatchesActivation(candidate, activation))) {
+            exact.add(`feature:${activationKey}`);
+          }
+        }
+        for (const [generationKey, window] of liveFirstThree) {
+          if (flapCreationCandidates.some((candidate) => flapQuoteCandidateAfterActivation(candidate, window)
+            && verifiedFlapQuotePair(bscPools, candidate.token, window.quoteAddress))) {
+            exact.add(`first3:${generationKey}`);
+          }
+        }
+      }
+      if (canClassifyFour) {
+        for (const [activationKey, activation] of Object.entries(
+          state.officialSources?.fourMeme?.featureActivations || {},
+        )) {
+          if (activation?.active === false || activation.firstTokenAlertedAt
+            || activation.firstTokenTransactionHash) continue;
+          if (fourMemeCreationCandidates.some((candidate) => fourMemeCandidateMatchesActivation(candidate, activation))) {
+            exact.add(`feature:${activationKey}`);
+          }
+        }
+      }
+      const nextBarrierKeys = normalizeBscCausalBarrierKeys([...exact]);
+      let evidenceChanged = false;
+      for (const candidate of flapCreationCandidates) {
+        const key = flapCreationCandidateKey(candidate);
+        const previous = entry.flapCreationHotCandidates?.get?.(key);
+        const merged = normalizeFlapCreationHotIndex(previous ? [previous, candidate] : [candidate], null)[0];
+        entry.flapCreationHotCandidates ||= new Map();
+        if (!previous || JSON.stringify(previous) !== JSON.stringify(merged)) evidenceChanged = true;
+        entry.flapCreationHotCandidates.set(key, merged);
+      }
+      for (const candidate of fourMemeCreationCandidates) {
+        const key = fourMemeCreationCandidateKey(candidate);
+        const previous = entry.fourMemeCreationHotCandidates?.get?.(key);
+        const merged = normalizeFourMemeCreationHotIndex(previous ? [previous, candidate] : [candidate], null)[0];
+        entry.fourMemeCreationHotCandidates ||= new Map();
+        if (!previous || JSON.stringify(previous) !== JSON.stringify(merged)) evidenceChanged = true;
+        entry.fourMemeCreationHotCandidates.set(key, merged);
+      }
+      if (JSON.stringify(nextBarrierKeys) !== JSON.stringify(durableBarrierKeys)
+        || JSON.stringify(nextBarrierKeys) !== JSON.stringify(entry.causalBarrierKeys || [])
+        || evidenceChanged) {
+        entry.causalBarrierKeys = nextBarrierKeys;
+        entry.revision = Math.max(
+          Number(entry.revision || 0),
+          Number(pending?.revision || 0),
+          Number(deferred?.revision || 0),
+        ) + 1;
+      }
+      if (pending) state.realtimePendingEntries[entry.transactionHash] = serializeRealtimePendingEntry(entry, pending);
+      if (deferred) {
+        state.deferredCreationEvidence[entry.transactionHash] = mergeDeferredRecordWithoutAttempt(entry, deferred);
+      }
+      if (pending || deferred) await save();
+      return {
+        flapReplayNeeded: false,
+        fourMemeReplayKeys: [],
+      };
+    });
+    return {
+      bscPools,
+      flapCreationCandidates,
+      fourMemeCreationCandidates,
+      ...committed,
+    };
+  }
+
+  async function bindObservationCausalKeys(entry, observation, flapCreationCandidates = []) {
+    return withState(async () => {
+      const featureKey = observation?.mode?.featureActivationKey || null;
+      const pending = state.realtimePendingEntries[entry.transactionHash];
+      const deferred = state.deferredCreationEvidence[entry.transactionHash];
+      const durableBarrierKeys = normalizeBscCausalBarrierKeys([
+        ...(entry.causalBarrierKeys || []),
+        ...(pending?.causalBarrierKeys || []),
+        ...(deferred?.causalBarrierKeys || []),
+      ]);
+      const authorizedFirstThreeKeys = durableBarrierKeys
+        .filter((key) => key.startsWith("first3:"))
+        .map((key) => key.slice("first3:".length));
+      const firstThreeKeys = entry.flapQuoteFirstThreeReplayGenerationKey
+        ? [entry.flapQuoteFirstThreeReplayGenerationKey]
+        : [...new Set(
+          coarseFlapQuoteFirstThreeMatches(
+            state,
+            observation,
+            flapCreationCandidates,
+            authorizedFirstThreeKeys,
+          )
+            .map((match) => match.generationKey),
+        )].sort();
+      if (firstThreeKeys.length > 1) {
+        const error = new Error(`multiple Flap first-three causal groups matched ${entry.transactionHash}`);
+        error.code = "BSC_CAUSAL_GROUP_PENDING";
+        throw error;
+      }
+      const firstThreeKey = firstThreeKeys[0] || null;
+      const durableFeatureKey = entry.featureActivationReplayKey
+        || pending?.featureActivationReplayKey
+        || deferred?.featureActivationReplayKey
+        || null;
+      const durableFirstThreeKey = entry.flapQuoteFirstThreeReplayGenerationKey
+        || pending?.flapQuoteFirstThreeReplayGenerationKey
+        || deferred?.flapQuoteFirstThreeReplayGenerationKey
+        || null;
+      if (durableFeatureKey && featureKey && durableFeatureKey !== featureKey) {
+        throw new Error(`feature activation key changed for ${entry.transactionHash}`);
+      }
+      if (durableFirstThreeKey && firstThreeKey && durableFirstThreeKey !== firstThreeKey) {
+        throw new Error(`first-three generation key changed for ${entry.transactionHash}`);
+      }
+      const nextFeatureKey = durableFeatureKey || featureKey;
+      const nextFirstThreeKey = durableFirstThreeKey || firstThreeKey;
+      const changed = entry.featureActivationReplayKey !== nextFeatureKey
+        || entry.flapQuoteFirstThreeReplayGenerationKey !== nextFirstThreeKey
+        || JSON.stringify(entry.causalBarrierKeys || []) !== JSON.stringify(durableBarrierKeys);
+      if (changed) {
+        entry.featureActivationReplayKey = nextFeatureKey;
+        entry.flapQuoteFirstThreeReplayGenerationKey = nextFirstThreeKey;
+        // Receipt classification already contracted impossible possibilities.
+        // Preserve barriers installed by an activation registration that won
+        // this state lock after preparation; clearing them from a stale local
+        // entry would let a later candidate overtake.
+        entry.causalBarrierKeys = durableBarrierKeys;
+        entry.revision = Math.max(
+          Number(entry.revision || 0),
+          Number(pending?.revision || 0),
+          Number(deferred?.revision || 0),
+        ) + 1;
+        if (pending) state.realtimePendingEntries[entry.transactionHash] = serializeRealtimePendingEntry(entry, pending);
+        if (deferred) {
+          state.deferredCreationEvidence[entry.transactionHash] = {
+            ...deferred,
+            featureActivationReplayKey: nextFeatureKey,
+            flapQuoteFirstThreeReplayGenerationKey: nextFirstThreeKey,
+            causalBarrierKeys: durableBarrierKeys,
+            revision: entry.revision,
+          };
+        }
+        if (pending || deferred) await save();
+      }
+      return isDurableCausalGroupHead(entry);
+    });
+  }
+
   async function runProcessEntries(entries, rpcConcurrency = entryRpcConcurrency, {
     preserveRealtimePendingOnFailure = false,
     flapReplaySignal = null,
   } = {}) {
     const boundedRpcConcurrency = Math.max(1, Number(rpcConcurrency) || 1);
     const results = await mapLimit(entries, boundedRpcConcurrency, async (entry) => {
-      const revision = Number(entry.revision || 0);
+      let revision = Number(entry.revision || 0);
       if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
       const needsInspection = flapReplaySignal
         ? await awaitFlapReplayRead(() => needsTransactionInspection(entry), flapReplaySignal)
@@ -11137,33 +12572,46 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           : await transactionAndReceipt();
       if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
       if (!transaction || !receipt) throw new Error(`missing finalized transaction or receipt ${entry.transactionHash}`);
+      const hasOfficialCreation = (receipt.logs || []).some((log) => [
+        FLAP_TOKEN_CREATED_TOPIC,
+        FLAP_VAULT_TOKEN_CREATED_TOPIC,
+        FOUR_MEME_TOKEN_CREATE_TOPIC,
+        FOUR_MEME_PRESALE_TOKEN_CREATE_TOPIC,
+        OPENFOUR_TOKEN_CREATED_TOPIC,
+      ].includes(String(log?.topics?.[0] || "").toLowerCase()));
+      const exactCausalKeys = new Set([
+        entry.featureActivationReplayKey ? `feature:${entry.featureActivationReplayKey}` : null,
+        entry.flapQuoteFirstThreeReplayGenerationKey
+          ? `first3:${entry.flapQuoteFirstThreeReplayGenerationKey}` : null,
+      ].filter(Boolean));
+      const hasPotentialCausalBarrier = (entry.causalBarrierKeys || [])
+        .some((key) => !exactCausalKeys.has(key));
+      const needsReceiptClassification = hasOfficialCreation || hasPotentialCausalBarrier;
+      let receiptClassification = {
+        bscPools: parseBscPoolLogs(receipt.logs || []),
+        flapCreationCandidates: [],
+        fourMemeCreationCandidates: [],
+        flapReplayNeeded: false,
+        fourMemeReplayKeys: [],
+      };
+      if (needsReceiptClassification) {
+        const canonicalBlock = websocketProof?.block || (flapReplaySignal
+          ? await awaitFlapReplayRead(() => cachedBlock(entry.blockNumber), flapReplaySignal)
+          : await cachedBlock(entry.blockNumber));
+        receiptClassification = await commitReceiptCausalClassification(
+          entry,
+          transaction,
+          receipt,
+          canonicalBlock,
+        );
+        revision = Number(entry.revision || 0);
+      }
       registerSingularryCurves(receipt.logs || [], {
         transactionHash: entry.transactionHash,
         blockNumber: entry.blockNumber,
       });
-      const bscPools = parseBscPoolLogs(receipt.logs || []);
-      let receiptFlapCreationCandidates = [];
-      if ((receipt.logs || []).some((log) => [FLAP_TOKEN_CREATED_TOPIC, FLAP_VAULT_TOKEN_CREATED_TOPIC]
-        .includes(String(log?.topics?.[0] || "").toLowerCase()))) {
-        const observedAt = flapReplaySignal
-          ? await awaitFlapReplayRead(() => cachedBlockTimestamp(entry.blockNumber), flapReplaySignal)
-          : await cachedBlockTimestamp(entry.blockNumber);
-        receiptFlapCreationCandidates = parseFlapCreationHotCandidates(receipt.logs || [], {
-          transactionHash: entry.transactionHash,
-          blockHash: receipt.blockHash || null,
-          blockNumber: entry.blockNumber,
-          transactionIndex: receipt.index ?? receipt.transactionIndex ?? 0,
-          observedAt,
-          indexedAt: iso(now),
-          // A verified generation owns an unbounded durable archive cursor;
-          // its TokenCreated facts must not be discarded by the 30-minute
-          // realtime hot-index retention policy.
-          current: entry.flapQuoteFirstThreeReplayGenerationKey ? null : now(),
-          confirmations: Math.max(0, Number(currentHead || 0) - Number(entry.blockNumber)),
-          requiredConfirmations: Math.max(0, Number(config.bscConfirmations ?? 2)),
-          pools: bscPools,
-        });
-      }
+      const bscPools = receiptClassification.bscPools;
+      const receiptFlapCreationCandidates = receiptClassification.flapCreationCandidates;
       let observation;
       try {
         if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
@@ -11180,7 +12628,15 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
           hookEvent ||= await observeVerifiedHook(pool, entry.transactionHash, entry.blockNumber, { transaction, receipt, verifiedNewContracts: entry.verifiedNewContracts });
         }
-        if (hookEvent) return { revision, observation: null, flapCreationCandidates: receiptFlapCreationCandidates };
+        if (hookEvent) return {
+          revision,
+          observation: null,
+          flapCreationCandidates: receiptFlapCreationCandidates,
+          fourMemeCreationCandidates: receiptClassification.fourMemeCreationCandidates,
+          receiptClassificationCommitted: true,
+          flapReplayNeeded: receiptClassification.flapReplayNeeded,
+          fourMemeReplayKeys: receiptClassification.fourMemeReplayKeys,
+        };
         observation = flapReplaySignal
           ? await awaitFlapReplayRead(
             () => prepareTransaction(entry, { transaction, receipt, bscPools }),
@@ -11195,30 +12651,29 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         if (error && typeof error === "object" && receiptFlapCreationCandidates.length) {
           error.flapCreationCandidates = receiptFlapCreationCandidates;
         }
+        if (error && typeof error === "object" && needsReceiptClassification) {
+          error.receiptClassificationCommitted = true;
+          error.flapReplayNeeded = receiptClassification.flapReplayNeeded;
+          error.fourMemeReplayKeys = receiptClassification.fourMemeReplayKeys;
+        }
         throw error;
       }
-      const realtimeEntry = [...(entry.reasons || [])].some((reason) => BSC_REALTIME_QUEUE_REASONS.has(reason));
-      const fourMemeCreationCandidates = observation && realtimeEntry
-        ? (receipt.logs || []).map((log, logIndex) => fourMemeCreationCandidateFromLog(log, {
-          transactionHash: entry.transactionHash,
-          blockNumber: entry.blockNumber,
-          transactionIndex: receipt.index ?? receipt.transactionIndex ?? 0,
-          logIndex,
-          observedAt: observation.observedAt,
-        })).filter(Boolean)
-        : [];
+      const fourMemeCreationCandidates = receiptClassification.fourMemeCreationCandidates;
       // Flap has no separate archive activation replay lane. Preserve every
       // recently processed exact Flap creation receipt, including near-head
       // gap recovery, so a short WebSocket/RPC outage cannot erase the first
       // token before the Board confirms its new pool.
       const flapCreationCandidates = receiptFlapCreationCandidates;
+      const authorizedFirstThreeKeys = (entry.causalBarrierKeys || [])
+        .filter((key) => key.startsWith("first3:"))
+        .map((key) => key.slice("first3:".length));
       const knownOrdinaryFastPath = observation?.structural?.fastPath === "known_official_mode"
         && observation.officialDiscoveryReplay !== true
         && !flapActivationForObservation(state, observation)
         && !hasFlapQuoteFirstThreeMatch(state, {
           ...observation,
           flapQuoteFirstThreeReplayGenerationKey: entry.flapQuoteFirstThreeReplayGenerationKey || null,
-        }, receiptFlapCreationCandidates)
+        }, receiptFlapCreationCandidates, authorizedFirstThreeKeys)
         && !fourMemeActivationForObservation(state, observation);
       // A warmed exact identity match has already proven the same controller,
       // token implementation, selector and mode fingerprint. Keep its durable
@@ -11234,6 +12689,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         },
         fourMemeCreationCandidates,
         flapCreationCandidates,
+        receiptClassificationCommitted: needsReceiptClassification,
+        flapReplayNeeded: receiptClassification.flapReplayNeeded,
+        fourMemeReplayKeys: receiptClassification.fourMemeReplayKeys,
       };
     });
     // No result below this boundary has mutated the queue/state yet. An
@@ -11268,14 +12726,8 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       const result = results[index];
       const entry = entries[index];
       if (result.status === "rejected") {
-        const rejectedFlapCandidates = Array.isArray(result.reason?.flapCreationCandidates)
-          ? result.reason.flapCreationCandidates
-          : [];
-        if (rejectedFlapCandidates.length) {
-          const appended = await withState(() => appendFlapCreationHotIndex(state, rejectedFlapCandidates));
-          stateChanged ||= appended.changed;
-          flapReplayNeeded ||= appended.replayNeeded;
-        }
+        flapReplayNeeded ||= result.reason?.flapReplayNeeded === true;
+        for (const key of result.reason?.fourMemeReplayKeys || []) fourMemeReplayKeys.add(key);
         const alertPending = result.reason?.code === "ALERT_DELIVERY_PENDING";
         const creationEvidencePending = result.reason?.code === "BSC_CREATION_EVIDENCE_PENDING";
         const transientRpc = !alertPending && isTransientCoverageError(result.reason);
@@ -11331,6 +12783,11 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
             return false;
           }
           const previousDeferred = state.deferredCreationEvidence[entry.transactionHash] || {};
+          mergeCurrentDurableEntry(
+            entry,
+            state.realtimePendingEntries[entry.transactionHash],
+            previousDeferred,
+          );
           const deferredRecord = {
             ...serializeDeferredEntry(entry, result.reason, {
               ...previousDeferred,
@@ -11378,10 +12835,28 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         continue;
       }
       if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
+      flapReplayNeeded ||= result.value.flapReplayNeeded === true;
+      for (const key of result.value.fourMemeReplayKeys || []) fourMemeReplayKeys.add(key);
       if (result.value.observation) {
+        const causalHead = await bindObservationCausalKeys(
+          entry,
+          result.value.observation,
+          result.value.flapCreationCandidates || [],
+        );
+        if (!causalHead) {
+          const error = new Error(`earlier causal-group candidate is pending before ${entry.transactionHash}`);
+          error.code = "BSC_CAUSAL_GROUP_PENDING";
+          throw error;
+        }
         await processFlapQuoteFirstThreeCandidates(
           result.value.observation,
           result.value.flapCreationCandidates || [],
+          [
+            entry.flapQuoteFirstThreeReplayGenerationKey,
+            ...(entry.causalBarrierKeys || [])
+              .filter((key) => key.startsWith("first3:"))
+              .map((key) => key.slice("first3:".length)),
+          ].filter(Boolean),
         );
         await observe(result.value.observation, { persistIrrelevant: false });
       }
@@ -11463,22 +12938,84 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   async function retryDeferredCreationEvidence() {
     if (deferredEvidenceRunning || stopped) return;
     deferredEvidenceRunning = true;
+    let releaseDeepRpc = null;
     try {
       await initialize();
-      const due = await withState(async () => Object.values(state.deferredCreationEvidence || {})
-        .filter((record) => Date.parse(record.nextAttemptAt || 0) <= now())
-        .sort((left, right) => Date.parse(left.nextAttemptAt || 0) - Date.parse(right.nextAttemptAt || 0))
-        .slice(0, bscScanConcurrency)
-        .map((record) => structuredClone(record)));
-      const attempts = await mapLimit(due, bscScanConcurrency, async (record) => {
+      let due;
+      if (backgroundDeepPriorityEnabled()) {
+        const eligibility = backgroundDeepEligibility();
+        if (!eligibility.priority.allowFreshDeferred && !eligibility.capacityDependencyUnlock) {
+          if (eligibility.priority.tailPriority) scheduleRealtimeTail();
+          return { skipped: true, reason: "realtime_priority" };
+        }
+        const workClass = backgroundDeepTarget(eligibility);
+        if (!workClass || backgroundDeepLane(eligibility, workClass) !== "deferred") {
+          wakeBackgroundDeepRpc();
+          return { skipped: true, reason: "deep_rpc_fairness" };
+        }
+        due = eligibility.deferred[workClass].slice(0, 1).map((record) => structuredClone(record));
+        if (!due.length) {
+          wakeBackgroundDeepRpc();
+          return { skipped: false, attempted: 0 };
+        }
+        releaseDeepRpc = acquireBackgroundDeepRpc("deferred", workClass, eligibility);
+        if (!releaseDeepRpc) {
+          wakeBackgroundDeepRpc(backgroundDeepRpcDelayMs(workClass, eligibility));
+          return { skipped: true, reason: "deep_rpc_pacing" };
+        }
+      } else {
+        due = await withState(async () => Object.values(state.deferredCreationEvidence || {})
+          .filter((record) => Date.parse(record.nextAttemptAt || 0) <= now())
+          .sort((left, right) => Date.parse(left.nextAttemptAt || 0) - Date.parse(right.nextAttemptAt || 0))
+          .slice(0, bscScanConcurrency)
+          .map((record) => structuredClone(record)));
+      }
+      if (!due.length) return { skipped: false, attempted: 0 };
+      const attempts = await mapLimit(due, backgroundDeepPriorityEnabled() ? 1 : bscScanConcurrency, async (record) => {
         const entry = deserializeDeferredEntry(record);
         try {
           await processEntries([entry]);
+          await markBackgroundDeepHostRecovered();
           return;
         } catch (error) {
           await withState(async () => {
             const current = state.deferredCreationEvidence[record.transactionHash];
             if (!current) return;
+            if (error?.rpcFailureScope === "host") {
+              const providerRetryAfterMs = Number(error?.retryAfterMs);
+              const hostRetryDelayMs = Math.max(
+                1_000,
+                sharedRpcRetryDelayMs(error),
+                Number.isFinite(providerRetryAfterMs) && providerRetryAfterMs > 0
+                  ? Math.ceil(providerRetryAfterMs)
+                  : 0,
+              );
+              backgroundDeepHostRetryAt = Math.max(
+                backgroundDeepHostRetryAt,
+                Number(now()) + hostRetryDelayMs,
+              );
+              state._health.backgroundDeepRpc = {
+                status: "backoff",
+                checkedAt: iso(now),
+                lastErrorAt: iso(now),
+                lastError: errorSummary(error),
+                rpcFailureScope: "host",
+                rpcOperation: error?.rpcOperation || null,
+                retryDelayMs: hostRetryDelayMs,
+                nextRetryAt: iso(backgroundDeepHostRetryAt),
+              };
+              // A host-wide outage is not evidence that this candidate's
+              // transaction proof failed. Keep its original due time and
+              // attempt count so it can resume immediately when the shared
+              // physical-host cooldown expires.
+              await save();
+              return;
+            }
+            mergeCurrentDurableEntry(
+              entry,
+              state.realtimePendingEntries[record.transactionHash],
+              current,
+            );
             const updated = serializeDeferredEntry(entry, error, current);
             state.deferredCreationEvidence[record.transactionHash] = updated;
             state._health.creationEvidence = {
@@ -11502,8 +13039,11 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       });
       const failure = attempts.find((result) => result.status === "rejected");
       if (failure) logger.error(`[bsc][deferred] ${errorSummary(failure.reason)}`);
+      return { skipped: false, attempted: due.length };
     } finally {
+      releaseDeepRpc?.();
       deferredEvidenceRunning = false;
+      if (backgroundDeepPriorityEnabled() && !stopped) wakeBackgroundDeepRpc();
     }
   }
 
@@ -11900,6 +13440,205 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       || previous.continuity !== state._health.coverage.continuity;
   }
 
+  function activationReplayFloorBlock(activation, lookbackMs = 0, snapshot = state, { conservative = false } = {}) {
+    const activationAt = Date.parse(activation?.firstObservedAt || activation?.confirmedAt || "");
+    if (!Number.isFinite(activationAt)) return null;
+    const tailAnchorBlock = Number(snapshot?._health?.realtimeTail?.toBlock);
+    const tailAnchorAt = Date.parse(snapshot?._health?.realtimeTail?.lastSuccessAt || "");
+    const hasTailAnchor = Number.isSafeInteger(tailAnchorBlock)
+      && tailAnchorBlock >= 0
+      && Number.isFinite(tailAnchorAt);
+    // Never combine a newer currentHead with an older tail timestamp. The
+    // anchor block/time pair must describe one observation; the conservative
+    // safety below mirrors archive replay's boundary tolerance.
+    const referenceBlock = hasTailAnchor
+      ? tailAnchorBlock
+      : Math.max(0, Number(currentHead || 0), Number(snapshot?.realtimeTailNextBlock || 1) - 1);
+    const referenceAt = hasTailAnchor ? tailAnchorAt : Number(now());
+    const lowerBoundAt = activationAt - Math.max(0, Number(lookbackMs) || 0);
+    const distance = Math.max(0, Math.ceil((referenceAt - lowerBoundAt) / expectedBlockTimeMs));
+    const safetyBlocks = conservative ? Math.max(240, Math.ceil(distance * 0.05)) : 0;
+    return Math.max(0, referenceBlock - distance - safetyBlocks);
+  }
+
+  function candidateInActivationBlockWindow(candidate, activation, lookbackMs = 0, snapshot = state, options = {}) {
+    const blockNumber = Number(candidate?.blockNumber);
+    const floor = activationReplayFloorBlock(activation, lookbackMs, snapshot, options);
+    return Number.isSafeInteger(blockNumber) && blockNumber >= 0
+      && Number.isSafeInteger(floor)
+      && blockNumber >= floor;
+  }
+
+  function flapRawCandidateMatchesActivation(candidate, activation) {
+    const topic = String(candidate?.topic || "").toLowerCase();
+    const launcher = String(candidate?.launcher || "").toLowerCase();
+    if (activation?.type === "vault_factory") {
+      return topic === FLAP_VAULT_TOKEN_CREATED_TOPIC
+        && launcher === FLAP_VAULT_PORTAL_ADDRESS
+        && ADDRESS.test(String(activation.vaultFactory || "").toLowerCase())
+        && String(candidate?.vaultFactory || "").toLowerCase()
+          === String(activation.vaultFactory).toLowerCase();
+    }
+    if (activation?.type === "quote_pool") {
+      const quoteAssets = Array.isArray(candidate?.quoteAssets) ? candidate.quoteAssets : [];
+      const quoteAddress = String(activation.quoteAddress || "").toLowerCase();
+      return topic === FLAP_TOKEN_CREATED_TOPIC
+        && launcher === FLAP_PORTAL_ADDRESS
+        && ADDRESS.test(quoteAddress)
+        && (!quoteAssets.length || quoteAssets.includes(quoteAddress));
+    }
+    return false;
+  }
+
+  function legacyCausalBarrierKeysForRecord(record) {
+    const exact = normalizeBscCausalBarrierKeys([
+      record?.featureActivationReplayKey ? `feature:${record.featureActivationReplayKey}` : null,
+      record?.flapQuoteFirstThreeReplayGenerationKey
+        ? `first3:${record.flapQuoteFirstThreeReplayGenerationKey}`
+        : null,
+    ].filter(Boolean));
+    if (exact.length) return exact;
+
+    const transactionHash = normalizeTransactionHash(record?.transactionHash);
+    const blockNumber = Number(record?.blockNumber);
+    if (!/^0x[0-9a-f]{64}$/.test(transactionHash)
+      || !Number.isSafeInteger(blockNumber)
+      || blockNumber < 0) return [];
+    const collectionSize = (value) => Array.isArray(value)
+      ? value.length
+      : value instanceof Set ? value.size : 0;
+    const likelyCreation = collectionSize(record?.candidateTokens) > 0
+      || collectionSize(record?.verifiedNewContracts) > 0;
+    if (!likelyCreation) return [];
+
+    const keys = new Set();
+    const unresolved = (activation) => activation
+      && activation.active !== false
+      && !activation.firstTokenAlertedAt
+      && !activation.firstTokenTransactionHash;
+    const flapHot = normalizeFlapCreationHotIndex(
+      state?.officialSources?.flap?.creationEventHotIndex,
+      now(),
+    ).filter((candidate) => candidate.transactionHash === transactionHash);
+    const fourHot = normalizeFourMemeCreationHotIndex(
+      state?.officialSources?.fourMeme?.creationEventHotIndex,
+      now(),
+    ).filter((candidate) => candidate.transactionHash === transactionHash);
+    const hasExactHotIdentity = flapHot.length > 0 || fourHot.length > 0;
+    for (const [activationKey, activation] of Object.entries(
+      state?.officialSources?.flap?.featureActivations || {},
+    )) {
+      if (!unresolved(activation)) continue;
+      if (flapHot.some((candidate) => flapRawCandidateMatchesActivation(candidate, activation)
+        && candidateInActivationBlockWindow(candidate, activation, 0))) {
+        keys.add(`feature:${activationKey}`);
+      } else if (!hasExactHotIdentity
+        && candidateInActivationBlockWindow({ blockNumber }, activation, 0)) {
+        keys.add(`feature:${activationKey}`);
+      }
+    }
+    for (const [activationKey, activation] of Object.entries(
+      state?.officialSources?.fourMeme?.featureActivations || {},
+    )) {
+      if (!unresolved(activation)) continue;
+      if (fourHot.some((candidate) => fourMemeCandidateMatchesActivation(
+        candidate,
+        activation,
+        { requireEventTime: false },
+      ) && candidateInActivationBlockWindow(candidate, activation, 0))) {
+        keys.add(`feature:${activationKey}`);
+      } else if (!hasExactHotIdentity
+        && candidateInActivationBlockWindow({ blockNumber }, activation, 0)) {
+        keys.add(`feature:${activationKey}`);
+      }
+    }
+    const position = {
+      transactionHash,
+      blockNumber,
+      transactionIndex: bscQueuePosition(record?.transactionIndex),
+      logIndex: bscQueuePosition(record?.logIndex),
+    };
+    for (const [generationKey, window] of activeFlapQuoteFirstThreeWindows()) {
+      if ((window.slots || []).length >= FLAP_QUOTE_FIRST_THREE_TARGET
+        || !flapQuoteCandidateAfterActivation(position, window)) continue;
+      if (!hasExactHotIdentity || flapHot.some((candidate) => candidate.topic === FLAP_TOKEN_CREATED_TOPIC)) {
+        keys.add(`first3:${generationKey}`);
+      }
+    }
+    return normalizeBscCausalBarrierKeys([...keys]);
+  }
+
+  function officialCreationHandoffEvidenceForLogs(logs, details = {}) {
+    const keys = new Set();
+    const observedAt = details.observedAt || iso(now);
+    const flapCandidates = parseFlapCreationHotCandidates(logs, {
+      ...details,
+      observedAt,
+      indexedAt: observedAt,
+      current: now(),
+      pools: [],
+    });
+    const activationReady = (activation) => Boolean(activation
+      && activation.active !== false
+      && !activation.firstTokenAlertedAt
+      && !activation.firstTokenTransactionHash);
+
+    for (const [activationKey, activation] of Object.entries(
+      state?.officialSources?.flap?.featureActivations || {},
+    )) {
+      if (!activationReady(activation)) continue;
+      const possible = flapCandidates.some((candidate) => {
+        return flapRawCandidateMatchesActivation(candidate, activation)
+          && candidateInActivationBlockWindow(
+            candidate,
+            activation,
+            activation.allowReplay === true ? FLAP_ACTIVATION_REPLAY_LOOKBACK_MS : 0,
+            state,
+            { conservative: true },
+          );
+      });
+      if (possible) keys.add(`feature:${activationKey}`);
+    }
+
+    const fourMemeCandidates = logs
+      .map((log) => fourMemeCreationCandidateFromLog(log, { ...details, observedAt }))
+      .filter(Boolean);
+    for (const [activationKey, activation] of Object.entries(
+      state?.officialSources?.fourMeme?.featureActivations || {},
+    )) {
+      if (!activationReady(activation)) continue;
+      if (fourMemeCandidates.some((candidate) => fourMemeCandidateMatchesActivation(
+        candidate,
+        activation,
+        { requireEventTime: false },
+      ) && candidateInActivationBlockWindow(
+        candidate,
+        activation,
+        activation.allowReplay === true ? FOUR_MEME_ACTIVATION_REPLAY_LOOKBACK_MS : 0,
+        state,
+        { conservative: true },
+      ))) keys.add(`feature:${activationKey}`);
+    }
+
+    for (const [generationKey, window] of activeFlapQuoteFirstThreeWindows()) {
+      if ((window.slots || []).length >= FLAP_QUOTE_FIRST_THREE_TARGET) continue;
+      if (flapCandidates.some((candidate) => candidate.topic === FLAP_TOKEN_CREATED_TOPIC
+        && candidate.launcher === FLAP_PORTAL_ADDRESS
+        && flapQuoteCandidateAfterActivation(candidate, window))) {
+        keys.add(`first3:${generationKey}`);
+      }
+    }
+    return {
+      causalBarrierKeys: normalizeBscCausalBarrierKeys([...keys]),
+      flapCandidates,
+      fourMemeCandidates,
+    };
+  }
+
+  function causalBarrierKeysForOfficialLogs(logs, details = {}) {
+    return officialCreationHandoffEvidenceForLogs(logs, details).causalBarrierKeys;
+  }
+
   function ingestRecoveryLogs(transactionHash, blockNumber, logs, reason = "gap_recovery", details = {}) {
     registerOfficialChildren(parseRugspullChildren(logs).map((child) => ({ ...child, registeredAt: iso(now) })));
     registerSingularryCurves(logs, { transactionHash, blockNumber });
@@ -11925,28 +13664,36 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       bscQueuePosition(details.logIndex),
       ...logs.map((log) => bscQueuePosition(log.logIndex ?? log.index)),
     );
-    let flapReplayNeeded = false;
-    if (reason === "http_tail") {
-      // A Vault creation event already carries the exact official factory.
-      // Persist that small replay record with the tail cursor instead of
-      // waiting behind every ordinary Flap token's deep RPC analysis. Quote
-      // pools still require the complete receipt and remain on the strict path.
-      const observedAt = iso(now);
-      const directVaultCandidates = parseFlapCreationHotCandidates(focusLaunchLogs, {
+    const blockHashes = [...new Set(logs
+      .map((log) => normalizeTransactionHash(log?.blockHash))
+      .filter((hash) => /^0x[0-9a-f]{64}$/.test(hash)))];
+    if (blockHashes.length > 1) throw new Error(`conflicting canonical block hashes for ${transactionHash}`);
+    const blockHash = blockHashes[0] || null;
+    const handoffEvidence = focus3ChainScope
+      ? officialCreationHandoffEvidenceForLogs(focusLaunchLogs, {
         transactionHash,
+        blockHash,
         blockNumber,
         transactionIndex,
         logIndex,
-        observedAt,
-        indexedAt: observedAt,
-        current: now(),
-        pools: [],
-      }).filter((candidate) => candidate.topic === FLAP_VAULT_TOKEN_CREATED_TOPIC);
-      const appended = appendFlapCreationHotIndex(state, directVaultCandidates);
-      flapReplayNeeded = appended.replayNeeded;
-    }
-    if (mintEmitters.length || launchProtocol || lifecycleProtocol || candidateTokens.length || hookPools.length || upgradeEmitters.length) enqueue(transactionHash, blockNumber, reason, { transactionIndex, logIndex, mintEmitters, candidateTokens, verifiedNewContracts: exactOfficialTokens, upgradeEmitters, lifecycleEmitters, hookPools, protocol: launchProtocol || lifecycleProtocol || upgradeEmitters.length > 0 });
-    return { flapReplayNeeded };
+      })
+      : { causalBarrierKeys: [], flapCandidates: [], fourMemeCandidates: [] };
+    if (mintEmitters.length || launchProtocol || lifecycleProtocol || candidateTokens.length || hookPools.length || upgradeEmitters.length) enqueue(transactionHash, blockNumber, reason, {
+      transactionIndex,
+      logIndex,
+      blockHash,
+      mintEmitters,
+      candidateTokens,
+      verifiedNewContracts: exactOfficialTokens,
+      upgradeEmitters,
+      lifecycleEmitters,
+      hookPools,
+      causalBarrierKeys: handoffEvidence.causalBarrierKeys,
+      flapCreationHotCandidates: handoffEvidence.flapCandidates,
+      fourMemeCreationHotCandidates: handoffEvidence.fourMemeCandidates,
+      protocol: launchProtocol || lifecycleProtocol || upgradeEmitters.length > 0,
+    });
+    return { flapReplayNeeded: false };
   }
 
   function validateRecoveredBlockBundle(blockNumber, receipts, block) {
@@ -12097,8 +13844,14 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     const entries = [...queue.values()]
       .filter((entry) => entry.blockNumber <= blockNumber && !state.seenTransactions[entry.transactionHash])
       .sort(compareBscQueueEntries);
-    if (entries.length) await processEntryBatches(entries);
+    if (entries.length && !focus3ChainScope) await processEntryBatches(entries);
     await withState(async () => {
+      // Focus3 history uses the same durable handoff boundary as tail and
+      // near-head recovery. Log coverage and every discovered candidate are
+      // committed together; expensive transaction/code analysis then passes
+      // through the single paced background lane instead of bursting inside
+      // the history scheduler while the live head continues to move.
+      if (focus3ChainScope) persistRealtimePendingHandoff(entries);
       if (Object.keys(state.seenTransactions).length > 21_000) pruneState(state, now());
       state.lastFinalizedBlock = blockNumber;
       const legacyRescan = state.coverageContinuity?.latestConservativeRescan;
@@ -12137,6 +13890,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       updateCoverageHealth();
       await save();
     });
+    if (focus3ChainScope && entries.length) scheduleRealtime();
   }
 
   async function advanceCoverage() {
@@ -12146,15 +13900,25 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       return;
     }
     const confirmed = Math.max(0, currentHead - (config.bscConfirmations ?? 2));
-    const realtimeTailStatus = state._health.realtimeTail?.status;
     const realtimeTailBehind = Number(state.realtimeTailNextBlock) <= confirmed;
-    const realtimeTailLagBlocks = realtimeTailBehind
-      ? confirmed - Math.max(0, Number(state.realtimeTailNextBlock) - 1)
-      : 0;
-    if (realtimeTailLagBlocks > nearHeadRecoveryPermittedRealtimeLagBlocks
-      && ["critical", "degraded", "rebuilding"].includes(realtimeTailStatus)) {
+    const deepPriority = currentDeepRpcPriority();
+    if (focus3ChainScope && !deepPriority.tailReady) {
+      // Full-history reads share every physical host used by the isolated
+      // realtime pool. Never let an error/rebuild state (or more than twenty
+      // missing blocks) spend those hosts while the first-detection cursor is
+      // behind. The range remains wholly below lastFinalizedBlock until a
+      // later turn, so this is delay-only and cannot create false coverage.
       scheduleRealtimeTail();
-      scheduleCoverage(250);
+      scheduleCoverage(BSC_DEEP_RPC_PACE_MS);
+      return;
+    }
+    const historyBackpressure = state._health?.rpc?.backpressureReason;
+    if (focus3ChainScope && historyBackpressure === "realtime_pending_capacity") {
+      // Re-reading the same history range cannot create capacity. Let one
+      // already-durable transaction vacate the queue, then the successful
+      // processor wakeup will pre-empt this conservative deadline.
+      wakeBackgroundDeepRpc();
+      scheduleCoverage(BSC_DEEP_RPC_OLD_WITH_GAPS_PACE_MS);
       return;
     }
     const dueNearHeadGap = Boolean(dueNearHeadRecoveryGap());
@@ -12221,7 +13985,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       await withState(async () => {
         const health = state._health.rpc || { consecutiveFailures: 0 };
         const consecutiveFailures = Number(health.consecutiveFailures || 0) + 1;
-        const retryDelayMs = failurePhase === "range_recovery"
+        const handoffCapacity = isBscDurableHandoffCapacityError(error);
+        const retryDelayMs = handoffCapacity
+          ? BSC_DEEP_RPC_OLD_WITH_GAPS_PACE_MS
+          : failurePhase === "range_recovery"
           ? Math.min(
             coverageRetryMaxMs,
             coverageRetryBaseMs * (2 ** Math.min(consecutiveFailures - 1, 10)),
@@ -12238,7 +14005,13 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           failurePhase,
           retryDelayMs,
           nextRetryAt: iso(now() + retryDelayMs),
+          ...(handoffCapacity ? {
+            backpressureReason: error.rangeExceedsCapacity === true
+              ? "realtime_range_exceeds_pending_capacity"
+              : "realtime_pending_capacity",
+          } : {}),
         };
+        if (!handoffCapacity) delete state._health.rpc.backpressureReason;
         updateCoverageHealth();
         await save().catch(() => {});
       });
@@ -12255,10 +14028,17 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     const confirmed = Math.max(0, currentHead - (config.bscConfirmations ?? 2));
     desiredCoverage = Math.max(desiredCoverage, confirmed);
     recoveryTarget = Math.max(recoveryTarget, confirmed);
-    if (coverageTimer) return;
-    const delay = Math.max(minDelayMs, coverageRetryAt - Date.now());
+    const current = Date.now();
+    const delay = Math.max(minDelayMs, coverageRetryAt - current);
+    const dueAt = current + delay;
+    if (coverageTimer) {
+      if (dueAt >= coverageTimerDueAt) return;
+      clearTimeout(coverageTimer);
+    }
+    coverageTimerDueAt = dueAt;
     coverageTimer = setTimeout(() => {
       coverageTimer = null;
+      coverageTimerDueAt = 0;
       void advanceCoverage();
     }, delay);
     coverageTimer.unref?.();
@@ -12269,10 +14049,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     const current = Number(now());
     if (realtimeRetryAt > current) {
       scheduleRealtime(realtimeRetryAt - current);
+      if (focus3ChainScope) wakeBackgroundDeepRpc();
       return;
     }
     realtimeRunning = true;
     let retryDelayMs = 25;
+    let releaseDeepRpc = null;
     try {
       const durableTailConfirmed = Number.isSafeInteger(Number(state.realtimeTailNextBlock))
         ? Math.max(0, Number(state.realtimeTailNextBlock) - 1)
@@ -12280,21 +14062,64 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       const confirmed = Math.max(0, currentHead - (config.bscConfirmations ?? 2), durableTailConfirmed);
       // Keep first-launch/mode ordering inside each lane, but never let a large
       // historical gap-recovery queue starve confirmed WebSocket observations.
-      const queuedEntries = [...queue.values()].filter((entry) =>
-        Number(websocketHttpFallbackRetryAt.get(entry.transactionHash) || 0) <= current);
-      const processLimit = bscRealtimeProcessLimit(queuedEntries, confirmed, state.seenTransactions, {
+      let queuedEntries;
+      if (backgroundDeepPriorityEnabled()) {
+        const eligibility = backgroundDeepEligibility(current);
+        if (!eligibility.priority.allowFreshQueue) {
+          retryDelayMs = BSC_DEEP_RPC_PACE_MS;
+          if (eligibility.priority.tailPriority) scheduleRealtimeTail();
+          return;
+        }
+        const workClass = backgroundDeepTarget(eligibility);
+        if (!workClass || backgroundDeepLane(eligibility, workClass) !== "realtime") {
+          retryDelayMs = backgroundDeepRpcDelayMs(workClass, eligibility);
+          wakeBackgroundDeepRpc(retryDelayMs);
+          return;
+        }
+        queuedEntries = eligibility.realtime[workClass].slice(0, 1);
+        if (!queuedEntries.length) {
+          retryDelayMs = BSC_DEEP_RPC_PACE_MS;
+          wakeBackgroundDeepRpc();
+          return;
+        }
+        releaseDeepRpc = acquireBackgroundDeepRpc("realtime", workClass, eligibility);
+        if (!releaseDeepRpc) {
+          retryDelayMs = backgroundDeepRpcDelayMs(workClass, eligibility);
+          wakeBackgroundDeepRpc(retryDelayMs);
+          return;
+        }
+      } else {
+        queuedEntries = [...queue.values()].filter((entry) =>
+          Number(websocketHttpFallbackRetryAt.get(entry.transactionHash) || 0) <= current);
+      }
+      const processLimit = backgroundDeepPriorityEnabled() ? 1 : bscRealtimeProcessLimit(queuedEntries, confirmed, state.seenTransactions, {
         nearHeadWindowBlocks: realtimeTailLookbackBlocks,
         normalLimit: processBatchSize,
         backlogLimit: backlogProcessBatchSize,
       });
-      const entries = selectBscRealtimeEntries(
+      const entries = backgroundDeepPriorityEnabled() ? queuedEntries : selectBscRealtimeEntries(
         queuedEntries,
         confirmed,
         state.seenTransactions,
         processLimit,
         realtimeTailLookbackBlocks,
       );
-      if (entries.length) await processEntries(entries);
+      if (entries.length) {
+        await processEntries(entries, backgroundDeepPriorityEnabled() ? 1 : entryRpcConcurrency);
+        if (backgroundDeepPriorityEnabled()) await markBackgroundDeepHostRecovered();
+        if (backgroundDeepPriorityEnabled()) {
+          retryDelayMs = backgroundDeepRpcDelayMs();
+          if (state._health?.rpc?.backpressureReason === "realtime_pending_capacity"
+            && Object.keys(state.realtimePendingEntries || {}).length < realtimePendingMaxEntries) {
+            coverageRetryAt = 0;
+            scheduleCoverage(BSC_DEEP_RPC_PACE_MS);
+          }
+          if (state._health?.realtimeTail?.backpressureReason === "realtime_pending_capacity") {
+            realtimeTailRetryAt = 0;
+            scheduleRealtimeTail(BSC_DEEP_RPC_PACE_MS);
+          }
+        }
+      }
       if (entries.length && (realtimeRetryAt > 0 || state._health?.realtimeQueue?.status === "backoff")) {
         realtimeRetryAt = 0;
         await withState(async () => {
@@ -12324,6 +14149,19 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       const failedAt = Number(now());
       realtimeRetryAt = Math.max(realtimeRetryAt, failedAt + retryDelayMs);
       await withState(async () => {
+        if (error?.rpcFailureScope === "host") {
+          backgroundDeepHostRetryAt = Math.max(backgroundDeepHostRetryAt, failedAt + retryDelayMs);
+          state._health.backgroundDeepRpc = {
+            status: "backoff",
+            checkedAt: iso(failedAt),
+            lastErrorAt: iso(failedAt),
+            lastError: errorSummary(error),
+            rpcFailureScope: "host",
+            rpcOperation: error?.rpcOperation || null,
+            retryDelayMs,
+            nextRetryAt: iso(backgroundDeepHostRetryAt),
+          };
+        }
         const previous = state._health.realtimeQueue || { consecutiveFailures: 0 };
         state._health.realtimeQueue = {
           ...previous,
@@ -12339,32 +14177,60 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       });
       logRealtimeFailure(error);
     } finally {
+      releaseDeepRpc?.();
       realtimeRunning = false;
-      const durableTailConfirmed = Number.isSafeInteger(Number(state.realtimeTailNextBlock))
-        ? Math.max(0, Number(state.realtimeTailNextBlock) - 1)
-        : 0;
-      const confirmed = Math.max(0, currentHead - (config.bscConfirmations ?? 2), durableTailConfirmed);
-      const pendingEntries = [...queue.values()].filter((entry) =>
-        Number(entry.blockNumber) <= confirmed && !state.seenTransactions[entry.transactionHash]);
-      const hasReadyEntry = pendingEntries.some((entry) =>
-        Number(websocketHttpFallbackRetryAt.get(entry.transactionHash) || 0) <= Number(now()));
-      const nextWebsocketFallbackAt = Math.min(...pendingEntries
-        .map((entry) => Number(websocketHttpFallbackRetryAt.get(entry.transactionHash) || 0))
-        .filter((value) => value > Number(now())));
-      if (hasReadyEntry && !stopped) scheduleRealtime(retryDelayMs);
-      else if (Number.isFinite(nextWebsocketFallbackAt) && !stopped) {
-        scheduleRealtime(Math.max(25, nextWebsocketFallbackAt - Number(now())));
+      if (backgroundDeepPriorityEnabled()) {
+        if (!stopped) {
+          const retryRemaining = Math.max(0, realtimeRetryAt - Number(now()));
+          const hasDurableRealtimeWork = [...queue.values()].some((entry) =>
+            Boolean(state?.realtimePendingEntries?.[entry.transactionHash])
+            && !state?.seenTransactions?.[entry.transactionHash]);
+          // Eligibility intentionally hides the realtime lane while its retry
+          // deadline is active. Install that deadline explicitly; otherwise a
+          // 60s head-poll interval could strand a 1s retry indefinitely.
+          if (retryRemaining > 0 && hasDurableRealtimeWork) scheduleRealtime(retryRemaining);
+          wakeBackgroundDeepRpc(retryDelayMs);
+        }
+      } else {
+        const durableTailConfirmed = Number.isSafeInteger(Number(state.realtimeTailNextBlock))
+          ? Math.max(0, Number(state.realtimeTailNextBlock) - 1)
+          : 0;
+        const confirmed = Math.max(0, currentHead - (config.bscConfirmations ?? 2), durableTailConfirmed);
+        const pendingEntries = [...queue.values()].filter((entry) =>
+          Number(entry.blockNumber) <= confirmed && !state.seenTransactions[entry.transactionHash]);
+        const hasReadyEntry = pendingEntries.some((entry) =>
+          Number(websocketHttpFallbackRetryAt.get(entry.transactionHash) || 0) <= Number(now()));
+        const nextWebsocketFallbackAt = Math.min(...pendingEntries
+          .map((entry) => Number(websocketHttpFallbackRetryAt.get(entry.transactionHash) || 0))
+          .filter((value) => value > Number(now())));
+        if (hasReadyEntry && !stopped) scheduleRealtime(retryDelayMs);
+        else if (Number.isFinite(nextWebsocketFallbackAt) && !stopped) {
+          scheduleRealtime(Math.max(25, nextWebsocketFallbackAt - Number(now())));
+        }
       }
     }
   }
 
   function scheduleRealtime(delay = 25) {
-    if (stopped || realtimeTimer || realtimeRunning) return;
-    const retryDelay = Math.max(0, realtimeRetryAt - Number(now()));
-    realtimeTimer = setTimeout(() => {
+    if (stopped || realtimeRunning) return;
+    const current = Number(now());
+    const retryDelay = Math.max(0, realtimeRetryAt - current);
+    const deepRpcDelay = backgroundDeepPriorityEnabled() ? backgroundDeepRpcDelayMs() : 0;
+    const effectiveDelay = Math.max(25, Number(delay) || 25, retryDelay, deepRpcDelay);
+    const dueAt = current + effectiveDelay;
+    if (realtimeTimer) {
+      // A pre-readiness attempt may have installed a long wakeup. The second
+      // consecutive healthy tail batch is authoritative new information, so
+      // let its earlier fresh-work deadline replace that stale timer.
+      if (dueAt >= realtimeTimerDueAt) return;
+      backgroundClearTimeout(realtimeTimer);
+    }
+    realtimeTimerDueAt = dueAt;
+    realtimeTimer = backgroundSetTimeout(() => {
       realtimeTimer = null;
+      realtimeTimerDueAt = 0;
       void processRealtimeQueue();
-    }, Math.max(25, Number(delay) || 25, retryDelay));
+    }, effectiveDelay);
     realtimeTimer.unref?.();
   }
 
@@ -12379,12 +14245,15 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         return { skipped: true, reason: "backoff", nextRetryAt: iso(realtimeTailRetryAt) };
       }
       const confirmed = Math.max(0, currentHead - (config.bscConfirmations ?? 2));
+      let cursorRebuilt = false;
       await withState(async () => {
-        if (ensureRealtimeTailCursor(confirmed)) {
+        cursorRebuilt = ensureRealtimeTailCursor(confirmed);
+        if (cursorRebuilt) {
           updateCoverageHealth();
           await save();
         }
       });
+      if (cursorRebuilt) resetRealtimeTailDeepReadiness();
       const fromBlock = Number(state.realtimeTailNextBlock);
       if (fromBlock > confirmed) {
         await withState(async () => {
@@ -12400,9 +14269,15 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           };
           delete state._health.realtimeTail.lastError;
           delete state._health.realtimeTail.lastErrorAt;
+          delete state._health.realtimeTail.backpressureReason;
+          delete state._health.realtimeTail.pendingEntryCount;
+          delete state._health.realtimeTail.newEntryCount;
+          delete state._health.realtimeTail.pendingEntryCapacity;
           updateCoverageHealth();
           await save();
         });
+        recordRealtimeTailDeepReadiness();
+        if (focus3ChainScope) scheduleRealtime();
         scheduleNearHeadRecovery();
         resetTailFailureLog();
         return { skipped: false, fromBlock, toBlock: null };
@@ -12442,10 +14317,15 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         delete state._health.realtimeTail.lastErrorAt;
         delete state._health.realtimeTail.nextRetryAt;
         delete state._health.realtimeTail.retryDelayMs;
+        delete state._health.realtimeTail.backpressureReason;
+        delete state._health.realtimeTail.pendingEntryCount;
+        delete state._health.realtimeTail.newEntryCount;
+        delete state._health.realtimeTail.pendingEntryCapacity;
         updateCoverageHealth();
         await save();
       });
-      if (entries.length) scheduleRealtime();
+      recordRealtimeTailDeepReadiness();
+      if (entries.length || focus3ChainScope) scheduleRealtime();
       if (recovered.flapReplayNeeded) void replayPendingFlapActivations();
       resetTailFailureLog();
       realtimeTailRetryAt = 0;
@@ -12457,6 +14337,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       scheduleNearHeadRecovery();
       return { skipped: false, fromBlock, toBlock };
     } catch (error) {
+      resetRealtimeTailDeepReadiness();
       await withState(async () => {
         const previous = state._health.realtimeTail || { consecutiveFailures: 0 };
         const consecutiveFailures = Number(previous.consecutiveFailures || 0) + 1;
@@ -12482,7 +14363,21 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           nextBlock: state.realtimeTailNextBlock,
           retryDelayMs,
           nextRetryAt: iso(realtimeTailRetryAt),
+          ...(isBscDurableHandoffCapacityError(error) ? {
+            backpressureReason: error.rangeExceedsCapacity === true
+              ? "realtime_range_exceeds_pending_capacity"
+              : "realtime_pending_capacity",
+            pendingEntryCount: Number(error.pendingEntryCount || 0),
+            newEntryCount: Number(error.newEntryCount || 0),
+            pendingEntryCapacity: Number(error.pendingEntryCapacity || realtimePendingMaxEntries),
+          } : {}),
         };
+        if (!isBscDurableHandoffCapacityError(error)) {
+          delete state._health.realtimeTail.backpressureReason;
+          delete state._health.realtimeTail.pendingEntryCount;
+          delete state._health.realtimeTail.newEntryCount;
+          delete state._health.realtimeTail.pendingEntryCapacity;
+        }
         updateCoverageHealth();
         await save().catch(() => {});
       });
@@ -12490,6 +14385,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       throw error;
     } finally {
       realtimeTailRunning = false;
+      if (focus3ChainScope && currentDeepRpcPriority().allowFreshQueue) {
+        wakeBackgroundDeepRpc();
+      }
       if ((shouldContinue || realtimeTailRequested) && !stopped) {
         realtimeTailRequested = false;
         scheduleRealtimeTail(Math.max(25, realtimeTailRetryAt - now()));
@@ -12524,6 +14422,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       if (!(state.nearHeadRecoveryGaps || []).length) return { skipped: true, reason: "empty" };
 
       const confirmed = Math.max(0, currentHead - (config.bscConfirmations ?? 2));
+      if (focus3ChainScope && currentDeepRpcPriority().capacityBackpressure) {
+        scheduleRealtimeTail();
+        return { skipped: true, reason: "realtime_capacity_backpressure" };
+      }
       if (shouldYieldBscNearHeadRecovery({
         realtimeTailRunning,
         realtimeTailNextBlock: state.realtimeTailNextBlock,
@@ -12647,6 +14549,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         delete state._health.nearHeadRecovery.nextRetryAt;
         delete state._health.nearHeadRecovery.sharedRpcRetryAt;
         delete state._health.nearHeadRecovery.sharedRpcBackoff;
+        delete state._health.nearHeadRecovery.backpressureReason;
         updateCoverageHealth();
         await save();
       });
@@ -12704,6 +14607,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           delete state._health.nearHeadRecovery.sharedRpcRetryAt;
           delete state._health.nearHeadRecovery.sharedRpcBackoff;
         }
+        delete state._health.nearHeadRecovery.backpressureReason;
         updateCoverageHealth();
         await save().catch(() => {});
       });
@@ -12935,6 +14839,30 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     return null;
   }
 
+  function websocketFlapFirstThreeGenerationKeys(receipt, entry, observedAt) {
+    const pools = parseBscPoolLogs(receipt?.logs || []);
+    const candidates = parseFlapCreationHotCandidates(receipt?.logs || [], {
+      transactionHash: entry.transactionHash,
+      blockHash: receipt?.blockHash || null,
+      blockNumber: entry.blockNumber,
+      transactionIndex: receipt?.index ?? receipt?.transactionIndex ?? entry.transactionIndex ?? 0,
+      observedAt,
+      indexedAt: observedAt,
+      current: Number(now()),
+      confirmations: Math.max(0, Number(currentHead || 0) - Number(entry.blockNumber)),
+      requiredConfirmations: Math.max(0, Number(config.bscConfirmations ?? 2)),
+      pools,
+    });
+    const matches = new Set();
+    for (const [generationKey, window] of activeFlapQuoteFirstThreeWindows()) {
+      for (const candidate of candidates) {
+        if (!flapQuoteCandidateAfterActivation(candidate, window)) continue;
+        if (verifiedFlapQuotePair(pools, candidate.token, window.quoteAddress)) matches.add(generationKey);
+      }
+    }
+    return [...matches].sort();
+  }
+
   async function runWebsocketProofFastPath(entry, triggerLog, observedAt, socket) {
     const deliverySla = normalizeBscWebsocketDeliverySla(entry?.deliverySla);
     const observedAtMs = Date.parse(observedAt || "");
@@ -12950,7 +14878,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     try {
       const deadlineAtMs = Date.parse(deliverySla.deadlineAt);
       const stillFocused = websocketFocusCandidatePlatform(triggerLog, observedAt);
-      if (stillFocused
+      if (stillFocused?.activationKey
         && !websocketProofCandidateActive
         && !inFlightEntries.has(entry.transactionHash)
         && Number.isFinite(deadlineAtMs)
@@ -12971,14 +14899,17 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       const persisted = await withState(async () => {
         if (state.seenTransactions[entry.transactionHash]
           || state.deferredCreationEvidence[entry.transactionHash]) return false;
-        state.realtimePendingEntries[entry.transactionHash] = serializeRealtimePendingEntry(
-          entry,
-          state.realtimePendingEntries[entry.transactionHash],
-        );
+        persistRealtimePendingHandoff([entry]);
         await save();
         return true;
       });
       if (!persisted) return { status: "already_processed", requests: 0 };
+
+      const ownsKnownCausalHead = await withState(() => isDurableCausalGroupHead(entry));
+      if (!ownsKnownCausalHead) {
+        wakeBackgroundDeepRpc();
+        return { status: "causal_http_fallback", requests: 0 };
+      }
 
       if (!ownsSlot) {
         scheduleRealtime();
@@ -13014,6 +14945,31 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         triggerLog,
         current: now(),
       });
+      const firstThreeGenerationKeys = websocketFlapFirstThreeGenerationKeys(receipt, entry, observedAt);
+      if (firstThreeGenerationKeys.length > 1) {
+        throw websocketProofUnavailable("BSC websocket proof matched multiple Flap first-three generations");
+      }
+      if (firstThreeGenerationKeys.length === 1) {
+        const [generationKey] = firstThreeGenerationKeys;
+        if (entry.flapQuoteFirstThreeReplayGenerationKey
+          && entry.flapQuoteFirstThreeReplayGenerationKey !== generationKey) {
+          throw websocketProofUnavailable("BSC websocket first-three generation changed during proof");
+        }
+        if (!entry.flapQuoteFirstThreeReplayGenerationKey) {
+          entry.flapQuoteFirstThreeReplayGenerationKey = generationKey;
+          entry.revision = Number(entry.revision || 0) + 1;
+          await withState(async () => {
+            const pending = state.realtimePendingEntries[entry.transactionHash];
+            if (!pending || state.seenTransactions[entry.transactionHash]) return;
+            state.realtimePendingEntries[entry.transactionHash] = serializeRealtimePendingEntry(entry, pending);
+            await save();
+          });
+        }
+      }
+      if (!await withState(() => isDurableCausalGroupHead(entry))) {
+        wakeBackgroundDeepRpc();
+        return { status: "causal_http_fallback", requests: requestBudget.count };
+      }
       if (Number(now()) >= deadlineAtMs - BSC_WEBSOCKET_PROOF_DELIVERY_RESERVE_MS) {
         throw websocketProofUnavailable("BSC websocket proof completed after its delivery budget");
       }
@@ -13135,6 +15091,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         deliverySla,
       });
     } else if (kind === "protocol" && result?.transactionHash) {
+      const observedAt = new Date(Number(messageReceivedAt)).toISOString();
       registerSingularryCurves([result], {
         transactionHash: result.transactionHash,
         blockNumber: Number.parseInt(result.blockNumber, 16),
@@ -13160,18 +15117,30 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         ...parseKnownBscLaunchTokens([result]),
       ].filter((address) => !BSC_QUOTE_ASSETS.has(address.toLowerCase()));
       const hookPools = parsedPools.filter((pool) => pool.verifiedDex && pool.hook && pool.hook.toLowerCase() !== "0x0000000000000000000000000000000000000000");
+      const handoffEvidence = focus3ChainScope
+        ? officialCreationHandoffEvidenceForLogs([result], {
+          transactionHash: result.transactionHash,
+          blockNumber: Number.parseInt(result.blockNumber, 16),
+          transactionIndex: result.transactionIndex,
+          logIndex: result.logIndex,
+          observedAt,
+        })
+        : { causalBarrierKeys: [], flapCandidates: [], fourMemeCandidates: [] };
       enqueue(result.transactionHash, Number.parseInt(result.blockNumber, 16), launchProtocol ? "known_launch" : upgradeProtocol ? "official_upgrade" : lifecycleProtocol ? "official_lifecycle" : "pool_created", {
         transactionIndex: result.transactionIndex,
         logIndex: result.logIndex,
+        blockHash: result.blockHash,
         candidateTokens,
         verifiedNewContracts: exactOfficialTokens,
         upgradeEmitters: upgradeComponent ? [result.address] : [],
         lifecycleEmitters: lifecycleComponent ? [result.address] : [],
         hookPools,
+        causalBarrierKeys: handoffEvidence.causalBarrierKeys,
+        flapCreationHotCandidates: handoffEvidence.flapCandidates,
+        fourMemeCreationHotCandidates: handoffEvidence.fourMemeCandidates,
         protocol: launchProtocol || upgradeProtocol || lifecycleProtocol,
         deliverySla,
       });
-      const observedAt = new Date(Number(messageReceivedAt)).toISOString();
       const fastCandidate = websocketFocusCandidatePlatform(result, observedAt);
       const entry = fastCandidate ? queue.get(normalizeTransactionHash(result.transactionHash)) : null;
       if (entry && fastCandidate.activationKey
@@ -13198,7 +15167,8 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     if (watchdogTimer) clearInterval(watchdogTimer);
     if (healthTelemetryTimer) healthClearTimeout(healthTelemetryTimer);
     if (coverageTimer) clearTimeout(coverageTimer);
-    if (realtimeTimer) clearTimeout(realtimeTimer);
+    if (realtimeTimer) backgroundClearTimeout(realtimeTimer);
+    if (deferredEvidenceWakeTimer) backgroundClearTimeout(deferredEvidenceWakeTimer);
     if (realtimeTailTimer) clearTimeout(realtimeTailTimer);
     if (nearHeadRecoveryTimer) clearTimeout(nearHeadRecoveryTimer);
     if (httpHeadTimer) clearInterval(httpHeadTimer);
@@ -13208,12 +15178,24 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     watchdogTimer = null;
     healthTelemetryTimer = null;
     coverageTimer = null;
+    coverageTimerDueAt = 0;
     realtimeTimer = null;
+    realtimeTimerDueAt = 0;
+    deferredEvidenceWakeTimer = null;
+    deferredEvidenceWakeTimerDueAt = 0;
     realtimeTailTimer = null;
     realtimeTailRequested = false;
     nearHeadRecoveryTimer = null;
     nearHeadRecoveryTimerDueAt = 0;
     nearHeadRecoveryRequested = false;
+    resetRealtimeTailDeepReadiness();
+    backgroundDeepRpcNextAt = 0;
+    backgroundDeepHostRetryAt = 0;
+    backgroundOldDeepRpcNextAt = 0;
+    backgroundFreshDeepRpcStreak = 0;
+    backgroundDeepPreferredLane.sla = "realtime";
+    backgroundDeepPreferredLane.fresh = "realtime";
+    backgroundDeepPreferredLane.old = "realtime";
     httpHeadTimer = null;
     officialPollTimer = null;
     discoveryPollTimer = null;

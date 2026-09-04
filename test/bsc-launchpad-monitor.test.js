@@ -28,6 +28,7 @@ import {
   PANCAKE_INFINITY_CL_INITIALIZE_TOPIC,
   RUG_LAUNCH_SUCCEEDED_TOPIC,
   bscRealtimeProcessLimit,
+  bscDeepRpcPriority,
   commitBscDecision,
   compactBscNearHeadRecoveryGaps,
   compactFocus3LiveCoverageState,
@@ -542,6 +543,65 @@ test("BSC realtime queue uses full capacity near head and throttles ordinary bac
   assert.equal(bscRealtimeProcessLimit([entry("seen-fresh", 999)], 1_000, { "seen-fresh": 999 }, options), 2);
 });
 
+test("focus3 deep RPC priority requires two healthy tail batches and has capacity to drain production arrivals", () => {
+  const base = {
+    realtimeTailNextBlock: 1_001,
+    confirmedBlock: 1_000,
+    realtimeTailStatus: "healthy",
+    nearHeadGapCount: 1,
+  };
+  assert.equal(bscDeepRpcPriority({ ...base, consecutiveHealthyTailBatches: 1 }).tailReady, false);
+  const healthy = bscDeepRpcPriority({ ...base, consecutiveHealthyTailBatches: 2 });
+  assert.equal(healthy.tailReady, true);
+  assert.equal(healthy.deepIntervalMs, 750);
+  assert.equal(healthy.oldDeepIntervalMs, 30_000);
+  assert.equal(bscDeepRpcPriority({
+    ...base,
+    realtimeTailNextBlock: 979,
+    consecutiveHealthyTailBatches: 2,
+  }).allowFreshQueue, false, "more than twenty missing tail blocks close every ordinary deep lane");
+  assert.equal(bscDeepRpcPriority({
+    ...base,
+    realtimeTailStatus: "error",
+    consecutiveHealthyTailBatches: 2,
+  }).allowFreshQueue, false, "an RPC tail error cannot be bypassed by a small lag");
+
+  const capacity = bscDeepRpcPriority({
+    ...base,
+    realtimeTailNextBlock: 900,
+    realtimeTailStatus: "error",
+    realtimeTailBackpressure: "realtime_pending_capacity",
+  });
+  assert.equal(capacity.tailReady, false);
+  assert.equal(capacity.allowFreshQueue, true, "capacity backpressure may drain only already-durable queue work");
+  assert.equal(capacity.allowFreshDeferred, false);
+  assert.equal(capacity.oldDeepIntervalMs, 750, "capacity recovery must not take eight days at the repair-gap quota");
+
+  const durationMs = 10 * 60_000;
+  const arrivalEveryMs = 1_000 / 0.6;
+  let arrived = 0;
+  let serviced = 0;
+  let nextArrivalAt = 0;
+  let nextServiceAt = 0;
+  for (let clock = 0; clock <= durationMs; clock += 50) {
+    while (nextArrivalAt <= clock) {
+      arrived += 1;
+      nextArrivalAt += arrivalEveryMs;
+    }
+    while (nextServiceAt <= clock && serviced < arrived) {
+      serviced += 1;
+      nextServiceAt += healthy.deepIntervalMs;
+    }
+  }
+  assert.ok(serviced >= arrived - 1, `750ms serial starts drain a 0.6/s stream over ten minutes (${serviced}/${arrived})`);
+  const degraded = bscDeepRpcPriority({
+    ...base,
+    realtimeTailStatus: "degraded",
+    consecutiveHealthyTailBatches: 2,
+  });
+  assert.equal(degraded.allowFreshQueue, false, "once the tail degrades, the next deep start count is exactly zero");
+});
+
 test("Four.Meme stock and RWA templates stay out of alerts and active first-token replay", () => {
   assert.equal(isExcludedFourMemeTemplate({ name: "RWA", description: "RWA税费股票" }), true);
   assert.equal(isExcludedFourMemeTemplate({ name: "Tokenized Equity" }), true);
@@ -792,7 +852,7 @@ test("near-head gaps keep a missing retry timestamp as null", async (t) => {
   assert.equal(snapshot.nearHeadRecoveryGaps[0].nextAttemptAt, null);
 });
 
-test("realtime tail hot-indexes exact Flap Vault creation before ordinary deep processing", async (t) => {
+test("realtime tail WAL-persists exact Flap Vault creation before ordinary deep processing", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-flap-tail-hot-index-"));
   const clock = Date.parse("2026-08-11T12:00:00.000Z");
   const transactionHash = `0x${"a".repeat(64)}`;
@@ -815,7 +875,7 @@ test("realtime tail hot-indexes exact Flap Vault creation before ordinary deep p
     initializedAt: new Date(clock - 60_000).toISOString(),
     lastFinalizedBlock: 100,
     realtimeTailNextBlock: 99,
-    seenTransactions: { [transactionHash]: 99 },
+    seenTransactions: {},
   }));
   const provider = {
     async getNetwork() { return { chainId: 56n }; },
@@ -866,19 +926,27 @@ test("realtime tail hot-indexes exact Flap Vault creation before ordinary deep p
     await fs.rm(dataDir, { recursive: true, force: true });
   });
   await monitor.start();
-  await waitUntil(async () => (await monitor.getState()).officialSources.flap.creationEventHotIndex
-    .some((candidate) => candidate.transactionHash === transactionHash));
+  await waitUntil(async () => {
+    const current = await monitor.getState();
+    return current.realtimeTailNextBlock === 101
+      && Boolean(current.realtimePendingEntries[transactionHash]
+        || current.deferredCreationEvidence[transactionHash]);
+  });
   const snapshot = await monitor.getState();
-  const candidate = snapshot.officialSources.flap.creationEventHotIndex
+  const durable = snapshot.realtimePendingEntries[transactionHash]
+    || snapshot.deferredCreationEvidence[transactionHash];
+  const candidate = durable.flapCreationHotCandidates
     .find((entry) => entry.transactionHash === transactionHash);
   assert.equal(candidate.token, token);
   assert.equal(candidate.vaultFactory, vaultFactory);
   assert.equal(candidate.topic, FLAP_VAULT_TOKEN_CREATED_TOPIC);
   assert.equal(snapshot.realtimeTailNextBlock, 101);
-  assert.equal(snapshot.realtimePendingEntries[transactionHash], undefined, "the direct index is independent of ordinary queue processing");
+  assert.equal(snapshot.officialSources.flap.creationEventHotIndex
+    .some((entry) => entry.transactionHash === transactionHash), false,
+  "unprocessed raw evidence belongs to the per-transaction WAL record, not the processed hot cache");
 });
 
-test("an exact Flap receipt stays in the hot index when later identity profiling fails", async (t) => {
+test("an exact Flap receipt stays in per-transaction evidence when later identity profiling fails", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-flap-profile-failure-hot-index-"));
   const clock = Date.parse("2026-08-11T12:00:00.000Z");
   const transactionHash = `0x${"b".repeat(64)}`;
@@ -887,11 +955,13 @@ test("an exact Flap receipt stays in the hot index when later identity profiling
   const token = "0x1111111111111111111111111111111111117777";
   const iface = new Interface(["event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)"]);
   const encoded = iface.encodeEventLog(iface.getEvent("TokenCreated"), [Math.floor(clock / 1_000), creator, 1n, token, "First", "FIRST", "ipfs://first"]);
+  const blockHash = `0x${"c".repeat(64)}`;
   const log = {
     address: portal,
     transactionHash,
     blockNumber: "0x63",
-    transactionIndex: "0x1",
+    blockHash,
+    transactionIndex: "0x0",
     logIndex: "0x2",
     topics: encoded.topics,
     data: encoded.data,
@@ -913,14 +983,14 @@ test("an exact Flap receipt stays in the hot index when later identity profiling
     async getBlockNumber() { return 102; },
     async getTransaction(hash) {
       assert.equal(hash, transactionHash);
-      return { hash, to: portal, from: creator, data: "0x8cb5772c" };
+      return { hash, blockNumber: 99, blockHash, index: 0, transactionIndex: 0, to: portal, from: creator, data: "0x8cb5772c" };
     },
     async getTransactionReceipt(hash) {
       assert.equal(hash, transactionHash);
-      return { transactionHash: hash, blockNumber: 99, index: 1, status: 1, logs: [log] };
+      return { transactionHash: hash, blockNumber: 99, blockHash, index: 0, transactionIndex: 0, status: 1, logs: [log] };
     },
     async getBlock(number) {
-      return { number, timestamp: Math.floor(clock / 1_000), transactions: [transactionHash] };
+      return { number, hash: blockHash, timestamp: Math.floor(clock / 1_000), transactions: [transactionHash] };
     },
     async getCode() { return unavailable(); },
     async getStorage() { return unavailable(); },
@@ -971,14 +1041,24 @@ test("an exact Flap receipt stays in the hot index when later identity profiling
     await fs.rm(dataDir, { recursive: true, force: true });
   });
   await monitor.start();
-  await waitUntil(async () => (await monitor.getState()).officialSources.flap.creationEventHotIndex
-    .some((candidate) => candidate.transactionHash === transactionHash));
+  await waitUntil(async () => {
+    const current = await monitor.getState();
+    const durable = current.realtimePendingEntries[transactionHash]
+      || current.deferredCreationEvidence[transactionHash];
+    return durable?.flapCreationHotCandidates?.some((candidate) =>
+      candidate.transactionHash === transactionHash && candidate.blockHash === blockHash);
+  });
   const snapshot = await monitor.getState();
-  const candidate = snapshot.officialSources.flap.creationEventHotIndex
+  const durable = snapshot.realtimePendingEntries[transactionHash]
+    || snapshot.deferredCreationEvidence[transactionHash];
+  const candidate = durable.flapCreationHotCandidates
     .find((entry) => entry.transactionHash === transactionHash);
   assert.equal(candidate.token, token);
   assert.equal(candidate.topic, FLAP_TOKEN_CREATED_TOPIC);
-  assert.ok(snapshot.realtimePendingEntries[transactionHash], "deep analysis must remain durable for retry");
+  assert.equal(snapshot.officialSources.flap.creationEventHotIndex
+    .some((entry) => entry.transactionHash === transactionHash), false,
+  "a failed deep profile cannot publish an unprocessed candidate into the hot cache");
+  assert.ok(durable, "deep analysis must remain durable for retry");
   assert.equal(snapshot.seenTransactions[transactionHash], undefined);
 });
 
@@ -989,13 +1069,15 @@ test("the first near-head exact Flap warm profile reads latest before any histor
   const portal = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
   const creator = "0x2222222222222222222222222222222222222222";
   const token = "0x1111111111111111111111111111111111118888";
+  const blockHash = `0x${"d".repeat(64)}`;
   const iface = new Interface(["event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)"]);
   const encoded = iface.encodeEventLog(iface.getEvent("TokenCreated"), [Math.floor(clock / 1_000), creator, 1n, token, "Warm", "WARM", "ipfs://warm"]);
   const log = {
     address: portal,
     transactionHash,
     blockNumber: "0x63",
-    transactionIndex: "0x1",
+    blockHash,
+    transactionIndex: "0x0",
     logIndex: "0x2",
     topics: encoded.topics,
     data: encoded.data,
@@ -1013,14 +1095,14 @@ test("the first near-head exact Flap warm profile reads latest before any histor
     async getBlockNumber() { return 102; },
     async getTransaction(hash) {
       assert.equal(hash, transactionHash);
-      return { hash, to: portal, from: creator, data: `0x8cb5772c${"00".repeat(32)}` };
+      return { hash, blockNumber: 99, blockHash, index: 0, transactionIndex: 0, to: portal, from: creator, data: `0x8cb5772c${"00".repeat(32)}` };
     },
     async getTransactionReceipt(hash) {
       assert.equal(hash, transactionHash);
-      return { hash, transactionHash: hash, blockNumber: 99, index: 1, status: 1, logs: [log] };
+      return { hash, transactionHash: hash, blockNumber: 99, blockHash, index: 0, transactionIndex: 0, status: 1, logs: [log] };
     },
     async getBlock(number) {
-      return { number, timestamp: Math.floor(clock / 1_000), transactions: [transactionHash] };
+      return { number, hash: blockHash, timestamp: Math.floor(clock / 1_000), transactions: [transactionHash] };
     },
     async getCode(address, blockTag) {
       const normalized = String(address).toLowerCase();
@@ -1091,6 +1173,218 @@ test("the first near-head exact Flap warm profile reads latest before any histor
   assert.ok(profileReads.some((read) => read.method === "getCode" && read.address === portal));
   assert.ok(profileReads.some((read) => read.method === "getCode" && read.address === token));
   assert.equal(snapshot.realtimePendingEntries[transactionHash], undefined, "successful latest-first warm profiling drains the durable entry");
+  assert.ok(snapshot.officialSources.flap.creationEventHotIndex
+    .some((candidate) => candidate.transactionHash === transactionHash && candidate.blockHash === blockHash),
+  "successful processing commits the rich receipt candidate into the processed hot cache");
+});
+
+test("successful Flap deep processing atomically replaces pending raw evidence with restartable hot evidence", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-success-hot-restart-"));
+  const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
+  const walFile = `${stateFile}.wal`;
+  const clock = Date.parse("2026-08-11T12:00:00.000Z");
+  const launcher = "0x90497450f2a706f1951b5bdda52b4e5d16f34c06";
+  const token = "0x1111111111111111111111111111111111117777";
+  const vault = "0x2222222222222222222222222222222222222222";
+  const vaultFactory = "0x3333333333333333333333333333333333333333";
+  const creator = "0x4444444444444444444444444444444444444444";
+  const transactionHash = `0x${"ab".repeat(32)}`;
+  const blockHash = `0x${"cd".repeat(32)}`;
+  const iface = new Interface([
+    "event FlapTaxVaultTokenCreated(address indexed token,address indexed vault,address indexed vaultFactory)",
+  ]);
+  const encoded = iface.encodeEventLog(iface.getEvent("FlapTaxVaultTokenCreated"), [token, vault, vaultFactory]);
+  const log = {
+    address: launcher,
+    transactionHash,
+    blockNumber: 99,
+    blockHash,
+    transactionIndex: 0,
+    logIndex: 2,
+    topics: encoded.topics,
+    data: encoded.data,
+    removed: false,
+  };
+  await fs.writeFile(stateFile, JSON.stringify({
+    version: 7,
+    journalRevision: 0,
+    initializedAt: new Date(clock - 3_600_000).toISOString(),
+    lastFinalizedBlock: 98,
+    realtimeTailNextBlock: 100,
+    realtimeTailInitializedAt: new Date(clock - 3_600_000).toISOString(),
+    realtimePendingEntries: {},
+    deferredCreationEvidence: {},
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    coverageGaps: [],
+    nearHeadRecoveryGaps: [{
+      id: "success-hot",
+      fromBlock: 99,
+      toBlock: 99,
+      nextBlock: 99,
+      reason: "fixture",
+      attempts: 0,
+    }],
+    officialSources: {
+      flap: {
+        creationEventHotIndex: [],
+        quotePoolFirstThree: { version: 1, windows: {}, activeByQuote: {}, lifecycleEvents: {} },
+      },
+    },
+    _health: {
+      realtimeTail: {
+        status: "healthy",
+        lastSuccessAt: new Date(clock).toISOString(),
+        toBlock: 99,
+        consecutiveFailures: 0,
+      },
+    },
+  }));
+  const provider = {
+    async getNetwork() { return { chainId: 56n }; },
+    async getBlockNumber() { return 99; },
+    async send(method, [request]) {
+      if (method !== "eth_getLogs") throw new Error(`unexpected ${method}`);
+      const topics = Array.isArray(request?.topics?.[0]) ? request.topics[0] : [request?.topics?.[0]];
+      return topics.includes(FLAP_VAULT_TOKEN_CREATED_TOPIC) ? [log] : [];
+    },
+    async getTransaction(hash) {
+      if (hash !== transactionHash) return null;
+      return {
+        hash,
+        blockNumber: 99,
+        blockHash,
+        index: 0,
+        transactionIndex: 0,
+        to: launcher,
+        from: creator,
+        data: `0x8cb5772c${"0".repeat(64)}`,
+        value: 0n,
+      };
+    },
+    async getTransactionReceipt(hash) {
+      if (hash !== transactionHash) return null;
+      return {
+        hash,
+        transactionHash: hash,
+        blockNumber: 99,
+        blockHash,
+        index: 0,
+        transactionIndex: 0,
+        to: launcher,
+        from: creator,
+        status: 1,
+        logs: [log],
+      };
+    },
+    async getBlock(number) {
+      return {
+        number: Number(number),
+        hash: blockHash,
+        timestamp: Math.floor((clock - 60_000) / 1_000),
+        transactions: [transactionHash],
+      };
+    },
+    async getCode(address) {
+      return String(address).toLowerCase() === token
+        ? `0x${"6000".repeat(300)}`
+        : `0x${"6000".repeat(400)}`;
+    },
+    async getStorage() { return "0x"; },
+    async call() { return "0x"; },
+    destroy() {},
+  };
+  const alerts = [];
+  const dependencies = {
+    autoStart: false,
+    externalAttribution: false,
+    provider,
+    now: () => clock,
+    logger: { error() {}, info() {} },
+    sendAlertsImpl: async (_config, event) => {
+      alerts.push(structuredClone(event));
+      return { status: "delivered", eventId: event.eventKey };
+    },
+    ...disabledJournalTimerDependencies(),
+  };
+  const config = {
+    dataDir,
+    monitorScope: "focus3",
+    bscConfirmations: 0,
+    bscNearHeadRecoveryBatchSize: 1,
+    blockedContracts: new Set(),
+  };
+  let monitor = createBscLaunchpadMonitor(config, dependencies);
+  t.after(async () => {
+    await monitor?.stop().catch(() => {});
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  await monitor.getState();
+  assert.equal((await monitor.scanNearHeadRecovery()).completed, true);
+  let snapshot = await monitor.getState();
+  assert.ok(snapshot.realtimePendingEntries[transactionHash]);
+  assert.equal(snapshot.officialSources.flap.creationEventHotIndex
+    .some((candidate) => candidate.transactionHash === transactionHash), false);
+
+  await monitor.checkHttpHead();
+  for (let turn = 0; turn < 3; turn += 1) await monitor.processRealtimeQueue();
+  await monitor.awaitIdle();
+  snapshot = await monitor.getState();
+  assert.equal(snapshot.realtimePendingEntries[transactionHash], undefined);
+  assert.equal(snapshot.deferredCreationEvidence[transactionHash], undefined);
+  assert.equal(snapshot.seenTransactions[transactionHash], 99);
+  assert.ok(snapshot.officialSources.flap.creationEventHotIndex
+    .some((candidate) => candidate.transactionHash === transactionHash));
+
+  const frames = (await fs.readFile(walFile, "utf8"))
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map(JSON.parse);
+  assert.ok(frames.some((frame) => {
+    const paths = frame.ops.map((operation) => operation.path.join("."));
+    return paths.includes("officialSources.flap.creationEventHotIndex")
+      && paths.includes(`realtimePendingEntries.${transactionHash}`)
+      && frame.ops.some((operation) => operation.op === "delete"
+        && operation.path.join(".") === `realtimePendingEntries.${transactionHash}`);
+  }), "the processed hot evidence and pending deletion share one WAL revision");
+
+  await monitor.stop();
+  monitor = createBscLaunchpadMonitor(config, dependencies);
+  snapshot = await monitor.getState();
+  assert.ok(snapshot.officialSources.flap.creationEventHotIndex
+    .some((candidate) => candidate.transactionHash === transactionHash));
+  assert.equal(await monitor.registerFlapFeatureActivations([{
+    pool: {
+      identity: `vault:INDEX:${vaultFactory}`,
+      category: "INDEX",
+      vaultFactory,
+      sourceUrl: "https://flap.sh/board",
+    },
+    confirmed: true,
+    observations: 2,
+    firstObservedAt: new Date(clock - 30_000).toISOString(),
+    confirmedAt: new Date(clock).toISOString(),
+    observedAt: new Date(clock).toISOString(),
+  }]), 1);
+  await monitor.awaitIdle();
+  snapshot = await monitor.getState();
+  const activation = Object.values(snapshot.officialSources.flap.featureActivations)[0];
+  assert.equal(activation.firstTokenTransactionHash, transactionHash);
+  assert.equal(alerts.filter((event) => event.transactionHash === transactionHash).length, 1);
+
+  await monitor.stop();
+  monitor = createBscLaunchpadMonitor(config, dependencies);
+  await monitor.getState();
+  await monitor.replayFlapFeatureActivations();
+  await monitor.awaitIdle();
+  snapshot = await monitor.getState();
+  assert.equal(Object.values(snapshot.officialSources.flap.featureActivations)[0]
+    .firstTokenTransactionHash, transactionHash);
+  assert.equal(alerts.filter((event) => event.transactionHash === transactionHash).length, 1,
+    "the processed hot owner remains exact-once across a second restart");
 });
 
 test("warmed ordinary Flap and Four.Meme fingerprints use the conservative identity fast path", async () => {
@@ -3643,6 +3937,7 @@ test("Flap Board replay keeps the earliest exact creation after more than 100 ne
     officialSources: { flap: { creationEventHotIndex: [...candidates].reverse() } },
   }));
   const first = candidates[0];
+  const firstBlockHash = `0x${"a9".repeat(32)}`;
   const vaultInterface = new Interface(["event FlapTaxVaultTokenCreated(address indexed token,address indexed vault,address indexed vaultFactory)"]);
   const encoded = vaultInterface.encodeEventLog(vaultInterface.getEvent("FlapTaxVaultTokenCreated"), [first.token, vault, vaultFactory]);
   const log = {
@@ -3650,9 +3945,11 @@ test("Flap Board replay keeps the earliest exact creation after more than 100 ne
     topics: encoded.topics,
     data: encoded.data,
     transactionHash: first.transactionHash,
+    blockHash: firstBlockHash,
     blockNumber: first.blockNumber,
     transactionIndex: first.transactionIndex,
     logIndex: 0,
+    removed: false,
   };
   const controllerCode = `0x${"6000".repeat(400)}`;
   const tokenCode = `0x${"6000".repeat(300)}`;
@@ -3662,14 +3959,14 @@ test("Flap Board replay keeps the earliest exact creation after more than 100 ne
     async getTransaction(hash) {
       requestedTransactions.push(hash);
       if (hash !== first.transactionHash) throw new Error(`unexpected later Flap replay ${hash}`);
-      return { hash, to: launcher, from: creator, data: `0x8cb5772c${"0".repeat(64)}` };
+      return { hash, blockNumber: first.blockNumber, blockHash: firstBlockHash, index: first.transactionIndex, transactionIndex: first.transactionIndex, to: launcher, from: creator, data: `0x8cb5772c${"0".repeat(64)}` };
     },
     async getTransactionReceipt(hash) {
       if (hash !== first.transactionHash) throw new Error(`unexpected later Flap receipt ${hash}`);
-      return { transactionHash: hash, status: 1, blockNumber: first.blockNumber, index: first.transactionIndex, logs: [log] };
+      return { transactionHash: hash, blockHash: firstBlockHash, status: 1, blockNumber: first.blockNumber, index: first.transactionIndex, transactionIndex: first.transactionIndex, logs: [log] };
     },
     async getBlock(blockNumber) {
-      return { number: Number(blockNumber), timestamp: Math.floor(Date.parse(first.observedAt) / 1_000), transactions: [] };
+      return { number: Number(blockNumber), hash: firstBlockHash, timestamp: Math.floor(Date.parse(first.observedAt) / 1_000), transactions: [first.transactionHash] };
     },
     async getCode(address) {
       return String(address).toLowerCase() === first.token ? tokenCode : controllerCode;
@@ -3726,6 +4023,7 @@ test("a failed new Flap activation replay rejects registration and remains retry
   const vaultFactory = "0x3333333333333333333333333333333333333333";
   const creator = "0x4444444444444444444444444444444444444444";
   const transactionHash = `0x${"6".repeat(64)}`;
+  const blockHash = `0x${"a6".repeat(32)}`;
   const observedAt = new Date(clock - 60_000).toISOString();
   await fs.writeFile(path.join(dataDir, "bsc-launchpad-state.json"), JSON.stringify({
     version: 6,
@@ -3749,19 +4047,19 @@ test("a failed new Flap activation replay rejects registration and remains retry
   }));
   const iface = new Interface(["event FlapTaxVaultTokenCreated(address indexed token,address indexed vault,address indexed vaultFactory)"]);
   const encoded = iface.encodeEventLog(iface.getEvent("FlapTaxVaultTokenCreated"), [token, vault, vaultFactory]);
-  const log = { address: launcher, topics: encoded.topics, data: encoded.data, transactionHash, blockNumber: 99, transactionIndex: 0, logIndex: 0 };
+  const log = { address: launcher, topics: encoded.topics, data: encoded.data, transactionHash, blockHash, blockNumber: 99, transactionIndex: 0, logIndex: 0, removed: false };
   let failReplay = true;
   const alerts = [];
   const provider = {
     async getTransaction(hash) {
       if (failReplay) throw new Error("Flap replay RPC unavailable");
-      return { hash, to: launcher, from: creator, data: `0x8cb5772c${"0".repeat(64)}` };
+      return { hash, blockNumber: 99, blockHash, index: 0, transactionIndex: 0, to: launcher, from: creator, data: `0x8cb5772c${"0".repeat(64)}` };
     },
     async getTransactionReceipt(hash) {
       if (failReplay) throw new Error("Flap replay RPC unavailable");
-      return { transactionHash: hash, status: 1, blockNumber: 99, index: 0, logs: [log] };
+      return { transactionHash: hash, blockHash, status: 1, blockNumber: 99, index: 0, transactionIndex: 0, logs: [log] };
     },
-    async getBlock() { return { number: 99, timestamp: Math.floor(Date.parse(observedAt) / 1_000), transactions: [] }; },
+    async getBlock() { return { number: 99, hash: blockHash, timestamp: Math.floor(Date.parse(observedAt) / 1_000), transactions: [transactionHash] }; },
     async getCode(address) { return String(address).toLowerCase() === token ? `0x${"6000".repeat(300)}` : `0x${"6000".repeat(400)}`; },
     async getStorage() { return "0x"; },
     async call() { return "0x"; },
@@ -3811,6 +4109,7 @@ test("Flap replay shares one persisted RPC backoff across features and resumes w
       vault: "0x2111111111111111111111111111111111111111",
       vaultFactory: "0x3111111111111111111111111111111111111111",
       transactionHash: `0x${"6".repeat(64)}`,
+      blockHash: `0x${"b6".repeat(32)}`,
       blockNumber: 99,
       category: "INDEX",
     },
@@ -3819,6 +4118,7 @@ test("Flap replay shares one persisted RPC backoff across features and resumes w
       vault: "0x2222222222222222222222222222222222222222",
       vaultFactory: "0x3222222222222222222222222222222222222222",
       transactionHash: `0x${"7".repeat(64)}`,
+      blockHash: `0x${"b7".repeat(32)}`,
       blockNumber: 100,
       category: "STAKING",
     },
@@ -3856,9 +4156,11 @@ test("Flap replay shares one persisted RPC backoff across features and resumes w
       topics: encoded.topics,
       data: encoded.data,
       transactionHash: record.transactionHash,
+      blockHash: record.blockHash,
       blockNumber: record.blockNumber,
       transactionIndex: index,
       logIndex: 0,
+      removed: false,
     }];
   }));
   let cooling = true;
@@ -3877,13 +4179,22 @@ test("Flap replay shares one persisted RPC backoff across features and resumes w
         error.rpcFailureScope = "host";
         throw error;
       }
-      return { hash, to: launcher, from: creator, data: `0x8cb5772c${"0".repeat(64)}` };
+      const record = records.find((item) => item.transactionHash === hash);
+      return { hash, blockNumber: record.blockNumber, blockHash: record.blockHash, index: records.indexOf(record), transactionIndex: records.indexOf(record), to: launcher, from: creator, data: `0x8cb5772c${"0".repeat(64)}` };
     },
     async getTransactionReceipt(hash) {
       const log = logs.get(hash);
-      return { transactionHash: hash, status: 1, blockNumber: log.blockNumber, index: log.transactionIndex, logs: [log] };
+      return { transactionHash: hash, blockHash: log.blockHash, status: 1, blockNumber: log.blockNumber, index: log.transactionIndex, transactionIndex: log.transactionIndex, logs: [log] };
     },
-    async getBlock(blockNumber) { return { number: blockNumber, timestamp: Math.floor(Date.parse(observedAt) / 1_000), transactions: [] }; },
+    async getBlock(blockNumber) {
+      const record = records.find((item) => item.blockNumber === Number(blockNumber));
+      return {
+        number: Number(blockNumber),
+        hash: record.blockHash,
+        timestamp: Math.floor(Date.parse(observedAt) / 1_000),
+        transactions: Array.from({ length: records.indexOf(record) }, (_, index) => `0x${String(index + 3).repeat(64)}`).concat(record.transactionHash),
+      };
+    },
     async getCode(address) { return records.some((record) => record.token.toLowerCase() === String(address).toLowerCase()) ? `0x${"6000".repeat(300)}` : `0x${"6000".repeat(400)}`; },
     async getStorage() { return "0x"; },
     async call() { return "0x"; },
@@ -3973,6 +4284,7 @@ test("a background Flap activation replay preserves the durable checkpoint and r
   const vaultFactory = "0x3333333333333333333333333333333333333333";
   const creator = "0x4444444444444444444444444444444444444444";
   const transactionHash = `0x${"7".repeat(64)}`;
+  const blockHash = `0x${"a7".repeat(32)}`;
   const observedAt = new Date(clock - 60_000).toISOString();
   await fs.writeFile(stateFile, JSON.stringify({
     version: 6,
@@ -3996,7 +4308,7 @@ test("a background Flap activation replay preserves the durable checkpoint and r
   }));
   const iface = new Interface(["event FlapTaxVaultTokenCreated(address indexed token,address indexed vault,address indexed vaultFactory)"]);
   const encoded = iface.encodeEventLog(iface.getEvent("FlapTaxVaultTokenCreated"), [token, vault, vaultFactory]);
-  const log = { address: launcher, topics: encoded.topics, data: encoded.data, transactionHash, blockNumber: 99, transactionIndex: 0, logIndex: 0 };
+  const log = { address: launcher, topics: encoded.topics, data: encoded.data, transactionHash, blockHash, blockNumber: 99, transactionIndex: 0, logIndex: 0, removed: false };
   let failReplay = true;
   let releaseFirstReplay;
   let signalFirstReplay;
@@ -4012,15 +4324,15 @@ test("a background Flap activation replay preserves the durable checkpoint and r
       signalFirstReplay();
       await firstReplayGate;
       if (failReplay) throw new Error("Flap background replay RPC unavailable");
-      return { hash, to: launcher, from: creator, data: `0x8cb5772c${"0".repeat(64)}` };
+      return { hash, blockNumber: 99, blockHash, index: 0, transactionIndex: 0, to: launcher, from: creator, data: `0x8cb5772c${"0".repeat(64)}` };
     },
     async getTransactionReceipt(hash) {
       signalFirstReplay();
       await firstReplayGate;
       if (failReplay) throw new Error("Flap background replay RPC unavailable");
-      return { transactionHash: hash, status: 1, blockNumber: 99, index: 0, logs: [log] };
+      return { transactionHash: hash, blockHash, status: 1, blockNumber: 99, index: 0, transactionIndex: 0, logs: [log] };
     },
-    async getBlock() { return { number: 99, timestamp: Math.floor(Date.parse(observedAt) / 1_000), transactions: [] }; },
+    async getBlock() { return { number: 99, hash: blockHash, timestamp: Math.floor(Date.parse(observedAt) / 1_000), transactions: [transactionHash] }; },
     async getCode(address) { return String(address).toLowerCase() === token ? `0x${"6000".repeat(300)}` : `0x${"6000".repeat(400)}`; },
     async getStorage() { return "0x"; },
     async call() { return "0x"; },
@@ -4112,6 +4424,7 @@ test("stop aborts a blocked Flap replay and a restart resumes its durable candid
   const vaultFactory = "0x3333333333333333333333333333333333333333";
   const creator = "0x4444444444444444444444444444444444444444";
   const transactionHash = `0x${"8".repeat(64)}`;
+  const blockHash = `0x${"a8".repeat(32)}`;
   const observedAt = new Date(clock - 60_000).toISOString();
   const candidate = {
     launcher,
@@ -4136,7 +4449,7 @@ test("stop aborts a blocked Flap replay and a restart resumes its durable candid
   }));
   const iface = new Interface(["event FlapTaxVaultTokenCreated(address indexed token,address indexed vault,address indexed vaultFactory)"]);
   const encoded = iface.encodeEventLog(iface.getEvent("FlapTaxVaultTokenCreated"), [token, vault, vaultFactory]);
-  const log = { address: launcher, topics: encoded.topics, data: encoded.data, transactionHash, blockNumber: 99, transactionIndex: 0, logIndex: 0 };
+  const log = { address: launcher, topics: encoded.topics, data: encoded.data, transactionHash, blockHash, blockNumber: 99, transactionIndex: 0, logIndex: 0, removed: false };
   let releaseBlockedReads;
   let signalBlockedRead;
   const blockedReads = new Promise((resolve) => { releaseBlockedReads = resolve; });
@@ -4213,9 +4526,9 @@ test("stop aborts a blocked Flap replay and a restart resumes its durable candid
 
   const alerts = [];
   const replayProvider = {
-    async getTransaction(hash) { return { hash, to: launcher, from: creator, data: `0x8cb5772c${"0".repeat(64)}` }; },
-    async getTransactionReceipt(hash) { return { transactionHash: hash, status: 1, blockNumber: 99, index: 0, logs: [log] }; },
-    async getBlock() { return { number: 99, timestamp: Math.floor(Date.parse(observedAt) / 1_000), transactions: [] }; },
+    async getTransaction(hash) { return { hash, blockNumber: 99, blockHash, index: 0, transactionIndex: 0, to: launcher, from: creator, data: `0x8cb5772c${"0".repeat(64)}` }; },
+    async getTransactionReceipt(hash) { return { transactionHash: hash, blockHash, status: 1, blockNumber: 99, index: 0, transactionIndex: 0, logs: [log] }; },
+    async getBlock() { return { number: 99, hash: blockHash, timestamp: Math.floor(Date.parse(observedAt) / 1_000), transactions: [transactionHash] }; },
     async getCode(address) { return String(address).toLowerCase() === token ? `0x${"6000".repeat(300)}` : `0x${"6000".repeat(400)}`; },
     async getStorage() { return "0x"; },
     async call() { return "0x"; },
@@ -4521,9 +4834,11 @@ test("Four.Meme PublicNode fast replay is address scoped, ordered, and bypasses 
   const creator = "0x4444444444444444444444444444444444444444";
   const earlierTransactionHash = `0x${"a".repeat(64)}`;
   const laterTransactionHash = `0x${"b".repeat(64)}`;
+  const earlierBlockHash = `0x${"c1".repeat(32)}`;
+  const laterBlockHash = `0x${"c2".repeat(32)}`;
   const modules = ["5", "6", "7", "8", "9", "a"].map((digit) => `0x${digit.repeat(40)}`);
   const iface = new Interface(["event TokenCreated(uint256 requestId,uint256 indexed presetId,address indexed creator,address indexed token,string name,string symbol,uint256 maxSupply,uint256 saleAmount,uint256 raiseAmount,uint256 initialPrice,address quoteAsset,address vault,address curveModule,address tradeModule,address migrateModule,address customData,address tokenModule,string tokenMetaUri,uint256 flags,bytes encodedTags)"]);
-  const makeLog = (token, transactionHash, blockNumber, transactionIndex) => {
+  const makeLog = (token, transactionHash, blockHash, blockNumber, transactionIndex) => {
     const encoded = iface.encodeEventLog(iface.getEvent("TokenCreated"), [
       BigInt(blockNumber), 1778027615723n, creator, token, `Fast Token ${blockNumber}`, `F${blockNumber}`,
       1_000n, 800n, 20n, 1n, quote, ...modules, "ipfs://meta", 0n, "0x",
@@ -4536,10 +4851,12 @@ test("Four.Meme PublicNode fast replay is address scoped, ordered, and bypasses 
       transactionIndex: `0x${transactionIndex.toString(16)}`,
       logIndex: "0x1",
       transactionHash,
+      blockHash,
+      removed: false,
     };
   };
-  const earlierLog = makeLog(earlierToken, earlierTransactionHash, 96, 3);
-  const laterLog = makeLog(laterToken, laterTransactionHash, 97, 2);
+  const earlierLog = makeLog(earlierToken, earlierTransactionHash, earlierBlockHash, 96, 3);
+  const laterLog = makeLog(laterToken, laterTransactionHash, laterBlockHash, 97, 2);
   const owner = new Interface(["function owner() view returns(address)"]);
   const controllerCode = `0x${"6000".repeat(400)}`;
   const safeCode = `0x${"6000".repeat(300)}`;
@@ -4549,20 +4866,28 @@ test("Four.Meme PublicNode fast replay is address scoped, ordered, and bypasses 
   const provider = {
     async getBlockNumber() { return 100; },
     async getBlock(blockNumber) {
-      return { number: Number(blockNumber), timestamp: Math.floor((clock - (100 - Number(blockNumber)) * 750) / 1_000), transactions: [] };
+      const isEarlier = Number(blockNumber) === 96;
+      const transactionIndex = isEarlier ? 3 : 2;
+      const transactionHash = isEarlier ? earlierTransactionHash : laterTransactionHash;
+      return {
+        number: Number(blockNumber),
+        hash: isEarlier ? earlierBlockHash : laterBlockHash,
+        timestamp: Math.floor((clock - (100 - Number(blockNumber)) * 750) / 1_000),
+        transactions: Array.from({ length: transactionIndex }, (_, index) => `0x${String(index + 3).repeat(64)}`).concat(transactionHash),
+      };
     },
     async send() {
       completeLogCalls += 1;
       throw new Error("the complete replay must not run after the fast candidate is claimed");
     },
     async getTransaction(hash) {
-      return [earlierTransactionHash, laterTransactionHash].includes(hash)
-        ? { hash, to: core, from: creator, data: `0x12345678${"0".repeat(64)}` }
-        : null;
+      if (hash === earlierTransactionHash) return { hash, blockNumber: 96, blockHash: earlierBlockHash, index: 3, transactionIndex: 3, to: core, from: creator, data: `0x12345678${"0".repeat(64)}` };
+      if (hash === laterTransactionHash) return { hash, blockNumber: 97, blockHash: laterBlockHash, index: 2, transactionIndex: 2, to: core, from: creator, data: `0x12345678${"0".repeat(64)}` };
+      return null;
     },
     async getTransactionReceipt(hash) {
-      if (hash === earlierTransactionHash) return { transactionHash: hash, status: 1, blockNumber: 96, logs: [earlierLog] };
-      if (hash === laterTransactionHash) return { transactionHash: hash, status: 1, blockNumber: 97, logs: [laterLog] };
+      if (hash === earlierTransactionHash) return { transactionHash: hash, blockHash: earlierBlockHash, status: 1, blockNumber: 96, index: 3, transactionIndex: 3, logs: [earlierLog] };
+      if (hash === laterTransactionHash) return { transactionHash: hash, blockHash: laterBlockHash, status: 1, blockNumber: 97, index: 2, transactionIndex: 2, logs: [laterLog] };
       return null;
     },
     async getCode(address) {
@@ -4632,11 +4957,13 @@ test("Four.Meme activation replays the persisted realtime creation hot index bef
   const token2 = "0x2222222222222222222222222222222222222222";
   const tx1 = `0x${"1".repeat(64)}`;
   const tx2 = `0x${"2".repeat(64)}`;
+  const blockHash1 = `0x${"d1".repeat(32)}`;
+  const blockHash2 = `0x${"d2".repeat(32)}`;
   const creator1 = "0x3333333333333333333333333333333333333333";
   const creator2 = "0x4444444444444444444444444444444444444444";
   const modules = ["5", "6", "7", "8", "9", "a"].map((digit) => `0x${digit.repeat(40)}`);
   const iface = new Interface(["event TokenCreated(uint256 requestId,uint256 indexed presetId,address indexed creator,address indexed token,string name,string symbol,uint256 maxSupply,uint256 saleAmount,uint256 raiseAmount,uint256 initialPrice,address quoteAsset,address vault,address curveModule,address tradeModule,address migrateModule,address customData,address tokenModule,string tokenMetaUri,uint256 flags,bytes encodedTags)"]);
-  const makeLog = (token, creator, transactionHash, blockNumber, transactionIndex) => {
+  const makeLog = (token, creator, transactionHash, blockHash, blockNumber, transactionIndex) => {
     const encoded = iface.encodeEventLog(iface.getEvent("TokenCreated"), [
       BigInt(blockNumber), 1778027615723n, creator, token, `Token ${blockNumber}`, `T${blockNumber}`,
       1_000n, 800n, 20n, 1n, quote, ...modules, "ipfs://meta", 0n, "0x",
@@ -4649,10 +4976,12 @@ test("Four.Meme activation replays the persisted realtime creation hot index bef
       transactionIndex,
       logIndex: 0,
       transactionHash,
+      blockHash,
+      removed: false,
     };
   };
-  const log1 = makeLog(token1, creator1, tx1, 91, 0);
-  const log2 = makeLog(token2, creator2, tx2, 92, 0);
+  const log1 = makeLog(token1, creator1, tx1, blockHash1, 91, 0);
+  const log2 = makeLog(token2, creator2, tx2, blockHash2, 92, 0);
   const observed1 = new Date(clock - 5 * 60_000).toISOString();
   const observed2 = new Date(clock - 4 * 60_000).toISOString();
   await fs.writeFile(path.join(dataDir, "bsc-launchpad-state.json"), JSON.stringify({
@@ -4667,12 +4996,12 @@ test("Four.Meme activation replays the persisted realtime creation hot index bef
     ] } },
   }));
   const transactions = new Map([
-    [tx1, { hash: tx1, to: core, from: creator1, data: `0x12345678${"0".repeat(64)}` }],
-    [tx2, { hash: tx2, to: core, from: creator2, data: `0x12345678${"0".repeat(64)}` }],
+    [tx1, { hash: tx1, blockNumber: 91, blockHash: blockHash1, index: 0, transactionIndex: 0, to: core, from: creator1, data: `0x12345678${"0".repeat(64)}` }],
+    [tx2, { hash: tx2, blockNumber: 92, blockHash: blockHash2, index: 0, transactionIndex: 0, to: core, from: creator2, data: `0x12345678${"0".repeat(64)}` }],
   ]);
   const receipts = new Map([
-    [tx1, { transactionHash: tx1, status: 1, blockNumber: 91, logs: [log1] }],
-    [tx2, { transactionHash: tx2, status: 1, blockNumber: 92, logs: [log2] }],
+    [tx1, { transactionHash: tx1, blockHash: blockHash1, status: 1, blockNumber: 91, index: 0, transactionIndex: 0, logs: [log1] }],
+    [tx2, { transactionHash: tx2, blockHash: blockHash2, status: 1, blockNumber: 92, index: 0, transactionIndex: 0, logs: [log2] }],
   ]);
   const owner = new Interface(["function owner() view returns(address)"]);
   const controllerCode = `0x${"6000".repeat(400)}`;
@@ -4683,7 +5012,8 @@ test("Four.Meme activation replays the persisted realtime creation hot index bef
   const provider = {
     async getBlockNumber() { throw new Error("archive head must not be read after a hot-index hit"); },
     async getBlock(blockNumber) {
-      return { number: Number(blockNumber), timestamp: Math.floor((clock - (100 - Number(blockNumber)) * 750) / 1_000), transactions: [] };
+      const isFirst = Number(blockNumber) === 91;
+      return { number: Number(blockNumber), hash: isFirst ? blockHash1 : blockHash2, timestamp: Math.floor((clock - (100 - Number(blockNumber)) * 750) / 1_000), transactions: [isFirst ? tx1 : tx2] };
     },
     async send() { archiveLogCalls += 1; throw new Error("archive logs must not run before a hot-index hit"); },
     async getTransaction(hash) { return transactions.get(hash) || null; },
@@ -4801,11 +5131,13 @@ test("Four.Meme log replay reopens pruned transactions, skips an unsafe first to
   const token2 = "0x2222222222222222222222222222222222222222";
   const tx1 = `0x${"a".repeat(64)}`;
   const tx2 = `0x${"b".repeat(64)}`;
+  const blockHash1 = `0x${"e1".repeat(32)}`;
+  const blockHash2 = `0x${"e2".repeat(32)}`;
   const creator1 = "0x3333333333333333333333333333333333333333";
   const creator2 = "0x4444444444444444444444444444444444444444";
   const modules = ["5", "6", "7", "8", "9", "a"].map((digit) => `0x${digit.repeat(40)}`);
   const iface = new Interface(["event TokenCreated(uint256 requestId,uint256 indexed presetId,address indexed creator,address indexed token,string name,string symbol,uint256 maxSupply,uint256 saleAmount,uint256 raiseAmount,uint256 initialPrice,address quoteAsset,address vault,address curveModule,address tradeModule,address migrateModule,address customData,address tokenModule,string tokenMetaUri,uint256 flags,bytes encodedTags)"]);
-  const makeLog = (token, creator, transactionHash, blockNumber, transactionIndex) => {
+  const makeLog = (token, creator, transactionHash, blockHash, blockNumber, transactionIndex) => {
     const encoded = iface.encodeEventLog(iface.getEvent("TokenCreated"), [
       BigInt(blockNumber), 1778027615723n, creator, token, `Token ${blockNumber}`, `T${blockNumber}`,
       1_000n, 800n, 20n, 1n, quote, ...modules, "ipfs://meta", 0n, "0x",
@@ -4818,17 +5150,19 @@ test("Four.Meme log replay reopens pruned transactions, skips an unsafe first to
       transactionIndex: `0x${transactionIndex.toString(16)}`,
       logIndex: "0x0",
       transactionHash,
+      blockHash,
+      removed: false,
     };
   };
-  const log1 = makeLog(token1, creator1, tx1, 9, 0);
-  const log2 = makeLog(token2, creator2, tx2, 10, 0);
+  const log1 = makeLog(token1, creator1, tx1, blockHash1, 9, 0);
+  const log2 = makeLog(token2, creator2, tx2, blockHash2, 10, 0);
   const transactions = new Map([
-    [tx1, { hash: tx1, to: core, from: creator1, data: `0x12345678${"0".repeat(64)}` }],
-    [tx2, { hash: tx2, to: core, from: creator2, data: `0x12345678${"0".repeat(64)}` }],
+    [tx1, { hash: tx1, blockNumber: 9, blockHash: blockHash1, index: 0, transactionIndex: 0, to: core, from: creator1, data: `0x12345678${"0".repeat(64)}` }],
+    [tx2, { hash: tx2, blockNumber: 10, blockHash: blockHash2, index: 0, transactionIndex: 0, to: core, from: creator2, data: `0x12345678${"0".repeat(64)}` }],
   ]);
   const receipts = new Map([
-    [tx1, { transactionHash: tx1, status: 1, blockNumber: 9, logs: [log1] }],
-    [tx2, { transactionHash: tx2, status: 1, blockNumber: 10, logs: [log2] }],
+    [tx1, { transactionHash: tx1, blockHash: blockHash1, status: 1, blockNumber: 9, index: 0, transactionIndex: 0, logs: [log1] }],
+    [tx2, { transactionHash: tx2, blockHash: blockHash2, status: 1, blockNumber: 10, index: 0, transactionIndex: 0, logs: [log2] }],
   ]);
   await fs.writeFile(path.join(dataDir, "bsc-launchpad-state.json"), JSON.stringify({
     version: 6,
@@ -4845,7 +5179,8 @@ test("Four.Meme log replay reopens pruned transactions, skips an unsafe first to
   const provider = {
     async getBlockNumber() { return 100; },
     async getBlock(blockNumber) {
-      return { number: Number(blockNumber), timestamp: Math.floor((clock - (100 - Number(blockNumber)) * 750) / 1_000), transactions: [] };
+      const isFirst = Number(blockNumber) === 9;
+      return { number: Number(blockNumber), hash: isFirst ? blockHash1 : blockHash2, timestamp: Math.floor((clock - (100 - Number(blockNumber)) * 750) / 1_000), transactions: [isFirst ? tx1 : tx2] };
     },
     async send(method, [filter]) {
       assert.equal(method, "eth_getLogs");
@@ -6143,6 +6478,7 @@ test("realtime processing persists shared RPC cooling without retry loops or dro
   const token = "0x1111111111111111111111111111111111111111";
   const creator = "0x4444444444444444444444444444444444444444";
   const transactionHash = `0x${"8".repeat(64)}`;
+  const blockHash = `0x${"f8".repeat(32)}`;
   await fs.writeFile(stateFile, JSON.stringify({
     version: 6,
     initializedAt: "2026-08-24T10:00:00.000Z",
@@ -6178,9 +6514,11 @@ test("realtime processing persists shared RPC cooling without retry loops or dro
     topics: encoded.topics,
     data: encoded.data,
     transactionHash,
+    blockHash,
     blockNumber: 100,
     transactionIndex: 0,
     logIndex: 0,
+    removed: false,
   };
   let cooling = true;
   let transactionRequests = 0;
@@ -6197,10 +6535,10 @@ test("realtime processing persists shared RPC cooling without retry loops or dro
         error.retryAfterMs = 5_000;
         throw error;
       }
-      return { hash, to: launcher, from: creator, data: `0x8cb5772c${"0".repeat(64)}` };
+      return { hash, blockNumber: 100, blockHash, index: 0, transactionIndex: 0, to: launcher, from: creator, data: `0x8cb5772c${"0".repeat(64)}` };
     },
-    async getTransactionReceipt(hash) { return { transactionHash: hash, status: 1, blockNumber: 100, index: 0, logs: [log] }; },
-    async getBlock() { return { number: 100, timestamp: Math.floor(current / 1_000), transactions: [] }; },
+    async getTransactionReceipt(hash) { return { transactionHash: hash, blockHash, status: 1, blockNumber: 100, index: 0, transactionIndex: 0, logs: [log] }; },
+    async getBlock() { return { number: 100, hash: blockHash, timestamp: Math.floor(current / 1_000), transactions: [transactionHash] }; },
     async getCode(address) { return String(address).toLowerCase() === token ? `0x${"6000".repeat(300)}` : `0x${"6000".repeat(400)}`; },
     async getStorage() { return "0x"; },
     async call() { return "0x"; },
@@ -6504,6 +6842,472 @@ test("realtime tail durably advances before a candidate's deep analysis complete
   releaseTransaction();
 });
 
+test("focus3 background deep RPC prioritizes delivery deadlines and fairly drains both old lanes through a permanent gap", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-deep-rpc-arbitration-"));
+  const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
+  let clock = Date.parse("2026-08-24T12:00:00.000Z");
+  const head = 5_000;
+  const blockByHash = new Map();
+  const record = (id, blockNumber, extra = {}) => {
+    const transactionHash = `0x${id.toString(16).padStart(64, "0")}`;
+    blockByHash.set(transactionHash, blockNumber);
+    return [transactionHash, {
+      transactionHash,
+      blockNumber,
+      transactionIndex: id,
+      logIndex: 0,
+      reasons: ["http_tail"],
+      mintEmitters: [],
+      candidateTokens: [],
+      verifiedNewContracts: [],
+      // A real inspection trigger is required; otherwise the queue entry is
+      // correctly marked seen before transaction/receipt RPCs are attempted.
+      upgradeEmitters: ["0x1111111111111111111111111111111111111111"],
+      lifecycleEmitters: [],
+      hookPools: [],
+      hasProtocolTrigger: false,
+      revision: 1,
+      ...extra,
+    }];
+  };
+  const queueUrgent = record(1, 100, {
+    deliverySla: {
+      startedAt: new Date(clock - 1_000).toISOString(),
+      deadlineAt: new Date(clock + 2_000).toISOString(),
+      budgetMs: 5_000,
+      pollAllowanceMs: 0,
+      basis: "bsc_websocket_ingest",
+    },
+  });
+  const deferredUrgent = record(2, 101, {
+    deliverySla: {
+      startedAt: new Date(clock - 1_000).toISOString(),
+      deadlineAt: new Date(clock + 1_000).toISOString(),
+      budgetMs: 5_000,
+      pollAllowanceMs: 0,
+      basis: "bsc_websocket_ingest",
+    },
+    attempts: 1,
+    firstDeferredAt: new Date(clock - 1_000).toISOString(),
+    nextAttemptAt: new Date(clock - 1).toISOString(),
+  });
+  const oldQueue = record(3, 102);
+  const oldDeferred = record(4, 103, {
+    attempts: 1,
+    firstDeferredAt: new Date(clock - 20 * 60_000).toISOString(),
+    nextAttemptAt: new Date(clock - 1).toISOString(),
+  });
+  const normalQueue = Array.from({ length: 50 }, (_, index) => record(100 + index, 3_000 + index));
+  const normalDeferred = Array.from({ length: 50 }, (_, index) => record(200 + index, 3_100 + index, {
+    attempts: 1,
+    firstDeferredAt: new Date(clock - 1_000).toISOString(),
+    nextAttemptAt: new Date(clock - 1).toISOString(),
+  }));
+  await fs.writeFile(stateFile, JSON.stringify({
+    version: 6,
+    initializedAt: new Date(clock - 60_000).toISOString(),
+    lastFinalizedBlock: head - 2,
+    realtimeTailNextBlock: head - 1,
+    realtimeTailInitializedAt: new Date(clock - 60_000).toISOString(),
+    realtimePendingEntries: Object.fromEntries([queueUrgent, oldQueue, ...normalQueue]),
+    deferredCreationEvidence: Object.fromEntries([deferredUrgent, oldDeferred, ...normalDeferred]),
+    nearHeadRecoveryGaps: [{
+      id: "permanent-gap",
+      fromBlock: 200,
+      toBlock: 200,
+      nextBlock: 200,
+      reason: "realtime_tail_stale_rebuild",
+      attempts: 1,
+      nextAttemptAt: new Date(clock + 60_000).toISOString(),
+    }],
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    coverageGaps: [],
+    _health: { realtimeTail: { status: "healthy", consecutiveFailures: 0 } },
+  }));
+
+  const deepOrder = [];
+  const provider = {
+    async getNetwork() { return { chainId: 56n }; },
+    async getBlockNumber() { return head; },
+    async getTransaction(hash) {
+      deepOrder.push(hash);
+      return { hash, blockNumber: blockByHash.get(hash), to: null, from: `0x${"9".repeat(40)}`, data: "0x" };
+    },
+    async getTransactionReceipt(hash) {
+      return { hash, transactionHash: hash, blockNumber: blockByHash.get(hash), status: 1, logs: [] };
+    },
+    async send() { return []; },
+    destroy() {},
+  };
+  const backgroundTimers = [];
+  const backgroundSetTimeoutImpl = (callback, delay) => {
+    const timer = { callback, delay, dueAt: clock + delay, cancelled: false, unref() {} };
+    backgroundTimers.push(timer);
+    return timer;
+  };
+  const backgroundClearTimeoutImpl = (timer) => { timer.cancelled = true; };
+  class IdleWebSocket { addEventListener() {} close() {} }
+  const fetchImpl = async (url) => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ code: 0, data: url.includes("/address")
+      ? [{ name: "TokenManager3", address: "0x5c952063c7fc8610ffdb798152d69f0b9550762b", networkCode: "BSC" }]
+      : [{ id: 1, name: "Baseline", tag: "Curve", codeType: "SOLIDITY", descr: "base", status: "PUBLISHED" }] }),
+  });
+  const monitor = createBscLaunchpadMonitor({
+    dataDir,
+    monitorScope: "focus3",
+    bscMonitorEnabled: true,
+    bscWsUrl: "wss://example.invalid",
+    bscRpcUrl: "https://example.invalid",
+    bscConfirmations: 2,
+    bscHttpHeadPollIntervalMs: 60_000,
+    bscOfficialPollIntervalMs: 60_000,
+    bscDeferredRetryIntervalMs: 60_000,
+  }, {
+    autoStart: false,
+    externalAttribution: false,
+    provider,
+    WebSocketImpl: IdleWebSocket,
+    fetchImpl,
+    now: () => clock,
+    backgroundSetTimeoutImpl,
+    backgroundClearTimeoutImpl,
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  t.after(async () => {
+    await monitor.stop();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  await monitor.start();
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  await monitor.scanRealtimeTail();
+  await monitor.scanRealtimeTail();
+
+  for (let slot = 0; slot < 44; slot += 1) {
+    const before = deepOrder.length;
+    await monitor.processRealtimeQueue();
+    await monitor.retryDeferredCreationEvidence();
+    assert.ok(deepOrder.length <= before + 1, "the shared deep lease starts at most one transaction per slot");
+    clock += 750;
+  }
+
+  assert.deepEqual(deepOrder.slice(0, 2), [deferredUrgent[0], queueUrgent[0]],
+    "deadline-bound durable work outranks hundreds of normal fresh entries across both lanes");
+  const queueOldIndex = deepOrder.indexOf(oldQueue[0]);
+  const deferredOldIndex = deepOrder.indexOf(oldDeferred[0]);
+  assert.ok(queueOldIndex >= 2 && queueOldIndex <= 3, "fresh receives the first slot, then the first due old lane progresses");
+  assert.ok(deferredOldIndex > queueOldIndex && deferredOldIndex <= 43,
+    "the old-specific lane cursor reaches deferred work at the next 30-second quota despite forty fresh completions");
+});
+
+test("focus3 background deep RPC preserves feature and first-three causal order across queue classes", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-deep-rpc-causal-order-"));
+  const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
+  let clock = Date.parse("2026-08-24T13:00:00.000Z");
+  const head = 5_000;
+  const sharedLiteralKey = "same-literal-different-causal-namespaces";
+  const blockByHash = new Map();
+  const record = (id, blockNumber, extra = {}) => {
+    const transactionHash = `0x${id.toString(16).padStart(64, "0")}`;
+    blockByHash.set(transactionHash, blockNumber);
+    return [transactionHash, {
+      transactionHash,
+      blockNumber,
+      transactionIndex: id,
+      logIndex: 0,
+      reasons: ["http_tail"],
+      mintEmitters: [],
+      candidateTokens: [],
+      verifiedNewContracts: [],
+      upgradeEmitters: ["0x1111111111111111111111111111111111111111"],
+      lifecycleEmitters: [],
+      hookPools: [],
+      hasProtocolTrigger: true,
+      revision: 1,
+      ...extra,
+    }];
+  };
+  const featureOlderQueue = record(11, 100, { featureActivationReplayKey: sharedLiteralKey });
+  const featureLaterDeferred = record(12, 3_000, {
+    featureActivationReplayKey: sharedLiteralKey,
+    deliverySla: {
+      startedAt: new Date(clock - 1_000).toISOString(),
+      deadlineAt: new Date(clock + 4_000).toISOString(),
+      budgetMs: 5_000,
+      pollAllowanceMs: 0,
+      basis: "bsc_websocket_ingest",
+    },
+    attempts: 1,
+    firstDeferredAt: new Date(clock - 1_000).toISOString(),
+    nextAttemptAt: new Date(clock - 1).toISOString(),
+  });
+  const firstThreeOlderDeferred = record(13, 101, {
+    flapQuoteFirstThreeReplayGenerationKey: sharedLiteralKey,
+    attempts: 1,
+    firstDeferredAt: new Date(clock - 20 * 60_000).toISOString(),
+    nextAttemptAt: new Date(clock + 15_000).toISOString(),
+  });
+  const firstThreeLaterQueue = record(14, 3_001, {
+    flapQuoteFirstThreeReplayGenerationKey: sharedLiteralKey,
+    deliverySla: {
+      startedAt: new Date(clock - 1_000).toISOString(),
+      deadlineAt: new Date(clock + 4_000).toISOString(),
+      budgetMs: 5_000,
+      pollAllowanceMs: 0,
+      basis: "bsc_websocket_ingest",
+    },
+  });
+  await fs.writeFile(stateFile, JSON.stringify({
+    version: 6,
+    initializedAt: new Date(clock - 60_000).toISOString(),
+    lastFinalizedBlock: head - 2,
+    realtimeTailNextBlock: head - 1,
+    realtimeTailInitializedAt: new Date(clock - 60_000).toISOString(),
+    realtimePendingEntries: Object.fromEntries([featureOlderQueue, firstThreeLaterQueue]),
+    deferredCreationEvidence: Object.fromEntries([featureLaterDeferred, firstThreeOlderDeferred]),
+    nearHeadRecoveryGaps: [],
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    coverageGaps: [],
+    _health: { realtimeTail: { status: "healthy", consecutiveFailures: 0 } },
+  }));
+  const deepOrder = [];
+  const provider = {
+    async getNetwork() { return { chainId: 56n }; },
+    async getBlockNumber() { return head; },
+    async getTransaction(hash) {
+      deepOrder.push(hash);
+      return { hash, blockNumber: blockByHash.get(hash), to: null, from: `0x${"9".repeat(40)}`, data: "0x" };
+    },
+    async getTransactionReceipt(hash) {
+      return { hash, transactionHash: hash, blockNumber: blockByHash.get(hash), status: 1, logs: [] };
+    },
+    async send() { return []; },
+    destroy() {},
+  };
+  class IdleWebSocket { addEventListener() {} close() {} }
+  const fetchImpl = async (url) => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ code: 0, data: url.includes("/address")
+      ? [{ name: "TokenManager3", address: "0x5c952063c7fc8610ffdb798152d69f0b9550762b", networkCode: "BSC" }]
+      : [{ id: 1, name: "Baseline", tag: "Curve", codeType: "SOLIDITY", descr: "base", status: "PUBLISHED" }] }),
+  });
+  const monitor = createBscLaunchpadMonitor({
+    dataDir,
+    monitorScope: "focus3",
+    bscMonitorEnabled: true,
+    bscWsUrl: "wss://example.invalid",
+    bscRpcUrl: "https://example.invalid",
+    bscConfirmations: 2,
+    bscHttpHeadPollIntervalMs: 60_000,
+    bscOfficialPollIntervalMs: 60_000,
+    bscDeferredRetryIntervalMs: 60_000,
+  }, {
+    autoStart: false,
+    externalAttribution: false,
+    provider,
+    WebSocketImpl: IdleWebSocket,
+    fetchImpl,
+    now: () => clock,
+    backgroundSetTimeoutImpl: () => ({ unref() {} }),
+    backgroundClearTimeoutImpl() {},
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  t.after(async () => {
+    await monitor.stop();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+  await monitor.start();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  await monitor.scanRealtimeTail();
+  await monitor.scanRealtimeTail();
+  const normalized = await monitor.getState();
+  assert.ok(normalized.deferredCreationEvidence[featureLaterDeferred[0]].deliverySla);
+  assert.ok(normalized.realtimePendingEntries[firstThreeLaterQueue[0]].deliverySla);
+  for (let slot = 0; slot < 16 && deepOrder.length < 4; slot += 1) {
+    await monitor.processRealtimeQueue();
+    await monitor.retryDeferredCreationEvidence();
+    if (slot === 0) assert.deepEqual(deepOrder, [featureOlderQueue[0]],
+      "the later feature SLA makes zero deep calls until its causal head completes");
+    clock += 750;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  const causalSnapshot = await monitor.getState();
+  assert.deepEqual(deepOrder, [
+    featureOlderQueue[0],
+    featureLaterDeferred[0],
+    firstThreeOlderDeferred[0],
+    firstThreeLaterQueue[0],
+  ], `later SLA work never overtakes its own group head, while equal literal keys in separate namespaces remain independent: ${JSON.stringify({
+    pending: causalSnapshot.realtimePendingEntries,
+    deferred: causalSnapshot.deferredCreationEvidence,
+    failures: causalSnapshot.transactionFailures,
+    health: causalSnapshot._health,
+  })}`);
+});
+
+test("focus3 host-wide deep RPC cooldown survives restart and wakes both lanes without charging deferred attempts", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-deep-rpc-host-cooldown-"));
+  const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
+  let clock = Date.parse("2026-08-24T14:00:00.000Z");
+  const head = 1_000;
+  const queueHash = `0x${"51".repeat(32)}`;
+  const deferredHash = `0x${"52".repeat(32)}`;
+  const trigger = "0x1111111111111111111111111111111111111111";
+  const baseRecord = (transactionHash, blockNumber) => ({
+    transactionHash,
+    blockNumber,
+    transactionIndex: 1,
+    logIndex: 0,
+    reasons: ["http_tail"],
+    mintEmitters: [],
+    candidateTokens: [],
+    verifiedNewContracts: [],
+    upgradeEmitters: [trigger],
+    lifecycleEmitters: [],
+    hookPools: [],
+    hasProtocolTrigger: true,
+    revision: 1,
+  });
+  await fs.writeFile(stateFile, JSON.stringify({
+    version: 6,
+    initializedAt: new Date(clock - 60_000).toISOString(),
+    lastFinalizedBlock: head - 2,
+    realtimeTailNextBlock: head - 1,
+    realtimeTailInitializedAt: new Date(clock - 60_000).toISOString(),
+    realtimePendingEntries: { [queueHash]: baseRecord(queueHash, 900) },
+    deferredCreationEvidence: {
+      [deferredHash]: {
+        ...baseRecord(deferredHash, 901),
+        attempts: 2,
+        firstDeferredAt: new Date(clock - 30_000).toISOString(),
+        nextAttemptAt: new Date(clock - 1).toISOString(),
+      },
+    },
+    nearHeadRecoveryGaps: [],
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    coverageGaps: [],
+    _health: { realtimeTail: { status: "healthy", consecutiveFailures: 0 } },
+  }));
+  let hostUnavailable = true;
+  const deepCalls = [];
+  const provider = {
+    async getNetwork() { return { chainId: 56n }; },
+    async getBlockNumber() { return head; },
+    async getTransaction(hash) {
+      deepCalls.push(hash);
+      if (hostUnavailable) {
+        const error = new Error("shared physical host rate limited");
+        error.code = 429;
+        error.retryAfterMs = 1_000;
+        error.rpcFailureScope = "host";
+        error.rpcOperation = "getTransaction";
+        throw error;
+      }
+      return { hash, blockNumber: hash === queueHash ? 900 : 901, to: null, from: `0x${"9".repeat(40)}`, data: "0x" };
+    },
+    async getTransactionReceipt(hash) {
+      return { hash, transactionHash: hash, blockNumber: hash === queueHash ? 900 : 901, status: 1, logs: [] };
+    },
+    async send() { return []; },
+    destroy() {},
+  };
+  const timers = [];
+  const backgroundSetTimeoutImpl = (callback, delay) => {
+    const timer = { callback, delay, dueAt: clock + delay, cancelled: false, unref() {} };
+    timers.push(timer);
+    return timer;
+  };
+  const backgroundClearTimeoutImpl = (timer) => { timer.cancelled = true; };
+  class IdleWebSocket { addEventListener() {} close() {} }
+  const fetchImpl = async (url) => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ code: 0, data: url.includes("/address")
+      ? [{ name: "TokenManager3", address: "0x5c952063c7fc8610ffdb798152d69f0b9550762b", networkCode: "BSC" }]
+      : [{ id: 1, name: "Baseline", tag: "Curve", codeType: "SOLIDITY", descr: "base", status: "PUBLISHED" }] }),
+  });
+  const makeMonitor = () => createBscLaunchpadMonitor({
+    dataDir,
+    monitorScope: "focus3",
+    bscMonitorEnabled: true,
+    bscWsUrl: "wss://example.invalid",
+    bscRpcUrl: "https://example.invalid",
+    bscConfirmations: 2,
+    bscHttpHeadPollIntervalMs: 60_000,
+    bscOfficialPollIntervalMs: 60_000,
+    bscDeferredRetryIntervalMs: 2_000,
+  }, {
+    autoStart: false,
+    externalAttribution: false,
+    provider,
+    WebSocketImpl: IdleWebSocket,
+    fetchImpl,
+    now: () => clock,
+    backgroundSetTimeoutImpl,
+    backgroundClearTimeoutImpl,
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  let monitor = makeMonitor();
+  t.after(async () => {
+    await monitor?.stop();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+  await monitor.start();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  await monitor.scanRealtimeTail();
+  await monitor.scanRealtimeTail();
+  await monitor.processRealtimeQueue();
+  assert.deepEqual(deepCalls, [queueHash]);
+  let snapshot = await monitor.getState();
+  const retryAt = Date.parse(snapshot._health.backgroundDeepRpc.nextRetryAt);
+  assert.equal(snapshot.deferredCreationEvidence[deferredHash].attempts, 2);
+  clock += 500;
+  await monitor.retryDeferredCreationEvidence();
+  await monitor.processRealtimeQueue();
+  snapshot = await monitor.getState();
+  assert.deepEqual(deepCalls, [queueHash], "neither lane makes a physical call during the shared host cooldown");
+  assert.equal(snapshot.deferredCreationEvidence[deferredHash].attempts, 2,
+    "a host outage is not charged as a candidate-specific deferred failure");
+
+  await monitor.stop();
+  monitor = makeMonitor();
+  await monitor.start();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  await monitor.scanRealtimeTail();
+  await monitor.scanRealtimeTail();
+  await monitor.processRealtimeQueue();
+  await monitor.retryDeferredCreationEvidence();
+  assert.deepEqual(deepCalls, [queueHash], "the persisted host gate remains closed after restart");
+  hostUnavailable = false;
+  clock = retryAt + 1;
+  for (const timer of timers.filter((item) => !item.cancelled && item.dueAt <= clock)) {
+    timer.cancelled = true;
+    timer.callback();
+  }
+  await waitUntil(() => deepCalls.length >= 2, 2_000);
+  assert.equal(deepCalls[1], queueHash, "the retry timer wakes the realtime lane without waiting for the 60s head poll");
+  snapshot = await monitor.getState();
+  assert.equal(snapshot._health.backgroundDeepRpc.status, "healthy");
+  assert.equal(snapshot._health.backgroundDeepRpc.nextRetryAt, null);
+  clock += 750;
+  await monitor.retryDeferredCreationEvidence();
+  assert.deepEqual(deepCalls, [queueHash, queueHash, deferredHash]);
+  snapshot = await monitor.getState();
+  assert.equal(snapshot.deferredCreationEvidence[deferredHash], undefined);
+});
+
 test("near-head recovery commits every candidate and its gap cursor in one WAL revision", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-near-head-wal-handoff-"));
   const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
@@ -6596,6 +7400,122 @@ test("near-head recovery commits every candidate and its gap cursor in one WAL r
   assert.ok(durable.realtimePendingEntries[transactionHash], "restart restores the complete candidate whenever it observes the advanced cursor");
 });
 
+test("near-head handoff replaces a deferred transaction's orphaned fork coordinates and survives restart", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-near-head-canonical-reinclude-"));
+  const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
+  const transactionHash = `0x${"39".repeat(32)}`;
+  const oldBlockHash = `0x${"3a".repeat(32)}`;
+  const newBlockHash = `0x${"3b".repeat(32)}`;
+  const launcher = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
+  const token = "0x3c11111111111111111111111111111111111111";
+  const creator = "0x3d22222222222222222222222222222222222222";
+  const iface = new Interface(["event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)"]);
+  const encoded = iface.encodeEventLog(iface.getEvent("TokenCreated"), [1n, creator, 1n, token, "Canonical", "NEW", "ipfs://canonical"]);
+  const canonicalLog = {
+    address: launcher,
+    topics: encoded.topics,
+    data: encoded.data,
+    transactionHash,
+    blockHash: newBlockHash,
+    blockNumber: "0x5b",
+    transactionIndex: "0x1",
+    logIndex: "0x2",
+    removed: false,
+  };
+  await fs.writeFile(stateFile, JSON.stringify({
+    version: 6,
+    initializedAt: "2026-08-24T10:00:00.000Z",
+    lastFinalizedBlock: 50,
+    realtimeTailNextBlock: 101,
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    realtimePendingEntries: {},
+    deferredCreationEvidence: {
+      [transactionHash]: {
+        transactionHash,
+        blockHash: oldBlockHash,
+        blockNumber: 90,
+        transactionIndex: 5,
+        logIndex: 8,
+        reasons: ["http_tail"],
+        mintEmitters: [],
+        candidateTokens: [],
+        verifiedNewContracts: [],
+        upgradeEmitters: [],
+        lifecycleEmitters: [],
+        hookPools: [],
+        hasProtocolTrigger: true,
+        featureActivationReplayKey: null,
+        flapQuoteFirstThreeReplayGenerationKey: null,
+        causalBarrierKeys: [],
+        flapCreationHotCandidates: [],
+        fourMemeCreationHotCandidates: [],
+        revision: 1,
+        deferredKind: "coverage_processing",
+        attempts: 1,
+        firstDeferredAt: "2026-08-24T09:59:00.000Z",
+        lastAttemptAt: "2026-08-24T10:00:00.000Z",
+        nextAttemptAt: "2099-01-01T00:00:00.000Z",
+        lastError: "old fork",
+      },
+    },
+    nearHeadRecoveryGaps: [{
+      id: "realtime-tail-gap:91:91",
+      fromBlock: 91,
+      toBlock: 91,
+      nextBlock: 91,
+      reason: "realtime_tail_stale_rebuild",
+      attempts: 0,
+    }],
+    coverageGaps: [],
+  }));
+  const provider = {
+    async send(method, [request]) {
+      assert.equal(method, "eth_getLogs");
+      return Array.isArray(request.topics?.[0]) && request.topics[0].includes(FLAP_TOKEN_CREATED_TOPIC)
+        ? [canonicalLog]
+        : [];
+    },
+    destroy() {},
+  };
+  const inertTimer = () => ({ unref() {} });
+  const dependencies = {
+    autoStart: false,
+    provider,
+    backgroundSetTimeoutImpl: inertTimer,
+    backgroundClearTimeoutImpl() {},
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  };
+  let monitor = createBscLaunchpadMonitor({ dataDir, monitorScope: "focus3", bscNearHeadRecoveryBatchSize: 1 }, dependencies);
+  t.after(async () => {
+    await monitor?.stop();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+  assert.equal((await monitor.scanNearHeadRecovery()).completed, true);
+  let snapshot = await monitor.getState();
+  let record = snapshot.deferredCreationEvidence[transactionHash];
+  assert.equal(record.blockNumber, 91);
+  assert.equal(record.blockHash, newBlockHash);
+  assert.equal(record.transactionIndex, 1);
+  assert.equal(record.logIndex, 2);
+  assert.equal(record.flapCreationHotCandidates.length, 1);
+  assert.equal(record.flapCreationHotCandidates[0].blockHash, newBlockHash,
+    "the new canonical raw proof replaces the same transaction's orphaned fork proof");
+  assert.deepEqual(snapshot.nearHeadRecoveryGaps, []);
+
+  await monitor.stop();
+  monitor = createBscLaunchpadMonitor({ dataDir, monitorScope: "focus3" }, dependencies);
+  snapshot = await monitor.getState();
+  record = snapshot.deferredCreationEvidence[transactionHash];
+  assert.deepEqual(
+    [record.blockNumber, record.blockHash, record.transactionIndex, record.logIndex],
+    [91, newBlockHash, 1, 2],
+  );
+  assert.equal(record.flapCreationHotCandidates[0].blockHash, newBlockHash);
+});
+
 test("a durable near-head candidate registered after restart bypasses the warmed ordinary fast exit for its Flap activation", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-near-head-late-flap-activation-"));
   const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
@@ -6675,8 +7595,8 @@ test("a durable near-head candidate registered after restart bypasses the warmed
     }],
   ]);
   const blocks = new Map([
-    [80, { number: 80, hash: warmBlockHash, timestamp: Math.floor((clock - 20 * 60_000) / 1_000), transactions: [warmTransactionHash] }],
-    [90, { number: 90, hash: targetBlockHash, timestamp: Math.floor(clock / 1_000), transactions: [targetTransactionHash] }],
+    [80, { number: 80, hash: warmBlockHash, timestamp: Math.floor((clock - 20 * 60_000) / 1_000), transactions: [`0x${"40".repeat(32)}`, warmTransactionHash] }],
+    [90, { number: 90, hash: targetBlockHash, timestamp: Math.floor(clock / 1_000), transactions: [`0x${"50".repeat(32)}`, targetTransactionHash] }],
   ]);
   await fs.writeFile(stateFile, JSON.stringify({
     version: 6,
@@ -10458,6 +11378,8 @@ async function createBscWebsocketProofHarness(t, {
   failDeepProof = false,
   providerSend = null,
   providerGetBlock = null,
+  healthyRealtimeLogs = false,
+  dependencyOverrides = {},
 } = {}) {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-ws-proof-fast-path-"));
   const ingressAt = Date.parse("2026-08-24T12:00:00.000Z");
@@ -10693,6 +11615,18 @@ async function createBscWebsocketProofHarness(t, {
     autoStart: false,
     externalAttribution: false,
     provider,
+    ...(healthyRealtimeLogs ? {
+      realtimeProvider: {
+        ...provider,
+        async send(method, params) {
+          if (method === "eth_getLogs") {
+            httpCalls.getLogs += 1;
+            return [];
+          }
+          return provider.send(method, params);
+        },
+      },
+    } : {}),
     WebSocketImpl: ProofWebSocket,
     fetchImpl,
     now: () => clock,
@@ -10702,6 +11636,7 @@ async function createBscWebsocketProofHarness(t, {
       alertTimes.push(clock);
       return { status: "delivered", eventId: event.eventKey };
     },
+    ...dependencyOverrides,
   };
   const monitor = createBscLaunchpadMonitor(config, dependencies);
   t.after(async () => {
@@ -10789,7 +11724,7 @@ test("BSC WebSocket fast proof waits for confirmations, routes mixed responses, 
   assert.equal(socket.proofRequests.length, 2, "head N+1 must not fetch the canonical block yet");
   harness.advance(800);
   harness.emitHead(103);
-  await waitUntil(() => harness.httpCalls.blockReceipts > 0);
+  await waitUntil(() => harness.httpCalls.getLogs > 0);
   assert.equal(
     harness.httpCalls.blockNumbers.includes(harness.blockNumber),
     false,
@@ -10831,6 +11766,101 @@ test("BSC WebSocket fast proof waits for confirmations, routes mixed responses, 
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(harness.alerts.length, 1, "a duplicate response id is ignored after its exact waiter is settled");
   assert.equal(harness.sockets.length, 1);
+});
+
+test("BSC WebSocket fast proof cannot overtake an earlier durable feature candidate", async (t) => {
+  const earlierHash = `0x${"c1".repeat(32)}`;
+  const laterHash = `0x${"c2".repeat(32)}`;
+  let failEarlierReceipt = true;
+  const harness = await createBscWebsocketProofHarness(t, {
+    proofResponder({ request, result, proof, respond }) {
+      if (proof?.transactionHash === earlierHash
+        && request.method === "eth_getTransactionReceipt"
+        && failEarlierReceipt) {
+        respond({ jsonrpc: "2.0", id: request.id, error: { code: -32000, message: "temporary receipt outage" } });
+        return;
+      }
+      respond({ jsonrpc: "2.0", id: request.id, result });
+    },
+  });
+  const earlier = harness.addCandidate({ transactionHash: earlierHash, transactionIndex: 0 });
+  const later = harness.addCandidate({ transactionHash: laterHash, transactionIndex: 1 });
+  const socket = harness.sockets[0];
+  harness.emitCandidate(earlier);
+  await waitUntil(async () => Boolean((await harness.monitor.getState()).realtimePendingEntries?.[earlierHash]));
+  await waitUntil(() => socket.proofRequests.filter((request) => request.params?.[0] === earlierHash).length >= 2);
+
+  harness.emitCandidate(later);
+  await waitUntil(async () => Boolean((await harness.monitor.getState()).realtimePendingEntries?.[laterHash]));
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(socket.proofRequests.some((request) => request.params?.[0] === laterHash), false,
+    "a later five-second candidate is durable but starts no proof while its causal head is pending");
+  assert.equal(harness.alerts.length, 0);
+
+  failEarlierReceipt = false;
+  harness.emitCandidate(earlier);
+  await waitUntil(() => socket.proofRequests.filter((request) => request.params?.[0] === earlierHash).length >= 4);
+  harness.advance(1_000);
+  harness.emitHead(103);
+  await waitUntil(() => harness.alerts.length === 1);
+  assert.equal(harness.alerts[0].transactionHash, earlierHash);
+  harness.emitCandidate(later);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(harness.alerts.length, 1, "the later transaction cannot replace the first feature token after the head succeeds");
+});
+
+test("BSC causal reservation sees an earlier official candidate handed off immediately before the final claim", async (t) => {
+  const earlierHash = `0x${"d1".repeat(32)}`;
+  const laterHash = `0x${"d2".repeat(32)}`;
+  let harness;
+  let earlier;
+  let injected = false;
+  harness = await createBscWebsocketProofHarness(t, {
+    dependencyOverrides: {
+      async beforeCausalGroupReservationImpl({ transactionHash, claim }) {
+        if (transactionHash !== laterHash || claim !== "observation" || injected) return;
+        injected = true;
+        harness.emitCandidate(earlier);
+        await waitUntil(async () => Boolean(
+          (await harness.monitor.getState()).realtimePendingEntries?.[earlierHash],
+        ));
+      },
+    },
+  });
+  earlier = harness.addCandidate({ transactionHash: earlierHash, transactionIndex: 0 });
+  const later = harness.addCandidate({ transactionHash: laterHash, transactionIndex: 1 });
+  harness.emitCandidate(later);
+  harness.advance(1_500);
+  harness.emitHead(103);
+  await waitUntil(() => injected);
+  await waitUntil(async () => Boolean(
+    (await harness.monitor.getState()).realtimePendingEntries?.[laterHash],
+  ));
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(harness.alerts.length, 0,
+    "the later candidate cannot alert after an earlier raw-evidence handoff wins before reservation");
+
+  await waitUntil(async () => Boolean(
+    (await harness.monitor.getState()).transactionFailures?.[laterHash],
+  ));
+  await new Promise((resolve) => setImmediate(resolve));
+  harness.emitCandidate(earlier);
+  await waitUntil(() => harness.alerts.length === 1);
+  const finalSnapshot = await harness.monitor.getState();
+  assert.equal(harness.alerts.length, 1, JSON.stringify({
+    pending: finalSnapshot.realtimePendingEntries,
+    deferred: finalSnapshot.deferredCreationEvidence,
+    failures: finalSnapshot.transactionFailures,
+    seen: finalSnapshot.seenTransactions,
+    proofRequests: harness.sockets[0].proofRequests.map((request) => ({
+      method: request.method,
+      transactionHash: request.params?.[0],
+    })),
+    errors: harness.errors,
+  }));
+  assert.equal(harness.alerts[0].transactionHash, earlierHash);
+  await harness.monitor.awaitIdle();
+  assert.equal(harness.alerts.some((event) => event.transactionHash === laterHash), false);
 });
 
 test("stop aborts coverage waiting on a WS block reservation without starting a new HTTP read", async (t) => {
@@ -10910,6 +11940,7 @@ test("late HTTP block failures cannot evict newer WS generations under concurren
     const oldBlockStarted = new Promise((resolve) => { signalOldBlockStarted = resolve; });
     const oldBlock = new Promise((_resolve, reject) => { rejectOldBlock = reject; });
     const harness = await createBscWebsocketProofHarness(t, {
+      healthyRealtimeLogs: true,
       providerSend({ method, params }) {
         if (method === "eth_getLogs") throw new Error("force verified receipt fallback");
         if (method === "eth_getBlockReceipts") {
@@ -10934,6 +11965,13 @@ test("late HTTP block failures cannot evict newer WS generations under concurren
       transactionIndex: 0,
     });
 
+    // The capacity scheduler deliberately blocks history until two
+    // consecutive realtime-tail checks are healthy. Prime that production
+    // invariant through the isolated tail provider so this test reaches the
+    // intended pending HTTP block-generation race.
+    await harness.monitor.awaitIdle();
+    await harness.monitor.scanRealtimeTail();
+    await harness.monitor.scanRealtimeTail();
     // Start coverage first so its old HTTP generation is genuinely pending.
     harness.emitHead(103);
     await oldBlockStarted;
@@ -10968,6 +12006,7 @@ test("coverage invalidates one stale WS block generation and refreshes the fork 
   t.after(() => releaseLogRange());
   const refreshedBlockHash = `0x${"c".repeat(64)}`;
   const harness = await createBscWebsocketProofHarness(t, {
+    healthyRealtimeLogs: true,
     async providerSend({ method, params }) {
       if (method === "eth_getLogs") {
         signalLogRangeStarted();
@@ -10999,6 +12038,9 @@ test("coverage invalidates one stale WS block generation and refreshes the fork 
     },
   });
   proof = harness.addCandidate({ transactionIndex: 0 });
+  await harness.monitor.awaitIdle();
+  await harness.monitor.scanRealtimeTail();
+  await harness.monitor.scanRealtimeTail();
   harness.emitCandidate(proof);
   harness.advance(1_500);
   harness.emitHead(103);
@@ -11587,7 +12629,7 @@ async function createFlapQuoteFirstThreeHarness(t, {
     number: blockNumber,
     hash: blockHash,
     timestamp: Math.floor(blockTimestampMs / 1_000),
-    transactions: [transactionHash],
+    transactions: [`0x${"01".repeat(32)}`, `0x${"02".repeat(32)}`, transactionHash],
   };
   const archiveRequests = [];
   let archiveVisible = true;
@@ -11999,4 +13041,264 @@ test("Flap orphaned disable restoration replays its canonical gap and remains ex
   await monitor.awaitIdle();
   assert.equal(harness.alerts.length, 3);
   await monitor.stop();
+});
+
+test("Flap restored first-three processing keeps a disabled-period durable predecessor ahead of a later candidate", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-first3-restore-raw-"));
+  const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
+  let clock = Date.parse("2026-08-24T12:00:00.000Z");
+  let head = 100;
+  let phase = "none";
+  const portal = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
+  const factory = "0xca143ce32fe78f1f7019d7d551a6402fc5350c73";
+  const quote = "0x1111111111111111111111111111111111111111";
+  const creator = "0x2222222222222222222222222222222222222222";
+  const tokens = ["0x3333333333333333333333333333333333333333", "0x4444444444444444444444444444444444444444"];
+  const pairs = ["0x7333333333333333333333333333333333333333", "0x7444444444444444444444444444444444444444"];
+  const transactionHashes = [`0x${"31".repeat(32)}`, `0x${"41".repeat(32)}`];
+  const blockHashes = [`0x${"32".repeat(32)}`, `0x${"42".repeat(32)}`];
+  const creationInterface = new Interface([
+    "event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)",
+  ]);
+  const pairInterface = new Interface([
+    "event PairCreated(address indexed token0,address indexed token1,address pair,uint256)",
+  ]);
+  const creationLogs = [];
+  const transactions = new Map();
+  const receipts = new Map();
+  const blocks = new Map();
+  for (let index = 0; index < 2; index += 1) {
+    const blockNumber = 102 + index;
+    const encodedCreation = creationInterface.encodeEventLog(
+      creationInterface.getEvent("TokenCreated"),
+      [BigInt(Math.floor(clock / 1_000)), creator, BigInt(index + 1), tokens[index], `Token ${index + 1}`, `T${index + 1}`, `ipfs://${index + 1}`],
+    );
+    const creation = {
+      address: portal,
+      topics: encodedCreation.topics,
+      data: encodedCreation.data,
+      transactionHash: transactionHashes[index],
+      blockHash: blockHashes[index],
+      blockNumber,
+      transactionIndex: 1,
+      logIndex: 2,
+      removed: false,
+    };
+    const encodedPair = pairInterface.encodeEventLog(
+      pairInterface.getEvent("PairCreated"),
+      [tokens[index], quote, pairs[index], BigInt(index + 1)],
+    );
+    const pairLog = {
+      address: factory,
+      topics: encodedPair.topics,
+      data: encodedPair.data,
+      transactionHash: transactionHashes[index],
+      blockHash: blockHashes[index],
+      blockNumber,
+      transactionIndex: 1,
+      logIndex: 3,
+      removed: false,
+    };
+    creationLogs.push(creation);
+    transactions.set(transactionHashes[index], {
+      hash: transactionHashes[index],
+      blockNumber,
+      blockHash: blockHashes[index],
+      index: 1,
+      transactionIndex: 1,
+      from: creator,
+      to: portal,
+      data: `0x12345678${"0".repeat(128)}`,
+      value: 0n,
+    });
+    receipts.set(transactionHashes[index], {
+      hash: transactionHashes[index],
+      transactionHash: transactionHashes[index],
+      blockNumber,
+      blockHash: blockHashes[index],
+      index: 1,
+      transactionIndex: 1,
+      from: creator,
+      to: portal,
+      status: 1,
+      logs: [creation, pairLog],
+    });
+    blocks.set(blockNumber, {
+      number: blockNumber,
+      hash: blockHashes[index],
+      timestamp: Math.floor(clock / 1_000) + index,
+      transactions: [`0x${String(index + 5).repeat(64)}`, transactionHashes[index]],
+    });
+  }
+  await fs.writeFile(stateFile, JSON.stringify({
+    version: 7,
+    initializedAt: new Date(clock - 3_600_000).toISOString(),
+    lastFinalizedBlock: 50,
+    realtimeTailNextBlock: 104,
+    realtimeTailInitializedAt: new Date(clock - 3_600_000).toISOString(),
+    realtimePendingEntries: {},
+    deferredCreationEvidence: {},
+    officialSources: { flap: { quotePoolFirstThree: { version: 1, windows: {}, activeByQuote: {}, lifecycleEvents: {} } } },
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    coverageGaps: [],
+    nearHeadRecoveryGaps: [{
+      id: "first3-raw",
+      fromBlock: 102,
+      toBlock: 103,
+      nextBlock: 102,
+      reason: "fixture",
+      attempts: 0,
+    }],
+    _health: { realtimeTail: { status: "healthy", lastSuccessAt: new Date(clock).toISOString(), toBlock: 103, consecutiveFailures: 0 } },
+  }));
+  const provider = {
+    async getBlockNumber() { return head; },
+    async send(method, [filter]) {
+      if (method !== "eth_getLogs") throw new Error(`unexpected ${method}`);
+      if (phase === "restore_blocked") throw new Error("fixture keeps archive replay incomplete");
+      const fromBlock = Number.parseInt(filter.fromBlock, 16);
+      const toBlock = Number.parseInt(filter.toBlock, 16);
+      const topics = Array.isArray(filter?.topics?.[0]) ? filter.topics[0] : [filter?.topics?.[0]];
+      if (!topics.includes(FLAP_TOKEN_CREATED_TOPIC)) return [];
+      if (phase === "A" && fromBlock <= 102 && toBlock >= 102) return [creationLogs[0]];
+      if (phase === "B" && fromBlock <= 103 && toBlock >= 103) return [creationLogs[1]];
+      return [];
+    },
+    async getTransaction(hash) { return transactions.get(hash) || null; },
+    async getTransactionReceipt(hash) { return receipts.get(hash) || null; },
+    async getBlock(number) { return blocks.get(Number(number)) || null; },
+    async getCode() { return `0x${"6000".repeat(400)}`; },
+    async getStorage() { return "0x"; },
+    async call() { throw new Error("optional safety RPC unavailable"); },
+    destroy() {},
+  };
+  const alerts = [];
+  const dependencies = {
+    autoStart: false,
+    externalAttribution: false,
+    provider,
+    now: () => clock,
+    logger: { error() {}, info() {} },
+    sendAlertsImpl: async (_config, event) => {
+      alerts.push(structuredClone(event));
+      return { status: "delivered", eventId: event.eventKey };
+    },
+    ...disabledJournalTimerDependencies(),
+  };
+  const config = {
+    dataDir,
+    monitorScope: "focus3",
+    bscConfirmations: 0,
+    bscNearHeadRecoveryBatchSize: 1,
+    bscRecoveryLogBatchSize: 1,
+    blockedContracts: new Set(),
+  };
+  const activation = flapQuoteLifecycleRecord({
+    quoteAddress: quote,
+    quoteName: "Quote",
+    quoteSymbol: "Q",
+    transactionHash: `0x${"11".repeat(32)}`,
+    blockNumber: 100,
+    blockHash: `0x${"12".repeat(32)}`,
+    transactionIndex: 0,
+    logIndex: 1,
+    occurredAt: new Date(clock - 60_000).toISOString(),
+  });
+  const disable = flapQuoteLifecycleRecord({
+    action: "disabled",
+    quoteAddress: quote,
+    quoteName: "Quote",
+    quoteSymbol: "Q",
+    transactionHash: `0x${"21".repeat(32)}`,
+    blockNumber: 101,
+    blockHash: `0x${"22".repeat(32)}`,
+    transactionIndex: 0,
+    logIndex: 4,
+    occurredAt: new Date(clock - 30_000).toISOString(),
+  });
+  const restore = flapQuoteLifecycleRecord({
+    ...disable,
+    action: "restored",
+    targetActivationEventKey: activation.activationEventKey,
+  });
+  let monitor = createBscLaunchpadMonitor(config, dependencies);
+  t.after(async () => {
+    await monitor?.stop();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+  const activationAck = await monitor.registerFlapQuotePoolLifecycle(activation);
+  await monitor.awaitIdle();
+  await monitor.registerFlapQuotePoolLifecycle(disable);
+  phase = "A";
+  head = 102;
+  assert.equal((await monitor.scanNearHeadRecovery()).completed, false);
+  phase = "restore_blocked";
+  let snapshot = await monitor.getState();
+  assert.deepEqual(snapshot.realtimePendingEntries[transactionHashes[0]].causalBarrierKeys, []);
+  assert.equal(snapshot.nearHeadRecoveryGaps[0]?.nextBlock, 103,
+    "the second candidate remains an uncovered durable gap before restart");
+  await monitor.stop();
+
+  monitor = createBscLaunchpadMonitor(config, dependencies);
+  await monitor.getState();
+  phase = "restore_blocked";
+  assert.equal((await monitor.registerFlapQuotePoolLifecycle(restore)).status, "restored");
+  await monitor.awaitIdle();
+  phase = "none";
+  snapshot = await monitor.getState();
+  assert.equal(snapshot.officialSources.flap.quotePoolFirstThree
+    .windows[activationAck.generationKey].replayCompletedAt, null,
+  "the potential barrier must authorize A while archive replay is still incomplete");
+  assert.deepEqual(
+    snapshot.realtimePendingEntries[transactionHashes[0]].causalBarrierKeys,
+    [`first3:${activationAck.generationKey}`],
+  );
+  await monitor.processRealtimeQueue();
+  await monitor.awaitIdle();
+  snapshot = await monitor.getState();
+  let window = snapshot.officialSources.flap.quotePoolFirstThree.windows[activationAck.generationKey];
+  assert.deepEqual(window.slots.map((slot) => [slot.ordinal, slot.transactionHash]), [
+    [1, transactionHashes[0]],
+  ], "A must claim ordinal one while archive replay is still incomplete");
+
+  phase = "B";
+  head = 103;
+  clock = Math.max(clock, Date.parse("2026-08-24T12:00:01.000Z"));
+  const remainingGap = snapshot.nearHeadRecoveryGaps[0];
+  if (remainingGap?.nextAttemptAt) {
+    clock = Math.max(clock, Date.parse(remainingGap.nextAttemptAt) + 1);
+  }
+  const handoffB = await monitor.scanNearHeadRecovery();
+  phase = "restore_blocked";
+  const afterBHandoff = await monitor.getState();
+  assert.ok(
+    afterBHandoff.realtimePendingEntries[transactionHashes[1]]
+      || afterBHandoff.deferredCreationEvidence[transactionHashes[1]]
+      || afterBHandoff.seenTransactions[transactionHashes[1]],
+    `B must be durably admitted even when a scheduled scan wins the race: ${JSON.stringify(handoffB)}`,
+  );
+  for (let turn = 0; turn < 5; turn += 1) {
+    await monitor.processRealtimeQueue();
+    clock += 1_000;
+  }
+  await monitor.awaitIdle();
+  phase = "none";
+  snapshot = await monitor.getState();
+  window = snapshot.officialSources.flap.quotePoolFirstThree.windows[activationAck.generationKey];
+  assert.deepEqual(window.slots.map((slot) => [slot.ordinal, slot.transactionHash]), [
+    [1, transactionHashes[0]],
+    [2, transactionHashes[1]],
+  ]);
+  assert.deepEqual(alerts.map((event) => [event.featureTokenOrdinal, event.transactionHash]), [
+    [1, transactionHashes[0]],
+    [2, transactionHashes[1]],
+  ]);
+  await monitor.stop();
+
+  monitor = createBscLaunchpadMonitor(config, dependencies);
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  assert.equal(alerts.length, 2, "restart cannot redeliver either accepted canonical ordinal");
 });
