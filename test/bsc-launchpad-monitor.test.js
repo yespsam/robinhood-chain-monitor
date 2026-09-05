@@ -8063,8 +8063,14 @@ test("strict receipt classification releases a fresh causal descendant before hi
   const activationKey = "quote:0x4333333333333333333333333333333333333333";
   const causalKey = `feature:${activationKey}`;
   const oldHash = `0x${"61".repeat(32)}`;
+  const oldSecondHash = `0x${"69".repeat(32)}`;
+  const oldThirdHash = `0x${"6c".repeat(32)}`;
+  const oldFourthHash = `0x${"6d".repeat(32)}`;
   const freshHash = `0x${"62".repeat(32)}`;
   const oldBlockHash = `0x${"63".repeat(32)}`;
+  const oldSecondBlockHash = `0x${"6a".repeat(32)}`;
+  const oldThirdBlockHash = `0x${"6e".repeat(32)}`;
+  const oldFourthBlockHash = `0x${"6f".repeat(32)}`;
   const freshBlockHash = `0x${"64".repeat(32)}`;
   const launcher = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
   const token = "0x6511111111111111111111111111111111111111";
@@ -8088,11 +8094,59 @@ test("strict receipt classification releases a fresh causal descendant before hi
     logIndex: 2,
     removed: false,
   };
+  const oldSecondLog = {
+    ...oldLog,
+    transactionHash: oldSecondHash,
+    blockHash: oldSecondBlockHash,
+    blockNumber: 101,
+  };
+  const oldThirdLog = {
+    ...oldLog,
+    transactionHash: oldThirdHash,
+    blockHash: oldThirdBlockHash,
+    blockNumber: 102,
+  };
+  const oldFourthLog = {
+    ...oldLog,
+    transactionHash: oldFourthHash,
+    blockHash: oldFourthBlockHash,
+    blockNumber: 103,
+  };
   const transactionByHash = new Map([
     [oldHash, {
       hash: oldHash,
       blockNumber: 100,
       blockHash: oldBlockHash,
+      index: 1,
+      transactionIndex: 1,
+      from: creator,
+      to: launcher,
+      data: "0x",
+    }],
+    [oldSecondHash, {
+      hash: oldSecondHash,
+      blockNumber: 101,
+      blockHash: oldSecondBlockHash,
+      index: 1,
+      transactionIndex: 1,
+      from: creator,
+      to: launcher,
+      data: "0x",
+    }],
+    [oldThirdHash, {
+      hash: oldThirdHash,
+      blockNumber: 102,
+      blockHash: oldThirdBlockHash,
+      index: 1,
+      transactionIndex: 1,
+      from: creator,
+      to: launcher,
+      data: "0x",
+    }],
+    [oldFourthHash, {
+      hash: oldFourthHash,
+      blockNumber: 103,
+      blockHash: oldFourthBlockHash,
       index: 1,
       transactionIndex: 1,
       from: creator,
@@ -8121,6 +8175,36 @@ test("strict receipt classification releases a fresh causal descendant before hi
       status: 1,
       logs: [oldLog],
     }],
+    [oldSecondHash, {
+      hash: oldSecondHash,
+      transactionHash: oldSecondHash,
+      blockNumber: 101,
+      blockHash: oldSecondBlockHash,
+      index: 1,
+      transactionIndex: 1,
+      status: 1,
+      logs: [oldSecondLog],
+    }],
+    [oldThirdHash, {
+      hash: oldThirdHash,
+      transactionHash: oldThirdHash,
+      blockNumber: 102,
+      blockHash: oldThirdBlockHash,
+      index: 1,
+      transactionIndex: 1,
+      status: 1,
+      logs: [oldThirdLog],
+    }],
+    [oldFourthHash, {
+      hash: oldFourthHash,
+      transactionHash: oldFourthHash,
+      blockNumber: 103,
+      blockHash: oldFourthBlockHash,
+      index: 1,
+      transactionIndex: 1,
+      status: 1,
+      logs: [oldFourthLog],
+    }],
     [freshHash, {
       hash: freshHash,
       transactionHash: freshHash,
@@ -8139,6 +8223,24 @@ test("strict receipt classification releases a fresh causal descendant before hi
       timestamp: Math.floor((clock - 60 * 60_000) / 1_000),
       transactions: [`0x${"60".repeat(32)}`, oldHash],
     }],
+    [101, {
+      number: 101,
+      hash: oldSecondBlockHash,
+      timestamp: Math.floor((clock - 60 * 60_000 + 1_000) / 1_000),
+      transactions: [`0x${"6b".repeat(32)}`, oldSecondHash],
+    }],
+    [102, {
+      number: 102,
+      hash: oldThirdBlockHash,
+      timestamp: Math.floor((clock - 60 * 60_000 + 2_000) / 1_000),
+      transactions: [`0x${"70".repeat(32)}`, oldThirdHash],
+    }],
+    [103, {
+      number: 103,
+      hash: oldFourthBlockHash,
+      timestamp: Math.floor((clock - 60 * 60_000 + 3_000) / 1_000),
+      transactions: [`0x${"71".repeat(32)}`, oldFourthHash],
+    }],
     [head - 2, {
       number: head - 2,
       hash: freshBlockHash,
@@ -8151,11 +8253,11 @@ test("strict receipt classification releases a fresh causal descendant before hi
     blockHash,
     blockNumber,
     transactionIndex: 1,
-    logIndex: transactionHash === oldHash ? 2 : 0,
+    logIndex: transactionHash === freshHash ? 0 : 2,
     reasons: ["http_tail"],
     mintEmitters: [],
-    candidateTokens: transactionHash === oldHash ? [token] : [],
-    verifiedNewContracts: transactionHash === oldHash ? [token] : [],
+    candidateTokens: transactionHash === freshHash ? [] : [token],
+    verifiedNewContracts: transactionHash === freshHash ? [] : [token],
     upgradeEmitters: transactionHash === freshHash ? [trigger] : [],
     lifecycleEmitters: [],
     hookPools: [],
@@ -8183,6 +8285,9 @@ test("strict receipt classification releases a fresh causal descendant before hi
     realtimePendingEntries: {},
     deferredCreationEvidence: {
       [oldHash]: deferred(oldHash, 100, oldBlockHash),
+      [oldSecondHash]: deferred(oldSecondHash, 101, oldSecondBlockHash),
+      [oldThirdHash]: deferred(oldThirdHash, 102, oldThirdBlockHash),
+      [oldFourthHash]: deferred(oldFourthHash, 103, oldFourthBlockHash),
       [freshHash]: deferred(freshHash, head - 2, freshBlockHash),
     },
     nearHeadRecoveryGaps: [{
@@ -8259,10 +8364,28 @@ test("strict receipt classification releases a fresh causal descendant before hi
   await completeRealtimeTailPasses(monitor, 2, 5_000);
   await monitor.retryDeferredCreationEvidence();
   let snapshot = await monitor.getState();
-  assert.deepEqual(deepOrder, [oldHash]);
+  assert.equal(deepOrder.length, 4, JSON.stringify({
+    deepOrder,
+    deferred: Object.fromEntries(Object.entries(snapshot.deferredCreationEvidence)
+      .map(([hash, record]) => [hash, {
+        blockNumber: record.blockNumber,
+        causalBarrierKeys: record.causalBarrierKeys,
+        nextAttemptAt: record.nextAttemptAt,
+      }])),
+    health: snapshot._health,
+  }));
+  assert.deepEqual(new Set(deepOrder), new Set([
+    oldHash,
+    oldSecondHash,
+    oldThirdHash,
+    oldFourthHash,
+  ]), "one dependency lease batches four proof-only historical classifications");
   assert.equal(getCodeCalls, 0,
     "strict receipt proof must release the causal chain before historical runtime RPCs");
   assert.deepEqual(snapshot.deferredCreationEvidence[oldHash].causalBarrierKeys, []);
+  assert.deepEqual(snapshot.deferredCreationEvidence[oldSecondHash].causalBarrierKeys, []);
+  assert.deepEqual(snapshot.deferredCreationEvidence[oldThirdHash].causalBarrierKeys, []);
+  assert.deepEqual(snapshot.deferredCreationEvidence[oldFourthHash].causalBarrierKeys, []);
   assert.equal(snapshot.seenTransactions[oldHash], undefined);
   assert.equal(snapshot.deferredCreationEvidence[oldHash].attempts, 1,
     "classification-only success is neither completion nor a failed attempt");
@@ -8271,11 +8394,14 @@ test("strict receipt classification releases a fresh causal descendant before hi
     "per-transaction evidence remains durable without falsely marking the transaction processed");
   const durable = await readBscLaunchpadDurableState(stateFile);
   assert.deepEqual(durable.deferredCreationEvidence[oldHash].causalBarrierKeys, []);
+  assert.deepEqual(durable.deferredCreationEvidence[oldSecondHash].causalBarrierKeys, []);
+  assert.deepEqual(durable.deferredCreationEvidence[oldThirdHash].causalBarrierKeys, []);
+  assert.deepEqual(durable.deferredCreationEvidence[oldFourthHash].causalBarrierKeys, []);
   assert.ok(durable.deferredCreationEvidence[freshHash], "the fresh descendant remains durable until its own slot");
 
   clock += 750;
   await monitor.retryDeferredCreationEvidence();
-  assert.deepEqual(deepOrder.slice(0, 2), [oldHash, freshHash],
+  assert.equal(deepOrder[4], freshHash,
     "the fresh descendant runs next instead of waiting behind the now-unrelated old record");
 });
 

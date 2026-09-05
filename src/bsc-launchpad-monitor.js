@@ -160,6 +160,7 @@ const BSC_DEEP_RPC_HEALTHY_TAIL_BATCHES = 2;
 const BSC_DEEP_RPC_PACE_MS = 750;
 const BSC_DEEP_RPC_OLD_WITH_GAPS_PACE_MS = 30_000;
 const BSC_DEEP_RPC_FRESH_WINDOW_MS = 15 * 60_000;
+const BSC_CAUSAL_CLASSIFICATION_BATCH_SIZE = 4;
 const BSC_DEEP_RPC_BLOCKING_TAIL_STATUSES = new Set([
   "error",
   "degraded",
@@ -5556,8 +5557,8 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       capacityDependencyUnlock: false,
       effectiveSlaDeadlines: new Map(),
       priority,
-      realtime: { sla: [], fresh: [], dependency: [], old: [] },
-      deferred: { sla: [], fresh: [], dependency: [], old: [] },
+      realtime: { sla: [], fresh: [], dependency: [], old: [], classification: [] },
+      deferred: { sla: [], fresh: [], dependency: [], old: [], classification: [] },
     });
     // Tail health and the shared host circuit are complete gates. Walking and
     // sorting thousands of durable candidates while no deep read can start
@@ -5688,7 +5689,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         && !inFlightEntries.has(record.transactionHash))
       .sort(compareEffectiveBackgroundEntries);
     const partition = (entries) => {
-      const result = { sla: [], fresh: [], dependency: [], old: [] };
+      const result = { sla: [], fresh: [], dependency: [], old: [], classification: [] };
       for (const entry of entries) {
         if (hasEffectiveSla(entry)) result.sla.push(entry);
         else if (metadataFor(entry).fresh) result.fresh.push(entry);
@@ -5697,6 +5698,51 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       }
       return result;
     };
+    const hasPotentialCausalBarrier = (entry) => {
+      const exact = new Set([
+        entry?.featureActivationReplayKey ? `feature:${entry.featureActivationReplayKey}` : null,
+        entry?.flapQuoteFirstThreeReplayGenerationKey
+          ? `first3:${entry.flapQuoteFirstThreeReplayGenerationKey}`
+          : null,
+      ].filter(Boolean));
+      return normalizeBscCausalBarrierKeys(entry?.causalBarrierKeys)
+        .some((key) => !exact.has(key));
+    };
+    const classificationReferenceHead = Math.max(
+      Number(currentHead || 0),
+      Math.max(0, Number(state?.realtimeTailNextBlock || 0) - 1),
+    );
+    const isHistoricalPotentialClassification = (entry) =>
+      classificationReferenceHead > 0
+      && Number(entry?.blockNumber) <= classificationReferenceHead - realtimeTailMaxLagBlocks
+      && hasPotentialCausalBarrier(entry)
+      && !hasActiveSla(entry)
+      && !inFlightEntries.has(entry.transactionHash);
+    const earliestClassificationCandidates = (entries, eligible) => {
+      const selected = [];
+      for (const entry of entries) {
+        if (!eligible(entry)) continue;
+        selected.push(entry);
+        selected.sort(compareBscQueueEntries);
+        if (selected.length > BSC_CAUSAL_CLASSIFICATION_BATCH_SIZE) selected.pop();
+      }
+      return selected;
+    };
+    const realtimePartition = partition(queued);
+    const deferredPartition = partition(deferred);
+    if (realtimeRetryAt <= current) {
+      realtimePartition.classification = earliestClassificationCandidates(
+        allQueued,
+        (entry) => isHistoricalPotentialClassification(entry)
+          && !websocketProofReservations.has(entry.transactionHash)
+          && Number(websocketHttpFallbackRetryAt.get(entry.transactionHash) || 0) <= current,
+      );
+    }
+    deferredPartition.classification = earliestClassificationCandidates(
+      allDeferredForDependencies,
+      (entry) => isHistoricalPotentialClassification(entry)
+        && (metadataFor(entry).nextAttemptAt <= current || hasEffectiveSla(entry)),
+    );
     return {
       current,
       confirmed,
@@ -5704,8 +5750,8 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       capacityDependencyUnlock: priority.capacityBackpressure && deferred.length > 0,
       effectiveSlaDeadlines,
       priority,
-      realtime: partition(queued),
-      deferred: partition(deferred),
+      realtime: realtimePartition,
+      deferred: deferredPartition,
     };
   };
 
@@ -13028,6 +13074,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   async function runProcessEntries(entries, rpcConcurrency = entryRpcConcurrency, {
     preserveRealtimePendingOnFailure = false,
     flapReplaySignal = null,
+    receiptClassificationOnly = false,
   } = {}) {
     const boundedRpcConcurrency = Math.max(1, Number(rpcConcurrency) || 1);
     const results = await mapLimit(entries, boundedRpcConcurrency, async (entry) => {
@@ -13107,7 +13154,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       const entryDeliveryDeadline = backgroundDeliveryDeadline(entry);
       const classificationOnly = historical
         && hasPotentialCausalBarrier
-        && backgroundFeatureKeys(entry).length === 0
+        && (receiptClassificationOnly || backgroundFeatureKeys(entry).length === 0)
         && !(Number.isFinite(entryDeliveryDeadline) && entryDeliveryDeadline > Number(now()));
       if (classificationOnly) {
         // Legacy recovery records can conservatively carry every unresolved
@@ -13456,6 +13503,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     if (dirtyEntries.length) await runProcessEntries(dirtyEntries, boundedRpcConcurrency, {
       preserveRealtimePendingOnFailure,
       flapReplaySignal,
+      receiptClassificationOnly,
     });
   }
 
@@ -13498,6 +13546,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     if (deferredEvidenceRunning || stopped) return;
     deferredEvidenceRunning = true;
     let releaseDeepRpc = null;
+    let classificationBatch = false;
     try {
       await initialize();
       let due;
@@ -13512,7 +13561,14 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           wakeBackgroundDeepRpc();
           return { skipped: true, reason: "deep_rpc_fairness" };
         }
-        due = eligibility.deferred[workClass].slice(0, 1).map((record) => structuredClone(record));
+        const classificationCandidates = workClass === "dependency"
+          ? eligibility.deferred.classification
+          : [];
+        classificationBatch = classificationCandidates.length > 0;
+        due = (classificationBatch
+          ? classificationCandidates.slice(0, BSC_CAUSAL_CLASSIFICATION_BATCH_SIZE)
+          : eligibility.deferred[workClass].slice(0, 1))
+          .map((record) => structuredClone(record));
         if (!due.length) {
           wakeBackgroundDeepRpc();
           return { skipped: false, attempted: 0 };
@@ -13530,73 +13586,79 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           .map((record) => structuredClone(record)));
       }
       if (!due.length) return { skipped: false, attempted: 0 };
-      const attempts = await mapLimit(due, backgroundDeepPriorityEnabled() ? 1 : bscScanConcurrency, async (record) => {
-        const entry = deserializeDeferredEntry(record);
-        try {
-          await processEntries([entry]);
-          await markBackgroundDeepHostRecovered();
-          return;
-        } catch (error) {
-          await withState(async () => {
-            const current = state.deferredCreationEvidence[record.transactionHash];
-            if (!current) return;
-            if (sharedRpcRetryDelayMs(error) > 0) {
-              const providerRetryAfterMs = Number(error?.retryAfterMs);
-              const hostRetryDelayMs = Math.max(
-                1_000,
-                sharedRpcRetryDelayMs(error),
-                error?.rpcFailureScope === "host"
-                  && Number.isFinite(providerRetryAfterMs) && providerRetryAfterMs > 0
-                  ? Math.ceil(providerRetryAfterMs)
-                  : 0,
+      const attempts = await mapLimit(
+        due,
+        backgroundDeepPriorityEnabled()
+          ? classificationBatch ? BSC_CAUSAL_CLASSIFICATION_BATCH_SIZE : 1
+          : bscScanConcurrency,
+        async (record) => {
+          const entry = deserializeDeferredEntry(record);
+          try {
+            await processEntries([entry], 1, { receiptClassificationOnly: classificationBatch });
+            await markBackgroundDeepHostRecovered();
+            return;
+          } catch (error) {
+            await withState(async () => {
+              const current = state.deferredCreationEvidence[record.transactionHash];
+              if (!current) return;
+              if (sharedRpcRetryDelayMs(error) > 0) {
+                const providerRetryAfterMs = Number(error?.retryAfterMs);
+                const hostRetryDelayMs = Math.max(
+                  1_000,
+                  sharedRpcRetryDelayMs(error),
+                  error?.rpcFailureScope === "host"
+                    && Number.isFinite(providerRetryAfterMs) && providerRetryAfterMs > 0
+                    ? Math.ceil(providerRetryAfterMs)
+                    : 0,
+                );
+                backgroundDeepHostRetryAt = Math.max(
+                  backgroundDeepHostRetryAt,
+                  Number(now()) + hostRetryDelayMs,
+                );
+                state._health.backgroundDeepRpc = {
+                  status: "backoff",
+                  checkedAt: iso(now),
+                  lastErrorAt: iso(now),
+                  lastError: errorSummary(error),
+                  rpcFailureScope: "host",
+                  rpcOperation: error?.rpcOperation || null,
+                  retryDelayMs: hostRetryDelayMs,
+                  nextRetryAt: iso(backgroundDeepHostRetryAt),
+                };
+                // A host-wide outage is not evidence that this candidate's
+                // transaction proof failed. Keep its original due time and
+                // attempt count so it can resume immediately when the shared
+                // physical-host cooldown expires.
+                await save();
+                return;
+              }
+              mergeCurrentDurableEntry(
+                entry,
+                state.realtimePendingEntries[record.transactionHash],
+                current,
               );
-              backgroundDeepHostRetryAt = Math.max(
-                backgroundDeepHostRetryAt,
-                Number(now()) + hostRetryDelayMs,
-              );
-              state._health.backgroundDeepRpc = {
-                status: "backoff",
+              const updated = serializeDeferredEntry(entry, error, current);
+              state.deferredCreationEvidence[record.transactionHash] = updated;
+              state._health.creationEvidence = {
+                status: "deferred",
                 checkedAt: iso(now),
-                lastErrorAt: iso(now),
-                lastError: errorSummary(error),
-                rpcFailureScope: "host",
-                rpcOperation: error?.rpcOperation || null,
-                retryDelayMs: hostRetryDelayMs,
-                nextRetryAt: iso(backgroundDeepHostRetryAt),
+                pending: Object.keys(state.deferredCreationEvidence).length,
+                lastError: updated.lastError,
               };
-              // A host-wide outage is not evidence that this candidate's
-              // transaction proof failed. Keep its original due time and
-              // attempt count so it can resume immediately when the shared
-              // physical-host cooldown expires.
+              for (const gap of state.coverageGaps || []) {
+                if (gap.transactionHash !== record.transactionHash || gap.resolvedAt || gap.status === "resolved") continue;
+                gap.lastFailureAt = iso(now);
+                gap.nextAttemptAt = updated.nextAttemptAt;
+                gap.attempts = updated.attempts;
+                gap.error = updated.lastError;
+              }
+              updateCoverageHealth();
               await save();
-              return;
-            }
-            mergeCurrentDurableEntry(
-              entry,
-              state.realtimePendingEntries[record.transactionHash],
-              current,
-            );
-            const updated = serializeDeferredEntry(entry, error, current);
-            state.deferredCreationEvidence[record.transactionHash] = updated;
-            state._health.creationEvidence = {
-              status: "deferred",
-              checkedAt: iso(now),
-              pending: Object.keys(state.deferredCreationEvidence).length,
-              lastError: updated.lastError,
-            };
-            for (const gap of state.coverageGaps || []) {
-              if (gap.transactionHash !== record.transactionHash || gap.resolvedAt || gap.status === "resolved") continue;
-              gap.lastFailureAt = iso(now);
-              gap.nextAttemptAt = updated.nextAttemptAt;
-              gap.attempts = updated.attempts;
-              gap.error = updated.lastError;
-            }
-            updateCoverageHealth();
-            await save();
-            if (updated.attempts === 2 || updated.attempts % 5 === 0) logger.error(`[bsc][deferred] retry=${updated.attempts} ${record.transactionHash}: ${updated.lastError}`);
-          });
-        }
-      });
+              if (updated.attempts === 2 || updated.attempts % 5 === 0) logger.error(`[bsc][deferred] retry=${updated.attempts} ${record.transactionHash}: ${updated.lastError}`);
+            });
+          }
+        },
+      );
       const failure = attempts.find((result) => result.status === "rejected");
       if (failure) logger.error(`[bsc][deferred] ${errorSummary(failure.reason)}`);
       return { skipped: false, attempted: due.length };
@@ -14635,6 +14697,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     realtimeRunning = true;
     let retryDelayMs = 25;
     let releaseDeepRpc = null;
+    let classificationBatch = false;
     try {
       const durableTailConfirmed = Number.isSafeInteger(Number(state.realtimeTailNextBlock))
         ? Math.max(0, Number(state.realtimeTailNextBlock) - 1)
@@ -14656,7 +14719,13 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           wakeBackgroundDeepRpc(retryDelayMs);
           return;
         }
-        queuedEntries = eligibility.realtime[workClass].slice(0, 1);
+        const classificationCandidates = workClass === "dependency"
+          ? eligibility.realtime.classification
+          : [];
+        classificationBatch = classificationCandidates.length > 0;
+        queuedEntries = classificationBatch
+          ? classificationCandidates.slice(0, BSC_CAUSAL_CLASSIFICATION_BATCH_SIZE)
+          : eligibility.realtime[workClass].slice(0, 1);
         if (!queuedEntries.length) {
           retryDelayMs = BSC_DEEP_RPC_PACE_MS;
           wakeBackgroundDeepRpc();
@@ -14685,7 +14754,13 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         realtimeTailLookbackBlocks,
       );
       if (entries.length) {
-        await processEntries(entries, backgroundDeepPriorityEnabled() ? 1 : entryRpcConcurrency);
+        await processEntries(
+          entries,
+          backgroundDeepPriorityEnabled() && classificationBatch
+            ? BSC_CAUSAL_CLASSIFICATION_BATCH_SIZE
+            : backgroundDeepPriorityEnabled() ? 1 : entryRpcConcurrency,
+          { receiptClassificationOnly: classificationBatch },
+        );
         if (backgroundDeepPriorityEnabled()) await markBackgroundDeepHostRecovered();
         if (backgroundDeepPriorityEnabled()) {
           retryDelayMs = backgroundDeepRpcDelayMs();
