@@ -14677,15 +14677,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         const previous = state._health.realtimeTail || { consecutiveFailures: 0 };
         const consecutiveFailures = Number(previous.consecutiveFailures || 0) + 1;
         const exponentialDelayMs = Math.min(5_000, 500 * (2 ** Math.min(consecutiveFailures - 1, 4)));
-        const providerRetryAfterMs = Math.max(
-          sharedRpcRetryDelayMs(error),
-          Number.isFinite(Number(error?.retryAfterMs)) && Number(error.retryAfterMs) > 0
-            ? Math.ceil(Number(error.retryAfterMs))
-            : 0,
-        );
-        // The local exponential is bounded; an upstream Retry-After is not.
-        // Waking before a physical host's declared deadline only creates a
-        // fail-fast loop and cannot advance the durable cursor.
+        // Provider circuits already retain every per-host deadline. Retry the
+        // range when the earliest capable host is due instead of inheriting a
+        // longer 429 from an unrelated fallback that remains excluded.
+        const providerRetryAfterMs = Number.isFinite(Number(error?.retryAfterMs))
+          && Number(error.retryAfterMs) > 0 ? Math.ceil(Number(error.retryAfterMs)) : 0;
+        // The local exponential is bounded; a pool-level Retry-After is not.
         const retryDelayMs = Math.max(exponentialDelayMs, providerRetryAfterMs);
         realtimeTailRetryAt = now() + retryDelayMs;
         state._health.realtimeTail = {
@@ -14936,13 +14933,22 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           nearHeadRecoveryRetryBaseMs * (2 ** Math.min(attempts - 1, 10)),
         );
         const failedAt = Number(now());
-        const sharedRetryDelayMs = sharedRpcRetryDelayMs(error);
-        const retryDelayMs = Math.max(localRetryDelayMs, sharedRetryDelayMs);
-        if (sharedRetryDelayMs > 0) {
-          // The lane-wide deadline belongs only to the physical-host outage.
+        // Every failed host retains its own circuit. Only a proven shared-host
+        // outage may pause the whole near-head lane; an isolated method error
+        // remains local to this gap so the fairness slots can keep moving.
+        // When the pool is unavailable, wake at its earliest viable provider
+        // rather than inheriting a longer 429 from an unrelated fallback.
+        const sharedRetryEvidenceMs = sharedRpcRetryDelayMs(error);
+        const poolRetryDelayMs = sharedRetryEvidenceMs > 0
+          && Number.isFinite(Number(error?.retryAfterMs))
+          && Number(error.retryAfterMs) > 0
+          ? Math.ceil(Number(error.retryAfterMs))
+          : 0;
+        const retryDelayMs = Math.max(localRetryDelayMs, poolRetryDelayMs);
+        if (poolRetryDelayMs > 0) {
           // A high-attempt poison gap keeps its own local 60s deadline without
           // freezing every other due gap for that extra time.
-          nearHeadRecoveryRetryAt = Math.max(nearHeadRecoveryRetryAt, failedAt + sharedRetryDelayMs);
+          nearHeadRecoveryRetryAt = Math.max(nearHeadRecoveryRetryAt, failedAt + poolRetryDelayMs);
         }
         const retryAt = failedAt + retryDelayMs;
         const nextRetryAt = iso(retryAt);
@@ -14962,12 +14968,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           retryDelayMs,
           nextRetryAt,
           activeGapId: null,
-          ...(sharedRetryDelayMs > 0 ? {
+          ...(poolRetryDelayMs > 0 ? {
             sharedRpcRetryAt: iso(nearHeadRecoveryRetryAt),
             sharedRpcBackoff: true,
           } : {}),
         };
-        if (sharedRetryDelayMs <= 0) {
+        if (poolRetryDelayMs <= 0) {
           delete state._health.nearHeadRecovery.sharedRpcRetryAt;
           delete state._health.nearHeadRecovery.sharedRpcBackoff;
         }

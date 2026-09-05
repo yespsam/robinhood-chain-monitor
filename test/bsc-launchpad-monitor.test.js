@@ -6936,7 +6936,7 @@ test("realtime tail keeps its cursor and backs off instead of blocking on full r
   assert.equal(snapshot._health.realtimeTail.nextRetryAt, undefined);
 });
 
-test("realtime tail preserves a long provider Retry-After across direct calls and restart", async (t) => {
+test("realtime tail preserves the earliest viable provider Retry-After across direct calls and restart", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-tail-long-retry-after-"));
   const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
   let current = Date.parse("2026-08-24T10:30:00.000Z");
@@ -6963,6 +6963,9 @@ test("realtime tail preserves a long provider Retry-After across direct calls an
       const error = new Error("eth_getLogs failed on every BSC RPC: providers cooling down; retry in 90000ms");
       error.code = "SERVER_ERROR";
       error.retryAfterMs = 90_000;
+      error.rpcHostRetryAfterMs = 300_000;
+      error.rpcFailureScope = "method";
+      error.rpcOperation = "eth_getLogs";
       throw error;
     },
     destroy() {},
@@ -9976,8 +9979,9 @@ test("shared RPC cooling backs off the whole near-head lane without walking ever
         const error = new Error("eth_getLogs failed on every BSC RPC: providers cooling down; retry in 5000ms");
         error.code = "SERVER_ERROR";
         error.retryAfterMs = 5_000;
+        error.rpcHostRetryAfterMs = 300_000;
         error.rpcOperation = "eth_getLogs";
-        error.rpcFailureScope = "host";
+        error.rpcFailureScope = "method";
         throw error;
       }
       blockFallbackCalls += 1;
