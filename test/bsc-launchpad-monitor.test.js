@@ -8626,6 +8626,153 @@ test("near-head handoff replaces a deferred transaction's orphaned fork coordina
   assert.equal(record.flapCreationHotCandidates[0].blockHash, newBlockHash);
 });
 
+test("legacy Flap replay fills unknown receipt coordinates only after strict canonical proof", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-legacy-receipt-position-"));
+  const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
+  const clock = Date.parse("2026-08-24T10:00:00.000Z");
+  const transactionHash = `0x${"3e".repeat(32)}`;
+  const blockHash = `0x${"3f".repeat(32)}`;
+  const precedingHash = `0x${"40".repeat(32)}`;
+  const launcher = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
+  const token = "0x4111111111111111111111111111111111111111";
+  const creator = "0x4222222222222222222222222222222222222222";
+  const activationKey = "quote:0x4333333333333333333333333333333333333333";
+  const iface = new Interface([
+    "event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)",
+  ]);
+  const encoded = iface.encodeEventLog(
+    iface.getEvent("TokenCreated"),
+    [1n, creator, 1n, token, "Legacy", "LEG", "ipfs://legacy"],
+  );
+  const log = {
+    address: launcher,
+    topics: encoded.topics,
+    data: encoded.data,
+    transactionHash,
+    blockHash,
+    blockNumber: 90,
+    transactionIndex: 1,
+    logIndex: 2,
+    removed: false,
+  };
+  const transaction = {
+    hash: transactionHash,
+    blockNumber: 90,
+    blockHash,
+    index: 1,
+    transactionIndex: 1,
+    from: creator,
+    to: launcher,
+    data: "0x",
+  };
+  const receipt = {
+    hash: transactionHash,
+    transactionHash,
+    blockNumber: 90,
+    blockHash,
+    index: 1,
+    transactionIndex: 1,
+    status: 1,
+    logs: [log],
+  };
+  const block = {
+    number: 90,
+    hash: blockHash,
+    timestamp: Math.floor(clock / 1_000),
+    transactions: [precedingHash, transactionHash],
+  };
+  await fs.writeFile(stateFile, JSON.stringify({
+    version: 6,
+    initializedAt: new Date(clock - 60_000).toISOString(),
+    lastFinalizedBlock: 89,
+    realtimeTailNextBlock: 91,
+    realtimePendingEntries: {},
+    deferredCreationEvidence: {
+      [transactionHash]: {
+        transactionHash,
+        blockHash: null,
+        blockNumber: 90,
+        transactionIndex: Number.MAX_SAFE_INTEGER,
+        logIndex: Number.MAX_SAFE_INTEGER,
+        reasons: ["flap_feature_replay"],
+        mintEmitters: [token],
+        candidateTokens: [token],
+        verifiedNewContracts: [token],
+        upgradeEmitters: [],
+        lifecycleEmitters: [],
+        hookPools: [],
+        hasProtocolTrigger: true,
+        featureActivationReplayKey: activationKey,
+        flapQuoteFirstThreeReplayGenerationKey: null,
+        causalBarrierKeys: [`feature:${activationKey}`],
+        flapCreationHotCandidates: [],
+        fourMemeCreationHotCandidates: [],
+        revision: 1,
+        deferredKind: "coverage_processing",
+        attempts: 1,
+        firstDeferredAt: new Date(clock - 30_000).toISOString(),
+        lastAttemptAt: new Date(clock - 15_000).toISOString(),
+        nextAttemptAt: new Date(clock - 1).toISOString(),
+        lastError: "legacy record lacked canonical coordinates",
+      },
+    },
+    nearHeadRecoveryGaps: [],
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    coverageGaps: [],
+  }));
+  const provider = {
+    async getNetwork() { return { chainId: 56n }; },
+    async getBlockNumber() { return 92; },
+    async getTransaction(hash) { return hash === transactionHash ? transaction : null; },
+    async getTransactionReceipt(hash) { return hash === transactionHash ? receipt : null; },
+    async getBlock(number) { return Number(number) === 90 ? block : null; },
+    async getCode() {
+      const error = new Error("runtime profile unavailable after canonical classification");
+      error.code = "SERVER_ERROR";
+      throw error;
+    },
+    async getStorage() { return "0x"; },
+    async call() { return "0x"; },
+    async send() { return []; },
+    destroy() {},
+  };
+  const dependencies = {
+    autoStart: false,
+    provider,
+    now: () => clock,
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  };
+  let monitor = createBscLaunchpadMonitor({ dataDir }, dependencies);
+  t.after(async () => {
+    await monitor?.stop();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+  await monitor.getState();
+  await monitor.retryDeferredCreationEvidence();
+  let snapshot = await monitor.getState();
+  let record = snapshot.deferredCreationEvidence[transactionHash];
+  assert.ok(record, "the forced downstream runtime failure keeps the classified candidate durable");
+  assert.deepEqual(
+    [record.blockNumber, record.blockHash, record.transactionIndex, record.logIndex],
+    [90, blockHash, 1, 2],
+  );
+  assert.equal(record.flapCreationHotCandidates.length, 1);
+  assert.doesNotMatch(record.lastError, /causal classification proof mismatch/);
+
+  await monitor.stop();
+  monitor = createBscLaunchpadMonitor({ dataDir }, dependencies);
+  snapshot = await monitor.getState();
+  record = snapshot.deferredCreationEvidence[transactionHash];
+  assert.deepEqual(
+    [record.blockNumber, record.blockHash, record.transactionIndex, record.logIndex],
+    [90, blockHash, 1, 2],
+    "the canonical repair survives the checksummed state/WAL restart boundary",
+  );
+});
+
 test("a durable near-head candidate registered after restart bypasses the warmed ordinary fast exit for its Flap activation", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-near-head-late-flap-activation-"));
   const stateFile = path.join(dataDir, "bsc-launchpad-state.json");

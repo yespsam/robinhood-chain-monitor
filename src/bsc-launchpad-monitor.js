@@ -12768,9 +12768,51 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     return new Date(timestamp * 1_000).toISOString();
   }
 
+  function canonicalizeUnknownReceiptPosition(entry, transaction, receipt, block) {
+    const transactionIndex = bscQueuePosition(entry.transactionIndex);
+    const logIndex = bscQueuePosition(entry.logIndex);
+    const blockHash = String(entry.blockHash || "").toLowerCase();
+    const missingTransactionIndex = transactionIndex === Number.MAX_SAFE_INTEGER;
+    const missingLogIndex = logIndex === Number.MAX_SAFE_INTEGER;
+    const missingBlockHash = !/^0x[0-9a-f]{64}$/.test(blockHash);
+    if (!missingTransactionIndex && !missingLogIndex && !missingBlockHash) {
+      return canonicalReceiptObservationTime(entry, transaction, receipt, block);
+    }
+
+    const receiptTransactionIndex = bscQueuePosition(receipt?.index ?? receipt?.transactionIndex);
+    const receiptLogIndexes = Array.isArray(receipt?.logs)
+      ? receipt.logs.map((log) => bscQueuePosition(log?.index ?? log?.logIndex))
+        .filter((value) => value !== Number.MAX_SAFE_INTEGER)
+      : [];
+    const canonicalBlockHash = normalizeTransactionHash(block?.hash);
+    const hydrated = {
+      ...entry,
+      transactionIndex: missingTransactionIndex ? receiptTransactionIndex : transactionIndex,
+      logIndex: missingLogIndex && receiptLogIndexes.length
+        ? Math.min(...receiptLogIndexes)
+        : logIndex,
+      blockHash: missingBlockHash ? canonicalBlockHash : blockHash,
+    };
+    // Missing coordinates are an old migration-format limitation, not a
+    // reason to weaken canonical proof. Validate the proposed coordinates
+    // against the transaction, receipt, block hash, block transaction array,
+    // status and every receipt log before changing the durable entry.
+    const observedAt = canonicalReceiptObservationTime(hydrated, transaction, receipt, block);
+    const changed = hydrated.transactionIndex !== entry.transactionIndex
+      || hydrated.logIndex !== entry.logIndex
+      || hydrated.blockHash !== entry.blockHash;
+    if (changed) {
+      entry.transactionIndex = hydrated.transactionIndex;
+      entry.logIndex = hydrated.logIndex;
+      entry.blockHash = hydrated.blockHash;
+      entry.revision = Number(entry.revision || 0) + 1;
+    }
+    return observedAt;
+  }
+
   async function commitReceiptCausalClassification(entry, transaction, receipt, block) {
     const logs = Array.isArray(receipt?.logs) ? receipt.logs : [];
-    const observedAt = canonicalReceiptObservationTime(entry, transaction, receipt, block);
+    const observedAt = canonicalizeUnknownReceiptPosition(entry, transaction, receipt, block);
     const bscPools = parseBscPoolLogs(logs);
     const flapCreationCandidates = parseFlapCreationHotCandidates(logs, {
       transactionHash: entry.transactionHash,
