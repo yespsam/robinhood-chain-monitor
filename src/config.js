@@ -192,7 +192,7 @@ export const config = {
   fourRegistryPollIntervalMs: integer("FOUR_REGISTRY_POLL_INTERVAL_MS", 5_000),
   fourRegistryCatchUpIntervalMs: integer("FOUR_REGISTRY_CATCH_UP_INTERVAL_MS", 5_000),
   fourRegistryConfirmations: integer("FOUR_REGISTRY_CONFIRMATIONS", 3),
-  fourRegistryLogChunkSize: integer("FOUR_REGISTRY_LOG_CHUNK_SIZE", 64),
+  fourRegistryLogChunkSize: integer("FOUR_REGISTRY_LOG_CHUNK_SIZE", 4_096),
   fourRegistryReorgLookbackBlocks: integer("FOUR_REGISTRY_REORG_LOOKBACK_BLOCKS", 64),
   fourRegistryLogRpcUrls: parseDistinctRpcOrigins(
     "FOUR_REGISTRY_LOG_RPC_URLS",

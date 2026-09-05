@@ -795,7 +795,7 @@ test("the monitor works through a createRpcPool-style raw eth_getLogs facade wit
   assert.ok(facade.rawFilters.every((filter) => Array.isArray(filter.address) && filter.address.length === 2));
 });
 
-test("Multicall3 keeps a 64-block steady scan within the fixed physical-host RPC budget", async (t) => {
+test("Multicall3 keeps the default 4096-block catch-up scan within the fixed physical-host RPC budget", async (t) => {
   const provider = new FakeBscProvider({ head: 102 });
   provider.setSnapshot(100, Array.from({ length: 7 }, (_, index) => preset(String(1778027615800 + index))));
   const dependencies = {
@@ -812,22 +812,23 @@ test("Multicall3 keeps a 64-block steady scan within the fixed physical-host RPC
   assert.equal((await monitor.check()).status, "baseline");
   const before = monitor.getRpcTelemetry();
 
-  provider.head = 166;
+  provider.head = 4_198;
   const result = await monitor.check();
   const after = monitor.getRpcTelemetry();
   assert.equal(result.status, "ok");
-  assert.equal(result.finalizedBlock.number, 164);
+  assert.equal(result.finalizedBlock.number, 4_196);
   assert.equal(result.hasMore, false);
 
   const delta = (host, lane) => (
     (after.hosts[host].lanes[lane]?.calls || 0) - (before.hosts[host].lanes[lane]?.calls || 0)
   );
-  assert.equal(delta("shared-budget.test", "state"), 7, "state quorum keeps anchor, pre/post snapshot, two multicalls, and commit checks");
+  assert.equal(delta("shared-budget.test", "state"), 12,
+    "the large catch-up step also revalidates all three pinned runtimes on both state sources");
   assert.equal(delta("shared-budget.test", "log"), 2, "combined Registry/Core logs share one range hash and one eth_getLogs call");
   assert.equal(
     after.hosts["shared-budget.test"].calls - before.hosts["shared-budget.test"].calls,
-    9,
-    "the shared BlockMachine-style host stays below ten calls for a complete 64-block cycle",
+    14,
+    "the complete default catch-up cycle remains below the hard rolling host budget even with runtime revalidation",
   );
   assert.equal(after.hosts["shared-budget.test"].rateLimited, 0);
 });

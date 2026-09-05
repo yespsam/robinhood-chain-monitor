@@ -4015,7 +4015,7 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
     1,
   );
   const scanChunkSize = Math.max(1, Math.min(10_000, integer(
-    config.fourRegistryLogChunkSize ?? 64,
+    config.fourRegistryLogChunkSize ?? 4_096,
     "fourRegistryLogChunkSize",
   )));
   const reorgLookbackBlocks = Math.max(1, Math.min(10_000, integer(
