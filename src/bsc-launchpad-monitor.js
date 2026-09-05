@@ -144,6 +144,9 @@ const BSC_FOCUS3_LAUNCH_TOPICS = [
 const BSC_FOCUS3_TRIGGER_TOPICS = [...BSC_FOCUS3_LAUNCH_TOPICS, ...BSC_UPGRADE_TOPICS];
 const BSC_REALTIME_QUEUE_REASONS = new Set(["zero_mint", "known_launch", "official_upgrade", "official_lifecycle", "pool_created", "http_tail", "near_head_gap_recovery"]);
 const BSC_UNSCOPED_LOG_MAX_BLOCKS = 10;
+const BSC_REALTIME_TAIL_MIN_INTERVAL_MS = 5_000;
+const BSC_NEAR_HEAD_RECOVERY_INTERVAL_MS = 8_000;
+const BSC_RPC_LOG_HOST_CONCURRENCY = 2;
 const BSC_REALTIME_PENDING_MAX_ENTRIES = 25_000;
 const BSC_REALTIME_OLDEST_RESERVE = 2;
 const BSC_NEAR_HEAD_ATTEMPTS_PER_HISTORICAL_BATCH = 5;
@@ -4215,6 +4218,13 @@ async function mapLimit(items, limit, worker) {
   return results;
 }
 
+async function mapLimitStrict(items, limit, worker) {
+  const settled = await mapLimit(items, limit, worker);
+  const failed = settled.find((result) => result.status === "rejected");
+  if (failed) throw failed.reason;
+  return settled.map((result) => result.value);
+}
+
 // Production pools (historical, realtime and archive) intentionally share
 // physical-host circuit state. A 429/timeout from Blast/BlockRazor/BLXR must
 // not be rediscovered independently by every pool. Provider-factory tests get
@@ -4228,6 +4238,7 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
   const standardConcurrency = Math.max(1, Number(dependencies.standardConcurrency || 12));
   const clockNow = dependencies.now || Date.now;
   const recoveryProbeIntervalMs = Math.max(250, Number(dependencies.recoveryProbeIntervalMs || 1_000));
+  const allowPublicNodeLogs = dependencies.allowPublicNodeLogs !== false;
   const hostCircuitRegistry = dependencies.hostCircuitRegistry
     || (dependencies.providerFactory ? new Map() : BSC_RPC_HOST_CIRCUITS);
   let circuitRegistryMeta = BSC_RPC_CIRCUIT_REGISTRY_META.get(hostCircuitRegistry);
@@ -4235,9 +4246,13 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     circuitRegistryMeta = {
       recoveryProbeAfter: new Map(),
       recoveryProbeInFlight: new Map(),
+      activeLogRequests: new Map(),
+      logRequestWaiters: new Map(),
     };
     BSC_RPC_CIRCUIT_REGISTRY_META.set(hostCircuitRegistry, circuitRegistryMeta);
   }
+  circuitRegistryMeta.activeLogRequests ||= new Map();
+  circuitRegistryMeta.logRequestWaiters ||= new Map();
   const abortableGetUrl = async (request, signal) => {
     const controller = new AbortController();
     let timedOut = false;
@@ -4325,6 +4340,8 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
   const archiveCircuits = archiveUnique.map(circuitForUrl);
   const hostMethodRecoveryProbeAfter = circuitRegistryMeta.recoveryProbeAfter;
   const hostMethodRecoveryProbeInFlight = circuitRegistryMeta.recoveryProbeInFlight;
+  const activeLogRequestsByHost = circuitRegistryMeta.activeLogRequests;
+  const logRequestWaitersByHost = circuitRegistryMeta.logRequestWaiters;
   const archiveWaiters = [];
   const standardWaiters = [];
   let activeArchiveRequests = 0;
@@ -4360,6 +4377,8 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
   const isKnownGetLogsDisabled = (url, args = []) => {
     const host = hostForUrl(url);
     const blockSpan = getLogsBlockSpan(args);
+    const address = getLogsFilterFromArgs(args)?.address;
+    const addressCount = Array.isArray(address) ? address.length : address ? 1 : 0;
     return knownGetLogsDisabledHosts.has(host)
       || (host.endsWith(".bnbchain.org") && host.startsWith("bsc-dataseed"))
       || (host.includes("blastapi.io") && blockSpan !== null && blockSpan > 10)
@@ -4367,17 +4386,22 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
       // PublicNode's free BSC endpoint accepts recent log queries only when
       // they are scoped to one or more addresses. Sending a global topic-only
       // request adds a guaranteed failure before the next fallback provider.
-      || (host.includes("publicnode.com") && !getLogsFilterFromArgs(args)?.address);
+      || (host.includes("publicnode.com") && (!allowPublicNodeLogs || addressCount === 0 || addressCount > 8));
   };
-  const getLogsPreference = (url) => {
+  const getLogsPreference = (url, args = []) => {
     const host = hostForUrl(url);
-    // Keep both realtime-capable public endpoints warm. Always preferring
-    // Blast meant every tail range hit the same host first until it timed out,
-    // while BlockRazor remained cold and then had to absorb the whole retry.
-    if (host.includes("blastapi.io") || host.includes("blockrazor.xyz")) return 0;
-    if (host.includes("publicnode.com")) return 1;
-    if (host.includes("blxrbdn.com")) return 3;
-    return 2;
+    const address = getLogsFilterFromArgs(args)?.address;
+    const addressScoped = Array.isArray(address) ? address.length > 0 : Boolean(address);
+    // Production probes show distinct public capabilities: BlockRazor is the
+    // only reliable topic-only source, while PublicNode is the fastest recent
+    // address-scoped source (and rejects archive ranges). Keep these priorities
+    // deterministic across round-robin rotations; circuits still provide the
+    // ordered fallback when the preferred physical host is cooling.
+    if (addressScoped && host.includes("publicnode.com")) return 0;
+    if (host.includes("blockrazor.xyz")) return addressScoped ? 1 : 0;
+    if (host.includes("blastapi.io")) return 2;
+    if (host.includes("blxrbdn.com")) return 4;
+    return 3;
   };
   const historicalObjectPreference = (url) => {
     const host = hostForUrl(url);
@@ -4393,7 +4417,7 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
       : indices;
     if (operation === "eth_getLogs") {
       return capable.map((index, order) => ({ index, order }))
-        .sort((left, right) => getLogsPreference(sourceUrls[left.index]) - getLogsPreference(sourceUrls[right.index]) || left.order - right.order)
+        .sort((left, right) => getLogsPreference(sourceUrls[left.index], args) - getLogsPreference(sourceUrls[right.index], args) || left.order - right.order)
         .map(({ index }) => index);
     }
     if (["getTransaction", "getTransactionReceipt", "getBlock", "getCode", "getStorage", "call"].includes(operation)) {
@@ -4510,7 +4534,10 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
       : transientMethodTimeout
         ? exponentialCooldown(Math.max(1_000, Math.min(5_000, requestTimeoutMs)), failureCount, 60_000)
         : rateLimited
-          ? exponentialCooldown(5_000, failureCount, 5 * 60_000)
+          // A 429 without a server deadline is not permission to probe every
+          // five seconds. Blast currently omits Retry-After; give that physical
+          // host a conservative minute before the shared host:* half-open probe.
+          ? exponentialCooldown(declaredRetryAfterMs > 0 ? 5_000 : 60_000, failureCount, 5 * 60_000)
           : methodScoped ? 60_000 : exponentialCooldown(5_000, failureCount, 60_000);
     const retryAt = current + Math.max(computedDelayMs, declaredRetryAfterMs);
     if (methodScoped) {
@@ -4573,6 +4600,21 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     if (!error.rpcHostFailure && cause) error.rpcHostFailure = errorSummary(cause).slice(0, 300);
     return error;
   };
+  const queuedCircuitCoolingError = (circuits, index, operation) => {
+    const current = clockNow();
+    const circuit = circuits[index];
+    const globalDelay = Math.max(0, Number(circuit?.globalUntil || 0) - current);
+    const methodDelay = Math.max(0, Number(methodCircuit(circuit, operation)?.until || 0) - current);
+    const retryInMs = Math.max(1, globalDelay, methodDelay);
+    const error = new Error(`${operation} physical host entered cooldown while this request waited for a slot; retry in ${retryInMs}ms`);
+    error.code = "SERVER_ERROR";
+    error.retryAfterMs = retryInMs;
+    error.rpcOperation = operation;
+    error.rpcFailureScope = globalDelay > 0 ? "host" : "method";
+    error.rpcCircuitAlreadyOpen = true;
+    if (globalDelay > 0) attachHostRetryEvidence(error, globalDelay, error);
+    return error;
+  };
   const acquireRecoveryProbe = (circuits, index, operation) => {
     const key = recoveryProbeKey(circuits, index, operation);
     if (hostMethodRecoveryProbeInFlight.has(key)) return null;
@@ -4583,6 +4625,35 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
   const releaseRecoveryProbe = (probe) => {
     if (probe && hostMethodRecoveryProbeInFlight.get(probe.key) === probe.lease) {
       hostMethodRecoveryProbeInFlight.delete(probe.key);
+    }
+  };
+  const withPhysicalLogHostSlot = async (url, operation, callback) => {
+    if (operation !== "eth_getLogs") return callback();
+    const host = hostForUrl(url);
+    if (Number(activeLogRequestsByHost.get(host) || 0) >= BSC_RPC_LOG_HOST_CONCURRENCY) {
+      const waiters = logRequestWaitersByHost.get(host) || [];
+      logRequestWaitersByHost.set(host, waiters);
+      await new Promise((resolve) => waiters.push(resolve));
+      // The releasing owner transfers its already-counted slot directly to
+      // this FIFO waiter. Do not increment again after the await: a fresh call
+      // cannot steal the slot between resolve() and this continuation.
+    } else {
+      activeLogRequestsByHost.set(host, Number(activeLogRequestsByHost.get(host) || 0) + 1);
+    }
+    try {
+      return await callback();
+    } finally {
+      const waiters = logRequestWaitersByHost.get(host);
+      const next = waiters?.shift();
+      if (next) {
+        if (!waiters.length) logRequestWaitersByHost.delete(host);
+        next();
+      } else {
+        logRequestWaitersByHost.delete(host);
+        const remaining = Math.max(0, Number(activeLogRequestsByHost.get(host) || 1) - 1);
+        if (remaining) activeLogRequestsByHost.set(host, remaining);
+        else activeLogRequestsByHost.delete(host);
+      }
     }
   };
   const recoveryProbeBusyError = (operation, current, probeBlockedUntil = 0, failureScope = "method") => {
@@ -4657,13 +4728,26 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     // has an open circuit, probe one due physical host per invocation. Probe
     // leases and cooldowns are keyed by host+method, so a slow historical
     // state probe on host A cannot suppress a ready host B (or its log lane).
-    const recoveryProbe = closed.length === 0;
-    const probeIndex = recoveryProbe ? available.find((index) => {
+    const dueProbe = (index) => {
       const key = recoveryProbeKey(providerCircuits, index, operation);
       return Number(hostMethodRecoveryProbeAfter.get(key) || 0) <= current
         && !hostMethodRecoveryProbeInFlight.has(key);
-    }) : null;
-    if (recoveryProbe && probeIndex === undefined) {
+    };
+    const allOpenRecovery = closed.length === 0;
+    const bestClosedLogPreference = operation === "eth_getLogs" && closed.length
+      ? getLogsPreference(unique[closed[0]], args)
+      : Number.NEGATIVE_INFINITY;
+    // A recovered preferred log host must not remain excluded forever merely
+    // because a worse fallback stayed healthy. Probe only a due host whose
+    // filter capability rank is strictly better; concurrent callers keep using
+    // the closed fallback while the shared host:* lease is in flight.
+    const preferredProbeIndex = !allOpenRecovery && operation === "eth_getLogs"
+      ? available.find((index) => circuitFailed(providerCircuits, index, operation)
+        && getLogsPreference(unique[index], args) < bestClosedLogPreference
+        && dueProbe(index))
+      : undefined;
+    const probeIndex = allOpenRecovery ? available.find(dueProbe) : preferredProbeIndex;
+    if (allOpenRecovery && probeIndex === undefined) {
       const blockedUntil = Math.min(...available.map((index) => {
         const key = recoveryProbeKey(providerCircuits, index, operation);
         return hostMethodRecoveryProbeInFlight.has(key)
@@ -4674,19 +4758,41 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
         && Number(providerCircuits[index]?.globalFailures || 0) > 0) ? "host" : "method";
       throw recoveryProbeBusyError(operation, current, blockedUntil, failureScope);
     }
-    const order = recoveryProbe ? [probeIndex] : closed;
-    const recoveryProbeLease = recoveryProbe ? acquireRecoveryProbe(providerCircuits, probeIndex, operation) : null;
-    if (recoveryProbe && !recoveryProbeLease) {
+    const recoveryProbeLease = probeIndex === undefined
+      ? null
+      : acquireRecoveryProbe(providerCircuits, probeIndex, operation);
+    if (allOpenRecovery && !recoveryProbeLease) {
       throw recoveryProbeBusyError(operation, current, current + recoveryProbeIntervalMs);
     }
+    const recoveryProbe = Boolean(recoveryProbeLease);
+    const order = recoveryProbe
+      ? allOpenRecovery ? [probeIndex] : [probeIndex, ...closed]
+      : closed;
     try {
       for (const index of order) {
         const generationAtStart = circuitGeneration(providerCircuits, index, operation);
+        let failureRecordedBeforeSlotRelease = false;
         try {
-          const result = await invokeWithTimeout(
-            () => providers[index][method](...args),
-            `${operation} ${new URL(unique[index]).host}`,
-          );
+          const result = await withPhysicalLogHostSlot(unique[index], operation, async () => {
+            if (cooldownUntil(providerCircuits, index, operation) > clockNow()) {
+              throw queuedCircuitCoolingError(providerCircuits, index, operation);
+            }
+            try {
+              return await invokeWithTimeout(
+                () => providers[index][method](...args),
+                `${operation} ${new URL(unique[index]).host}`,
+              );
+            } catch (error) {
+              // Publish a newly opened circuit before transferring this host
+              // slot. A queued log request then rechecks the deadline above
+              // instead of leaking one extra physical call per waiter.
+              if (!NON_RETRYABLE_RPC_CODES.has(error.code)) {
+                recordFailureCooldown(providerCircuits, index, operation, error);
+                failureRecordedBeforeSlotRelease = true;
+              }
+              throw error;
+            }
+          });
           if (result == null && NULL_RETRY_RPC_METHODS.has(method)) throw new Error(`${method} returned null for finalized BSC data`);
           const probeKeyAtStart = recoveryProbeLease?.key || recoveryProbeKey(providerCircuits, index, operation);
           clearCircuit(providerCircuits, index, operation, generationAtStart);
@@ -4694,7 +4800,9 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
           return result;
         } catch (error) {
           if (NON_RETRYABLE_RPC_CODES.has(error.code)) throw error;
-          recordFailureCooldown(providerCircuits, index, operation, error);
+          if (!failureRecordedBeforeSlotRelease && error?.rpcCircuitAlreadyOpen !== true) {
+            recordFailureCooldown(providerCircuits, index, operation, error);
+          }
           failureScopes.push(error?.rpcFailureScope || null);
           errors.push(`${new URL(unique[index]).host}: ${errorSummary(error)}`);
         }
@@ -4756,13 +4864,22 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
       attachHostRetryEvidence(error, hostRetryDelayForCircuits(capable, archiveCircuits, current), error);
       throw error;
     }
-    const recoveryProbe = closed.length === 0;
-    const probeIndex = recoveryProbe ? available.find((index) => {
+    const dueProbe = (index) => {
       const key = recoveryProbeKey(archiveCircuits, index, operation);
       return Number(hostMethodRecoveryProbeAfter.get(key) || 0) <= current
         && !hostMethodRecoveryProbeInFlight.has(key);
-    }) : null;
-    if (recoveryProbe && probeIndex === undefined) {
+    };
+    const allOpenRecovery = closed.length === 0;
+    const bestClosedLogPreference = operation === "eth_getLogs" && closed.length
+      ? getLogsPreference(archiveUnique[closed[0]], args)
+      : Number.NEGATIVE_INFINITY;
+    const preferredProbeIndex = !allOpenRecovery && operation === "eth_getLogs"
+      ? available.find((index) => circuitFailed(archiveCircuits, index, operation)
+        && getLogsPreference(archiveUnique[index], args) < bestClosedLogPreference
+        && dueProbe(index))
+      : undefined;
+    const probeIndex = allOpenRecovery ? available.find(dueProbe) : preferredProbeIndex;
+    if (allOpenRecovery && probeIndex === undefined) {
       const blockedUntil = Math.min(...available.map((index) => {
         const key = recoveryProbeKey(archiveCircuits, index, operation);
         return hostMethodRecoveryProbeInFlight.has(key)
@@ -4773,26 +4890,47 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
         && Number(archiveCircuits[index]?.globalFailures || 0) > 0) ? "host" : "method";
       throw recoveryProbeBusyError(operation, current, blockedUntil, failureScope);
     }
-    const order = recoveryProbe ? [probeIndex] : closed;
-    const recoveryProbeLease = recoveryProbe ? acquireRecoveryProbe(archiveCircuits, probeIndex, operation) : null;
-    if (recoveryProbe && !recoveryProbeLease) {
+    const recoveryProbeLease = probeIndex === undefined
+      ? null
+      : acquireRecoveryProbe(archiveCircuits, probeIndex, operation);
+    if (allOpenRecovery && !recoveryProbeLease) {
       throw recoveryProbeBusyError(operation, current, current + recoveryProbeIntervalMs);
     }
+    const recoveryProbe = Boolean(recoveryProbeLease);
+    const order = recoveryProbe
+      ? allOpenRecovery ? [probeIndex] : [probeIndex, ...closed]
+      : closed;
     try {
       for (const index of order) {
         const generationAtStart = circuitGeneration(archiveCircuits, index, operation);
+        let failureRecordedBeforeSlotRelease = false;
         try {
-          const result = await invokeWithTimeout(
-            () => archiveProviders[index][method](...args),
-            `${operation} ${new URL(archiveUnique[index]).host}`,
-          );
+          const result = await withPhysicalLogHostSlot(archiveUnique[index], operation, async () => {
+            if (cooldownUntil(archiveCircuits, index, operation) > clockNow()) {
+              throw queuedCircuitCoolingError(archiveCircuits, index, operation);
+            }
+            try {
+              return await invokeWithTimeout(
+                () => archiveProviders[index][method](...args),
+                `${operation} ${new URL(archiveUnique[index]).host}`,
+              );
+            } catch (error) {
+              if (!NON_RETRYABLE_RPC_CODES.has(error.code)) {
+                recordFailureCooldown(archiveCircuits, index, operation, error);
+                failureRecordedBeforeSlotRelease = true;
+              }
+              throw error;
+            }
+          });
           if (result == null && NULL_RETRY_RPC_METHODS.has(method)) throw new Error(`${method} returned null for finalized BSC data`);
           const probeKeyAtStart = recoveryProbeLease?.key || recoveryProbeKey(archiveCircuits, index, operation);
           clearCircuit(archiveCircuits, index, operation, generationAtStart);
           hostMethodRecoveryProbeAfter.delete(probeKeyAtStart);
           return result;
         } catch (error) {
-          recordFailureCooldown(archiveCircuits, index, operation, error);
+          if (!failureRecordedBeforeSlotRelease && error?.rpcCircuitAlreadyOpen !== true) {
+            recordFailureCooldown(archiveCircuits, index, operation, error);
+          }
           failureScopes.push(error?.rpcFailureScope || null);
           errors.push(`${new URL(archiveUnique[index]).host}: ${errorSummary(error)}`);
         }
@@ -4922,6 +5060,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     {
       requestTimeoutMs: config.bscRpcRequestTimeoutMs,
       standardConcurrency: config.bscRpcConcurrency,
+      // PublicNode's free endpoint is recent-only. Historical/near-head work
+      // must remain archive-first and must not add a guaranteed 403 fallback.
+      allowPublicNodeLogs: false,
     },
   );
   const realtimeProvider = dependencies.realtimeProvider || (dependencies.provider ? provider : createRpcPool(
@@ -4931,6 +5072,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     {
       requestTimeoutMs: config.bscRealtimeRpcRequestTimeoutMs || Math.min(4_000, config.bscRpcRequestTimeoutMs || 7_000),
       standardConcurrency: config.bscRealtimeRpcConcurrency || 4,
+      allowPublicNodeLogs: true,
     },
   ));
   const WebSocketImpl = dependencies.WebSocketImpl || globalThis.WebSocket;
@@ -5033,10 +5175,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     expectedBlockTimeMs,
   });
   const recoveryLogBatchSize = Math.max(1, Number(config.bscRecoveryLogBatchSize || 10));
-  // Keep the default within the 10-block eth_getLogs limit enforced by the
-  // primary public archive endpoint. Deployments with a wider-capable private
-  // RPC can still raise this explicitly.
-  const nearHeadRecoveryBatchSize = Math.max(1, Number(config.bscNearHeadRecoveryBatchSize || recoveryLogBatchSize));
+  // Focus3 repairs twenty blocks per low-lane lease. The addressless creation
+  // filter is still hard-split into ten-block physical requests below, while
+  // the exact-address upgrade shards use the providers' verified wider range.
+  const nearHeadRecoveryBatchSize = Math.max(1, Number(
+    config.bscNearHeadRecoveryBatchSize || (focus3ChainScope ? 20 : recoveryLogBatchSize),
+  ));
   const nearHeadRecoverySegmentSize = Math.max(nearHeadRecoveryBatchSize, Number(config.bscNearHeadRecoverySegmentSize || 2_000));
   const realtimePendingMaxEntries = Math.max(1, Math.floor(Number(
     dependencies.realtimePendingMaxEntries || BSC_REALTIME_PENDING_MAX_ENTRIES,
@@ -5045,7 +5189,14 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   const coverageRetryMaxMs = Math.max(coverageRetryBaseMs, Number(config.bscCoverageRetryMaxMs || 60_000));
   const nearHeadRecoveryRetryBaseMs = Math.max(100, Number(config.bscNearHeadRecoveryRetryBaseMs || 1_000));
   const nearHeadRecoveryRetryMaxMs = Math.max(nearHeadRecoveryRetryBaseMs, Number(config.bscNearHeadRecoveryRetryMaxMs || coverageRetryMaxMs));
-  const nearHeadRecoverySuccessIntervalMs = Math.max(250, Number(config.bscNearHeadRecoverySuccessIntervalMs || 5_000));
+  const nearHeadRecoverySuccessIntervalMs = Math.max(250, Number(
+    config.bscNearHeadRecoverySuccessIntervalMs || BSC_NEAR_HEAD_RECOVERY_INTERVAL_MS,
+  ));
+  const realtimeTailMinIntervalMs = dependencies.realtimeTailMinIntervalMsForTesting === undefined
+    ? Math.max(BSC_REALTIME_TAIL_MIN_INTERVAL_MS, Number(
+      config.bscRealtimeTailMinIntervalMs || BSC_REALTIME_TAIL_MIN_INTERVAL_MS,
+    ))
+    : Math.max(0, Number(dependencies.realtimeTailMinIntervalMsForTesting) || 0);
   // This file is multi-megabyte in production. Pure checkedAt/head telemetry
   // is bounded to one flush per 30 seconds; cursor, queue, proof, dedup and
   // delivery mutations continue through the immediate save() path below.
@@ -5079,6 +5230,8 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   let realtimeTailRunning = false;
   let realtimeTailRequested = false;
   let realtimeTailRetryAt = 0;
+  let realtimeTailNextStartAt = 0;
+  let realtimeTailTimerDueAt = 0;
   let nearHeadRecoveryRunning = false;
   let nearHeadRecoveryRequested = false;
   let nearHeadRecoveryRetryAt = 0;
@@ -5092,6 +5245,8 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   let recoveryTarget = 0;
   let coverageRunning = false;
   let coverageRetryAt = 0;
+  let lowLogRecoveryOwner = null;
+  let lowLogTailRefreshRequired = false;
   let consecutiveHealthyRealtimeTailBatches = 0;
   let backgroundDeepRpcInFlight = false;
   let backgroundDeepRpcNextAt = 0;
@@ -5336,6 +5491,38 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       BSC_DEEP_RPC_HEALTHY_TAIL_BATCHES,
       consecutiveHealthyRealtimeTailBatches + 1,
     );
+    if (lowLogTailRefreshRequired
+      && consecutiveHealthyRealtimeTailBatches >= BSC_DEEP_RPC_HEALTHY_TAIL_BATCHES) {
+      lowLogTailRefreshRequired = false;
+    }
+  };
+
+  const lowLogRecoveryReady = () => {
+    if (!focus3ChainScope) return true;
+    const confirmed = Math.max(0, currentHead - (config.bscConfirmations ?? 2));
+    return !realtimeTailRunning
+      && !lowLogTailRefreshRequired
+      && currentDeepRpcPriority().tailReady
+      && Number(state?.realtimeTailNextBlock) > confirmed;
+  };
+
+  const acquireLowLogRecovery = (owner) => {
+    if (!focus3ChainScope) return true;
+    if (lowLogRecoveryOwner || (started && !lowLogRecoveryReady())) return false;
+    lowLogRecoveryOwner = owner;
+    return true;
+  };
+
+  const releaseLowLogRecovery = (owner) => {
+    if (!focus3ChainScope || lowLogRecoveryOwner !== owner) return;
+    lowLogRecoveryOwner = null;
+    if (!started) return;
+    // Linearize the next low-lane lease after this completion. Tail results
+    // produced while the old repair was in flight cannot pre-authorize another
+    // repair burst; only two caught-up results after release clear this epoch.
+    lowLogTailRefreshRequired = true;
+    resetRealtimeTailDeepReadiness();
+    scheduleRealtimeTail();
   };
 
   const backgroundDeepEligibility = (current = Number(now())) => {
@@ -13904,9 +14091,18 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       }
       return logs;
     };
+    const filters = protocolLogFilters(range);
+    // The realtime tail may use two physical requests concurrently (normally
+    // BlockRazor for the topic-only creation filter and PublicNode for one
+    // address shard). Near-head and full-history repair share a single low
+    // lane and issue filters strictly one at a time, preventing four upgrade
+    // shards from bursting the same fallback host.
+    const filterConcurrency = focus3ChainScope
+      ? reason === "http_tail" ? 2 : 1
+      : Math.max(1, filters.length);
     const [mintLogs, protocolLogBatches] = await Promise.all([
       focus3ChainScope ? Promise.resolve([]) : queryLogFilter({ ...range, topics: [BSC_TRANSFER_TOPIC, BSC_ZERO_TOPIC] }),
-      Promise.all(protocolLogFilters(range).map(queryLogFilter)),
+      mapLimitStrict(filters, filterConcurrency, queryLogFilter),
     ]);
     if (!Array.isArray(mintLogs)
       || !Array.isArray(protocolLogBatches)
@@ -14001,13 +14197,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     }
     const confirmed = Math.max(0, currentHead - (config.bscConfirmations ?? 2));
     const realtimeTailBehind = Number(state.realtimeTailNextBlock) <= confirmed;
-    const deepPriority = currentDeepRpcPriority();
-    if (focus3ChainScope && !deepPriority.tailReady) {
+    if (focus3ChainScope && started && !lowLogRecoveryReady()) {
       // Full-history reads share every physical host used by the isolated
-      // realtime pool. Never let an error/rebuild state (or more than twenty
-      // missing blocks) spend those hosts while the first-detection cursor is
-      // behind. The range remains wholly below lastFinalizedBlock until a
-      // later turn, so this is delay-only and cannot create false coverage.
+      // realtime pool. It gets one request only after the tail is exactly
+      // caught up and has produced two consecutive healthy batches.
       scheduleRealtimeTail();
       scheduleCoverage(BSC_DEEP_RPC_PACE_MS);
       return;
@@ -14034,6 +14227,15 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         return;
       }
     }
+    // Do not consume a low-lane epoch for a no-op maintenance call. The
+    // release boundary intentionally invalidates the tail health proof, so a
+    // lease is meaningful only when this invocation will start a range.
+    if (stopped || !(Number(state.lastFinalizedBlock || 0) < desiredCoverage)) return;
+    if (focus3ChainScope && !acquireLowLogRecovery("history")) {
+      scheduleRealtimeTail();
+      scheduleCoverage(BSC_DEEP_RPC_PACE_MS);
+      return;
+    }
     coverageRunning = true;
     let failurePhase = "range_recovery";
     try {
@@ -14057,6 +14259,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         try {
           await recoverLogRange(from, batchEnd);
         } catch (rangeError) {
+          // Focus3's bounded filter set is the authoritative range proof. A
+          // partial filter result is not coverage and must not fan out into a
+          // per-block receipt burst that can compete with the realtime tail.
+          if (focus3ChainScope) throw rangeError;
           // A typed host-wide cooldown (notably HTTP 429) applies to receipts
           // as well as logs. Preserve the provider deadline instead of
           // multiplying the outage into one fallback request per block.
@@ -14118,6 +14324,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       logger.error(`[bsc][rpc] ${errorSummary(error)}`);
     } finally {
       coverageRunning = false;
+      releaseLowLogRecovery("history");
       if (!stopped && Number(state.lastFinalizedBlock || 0) < desiredCoverage) scheduleCoverage();
       if (!stopped && (state.nearHeadRecoveryGaps || []).length) scheduleNearHeadRecovery();
     }
@@ -14338,6 +14545,11 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
 
   async function scanRealtimeTail() {
     if (realtimeTailRunning || stopped) return { skipped: true };
+    const startedAt = Number(now());
+    if (focus3ChainScope && realtimeTailNextStartAt > startedAt) {
+      scheduleRealtimeTail(realtimeTailNextStartAt - startedAt);
+      return { skipped: true, reason: "paced", nextStartAt: iso(realtimeTailNextStartAt) };
+    }
     realtimeTailRunning = true;
     let shouldContinue = false;
     try {
@@ -14345,6 +14557,16 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       if (realtimeTailRetryAt > Number(now())) {
         shouldContinue = true;
         return { skipped: true, reason: "backoff", nextRetryAt: iso(realtimeTailRetryAt) };
+      }
+      if (focus3ChainScope) {
+        realtimeTailNextStartAt = Number(now()) + realtimeTailMinIntervalMs;
+        if (lowLogRecoveryOwner && !lowLogTailRefreshRequired) {
+          // A slow repair is allowed to overlap one urgent tail batch. That
+          // overlap consumes the old health proof; two caught-up tail results
+          // must follow before another low-range owner may start.
+          lowLogTailRefreshRequired = true;
+          resetRealtimeTailDeepReadiness();
+        }
       }
       const confirmed = Math.max(0, currentHead - (config.bscConfirmations ?? 2));
       let cursorRebuilt = false;
@@ -14385,6 +14607,16 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         return { skipped: false, fromBlock, toBlock: null };
       }
       const toBlock = Math.min(confirmed, fromBlock + realtimeTailBatchSize - 1);
+      if (focus3ChainScope) {
+        // Initialization or a cursor WAL repair may delay this pass after it
+        // was admitted. Re-anchor immediately before the first range query so
+        // the next pass cannot bunch its physical eth_getLogs calls inside
+        // the five-second host budget.
+        realtimeTailNextStartAt = Math.max(
+          realtimeTailNextStartAt,
+          Number(now()) + realtimeTailMinIntervalMs,
+        );
+      }
       // Keep the realtime lane bounded. A failed range remains behind the
       // durable cursor and is retried after backoff; synchronously expanding
       // it into ten full receipt scans can stall first detection for 20-30s
@@ -14490,7 +14722,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       if (focus3ChainScope && currentDeepRpcPriority().allowFreshQueue) {
         wakeBackgroundDeepRpc();
       }
-      if ((shouldContinue || realtimeTailRequested) && !stopped) {
+      if ((shouldContinue
+        || realtimeTailRequested
+        || (focus3ChainScope && lowLogTailRefreshRequired)) && !stopped) {
         realtimeTailRequested = false;
         scheduleRealtimeTail(Math.max(25, realtimeTailRetryAt - now()));
       }
@@ -14498,16 +14732,27 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   }
 
   function scheduleRealtimeTail(delay = 25) {
-    if (stopped || realtimeTailTimer) return;
+    if (stopped) return;
     if (realtimeTailRunning) {
       realtimeTailRequested = true;
       return;
     }
     const retryDelay = Math.max(0, realtimeTailRetryAt - Number(now()));
+    const paceDelay = focus3ChainScope
+      ? Math.max(0, realtimeTailNextStartAt - Number(now()))
+      : 0;
+    const effectiveDelay = Math.max(25, Number(delay) || 25, retryDelay, paceDelay);
+    const dueAt = Number(now()) + effectiveDelay;
+    if (realtimeTailTimer) {
+      if (realtimeTailTimerDueAt <= dueAt) return;
+      clearTimeout(realtimeTailTimer);
+    }
+    realtimeTailTimerDueAt = dueAt;
     realtimeTailTimer = setTimeout(() => {
       realtimeTailTimer = null;
+      realtimeTailTimerDueAt = 0;
       void scanRealtimeTail().catch(logTailFailure);
-    }, Math.max(25, Number(delay) || 25, retryDelay));
+    }, effectiveDelay);
     realtimeTailTimer.unref?.();
   }
 
@@ -14519,6 +14764,8 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     let toBlock = null;
     let shouldContinue = false;
     let continuationDelayMs = 25;
+    let ownsLowLogRecovery = false;
+    let recoveryStartedAt = 0;
     try {
       await initialize();
       if (!(state.nearHeadRecoveryGaps || []).length) return { skipped: true, reason: "empty" };
@@ -14537,6 +14784,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         // Historical repair must never compete with an active or materially
         // lagging first-detection batch. Once the durable tail is inside the
         // short live window, its isolated RPC pool can advance in parallel.
+        scheduleRealtimeTail();
+        return { skipped: true, reason: "realtime_priority" };
+      }
+      if (focus3ChainScope && started && !lowLogRecoveryReady()) {
         scheduleRealtimeTail();
         return { skipped: true, reason: "realtime_priority" };
       }
@@ -14561,6 +14812,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         shouldContinue = true;
         return { skipped: true, reason: "backoff" };
       }
+      if (focus3ChainScope && !acquireLowLogRecovery("near_head")) {
+        scheduleRealtimeTail();
+        return { skipped: true, reason: "low_lane_busy" };
+      }
+      ownsLowLogRecovery = true;
+      recoveryStartedAt = Number(now());
       if (nearHeadNewestSelectionStreak >= 8) nearHeadNewestSelectionStreak = 0;
       else nearHeadNewestSelectionStreak += 1;
       activeGapId = gap.id;
@@ -14586,6 +14843,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       try {
         recoveredRange = await recoverLogRange(fromBlock, toBlock, "near_head_gap_recovery");
       } catch (rangeError) {
+        if (focus3ChainScope) throw rangeError;
         // A pool-level cooling/429/timeout already proves that every physical
         // RPC is unavailable for this method. Do not expand it into per-block
         // receipt fallbacks or move on to another durable gap in the same
@@ -14658,10 +14916,13 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       if (entries.length) scheduleRealtime();
       if (recoveredRange?.flapReplayNeeded) void replayPendingFlapActivations();
       nearHeadRecoveryRetryAt = 0;
-      nearHeadRecoveryPacedUntil = Number(now()) + nearHeadRecoverySuccessIntervalMs;
+      nearHeadRecoveryPacedUntil = Math.max(
+        nearHeadRecoveryPacedUntil,
+        recoveryStartedAt + nearHeadRecoverySuccessIntervalMs,
+      );
       resetNearHeadRecoveryFailureLog();
       shouldContinue = state.nearHeadRecoveryGaps.length > 0;
-      continuationDelayMs = nearHeadRecoverySuccessIntervalMs;
+      continuationDelayMs = Math.max(25, nearHeadRecoveryPacedUntil - Number(now()));
       scheduleCoverage();
       return { skipped: false, gapId: activeGapId, fromBlock, toBlock, completed: !state.nearHeadRecoveryGaps.some((item) => item.id === activeGapId) };
     } catch (error) {
@@ -14718,6 +14979,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       throw error;
     } finally {
       nearHeadRecoveryRunning = false;
+      if (ownsLowLogRecovery) releaseLowLogRecovery("near_head");
       if (!stopped) scheduleCoverage();
       if ((shouldContinue || nearHeadRecoveryRequested) && !stopped) {
         nearHeadRecoveryRequested = false;
@@ -15286,10 +15548,14 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     deferredEvidenceWakeTimer = null;
     deferredEvidenceWakeTimerDueAt = 0;
     realtimeTailTimer = null;
+    realtimeTailTimerDueAt = 0;
     realtimeTailRequested = false;
+    realtimeTailNextStartAt = 0;
     nearHeadRecoveryTimer = null;
     nearHeadRecoveryTimerDueAt = 0;
     nearHeadRecoveryRequested = false;
+    lowLogRecoveryOwner = null;
+    lowLogTailRefreshRequired = false;
     resetRealtimeTailDeepReadiness();
     backgroundDeepRpcNextAt = 0;
     backgroundDeepHostRetryAt = 0;

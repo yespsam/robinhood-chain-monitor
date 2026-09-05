@@ -387,7 +387,7 @@ export const config = {
   bscRealtimeTailBatchSize: integer("BSC_REALTIME_TAIL_BATCH_SIZE", 20),
   bscRealtimeTailMaxLagBlocks: integer("BSC_REALTIME_TAIL_MAX_LAG_BLOCKS", 128),
   bscRecoveryLogBatchSize: integer("BSC_RECOVERY_LOG_BATCH_SIZE", 10),
-  bscNearHeadRecoveryBatchSize: integer("BSC_NEAR_HEAD_RECOVERY_BATCH_SIZE", 10),
+  bscNearHeadRecoveryBatchSize: integer("BSC_NEAR_HEAD_RECOVERY_BATCH_SIZE", 20),
   bscNearHeadRecoverySegmentSize: integer("BSC_NEAR_HEAD_RECOVERY_SEGMENT_SIZE", 2_000),
   bscNearHeadRecoveryRetryBaseMs: integer("BSC_NEAR_HEAD_RECOVERY_RETRY_BASE_MS", 1_000),
   bscNearHeadRecoveryRetryMaxMs: integer("BSC_NEAR_HEAD_RECOVERY_RETRY_MAX_MS", 60_000),

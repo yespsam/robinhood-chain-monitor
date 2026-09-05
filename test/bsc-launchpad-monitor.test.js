@@ -420,6 +420,17 @@ async function waitUntil(predicate, timeoutMs = 3_500) {
   while (!await predicate() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
 }
 
+async function completeRealtimeTailPasses(monitor, count = 2, timeoutMs = 2_000) {
+  const deadline = Date.now() + timeoutMs;
+  let completed = 0;
+  while (completed < count && Date.now() < deadline) {
+    const result = await monitor.scanRealtimeTail();
+    if (result?.skipped === false) completed += 1;
+    else await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.equal(completed, count, `expected ${count} completed realtime-tail passes`);
+}
+
 test("realtime BSC work outranks recovery without reversing first-launch order", () => {
   const entry = (transactionHash, blockNumber, reasons) => ({ transactionHash, blockNumber, reasons: new Set(reasons) });
   const entries = [
@@ -1156,6 +1167,7 @@ test("the first near-head exact Flap warm profile reads latest before any histor
     autoStart: false,
     provider,
     realtimeProvider,
+    realtimeTailMinIntervalMsForTesting: 0,
     WebSocketImpl: IdleWebSocket,
     fetchImpl,
     now: () => clock,
@@ -1167,6 +1179,7 @@ test("the first near-head exact Flap warm profile reads latest before any histor
     await fs.rm(dataDir, { recursive: true, force: true });
   });
   await monitor.start();
+  await completeRealtimeTailPasses(monitor, 2);
   await waitUntil(async () => (await monitor.getState()).seenTransactions[transactionHash] === 99);
   const snapshot = await monitor.getState();
   assert.equal(snapshot.seenTransactions[transactionHash], 99);
@@ -1980,6 +1993,139 @@ test("BSC RPC circuits honor Retry-After with a fake clock and recover with one 
   pool.destroy();
 });
 
+test("a BSC 429 without Retry-After uses 60/120/240/300 second host cooldowns", async () => {
+  let clock = 0;
+  let physicalCalls = 0;
+  const pool = createRpcPool(["https://bsc-mainnet.public.blastapi.io"], [], 1, {
+    now: () => clock,
+    recoveryProbeIntervalMs: 250,
+    providerFactory: () => ({
+      async send() {
+        physicalCalls += 1;
+        const error = new Error("HTTP 429 without a server deadline");
+        error.status = 429;
+        error.code = "SERVER_ERROR";
+        throw error;
+      },
+      async getBlockNumber() {
+        physicalCalls += 1;
+        return 123;
+      },
+    }),
+  });
+
+  await assert.rejects(
+    () => pool.send("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x1" }]),
+    (error) => error.rpcFailureScope === "host"
+      && error.retryAfterMs >= 60_000
+      && error.rpcHostRetryAfterMs >= 60_000,
+  );
+  clock = 59_999;
+  await assert.rejects(() => pool.getBlockNumber(), /providers cooling down/);
+  assert.equal(physicalCalls, 1, "another method cannot probe the physical host before the minute gate");
+
+  clock = 60_000;
+  await assert.rejects(
+    () => pool.send("eth_getLogs", [{ fromBlock: "0x2", toBlock: "0x2" }]),
+    (error) => error.retryAfterMs === 120_000,
+  );
+  assert.equal(physicalCalls, 2, "the first half-open probe fails once and doubles the undeclared cooldown");
+
+  clock = 180_000;
+  await assert.rejects(
+    () => pool.send("eth_getLogs", [{ fromBlock: "0x3", toBlock: "0x3" }]),
+    (error) => error.retryAfterMs === 240_000,
+  );
+  clock = 420_000;
+  await assert.rejects(
+    () => pool.send("eth_getLogs", [{ fromBlock: "0x4", toBlock: "0x4" }]),
+    (error) => error.retryAfterMs === 300_000,
+  );
+  clock = 720_000;
+  await assert.rejects(
+    () => pool.send("eth_getLogs", [{ fromBlock: "0x5", toBlock: "0x5" }]),
+    (error) => error.retryAfterMs === 300_000,
+  );
+  assert.equal(physicalCalls, 5, "undeclared cooldowns cap at five minutes without early probes");
+  pool.destroy();
+
+  let declaredCalls = 0;
+  const declaredPool = createRpcPool(["https://declared-rate-limit.test"], [], 1, {
+    now: () => clock,
+    hostCircuitRegistry: new Map(),
+    providerFactory: () => ({
+      async send() {
+        declaredCalls += 1;
+        const error = new Error("HTTP 429 with a long server deadline");
+        error.status = 429;
+        error.headers = { "retry-after": "420" };
+        throw error;
+      },
+    }),
+  });
+  await assert.rejects(
+    () => declaredPool.send("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x1" }]),
+    (error) => error.retryAfterMs === 420_000,
+  );
+  clock += 300_000;
+  await assert.rejects(() => declaredPool.send("eth_getLogs", [{ fromBlock: "0x2", toBlock: "0x2" }]), /cooling down/);
+  assert.equal(declaredCalls, 1, "the local five-minute exponential cap cannot shorten Retry-After");
+  declaredPool.destroy();
+});
+
+test("a queued getLogs waiter rechecks a newly opened host circuit before sending", async () => {
+  let clock = 0;
+  let physicalCalls = 0;
+  const pending = new Map();
+  let signalStarted;
+  const twoStarted = new Promise((resolve) => { signalStarted = resolve; });
+  const pool = createRpcPool(["https://bsc.blockrazor.xyz"], [], 1, {
+    now: () => clock,
+    standardConcurrency: 4,
+    hostCircuitRegistry: new Map(),
+    providerFactory: () => ({
+      async send() {
+        physicalCalls += 1;
+        const call = physicalCalls;
+        if (physicalCalls === 2) signalStarted();
+        if (call <= 2) {
+          return new Promise((resolve, reject) => pending.set(call, { resolve, reject }));
+        }
+        return [];
+      },
+    }),
+  });
+  const request = (block) => pool.send("eth_getLogs", [{
+    address: "0x1111111111111111111111111111111111111111",
+    fromBlock: `0x${block.toString(16)}`,
+    toBlock: `0x${block.toString(16)}`,
+  }]);
+  const first = request(1);
+  const second = request(2);
+  const third = request(3);
+  const settled = Promise.allSettled([first, second, third]);
+  await twoStarted;
+  assert.equal(physicalCalls, 2, "the third request waits behind the per-host cap");
+  const rateLimit = new Error("HTTP 429 without Retry-After");
+  rateLimit.status = 429;
+  pending.get(1).reject(rateLimit);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(physicalCalls, 2,
+    "the transferred waiter observes the new host circuit instead of leaking another physical request");
+  pending.get(2).resolve([]);
+  const results = await settled;
+  assert.deepEqual(results.map(({ status }) => status), ["rejected", "fulfilled", "rejected"]);
+  assert.equal(physicalCalls, 2);
+
+  clock = 60_000;
+  const probeOne = request(4);
+  const probeTwo = request(5);
+  const probes = await Promise.allSettled([probeOne, probeTwo]);
+  assert.equal(physicalCalls, 3, "only one physical half-open probe is admitted at the shared deadline");
+  assert.equal(probes.filter(({ status }) => status === "fulfilled").length, 1);
+  pool.destroy();
+});
+
 test("timed-out BSC hosts use exponential method circuits and only one rotating recovery probe", async () => {
   let clock = Date.parse("2026-08-24T09:00:00.000Z");
   let recovered = false;
@@ -2306,11 +2452,13 @@ test("the default BSC transport surfaces one HTTP 429 with its Retry-After inste
   assert.equal(requests, 1);
 });
 
-test("Blast and BlockRazor alternate as equal-priority getLogs providers", async () => {
+test("getLogs routing keeps filter-aware provider priority across rotations", async () => {
   const calls = [];
   const pool = createRpcPool([
     "https://bsc-mainnet.public.blastapi.io",
+    "https://bsc-rpc.publicnode.com",
     "https://bsc.blockrazor.xyz",
+    "https://bsc.rpc.blxrbdn.com",
   ], [], 1, {
     providerFactory: (url) => ({
       async send(method) {
@@ -2322,7 +2470,123 @@ test("Blast and BlockRazor alternate as equal-priority getLogs providers", async
   });
   await pool.send("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x1" }]);
   await pool.send("eth_getLogs", [{ fromBlock: "0x2", toBlock: "0x2" }]);
-  assert.deepEqual(calls, ["bsc-mainnet.public.blastapi.io", "bsc.blockrazor.xyz"]);
+  const address = "0x1111111111111111111111111111111111111111";
+  await pool.send("eth_getLogs", [{ fromBlock: "0x3", toBlock: "0x3", address }]);
+  await pool.send("eth_getLogs", [{ fromBlock: "0x4", toBlock: "0x4", address }]);
+  await pool.send("eth_getLogs", [{
+    fromBlock: "0x5",
+    toBlock: "0x5",
+    address: Array.from({ length: 9 }, (_, index) => `0x${(index + 1).toString(16).padStart(40, "0")}`),
+  }]);
+  assert.deepEqual(calls, [
+    "bsc.blockrazor.xyz",
+    "bsc.blockrazor.xyz",
+    "bsc-rpc.publicnode.com",
+    "bsc-rpc.publicnode.com",
+    "bsc.blockrazor.xyz",
+  ]);
+  pool.destroy();
+});
+
+test("a recovered preferred getLogs host is probed ahead of a healthy fallback", async () => {
+  const address = "0x1111111111111111111111111111111111111111";
+  for (const scenario of [
+    {
+      name: "unscoped BlockRazor",
+      preferred: "bsc.blockrazor.xyz",
+      fallback: "bsc-mainnet.public.blastapi.io",
+      filter: { fromBlock: "0x1", toBlock: "0x1" },
+    },
+    {
+      name: "scoped PublicNode",
+      preferred: "bsc-rpc.publicnode.com",
+      fallback: "bsc.blockrazor.xyz",
+      filter: { address, fromBlock: "0x1", toBlock: "0x1" },
+    },
+  ]) {
+    let clock = 0;
+    let preferredHealthy = false;
+    const calls = [];
+    const pool = createRpcPool([
+      "https://bsc-mainnet.public.blastapi.io",
+      "https://bsc-rpc.publicnode.com",
+      "https://bsc.blockrazor.xyz",
+      "https://bsc.rpc.blxrbdn.com",
+    ], [], 1, {
+      now: () => clock,
+      hostCircuitRegistry: new Map(),
+      providerFactory: (url) => ({
+        async send() {
+          const host = new URL(url).host;
+          calls.push(host);
+          if (host === scenario.preferred && !preferredHealthy) {
+            const error = new Error("HTTP 429 without Retry-After");
+            error.status = 429;
+            throw error;
+          }
+          return [];
+        },
+      }),
+    });
+    await pool.send("eth_getLogs", [scenario.filter]);
+    assert.deepEqual(calls, [scenario.preferred, scenario.fallback], `${scenario.name} falls back once`);
+    clock = 59_999;
+    await pool.send("eth_getLogs", [scenario.filter]);
+    assert.equal(calls.at(-1), scenario.fallback, `${scenario.name} stays closed before its deadline`);
+    preferredHealthy = true;
+    clock = 60_000;
+    await pool.send("eth_getLogs", [scenario.filter]);
+    assert.equal(calls.at(-1), scenario.preferred,
+      `${scenario.name} receives one due half-open probe ahead of the worse healthy host`);
+    await pool.send("eth_getLogs", [scenario.filter]);
+    assert.equal(calls.at(-1), scenario.preferred, `${scenario.name} resumes its deterministic first position`);
+    pool.destroy();
+  }
+
+  const registry = new Map([[
+    "bsc.rpc.blxrbdn.com",
+    { host: "bsc.rpc.blxrbdn.com", globalUntil: 0, globalFailures: 1, globalGeneration: 1, methods: new Map() },
+  ]]);
+  const worseCalls = [];
+  const worsePool = createRpcPool([
+    "https://bsc-rpc.publicnode.com",
+    "https://bsc.rpc.blxrbdn.com",
+  ], [], 1, {
+    hostCircuitRegistry: registry,
+    providerFactory: (url) => ({
+      async send() { worseCalls.push(new URL(url).host); return []; },
+    }),
+  });
+  await worsePool.send("eth_getLogs", [{ address, fromBlock: "0x1", toBlock: "0x1" }]);
+  assert.deepEqual(worseCalls, ["bsc-rpc.publicnode.com"],
+    "an expired lower-priority circuit cannot probe ahead of a healthy preferred host");
+  worsePool.destroy();
+});
+
+test("historical getLogs keeps PublicNode disabled and uses archive BlockRazor first", async () => {
+  const calls = [];
+  const pool = createRpcPool(
+    ["https://bsc-rpc.publicnode.com", "https://bsc-mainnet.public.blastapi.io"],
+    ["https://bsc.blockrazor.xyz"],
+    1,
+    {
+      allowPublicNodeLogs: false,
+      hostCircuitRegistry: new Map(),
+      providerFactory: (url, context) => ({
+        async send() {
+          calls.push(`${context.kind}:${new URL(url).host}`);
+          return [];
+        },
+      }),
+    },
+  );
+  await pool.send("eth_getLogs", [{
+    address: "0x1111111111111111111111111111111111111111",
+    fromBlock: "0x64",
+    toBlock: "0x64",
+  }]);
+  assert.deepEqual(calls, ["archive:bsc.blockrazor.xyz"]);
+  assert.equal(calls.some((call) => call.includes("publicnode")), false);
   pool.destroy();
 });
 
@@ -4656,6 +4920,7 @@ test("focus3 Flap activation replay performs zero deep RPC until two healthy tai
       firstHealthyObserved = true;
       break;
     }
+    clock += 5_000;
     const result = await monitor.scanRealtimeTail();
     if (result?.skipped !== false) {
       await monitor.awaitIdle();
@@ -4675,6 +4940,7 @@ test("focus3 Flap activation replay performs zero deep RPC until two healthy tai
 
   let secondHealthyCompleted = false;
   for (let attempt = 0; attempt < 20 && !secondHealthyCompleted; attempt += 1) {
+    clock += 5_000;
     const result = await monitor.scanRealtimeTail();
     if (result?.skipped !== false) {
       await monitor.awaitIdle();
@@ -6923,6 +7189,25 @@ test("focus3 realtime recovery excludes ordinary BSC mints and unrelated launchp
     hooks: {},
     seenTransactions: {},
     coverageGaps: [],
+    officialSources: {
+      flap: {
+        // Production currently carries seven active vault factories in
+        // addition to the static focus3 component catalog. Keep the live
+        // 28-address shard shape under regression coverage here.
+        featureActivations: Object.fromEntries(Array.from({ length: 7 }, (_, index) => {
+          const vaultFactory = `0xa${String(index + 1).padStart(39, "0")}`;
+          return [`vault:TEST${index}:${vaultFactory}`, {
+            type: "vault_factory",
+            category: `TEST${index}`,
+            vaultFactory,
+            active: true,
+            firstObservedAt: "2026-08-02T00:00:00.000Z",
+            confirmedAt: "2026-08-02T00:00:00.000Z",
+            replayCompletedAt: "2026-08-02T00:00:00.000Z",
+          }];
+        })),
+      },
+    },
   }));
   const provider = {
     async getNetwork() { return { chainId: 56n }; },
@@ -6973,7 +7258,9 @@ test("focus3 realtime recovery excludes ordinary BSC mints and unrelated launchp
   assert.equal(topics.includes(PANCAKE_INFINITY_CL_INITIALIZE_TOPIC), false, "focus3 must not ingest every global Infinity pool");
   assert.ok(topics.length <= 10, "the realtime topic filter must remain compatible with the fallback RPC");
   const upgradeAddresses = upgradeRequests.flatMap((request) => request.address);
-  assert.ok(upgradeRequests.every((request) => request.address.length <= 8));
+  assert.deepEqual(upgradeRequests.map((request) => request.address.length), [8, 8, 8, 4],
+    "the 28 exact emitters remain four PublicNode-compatible shards");
+  assert.equal(new Set(upgradeAddresses).size, 28);
   assert.ok(upgradeRequests.every((request) => BSC_UPGRADE_TOPICS.every((topic) => request.topics[0].includes(topic))));
   assert.ok(upgradeAddresses.includes("0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0"));
   assert.ok(upgradeAddresses.includes("0x90497450f2a706f1951b5bdda52b4e5d16f34c06"));
@@ -6981,6 +7268,245 @@ test("focus3 realtime recovery excludes ordinary BSC mints and unrelated launchp
   assert.ok(upgradeAddresses.includes("0xebe7b6c1089d9f72ad07f34e36d898e44e5e27f3"));
   assert.ok(upgradeAddresses.every((address) => /^0x[0-9a-f]{40}$/.test(address)));
   assert.notDeepEqual(launchRequests[0].topics, [BSC_TRANSFER_TOPIC, BSC_ZERO_TOPIC]);
+});
+
+test("focus3 realtime-tail starts cannot occur within the hard five-second floor", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-tail-hard-cadence-"));
+  let monitor;
+  let clock = Date.parse("2026-09-05T00:00:00.000Z");
+  const head = 142;
+  const requests = [];
+  t.after(async () => {
+    t.mock.timers.reset();
+    await monitor?.stop();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+  await fs.writeFile(path.join(dataDir, "bsc-launchpad-state.json"), JSON.stringify({
+    version: 6,
+    initializedAt: "2026-09-05T00:00:00.000Z",
+    lastFinalizedBlock: 140,
+    realtimeTailNextBlock: 101,
+    realtimeTailInitializedAt: "2026-09-05T00:00:00.000Z",
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    nearHeadRecoveryGaps: [],
+    coverageGaps: [],
+  }));
+  const provider = {
+    async getNetwork() { return { chainId: 56n }; },
+    async getBlockNumber() { return head; },
+    async send(method, [request]) {
+      assert.equal(method, "eth_getLogs");
+      requests.push({ clock, request: structuredClone(request) });
+      return [];
+    },
+    destroy() {},
+  };
+  class IdleWebSocket { addEventListener() {} close() {} }
+  monitor = createBscLaunchpadMonitor({
+    dataDir,
+    monitorScope: "focus3",
+    bscMonitorEnabled: true,
+    bscWsUrl: "wss://example.invalid",
+    bscRpcUrl: "https://example.invalid",
+    bscConfirmations: 2,
+    bscRealtimeTailBatchSize: 20,
+    bscHttpHeadPollIntervalMs: 60_000,
+    bscOfficialPollIntervalMs: 60_000,
+  }, {
+    autoStart: false,
+    provider,
+    WebSocketImpl: IdleWebSocket,
+    fetchImpl: async () => ({ ok: false, status: 403, headers: { get() { return null; } }, text: async () => "forbidden" }),
+    now: () => clock,
+    backgroundSetTimeoutImpl: () => ({ unref() {} }),
+    backgroundClearTimeoutImpl() {},
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+
+  await monitor.start();
+  const flushUntil = async (predicate) => {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if (await predicate()) return true;
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    return false;
+  };
+  t.mock.timers.tick(25);
+  assert.equal(await flushUntil(async () => (await monitor.getState()).realtimeTailNextBlock === 121), true,
+    "the production scheduler starts the first due tail range");
+  const firstRequestCount = requests.length;
+  assert.ok(firstRequestCount > 0);
+
+  const sameTick = await monitor.scanRealtimeTail();
+  assert.equal(sameTick.reason, "paced");
+  assert.equal(requests.length, firstRequestCount);
+  clock += 4_999;
+  t.mock.timers.tick(4_999);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(requests.length, firstRequestCount, "T+4999ms cannot start another physical tail range");
+
+  clock += 1;
+  t.mock.timers.tick(1);
+  assert.equal(await flushUntil(async () => (await monitor.getState()).realtimeTailNextBlock === 141), true,
+    "the scheduler starts the next physical range exactly at T+5000ms");
+  assert.ok(requests.length > firstRequestCount);
+  assert.deepEqual([...new Set(requests.map((request) => request.clock))], [
+    Date.parse("2026-09-05T00:00:00.000Z"),
+    Date.parse("2026-09-05T00:00:05.000Z"),
+  ]);
+  assert.equal((await monitor.scanRealtimeTail()).reason, "paced",
+    "even a caught-up continuation consumes the same start-to-start floor");
+});
+
+test("production focus3 defaults recover at least 600 near-head blocks in ten fake minutes while history progresses within the log-call budget", async (t) => {
+  const startedAt = Date.parse("2026-09-05T01:00:00.000Z");
+  t.mock.timers.enable({
+    apis: ["Date", "setTimeout", "setInterval"],
+    now: startedAt,
+  });
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-focus3-production-scheduler-"));
+  let monitor;
+  let activePhysicalLogs = 0;
+  let activeLowLogs = 0;
+  let maximumPhysicalLogs = 0;
+  let maximumLowLogs = 0;
+  let ethGetLogsCalls = 0;
+  const tailStarts = [];
+  const circuitRegistry = new Map();
+  const rpcUrl = "https://bsc.blockrazor.xyz";
+  const headAt = () => 10_002 + (Math.floor((Date.now() - startedAt) / 5_000) * 11);
+  const providerFactory = (lane) => () => ({
+    async getNetwork() { return { chainId: 56n }; },
+    async getBlockNumber() { return headAt(); },
+    async send(method, [request]) {
+      assert.equal(method, "eth_getLogs");
+      ethGetLogsCalls += 1;
+      activePhysicalLogs += 1;
+      if (lane === "low") activeLowLogs += 1;
+      maximumPhysicalLogs = Math.max(maximumPhysicalLogs, activePhysicalLogs);
+      maximumLowLogs = Math.max(maximumLowLogs, activeLowLogs);
+      if (lane === "tail" && !request.address) {
+        tailStarts.push(Date.now());
+      }
+      try {
+        await Promise.resolve();
+        return [];
+      } finally {
+        activePhysicalLogs -= 1;
+        if (lane === "low") activeLowLogs -= 1;
+      }
+    },
+    async getBlock(blockNumber) { return { number: Number(blockNumber), transactions: [] }; },
+    destroy() {},
+  });
+  const provider = createRpcPool([rpcUrl], [], 1, {
+    hostCircuitRegistry: circuitRegistry,
+    standardConcurrency: 4,
+    allowPublicNodeLogs: false,
+    providerFactory: providerFactory("low"),
+  });
+  const realtimeProvider = createRpcPool([rpcUrl], [], 1, {
+    hostCircuitRegistry: circuitRegistry,
+    standardConcurrency: 4,
+    allowPublicNodeLogs: true,
+    providerFactory: providerFactory("tail"),
+  });
+  t.after(async () => {
+    t.mock.timers.reset();
+    await monitor?.stop();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+  await fs.writeFile(path.join(dataDir, "bsc-launchpad-state.json"), JSON.stringify({
+    version: 6,
+    initializedAt: new Date(startedAt).toISOString(),
+    lastFinalizedBlock: 0,
+    realtimeTailNextBlock: 10_001,
+    realtimeTailInitializedAt: new Date(startedAt).toISOString(),
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    nearHeadRecoveryGaps: [{
+      id: "realtime-tail-gap:1000:9999",
+      fromBlock: 1_000,
+      toBlock: 9_999,
+      nextBlock: 1_000,
+      reason: "realtime_tail_stale_rebuild",
+      detectedAt: new Date(startedAt).toISOString(),
+      attempts: 0,
+      nextAttemptAt: null,
+    }],
+    coverageGaps: [],
+  }));
+  class IdleWebSocket { addEventListener() {} close() {} }
+  monitor = createBscLaunchpadMonitor({
+    dataDir,
+    monitorScope: "focus3",
+    bscMonitorEnabled: true,
+    bscWsUrl: "wss://example.invalid",
+    bscRpcUrl: rpcUrl,
+    bscConfirmations: 2,
+    bscRealtimeTailBatchSize: 20,
+    bscRecoveryLogBatchSize: 10,
+    bscHttpHeadPollIntervalMs: 5_000,
+    bscOfficialPollIntervalMs: 1_000_000,
+    bscDeferredRetryIntervalMs: 1_000_000,
+  }, {
+    autoStart: false,
+    provider,
+    realtimeProvider,
+    WebSocketImpl: IdleWebSocket,
+    fetchImpl: async () => ({
+      ok: false,
+      status: 403,
+      headers: { get() { return null; } },
+      text: async () => "forbidden",
+    }),
+    logger: { error() {}, info() {} },
+    journalSetTimeoutImpl: () => ({ unref() {} }),
+    journalClearTimeoutImpl() {},
+  });
+
+  await monitor.start();
+  for (let turn = 0; turn < 5; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+  for (let elapsed = 1_000; elapsed <= 600_000; elapsed += 1_000) {
+    t.mock.timers.tick(1_000);
+    for (let turn = 0; turn < 100; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+  }
+  let snapshot;
+  for (let turn = 0; turn < 2_000; turn += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+    snapshot = await monitor.getState();
+    const pendingGap = snapshot.nearHeadRecoveryGaps.find((item) => item.id === "realtime-tail-gap:1000:9999");
+    const recovered = Number(pendingGap?.nextBlock || 10_000) - 1_000;
+    const confirmedNow = headAt() - 2;
+    const lagNow = Math.max(0, confirmedNow - Number(snapshot.realtimeTailNextBlock) + 1);
+    if (recovered >= 600 && Number(snapshot.lastFinalizedBlock || 0) > 0 && lagNow === 0) break;
+  }
+  assert.ok(snapshot, "the fake-clock scheduler produced a durable state snapshot");
+  const gap = snapshot.nearHeadRecoveryGaps.find((item) => item.id === "realtime-tail-gap:1000:9999");
+  const nearRecovered = Number(gap?.nextBlock || 10_000) - 1_000;
+  const historyRecovered = Number(snapshot.lastFinalizedBlock || 0);
+  const confirmed = headAt() - 2;
+  const tailLag = Math.max(0, confirmed - Number(snapshot.realtimeTailNextBlock) + 1);
+  const uniqueTailStarts = [...new Set(tailStarts)];
+  const minimumTailCadenceMs = uniqueTailStarts.length > 1
+    ? Math.min(...uniqueTailStarts.slice(1).map((at, index) => at - uniqueTailStarts[index]))
+    : null;
+  assert.ok(nearRecovered >= 600, `near-head recovered only ${nearRecovered} blocks`);
+  assert.ok(historyRecovered > 0, "bounded full-history work retains progress under the live-repair load");
+  assert.ok(tailLag <= 20,
+    `the production scheduler keeps the moving finalized tail within one bounded batch, observed ${tailLag}`);
+  assert.ok(ethGetLogsCalls <= 1_080,
+    `the worst-case four-shard ten-minute budget is bounded, observed ${ethGetLogsCalls}`);
+  assert.ok(maximumLowLogs <= 1, `low filter concurrency stays serial, observed ${maximumLowLogs}`);
+  assert.ok(maximumPhysicalLogs <= 2,
+    `shared physical-host log concurrency stays bounded at two, observed ${maximumPhysicalLogs}`);
+  assert.ok(minimumTailCadenceMs >= 5_000,
+    `scheduled realtime-tail starts violated the five-second floor: ${minimumTailCadenceMs}`);
 });
 
 test("every addressless recovery log request is hard-bounded to ten blocks", async (t) => {
@@ -7031,6 +7557,117 @@ test("every addressless recovery log request is hard-bounded to ten blocks", asy
   for (const ranges of perFilterRanges.values()) {
     assert.deepEqual(ranges, [[90, 99], [100, 109], [110, 114]], "bounded chunks exactly cover the configured range without gaps or overlap");
   }
+});
+
+test("one failed focus3 shard leaves the near-head cursor and candidate WAL uncommitted", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-near-shard-atomic-"));
+  const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
+  const transactionHash = `0x${"71".repeat(32)}`;
+  const token = "0x7111111111111111111111111111111111111111";
+  const creator = "0x7222222222222222222222222222222222222222";
+  const iface = new Interface(["event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)"]);
+  const encoded = iface.encodeEventLog(iface.getEvent("TokenCreated"), [1n, creator, 1n, token, "Atomic", "ATM", "ipfs://atomic"]);
+  const creationLog = {
+    address: "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0",
+    topics: encoded.topics,
+    data: encoded.data,
+    transactionHash,
+    blockNumber: "0x5a",
+    transactionIndex: "0x1",
+    logIndex: "0x2",
+    removed: false,
+  };
+  await fs.writeFile(stateFile, JSON.stringify({
+    version: 6,
+    initializedAt: "2026-09-05T00:00:00.000Z",
+    lastFinalizedBlock: 50,
+    realtimeTailNextBlock: 101,
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    nearHeadRecoveryGaps: [{
+      id: "realtime-tail-gap:90:90",
+      fromBlock: 90,
+      toBlock: 90,
+      nextBlock: 90,
+      reason: "realtime_tail_stale_rebuild",
+      attempts: 0,
+    }],
+    coverageGaps: [],
+  }));
+  let clock = 0;
+  let failScopedShard = true;
+  let receiptFallbackCalls = 0;
+  let blockFallbackCalls = 0;
+  const provider = {
+    async send(method, [request]) {
+      if (method === "eth_getBlockReceipts") {
+        receiptFallbackCalls += 1;
+        return [];
+      }
+      assert.equal(method, "eth_getLogs");
+      if (!request.address) return [creationLog];
+      if (failScopedShard) {
+        const error = new Error("HTTP 429 on one exact upgrade shard");
+        error.code = "SERVER_ERROR";
+        error.status = 429;
+        error.retryAfterMs = 60_000;
+        error.rpcHostRetryAfterMs = 60_000;
+        error.rpcOperation = method;
+        error.rpcFailureScope = "host";
+        throw error;
+      }
+      return [];
+    },
+    async getBlock() { blockFallbackCalls += 1; return { number: 90, transactions: [] }; },
+    destroy() {},
+  };
+  const dependencies = {
+    autoStart: false,
+    provider,
+    now: () => clock,
+    backgroundSetTimeoutImpl: () => ({ unref() {} }),
+    backgroundClearTimeoutImpl() {},
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  };
+  let monitor = createBscLaunchpadMonitor({ dataDir, monitorScope: "focus3", bscNearHeadRecoveryBatchSize: 1 }, dependencies);
+  t.after(async () => {
+    await monitor?.stop();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  await assert.rejects(() => monitor.scanNearHeadRecovery(), /429/);
+  let snapshot = await monitor.getState();
+  assert.equal(snapshot.nearHeadRecoveryGaps[0].nextBlock, 90);
+  assert.equal(snapshot.realtimePendingEntries[transactionHash], undefined);
+  assert.equal(receiptFallbackCalls, 0, "focus3 never expands a partial filter result into receipt fallback");
+  assert.equal(blockFallbackCalls, 0);
+  let durable = await readBscLaunchpadDurableState(stateFile);
+  assert.equal(durable.nearHeadRecoveryGaps[0].nextBlock, 90);
+  assert.equal(durable.realtimePendingEntries[transactionHash], undefined);
+  const failureFrames = (await fs.readFile(`${stateFile}.wal`, "utf8"))
+    .trim().split("\n").filter(Boolean).map(JSON.parse);
+  assert.equal(failureFrames.some((frame) => frame.ops.some((operation) =>
+    operation.path.join(".") === `realtimePendingEntries.${transactionHash}`)), false);
+
+  await monitor.stop();
+  failScopedShard = false;
+  clock = 60_001;
+  monitor = createBscLaunchpadMonitor({ dataDir, monitorScope: "focus3", bscNearHeadRecoveryBatchSize: 1 }, dependencies);
+  assert.equal((await monitor.scanNearHeadRecovery()).completed, true);
+  snapshot = await monitor.getState();
+  assert.deepEqual(snapshot.nearHeadRecoveryGaps, []);
+  assert.ok(snapshot.realtimePendingEntries[transactionHash]);
+  durable = await readBscLaunchpadDurableState(stateFile);
+  assert.deepEqual(durable.nearHeadRecoveryGaps, []);
+  assert.ok(durable.realtimePendingEntries[transactionHash]);
+  const replayFrames = (await fs.readFile(`${stateFile}.wal`, "utf8"))
+    .trim().split("\n").filter(Boolean).map(JSON.parse);
+  assert.ok(replayFrames.some((frame) => {
+    const paths = frame.ops.map((operation) => operation.path.join("."));
+    return paths.includes(`realtimePendingEntries.${transactionHash}`) && paths.includes("nearHeadRecoveryGaps");
+  }), "the complete retry admits the candidate and deletes its gap in one WAL frame");
 });
 
 test("realtime tail durably advances before a candidate's deep analysis completes", async (t) => {
@@ -7103,7 +7740,14 @@ test("realtime tail durably advances before a candidate's deep analysis complete
     bscConfirmations: 2,
     bscHttpHeadPollIntervalMs: 60_000,
     bscOfficialPollIntervalMs: 60_000,
-  }, { autoStart: false, provider, WebSocketImpl: IdleWebSocket, fetchImpl, logger: { error() {}, info() {} } });
+  }, {
+    autoStart: false,
+    provider,
+    WebSocketImpl: IdleWebSocket,
+    fetchImpl,
+    realtimeTailMinIntervalMsForTesting: 0,
+    logger: { error() {}, info() {} },
+  });
 
   await monitor.start();
   await waitUntil(() => typeof releaseTransaction === "function", 2_000);
@@ -7259,6 +7903,7 @@ test("focus3 background deep RPC prioritizes delivery deadlines and fairly drain
     WebSocketImpl: IdleWebSocket,
     fetchImpl,
     now: () => clock,
+    realtimeTailMinIntervalMsForTesting: 0,
     backgroundSetTimeoutImpl,
     backgroundClearTimeoutImpl,
     logger: { error() {}, info() {} },
@@ -7271,8 +7916,7 @@ test("focus3 background deep RPC prioritizes delivery deadlines and fairly drain
 
   await monitor.start();
   await new Promise((resolve) => setTimeout(resolve, 40));
-  await monitor.scanRealtimeTail();
-  await monitor.scanRealtimeTail();
+  await completeRealtimeTailPasses(monitor, 2, 5_000);
 
   for (let slot = 0; slot < 44; slot += 1) {
     const before = deepOrder.length;
@@ -7402,6 +8046,7 @@ test("focus3 background deep RPC preserves feature and first-three causal order 
     WebSocketImpl: IdleWebSocket,
     fetchImpl,
     now: () => clock,
+    realtimeTailMinIntervalMsForTesting: 0,
     backgroundSetTimeoutImpl: () => ({ unref() {} }),
     backgroundClearTimeoutImpl() {},
     logger: { error() {}, info() {} },
@@ -7413,8 +8058,7 @@ test("focus3 background deep RPC preserves feature and first-three causal order 
   });
   await monitor.start();
   await new Promise((resolve) => setTimeout(resolve, 30));
-  await monitor.scanRealtimeTail();
-  await monitor.scanRealtimeTail();
+  await completeRealtimeTailPasses(monitor, 2, 5_000);
   const normalized = await monitor.getState();
   assert.ok(normalized.deferredCreationEvidence[featureLaterDeferred[0]].deliverySla);
   assert.ok(normalized.realtimePendingEntries[firstThreeLaterQueue[0]].deliverySla);
@@ -7587,6 +8231,7 @@ test("focus3 mixed archive 429 and method failure share one durable deep RPC gat
     WebSocketImpl: IdleWebSocket,
     fetchImpl,
     now: () => clock,
+    realtimeTailMinIntervalMsForTesting: 0,
     backgroundSetTimeoutImpl,
     backgroundClearTimeoutImpl,
     logger: { error() {}, info() {} },
@@ -7601,8 +8246,7 @@ test("focus3 mixed archive 429 and method failure share one durable deep RPC gat
   });
   await monitor.start();
   await new Promise((resolve) => setTimeout(resolve, 30));
-  await monitor.scanRealtimeTail();
-  await monitor.scanRealtimeTail();
+  await completeRealtimeTailPasses(monitor, 2, 5_000);
   await monitor.processRealtimeQueue();
   assert.deepEqual(deepCalls, [queueHash]);
   assert.deepEqual(codeCalls, ["archive", "standard"],
@@ -7627,8 +8271,7 @@ test("focus3 mixed archive 429 and method failure share one durable deep RPC gat
   monitor = makeMonitor();
   await monitor.start();
   await new Promise((resolve) => setTimeout(resolve, 30));
-  await monitor.scanRealtimeTail();
-  await monitor.scanRealtimeTail();
+  await completeRealtimeTailPasses(monitor, 2, 5_000);
   await monitor.processRealtimeQueue();
   await monitor.retryDeferredCreationEvidence();
   assert.deepEqual(deepCalls, [queueHash], "the persisted host gate remains closed after restart");
@@ -7642,7 +8285,8 @@ test("focus3 mixed archive 429 and method failure share one durable deep RPC gat
     timer.cancelled = true;
     timer.callback();
   }
-  await waitUntil(() => deepCalls.length >= 2, 2_000);
+  await waitUntil(async () => deepCalls.length >= 2
+    && (await monitor.getState())._health.backgroundDeepRpc.status === "healthy", 5_000);
   assert.equal(deepCalls[1], queueHash, "the retry timer wakes the realtime lane without waiting for the 60s head poll");
   snapshot = await monitor.getState();
   assert.equal(snapshot._health.backgroundDeepRpc.status, "healthy");
@@ -8027,6 +8671,7 @@ test("a durable near-head candidate registered after restart bypasses the warmed
     WebSocketImpl: IdleWebSocket,
     fetchImpl,
     now: () => clock,
+    realtimeTailMinIntervalMsForTesting: 0,
     backgroundSetTimeoutImpl: () => ({ unref() {} }),
     backgroundClearTimeoutImpl() {},
     logger: { error() {}, info() {} },
@@ -8386,6 +9031,162 @@ test("a saturated recovery pool cannot block the isolated realtime tail", async 
   assert.equal(realtimeDestroyCalls, 1);
 });
 
+test("a slow focus3 low request overlaps an actual tail range but serializes the next low lease", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-focus3-slow-low-tail-overlap-"));
+  const startedAt = Date.parse("2026-09-05T02:00:00.000Z");
+  let clock = startedAt;
+  let head = 102;
+  let monitor;
+  let releaseLow;
+  let signalLowStarted;
+  const lowGate = new Promise((resolve) => { releaseLow = resolve; });
+  const lowStarted = new Promise((resolve) => { signalLowStarted = resolve; });
+  let blockFirstLow = true;
+  let activePhysicalLogs = 0;
+  let maximumPhysicalLogs = 0;
+  const physicalCalls = [];
+  const circuitRegistry = new Map();
+  const rpcUrl = "https://bsc.blockrazor.xyz";
+  const providerFactory = (lane) => () => ({
+    async getNetwork() { return { chainId: 56n }; },
+    async getBlockNumber() { return head; },
+    async send(method, [request]) {
+      assert.equal(method, "eth_getLogs");
+      const fromBlock = Number.parseInt(request.fromBlock, 16);
+      const toBlock = Number.parseInt(request.toBlock, 16);
+      activePhysicalLogs += 1;
+      maximumPhysicalLogs = Math.max(maximumPhysicalLogs, activePhysicalLogs);
+      physicalCalls.push({ lane, fromBlock, toBlock, address: request.address || null });
+      try {
+        if (lane === "low" && blockFirstLow && !request.address && fromBlock === 60 && toBlock === 69) {
+          signalLowStarted();
+          await lowGate;
+        }
+        return [];
+      } finally {
+        activePhysicalLogs -= 1;
+      }
+    },
+    async getBlock(blockNumber) { return { number: Number(blockNumber), transactions: [] }; },
+    destroy() {},
+  });
+  const provider = createRpcPool([rpcUrl], [], 1, {
+    hostCircuitRegistry: circuitRegistry,
+    standardConcurrency: 4,
+    allowPublicNodeLogs: false,
+    providerFactory: providerFactory("low"),
+  });
+  const realtimeProvider = createRpcPool([rpcUrl], [], 1, {
+    hostCircuitRegistry: circuitRegistry,
+    standardConcurrency: 4,
+    allowPublicNodeLogs: true,
+    providerFactory: providerFactory("tail"),
+  });
+  t.after(async () => {
+    blockFirstLow = false;
+    releaseLow();
+    t.mock.timers.reset();
+    await monitor?.stop();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+  await fs.writeFile(path.join(dataDir, "bsc-launchpad-state.json"), JSON.stringify({
+    version: 6,
+    initializedAt: new Date(startedAt).toISOString(),
+    lastFinalizedBlock: 100,
+    realtimeTailNextBlock: 101,
+    realtimeTailInitializedAt: new Date(startedAt).toISOString(),
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    nearHeadRecoveryGaps: [{
+      id: "realtime-tail-gap:60:99",
+      fromBlock: 60,
+      toBlock: 99,
+      nextBlock: 60,
+      reason: "realtime_tail_stale_rebuild",
+      detectedAt: new Date(startedAt).toISOString(),
+      attempts: 0,
+      nextAttemptAt: new Date(startedAt + 60_000).toISOString(),
+    }],
+    coverageGaps: [],
+  }));
+  class IdleWebSocket { addEventListener() {} close() {} }
+  monitor = createBscLaunchpadMonitor({
+    dataDir,
+    monitorScope: "focus3",
+    bscMonitorEnabled: true,
+    bscWsUrl: "wss://example.invalid",
+    bscRpcUrl: rpcUrl,
+    bscConfirmations: 2,
+    bscRealtimeTailBatchSize: 20,
+    bscNearHeadRecoveryBatchSize: 20,
+    bscHttpHeadPollIntervalMs: 60_000,
+    bscOfficialPollIntervalMs: 60_000,
+  }, {
+    autoStart: false,
+    provider,
+    realtimeProvider,
+    WebSocketImpl: IdleWebSocket,
+    fetchImpl: async () => ({ ok: false, status: 403, headers: { get() { return null; } }, text: async () => "forbidden" }),
+    now: () => clock,
+    realtimeTailMinIntervalMsForTesting: 0,
+    backgroundSetTimeoutImpl: () => ({ unref() {} }),
+    backgroundClearTimeoutImpl() {},
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+
+  await monitor.start();
+  assert.equal((await monitor.scanRealtimeTail()).skipped, false);
+  assert.equal((await monitor.scanRealtimeTail()).skipped, false);
+
+  clock += 60_000;
+  const firstLow = monitor.scanNearHeadRecovery();
+  await lowStarted;
+  assert.equal((await monitor.scanNearHeadRecovery()).reason, "running");
+  assert.equal(physicalCalls.filter((call) => call.lane === "low").length, 1,
+    "a blocked low filter owns the only low-range request");
+
+  head = 105;
+  await monitor.checkHttpHead();
+  const overlappingTail = await monitor.scanRealtimeTail();
+  assert.deepEqual({ fromBlock: overlappingTail.fromBlock, toBlock: overlappingTail.toBlock }, {
+    fromBlock: 101,
+    toBlock: 103,
+  });
+  let snapshot = await monitor.getState();
+  assert.equal(snapshot.realtimeTailNextBlock, 104, "the actual tail range commits while one low filter is blocked");
+  assert.equal(snapshot.nearHeadRecoveryGaps[0].nextBlock, 60);
+  assert.ok(physicalCalls.some((call) => call.lane === "tail" && call.fromBlock === 101 && call.toBlock === 103));
+  assert.ok(maximumPhysicalLogs <= 2,
+    `the shared physical host never exceeds tail+low concurrency two, observed ${maximumPhysicalLogs}`);
+  const lowCallsWhileBlocked = physicalCalls.filter((call) => call.lane === "low").length;
+  await monitor.advanceCoverage();
+  assert.equal(physicalCalls.filter((call) => call.lane === "low").length, lowCallsWhileBlocked,
+    "history cannot become a second low owner while near-head holds the lane");
+
+  blockFirstLow = false;
+  releaseLow();
+  assert.equal((await firstLow).completed, false);
+  snapshot = await monitor.getState();
+  assert.equal(snapshot.nearHeadRecoveryGaps[0].nextBlock, 80);
+  const callsAfterRelease = physicalCalls.length;
+  assert.equal((await monitor.scanNearHeadRecovery()).reason, "realtime_priority");
+  assert.equal(physicalCalls.length, callsAfterRelease, "release invalidates the prior tail proof immediately");
+
+  assert.equal((await monitor.scanRealtimeTail()).skipped, false);
+  assert.equal((await monitor.scanNearHeadRecovery()).reason, "realtime_priority",
+    "one post-release healthy tail pass is insufficient");
+  assert.equal((await monitor.scanRealtimeTail()).skipped, false);
+  const secondLow = await monitor.scanNearHeadRecovery();
+  assert.equal(secondLow.completed, true);
+  snapshot = await monitor.getState();
+  assert.deepEqual(snapshot.nearHeadRecoveryGaps, []);
+  assert.ok(physicalCalls.some((call) => call.lane === "low" && call.fromBlock === 80 && call.toBlock === 89));
+  assert.ok(maximumPhysicalLogs <= 2);
+});
+
 test("stale realtime tail is rebuilt near head while historical coverage remains honest", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-tail-stale-handoff-"));
   let monitor;
@@ -8636,6 +9437,7 @@ test("five successful near-head batches admit one truthful full-history batch wh
     bscOfficialPollIntervalMs: 60_000,
   }, {
     autoStart: false,
+    realtimeTailMinIntervalMsForTesting: 0,
     provider,
     WebSocketImpl: IdleWebSocket,
     fetchImpl,
@@ -8644,10 +9446,14 @@ test("five successful near-head batches admit one truthful full-history batch wh
   });
 
   await monitor.start();
-  await waitUntil(async () => (await monitor.getState()).nearHeadRecoveryGaps[0]?.nextBlock >= 101, 2_000);
   while ((await monitor.getState()).nearHeadRecoveryGaps[0].nextBlock < 105) {
+    // Every completed low-range lease invalidates the preceding tail proof.
+    // Drive two real caught-up tail passes before asking for the next lease;
+    // native timers may race these calls, so count completions rather than
+    // assuming a fixed number of invocations.
+    await completeRealtimeTailPasses(monitor);
     const result = await monitor.scanNearHeadRecovery();
-    assert.equal(result.skipped, false);
+    if (result.skipped) await new Promise((resolve) => setImmediate(resolve));
   }
   await waitUntil(async () => {
     await monitor.advanceCoverage();
@@ -8739,6 +9545,7 @@ test("five failed near-head attempt slots still admit one real full-history requ
     bscOfficialPollIntervalMs: 60_000,
   }, {
     autoStart: false,
+    realtimeTailMinIntervalMsForTesting: 0,
     provider,
     WebSocketImpl: IdleWebSocket,
     fetchImpl: async () => ({ ok: false, status: 403, headers: { get() { return null; } }, text: async () => "forbidden" }),
@@ -8754,7 +9561,7 @@ test("five failed near-head attempt slots still admit one real full-history requ
     "the method-failed gap cursors remain durable while independent history progresses");
 });
 
-test("history backoff leaves live repair runnable and a slow history attempt cannot erase its five-slot quota", async (t) => {
+test("history backoff leaves live repair runnable while a slow history request excludes overlapping low repair", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-near-head-history-backoff-fairness-"));
   let monitor;
   let releaseSlowHistory;
@@ -8768,16 +9575,16 @@ test("history backoff leaves live repair runnable and a slow history attempt can
     version: 6,
     initializedAt: "2026-09-04T00:00:00.000Z",
     lastFinalizedBlock: 50,
-    realtimeTailNextBlock: 201,
+    realtimeTailNextBlock: 1_001,
     realtimeTailInitializedAt: "2026-09-04T00:00:00.000Z",
     launchers: {},
     hooks: {},
     seenTransactions: {},
-    nearHeadRecoveryGaps: Array.from({ length: 40 }, (_, index) => ({
-      id: `realtime-tail-gap:${100 + (index * 2)}:${100 + (index * 2)}`,
-      fromBlock: 100 + (index * 2),
-      toBlock: 100 + (index * 2),
-      nextBlock: 100 + (index * 2),
+    nearHeadRecoveryGaps: Array.from({ length: 200 }, (_, index) => ({
+      id: `realtime-tail-gap:${500 + (index * 2)}:${500 + (index * 2)}`,
+      fromBlock: 500 + (index * 2),
+      toBlock: 500 + (index * 2),
+      nextBlock: 500 + (index * 2),
       reason: "realtime_tail_stale_rebuild",
       attempts: 0,
       nextAttemptAt: null,
@@ -8788,10 +9595,11 @@ test("history backoff leaves live repair runnable and a slow history attempt can
   const nearRanges = new Set();
   let failFirstHistoryWave = true;
   let firstHistoryFailureScheduled = false;
+  let firstHistoryFilterFailures = 0;
   let slowHistoryStarted = false;
   const provider = {
     async getNetwork() { return { chainId: 56n }; },
-    async getBlockNumber() { return 202; },
+    async getBlockNumber() { return 1_002; },
     async getBlock(blockNumber) { return { number: blockNumber, transactions: [] }; },
     async send(method, [request]) {
       if (method === "eth_getBlockReceipts") {
@@ -8819,8 +9627,9 @@ test("history backoff leaves live repair runnable and a slow history attempt can
         if (!firstHistoryFailureScheduled) {
           firstHistoryFailureScheduled = true;
           timeline.push("history:failed");
-          queueMicrotask(() => { failFirstHistoryWave = false; });
         }
+        firstHistoryFilterFailures += 1;
+        if (firstHistoryFilterFailures >= 5) queueMicrotask(() => { failFirstHistoryWave = false; });
         const error = new Error("history host temporarily unavailable");
         error.code = "SERVER_ERROR";
         error.retryAfterMs = 250;
@@ -8851,14 +9660,15 @@ test("history backoff leaves live repair runnable and a slow history attempt can
     bscConfirmations: 2,
     bscRecoveryLogBatchSize: 10,
     bscNearHeadRecoveryBatchSize: 1,
-    bscCoverageRetryBaseMs: 500,
-    bscCoverageRetryMaxMs: 500,
+    bscCoverageRetryBaseMs: 5_000,
+    bscCoverageRetryMaxMs: 5_000,
     bscNearHeadRecoveryRetryBaseMs: 60_000,
     bscNearHeadRecoveryRetryMaxMs: 60_000,
     bscHttpHeadPollIntervalMs: 60_000,
     bscOfficialPollIntervalMs: 60_000,
   }, {
     autoStart: false,
+    realtimeTailMinIntervalMsForTesting: 0,
     provider,
     WebSocketImpl: IdleWebSocket,
     fetchImpl: async () => ({ ok: false, status: 403, headers: { get() { return null; } }, text: async () => "forbidden" }),
@@ -8867,35 +9677,49 @@ test("history backoff leaves live repair runnable and a slow history attempt can
   });
 
   await monitor.start();
-  await waitUntil(() => timeline.includes("history:slow-start"), 3_000);
-  assert.ok(nearRanges.size >= 6,
-    "the sixth independent live gap must run while the failed history lane is still cooling");
+  await waitUntil(() => timeline.includes("history:failed"), 3_000);
+  // The history lane is cooling, not running. Five further independent gap
+  // attempts must remain possible, with each lease separated by a fresh
+  // two-pass tail proof.
+  for (let turn = 0; turn < 20 && nearRanges.size < 10; turn += 1) {
+    await completeRealtimeTailPasses(monitor);
+    await monitor.scanNearHeadRecovery().catch(() => {});
+  }
+  assert.ok(nearRanges.size >= 10,
+    `five independent live gaps run while the failed history lane cools: ${JSON.stringify(timeline)}`);
+  await waitUntil(() => timeline.includes("history:slow-start"), 7_000);
+  assert.ok(timeline.includes("history:slow-start"), `history retry must start after its cooldown: ${JSON.stringify(timeline)}`);
   const slowHistoryIndex = timeline.indexOf("history:slow-start");
-  const liveAttemptsDuringSlowHistory = () => timeline.slice(slowHistoryIndex + 1)
-    .filter((item) => item.startsWith("near:")).length;
-  await waitUntil(() => liveAttemptsDuringSlowHistory() >= 5, 3_000);
   const beforeHold = nearRanges.size;
   await new Promise((resolve) => setTimeout(resolve, 300));
   assert.equal(nearRanges.size, beforeHold,
-    `a slow in-flight history request holds the sixth live slot without a 25ms repair spin: ${JSON.stringify(timeline)}`);
-  assert.equal(liveAttemptsDuringSlowHistory(), 5,
-    "the slow history owns a single slot after five additional live attempts");
+    `a slow in-flight history request excludes a second low owner without a repair spin: ${JSON.stringify(timeline)}`);
 
   const attemptedBeforeRelease = new Set(nearRanges);
   releaseSlowHistory();
-  await waitUntil(() => timeline.includes("history:next"), 3_000);
-  await waitUntil(() => nearRanges.size > attemptedBeforeRelease.size, 3_000);
+  await completeRealtimeTailPasses(monitor);
+  await waitUntil(async () => {
+    await monitor.scanNearHeadRecovery().catch(() => {});
+    return nearRanges.size > attemptedBeforeRelease.size;
+  }, 3_000);
   const resumedNearIndex = timeline.findIndex((item) => item.startsWith("near:")
     && !attemptedBeforeRelease.has(Number(item.slice("near:".length))));
-  assert.ok(resumedNearIndex >= 0 && timeline.indexOf("history:next") < resumedNearIndex,
-    "the accumulated five attempts survive history completion and admit the next history batch first");
+  const nextHistoryIndex = timeline.indexOf("history:next");
+  assert.ok(resumedNearIndex > slowHistoryIndex
+    && (nextHistoryIndex < 0 || resumedNearIndex < nextHistoryIndex),
+  `after the slow owner releases, two new healthy tail passes authorize live repair before another history turn: ${JSON.stringify(timeline)}`);
 });
 
 test("focus3 runtime stale-tail rebuild retains every uncovered block instead of falsifying coverage", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-runtime-gap-compaction-"));
   const blockedRequests = [];
+  let blockProviderRequests = true;
   let monitor;
   t.after(async () => {
+    // An already-started mapLimit worker can issue its next shard after stop()
+    // begins. Make every future shard non-blocking before releasing the
+    // currently parked calls so cleanup cannot strand a late request.
+    blockProviderRequests = false;
     const stopping = monitor?.stop();
     for (const resolve of blockedRequests.splice(0)) resolve([]);
     await stopping;
@@ -8916,7 +9740,10 @@ test("focus3 runtime stale-tail rebuild retains every uncovered block instead of
   const provider = {
     async getNetwork() { return { chainId: 56n }; },
     async getBlockNumber() { return 1_000_102; },
-    async send() { return new Promise((resolve) => blockedRequests.push(resolve)); },
+    async send() {
+      if (!blockProviderRequests) return [];
+      return new Promise((resolve) => blockedRequests.push(resolve));
+    },
     destroy() {},
   };
   class IdleWebSocket {
@@ -11751,6 +12578,7 @@ async function createBscWebsocketProofHarness(t, {
   providerSend = null,
   providerGetBlock = null,
   healthyRealtimeLogs = false,
+  monitorScope = "focus3",
   dependencyOverrides = {},
 } = {}) {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-ws-proof-fast-path-"));
@@ -11972,7 +12800,7 @@ async function createBscWebsocketProofHarness(t, {
   });
   const config = {
     dataDir,
-    monitorScope: "focus3",
+    monitorScope,
     blockedContracts: new Set(),
     bscMonitorEnabled: true,
     bscWsUrl: "wss://example.invalid",
@@ -11987,6 +12815,7 @@ async function createBscWebsocketProofHarness(t, {
     autoStart: false,
     externalAttribution: false,
     provider,
+    realtimeTailMinIntervalMsForTesting: 0,
     ...(healthyRealtimeLogs ? {
       realtimeProvider: {
         ...provider,
@@ -12312,6 +13141,7 @@ test("late HTTP block failures cannot evict newer WS generations under concurren
     const oldBlockStarted = new Promise((resolve) => { signalOldBlockStarted = resolve; });
     const oldBlock = new Promise((_resolve, reject) => { rejectOldBlock = reject; });
     const harness = await createBscWebsocketProofHarness(t, {
+      monitorScope: "legacy",
       healthyRealtimeLogs: true,
       providerSend({ method, params }) {
         if (method === "eth_getLogs") throw new Error("force verified receipt fallback");
@@ -12337,13 +13167,12 @@ test("late HTTP block failures cannot evict newer WS generations under concurren
       transactionIndex: 0,
     });
 
-    // The capacity scheduler deliberately blocks history until two
-    // consecutive realtime-tail checks are healthy. Prime that production
-    // invariant through the isolated tail provider so this test reaches the
-    // intended pending HTTP block-generation race.
+    // This cache-generation regression intentionally uses the legacy recovery
+    // path, where a filter failure may still expand into verified block reads.
+    // Focus3 ranges are covered separately and now fail closed on any filter
+    // failure, so they can no longer construct this older fallback race.
     await harness.monitor.awaitIdle();
-    await harness.monitor.scanRealtimeTail();
-    await harness.monitor.scanRealtimeTail();
+    await completeRealtimeTailPasses(harness.monitor, 2);
     // Start coverage first so its old HTTP generation is genuinely pending.
     harness.emitHead(103);
     await oldBlockStarted;
@@ -12378,6 +13207,7 @@ test("coverage invalidates one stale WS block generation and refreshes the fork 
   t.after(() => releaseLogRange());
   const refreshedBlockHash = `0x${"c".repeat(64)}`;
   const harness = await createBscWebsocketProofHarness(t, {
+    monitorScope: "legacy",
     healthyRealtimeLogs: true,
     async providerSend({ method, params }) {
       if (method === "eth_getLogs") {
@@ -12411,8 +13241,7 @@ test("coverage invalidates one stale WS block generation and refreshes the fork 
   });
   proof = harness.addCandidate({ transactionIndex: 0 });
   await harness.monitor.awaitIdle();
-  await harness.monitor.scanRealtimeTail();
-  await harness.monitor.scanRealtimeTail();
+  await completeRealtimeTailPasses(harness.monitor, 2);
   harness.emitCandidate(proof);
   harness.advance(1_500);
   harness.emitHead(103);
