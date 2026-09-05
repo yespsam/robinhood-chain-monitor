@@ -8055,6 +8055,230 @@ test("focus3 background deep RPC prioritizes delivery deadlines and fairly drain
     "the newly unblocked descendant follows its old causal head without waiting for another 30-second quota");
 });
 
+test("strict receipt classification releases a fresh causal descendant before historical runtime inspection", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-causal-classification-yield-"));
+  const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
+  let clock = Date.parse("2026-08-24T12:30:00.000Z");
+  const head = 5_000;
+  const activationKey = "quote:0x4333333333333333333333333333333333333333";
+  const causalKey = `feature:${activationKey}`;
+  const oldHash = `0x${"61".repeat(32)}`;
+  const freshHash = `0x${"62".repeat(32)}`;
+  const oldBlockHash = `0x${"63".repeat(32)}`;
+  const freshBlockHash = `0x${"64".repeat(32)}`;
+  const launcher = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
+  const token = "0x6511111111111111111111111111111111111111";
+  const creator = "0x6622222222222222222222222222222222222222";
+  const trigger = "0x6777777777777777777777777777777777777777";
+  const iface = new Interface([
+    "event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)",
+  ]);
+  const encoded = iface.encodeEventLog(
+    iface.getEvent("TokenCreated"),
+    [1n, creator, 1n, token, "Historical", "HIST", "ipfs://historical"],
+  );
+  const oldLog = {
+    address: launcher,
+    topics: encoded.topics,
+    data: encoded.data,
+    transactionHash: oldHash,
+    blockHash: oldBlockHash,
+    blockNumber: 100,
+    transactionIndex: 1,
+    logIndex: 2,
+    removed: false,
+  };
+  const transactionByHash = new Map([
+    [oldHash, {
+      hash: oldHash,
+      blockNumber: 100,
+      blockHash: oldBlockHash,
+      index: 1,
+      transactionIndex: 1,
+      from: creator,
+      to: launcher,
+      data: "0x",
+    }],
+    [freshHash, {
+      hash: freshHash,
+      blockNumber: head - 2,
+      blockHash: freshBlockHash,
+      index: 1,
+      transactionIndex: 1,
+      from: creator,
+      to: trigger,
+      data: "0x",
+    }],
+  ]);
+  const receiptByHash = new Map([
+    [oldHash, {
+      hash: oldHash,
+      transactionHash: oldHash,
+      blockNumber: 100,
+      blockHash: oldBlockHash,
+      index: 1,
+      transactionIndex: 1,
+      status: 1,
+      logs: [oldLog],
+    }],
+    [freshHash, {
+      hash: freshHash,
+      transactionHash: freshHash,
+      blockNumber: head - 2,
+      blockHash: freshBlockHash,
+      index: 1,
+      transactionIndex: 1,
+      status: 1,
+      logs: [],
+    }],
+  ]);
+  const blockByNumber = new Map([
+    [100, {
+      number: 100,
+      hash: oldBlockHash,
+      timestamp: Math.floor((clock - 60 * 60_000) / 1_000),
+      transactions: [`0x${"60".repeat(32)}`, oldHash],
+    }],
+    [head - 2, {
+      number: head - 2,
+      hash: freshBlockHash,
+      timestamp: Math.floor(clock / 1_000),
+      transactions: [`0x${"68".repeat(32)}`, freshHash],
+    }],
+  ]);
+  const deferred = (transactionHash, blockNumber, blockHash, extra = {}) => ({
+    transactionHash,
+    blockHash,
+    blockNumber,
+    transactionIndex: 1,
+    logIndex: transactionHash === oldHash ? 2 : 0,
+    reasons: ["http_tail"],
+    mintEmitters: [],
+    candidateTokens: transactionHash === oldHash ? [token] : [],
+    verifiedNewContracts: transactionHash === oldHash ? [token] : [],
+    upgradeEmitters: transactionHash === freshHash ? [trigger] : [],
+    lifecycleEmitters: [],
+    hookPools: [],
+    hasProtocolTrigger: true,
+    featureActivationReplayKey: null,
+    flapQuoteFirstThreeReplayGenerationKey: null,
+    causalBarrierKeys: [causalKey],
+    flapCreationHotCandidates: [],
+    fourMemeCreationHotCandidates: [],
+    revision: 1,
+    deferredKind: "coverage_processing",
+    attempts: 1,
+    firstDeferredAt: new Date(clock - 60_000).toISOString(),
+    lastAttemptAt: new Date(clock - 30_000).toISOString(),
+    nextAttemptAt: new Date(clock - 1).toISOString(),
+    lastError: "waiting for canonical classification",
+    ...extra,
+  });
+  await fs.writeFile(stateFile, JSON.stringify({
+    version: 6,
+    initializedAt: new Date(clock - 60_000).toISOString(),
+    lastFinalizedBlock: head - 2,
+    realtimeTailNextBlock: head - 1,
+    realtimeTailInitializedAt: new Date(clock - 60_000).toISOString(),
+    realtimePendingEntries: {},
+    deferredCreationEvidence: {
+      [oldHash]: deferred(oldHash, 100, oldBlockHash),
+      [freshHash]: deferred(freshHash, head - 2, freshBlockHash),
+    },
+    nearHeadRecoveryGaps: [{
+      id: "permanent-gap",
+      fromBlock: 200,
+      toBlock: 200,
+      nextBlock: 200,
+      reason: "realtime_tail_stale_rebuild",
+      attempts: 1,
+      nextAttemptAt: new Date(clock + 60_000).toISOString(),
+    }],
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    coverageGaps: [],
+    _health: { realtimeTail: { status: "healthy", consecutiveFailures: 0 } },
+  }));
+
+  const deepOrder = [];
+  let getCodeCalls = 0;
+  const provider = {
+    async getNetwork() { return { chainId: 56n }; },
+    async getBlockNumber() { return head; },
+    async getTransaction(hash) {
+      deepOrder.push(hash);
+      return transactionByHash.get(hash) || null;
+    },
+    async getTransactionReceipt(hash) { return receiptByHash.get(hash) || null; },
+    async getBlock(number) { return blockByNumber.get(Number(number)) || null; },
+    async getCode() { getCodeCalls += 1; return "0x6000"; },
+    async getStorage() { return "0x"; },
+    async call() { return "0x"; },
+    async send() { return []; },
+    destroy() {},
+  };
+  class IdleWebSocket { addEventListener() {} close() {} }
+  const fetchImpl = async (url) => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ code: 0, data: url.includes("/address")
+      ? [{ name: "TokenManager3", address: "0x5c952063c7fc8610ffdb798152d69f0b9550762b", networkCode: "BSC" }]
+      : [{ id: 1, name: "Baseline", tag: "Curve", codeType: "SOLIDITY", descr: "base", status: "PUBLISHED" }] }),
+  });
+  const monitor = createBscLaunchpadMonitor({
+    dataDir,
+    monitorScope: "focus3",
+    bscMonitorEnabled: true,
+    bscWsUrl: "wss://example.invalid",
+    bscRpcUrl: "https://example.invalid",
+    bscConfirmations: 2,
+    bscHttpHeadPollIntervalMs: 60_000,
+    bscOfficialPollIntervalMs: 60_000,
+    bscDeferredRetryIntervalMs: 60_000,
+  }, {
+    autoStart: false,
+    externalAttribution: false,
+    provider,
+    WebSocketImpl: IdleWebSocket,
+    fetchImpl,
+    now: () => clock,
+    realtimeTailMinIntervalMsForTesting: 0,
+    backgroundSetTimeoutImpl: () => ({ unref() {} }),
+    backgroundClearTimeoutImpl() {},
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  t.after(async () => {
+    await monitor.stop();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  await monitor.start();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  await completeRealtimeTailPasses(monitor, 2, 5_000);
+  await monitor.retryDeferredCreationEvidence();
+  let snapshot = await monitor.getState();
+  assert.deepEqual(deepOrder, [oldHash]);
+  assert.equal(getCodeCalls, 0,
+    "strict receipt proof must release the causal chain before historical runtime RPCs");
+  assert.deepEqual(snapshot.deferredCreationEvidence[oldHash].causalBarrierKeys, []);
+  assert.equal(snapshot.seenTransactions[oldHash], undefined);
+  assert.equal(snapshot.deferredCreationEvidence[oldHash].attempts, 1,
+    "classification-only success is neither completion nor a failed attempt");
+  assert.equal(snapshot.deferredCreationEvidence[oldHash].flapCreationHotCandidates.length, 1);
+  assert.equal(snapshot.officialSources?.flap?.creationEventHotIndex?.length || 0, 0,
+    "per-transaction evidence remains durable without falsely marking the transaction processed");
+  const durable = await readBscLaunchpadDurableState(stateFile);
+  assert.deepEqual(durable.deferredCreationEvidence[oldHash].causalBarrierKeys, []);
+  assert.ok(durable.deferredCreationEvidence[freshHash], "the fresh descendant remains durable until its own slot");
+
+  clock += 750;
+  await monitor.retryDeferredCreationEvidence();
+  assert.deepEqual(deepOrder.slice(0, 2), [oldHash, freshHash],
+    "the fresh descendant runs next instead of waiting behind the now-unrelated old record");
+});
+
 test("focus3 background deep RPC preserves feature and first-three causal order across queue classes", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-deep-rpc-causal-order-"));
   const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
@@ -8681,6 +8905,7 @@ test("legacy Flap replay fills unknown receipt coordinates only after strict can
     timestamp: Math.floor(clock / 1_000),
     transactions: [precedingHash, transactionHash],
   };
+  let getCodeCalls = 0;
   await fs.writeFile(stateFile, JSON.stringify({
     version: 6,
     initializedAt: new Date(clock - 60_000).toISOString(),
@@ -8729,6 +8954,7 @@ test("legacy Flap replay fills unknown receipt coordinates only after strict can
     async getTransactionReceipt(hash) { return hash === transactionHash ? receipt : null; },
     async getBlock(number) { return Number(number) === 90 ? block : null; },
     async getCode() {
+      getCodeCalls += 1;
       const error = new Error("runtime profile unavailable after canonical classification");
       error.code = "SERVER_ERROR";
       throw error;
@@ -8761,6 +8987,8 @@ test("legacy Flap replay fills unknown receipt coordinates only after strict can
   );
   assert.equal(record.flapCreationHotCandidates.length, 1);
   assert.doesNotMatch(record.lastError, /causal classification proof mismatch/);
+  assert.ok(getCodeCalls > 0,
+    "an exact unresolved feature owner still performs full runtime proof instead of yielding after classification");
 
   await monitor.stop();
   monitor = createBscLaunchpadMonitor({ dataDir }, dependencies);

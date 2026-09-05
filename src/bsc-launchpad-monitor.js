@@ -13104,6 +13104,31 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       });
       const bscPools = receiptClassification.bscPools;
       const receiptFlapCreationCandidates = receiptClassification.flapCreationCandidates;
+      const entryDeliveryDeadline = backgroundDeliveryDeadline(entry);
+      const classificationOnly = historical
+        && hasPotentialCausalBarrier
+        && backgroundFeatureKeys(entry).length === 0
+        && !(Number.isFinite(entryDeliveryDeadline) && entryDeliveryDeadline > Number(now()));
+      if (classificationOnly) {
+        // Legacy recovery records can conservatively carry every unresolved
+        // feature/first-three key until their canonical receipt is available.
+        // Once strict receipt proof has contracted all of those potential
+        // keys, finishing historical lifecycle/runtime inspection in the same
+        // lease only lets a slow getCode call keep every fresh descendant
+        // blocked. The classification is already durable in the state/WAL.
+        // Keep this entry pending (and un-seen) for its ordinary old-work slot,
+        // while immediately making the next causal head eligible.
+        return {
+          revision,
+          observation: null,
+          classificationOnly: true,
+          flapCreationCandidates: receiptFlapCreationCandidates,
+          fourMemeCreationCandidates: receiptClassification.fourMemeCreationCandidates,
+          receiptClassificationCommitted: true,
+          flapReplayNeeded: receiptClassification.flapReplayNeeded,
+          fourMemeReplayKeys: receiptClassification.fourMemeReplayKeys,
+        };
+      }
       let observation;
       try {
         if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
@@ -13343,6 +13368,16 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
       flapReplayNeeded ||= result.value.flapReplayNeeded === true;
       for (const key of result.value.fourMemeReplayKeys || []) fourMemeReplayKeys.add(key);
+      if (result.value.classificationOnly) {
+        // The dependency lease did its complete durable job. Do not let that
+        // lease count toward the ordinary-old quota decision; if its final
+        // broad key was removed, a newly unblocked fresh descendant must get
+        // the next eligible slot. No cleanup occurs here: the classified
+        // historical entry remains durable for full later processing.
+        backgroundFreshDeepRpcStreak = 0;
+        backgroundDeepPreferredCausalClass = "fresh";
+        continue;
+      }
       if (result.value.observation) {
         const causalHead = await bindObservationCausalKeys(
           entry,
