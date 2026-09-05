@@ -4392,16 +4392,17 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     const host = hostForUrl(url);
     const address = getLogsFilterFromArgs(args)?.address;
     const addressScoped = Array.isArray(address) ? address.length > 0 : Boolean(address);
-    // Production probes show distinct public capabilities: BlockRazor is the
-    // only reliable topic-only source, while PublicNode is the fastest recent
-    // address-scoped source (and rejects archive ranges). Keep these priorities
-    // deterministic across round-robin rotations; circuits still provide the
-    // ordered fallback when the preferred physical host is cooling.
+    // Production probes show distinct public capabilities: 48.club serves
+    // exact topic-only and historical log ranges, while PublicNode is the
+    // fastest recent address-scoped source (and rejects archive ranges). Keep
+    // these priorities deterministic across round-robin rotations; circuits
+    // still provide ordered fallback when the preferred host is cooling.
     if (addressScoped && host.includes("publicnode.com")) return 0;
-    if (host.includes("blockrazor.xyz")) return addressScoped ? 1 : 0;
-    if (host.includes("blastapi.io")) return 2;
-    if (host.includes("blxrbdn.com")) return 4;
-    return 3;
+    if (host === "rpc.48.club") return addressScoped ? 1 : 0;
+    if (host.includes("blockrazor.xyz")) return addressScoped ? 2 : 1;
+    if (host.includes("blastapi.io")) return 3;
+    if (host.includes("blxrbdn.com")) return 5;
+    return 4;
   };
   const historicalObjectPreference = (url) => {
     const host = hostForUrl(url);

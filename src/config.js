@@ -369,15 +369,15 @@ export const config = {
     "https://bsc-dataseed.bnbchain.org",
     "https://bsc.rpc.blxrbdn.com",
   ].join(",")).split(",").map((value) => value.trim()).filter(Boolean),
-  // Keep blxrbdn first for historical transaction/receipt reads. Blast and
-  // BlockRazor are also the isolated realtime-tail pool; preferring the
-  // independent host prevents an old creation backlog from delaying fresh
-  // launch detection.
-  bscArchiveRpcUrls: (process.env.BSC_ARCHIVE_RPC_URLS || "https://bsc.rpc.blxrbdn.com,https://bsc-mainnet.public.blastapi.io,https://bsc.blockrazor.xyz").split(",").map((value) => value.trim()).filter(Boolean),
+  // Keep blxrbdn first for historical transaction/receipt reads. The log
+  // router independently prefers 48.club for exact ranges; using separate
+  // object/log priorities prevents an old creation backlog from delaying
+  // fresh launch detection.
+  bscArchiveRpcUrls: (process.env.BSC_ARCHIVE_RPC_URLS || "https://bsc.rpc.blxrbdn.com,https://rpc.48.club,https://bsc-mainnet.public.blastapi.io,https://bsc.blockrazor.xyz").split(",").map((value) => value.trim()).filter(Boolean),
   bscArchiveConcurrency: integer("BSC_ARCHIVE_CONCURRENCY", 12),
   bscRpcConcurrency: integer("BSC_RPC_CONCURRENCY", 12),
   bscRpcRequestTimeoutMs: integer("BSC_RPC_REQUEST_TIMEOUT_MS", 7_000),
-  bscRealtimeRpcUrls: (process.env.BSC_REALTIME_RPC_URLS || "https://bsc-mainnet.public.blastapi.io,https://bsc.blockrazor.xyz,https://bsc-rpc.publicnode.com,https://bsc.rpc.blxrbdn.com").split(",").map((value) => value.trim()).filter(Boolean),
+  bscRealtimeRpcUrls: (process.env.BSC_REALTIME_RPC_URLS || "https://rpc.48.club,https://bsc.blockrazor.xyz,https://bsc-rpc.publicnode.com,https://bsc-mainnet.public.blastapi.io,https://bsc.rpc.blxrbdn.com").split(",").map((value) => value.trim()).filter(Boolean),
   bscRealtimeRpcConcurrency: integer("BSC_REALTIME_RPC_CONCURRENCY", 4),
   bscRealtimeRpcRequestTimeoutMs: integer("BSC_REALTIME_RPC_REQUEST_TIMEOUT_MS", 4_000),
   bscWsUrl: process.env.BSC_WS_URL || "wss://bsc-rpc.publicnode.com",

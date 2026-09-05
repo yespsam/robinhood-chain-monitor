@@ -2458,6 +2458,7 @@ test("getLogs routing keeps filter-aware provider priority across rotations", as
     "https://bsc-mainnet.public.blastapi.io",
     "https://bsc-rpc.publicnode.com",
     "https://bsc.blockrazor.xyz",
+    "https://rpc.48.club",
     "https://bsc.rpc.blxrbdn.com",
   ], [], 1, {
     providerFactory: (url) => ({
@@ -2479,11 +2480,11 @@ test("getLogs routing keeps filter-aware provider priority across rotations", as
     address: Array.from({ length: 9 }, (_, index) => `0x${(index + 1).toString(16).padStart(40, "0")}`),
   }]);
   assert.deepEqual(calls, [
-    "bsc.blockrazor.xyz",
-    "bsc.blockrazor.xyz",
+    "rpc.48.club",
+    "rpc.48.club",
     "bsc-rpc.publicnode.com",
     "bsc-rpc.publicnode.com",
-    "bsc.blockrazor.xyz",
+    "rpc.48.club",
   ]);
   pool.destroy();
 });
@@ -2492,15 +2493,15 @@ test("a recovered preferred getLogs host is probed ahead of a healthy fallback",
   const address = "0x1111111111111111111111111111111111111111";
   for (const scenario of [
     {
-      name: "unscoped BlockRazor",
-      preferred: "bsc.blockrazor.xyz",
-      fallback: "bsc-mainnet.public.blastapi.io",
+      name: "unscoped 48.club",
+      preferred: "rpc.48.club",
+      fallback: "bsc.blockrazor.xyz",
       filter: { fromBlock: "0x1", toBlock: "0x1" },
     },
     {
       name: "scoped PublicNode",
       preferred: "bsc-rpc.publicnode.com",
-      fallback: "bsc.blockrazor.xyz",
+      fallback: "rpc.48.club",
       filter: { address, fromBlock: "0x1", toBlock: "0x1" },
     },
   ]) {
@@ -2511,6 +2512,7 @@ test("a recovered preferred getLogs host is probed ahead of a healthy fallback",
       "https://bsc-mainnet.public.blastapi.io",
       "https://bsc-rpc.publicnode.com",
       "https://bsc.blockrazor.xyz",
+      "https://rpc.48.club",
       "https://bsc.rpc.blxrbdn.com",
     ], [], 1, {
       now: () => clock,
@@ -2563,11 +2565,11 @@ test("a recovered preferred getLogs host is probed ahead of a healthy fallback",
   worsePool.destroy();
 });
 
-test("historical getLogs keeps PublicNode disabled and uses archive BlockRazor first", async () => {
+test("historical getLogs keeps PublicNode disabled and uses archive 48.club first", async () => {
   const calls = [];
   const pool = createRpcPool(
     ["https://bsc-rpc.publicnode.com", "https://bsc-mainnet.public.blastapi.io"],
-    ["https://bsc.blockrazor.xyz"],
+    ["https://bsc.blockrazor.xyz", "https://rpc.48.club"],
     1,
     {
       allowPublicNodeLogs: false,
@@ -2585,7 +2587,7 @@ test("historical getLogs keeps PublicNode disabled and uses archive BlockRazor f
     fromBlock: "0x64",
     toBlock: "0x64",
   }]);
-  assert.deepEqual(calls, ["archive:bsc.blockrazor.xyz"]);
+  assert.deepEqual(calls, ["archive:rpc.48.club"]);
   assert.equal(calls.some((call) => call.includes("publicnode")), false);
   pool.destroy();
 });
@@ -7470,11 +7472,32 @@ test("production focus3 defaults recover at least 600 near-head blocks in ten fa
     journalClearTimeoutImpl() {},
   });
 
+  const settleScheduler = async () => {
+    let previousSignature = null;
+    for (let turn = 0; turn < 1_000; turn += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+      if (activePhysicalLogs > 0 || activeLowLogs > 0) {
+        previousSignature = null;
+        continue;
+      }
+      const current = await monitor.getState();
+      const pendingGap = current.nearHeadRecoveryGaps.find((item) => item.id === "realtime-tail-gap:1000:9999");
+      const signature = JSON.stringify([
+        current.realtimeTailNextBlock,
+        current.lastFinalizedBlock,
+        pendingGap?.nextBlock || null,
+        current._health?.realtimeTail?.status || null,
+      ]);
+      if (signature === previousSignature) return;
+      previousSignature = signature;
+    }
+    assert.fail("production scheduler did not settle before the next fake-clock tick");
+  };
   await monitor.start();
-  for (let turn = 0; turn < 5; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+  await settleScheduler();
   for (let elapsed = 1_000; elapsed <= 600_000; elapsed += 1_000) {
     t.mock.timers.tick(1_000);
-    for (let turn = 0; turn < 100; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+    await settleScheduler();
   }
   let snapshot;
   for (let turn = 0; turn < 2_000; turn += 1) {

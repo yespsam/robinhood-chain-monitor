@@ -167,8 +167,8 @@ FlyPad 使用 `llms.txt` 与 Markdown 页面监控文档目录、AI/匿名发行
 ```env
 BSC_MONITOR_ENABLED=true
 BSC_RPC_URLS=https://bsc-rpc.publicnode.com,https://bsc-dataseed.nariox.org,https://bsc-dataseed.defibit.io,https://bsc-dataseed.ninicoin.io,https://bsc.nodereal.io,https://bsc-dataseed-public.bnbchain.org,https://bsc-dataseed.bnbchain.org,https://bsc.rpc.blxrbdn.com
-BSC_ARCHIVE_RPC_URLS=https://bsc-mainnet.public.blastapi.io,https://bsc.blockrazor.xyz
-BSC_REALTIME_RPC_URLS=https://bsc-mainnet.public.blastapi.io,https://bsc.blockrazor.xyz,https://bsc-rpc.publicnode.com,https://bsc.rpc.blxrbdn.com
+BSC_ARCHIVE_RPC_URLS=https://bsc.rpc.blxrbdn.com,https://rpc.48.club,https://bsc-mainnet.public.blastapi.io,https://bsc.blockrazor.xyz
+BSC_REALTIME_RPC_URLS=https://rpc.48.club,https://bsc.blockrazor.xyz,https://bsc-rpc.publicnode.com,https://bsc-mainnet.public.blastapi.io,https://bsc.rpc.blxrbdn.com
 BSC_REALTIME_RPC_CONCURRENCY=4
 BSC_REALTIME_RPC_REQUEST_TIMEOUT_MS=4000
 BSC_WS_URL=wss://bsc-rpc.publicnode.com
