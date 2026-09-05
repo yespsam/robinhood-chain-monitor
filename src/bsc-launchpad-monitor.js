@@ -5809,7 +5809,14 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     const hasSla = eligibility.realtime.sla.length > 0 || eligibility.deferred.sla.length > 0;
     const hasFresh = eligibility.realtime.fresh.length > 0 || eligibility.deferred.fresh.length > 0;
     const hasDependency = eligibility.realtime.dependency.length > 0
-      || eligibility.deferred.dependency.length > 0;
+      || eligibility.deferred.dependency.length > 0
+      // Receipt-only classification is safe before a record becomes the head
+      // of every conservative causal group: it cannot alert, mark seen or
+      // delete the durable candidate. Treat that proof as dependency work so
+      // one exact head in local backoff cannot freeze classification for all
+      // unrelated new pools.
+      || eligibility.realtime.classification.length > 0
+      || eligibility.deferred.classification.length > 0;
     const hasOld = eligibility.realtime.old.length > 0 || eligibility.deferred.old.length > 0;
     if (hasSla) return "sla";
     if (!hasFresh && !hasDependency && !hasOld) return null;
@@ -5835,8 +5842,20 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   };
 
   const backgroundDeepLane = (eligibility, workClass) => {
-    const realtimeReady = eligibility.realtime[workClass]?.length > 0;
-    const deferredReady = eligibility.deferred[workClass]?.length > 0;
+    if (workClass === "dependency") {
+      const realtimeDependencyReady = eligibility.realtime.dependency.length > 0;
+      const deferredDependencyReady = eligibility.deferred.dependency.length > 0;
+      if (realtimeDependencyReady || deferredDependencyReady) {
+        if (realtimeDependencyReady && deferredDependencyReady) {
+          return backgroundDeepPreferredLane.dependency;
+        }
+        return realtimeDependencyReady ? "realtime" : "deferred";
+      }
+    }
+    const realtimeReady = eligibility.realtime[workClass]?.length > 0
+      || (workClass === "dependency" && eligibility.realtime.classification.length > 0);
+    const deferredReady = eligibility.deferred[workClass]?.length > 0
+      || (workClass === "dependency" && eligibility.deferred.classification.length > 0);
     if (realtimeReady && deferredReady) {
       if (workClass === "sla") {
         const effectiveDeadline = (entry) => Math.min(
@@ -13666,8 +13685,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         const dependencyHead = workClass === "dependency"
           ? eligibility.deferred.dependency[0]
           : null;
-        classificationBatch = Boolean(dependencyHead && classificationCandidates
-          .some((entry) => entry.transactionHash === dependencyHead.transactionHash));
+        classificationBatch = Boolean(classificationCandidates.length > 0
+          && (!dependencyHead || classificationCandidates
+            .some((entry) => entry.transactionHash === dependencyHead.transactionHash)));
         due = (classificationBatch
           ? classificationCandidates.slice(0, BSC_CAUSAL_CLASSIFICATION_BATCH_SIZE)
           : eligibility.deferred[workClass].slice(0, 1))
@@ -14828,8 +14848,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         const dependencyHead = workClass === "dependency"
           ? eligibility.realtime.dependency[0]
           : null;
-        classificationBatch = Boolean(dependencyHead && classificationCandidates
-          .some((entry) => entry.transactionHash === dependencyHead.transactionHash));
+        classificationBatch = Boolean(classificationCandidates.length > 0
+          && (!dependencyHead || classificationCandidates
+            .some((entry) => entry.transactionHash === dependencyHead.transactionHash)));
         queuedEntries = classificationBatch
           ? classificationCandidates.slice(0, BSC_CAUSAL_CLASSIFICATION_BATCH_SIZE)
           : eligibility.realtime[workClass].slice(0, 1);

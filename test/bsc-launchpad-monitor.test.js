@@ -8435,6 +8435,11 @@ test("a durable exact receipt classification advances to full proof after restar
   const freshHash = `0x${"73".repeat(32)}`;
   const oldBlockHash = `0x${"74".repeat(32)}`;
   const freshBlockHash = `0x${"75".repeat(32)}`;
+  const blockedBroadRecords = Array.from({ length: 4 }, (_, index) => ({
+    transactionHash: `0x${(0x7b + index).toString(16).padStart(2, "0").repeat(32)}`,
+    blockHash: `0x${(0x81 + index).toString(16).padStart(2, "0").repeat(32)}`,
+    blockNumber: 101 + index,
+  }));
   const launcher = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
   const token = "0x7611111111111111111111111111111111111111";
   const creator = "0x7722222222222222222222222222222222222222";
@@ -8498,6 +8503,16 @@ test("a durable exact receipt classification advances to full proof after restar
       to: trigger,
       data: "0x",
     }],
+    ...blockedBroadRecords.map((record) => [record.transactionHash, {
+      hash: record.transactionHash,
+      blockNumber: record.blockNumber,
+      blockHash: record.blockHash,
+      index: 1,
+      transactionIndex: 1,
+      from: creator,
+      to: launcher,
+      data: "0x",
+    }]),
   ]);
   const receiptByHash = new Map([
     [oldHash, {
@@ -8520,6 +8535,16 @@ test("a durable exact receipt classification advances to full proof after restar
       status: 1,
       logs: [],
     }],
+    ...blockedBroadRecords.map((record) => [record.transactionHash, {
+      hash: record.transactionHash,
+      transactionHash: record.transactionHash,
+      blockNumber: record.blockNumber,
+      blockHash: record.blockHash,
+      index: 1,
+      transactionIndex: 1,
+      status: 1,
+      logs: [],
+    }]),
   ]);
   const deferred = (transactionHash, blockNumber, blockHash, extra = {}) => ({
     transactionHash,
@@ -8549,15 +8574,42 @@ test("a durable exact receipt classification advances to full proof after restar
     lastError: "waiting for canonical classification",
     ...extra,
   });
+  const pending = (transactionHash, blockNumber, blockHash, extra = {}) => {
+    const record = deferred(transactionHash, blockNumber, blockHash, extra);
+    for (const field of [
+      "deferredKind", "attempts", "firstDeferredAt", "lastAttemptAt", "nextAttemptAt", "lastError",
+    ]) delete record[field];
+    return record;
+  };
+  const remainingBroad = blockedBroadRecords.at(-1);
   await fs.writeFile(stateFile, JSON.stringify({
     version: 6,
     initializedAt: new Date(clock - 2 * 60 * 60_000).toISOString(),
     lastFinalizedBlock: head - 2,
     realtimeTailNextBlock: head - 1,
     realtimeTailInitializedAt: new Date(clock - 60_000).toISOString(),
-    realtimePendingEntries: {},
+    realtimePendingEntries: {
+      [remainingBroad.transactionHash]: pending(
+        remainingBroad.transactionHash,
+        remainingBroad.blockNumber,
+        remainingBroad.blockHash,
+        {
+          causalBarrierKeys: [causalKey, "feature:quote:unrelated-classification-group-3"],
+          candidateTokens: [token],
+          verifiedNewContracts: [token],
+        },
+      ),
+    },
     deferredCreationEvidence: {
       [oldHash]: deferred(oldHash, 100, oldBlockHash),
+      ...Object.fromEntries(blockedBroadRecords.slice(0, -1).map((record, index) => [
+        record.transactionHash,
+        deferred(record.transactionHash, record.blockNumber, record.blockHash, {
+          causalBarrierKeys: [causalKey, `feature:quote:unrelated-classification-group-${index}`],
+          candidateTokens: [token],
+          verifiedNewContracts: [token],
+        }),
+      ])),
       [freshHash]: deferred(freshHash, head - 2, freshBlockHash),
     },
     nearHeadRecoveryGaps: [],
@@ -8612,9 +8664,23 @@ test("a durable exact receipt classification advances to full proof after restar
         timestamp: Math.floor(clock / 1_000),
         transactions: [`0x${"76".repeat(32)}`, freshHash],
       };
+      const blockedRecord = blockedBroadRecords.find((record) => record.blockNumber === Number(number));
+      if (blockedRecord) return {
+        number: blockedRecord.blockNumber,
+        hash: blockedRecord.blockHash,
+        timestamp: Math.floor((clock - 60 * 60_000
+          + ((blockedRecord.blockNumber - 100) * 1_000)) / 1_000),
+        transactions: [`0x${"80".repeat(32)}`, blockedRecord.transactionHash],
+      };
       return null;
     },
-    async getCode() { getCodeCalls += 1; return "0x6000"; },
+    async getCode() {
+      getCodeCalls += 1;
+      const error = new Error("simulated exact getCode method timeout");
+      error.rpcFailureScope = "method";
+      error.rpcOperation = "getCode";
+      throw error;
+    },
     async getStorage() { return "0x"; },
     async call() { return "0x"; },
     async send() { return []; },
@@ -8664,7 +8730,10 @@ test("a durable exact receipt classification advances to full proof after restar
   await completeRealtimeTailPasses(monitor, 2, 5_000);
   await monitor.retryDeferredCreationEvidence();
   let snapshot = await monitor.getState();
-  assert.deepEqual(deepOrder, [oldHash]);
+  assert.deepEqual(deepOrder, [
+    oldHash,
+    ...blockedBroadRecords.slice(0, 3).map((record) => record.transactionHash),
+  ]);
   assert.equal(getCodeCalls, 0, "the first lease performs strict receipt classification only");
   assert.deepEqual(snapshot.deferredCreationEvidence[oldHash].causalBarrierKeys, [causalKey]);
   assert.match(snapshot.deferredCreationEvidence[oldHash].causalReceiptClassificationDigest, /^[0-9a-f]{64}$/);
@@ -8678,7 +8747,7 @@ test("a durable exact receipt classification advances to full proof after restar
   await completeRealtimeTailPasses(monitor, 2, 5_000);
   await monitor.retryDeferredCreationEvidence();
   snapshot = await monitor.getState();
-  assert.equal(deepOrder[1], oldHash,
+  assert.equal(deepOrder[4], oldHash,
     "the durable exact causal head advances to full proof instead of being classified forever");
   assert.ok(getCodeCalls > 0, "the second lease reaches runtime proof for the exact candidate");
   assert.equal(deepOrder.includes(freshHash), false,
@@ -8686,6 +8755,24 @@ test("a durable exact receipt classification advances to full proof after restar
   assert.ok(snapshot.seenTransactions[oldHash]
     || snapshot.deferredCreationEvidence[oldHash]
     || snapshot.realtimePendingEntries[oldHash]);
+
+  const getCodeCallsAfterExactProof = getCodeCalls;
+  clock += 750;
+  await monitor.retryDeferredCreationEvidence();
+  assert.equal(deepOrder[5], blockedBroadRecords[0].transactionHash,
+    "the bounded old-work slot remains available after dependency proof");
+
+  const getCodeCallsAfterOldFairness = getCodeCalls;
+  clock += 750;
+  await monitor.processRealtimeQueue();
+  snapshot = await monitor.getState();
+  assert.equal(deepOrder[6], remainingBroad.transactionHash,
+    "proof-only classification continues across lanes while an earlier exact group head is in local backoff");
+  assert.equal(getCodeCallsAfterOldFairness, getCodeCallsAfterExactProof,
+    "the bounded old-work slot does not require unrelated runtime inspection in this fixture");
+  assert.equal(getCodeCalls, getCodeCallsAfterOldFairness,
+    "the non-head broad record performs canonical classification without runtime inspection");
+  assert.deepEqual(snapshot.realtimePendingEntries[remainingBroad.transactionHash].causalBarrierKeys, []);
 });
 
 test("focus3 background deep RPC preserves feature and first-three causal order across queue classes", async (t) => {
