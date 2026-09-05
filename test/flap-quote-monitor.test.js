@@ -579,6 +579,27 @@ test("first check establishes a silent finalized-head-plus-one baseline", async 
   assert.equal((await fs.stat(fixture.monitor.stateFile)).mode & 0o777, 0o600);
 });
 
+test("production defaults advance one exact 4096-block Flap quote range per catch-up cycle", async (t) => {
+  const provider = new FakeBscProvider();
+  const fixture = await harness(t, {
+    provider,
+    config: {
+      flapQuoteEventChunkSize: undefined,
+      flapQuoteMaxBlocksPerCycle: undefined,
+      flapQuoteLogMaxBlockSpan: undefined,
+    },
+  });
+  assert.equal((await fixture.monitor.check()).status, "baseline");
+  provider.head = 4_196;
+  const result = await fixture.monitor.check();
+  assert.equal(result.status, "healthy");
+  assert.equal(result.caughtUp, true);
+  assert.equal(result.cursor.anchorBlock, 4_194);
+  assert.equal(result.cursor.nextBlock, 4_195);
+  assert.equal(provider.getLogsCalls.length, 2, "each independent log reader uses one exact range request");
+  assert.ok(provider.getLogsCalls.every((filter) => filter.fromBlock === 99 && filter.toBlock === 4_194));
+});
+
 test("a pre-baseline RPC failure uses only volatile backoff and a restart baselines cleanly", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-quote-prebaseline-failure-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));

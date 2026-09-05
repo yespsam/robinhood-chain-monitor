@@ -44,8 +44,8 @@ const STATE_VERSION = 1;
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const DEFAULT_CONFIRMATIONS = 3;
 const DEFAULT_POLL_INTERVAL_MS = 3_000;
-const DEFAULT_CHUNK_SIZE = 25;
-const DEFAULT_MAX_BLOCKS_PER_CYCLE = 125;
+const DEFAULT_CHUNK_SIZE = 4_096;
+const DEFAULT_MAX_BLOCKS_PER_CYCLE = 4_096;
 const DEFAULT_PROCESSED_LIMIT = 2_000;
 const DEFAULT_CHECKPOINT_LIMIT = 128;
 const DEFAULT_AUDIT_LIMIT = 500;
@@ -1402,7 +1402,7 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
     "flapQuoteMaxBlocksPerCycle",
   ));
   const logMaxBlockSpan = Math.max(1, safeInteger(
-    config.flapQuoteLogMaxBlockSpan ?? 25,
+    config.flapQuoteLogMaxBlockSpan ?? 4_096,
     "flapQuoteLogMaxBlockSpan",
   ));
   const logConcurrency = Math.max(1, Math.min(32, safeInteger(
