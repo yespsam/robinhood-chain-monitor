@@ -1471,6 +1471,7 @@ test("warmed ordinary Flap and Four.Meme fingerprints use the conservative ident
 
 test("a warmed ordinary Flap receipt can verify only the controller before silent cleanup", async () => {
   const fixture = knownOfficialFastFixture({ platformId: "flap" });
+  const identityCache = new Map();
   const matched = await matchKnownOfficialFastMode({
     provider: fixture.provider,
     state: fixture.state,
@@ -1479,11 +1480,29 @@ test("a warmed ordinary Flap receipt can verify only the controller before silen
     blockTag: 101,
     descriptor: fixture.descriptor,
     warmedFingerprints: fixture.warmedFingerprints,
+    identityCache,
+    identityCacheBlockTag: 5_000,
+    preferLatestState: true,
     verifyTokenIdentity: false,
   });
   assert.deepEqual(matched, fixture.shape);
   assert.equal(fixture.getReads(), 3,
     "receipt-only cleanup verifies the controller proxy but never reads the ordinary token runtime");
+  assert.deepEqual(await matchKnownOfficialFastMode({
+    provider: fixture.provider,
+    state: fixture.state,
+    controller: fixture.controller,
+    token: fixture.token,
+    blockTag: 202,
+    descriptor: fixture.descriptor,
+    warmedFingerprints: fixture.warmedFingerprints,
+    identityCache,
+    identityCacheBlockTag: 5_001,
+    preferLatestState: true,
+    verifyTokenIdentity: false,
+  }), fixture.shape);
+  assert.equal(fixture.getReads(), 3,
+    "historical ordinary receipts in one live bucket reuse the upgrade-aware controller proof");
 });
 
 test("warmed official controller identity is shared for a short block bucket", async () => {
@@ -7927,6 +7946,9 @@ test("focus3 background deep RPC prioritizes delivery deadlines and fairly drain
     firstDeferredAt: new Date(clock - 1_000).toISOString(),
     nextAttemptAt: new Date(clock - 1).toISOString(),
   }));
+  const dependencyKey = "old-head-blocking-fresh-candidate";
+  oldQueue[1].featureActivationReplayKey = dependencyKey;
+  normalDeferred[0][1].featureActivationReplayKey = dependencyKey;
   await fs.writeFile(stateFile, JSON.stringify({
     version: 6,
     initializedAt: new Date(clock - 60_000).toISOString(),
@@ -8024,9 +8046,13 @@ test("focus3 background deep RPC prioritizes delivery deadlines and fairly drain
     "deadline-bound durable work outranks hundreds of normal fresh entries across both lanes");
   const queueOldIndex = deepOrder.indexOf(oldQueue[0]);
   const deferredOldIndex = deepOrder.indexOf(oldDeferred[0]);
-  assert.ok(queueOldIndex >= 2 && queueOldIndex <= 3, "fresh receives the first slot, then the first due old lane progresses");
-  assert.ok(deferredOldIndex > queueOldIndex && deferredOldIndex <= 43,
-    "the old-specific lane cursor reaches deferred work at the next 30-second quota despite forty fresh completions");
+  const dependencyDescendantIndex = deepOrder.indexOf(normalDeferred[0][0]);
+  assert.equal(queueOldIndex, 3,
+    "one unrelated fresh item runs before the old causal head that blocks a new candidate");
+  assert.equal(deferredOldIndex, 4,
+    "ordinary old work retains its bounded quota after both live classes receive a slot");
+  assert.equal(dependencyDescendantIndex, 5,
+    "the newly unblocked descendant follows its old causal head without waiting for another 30-second quota");
 });
 
 test("focus3 background deep RPC preserves feature and first-three causal order across queue classes", async (t) => {

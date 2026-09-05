@@ -3570,6 +3570,7 @@ export async function matchKnownOfficialFastMode({
   descriptor,
   warmedFingerprints,
   identityCache = null,
+  identityCacheBlockTag = blockTag,
   preferLatestState = false,
   verifyTokenIdentity = true,
 }) {
@@ -3613,7 +3614,8 @@ export async function matchKnownOfficialFastMode({
   });
   if (!candidates.length) return null;
 
-  const bucket = Math.floor(Number(blockTag) / 20);
+  const cacheBlockTag = Number(identityCacheBlockTag);
+  const bucket = Math.floor((Number.isSafeInteger(cacheBlockTag) ? cacheBlockTag : Number(blockTag)) / 20);
   const cachedController = identityCache instanceof Map ? identityCache.get(controllerAddress) : null;
   const controllerIdentityPromise = cachedController?.bucket === bucket
     ? cachedController.promise
@@ -5276,7 +5278,13 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   let backgroundDeepRpcNextAt = 0;
   let backgroundDeepHostRetryAt = 0;
   let backgroundOldDeepRpcNextAt = 0;
-  const backgroundDeepPreferredLane = { sla: "realtime", fresh: "realtime", old: "realtime" };
+  const backgroundDeepPreferredLane = {
+    sla: "realtime",
+    fresh: "realtime",
+    dependency: "realtime",
+    old: "realtime",
+  };
+  let backgroundDeepPreferredCausalClass = "fresh";
   let backgroundFreshDeepRpcStreak = 0;
   let deferredEvidenceWakeTimer = null;
   let deferredEvidenceWakeTimerDueAt = 0;
@@ -5548,8 +5556,8 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       capacityDependencyUnlock: false,
       effectiveSlaDeadlines: new Map(),
       priority,
-      realtime: { sla: [], fresh: [], old: [] },
-      deferred: { sla: [], fresh: [], old: [] },
+      realtime: { sla: [], fresh: [], dependency: [], old: [] },
+      deferred: { sla: [], fresh: [], dependency: [], old: [] },
     });
     // Tail health and the shared host circuit are complete gates. Walking and
     // sorting thousands of durable candidates while no deep read can start
@@ -5613,11 +5621,13 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     };
     const featureHeads = new Map();
     const causalGroupDeadlines = new Map();
+    const causalGroupsWithFreshWork = new Set();
     for (const entry of [...allQueued, ...allDeferredForDependencies]) {
       const metadata = metadataFor(entry);
       for (const key of metadata.keys) {
         const previous = featureHeads.get(key);
         if (!previous || compareBscQueueEntries(entry, previous) < 0) featureHeads.set(key, entry);
+        if (metadata.fresh) causalGroupsWithFreshWork.add(key);
         if (hasActiveSla(entry)) {
           causalGroupDeadlines.set(key, Math.min(
             causalGroupDeadlines.get(key) ?? Number.POSITIVE_INFINITY,
@@ -5641,6 +5651,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     );
     const hasEffectiveSla = (entry) => Number.isFinite(effectiveDeadline(entry))
       && effectiveDeadline(entry) > current;
+    const dependencyHeadTransactions = new Set();
+    for (const [key, head] of featureHeads) {
+      if (causalGroupsWithFreshWork.has(key) && !metadataFor(head).fresh) {
+        dependencyHeadTransactions.add(head.transactionHash);
+      }
+    }
     const compareEffectiveBackgroundEntries = (left, right) =>
       effectiveDeadline(left) - effectiveDeadline(right)
       || compareCachedBackgroundEntries(left, right);
@@ -5672,10 +5688,11 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         && !inFlightEntries.has(record.transactionHash))
       .sort(compareEffectiveBackgroundEntries);
     const partition = (entries) => {
-      const result = { sla: [], fresh: [], old: [] };
+      const result = { sla: [], fresh: [], dependency: [], old: [] };
       for (const entry of entries) {
         if (hasEffectiveSla(entry)) result.sla.push(entry);
         else if (metadataFor(entry).fresh) result.fresh.push(entry);
+        else if (dependencyHeadTransactions.has(entry.transactionHash)) result.dependency.push(entry);
         else result.old.push(entry);
       }
       return result;
@@ -5695,16 +5712,30 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   const backgroundDeepTarget = (eligibility) => {
     const hasSla = eligibility.realtime.sla.length > 0 || eligibility.deferred.sla.length > 0;
     const hasFresh = eligibility.realtime.fresh.length > 0 || eligibility.deferred.fresh.length > 0;
+    const hasDependency = eligibility.realtime.dependency.length > 0
+      || eligibility.deferred.dependency.length > 0;
     const hasOld = eligibility.realtime.old.length > 0 || eligibility.deferred.old.length > 0;
     if (hasSla) return "sla";
-    if (!hasFresh && !hasOld) return null;
+    if (!hasFresh && !hasDependency && !hasOld) return null;
     const oldDue = eligibility.current >= backgroundOldDeepRpcNextAt;
-    // Fresh work always receives the first slot. Once at least one fresh item
-    // has run, an already-due old item receives the next slot. With a durable
-    // repair gap that old slot is shared by both lanes only once per 30s;
-    // without gaps it alternates at the normal 750ms cadence.
-    if (hasFresh && (!hasOld || !oldDue || backgroundFreshDeepRpcStreak === 0)) return "fresh";
-    return hasOld && oldDue ? "old" : hasFresh ? "fresh" : null;
+    // An old causal head that blocks a fresh descendant is not ordinary old
+    // backlog: leaving it on the 30-second gap quota also leaves every new CA
+    // behind it unreachable. Alternate natural fresh work with those exact
+    // dependency heads, while retaining the bounded old slot for unrelated
+    // historical work. Causal-head filtering still prevents overtaking.
+    if (hasFresh && hasDependency) {
+      if (hasOld && oldDue && backgroundFreshDeepRpcStreak >= 2) return "old";
+      return backgroundDeepPreferredCausalClass === "dependency" ? "dependency" : "fresh";
+    }
+    if (hasFresh) {
+      if (hasOld && oldDue && backgroundFreshDeepRpcStreak > 0) return "old";
+      return "fresh";
+    }
+    if (hasDependency) {
+      if (hasOld && oldDue && backgroundFreshDeepRpcStreak > 0) return "old";
+      return "dependency";
+    }
+    return hasOld && oldDue ? "old" : null;
   };
 
   const backgroundDeepLane = (eligibility, workClass) => {
@@ -5756,9 +5787,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     if (workClass === "old" && snapshot.current < backgroundOldDeepRpcNextAt) return null;
     backgroundDeepRpcInFlight = true;
     backgroundDeepRpcNextAt = snapshot.current + BSC_DEEP_RPC_PACE_MS;
-    if (workClass === "fresh" || workClass === "sla") backgroundFreshDeepRpcStreak += 1;
-    else {
+    if (workClass === "fresh" || workClass === "dependency") {
+      backgroundFreshDeepRpcStreak += 1;
+      backgroundDeepPreferredCausalClass = workClass === "fresh" ? "dependency" : "fresh";
+    } else if (workClass === "old") {
       backgroundFreshDeepRpcStreak = 0;
+      backgroundDeepPreferredCausalClass = "fresh";
       backgroundOldDeepRpcNextAt = snapshot.current + snapshot.priority.oldDeepIntervalMs;
     }
     let released = false;
@@ -11860,7 +11894,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         descriptor: modeDescriptor,
         warmedFingerprints: warmedKnownOfficialModes,
         identityCache: officialControllerIdentityCache,
-        preferLatestState: preferLatestOfficialState,
+        identityCacheBlockTag: Math.max(currentHead, profileBlock),
+        // This branch never emits an alert and falls back to the full exact
+        // profile on any current-controller mismatch. Reading the controller
+        // at latest lets historical ordinary receipts share one upgrade-aware
+        // cache bucket instead of repeatedly probing public archive state.
+        preferLatestState: true,
         verifyTokenIdentity: false,
       });
       if (knownControllerShape) return null;
@@ -15724,8 +15763,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     backgroundDeepHostRetryAt = 0;
     backgroundOldDeepRpcNextAt = 0;
     backgroundFreshDeepRpcStreak = 0;
+    backgroundDeepPreferredCausalClass = "fresh";
     backgroundDeepPreferredLane.sla = "realtime";
     backgroundDeepPreferredLane.fresh = "realtime";
+    backgroundDeepPreferredLane.dependency = "realtime";
     backgroundDeepPreferredLane.old = "realtime";
     httpHeadTimer = null;
     officialPollTimer = null;
