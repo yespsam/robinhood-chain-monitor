@@ -9172,6 +9172,13 @@ test("a slow focus3 low request overlaps an actual tail range but serializes the
   assert.equal((await monitor.scanRealtimeTail()).skipped, false);
   assert.equal((await monitor.scanRealtimeTail()).skipped, false);
 
+  head = 113;
+  await monitor.checkHttpHead();
+  let snapshot = await monitor.getState();
+  assert.equal(snapshot.realtimeTailNextBlock, 101);
+  assert.equal(head - 2 - snapshot.realtimeTailNextBlock + 1, 11,
+    "a moving BSC head may remain inside the healthy twenty-block tail window without becoming exactly caught up");
+
   clock += 60_000;
   const firstLow = monitor.scanNearHeadRecovery();
   await lowStarted;
@@ -9179,17 +9186,17 @@ test("a slow focus3 low request overlaps an actual tail range but serializes the
   assert.equal(physicalCalls.filter((call) => call.lane === "low").length, 1,
     "a blocked low filter owns the only low-range request");
 
-  head = 105;
+  head = 116;
   await monitor.checkHttpHead();
   const overlappingTail = await monitor.scanRealtimeTail();
   assert.deepEqual({ fromBlock: overlappingTail.fromBlock, toBlock: overlappingTail.toBlock }, {
     fromBlock: 101,
-    toBlock: 103,
+    toBlock: 114,
   });
-  let snapshot = await monitor.getState();
-  assert.equal(snapshot.realtimeTailNextBlock, 104, "the actual tail range commits while one low filter is blocked");
+  snapshot = await monitor.getState();
+  assert.equal(snapshot.realtimeTailNextBlock, 115, "the actual tail range commits while one low filter is blocked");
   assert.equal(snapshot.nearHeadRecoveryGaps[0].nextBlock, 60);
-  assert.ok(physicalCalls.some((call) => call.lane === "tail" && call.fromBlock === 101 && call.toBlock === 103));
+  assert.ok(physicalCalls.some((call) => call.lane === "tail" && call.fromBlock === 101 && call.toBlock === 114));
   assert.ok(maximumPhysicalLogs <= 2,
     `the shared physical host never exceeds tail+low concurrency two, observed ${maximumPhysicalLogs}`);
   const lowCallsWhileBlocked = physicalCalls.filter((call) => call.lane === "low").length;

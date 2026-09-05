@@ -5476,11 +5476,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
 
   const lowLogRecoveryReady = () => {
     if (!focus3ChainScope) return true;
-    const confirmed = Math.max(0, currentHead - (config.bscConfirmations ?? 2));
     return !realtimeTailRunning
       && !lowLogTailRefreshRequired
-      && currentDeepRpcPriority().tailReady
-      && Number(state?.realtimeTailNextBlock) > confirmed;
+      && currentDeepRpcPriority().tailReady;
   };
 
   const acquireLowLogRecovery = (owner) => {
@@ -14235,8 +14233,8 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     const realtimeTailBehind = Number(state.realtimeTailNextBlock) <= confirmed;
     if (focus3ChainScope && started && !lowLogRecoveryReady()) {
       // Full-history reads share every physical host used by the isolated
-      // realtime pool. It gets one request only after the tail is exactly
-      // caught up and has produced two consecutive healthy batches.
+      // realtime pool. It gets one request only after the tail is inside the
+      // bounded live window and has produced two consecutive healthy batches.
       scheduleRealtimeTail();
       scheduleCoverage(BSC_DEEP_RPC_PACE_MS);
       return;
