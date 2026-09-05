@@ -22,7 +22,7 @@ import {
   isStrictFourRegistryFirstTokenUpdate,
 } from "./source-controls.js";
 
-export const BILINGUAL_RENDER_VERSION = 23;
+export const BILINGUAL_RENDER_VERSION = 24;
 const MAX_CARD_LINES = 2;
 const MAX_LINE_LENGTH = 230;
 const MAX_DISPLAY_LINE_LENGTH = 138;
@@ -740,10 +740,10 @@ function renderFlapTrackedPoolTokenLines(focusModel, language = "zh") {
   const tokenLabel = details.tokenLabel || (zh ? "未命名代币" : "Unnamed token");
   const safetyDecision = details.security === "pass"
     ? (zh
-        ? "观察；静态初筛通过，可卖性仍待验证"
-        : "Watch; static screening passed; sellability still unverified")
+        ? "观察｜静态初筛通过；可卖性仍待验证｜非买入建议"
+        : "Watch | static screening passed; sellability unverified | not a buy signal")
     : details.security === "block"
-      ? (zh ? "⛔ 不买；安全门已拦截" : "⛔ Do not buy; safety gate blocked")
+      ? (zh ? "⛔ 安全门已拦截｜不买" : "⛔ Safety gate blocked | do not buy")
       : (zh ? "安全未完成｜不买" : "Safety incomplete | do not buy");
   const delayPrefix = details.delayKind === "delivery"
     ? (zh ? "延迟送达｜勿追价" : "Delayed delivery | do not chase")
@@ -760,18 +760,20 @@ function renderFlapTrackedPoolTokenLines(focusModel, language = "zh") {
   const time = localizedCstTime(focusModel?.time?.[language], language);
   return zh
     ? [
-        `平台：Flap｜${details.quoteSymbol} 底池｜第 ${details.ordinal}/${details.target} 个代币`,
-        `代币：${tokenLabel}｜CA ${details.token}`,
-        `结论：${decision}`,
-        `确认：官方 TokenCreated + ${details.quoteSymbol} 配对`,
-        `风险/时间：${details.delayKind ? "勿追价｜" : ""}非自动交易｜${time}`,
+        `平台：Flap｜${details.quoteSymbol} 新底池｜前三个 CA｜${details.ordinal}/${details.target}`,
+        `状态：${decision}`,
+        `CA：${details.token}`,
+        `代币：${tokenLabel}`,
+        `链上：官方 TokenCreated｜报价资产 ${details.quoteSymbol}`,
+        `时间：${time}｜非自动交易`,
       ]
     : [
-        `Platform: Flap | ${details.quoteSymbol} pool | Token ${details.ordinal}/${details.target}`,
-        `Token: ${tokenLabel} | CA ${details.token}`,
-        `Decision: ${decision}`,
-        `Proof: Official TokenCreated + ${details.quoteSymbol} pair`,
-        `Risk/Time: ${details.delayKind ? "Do not chase | " : ""}No automatic trading | ${time}`,
+        `Platform: Flap | ${details.quoteSymbol} new pool | first 3 CAs | ${details.ordinal}/${details.target}`,
+        `Status: ${decision}`,
+        `CA: ${details.token}`,
+        `Token: ${tokenLabel}`,
+        `On-chain: Official TokenCreated | quote asset ${details.quoteSymbol}`,
+        `Time: ${time} | no automatic trading`,
       ];
 }
 
@@ -3215,8 +3217,8 @@ function focusStage(event, language = "zh", sourceStatus = "") {
         : `Delayed recovery after disconnect · ${lag} · original Portal receipt and ERC-20 metadata verified`;
     }
     if (flapQuote.onchain) return zh
-      ? "Portal 交易回执与 ERC-20 元数据已核验；后续播报该池第1–3个代币CA"
-      : "Portal receipt and ERC-20 metadata verified; next: report token CAs #1–#3 from this pool";
+      ? "Portal 交易回执与 ERC-20 元数据已核验；已建立跟踪窗口，后续仅播报该池 CA 1/3、2/3、3/3"
+      : "Portal receipt and ERC-20 metadata verified; tracking opened: only CA 1/3, 2/3, and 3/3 will be reported for this pool";
     if (flapQuote.board && flapQuote.stage === "observed") return zh
       ? "Flap 官方看板首次确认观察到报价资产；名称/符号已解析，Portal 0→1 待确认"
       : "Flap official Board first confirmed the quote asset; name/symbol resolved, Portal 0→1 pending";
@@ -3494,7 +3496,7 @@ function buildFocusModel(event, changeModel, sourceLines, tradingPriority, showP
             : flapQuoteDetails.delayedRecovery
             ? `断线恢复补报 · ${flapRecoveryLagSummary(flapQuoteDetails, "zh")} · 原始 Portal 回执已核验`
             : flapQuoteDetails.onchain
-            ? "Portal 回执 + ERC-20 元数据已核验；后续播报该池第1–3个代币CA"
+            ? "Portal 回执 + ERC-20 元数据已核验；已建立跟踪窗口，后续仅播报该池 CA 1/3、2/3、3/3"
             : flapQuoteDetails.board && flapQuoteDetails.stage === "observed"
               ? "官方看板首次确认观察到报价资产 + 名称/符号已解析；Portal 0→1 待确认"
             : flapQuoteDetails.board && flapQuoteDetails.stage === "live"
@@ -3505,7 +3507,7 @@ function buildFocusModel(event, changeModel, sourceLines, tradingPriority, showP
             : flapQuoteDetails.delayedRecovery
             ? `Delayed recovery · ${flapRecoveryLagSummary(flapQuoteDetails, "en")} · original Portal receipt verified`
             : flapQuoteDetails.onchain
-            ? "Portal receipt + ERC-20 metadata verified; next: report token CAs #1–#3 from this pool"
+            ? "Portal receipt + ERC-20 metadata verified; tracking opened: only CA 1/3, 2/3, and 3/3 will be reported for this pool"
             : flapQuoteDetails.board && flapQuoteDetails.stage === "observed"
               ? "Official Board first confirmed the quote asset + name/symbol resolved; Portal 0→1 pending"
             : flapQuoteDetails.board && flapQuoteDetails.stage === "live"
@@ -4388,7 +4390,7 @@ export async function buildBilingualAlertBundle(config, event, baseMessage) {
 
   return {
     version: BILINGUAL_RENDER_VERSION,
-    format: "telegram_zh_en_compact_v13",
+    format: "telegram_zh_en_compact_v14",
     ...(event?.type === "telegram_news_update" ? { eventType: event.type } : {}),
     sourceHash,
     generatedAt: new Date().toISOString(),
@@ -4492,7 +4494,7 @@ export function renderBilingualTelegramText(bundle, strong = false) {
         `${zh ? "机制：" : "Mechanism: "}${fourMeme.partnerHandle ? `@${fourMeme.partnerHandle}｜` : ""}${zh ? "交易税分成→Lista 收益产品" : "trading-tax share→Lista yield products"}`,
         `${zh ? `毕业：流动性默认迁移 ${fourMeme.destination}${fourMeme.holderYield ? "｜符合条件持有人获持续收益" : ""}`
           : `Graduation: liquidity defaults to ${fourMeme.destination}${fourMeme.holderYield ? " | ongoing yield for eligible holders" : ""}`}`,
-        `${zh ? "结论：平台级催化；等待首个 TokenCreated CA，再做安全检查" : "Decision: platform catalyst; await the first TokenCreated CA, then run safety checks"}`,
+        `${zh ? "结论：仅模式公告，暂无 CA；链上启用后再播报首个 TokenCreated CA，并做安全检查" : "Decision: mode announcement only; no CA yet; report the first TokenCreated CA after activation, then run safety checks"}`,
         `${zh ? "来源：" : "Source: "}${source}`,
         ...riskTime,
       ].join("\n");
@@ -4518,7 +4520,7 @@ export function renderBilingualTelegramText(bundle, strong = false) {
         `${zh ? "平台：" : "Platform: "}Four.Meme｜${fourMeme.name} ${zh ? "模板" : "template"}${prioritySuffix}`,
         `${zh ? "事件：" : "Event: "}${fourTemplateAction(fourMeme.changeType, language)}`,
         `${zh ? "变化：" : "Change: "}${change}`,
-        `${zh ? "结论：结构性更新；等待链上启用及首个 TokenCreated CA，再做安全检查" : "Decision: structural update; await on-chain activation and the first TokenCreated CA, then run safety checks"}`,
+        `${zh ? "结论：仅模板更新，暂无 CA；等待链上启用及首个 TokenCreated CA，再做安全检查" : "Decision: template update only; no CA yet; await on-chain activation and the first TokenCreated CA, then run safety checks"}`,
         `${zh ? "来源：" : "Source: "}${source}`,
         `${zh ? "风险/时间：非自动交易｜" : "Risk/Time: no automatic trading | "}${time}`,
       ].join("\n");
@@ -4550,11 +4552,11 @@ export function renderBilingualTelegramText(bundle, strong = false) {
       const presetHeadline = fourRegistryPresetHeadline(fourMeme);
       const directSnapshot = fourMeme.snapshotScope === "canonical_event_status_plus_block_end_metadata";
       return [
-        `${zh ? "平台：" : "Platform: "}Four.Meme｜${recovery ? `${recovery}｜` : ""}OpenFour Registry${prioritySuffix}`,
+        `${zh ? "平台：" : "Platform: "}Four.Meme｜${recovery ? `${recovery}｜` : ""}OpenFour Registry ${zh ? "能力更新" : "capability update"}${prioritySuffix}`,
         `${zh ? "模式：" : "Mode: "}${presetHeadline}${directSnapshot ? `｜Preset ${fourMeme.presetId}` : ""}`,
         `${zh ? "事件：" : "Event: "}${fourRegistryAction(fourMeme.changeType, language)}｜${fourRegistryStatus(fourMeme, language)}`,
         attribution,
-        `${zh ? "结论：官方链上能力变更；等待该能力启用后的首个代币 CA（安全性另行核验）" : "Decision: official on-chain capability change; await its first token CA after activation (verify safety separately)"}`,
+        `${zh ? "结论：仅确认 Registry 能力变更，暂无代币 CA；启用后再播报首个 TokenCreated CA（安全另行核验）" : "Decision: Registry capability change only; no token CA yet; report the first TokenCreated CA after activation (verify safety separately)"}`,
         `${zh ? "证明：" : "Proof: "}${fourMeme.explorerUrl || (zh ? "BNB Chain finalized 状态" : "BNB Chain finalized state")}`,
         `${zh ? "风险/时间：" : "Risk/Time: "}${fourRegistryRiskTime(fourMeme, time, language)}`,
       ].filter(Boolean).join("\n");
@@ -4603,12 +4605,12 @@ export function renderBilingualTelegramText(bundle, strong = false) {
       const attribution = fourRegistrySnapshotQualifier(fourMeme, language, { firstToken: true });
       const presetHeadline = fourRegistryPresetHeadline(fourMeme, { firstToken: true });
       return [
-        `${zh ? "平台：" : "Platform: "}Four.Meme｜${recovery ? `${recovery}｜` : ""}${presetHeadline}${zh ? " 首个代币" : " first token"}${prioritySuffix}`,
-        `${zh ? "代币：" : "Token: "}${fourMeme.tokenName} (${fourMeme.tokenSymbol})｜CA ${fourMeme.tokenAddress || (zh ? "待解析" : "unresolved")}`,
-        `${zh ? "确认：官方 Core TokenCreated｜Preset " : "Proof: official Core TokenCreated | Preset "}${fourMeme.presetId}`,
+        `${zh ? "平台：" : "Platform: "}Four.Meme｜${presetHeadline}｜${zh ? "首个 CA" : "first CA"}${prioritySuffix}`,
+        `${zh ? "状态：" : "Status: "}${recovery ? `${recovery}${zh ? "｜" : " | "}` : ""}${zh ? "链上归属已确认；安全未完成｜不买" : "on-chain provenance confirmed; safety incomplete | do not buy"}`,
+        `CA${zh ? "：" : ": "}${fourMeme.tokenAddress || (zh ? "待解析" : "unresolved")}`,
+        `${zh ? "代币：" : "Token: "}${fourMeme.tokenName} (${fourMeme.tokenSymbol})`,
+        `${zh ? "链上：官方 Core TokenCreated｜Preset " : "On-chain: official Core TokenCreated | Preset "}${fourMeme.presetId}｜${fourMeme.explorerUrl || (zh ? "BNB Chain finalized 交易" : "BNB Chain finalized transaction")}`,
         attribution,
-        `${zh ? "结论：链上归属已确认；安全未完成｜不买" : "Decision: on-chain provenance confirmed; safety incomplete | do not buy"}`,
-        `${zh ? "证明：" : "Evidence: "}${fourMeme.explorerUrl || (zh ? "BNB Chain finalized 交易" : "BNB Chain finalized transaction")}`,
         `${zh ? "风险/时间：" : "Risk/Time: "}${fourRegistryRiskTime(fourMeme, time, language)}`,
       ].filter(Boolean).join("\n");
     }
@@ -4616,16 +4618,14 @@ export function renderBilingualTelegramText(bundle, strong = false) {
       const time = localizedCstTime(focusModel.time?.[language], language);
       const safetyPass = fourMeme.kind === "core_first_token_safety";
       return [
-        `${zh ? "平台：" : "Platform: "}Four.Meme｜OpenFour ${safetyPass
-          ? (zh ? "首币｜安全检查通过" : "first token | safety check passed")
-          : (zh ? "首币来源确认" : "first-token provenance")}${prioritySuffix}`,
-        `${zh ? "功能：" : "Capability: "}${fourMeme.name}`,
-        `${zh ? "代币：" : "Token: "}${fourMeme.tokenName} (${fourMeme.tokenSymbol})｜CA ${fourMeme.tokenAddress || (zh ? "待解析" : "unresolved")}`,
-        `${zh ? "确认：官方 Core TokenCreated" : "Proof: official Core TokenCreated"}${fourMeme.presetId === "?" ? "" : `｜Preset ${fourMeme.presetId}`}`,
+        `${zh ? "平台：" : "Platform: "}Four.Meme｜OpenFour｜${zh ? "首个 CA" : "first CA"}${prioritySuffix}`,
         safetyPass
-          ? `${zh ? "结论：本地流动性安全初筛已通过；仍非买入信号" : "Decision: local liquidity safety screening passed; still not a buy signal"}`
-          : `${zh ? "结论：仅确认链上归属；安全未完成｜不买" : "Decision: provenance only; safety incomplete | do not buy"}`,
-        `${zh ? "证明：" : "Evidence: "}${fourMeme.explorerUrl || (zh ? "BNB Chain finalized 交易" : "BNB Chain finalized transaction")}`,
+          ? `${zh ? "状态：本地流动性安全初筛通过｜仍非买入信号" : "Status: local liquidity safety screening passed | still not a buy signal"}`
+          : `${zh ? "状态：仅确认链上归属；安全未完成｜不买" : "Status: provenance only; safety incomplete | do not buy"}`,
+        `CA${zh ? "：" : ": "}${fourMeme.tokenAddress || (zh ? "待解析" : "unresolved")}`,
+        `${zh ? "代币：" : "Token: "}${fourMeme.tokenName} (${fourMeme.tokenSymbol})`,
+        `${zh ? "功能：" : "Capability: "}${fourMeme.name}`,
+        `${zh ? "链上：官方 Core TokenCreated" : "On-chain: official Core TokenCreated"}${fourMeme.presetId === "?" ? "" : `｜Preset ${fourMeme.presetId}`}｜${fourMeme.explorerUrl || (zh ? "BNB Chain finalized 交易" : "BNB Chain finalized transaction")}`,
         `${zh ? "风险/时间：需继续核验可卖、税费、持仓集中与 LP｜非自动交易｜" : "Risk/Time: still verify sellability, taxes, concentration, and LP | no automatic trading | "}${time}`,
       ].join("\n");
     }

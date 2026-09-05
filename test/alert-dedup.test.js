@@ -642,7 +642,7 @@ test("a durably queued Flap tracked token survives the two-hour TTL and delivers
   assert.equal(entry.event.tradingPriority.tier, "T2");
   assert.equal(entry.deliveryDisposition.reason, "flap_tracked_token_delayed_delivery");
   assert.equal(entry.destinations.telegram.receipt.messageId, 7301);
-  assert.equal(entry.renderBundle.version, 23);
+  assert.equal(entry.renderBundle.version, 24);
   assert.equal(await drainAlertOutbox(config), 0);
   assert.equal(payloads.length, 2, "terminal delivery is exact-once across later drains");
 });
@@ -6106,6 +6106,6 @@ test("pon.fun producer events pass the closed gate, render durably, and deduplic
   assert.deepEqual(outbox.events[first.eventId].event.canonicalSignalIds, [`pon:${coin}:created`]);
   assert.equal(outbox.events[graduatedResult.eventId].deliveryDisposition.reason, "pon_exact_onchain_realtime");
   assert.equal(outbox.events[graduatedResult.eventId].event.tradingPriority.tier, "T2");
-  assert.equal(outbox.events[first.eventId].renderBundle.version, 23);
+  assert.equal(outbox.events[first.eventId].renderBundle.version, 24);
   assert.equal(outbox.events[duplicate.eventId].semanticDuplicateOf, first.eventId);
 });

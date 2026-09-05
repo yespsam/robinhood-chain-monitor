@@ -5390,7 +5390,7 @@ test("a Four.Meme quote-pool first safe token reaches focus3 Telegram once with 
   assert.equal(isStrictBscOpenFourFirstTokenUpdate(event), true, JSON.stringify(event, null, 2));
   assert.deepEqual(event.deliverySla, first.deliverySla);
   assert.equal(payloads.length, 1);
-  assert.match(payloads[0].text, /(?:OpenFour 首币｜安全检查通过|Four\.Meme \/ OpenFour 新功能首币)/);
+  assert.match(payloads[0].text, /Four\.Meme｜OpenFour｜首个 CA/u);
   assert.match(payloads[0].text, /SPCXB 新底池/);
   assert.match(payloads[0].text, new RegExp(first.tokens[0].token, "i"));
   assert.doesNotMatch(JSON.stringify(payloads[0].reply_markup), /gmgn|买入|swap/i);

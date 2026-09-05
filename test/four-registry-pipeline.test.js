@@ -267,9 +267,9 @@ test("same-block Registry metadata stays explicitly unattributed from producer t
       "Config name (prior same-block state): Lista Yield V1 | multiple same-block updates; this transaction proves status only",
     ]],
     [payloads[1], [
-      "Four.Meme｜OpenFour Preset 1778027615803 首个代币",
+      "Four.Meme｜OpenFour Preset 1778027615803｜首个 CA",
       "配置名称（区块前态）：Lista Yield V1｜同块静态字段沿用前态；非 TokenCreated 时点精确值",
-      "Four.Meme｜OpenFour Preset 1778027615803 first token",
+      "Four.Meme｜OpenFour Preset 1778027615803｜first CA",
       "Config name (prior same-block state): Lista Yield V1 | static fields retain the prior state; not exact at TokenCreated time",
     ]],
     [payloads[2], [
@@ -446,7 +446,8 @@ test("OpenFour first-token cross-producer ownership preserves one provenance car
   assert.equal((await sendAlerts(weakFirst, weak)).status, "delivered");
   assert.equal((await sendAlerts(weakFirst, strong)).status, "delivered");
   assert.equal(payloads.length, 2);
-  assert.match(payloads[1].text, /安全检查通过/u);
+  assert.match(payloads[1].text, /本地流动性安全初筛通过/u);
+  assert.match(payloads[1].text, /仍非买入信号/u);
   assert.doesNotMatch(payloads[1].text, /安全升级/u);
   assert.ok(payloads.every((payload) => !/gmgn|swap|买入|buy now/iu.test(JSON.stringify(payload.reply_markup || {}))));
 
