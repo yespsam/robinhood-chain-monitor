@@ -198,6 +198,43 @@ function readBscCausalBarrierKeys(value, label) {
   return normalized;
 }
 
+function readBscCausalReceiptClassificationDigest(value, label) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || !/^[0-9a-f]{64}$/.test(value)) {
+    throw new Error(`${label} causalReceiptClassificationDigest is not canonical`);
+  }
+  return value;
+}
+
+function bscCausalReceiptClassificationDigest(record) {
+  const transactionHash = normalizeTransactionHash(record?.transactionHash);
+  const blockHash = normalizeTransactionHash(record?.blockHash);
+  const blockNumber = Number(record?.blockNumber);
+  const transactionIndex = bscQueuePosition(record?.transactionIndex);
+  const logIndex = bscQueuePosition(record?.logIndex);
+  if (!/^0x[0-9a-f]{64}$/.test(transactionHash)
+    || !/^0x[0-9a-f]{64}$/.test(blockHash)
+    || !Number.isSafeInteger(blockNumber)
+    || blockNumber < 0
+    || transactionIndex === Number.MAX_SAFE_INTEGER
+    || logIndex === Number.MAX_SAFE_INTEGER) return null;
+  return createHash("sha256").update(JSON.stringify([
+    transactionHash,
+    blockHash,
+    blockNumber,
+    transactionIndex,
+    logIndex,
+    record?.featureActivationReplayKey || null,
+    record?.flapQuoteFirstThreeReplayGenerationKey || null,
+    normalizeBscCausalBarrierKeys(record?.causalBarrierKeys),
+  ])).digest("hex");
+}
+
+function hasCurrentBscCausalReceiptClassification(record) {
+  const expected = bscCausalReceiptClassificationDigest(record);
+  return Boolean(expected && record?.causalReceiptClassificationDigest === expected);
+}
+
 function bscQueuePosition(value) {
   let numeric;
   try { numeric = typeof value === "bigint" ? Number(value) : Number(value); }
@@ -2702,6 +2739,12 @@ async function readState(file, metadata = null) {
               normalizeFourMemeCreationHotIndex,
             ),
             causalBarrierKeys: readBscCausalBarrierKeys(record?.causalBarrierKeys, `deferred ${normalized}`),
+            ...(Object.hasOwn(record || {}, "causalReceiptClassificationDigest")
+              ? { causalReceiptClassificationDigest: readBscCausalReceiptClassificationDigest(
+                record.causalReceiptClassificationDigest,
+                `deferred ${normalized}`,
+              ) }
+              : {}),
             ...(!Object.hasOwn(record || {}, "causalBarrierKeys")
               ? { causalBarrierMigrationPending: true }
               : {}),
@@ -2727,6 +2770,12 @@ async function readState(file, metadata = null) {
               normalizeFourMemeCreationHotIndex,
             ),
             causalBarrierKeys: readBscCausalBarrierKeys(record?.causalBarrierKeys, `pending ${normalized}`),
+            ...(Object.hasOwn(record || {}, "causalReceiptClassificationDigest")
+              ? { causalReceiptClassificationDigest: readBscCausalReceiptClassificationDigest(
+                record.causalReceiptClassificationDigest,
+                `pending ${normalized}`,
+              ) }
+              : {}),
             ...(!Object.hasOwn(record || {}, "causalBarrierKeys")
               ? { causalBarrierMigrationPending: true }
               : {}),
@@ -5716,6 +5765,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       classificationReferenceHead > 0
       && Number(entry?.blockNumber) <= classificationReferenceHead - realtimeTailMaxLagBlocks
       && hasPotentialCausalBarrier(entry)
+      && !hasCurrentBscCausalReceiptClassification(entry)
       && !hasActiveSla(entry)
       && !inFlightEntries.has(entry.transactionHash);
     const earliestClassificationCandidates = (entries, eligible) => {
@@ -6584,6 +6634,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           } else {
             record.causalBarrierKeys = readBscCausalBarrierKeys(
               record.causalBarrierKeys,
+              `post-WAL ${transactionHash}`,
+            );
+          }
+          if (Object.hasOwn(record || {}, "causalReceiptClassificationDigest")) {
+            record.causalReceiptClassificationDigest = readBscCausalReceiptClassificationDigest(
+              record.causalReceiptClassificationDigest,
               `post-WAL ${transactionHash}`,
             );
           }
@@ -10498,6 +10554,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         changed = true;
       }
     }
+    const currentClassificationDigest = bscCausalReceiptClassificationDigest(entry);
+    if (entry.causalReceiptClassificationDigest
+      && entry.causalReceiptClassificationDigest !== currentClassificationDigest) {
+      entry.causalReceiptClassificationDigest = null;
+      changed = true;
+    }
     if (changed) entry.revision = Number(entry.revision || 0) + 1;
     queue.set(normalizedTransactionHash, entry);
   }
@@ -10507,6 +10569,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   }
 
   function mergeCurrentDurableEntry(entry, ...records) {
+    const receiptClassificationDigests = new Set([
+      entry.causalReceiptClassificationDigest,
+      ...records.map((record) => record?.causalReceiptClassificationDigest),
+    ].filter(Boolean));
     let mergedDurable = false;
     for (const record of records.filter(Boolean)) {
       mergedDurable = true;
@@ -10556,6 +10622,11 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       }
       entry.revision = Math.max(Number(entry.revision || 0), Number(record.revision || 0));
     }
+    const expectedClassificationDigest = bscCausalReceiptClassificationDigest(entry);
+    entry.causalReceiptClassificationDigest = expectedClassificationDigest
+      && receiptClassificationDigests.has(expectedClassificationDigest)
+      ? expectedClassificationDigest
+      : null;
     if (mergedDurable) entry.revision = Number(entry.revision || 0) + 1;
     return entry;
   }
@@ -10571,6 +10642,13 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       ...(previous.fourMemeCreationHotCandidates || []),
       ...(entry.fourMemeCreationHotCandidates?.values?.() || []),
     ], entry.transactionHash, "Four.Meme", normalizeFourMemeCreationHotIndex);
+    const expectedClassificationDigest = bscCausalReceiptClassificationDigest(entry);
+    const causalReceiptClassificationDigest = [
+      entry.causalReceiptClassificationDigest,
+      previous.causalReceiptClassificationDigest,
+    ].includes(expectedClassificationDigest)
+      ? expectedClassificationDigest
+      : null;
     return {
       transactionHash: normalizeTransactionHash(entry.transactionHash),
       blockHash: /^0x[0-9a-f]{64}$/.test(String(entry.blockHash || "").toLowerCase())
@@ -10590,6 +10668,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       featureActivationReplayKey: entry.featureActivationReplayKey || null,
       flapQuoteFirstThreeReplayGenerationKey: entry.flapQuoteFirstThreeReplayGenerationKey || null,
       causalBarrierKeys: normalizeBscCausalBarrierKeys(entry.causalBarrierKeys),
+      ...(causalReceiptClassificationDigest ? { causalReceiptClassificationDigest } : {}),
       flapCreationHotCandidates,
       fourMemeCreationHotCandidates,
       revision: Number(entry.revision || 0),
@@ -10600,7 +10679,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
 
   function mergeDeferredRecordWithoutAttempt(entry, previous) {
     const common = serializeRealtimePendingEntry(entry, previous);
-    return {
+    const merged = {
       ...previous,
       ...common,
       deferredKind: previous.deferredKind || entry.deferredKind || "creation_evidence",
@@ -10610,6 +10689,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       nextAttemptAt: previous.nextAttemptAt,
       lastError: previous.lastError,
     };
+    if (!common.causalReceiptClassificationDigest) {
+      delete merged.causalReceiptClassificationDigest;
+    }
+    return merged;
   }
 
   function persistRealtimePendingHandoff(entries) {
@@ -10666,6 +10749,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       featureActivationReplayKey: record.featureActivationReplayKey || null,
       flapQuoteFirstThreeReplayGenerationKey: record.flapQuoteFirstThreeReplayGenerationKey || null,
       causalBarrierKeys: normalizeBscCausalBarrierKeys(record.causalBarrierKeys),
+      causalReceiptClassificationDigest: record.causalReceiptClassificationDigest || null,
       flapCreationHotCandidates: new Map(readBscTransactionCreationEvidence(
         record.flapCreationHotCandidates,
         record.transactionHash,
@@ -10694,6 +10778,13 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       ...(previous.fourMemeCreationHotCandidates || []),
       ...(entry.fourMemeCreationHotCandidates?.values?.() || []),
     ], entry.transactionHash, "Four.Meme", normalizeFourMemeCreationHotIndex);
+    const expectedClassificationDigest = bscCausalReceiptClassificationDigest(entry);
+    const causalReceiptClassificationDigest = [
+      entry.causalReceiptClassificationDigest,
+      previous.causalReceiptClassificationDigest,
+    ].includes(expectedClassificationDigest)
+      ? expectedClassificationDigest
+      : null;
     return {
       transactionHash: normalizeTransactionHash(entry.transactionHash),
       blockHash: /^0x[0-9a-f]{64}$/.test(String(entry.blockHash || "").toLowerCase())
@@ -10713,6 +10804,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       featureActivationReplayKey: entry.featureActivationReplayKey || null,
       flapQuoteFirstThreeReplayGenerationKey: entry.flapQuoteFirstThreeReplayGenerationKey || null,
       causalBarrierKeys: normalizeBscCausalBarrierKeys(entry.causalBarrierKeys),
+      ...(causalReceiptClassificationDigest ? { causalReceiptClassificationDigest } : {}),
       flapCreationHotCandidates,
       fourMemeCreationHotCandidates,
       revision: Number(entry.revision || 0),
@@ -10747,6 +10839,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       featureActivationReplayKey: record.featureActivationReplayKey || null,
       flapQuoteFirstThreeReplayGenerationKey: record.flapQuoteFirstThreeReplayGenerationKey || null,
       causalBarrierKeys: normalizeBscCausalBarrierKeys(record.causalBarrierKeys),
+      causalReceiptClassificationDigest: record.causalReceiptClassificationDigest || null,
       flapCreationHotCandidates: new Map(readBscTransactionCreationEvidence(
         record.flapCreationHotCandidates,
         record.transactionHash,
@@ -12965,10 +13058,16 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         if (!previous || JSON.stringify(previous) !== JSON.stringify(merged)) evidenceChanged = true;
         entry.fourMemeCreationHotCandidates.set(key, merged);
       }
+      const nextClassificationDigest = bscCausalReceiptClassificationDigest({
+        ...entry,
+        causalBarrierKeys: nextBarrierKeys,
+      });
       if (JSON.stringify(nextBarrierKeys) !== JSON.stringify(durableBarrierKeys)
         || JSON.stringify(nextBarrierKeys) !== JSON.stringify(entry.causalBarrierKeys || [])
-        || evidenceChanged) {
+        || evidenceChanged
+        || entry.causalReceiptClassificationDigest !== nextClassificationDigest) {
         entry.causalBarrierKeys = nextBarrierKeys;
+        entry.causalReceiptClassificationDigest = nextClassificationDigest;
         entry.revision = Math.max(
           Number(entry.revision || 0),
           Number(pending?.revision || 0),
@@ -13564,7 +13663,11 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         const classificationCandidates = workClass === "dependency"
           ? eligibility.deferred.classification
           : [];
-        classificationBatch = classificationCandidates.length > 0;
+        const dependencyHead = workClass === "dependency"
+          ? eligibility.deferred.dependency[0]
+          : null;
+        classificationBatch = Boolean(dependencyHead && classificationCandidates
+          .some((entry) => entry.transactionHash === dependencyHead.transactionHash));
         due = (classificationBatch
           ? classificationCandidates.slice(0, BSC_CAUSAL_CLASSIFICATION_BATCH_SIZE)
           : eligibility.deferred[workClass].slice(0, 1))
@@ -14722,7 +14825,11 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         const classificationCandidates = workClass === "dependency"
           ? eligibility.realtime.classification
           : [];
-        classificationBatch = classificationCandidates.length > 0;
+        const dependencyHead = workClass === "dependency"
+          ? eligibility.realtime.dependency[0]
+          : null;
+        classificationBatch = Boolean(dependencyHead && classificationCandidates
+          .some((entry) => entry.transactionHash === dependencyHead.transactionHash));
         queuedEntries = classificationBatch
           ? classificationCandidates.slice(0, BSC_CAUSAL_CLASSIFICATION_BATCH_SIZE)
           : eligibility.realtime[workClass].slice(0, 1);

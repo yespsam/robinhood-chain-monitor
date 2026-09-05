@@ -3787,6 +3787,24 @@ test("v2 BSC state is normalized and durably migrated while a future version is 
   const future = createBscLaunchpadMonitor({ dataDir: futureDir }, { autoStart: false, provider: { destroy() {} } });
   await assert.rejects(() => future.getState(), /newer than supported/);
   assert.equal(JSON.parse(await fs.readFile(futureFile, "utf8")).version, 8);
+
+  const malformedDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-state-classification-digest-"));
+  t.after(() => fs.rm(malformedDir, { recursive: true, force: true }));
+  const malformedHash = `0x${"8a".repeat(32)}`;
+  await fs.writeFile(path.join(malformedDir, "bsc-launchpad-state.json"), JSON.stringify({
+    version: 7,
+    deferredCreationEvidence: {
+      [malformedHash]: {
+        transactionHash: malformedHash,
+        causalReceiptClassificationDigest: "NOT-A-CANONICAL-DIGEST",
+      },
+    },
+  }));
+  const malformed = createBscLaunchpadMonitor(
+    { dataDir: malformedDir },
+    { autoStart: false, provider: { destroy() {} } },
+  );
+  await assert.rejects(() => malformed.getState(), /causalReceiptClassificationDigest is not canonical/);
 });
 
 test("deferred creation evidence is never pruned by ordinary state maintenance", async (t) => {
@@ -8405,6 +8423,271 @@ test("strict receipt classification releases a fresh causal descendant before hi
     "the fresh descendant runs next instead of waiting behind the now-unrelated old record");
 });
 
+test("a durable exact receipt classification advances to full proof after restart", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-causal-classification-exact-"));
+  const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
+  let clock = Date.parse("2026-08-24T12:30:00.000Z");
+  const head = 5_000;
+  const quote = "0x4333333333333333333333333333333333333333";
+  const activationKey = `quote:${quote}`;
+  const causalKey = `feature:${activationKey}`;
+  const oldHash = `0x${"72".repeat(32)}`;
+  const freshHash = `0x${"73".repeat(32)}`;
+  const oldBlockHash = `0x${"74".repeat(32)}`;
+  const freshBlockHash = `0x${"75".repeat(32)}`;
+  const launcher = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
+  const token = "0x7611111111111111111111111111111111111111";
+  const creator = "0x7722222222222222222222222222222222222222";
+  const pool = "0x7833333333333333333333333333333333333333";
+  const factory = "0x7944444444444444444444444444444444444444";
+  const trigger = "0x7a55555555555555555555555555555555555555";
+  const flapIface = new Interface([
+    "event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)",
+  ]);
+  const pairIface = new Interface([
+    "event PairCreated(address indexed token0,address indexed token1,address pair,uint256)",
+  ]);
+  const flapEncoded = flapIface.encodeEventLog(
+    flapIface.getEvent("TokenCreated"),
+    [1n, creator, 1n, token, "Historical", "HIST", "ipfs://historical"],
+  );
+  const pairEncoded = pairIface.encodeEventLog(
+    pairIface.getEvent("PairCreated"),
+    [token, quote, pool, 1n],
+  );
+  const oldLog = {
+    address: launcher,
+    topics: flapEncoded.topics,
+    data: flapEncoded.data,
+    transactionHash: oldHash,
+    blockHash: oldBlockHash,
+    blockNumber: 100,
+    transactionIndex: 1,
+    logIndex: 2,
+    removed: false,
+  };
+  const pairLog = {
+    address: factory,
+    topics: pairEncoded.topics,
+    data: pairEncoded.data,
+    transactionHash: oldHash,
+    blockHash: oldBlockHash,
+    blockNumber: 100,
+    transactionIndex: 1,
+    logIndex: 3,
+    removed: false,
+  };
+  const transactionByHash = new Map([
+    [oldHash, {
+      hash: oldHash,
+      blockNumber: 100,
+      blockHash: oldBlockHash,
+      index: 1,
+      transactionIndex: 1,
+      from: creator,
+      to: launcher,
+      data: "0x",
+    }],
+    [freshHash, {
+      hash: freshHash,
+      blockNumber: head - 2,
+      blockHash: freshBlockHash,
+      index: 1,
+      transactionIndex: 1,
+      from: creator,
+      to: trigger,
+      data: "0x",
+    }],
+  ]);
+  const receiptByHash = new Map([
+    [oldHash, {
+      hash: oldHash,
+      transactionHash: oldHash,
+      blockNumber: 100,
+      blockHash: oldBlockHash,
+      index: 1,
+      transactionIndex: 1,
+      status: 1,
+      logs: [oldLog, pairLog],
+    }],
+    [freshHash, {
+      hash: freshHash,
+      transactionHash: freshHash,
+      blockNumber: head - 2,
+      blockHash: freshBlockHash,
+      index: 1,
+      transactionIndex: 1,
+      status: 1,
+      logs: [],
+    }],
+  ]);
+  const deferred = (transactionHash, blockNumber, blockHash, extra = {}) => ({
+    transactionHash,
+    blockHash,
+    blockNumber,
+    transactionIndex: 1,
+    logIndex: transactionHash === oldHash ? 2 : 0,
+    reasons: ["http_tail"],
+    mintEmitters: [],
+    candidateTokens: transactionHash === oldHash ? [token] : [],
+    verifiedNewContracts: transactionHash === oldHash ? [token] : [],
+    upgradeEmitters: transactionHash === freshHash ? [trigger] : [],
+    lifecycleEmitters: [],
+    hookPools: [],
+    hasProtocolTrigger: true,
+    featureActivationReplayKey: null,
+    flapQuoteFirstThreeReplayGenerationKey: null,
+    causalBarrierKeys: [causalKey],
+    flapCreationHotCandidates: [],
+    fourMemeCreationHotCandidates: [],
+    revision: 1,
+    deferredKind: "coverage_processing",
+    attempts: 1,
+    firstDeferredAt: new Date(clock - 60_000).toISOString(),
+    lastAttemptAt: new Date(clock - 30_000).toISOString(),
+    nextAttemptAt: new Date(clock - 1).toISOString(),
+    lastError: "waiting for canonical classification",
+    ...extra,
+  });
+  await fs.writeFile(stateFile, JSON.stringify({
+    version: 6,
+    initializedAt: new Date(clock - 2 * 60 * 60_000).toISOString(),
+    lastFinalizedBlock: head - 2,
+    realtimeTailNextBlock: head - 1,
+    realtimeTailInitializedAt: new Date(clock - 60_000).toISOString(),
+    realtimePendingEntries: {},
+    deferredCreationEvidence: {
+      [oldHash]: deferred(oldHash, 100, oldBlockHash),
+      [freshHash]: deferred(freshHash, head - 2, freshBlockHash),
+    },
+    nearHeadRecoveryGaps: [],
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    coverageGaps: [],
+    officialSources: {
+      flap: {
+        featureActivations: {
+          [activationKey]: {
+            key: activationKey,
+            type: "quote_pool",
+            quoteAddress: quote,
+            quoteSymbol: "EXACT",
+            fingerprint: "exact-quote-fingerprint",
+            active: true,
+            allowReplay: true,
+            firstObservedAt: new Date(clock - 2 * 60 * 60_000).toISOString(),
+            confirmedAt: new Date(clock - 2 * 60 * 60_000 + 1_000).toISOString(),
+            replayCompletedAt: new Date(clock - 60_000).toISOString(),
+            firstTokenTransactionHash: null,
+            firstTokenAlertedAt: null,
+            replayAttemptedTransactionHashes: [],
+          },
+        },
+      },
+    },
+    _health: { realtimeTail: { status: "healthy", consecutiveFailures: 0 } },
+  }));
+
+  const deepOrder = [];
+  let getCodeCalls = 0;
+  const provider = {
+    async getNetwork() { return { chainId: 56n }; },
+    async getBlockNumber() { return head; },
+    async getTransaction(hash) {
+      deepOrder.push(hash);
+      return transactionByHash.get(hash) || null;
+    },
+    async getTransactionReceipt(hash) { return receiptByHash.get(hash) || null; },
+    async getBlock(number) {
+      if (Number(number) === 100) return {
+        number: 100,
+        hash: oldBlockHash,
+        timestamp: Math.floor((clock - 60 * 60_000) / 1_000),
+        transactions: [`0x${"71".repeat(32)}`, oldHash],
+      };
+      if (Number(number) === head - 2) return {
+        number: head - 2,
+        hash: freshBlockHash,
+        timestamp: Math.floor(clock / 1_000),
+        transactions: [`0x${"76".repeat(32)}`, freshHash],
+      };
+      return null;
+    },
+    async getCode() { getCodeCalls += 1; return "0x6000"; },
+    async getStorage() { return "0x"; },
+    async call() { return "0x"; },
+    async send() { return []; },
+    destroy() {},
+  };
+  class IdleWebSocket { addEventListener() {} close() {} }
+  const fetchImpl = async (url) => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ code: 0, data: url.includes("/address")
+      ? [{ name: "TokenManager3", address: "0x5c952063c7fc8610ffdb798152d69f0b9550762b", networkCode: "BSC" }]
+      : [{ id: 1, name: "Baseline", tag: "Curve", codeType: "SOLIDITY", descr: "base", status: "PUBLISHED" }] }),
+  });
+  const config = {
+    dataDir,
+    monitorScope: "focus3",
+    bscMonitorEnabled: true,
+    bscWsUrl: "wss://example.invalid",
+    bscRpcUrl: "https://example.invalid",
+    bscConfirmations: 2,
+    bscHttpHeadPollIntervalMs: 60_000,
+    bscOfficialPollIntervalMs: 60_000,
+    bscDeferredRetryIntervalMs: 60_000,
+  };
+  const dependencies = {
+    autoStart: false,
+    externalAttribution: false,
+    provider,
+    WebSocketImpl: IdleWebSocket,
+    fetchImpl,
+    now: () => clock,
+    realtimeTailMinIntervalMsForTesting: 0,
+    backgroundSetTimeoutImpl: () => ({ unref() {} }),
+    backgroundClearTimeoutImpl() {},
+    logger: { error() {}, info() {} },
+    sendAlertsImpl: async (_config, event) => ({ status: "delivered", eventId: event.eventKey }),
+    ...disabledJournalTimerDependencies(),
+  };
+  let monitor = createBscLaunchpadMonitor(config, dependencies);
+  t.after(async () => {
+    await monitor?.stop().catch(() => {});
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  await monitor.start();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  await completeRealtimeTailPasses(monitor, 2, 5_000);
+  await monitor.retryDeferredCreationEvidence();
+  let snapshot = await monitor.getState();
+  assert.deepEqual(deepOrder, [oldHash]);
+  assert.equal(getCodeCalls, 0, "the first lease performs strict receipt classification only");
+  assert.deepEqual(snapshot.deferredCreationEvidence[oldHash].causalBarrierKeys, [causalKey]);
+  assert.match(snapshot.deferredCreationEvidence[oldHash].causalReceiptClassificationDigest, /^[0-9a-f]{64}$/);
+  assert.equal(snapshot.seenTransactions[oldHash], undefined);
+
+  await monitor.stop();
+  monitor = createBscLaunchpadMonitor(config, dependencies);
+  clock += 750;
+  await monitor.start();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  await completeRealtimeTailPasses(monitor, 2, 5_000);
+  await monitor.retryDeferredCreationEvidence();
+  snapshot = await monitor.getState();
+  assert.equal(deepOrder[1], oldHash,
+    "the durable exact causal head advances to full proof instead of being classified forever");
+  assert.ok(getCodeCalls > 0, "the second lease reaches runtime proof for the exact candidate");
+  assert.equal(deepOrder.includes(freshHash), false,
+    "the later candidate cannot overtake the exact historical causal head");
+  assert.ok(snapshot.seenTransactions[oldHash]
+    || snapshot.deferredCreationEvidence[oldHash]
+    || snapshot.realtimePendingEntries[oldHash]);
+});
+
 test("focus3 background deep RPC preserves feature and first-three causal order across queue classes", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-deep-rpc-causal-order-"));
   const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
@@ -8866,6 +9149,16 @@ test("near-head handoff replaces a deferred transaction's orphaned fork coordina
   const transactionHash = `0x${"39".repeat(32)}`;
   const oldBlockHash = `0x${"3a".repeat(32)}`;
   const newBlockHash = `0x${"3b".repeat(32)}`;
+  const oldClassificationDigest = createHash("sha256").update(JSON.stringify([
+    transactionHash,
+    oldBlockHash,
+    90,
+    5,
+    8,
+    null,
+    null,
+    [],
+  ])).digest("hex");
   const launcher = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
   const token = "0x3c11111111111111111111111111111111111111";
   const creator = "0x3d22222222222222222222222222222222222222";
@@ -8909,6 +9202,7 @@ test("near-head handoff replaces a deferred transaction's orphaned fork coordina
         featureActivationReplayKey: null,
         flapQuoteFirstThreeReplayGenerationKey: null,
         causalBarrierKeys: [],
+        causalReceiptClassificationDigest: oldClassificationDigest,
         flapCreationHotCandidates: [],
         fourMemeCreationHotCandidates: [],
         revision: 1,
@@ -8963,6 +9257,8 @@ test("near-head handoff replaces a deferred transaction's orphaned fork coordina
   assert.equal(record.flapCreationHotCandidates.length, 1);
   assert.equal(record.flapCreationHotCandidates[0].blockHash, newBlockHash,
     "the new canonical raw proof replaces the same transaction's orphaned fork proof");
+  assert.equal(record.causalReceiptClassificationDigest, undefined,
+    "an orphaned fork's receipt classification cannot authenticate the canonical replacement");
   assert.deepEqual(snapshot.nearHeadRecoveryGaps, []);
 
   await monitor.stop();
@@ -8974,6 +9270,7 @@ test("near-head handoff replaces a deferred transaction's orphaned fork coordina
     [91, newBlockHash, 1, 2],
   );
   assert.equal(record.flapCreationHotCandidates[0].blockHash, newBlockHash);
+  assert.equal(record.causalReceiptClassificationDigest, undefined);
 });
 
 test("legacy Flap replay fills unknown receipt coordinates only after strict canonical proof", async (t) => {
