@@ -377,6 +377,20 @@ export const config = {
   bscArchiveConcurrency: integer("BSC_ARCHIVE_CONCURRENCY", 12),
   bscRpcConcurrency: integer("BSC_RPC_CONCURRENCY", 12),
   bscRpcRequestTimeoutMs: integer("BSC_RPC_REQUEST_TIMEOUT_MS", 7_000),
+  // Receipt-only causal classification uses object-capable standard RPCs
+  // that do not serve the realtime log tail. This keeps old ordering proofs
+  // moving without spending Blast/48.club/BlockRazor/PublicNode log capacity.
+  bscCausalClassificationRpcUrls: (process.env.BSC_CAUSAL_CLASSIFICATION_RPC_URLS || [
+    "https://bsc-dataseed.nariox.org",
+    "https://bsc-dataseed.defibit.io",
+    "https://bsc-dataseed.ninicoin.io",
+    "https://bsc.nodereal.io",
+    "https://bsc-dataseed-public.bnbchain.org",
+    "https://bsc-dataseed.bnbchain.org",
+  ].join(",")).split(",").map((value) => value.trim()).filter(Boolean),
+  bscCausalClassificationRpcConcurrency: integer("BSC_CAUSAL_CLASSIFICATION_RPC_CONCURRENCY", 4),
+  bscCausalClassificationRpcRequestTimeoutMs: integer("BSC_CAUSAL_CLASSIFICATION_RPC_REQUEST_TIMEOUT_MS", 6_000),
+  bscCausalClassificationIntervalMs: integer("BSC_CAUSAL_CLASSIFICATION_INTERVAL_MS", 5_000),
   bscRealtimeRpcUrls: (process.env.BSC_REALTIME_RPC_URLS || "https://rpc.48.club,https://bsc.blockrazor.xyz,https://bsc-rpc.publicnode.com,https://bsc-mainnet.public.blastapi.io,https://bsc.rpc.blxrbdn.com").split(",").map((value) => value.trim()).filter(Boolean),
   bscRealtimeRpcConcurrency: integer("BSC_REALTIME_RPC_CONCURRENCY", 4),
   bscRealtimeRpcRequestTimeoutMs: integer("BSC_REALTIME_RPC_REQUEST_TIMEOUT_MS", 4_000),

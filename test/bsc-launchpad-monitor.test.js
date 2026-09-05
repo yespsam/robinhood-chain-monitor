@@ -8321,10 +8321,19 @@ test("strict receipt classification releases a fresh causal descendant before hi
     hooks: {},
     seenTransactions: {},
     coverageGaps: [],
-    _health: { realtimeTail: { status: "healthy", consecutiveFailures: 0 } },
+    _health: {
+      realtimeTail: { status: "error", consecutiveFailures: 1 },
+      backgroundDeepRpc: {
+        status: "backoff",
+        rpcFailureScope: "host",
+        nextRetryAt: new Date(clock + 60_000).toISOString(),
+      },
+    },
   }));
 
   const deepOrder = [];
+  const classificationOrder = [];
+  let failFirstClassification = true;
   let getCodeCalls = 0;
   const provider = {
     async getNetwork() { return { chainId: 56n }; },
@@ -8339,6 +8348,25 @@ test("strict receipt classification releases a fresh causal descendant before hi
     async getStorage() { return "0x"; },
     async call() { return "0x"; },
     async send() { return []; },
+    destroy() {},
+  };
+  const causalClassificationProvider = {
+    hosts: ["classification-only.invalid"],
+    async getNetwork() { return { chainId: 56n }; },
+    async getTransaction(hash) {
+      classificationOrder.push(hash);
+      if (hash === oldHash && failFirstClassification) {
+        failFirstClassification = false;
+        const error = new Error("classification object RPC timed out");
+        error.code = "TIMEOUT";
+        error.rpcFailureScope = "method";
+        throw error;
+      }
+      return transactionByHash.get(hash) || null;
+    },
+    async getTransactionReceipt(hash) { return receiptByHash.get(hash) || null; },
+    async getBlock(number) { return blockByNumber.get(Number(number)) || null; },
+    async getCode() { throw new Error("receipt classification must not read code"); },
     destroy() {},
   };
   class IdleWebSocket { addEventListener() {} close() {} }
@@ -8363,6 +8391,10 @@ test("strict receipt classification releases a fresh causal descendant before hi
     autoStart: false,
     externalAttribution: false,
     provider,
+    causalClassificationProvider,
+    causalClassificationEnabled: true,
+    causalClassificationAutoSchedule: false,
+    causalClassificationMinIntervalMsForTesting: 5_000,
     WebSocketImpl: IdleWebSocket,
     fetchImpl,
     now: () => clock,
@@ -8378,12 +8410,40 @@ test("strict receipt classification releases a fresh causal descendant before hi
   });
 
   await monitor.start();
-  await new Promise((resolve) => setTimeout(resolve, 30));
-  await completeRealtimeTailPasses(monitor, 2, 5_000);
-  await monitor.retryDeferredCreationEvidence();
+  const blockedDeep = await monitor.retryDeferredCreationEvidence();
+  assert.equal(blockedDeep.reason, "realtime_priority");
+  assert.equal(deepOrder.length, 0, "tail/deep backoff still blocks full runtime work");
+  const classified = await monitor.classifyCausalBacklog();
+  assert.deepEqual(classified, {
+    skipped: false,
+    attempted: 4,
+    classified: 3,
+    failed: 1,
+    remaining: 1,
+  });
+  const paced = await monitor.classifyCausalBacklog();
+  assert.equal(paced.reason, "paced");
+  assert.equal(classificationOrder.length, 4,
+    "the isolated classifier has a hard start-to-start cadence");
+  assert.equal(deepOrder.length, 0,
+    "receipt-only classification never falls through the archive/deep provider");
   let snapshot = await monitor.getState();
-  assert.equal(deepOrder.length, 4, JSON.stringify({
-    deepOrder,
+  assert.equal(snapshot.deferredCreationEvidence[oldHash].attempts, 1,
+    "a proof-RPC failure does not count as a full transaction failure");
+  assert.equal(snapshot.deferredCreationEvidence[oldHash].causalReceiptClassificationDigest, undefined);
+  clock += 5_000;
+  assert.deepEqual(await monitor.classifyCausalBacklog(), {
+    skipped: false,
+    attempted: 1,
+    classified: 1,
+    failed: 0,
+    remaining: 0,
+  });
+  assert.equal(classificationOrder.length, 5,
+    "only the failed durable record is retried after its local deadline");
+  snapshot = await monitor.getState();
+  assert.equal(classificationOrder.length, 5, JSON.stringify({
+    classificationOrder,
     deferred: Object.fromEntries(Object.entries(snapshot.deferredCreationEvidence)
       .map(([hash, record]) => [hash, {
         blockNumber: record.blockNumber,
@@ -8392,7 +8452,7 @@ test("strict receipt classification releases a fresh causal descendant before hi
       }])),
     health: snapshot._health,
   }));
-  assert.deepEqual(new Set(deepOrder), new Set([
+  assert.deepEqual(new Set(classificationOrder), new Set([
     oldHash,
     oldSecondHash,
     oldThirdHash,
@@ -8417,9 +8477,10 @@ test("strict receipt classification releases a fresh causal descendant before hi
   assert.deepEqual(durable.deferredCreationEvidence[oldFourthHash].causalBarrierKeys, []);
   assert.ok(durable.deferredCreationEvidence[freshHash], "the fresh descendant remains durable until its own slot");
 
-  clock += 750;
+  clock += 55_001;
+  await completeRealtimeTailPasses(monitor, 2, 5_000);
   await monitor.retryDeferredCreationEvidence();
-  assert.equal(deepOrder[4], freshHash,
+  assert.equal(deepOrder[0], freshHash,
     "the fresh descendant runs next instead of waiting behind the now-unrelated old record");
 });
 

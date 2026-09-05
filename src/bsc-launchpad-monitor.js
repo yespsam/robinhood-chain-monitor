@@ -161,6 +161,9 @@ const BSC_DEEP_RPC_PACE_MS = 750;
 const BSC_DEEP_RPC_OLD_WITH_GAPS_PACE_MS = 30_000;
 const BSC_DEEP_RPC_FRESH_WINDOW_MS = 15 * 60_000;
 const BSC_CAUSAL_CLASSIFICATION_BATCH_SIZE = 4;
+const BSC_CAUSAL_CLASSIFICATION_MIN_INTERVAL_MS = 5_000;
+const BSC_CAUSAL_CLASSIFICATION_IDLE_INTERVAL_MS = 30_000;
+const BSC_CAUSAL_CLASSIFICATION_RETRY_MAX_MS = 5 * 60_000;
 const BSC_DEEP_RPC_BLOCKING_TAIL_STATUSES = new Set([
   "error",
   "degraded",
@@ -5127,6 +5130,7 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
 }
 
 export function createBscLaunchpadMonitor(config, dependencies = {}) {
+  const focus3ChainScope = String(config.monitorScope || "").toLowerCase() === "focus3";
   const provider = dependencies.provider || createRpcPool(
     config.bscRpcUrls || [config.bscRpcUrl],
     config.bscArchiveRpcUrls || [],
@@ -5149,6 +5153,40 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       allowPublicNodeLogs: true,
     },
   ));
+  const configuredClassificationUrls = Array.isArray(config.bscCausalClassificationRpcUrls)
+    ? config.bscCausalClassificationRpcUrls.filter(Boolean)
+    : [];
+  const configuredStandardUrls = (config.bscRpcUrls || [config.bscRpcUrl]).filter(Boolean);
+  const realtimeHosts = new Set((config.bscRealtimeRpcUrls || [])
+    .map((url) => {
+      try { return new URL(url).hostname.toLowerCase(); }
+      catch { return null; }
+    })
+    .filter(Boolean));
+  const disjointStandardUrls = configuredStandardUrls.filter((url) => {
+    try { return !realtimeHosts.has(new URL(url).hostname.toLowerCase()); }
+    catch { return false; }
+  });
+  const causalClassificationUrls = configuredClassificationUrls.length
+    ? configuredClassificationUrls
+    : disjointStandardUrls.length ? disjointStandardUrls : configuredStandardUrls;
+  // Receipt-only causal classification is intentionally isolated from the
+  // realtime/archive pools. It reads transaction, receipt and canonical block
+  // objects only; expensive getCode/storage/call work remains on the guarded
+  // deep lane. Production defaults exclude every realtime-tail host so an old
+  // backlog cannot consume the capacity needed to discover a new pool.
+  const causalClassificationProvider = dependencies.causalClassificationProvider
+    || (dependencies.provider || !focus3ChainScope ? provider : createRpcPool(
+      causalClassificationUrls,
+      [],
+      1,
+      {
+        requestTimeoutMs: config.bscCausalClassificationRpcRequestTimeoutMs
+          || Math.min(6_000, config.bscRpcRequestTimeoutMs || 7_000),
+        standardConcurrency: config.bscCausalClassificationRpcConcurrency || 4,
+        allowPublicNodeLogs: false,
+      },
+    ));
   const WebSocketImpl = dependencies.WebSocketImpl || globalThis.WebSocket;
   const fetchImpl = dependencies.fetchImpl || globalThis.fetch;
   const fourMemeFastReplayFetchImpl = dependencies.fourMemeFastReplayFetchImpl || fetchImpl;
@@ -5205,7 +5243,6 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   const beforeCausalGroupReservation = dependencies.beforeCausalGroupReservationImpl || null;
   const autoStart = dependencies.autoStart !== false;
   const externalAttributionEnabled = dependencies.externalAttribution ?? autoStart;
-  const focus3ChainScope = String(config.monitorScope || "").toLowerCase() === "focus3";
   const flapQuoteFirstThreeWindowMax = Math.max(1, Math.floor(Number(
     dependencies.flapQuoteFirstThreeWindowMax ?? FLAP_QUOTE_FIRST_THREE_WINDOW_MAX,
   ) || FLAP_QUOTE_FIRST_THREE_WINDOW_MAX));
@@ -5267,6 +5304,14 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   const nearHeadRecoverySuccessIntervalMs = Math.max(250, Number(
     config.bscNearHeadRecoverySuccessIntervalMs || BSC_NEAR_HEAD_RECOVERY_INTERVAL_MS,
   ));
+  const causalClassificationEnabled = focus3ChainScope
+    && (dependencies.causalClassificationEnabled ?? !dependencies.provider);
+  const causalClassificationAutoSchedule = dependencies.causalClassificationAutoSchedule !== false;
+  const causalClassificationMinIntervalMs = dependencies.causalClassificationMinIntervalMsForTesting === undefined
+    ? Math.max(BSC_CAUSAL_CLASSIFICATION_MIN_INTERVAL_MS, Number(
+      config.bscCausalClassificationIntervalMs || BSC_CAUSAL_CLASSIFICATION_MIN_INTERVAL_MS,
+    ))
+    : Math.max(0, Number(dependencies.causalClassificationMinIntervalMsForTesting) || 0);
   const realtimeTailMinIntervalMs = dependencies.realtimeTailMinIntervalMsForTesting === undefined
     ? Math.max(BSC_REALTIME_TAIL_MIN_INTERVAL_MS, Number(
       config.bscRealtimeTailMinIntervalMs || BSC_REALTIME_TAIL_MIN_INTERVAL_MS,
@@ -5328,6 +5373,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   let backgroundDeepRpcNextAt = 0;
   let backgroundDeepHostRetryAt = 0;
   let backgroundOldDeepRpcNextAt = 0;
+  let causalClassificationRunning = false;
+  let causalClassificationTimer = null;
+  let causalClassificationTimerDueAt = 0;
+  let causalClassificationNextStartAt = 0;
+  let causalClassificationNetworkVerified = causalClassificationProvider === provider;
+  const causalClassificationRetryByTransaction = new Map();
   const backgroundDeepPreferredLane = {
     sla: "realtime",
     fresh: "realtime",
@@ -5430,6 +5481,26 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       : null,
     ...normalizeBscCausalBarrierKeys(entry?.causalBarrierKeys),
   ].filter(Boolean);
+
+  const hasPotentialCausalBarrier = (entry) => {
+    const exact = new Set([
+      entry?.featureActivationReplayKey ? `feature:${entry.featureActivationReplayKey}` : null,
+      entry?.flapQuoteFirstThreeReplayGenerationKey
+        ? `first3:${entry.flapQuoteFirstThreeReplayGenerationKey}`
+        : null,
+    ].filter(Boolean));
+    return normalizeBscCausalBarrierKeys(entry?.causalBarrierKeys)
+      .some((key) => !exact.has(key));
+  };
+
+  const isHistoricalPotentialClassification = (entry, current, referenceHead) =>
+    Number(referenceHead) > 0
+    && Number(entry?.blockNumber) <= Number(referenceHead) - realtimeTailMaxLagBlocks
+    && hasPotentialCausalBarrier(entry)
+    && !hasCurrentBscCausalReceiptClassification(entry)
+    && !(Number.isFinite(backgroundDeliveryDeadline(entry))
+      && backgroundDeliveryDeadline(entry) > Number(current))
+    && !inFlightEntries.has(entry.transactionHash);
 
   const outstandingCausalEntries = () => {
     const records = new Map();
@@ -5747,27 +5818,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       }
       return result;
     };
-    const hasPotentialCausalBarrier = (entry) => {
-      const exact = new Set([
-        entry?.featureActivationReplayKey ? `feature:${entry.featureActivationReplayKey}` : null,
-        entry?.flapQuoteFirstThreeReplayGenerationKey
-          ? `first3:${entry.flapQuoteFirstThreeReplayGenerationKey}`
-          : null,
-      ].filter(Boolean));
-      return normalizeBscCausalBarrierKeys(entry?.causalBarrierKeys)
-        .some((key) => !exact.has(key));
-    };
     const classificationReferenceHead = Math.max(
       Number(currentHead || 0),
       Math.max(0, Number(state?.realtimeTailNextBlock || 0) - 1),
     );
-    const isHistoricalPotentialClassification = (entry) =>
-      classificationReferenceHead > 0
-      && Number(entry?.blockNumber) <= classificationReferenceHead - realtimeTailMaxLagBlocks
-      && hasPotentialCausalBarrier(entry)
-      && !hasCurrentBscCausalReceiptClassification(entry)
-      && !hasActiveSla(entry)
-      && !inFlightEntries.has(entry.transactionHash);
     const earliestClassificationCandidates = (entries, eligible) => {
       const selected = [];
       for (const entry of entries) {
@@ -5783,14 +5837,14 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     if (realtimeRetryAt <= current) {
       realtimePartition.classification = earliestClassificationCandidates(
         allQueued,
-        (entry) => isHistoricalPotentialClassification(entry)
+        (entry) => isHistoricalPotentialClassification(entry, current, classificationReferenceHead)
           && !websocketProofReservations.has(entry.transactionHash)
           && Number(websocketHttpFallbackRetryAt.get(entry.transactionHash) || 0) <= current,
       );
     }
     deferredPartition.classification = earliestClassificationCandidates(
       allDeferredForDependencies,
-      (entry) => isHistoricalPotentialClassification(entry)
+      (entry) => isHistoricalPotentialClassification(entry, current, classificationReferenceHead)
         && (metadataFor(entry).nextAttemptAt <= current || hasEffectiveSla(entry)),
     );
     return {
@@ -12971,6 +13025,13 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   async function commitReceiptCausalClassification(entry, transaction, receipt, block) {
     const logs = Array.isArray(receipt?.logs) ? receipt.logs : [];
     const observedAt = canonicalizeUnknownReceiptPosition(entry, transaction, receipt, block);
+    const classifiedIdentity = {
+      transactionHash: normalizeTransactionHash(entry.transactionHash),
+      blockHash: normalizeTransactionHash(entry.blockHash),
+      blockNumber: Number(entry.blockNumber),
+      transactionIndex: bscQueuePosition(entry.transactionIndex),
+      logIndex: bscQueuePosition(entry.logIndex),
+    };
     const bscPools = parseBscPoolLogs(logs);
     const flapCreationCandidates = parseFlapCreationHotCandidates(logs, {
       transactionHash: entry.transactionHash,
@@ -13002,6 +13063,24 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     const committed = await withState(async () => {
       const pending = state.realtimePendingEntries[entry.transactionHash];
       const deferred = state.deferredCreationEvidence[entry.transactionHash];
+      const currentDurable = pending || deferred || null;
+      if (currentDurable) {
+        const durableBlockHash = normalizeTransactionHash(currentDurable.blockHash);
+        const durableTransactionIndex = bscQueuePosition(currentDurable.transactionIndex);
+        const durableLogIndex = bscQueuePosition(currentDurable.logIndex);
+        if (normalizeTransactionHash(currentDurable.transactionHash) !== classifiedIdentity.transactionHash
+          || Number(currentDurable.blockNumber) !== classifiedIdentity.blockNumber
+          || (/^0x[0-9a-f]{64}$/.test(durableBlockHash)
+            && durableBlockHash !== classifiedIdentity.blockHash)
+          || (durableTransactionIndex !== Number.MAX_SAFE_INTEGER
+            && durableTransactionIndex !== classifiedIdentity.transactionIndex)
+          || (durableLogIndex !== Number.MAX_SAFE_INTEGER
+            && durableLogIndex !== classifiedIdentity.logIndex)) {
+          const error = new Error(`BSC causal classification canonical entry changed ${entry.transactionHash}`);
+          error.code = "BSC_RECEIPT_CANONICAL_CHANGED";
+          throw error;
+        }
+      }
       const durableBarrierKeys = normalizeBscCausalBarrierKeys([
         ...(entry.causalBarrierKeys || []),
         ...(pending?.causalBarrierKeys || []),
@@ -13193,16 +13272,25 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     preserveRealtimePendingOnFailure = false,
     flapReplaySignal = null,
     receiptClassificationOnly = false,
+    receiptProofProvider = null,
+    isolatedReceiptClassification = false,
   } = {}) {
     const boundedRpcConcurrency = Math.max(1, Number(rpcConcurrency) || 1);
     const results = await mapLimit(entries, boundedRpcConcurrency, async (entry) => {
       let revision = Number(entry.revision || 0);
       if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
-      const needsInspection = flapReplaySignal
-        ? await awaitFlapReplayRead(() => needsTransactionInspection(entry), flapReplaySignal)
-        : await needsTransactionInspection(entry);
+      // A receipt-only pass must not perform the very historical getCode read
+      // it exists to get out of the way. Strict transaction/receipt/block
+      // identity below is sufficient to contract conservative causal keys;
+      // the candidate remains durable for full safety inspection afterwards.
+      const needsInspection = receiptClassificationOnly
+        ? true
+        : flapReplaySignal
+          ? await awaitFlapReplayRead(() => needsTransactionInspection(entry), flapReplaySignal)
+          : await needsTransactionInspection(entry);
       if (!needsInspection) return { revision, observation: null };
       const websocketProof = websocketProofContexts.get(entry.transactionHash) || null;
+      const proofProvider = receiptProofProvider || provider;
       const referenceHead = Math.max(
         Number(currentHead || 0),
         Math.max(0, Number(state.realtimeTailNextBlock || 0) - 1),
@@ -13212,12 +13300,16 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       // Public realtime RPCs commonly reject finalized objects once they are
       // a few hundred blocks old. Route those entries directly to the archive
       // pool instead of timing out through every standard provider first.
-      const getTransaction = historical && provider.getHistoricalTransaction
-        ? provider.getHistoricalTransaction.bind(provider)
-        : provider.getTransaction.bind(provider);
-      const getTransactionReceipt = historical && provider.getHistoricalTransactionReceipt
-        ? provider.getHistoricalTransactionReceipt.bind(provider)
-        : provider.getTransactionReceipt.bind(provider);
+      const getTransaction = receiptProofProvider
+        ? proofProvider.getTransaction.bind(proofProvider)
+        : historical && provider.getHistoricalTransaction
+          ? provider.getHistoricalTransaction.bind(provider)
+          : provider.getTransaction.bind(provider);
+      const getTransactionReceipt = receiptProofProvider
+        ? proofProvider.getTransactionReceipt.bind(proofProvider)
+        : historical && provider.getHistoricalTransactionReceipt
+          ? provider.getHistoricalTransactionReceipt.bind(provider)
+          : provider.getTransactionReceipt.bind(provider);
       const transactionAndReceipt = () => Promise.all([
         getTransaction(entry.transactionHash),
         getTransactionReceipt(entry.transactionHash),
@@ -13252,9 +13344,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         fourMemeReplayKeys: [],
       };
       if (needsReceiptClassification) {
+        const readCanonicalBlock = () => receiptProofProvider
+          ? proofProvider.getBlock(entry.blockNumber)
+          : cachedBlock(entry.blockNumber);
         const canonicalBlock = websocketProof?.block || (flapReplaySignal
-          ? await awaitFlapReplayRead(() => cachedBlock(entry.blockNumber), flapReplaySignal)
-          : await cachedBlock(entry.blockNumber));
+          ? await awaitFlapReplayRead(readCanonicalBlock, flapReplaySignal)
+          : await readCanonicalBlock());
         receiptClassification = await commitReceiptCausalClassification(
           entry,
           transaction,
@@ -13263,10 +13358,6 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         );
         revision = Number(entry.revision || 0);
       }
-      registerSingularryCurves(receipt.logs || [], {
-        transactionHash: entry.transactionHash,
-        blockNumber: entry.blockNumber,
-      });
       const bscPools = receiptClassification.bscPools;
       const receiptFlapCreationCandidates = receiptClassification.flapCreationCandidates;
       const entryDeliveryDeadline = backgroundDeliveryDeadline(entry);
@@ -13294,6 +13385,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           fourMemeReplayKeys: receiptClassification.fourMemeReplayKeys,
         };
       }
+      registerSingularryCurves(receipt.logs || [], {
+        transactionHash: entry.transactionHash,
+        blockNumber: entry.blockNumber,
+      });
       let observation;
       try {
         if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
@@ -13398,7 +13493,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     let globalRpcUnavailable = transientRpcFailures.some((result) => sharedRpcRetryDelayMs(result.reason) > 0)
       || (transientRpcFailures.length > 0
         && transientRpcFailures.every((result) => result.reason?.rpcFailureScope === "host"));
-    if (transientRpcFailures.length) {
+    if (transientRpcFailures.length && !preserveRealtimePendingOnFailure) {
       if (!globalRpcUnavailable) {
         try { await provider.getBlockNumber(); }
         catch { globalRpcUnavailable = true; }
@@ -13539,8 +13634,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         // broad key was removed, a newly unblocked fresh descendant must get
         // the next eligible slot. No cleanup occurs here: the classified
         // historical entry remains durable for full later processing.
-        backgroundFreshDeepRpcStreak = 0;
-        backgroundDeepPreferredCausalClass = "fresh";
+        if (!isolatedReceiptClassification) {
+          backgroundFreshDeepRpcStreak = 0;
+          backgroundDeepPreferredCausalClass = "fresh";
+        }
         continue;
       }
       if (result.value.observation) {
@@ -13622,6 +13719,8 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       preserveRealtimePendingOnFailure,
       flapReplaySignal,
       receiptClassificationOnly,
+      receiptProofProvider,
+      isolatedReceiptClassification,
     });
   }
 
@@ -13652,6 +13751,216 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       waits.add(tracked);
     }
     if (waits.size) await Promise.all(waits);
+  }
+
+  function scheduleCausalReceiptClassification(delay = 25) {
+    if (stopped || !state || !causalClassificationEnabled || !causalClassificationAutoSchedule) return;
+    const current = Number(now());
+    const effectiveDelay = Math.max(
+      25,
+      Number(delay) || 25,
+      causalClassificationNextStartAt - current,
+    );
+    const dueAt = current + effectiveDelay;
+    if (causalClassificationTimer) {
+      if (dueAt >= causalClassificationTimerDueAt) return;
+      backgroundClearTimeout(causalClassificationTimer);
+    }
+    causalClassificationTimerDueAt = dueAt;
+    causalClassificationTimer = backgroundSetTimeout(() => {
+      causalClassificationTimer = null;
+      causalClassificationTimerDueAt = 0;
+      void classifyCausalBacklog();
+    }, effectiveDelay);
+    causalClassificationTimer.unref?.();
+  }
+
+  function causalReceiptClassificationCandidates(current = Number(now())) {
+    const durableTailConfirmed = Number.isSafeInteger(Number(state?.realtimeTailNextBlock))
+      ? Math.max(0, Number(state.realtimeTailNextBlock) - 1)
+      : 0;
+    const confirmed = Math.max(
+      0,
+      Number(currentHead || 0) - (config.bscConfirmations ?? 2),
+      durableTailConfirmed,
+    );
+    const referenceHead = Math.max(Number(currentHead || 0), durableTailConfirmed);
+    const records = new Map();
+    for (const entry of queue.values()) {
+      if (!state?.realtimePendingEntries?.[entry.transactionHash]) continue;
+      records.set(entry.transactionHash, entry);
+    }
+    for (const record of Object.values(state?.realtimePendingEntries || {})) {
+      const transactionHash = normalizeTransactionHash(record?.transactionHash);
+      if (!records.has(transactionHash)) records.set(transactionHash, deserializeRealtimePendingEntry(record));
+    }
+    for (const record of Object.values(state?.deferredCreationEvidence || {})) {
+      const transactionHash = normalizeTransactionHash(record?.transactionHash);
+      if (!records.has(transactionHash)) records.set(transactionHash, deserializeDeferredEntry(record));
+    }
+    const selected = [];
+    let total = 0;
+    let earliestRetryAt = Number.POSITIVE_INFINITY;
+    const eligibleHashes = new Set();
+    for (const entry of records.values()) {
+      const transactionHash = normalizeTransactionHash(entry?.transactionHash);
+      if (!/^0x[0-9a-f]{64}$/.test(transactionHash)
+        || Number(entry?.blockNumber) > confirmed
+        || state?.seenTransactions?.[transactionHash]
+        || websocketProofReservations.has(transactionHash)
+        || Number(websocketHttpFallbackRetryAt.get(transactionHash) || 0) > current
+        || !isHistoricalPotentialClassification(entry, current, referenceHead)) continue;
+      eligibleHashes.add(transactionHash);
+      total += 1;
+      const retryAt = Number(causalClassificationRetryByTransaction.get(transactionHash)?.nextAttemptAt || 0);
+      if (retryAt > current) {
+        earliestRetryAt = Math.min(earliestRetryAt, retryAt);
+        continue;
+      }
+      selected.push(entry);
+      selected.sort(compareBscQueueEntries);
+      if (selected.length > BSC_CAUSAL_CLASSIFICATION_BATCH_SIZE) selected.pop();
+    }
+    for (const transactionHash of causalClassificationRetryByTransaction.keys()) {
+      if (!eligibleHashes.has(transactionHash)) causalClassificationRetryByTransaction.delete(transactionHash);
+    }
+    return { selected, total, earliestRetryAt };
+  }
+
+  function causalClassificationFailureDelay(error, attempts) {
+    const providerDelay = Math.max(
+      Number(error?.retryAfterMs) || 0,
+      Number(error?.rpcHostRetryAfterMs) || 0,
+    );
+    const localDelay = causalClassificationMinIntervalMs * (2 ** Math.min(Math.max(0, attempts - 1), 6));
+    return Math.min(
+      BSC_CAUSAL_CLASSIFICATION_RETRY_MAX_MS,
+      Math.max(causalClassificationMinIntervalMs, providerDelay, localDelay),
+    );
+  }
+
+  async function classifyCausalBacklog() {
+    if (causalClassificationRunning || stopped || !causalClassificationEnabled) {
+      return { skipped: true, reason: stopped ? "stopped" : "disabled_or_running" };
+    }
+    causalClassificationRunning = true;
+    let nextDelay = BSC_CAUSAL_CLASSIFICATION_IDLE_INTERVAL_MS;
+    try {
+      await initialize();
+      if (!started) return { skipped: true, reason: "not_started" };
+      const startedAt = Number(now());
+      if (causalClassificationNextStartAt > startedAt) {
+        nextDelay = causalClassificationNextStartAt - startedAt;
+        return { skipped: true, reason: "paced", retryInMs: nextDelay };
+      }
+      causalClassificationNextStartAt = startedAt + causalClassificationMinIntervalMs;
+      if (!causalClassificationNetworkVerified && typeof causalClassificationProvider.getNetwork === "function") {
+        const network = await causalClassificationProvider.getNetwork();
+        if (Number(network?.chainId) !== BSC_CHAIN_ID) {
+          const error = new Error(`BSC causal classification RPC chain ID ${network?.chainId} != 56`);
+          error.code = "NETWORK_ERROR";
+          throw error;
+        }
+        causalClassificationNetworkVerified = true;
+      }
+      const batch = causalReceiptClassificationCandidates(startedAt);
+      if (!batch.selected.length) {
+        nextDelay = Number.isFinite(batch.earliestRetryAt)
+          ? Math.max(causalClassificationMinIntervalMs, batch.earliestRetryAt - Number(now()))
+          : BSC_CAUSAL_CLASSIFICATION_IDLE_INTERVAL_MS;
+        return { skipped: false, attempted: 0, remaining: batch.total };
+      }
+      const results = await mapLimit(
+        batch.selected,
+        BSC_CAUSAL_CLASSIFICATION_BATCH_SIZE,
+        async (entry) => {
+          await processEntries([entry], 1, {
+            preserveRealtimePendingOnFailure: true,
+            receiptClassificationOnly: true,
+            receiptProofProvider: causalClassificationProvider,
+            isolatedReceiptClassification: true,
+          });
+          const durable = state.realtimePendingEntries?.[entry.transactionHash]
+            || state.deferredCreationEvidence?.[entry.transactionHash]
+            || null;
+          if (durable && !hasCurrentBscCausalReceiptClassification(durable)) {
+            const error = new Error(`BSC causal classification did not persist ${entry.transactionHash}`);
+            error.code = "BSC_CAUSAL_CLASSIFICATION_NOT_PERSISTED";
+            throw error;
+          }
+          causalClassificationRetryByTransaction.delete(entry.transactionHash);
+          return entry.transactionHash;
+        },
+      );
+      const failed = results.filter((result) => result.status === "rejected");
+      for (let index = 0; index < results.length; index += 1) {
+        if (results[index].status !== "rejected") continue;
+        const entry = batch.selected[index];
+        const previous = causalClassificationRetryByTransaction.get(entry.transactionHash) || { attempts: 0 };
+        const attempts = Number(previous.attempts || 0) + 1;
+        causalClassificationRetryByTransaction.set(entry.transactionHash, {
+          attempts,
+          nextAttemptAt: Number(now()) + causalClassificationFailureDelay(results[index].reason, attempts),
+          lastError: errorSummary(results[index].reason),
+        });
+      }
+      const classified = results.length - failed.length;
+      const remaining = causalReceiptClassificationCandidates(Number(now()));
+      nextDelay = Math.max(25, causalClassificationNextStartAt - Number(now()));
+      await withState(async () => {
+        const previous = state._health.causalReceiptClassification || {};
+        state._health.causalReceiptClassification = {
+          ...previous,
+          status: failed.length ? (classified > 0 ? "degraded" : "backoff") : classified > 0 ? "healthy" : "idle",
+          checkedAt: iso(now),
+          ...(classified > 0 ? { lastSuccessAt: iso(now) } : {}),
+          attempted: results.length,
+          classified,
+          remaining: remaining.total,
+          providers: causalClassificationProvider.hosts || previous.providers || [],
+          nextRunAt: new Date(Number(now()) + nextDelay).toISOString(),
+        };
+        if (failed.length) {
+          state._health.causalReceiptClassification.lastErrorAt = iso(now);
+          state._health.causalReceiptClassification.lastError = errorSummary(failed[0].reason);
+        } else {
+          delete state._health.causalReceiptClassification.lastErrorAt;
+          delete state._health.causalReceiptClassification.lastError;
+        }
+        await save();
+      });
+      return {
+        skipped: false,
+        attempted: results.length,
+        classified,
+        failed: failed.length,
+        remaining: remaining.total,
+      };
+    } catch (error) {
+      nextDelay = Math.max(
+        causalClassificationMinIntervalMs,
+        causalClassificationFailureDelay(error, 1),
+      );
+      if (state) {
+        await withState(async () => {
+          const previous = state._health.causalReceiptClassification || {};
+          state._health.causalReceiptClassification = {
+            ...previous,
+            status: "backoff",
+            checkedAt: iso(now),
+            lastErrorAt: iso(now),
+            lastError: errorSummary(error),
+            nextRunAt: new Date(Number(now()) + nextDelay).toISOString(),
+            providers: causalClassificationProvider.hosts || previous.providers || [],
+          };
+          await save();
+        }).catch(() => {});
+      }
+      return { skipped: false, attempted: 0, failed: 1, error: errorSummary(error) };
+    } finally {
+      causalClassificationRunning = false;
+      if (!stopped) scheduleCausalReceiptClassification(nextDelay);
+    }
   }
 
   async function processEntryBatches(entries, rpcConcurrency = entryRpcConcurrency) {
@@ -14998,6 +15307,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
 
   function scheduleRealtime(delay = 25) {
     if (stopped || realtimeRunning) return;
+    scheduleCausalReceiptClassification(delay);
     const current = Number(now());
     const retryDelay = Math.max(0, realtimeRetryAt - current);
     const deepRpcDelay = backgroundDeepPriorityEnabled() ? backgroundDeepRpcDelayMs() : 0;
@@ -16015,6 +16325,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     if (coverageTimer) clearTimeout(coverageTimer);
     if (realtimeTimer) backgroundClearTimeout(realtimeTimer);
     if (deferredEvidenceWakeTimer) backgroundClearTimeout(deferredEvidenceWakeTimer);
+    if (causalClassificationTimer) backgroundClearTimeout(causalClassificationTimer);
     if (realtimeTailTimer) clearTimeout(realtimeTailTimer);
     if (nearHeadRecoveryTimer) clearTimeout(nearHeadRecoveryTimer);
     if (httpHeadTimer) clearInterval(httpHeadTimer);
@@ -16029,6 +16340,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     realtimeTimerDueAt = 0;
     deferredEvidenceWakeTimer = null;
     deferredEvidenceWakeTimerDueAt = 0;
+    causalClassificationTimer = null;
+    causalClassificationTimerDueAt = 0;
+    causalClassificationNextStartAt = 0;
     realtimeTailTimer = null;
     realtimeTailTimerDueAt = 0;
     realtimeTailRequested = false;
@@ -16205,6 +16519,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       deferredEvidenceTimer = setInterval(() => void retryDeferredCreationEvidence(), config.bscDeferredRetryIntervalMs ?? 2_000);
       deferredEvidenceTimer.unref?.();
       void retryDeferredCreationEvidence();
+      scheduleCausalReceiptClassification();
       httpHeadTimer = setInterval(() => void pollHttpHead(), config.bscHttpHeadPollIntervalMs ?? 1_000);
       httpHeadTimer.unref?.();
       void pollHttpHead();
@@ -16240,7 +16555,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         });
       }, 2_500);
       watchdogTimer.unref?.();
-      logger.error(`[bsc] chain=56 baseline=${state.lastFinalizedBlock} ws=${new URL(config.bscWsUrl).host} realtime=${realtimeProvider.hosts?.join(",") || "shared"} rpc=${provider.hosts?.join(",") || new URL(config.bscRpcUrl).host} archive=${provider.archiveHosts?.join(",") || "none"}`);
+      logger.error(`[bsc] chain=56 baseline=${state.lastFinalizedBlock} ws=${new URL(config.bscWsUrl).host} realtime=${realtimeProvider.hosts?.join(",") || "shared"} rpc=${provider.hosts?.join(",") || new URL(config.bscRpcUrl).host} archive=${provider.archiveHosts?.join(",") || "none"} classifier=${causalClassificationEnabled ? causalClassificationProvider.hosts?.join(",") || "shared" : "off"}`);
     } catch (error) {
       started = false;
       clearRuntime();
@@ -16283,6 +16598,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         || deferredEvidenceRunning
         || httpHeadPollRunning
         || realtimeRunning
+        || causalClassificationRunning
         || realtimeTailRunning
         || nearHeadRecoveryRunning
         || coverageRunning
@@ -16340,7 +16656,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         await Promise.allSettled([journalIoLock]);
       } finally {
         providerDestroyPromise ||= Promise.allSettled(
-          [...new Set([provider, realtimeProvider])]
+          [...new Set([provider, realtimeProvider, causalClassificationProvider])]
             .map((rpc) => Promise.resolve().then(() => rpc.destroy?.())),
         );
         await providerDestroyPromise;
@@ -16355,7 +16671,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     return attempt;
   }
 
-  const monitor = { start, stop, awaitIdle, observe, registerDiscoveryCandidates, registerFlapFeatureActivations, registerFlapQuotePoolLifecycle, replayFlapFeatureActivations: replayPendingFlapActivations, replayFlapQuotePoolFirstThree: replayPendingFlapQuoteFirstThreeGenerations, registerFourMemeFeatureActivations, checkOfficialSources: checkOfficialFourMeme, checkHttpHead: pollHttpHead, retryDeferredCreationEvidence, processRealtimeQueue, scanRealtimeTail, scanNearHeadRecovery, advanceCoverage, getState: async () => {
+  const monitor = { start, stop, awaitIdle, observe, registerDiscoveryCandidates, registerFlapFeatureActivations, registerFlapQuotePoolLifecycle, replayFlapFeatureActivations: replayPendingFlapActivations, replayFlapQuotePoolFirstThree: replayPendingFlapQuoteFirstThreeGenerations, registerFourMemeFeatureActivations, checkOfficialSources: checkOfficialFourMeme, checkHttpHead: pollHttpHead, retryDeferredCreationEvidence, classifyCausalBacklog, processRealtimeQueue, scanRealtimeTail, scanNearHeadRecovery, advanceCoverage, getState: async () => {
     await initialize();
     return withState(async () => structuredClone(state));
   } };
