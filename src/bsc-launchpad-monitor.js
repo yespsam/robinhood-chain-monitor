@@ -5128,6 +5128,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   const healthClearTimeout = dependencies.healthClearTimeoutImpl || clearTimeout;
   const backgroundSetTimeout = dependencies.backgroundSetTimeoutImpl || setTimeout;
   const backgroundClearTimeout = dependencies.backgroundClearTimeoutImpl || clearTimeout;
+  const onBackgroundDeepEligibilityScan = dependencies.onBackgroundDeepEligibilityScanImpl || null;
   const beforeCausalGroupReservation = dependencies.beforeCausalGroupReservationImpl || null;
   const autoStart = dependencies.autoStart !== false;
   const externalAttributionEnabled = dependencies.externalAttribution ?? autoStart;
@@ -5337,26 +5338,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     nearHeadGapCount: state?.nearHeadRecoveryGaps?.length || 0,
   });
 
-  const isFreshBackgroundEntry = (entry, confirmedBlock, current = Number(now())) => {
-    const freshWindowBlocks = Math.max(
-      realtimeTailLookbackBlocks,
-      Math.ceil(BSC_DEEP_RPC_FRESH_WINDOW_MS / expectedBlockTimeMs),
-    );
-    const freshFromBlock = Math.max(0, Number(confirmedBlock) - freshWindowBlocks + 1);
-    const deliveryStartedAt = Date.parse(entry?.deliverySla?.startedAt || "");
-    return Number(entry?.blockNumber) >= freshFromBlock
-      || (Number.isFinite(deliveryStartedAt)
-        && deliveryStartedAt >= current - BSC_DEEP_RPC_FRESH_WINDOW_MS);
-  };
-
   const backgroundDeliveryDeadline = (entry) => {
     const deadline = Date.parse(entry?.deliverySla?.deadlineAt || "");
     return Number.isFinite(deadline) && deadline > 0 ? deadline : Number.POSITIVE_INFINITY;
   };
-
-  const hasActiveBackgroundDeliverySla = (entry, current) =>
-    backgroundDeliveryDeadline(entry) > current
-    && Number.isFinite(backgroundDeliveryDeadline(entry));
 
   const backgroundFeatureKeys = (entry) => [
     entry?.featureActivationReplayKey ? `feature:${entry.featureActivationReplayKey}` : null,
@@ -5461,15 +5446,6 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     }
   };
 
-  const compareBackgroundEntries = (left, right) => {
-    const leftGroups = backgroundFeatureKeys(left);
-    const rightGroups = new Set(backgroundFeatureKeys(right));
-    if (leftGroups.some((key) => rightGroups.has(key))) return compareBscQueueEntries(left, right);
-    return backgroundDeliveryDeadline(left) - backgroundDeliveryDeadline(right)
-      || compareBscQueueEntries(left, right)
-      || Date.parse(left?.nextAttemptAt || 0) - Date.parse(right?.nextAttemptAt || 0);
-  };
-
   const resetRealtimeTailDeepReadiness = () => {
     consecutiveHealthyRealtimeTailBatches = 0;
   };
@@ -5536,6 +5512,28 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       durableTailConfirmed,
     );
     const priority = currentDeepRpcPriority();
+    const emptyEligibility = () => ({
+      current,
+      confirmed,
+      hostRetryAt: backgroundDeepHostRetryAt,
+      capacityDependencyUnlock: false,
+      effectiveSlaDeadlines: new Map(),
+      priority,
+      realtime: { sla: [], fresh: [], old: [] },
+      deferred: { sla: [], fresh: [], old: [] },
+    });
+    // Tail health and the shared host circuit are complete gates. Walking and
+    // sorting thousands of durable candidates while no deep read can start
+    // only starves the event loop that must keep the tail healthy. Capacity
+    // backpressure remains eligible because draining one pending item is what
+    // lets the blocked range commit atomically.
+    if (!priority.allowFreshQueue || backgroundDeepHostRetryAt > current) {
+      return emptyEligibility();
+    }
+    onBackgroundDeepEligibilityScan?.({
+      queuedEntryCount: queue.size,
+      deferredEntryCount: Object.keys(state?.deferredCreationEvidence || {}).length,
+    });
     const allQueued = [...queue.values()]
       .filter((entry) => Number(entry.blockNumber) <= confirmed
         && !state?.seenTransactions?.[entry.transactionHash]
@@ -5545,16 +5543,56 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         // would let a failed history/tail commit leak an un-durable candidate.
         && isDurableBackgroundQueueEntry(entry));
     const allDeferredForDependencies = Object.values(state?.deferredCreationEvidence || {});
+    const entryMetadata = new WeakMap();
+    const freshWindowBlocks = Math.max(
+      realtimeTailLookbackBlocks,
+      Math.ceil(BSC_DEEP_RPC_FRESH_WINDOW_MS / expectedBlockTimeMs),
+    );
+    const freshFromBlock = Math.max(0, confirmed - freshWindowBlocks + 1);
+    const metadataFor = (entry) => {
+      let metadata = entryMetadata.get(entry);
+      if (metadata) return metadata;
+      const deadline = backgroundDeliveryDeadline(entry);
+      const deliveryStartedAt = Date.parse(entry?.deliverySla?.startedAt || "");
+      const keys = backgroundFeatureKeys(entry);
+      metadata = {
+        deadline,
+        deliveryStartedAt,
+        fresh: Number(entry?.blockNumber) >= freshFromBlock
+          || (Number.isFinite(deliveryStartedAt)
+            && deliveryStartedAt >= current - BSC_DEEP_RPC_FRESH_WINDOW_MS),
+        keys,
+        keySet: new Set(keys),
+        nextAttemptAt: Date.parse(entry?.nextAttemptAt || 0),
+      };
+      entryMetadata.set(entry, metadata);
+      return metadata;
+    };
+    const hasActiveSla = (entry) => {
+      const deadline = metadataFor(entry).deadline;
+      return Number.isFinite(deadline) && deadline > current;
+    };
+    const compareCachedBackgroundEntries = (left, right) => {
+      const leftMetadata = metadataFor(left);
+      const rightMetadata = metadataFor(right);
+      if (leftMetadata.keys.some((key) => rightMetadata.keySet.has(key))) {
+        return compareBscQueueEntries(left, right);
+      }
+      return leftMetadata.deadline - rightMetadata.deadline
+        || compareBscQueueEntries(left, right)
+        || leftMetadata.nextAttemptAt - rightMetadata.nextAttemptAt;
+    };
     const featureHeads = new Map();
     const causalGroupDeadlines = new Map();
     for (const entry of [...allQueued, ...allDeferredForDependencies]) {
-      for (const key of backgroundFeatureKeys(entry)) {
+      const metadata = metadataFor(entry);
+      for (const key of metadata.keys) {
         const previous = featureHeads.get(key);
         if (!previous || compareBscQueueEntries(entry, previous) < 0) featureHeads.set(key, entry);
-        if (hasActiveBackgroundDeliverySla(entry, current)) {
+        if (hasActiveSla(entry)) {
           causalGroupDeadlines.set(key, Math.min(
             causalGroupDeadlines.get(key) ?? Number.POSITIVE_INFINITY,
-            backgroundDeliveryDeadline(entry),
+            metadata.deadline,
           ));
         }
       }
@@ -5569,41 +5607,50 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       ));
     }
     const effectiveDeadline = (entry) => Math.min(
-      backgroundDeliveryDeadline(entry),
+      metadataFor(entry).deadline,
       effectiveSlaDeadlines.get(entry.transactionHash) ?? Number.POSITIVE_INFINITY,
     );
     const hasEffectiveSla = (entry) => Number.isFinite(effectiveDeadline(entry))
       && effectiveDeadline(entry) > current;
     const compareEffectiveBackgroundEntries = (left, right) =>
       effectiveDeadline(left) - effectiveDeadline(right)
-      || compareBackgroundEntries(left, right);
-    const isFeatureHead = (entry) => backgroundFeatureKeys(entry)
+      || compareCachedBackgroundEntries(left, right);
+    const isFeatureHead = (entry) => metadataFor(entry).keys
       .every((key) => featureHeads.get(key)?.transactionHash === entry.transactionHash);
-    const hostCooling = backgroundDeepHostRetryAt > current;
-    const queued = (realtimeRetryAt > current || hostCooling ? [] : allQueued)
+    const queued = (realtimeRetryAt > current ? [] : allQueued)
       .filter((entry) => isFeatureHead(entry)
         && !inFlightEntries.has(entry.transactionHash)
         && !websocketProofReservations.has(entry.transactionHash)
         && Number(websocketHttpFallbackRetryAt.get(entry.transactionHash) || 0) <= current)
       .sort(compareEffectiveBackgroundEntries);
-    const queuedCausalGroups = new Set(allQueued.flatMap((entry) => backgroundFeatureKeys(entry)));
+    const queuedCausalGroups = new Set();
+    for (const entry of allQueued) {
+      for (const key of metadataFor(entry).keys) queuedCausalGroups.add(key);
+    }
     const deferredCapacityUnlocks = allDeferredForDependencies.filter((record) =>
       isFeatureHead(record)
-      && backgroundFeatureKeys(record).some((key) => queuedCausalGroups.has(key)));
+      && metadataFor(record).keys.some((key) => queuedCausalGroups.has(key)));
     // During capacity backpressure, first drain any safe durable pending entry.
     // If every pending entry is causally blocked by an earlier deferred record,
     // admit only that exact group head so the queue can subsequently drain
     // without ever allowing the later first-token candidate to overtake it.
-    const allDeferred = hostCooling
-      ? []
-      : priority.capacityBackpressure
+    const allDeferred = priority.capacityBackpressure
       ? (queued.length > 0 ? [] : deferredCapacityUnlocks)
       : allDeferredForDependencies;
     const deferred = allDeferred
       .filter((record) => isFeatureHead(record)
-        && (Date.parse(record.nextAttemptAt || 0) <= current || hasEffectiveSla(record))
+        && (metadataFor(record).nextAttemptAt <= current || hasEffectiveSla(record))
         && !inFlightEntries.has(record.transactionHash))
       .sort(compareEffectiveBackgroundEntries);
+    const partition = (entries) => {
+      const result = { sla: [], fresh: [], old: [] };
+      for (const entry of entries) {
+        if (hasEffectiveSla(entry)) result.sla.push(entry);
+        else if (metadataFor(entry).fresh) result.fresh.push(entry);
+        else result.old.push(entry);
+      }
+      return result;
+    };
     return {
       current,
       confirmed,
@@ -5611,20 +5658,8 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       capacityDependencyUnlock: priority.capacityBackpressure && deferred.length > 0,
       effectiveSlaDeadlines,
       priority,
-      realtime: {
-        sla: queued.filter((entry) => hasEffectiveSla(entry)),
-        fresh: queued.filter((entry) => !hasEffectiveSla(entry)
-          && isFreshBackgroundEntry(entry, confirmed, current)),
-        old: queued.filter((entry) => !hasEffectiveSla(entry)
-          && !isFreshBackgroundEntry(entry, confirmed, current)),
-      },
-      deferred: {
-        sla: deferred.filter((entry) => hasEffectiveSla(entry)),
-        fresh: deferred.filter((entry) => !hasEffectiveSla(entry)
-          && isFreshBackgroundEntry(entry, confirmed, current)),
-        old: deferred.filter((entry) => !hasEffectiveSla(entry)
-          && !isFreshBackgroundEntry(entry, confirmed, current)),
-      },
+      realtime: partition(queued),
+      deferred: partition(deferred),
     };
   };
 

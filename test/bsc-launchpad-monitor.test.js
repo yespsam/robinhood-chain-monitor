@@ -4840,6 +4840,7 @@ test("focus3 Flap activation replay performs zero deep RPC until two healthy tai
     removed: false,
   };
   const deepTransactions = [];
+  let eligibilityScans = 0;
   const alerts = [];
   const provider = {
     async getNetwork() { return { chainId: 56n }; },
@@ -4885,6 +4886,7 @@ test("focus3 Flap activation replay performs zero deep RPC until two healthy tai
     WebSocketImpl: IdleWebSocket,
     fetchImpl,
     now: () => clock,
+    onBackgroundDeepEligibilityScanImpl: () => { eligibilityScans += 1; },
     backgroundSetTimeoutImpl: () => ({ unref() {} }),
     backgroundClearTimeoutImpl() {},
     logger: { error() {}, info() {} },
@@ -4913,6 +4915,7 @@ test("focus3 Flap activation replay performs zero deep RPC until two healthy tai
   assert.ok(snapshot.realtimePendingEntries[transactionHash]);
   await monitor.processRealtimeQueue();
   assert.deepEqual(deepTransactions, [], "a nominally healthy tail at lag 21 blocks admitted replay deep reads");
+  assert.equal(eligibilityScans, 0, "a blocked deep lane must not scan its durable backlog");
 
   let firstHealthyObserved = false;
   for (let attempt = 0; attempt < 40 && !firstHealthyObserved; attempt += 1) {
@@ -4939,6 +4942,7 @@ test("focus3 Flap activation replay performs zero deep RPC until two healthy tai
   assert.equal(firstHealthyObserved, true, "the tail must durably reach its first healthy caught-up batch");
   await monitor.processRealtimeQueue();
   assert.deepEqual(deepTransactions, [], "one healthy caught-up batch cannot release replay deep work");
+  assert.equal(eligibilityScans, 0, "one healthy batch still must not scan the durable backlog");
 
   let secondHealthyCompleted = false;
   for (let attempt = 0; attempt < 20 && !secondHealthyCompleted; attempt += 1) {
@@ -4956,6 +4960,7 @@ test("focus3 Flap activation replay performs zero deep RPC until two healthy tai
   assert.equal(secondHealthyCompleted, true, "a second real healthy tail scan must own the lane");
   await monitor.processRealtimeQueue();
   assert.deepEqual(deepTransactions, [transactionHash], "the second healthy tail batch releases exactly one replay");
+  assert.ok(eligibilityScans > 0, "an eligible deep lane must scan and select its durable head");
   snapshot = await monitor.getState();
   assert.equal(snapshot.realtimePendingEntries[transactionHash], undefined);
   assert.ok(snapshot.officialSources.flap.featureActivations[
