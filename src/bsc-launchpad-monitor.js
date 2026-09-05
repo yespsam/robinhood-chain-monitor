@@ -3561,7 +3561,18 @@ function linkedModeComponentAddresses(shape, controllerAddress = null) {
     .filter((address) => ADDRESS.test(address)));
 }
 
-export async function matchKnownOfficialFastMode({ provider, state, controller, token, blockTag, descriptor, warmedFingerprints, identityCache = null, preferLatestState = false }) {
+export async function matchKnownOfficialFastMode({
+  provider,
+  state,
+  controller,
+  token,
+  blockTag,
+  descriptor,
+  warmedFingerprints,
+  identityCache = null,
+  preferLatestState = false,
+  verifyTokenIdentity = true,
+}) {
   const allowedTopics = knownOfficialFastTopics(controller?.platform?.id);
   const controllerAddress = String(controller?.address || "").toLowerCase();
   const tokenAddress = String(token || "").toLowerCase();
@@ -3612,17 +3623,27 @@ export async function matchKnownOfficialFastMode({ provider, state, controller, 
   }
   const [controllerIdentity, tokenIdentity] = await Promise.all([
     controllerIdentityPromise,
-    lightweightRuntimeIdentity(provider, tokenAddress, Number(blockTag), preferLatestState),
+    verifyTokenIdentity
+      ? lightweightRuntimeIdentity(provider, tokenAddress, Number(blockTag), preferLatestState)
+      : Promise.resolve(null),
   ]);
   if (!controllerIdentity
     && identityCache instanceof Map
     && identityCache.get(controllerAddress)?.promise === controllerIdentityPromise) {
     identityCache.delete(controllerAddress);
   }
-  if (!controllerIdentity || !tokenIdentity) return null;
+  if (!controllerIdentity || (verifyTokenIdentity && !tokenIdentity)) return null;
   const matches = candidates.filter((mode) =>
     storedIdentityMatches(controllerIdentity, mode.shape.implementation, mode.shape.launcherCodeHash)
-    && storedIdentityMatches(tokenIdentity, mode.shape.tokenImplementation, mode.shape.tokenCodeHash || mode.shape.tokenSelectorHash));
+    && (!verifyTokenIdentity
+      || storedIdentityMatches(tokenIdentity, mode.shape.tokenImplementation, mode.shape.tokenCodeHash || mode.shape.tokenSelectorHash)));
+  // Controller-only matching is used solely to discard an ordinary Flap
+  // receipt after strict canonical classification has proved that it belongs
+  // to no open feature/first-three causal group. Token identity changes alone
+  // are not a meaningful mode novelty, so any complete warmed shape with the
+  // same static descriptor and controller identity is sufficient there. The
+  // alerting path keeps the default exact-one controller+token requirement.
+  if (!verifyTokenIdentity) return matches.length ? structuredClone(matches[0].shape) : null;
   return matches.length === 1 ? structuredClone(matches[0].shape) : null;
 }
 
@@ -11823,6 +11844,27 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       && isNearHeadProfileBlock(entry.blockNumber)
       && exactOfficialCausalProfileEligible(controller, tokens[0].token, modeDescriptor);
     const blockPromise = cachedBlock(entry.blockNumber);
+    if (profileBlock !== null && canUseOrdinaryFlapReceiptFastPath(entry, {
+      controller,
+      flapModeContext,
+      bscPools,
+      flapCreationCandidates: context.flapCreationCandidates || [],
+      receiptCausalClassification: context.receiptCausalClassification === true,
+    })) {
+      const knownControllerShape = await matchKnownOfficialFastMode({
+        provider,
+        state,
+        controller,
+        token: tokens[0].token,
+        blockTag: profileBlock,
+        descriptor: modeDescriptor,
+        warmedFingerprints: warmedKnownOfficialModes,
+        identityCache: officialControllerIdentityCache,
+        preferLatestState: preferLatestOfficialState,
+        verifyTokenIdentity: false,
+      });
+      if (knownControllerShape) return null;
+    }
     const fastShape = profileBlock === null ? null : await matchKnownOfficialFastMode({
       provider,
       state,
@@ -12063,6 +12105,65 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
 
   async function creationTransactionFromBscScan(address) {
     return (await attributionFromBscScan(address)).creationTransaction;
+  }
+
+  function hasKnownFlapReceiptRoute(candidates = []) {
+    if (!candidates.length) return false;
+    const configuredPools = Object.values(state?.officialSources?.flap?.pools || {});
+    const knownQuoteAssets = new Set([
+      ...BSC_QUOTE_ASSETS,
+      ...configuredPools
+        .map((pool) => String(pool?.quoteAddress || "").toLowerCase())
+        .filter((address) => ADDRESS.test(address)),
+    ]);
+    const knownVaultFactories = new Set([
+      ...FLAP_OFFICIAL_VAULT_FACTORIES.keys(),
+      ...configuredPools
+        .map((pool) => String(pool?.vaultFactory || "").toLowerCase())
+        .filter((address) => ADDRESS.test(address)),
+    ]);
+    return candidates.every((candidate) => {
+      if (candidate.topic === FLAP_TOKEN_CREATED_TOPIC) {
+        return Array.isArray(candidate.quoteAssets)
+          && candidate.quoteAssets.length > 0
+          && candidate.quoteAssets.every((address) => knownQuoteAssets.has(String(address).toLowerCase()));
+      }
+      if (candidate.topic === FLAP_VAULT_TOKEN_CREATED_TOPIC) {
+        return knownVaultFactories.has(String(candidate.vaultFactory || "").toLowerCase());
+      }
+      return false;
+    });
+  }
+
+  function canUseOrdinaryFlapReceiptFastPath(entry, {
+    controller,
+    flapModeContext,
+    bscPools = [],
+    flapCreationCandidates = [],
+    receiptCausalClassification = false,
+  } = {}) {
+    if (receiptCausalClassification !== true
+      || controller?.platform?.id !== "flap"
+      || flapModeContext
+      || backgroundFeatureKeys(entry).length > 0
+      || !hasKnownFlapReceiptRoute(flapCreationCandidates)) return false;
+    const ordinaryReasons = new Set([
+      "known_launch",
+      "http_tail",
+      "near_head_gap_recovery",
+      "realtime_tail",
+      "gap_recovery",
+    ]);
+    if ([...(entry.reasons || [])].some((reason) => !ordinaryReasons.has(reason))) return false;
+    // Receipt classification installs an exact first-three key when a live
+    // quote window matches. Recheck the same proof here so this optimization
+    // fails closed if a future classification change forgets that binding.
+    for (const [, window] of activeFlapQuoteFirstThreeWindows(state)) {
+      if (flapCreationCandidates.some((candidate) =>
+        flapQuoteCandidateAfterActivation(candidate, window)
+        && verifiedFlapQuotePair(bscPools, candidate.token, window.quoteAddress))) return false;
+    }
+    return true;
   }
 
   async function needsTransactionInspection(entry) {
@@ -12949,10 +13050,22 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         };
         observation = flapReplaySignal
           ? await awaitFlapReplayRead(
-            () => prepareTransaction(entry, { transaction, receipt, bscPools }),
+            () => prepareTransaction(entry, {
+              transaction,
+              receipt,
+              bscPools,
+              flapCreationCandidates: receiptFlapCreationCandidates,
+              receiptCausalClassification: needsReceiptClassification,
+            }),
             flapReplaySignal,
           )
-          : await prepareTransaction(entry, { transaction, receipt, bscPools });
+          : await prepareTransaction(entry, {
+            transaction,
+            receipt,
+            bscPools,
+            flapCreationCandidates: receiptFlapCreationCandidates,
+            receiptCausalClassification: needsReceiptClassification,
+          });
         if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
       } catch (error) {
         // Receipt parsing is sufficient to preserve exact Flap creation and

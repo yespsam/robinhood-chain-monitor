@@ -1073,16 +1073,26 @@ test("an exact Flap receipt stays in per-transaction evidence when later identit
   assert.equal(snapshot.seenTransactions[transactionHash], undefined);
 });
 
-test("the first near-head exact Flap warm profile reads latest before any historical blockTag", async (t) => {
+test("the first near-head Flap token warms the mode and the next ordinary receipt skips token runtime reads", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-flap-near-head-latest-warm-"));
-  const clock = Date.parse("2026-08-11T12:00:00.000Z");
+  let clock = Date.parse("2026-08-11T12:00:00.000Z");
   const transactionHash = `0x${"c".repeat(64)}`;
+  const nextTransactionHash = `0x${"e".repeat(64)}`;
   const portal = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
   const creator = "0x2222222222222222222222222222222222222222";
   const token = "0x1111111111111111111111111111111111118888";
+  const nextToken = "0x1111111111111111111111111111111111119999";
   const blockHash = `0x${"d".repeat(64)}`;
+  const nextBlockHash = `0x${"f".repeat(64)}`;
+  const pairFactory = "0xca143ce32fe78f1f7019d7d551a6402fc5350c73";
+  const pair = "0x3333333333333333333333333333333333333333";
+  const nextPair = "0x4444444444444444444444444444444444444444";
   const iface = new Interface(["event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)"]);
+  const pairInterface = new Interface(["event PairCreated(address indexed token0,address indexed token1,address pair,uint256)"]);
   const encoded = iface.encodeEventLog(iface.getEvent("TokenCreated"), [Math.floor(clock / 1_000), creator, 1n, token, "Warm", "WARM", "ipfs://warm"]);
+  const nextEncoded = iface.encodeEventLog(iface.getEvent("TokenCreated"), [Math.floor(clock / 1_000) + 1, creator, 2n, nextToken, "Known", "KNOWN", "ipfs://known"]);
+  const pairEncoded = pairInterface.encodeEventLog(pairInterface.getEvent("PairCreated"), [BSC_WBNB, token, pair, 1n]);
+  const nextPairEncoded = pairInterface.encodeEventLog(pairInterface.getEvent("PairCreated"), [BSC_WBNB, nextToken, nextPair, 2n]);
   const log = {
     address: portal,
     transactionHash,
@@ -1092,6 +1102,29 @@ test("the first near-head exact Flap warm profile reads latest before any histor
     logIndex: "0x2",
     topics: encoded.topics,
     data: encoded.data,
+  };
+  const nextLog = {
+    ...log,
+    transactionHash: nextTransactionHash,
+    blockNumber: "0x64",
+    blockHash: nextBlockHash,
+    topics: nextEncoded.topics,
+    data: nextEncoded.data,
+  };
+  const pairLog = {
+    ...log,
+    address: pairFactory,
+    logIndex: "0x3",
+    topics: pairEncoded.topics,
+    data: pairEncoded.data,
+  };
+  const nextPairLog = {
+    ...pairLog,
+    transactionHash: nextTransactionHash,
+    blockNumber: "0x64",
+    blockHash: nextBlockHash,
+    topics: nextPairEncoded.topics,
+    data: nextPairEncoded.data,
   };
   await fs.writeFile(path.join(dataDir, "bsc-launchpad-state.json"), JSON.stringify({
     version: 6,
@@ -1103,21 +1136,25 @@ test("the first near-head exact Flap warm profile reads latest before any histor
   const profileReads = [];
   const provider = {
     async getNetwork() { return { chainId: 56n }; },
-    async getBlockNumber() { return 102; },
+    async getBlockNumber() { return 103; },
     async getTransaction(hash) {
-      assert.equal(hash, transactionHash);
-      return { hash, blockNumber: 99, blockHash, index: 0, transactionIndex: 0, to: portal, from: creator, data: `0x8cb5772c${"00".repeat(32)}` };
+      if (hash === transactionHash) return { hash, blockNumber: 99, blockHash, index: 0, transactionIndex: 0, to: portal, from: creator, data: `0x8cb5772c${"00".repeat(32)}` };
+      assert.equal(hash, nextTransactionHash);
+      return { hash, blockNumber: 100, blockHash: nextBlockHash, index: 0, transactionIndex: 0, to: portal, from: creator, data: `0x8cb5772c${"00".repeat(32)}` };
     },
     async getTransactionReceipt(hash) {
-      assert.equal(hash, transactionHash);
-      return { hash, transactionHash: hash, blockNumber: 99, blockHash, index: 0, transactionIndex: 0, status: 1, logs: [log] };
+      if (hash === transactionHash) return { hash, transactionHash: hash, blockNumber: 99, blockHash, index: 0, transactionIndex: 0, status: 1, logs: [log, pairLog] };
+      assert.equal(hash, nextTransactionHash);
+      return { hash, transactionHash: hash, blockNumber: 100, blockHash: nextBlockHash, index: 0, transactionIndex: 0, status: 1, logs: [nextLog, nextPairLog] };
     },
     async getBlock(number) {
-      return { number, hash: blockHash, timestamp: Math.floor(clock / 1_000), transactions: [transactionHash] };
+      return Number(number) === 99
+        ? { number: 99, hash: blockHash, timestamp: Math.floor(clock / 1_000), transactions: [transactionHash] }
+        : { number: 100, hash: nextBlockHash, timestamp: Math.floor(clock / 1_000) + 1, transactions: [nextTransactionHash] };
     },
     async getCode(address, blockTag) {
       const normalized = String(address).toLowerCase();
-      if ([portal, token].includes(normalized)) {
+      if ([portal, token, nextToken].includes(normalized)) {
         profileReads.push({ method: "getCode", address: normalized, blockTag });
         assert.equal(blockTag, undefined, "the exact near-head warm profile must read latest first");
       }
@@ -1125,7 +1162,7 @@ test("the first near-head exact Flap warm profile reads latest before any histor
     },
     async getStorage(address, _slot, blockTag) {
       const normalized = String(address).toLowerCase();
-      if ([portal, token].includes(normalized)) {
+      if ([portal, token, nextToken].includes(normalized)) {
         profileReads.push({ method: "getStorage", address: normalized, blockTag });
         assert.equal(blockTag, undefined, "the exact near-head warm identity must read latest first");
       }
@@ -1134,11 +1171,11 @@ test("the first near-head exact Flap warm profile reads latest before any histor
     destroy() {},
   };
   const realtimeProvider = {
-    async getBlockNumber() { return 102; },
+    async getBlockNumber() { return 103; },
     async send(method, [request]) {
       assert.equal(method, "eth_getLogs");
       return Array.isArray(request.topics?.[0]) && request.topics[0].includes(FLAP_TOKEN_CREATED_TOPIC)
-        ? [log]
+        ? [log, nextLog]
         : [];
     },
     destroy() {},
@@ -1181,14 +1218,23 @@ test("the first near-head exact Flap warm profile reads latest before any histor
   await monitor.start();
   await completeRealtimeTailPasses(monitor, 2);
   await waitUntil(async () => (await monitor.getState()).seenTransactions[transactionHash] === 99);
+  clock += 751;
+  await monitor.processRealtimeQueue();
+  await waitUntil(async () => (await monitor.getState()).seenTransactions[nextTransactionHash] === 100);
   const snapshot = await monitor.getState();
   assert.equal(snapshot.seenTransactions[transactionHash], 99);
+  assert.equal(snapshot.seenTransactions[nextTransactionHash], 100);
   assert.ok(profileReads.some((read) => read.method === "getCode" && read.address === portal));
   assert.ok(profileReads.some((read) => read.method === "getCode" && read.address === token));
+  assert.equal(profileReads.some((read) => read.address === nextToken), false,
+    "the warmed known route finishes from its canonical receipt without reading the ordinary token runtime");
   assert.equal(snapshot.realtimePendingEntries[transactionHash], undefined, "successful latest-first warm profiling drains the durable entry");
+  assert.equal(snapshot.realtimePendingEntries[nextTransactionHash], undefined);
   assert.ok(snapshot.officialSources.flap.creationEventHotIndex
     .some((candidate) => candidate.transactionHash === transactionHash && candidate.blockHash === blockHash),
   "successful processing commits the rich receipt candidate into the processed hot cache");
+  assert.ok(snapshot.officialSources.flap.creationEventHotIndex
+    .some((candidate) => candidate.transactionHash === nextTransactionHash && candidate.blockHash === nextBlockHash));
 });
 
 test("successful Flap deep processing atomically replaces pending raw evidence with restartable hot evidence", async (t) => {
@@ -1421,6 +1467,23 @@ test("warmed ordinary Flap and Four.Meme fingerprints use the conservative ident
     assert.deepEqual(matched, fixture.shape);
     assert.equal(fixture.getReads(), expectedReads, "clone bytecode avoids redundant proxy-slot reads");
   }
+});
+
+test("a warmed ordinary Flap receipt can verify only the controller before silent cleanup", async () => {
+  const fixture = knownOfficialFastFixture({ platformId: "flap" });
+  const matched = await matchKnownOfficialFastMode({
+    provider: fixture.provider,
+    state: fixture.state,
+    controller: fixture.controller,
+    token: fixture.token,
+    blockTag: 101,
+    descriptor: fixture.descriptor,
+    warmedFingerprints: fixture.warmedFingerprints,
+    verifyTokenIdentity: false,
+  });
+  assert.deepEqual(matched, fixture.shape);
+  assert.equal(fixture.getReads(), 3,
+    "receipt-only cleanup verifies the controller proxy but never reads the ordinary token runtime");
 });
 
 test("warmed official controller identity is shared for a short block bucket", async () => {
