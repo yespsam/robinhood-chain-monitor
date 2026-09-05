@@ -9074,6 +9074,8 @@ test("a slow focus3 low request overlaps an actual tail range but serializes the
   const lowGate = new Promise((resolve) => { releaseLow = resolve; });
   const lowStarted = new Promise((resolve) => { signalLowStarted = resolve; });
   let blockFirstLow = true;
+  const deepTransactionHash = `0x${"7".repeat(64)}`;
+  let deepTransactionCalls = 0;
   let activePhysicalLogs = 0;
   let maximumPhysicalLogs = 0;
   const physicalCalls = [];
@@ -9082,6 +9084,20 @@ test("a slow focus3 low request overlaps an actual tail range but serializes the
   const providerFactory = (lane) => () => ({
     async getNetwork() { return { chainId: 56n }; },
     async getBlockNumber() { return head; },
+    async getTransaction(transactionHash) {
+      deepTransactionCalls += 1;
+      return {
+        hash: transactionHash,
+        blockNumber: 95,
+        transactionIndex: 0,
+        from: `0x${"9".repeat(40)}`,
+        to: null,
+        data: "0x",
+      };
+    },
+    async getTransactionReceipt(transactionHash) {
+      return { transactionHash, blockNumber: 95, status: 1, logs: [] };
+    },
     async send(method, [request]) {
       assert.equal(method, "eth_getLogs");
       const fromBlock = Number.parseInt(request.fromBlock, 16);
@@ -9130,6 +9146,23 @@ test("a slow focus3 low request overlaps an actual tail range but serializes the
     launchers: {},
     hooks: {},
     seenTransactions: {},
+    realtimePendingEntries: {
+      [deepTransactionHash]: {
+        transactionHash: deepTransactionHash,
+        blockNumber: 95,
+        transactionIndex: 0,
+        logIndex: 0,
+        reasons: ["http_tail"],
+        mintEmitters: [],
+        candidateTokens: [],
+        verifiedNewContracts: [],
+        upgradeEmitters: ["0x1111111111111111111111111111111111111111"],
+        lifecycleEmitters: [],
+        hookPools: [],
+        hasProtocolTrigger: false,
+        revision: 1,
+      },
+    },
     nearHeadRecoveryGaps: [{
       id: "realtime-tail-gap:60:99",
       fromBlock: 60,
@@ -9156,6 +9189,7 @@ test("a slow focus3 low request overlaps an actual tail range but serializes the
     bscOfficialPollIntervalMs: 60_000,
   }, {
     autoStart: false,
+    externalAttribution: false,
     provider,
     realtimeProvider,
     WebSocketImpl: IdleWebSocket,
@@ -9209,6 +9243,9 @@ test("a slow focus3 low request overlaps an actual tail range but serializes the
   assert.equal((await firstLow).completed, false);
   snapshot = await monitor.getState();
   assert.equal(snapshot.nearHeadRecoveryGaps[0].nextBlock, 80);
+  await monitor.processRealtimeQueue();
+  assert.equal(deepTransactionCalls, 1,
+    "a completed low lease must not erase the still-valid healthy-tail proof for durable CA analysis");
   const callsAfterRelease = physicalCalls.length;
   assert.equal((await monitor.scanNearHeadRecovery()).reason, "realtime_priority");
   assert.equal(physicalCalls.length, callsAfterRelease, "release invalidates the prior tail proof immediately");

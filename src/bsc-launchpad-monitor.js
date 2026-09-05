@@ -5250,6 +5250,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   let lowLogRecoveryOwner = null;
   let lowLogTailRefreshRequired = false;
   let consecutiveHealthyRealtimeTailBatches = 0;
+  let consecutiveHealthyTailBatchesAfterLowRelease = 0;
   let backgroundDeepRpcInFlight = false;
   let backgroundDeepRpcNextAt = 0;
   let backgroundDeepHostRetryAt = 0;
@@ -5448,6 +5449,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
 
   const resetRealtimeTailDeepReadiness = () => {
     consecutiveHealthyRealtimeTailBatches = 0;
+    consecutiveHealthyTailBatchesAfterLowRelease = 0;
   };
 
   const recordRealtimeTailDeepReadiness = () => {
@@ -5468,9 +5470,15 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       BSC_DEEP_RPC_HEALTHY_TAIL_BATCHES,
       consecutiveHealthyRealtimeTailBatches + 1,
     );
-    if (lowLogTailRefreshRequired
-      && consecutiveHealthyRealtimeTailBatches >= BSC_DEEP_RPC_HEALTHY_TAIL_BATCHES) {
-      lowLogTailRefreshRequired = false;
+    if (lowLogTailRefreshRequired) {
+      consecutiveHealthyTailBatchesAfterLowRelease = Math.min(
+        BSC_DEEP_RPC_HEALTHY_TAIL_BATCHES,
+        consecutiveHealthyTailBatchesAfterLowRelease + 1,
+      );
+      if (consecutiveHealthyTailBatchesAfterLowRelease >= BSC_DEEP_RPC_HEALTHY_TAIL_BATCHES) {
+        lowLogTailRefreshRequired = false;
+        consecutiveHealthyTailBatchesAfterLowRelease = 0;
+      }
     }
   };
 
@@ -5495,8 +5503,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     // Linearize the next low-lane lease after this completion. Tail results
     // produced while the old repair was in flight cannot pre-authorize another
     // repair burst; only two caught-up results after release clear this epoch.
+    // The already-proven deep-reader health remains valid so durable CA work
+    // can run while the lower-priority log lane waits for its fresh proof.
     lowLogTailRefreshRequired = true;
-    resetRealtimeTailDeepReadiness();
+    consecutiveHealthyTailBatchesAfterLowRelease = 0;
     scheduleRealtimeTail();
   };
 
@@ -14596,10 +14606,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         realtimeTailNextStartAt = Number(now()) + realtimeTailMinIntervalMs;
         if (lowLogRecoveryOwner && !lowLogTailRefreshRequired) {
           // A slow repair is allowed to overlap one urgent tail batch. That
-          // overlap consumes the old health proof; two caught-up tail results
-          // must follow before another low-range owner may start.
+          // overlap consumes the old low-lane health proof; two caught-up tail
+          // results must follow before another low-range owner may start.
           lowLogTailRefreshRequired = true;
-          resetRealtimeTailDeepReadiness();
+          consecutiveHealthyTailBatchesAfterLowRelease = 0;
         }
       }
       const confirmed = Math.max(0, currentHead - (config.bscConfirmations ?? 2));
