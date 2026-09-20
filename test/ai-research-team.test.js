@@ -72,3 +72,15 @@ test('brief is concise Chinese and names the evidence boundaries', () => {
   assert.match(brief, /安全/);
   assert.match(brief, /失效条件/);
 });
+
+test('Robinhood Chain is a first-class research lane with explicit chip evidence', () => {
+  const report = goodReport({
+    chain: '4663',
+    token: { ...TOKEN, chain: 'robinhood', devTeamHoldRate: .04, top70SniperHoldRate: .08, ratTraderAmountRate: .03, bluechipOwnerPercentage: .21, ctoFlag: true },
+  });
+  assert.equal(report.chain, 'robinhood');
+  assert.match(report.departments.chain.conclusion, /Robinhood Chain/);
+  assert.equal(report.departments.flow.metrics.devTeamHoldRate, 4);
+  assert.equal(report.departments.flow.metrics.bluechipOwnerPercentage, 21);
+  assert.ok(report.departments.flow.facts.some(item => /筹码字段/.test(item.text)));
+});

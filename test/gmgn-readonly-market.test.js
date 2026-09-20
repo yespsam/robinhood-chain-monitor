@@ -86,7 +86,26 @@ test('readonly K-line keeps the last real candles during a transient upstream fa
 
 test('readonly market accepts only supported read-only chains and resolutions', async () => {
   const client = createReadonlyMarketClient({ runner: async () => JSON.stringify({ data: { rank: [rankItem] } }) });
+  const robinhood = await client.trending({ chain: 'robinhood', interval: '1m', limit: 1 });
+  assert.equal(robinhood.status, 'ok');
   await assert.rejects(() => client.trending({ chain: 'polygon', interval: '1m' }), /invalid chain/);
   await assert.rejects(() => client.trending({ chain: 'bsc', interval: '10m' }), /invalid interval/);
   await assert.rejects(() => client.kline({ chain: 'bsc', address: '0xabc12345', resolution: '10m' }), /invalid resolution/);
+});
+
+test('readonly market preserves Robinhood-specific chip fields without treating them as execution data', async () => {
+  const calls = [];
+  const client = createReadonlyMarketClient({ runner: async args => {
+    calls.push(args);
+    return JSON.stringify({ data: { rank: [{ ...rankItem, chain: 'robinhood', dev_team_hold_rate: .04, top70_sniper_hold_rate: .08, rat_trader_amount_rate: .03, bluechip_owner_percentage: .21, cto_flag: 1 }] } });
+  } });
+  const result = await client.trending({ chain: 'robinhood', interval: '5m', limit: 2 });
+  const token = result.tokens[0];
+  assert.equal(token.chain, 'robinhood');
+  assert.equal(token.devTeamHoldRate, .04);
+  assert.equal(token.top70SniperHoldRate, .08);
+  assert.equal(token.ratTraderAmountRate, .03);
+  assert.equal(token.bluechipOwnerPercentage, .21);
+  assert.equal(token.ctoFlag, true);
+  assert.deepEqual(calls[0], ['market', 'trending', '--chain', 'robinhood', '--interval', '5m', '--order-by', 'volume', '--limit', '2', '--raw']);
 });

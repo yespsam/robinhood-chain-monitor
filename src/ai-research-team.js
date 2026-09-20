@@ -24,9 +24,11 @@ const CHAIN_ALIASES = Object.freeze({
   bsc: 'bsc', '56': 'bsc',
   base: 'base', '8453': 'base',
   eth: 'eth', ethereum: 'eth', '1': 'eth',
+  robinhood: 'robinhood', '4663': 'robinhood',
 });
-const CHAIN_LABELS = Object.freeze({ sol: 'Solana', bsc: 'BSC', base: 'Base', eth: 'Ethereum' });
-const CHAIN_NATIVE = Object.freeze({ sol: 'SOL', bsc: 'BNB', base: 'ETH', eth: 'ETH' });
+const CHAIN_LABELS = Object.freeze({ sol: 'Solana', bsc: 'BSC', base: 'Base', eth: 'Ethereum', robinhood: 'Robinhood Chain' });
+const CHAIN_NATIVE = Object.freeze({ sol: 'SOL', bsc: 'BNB', base: 'ETH', eth: 'ETH', robinhood: 'ETH' });
+const CHAIN_IDS = Object.freeze({ sol: '非 EVM', bsc: 56, base: 8453, eth: 1, robinhood: 4663 });
 const DEFAULT_MAX_MARKET_AGE_MS = 2 * 60 * 1_000;
 const MAX_NARRATIVE_AGE_MS = 24 * 60 * 60 * 1_000;
 const MIN_LIQUIDITY_USD = 50_000;
@@ -144,7 +146,8 @@ function chainReport({ chain, freshness, marketStatus } = {}) {
     id: 'chain', label: '链路研究部', status, score, maxScore: 15,
     conclusion: !supported ? '当前链不在 GMGN 只读覆盖范围' : freshness.fresh ? `${CHAIN_LABELS[slug]} · GMGN 数据新鲜` : `${CHAIN_LABELS[slug]} · 数据需要刷新`,
     facts: [
-      evidence(supported ? `${CHAIN_LABELS[slug]} · 原生资产 ${CHAIN_NATIVE[slug]}` : '未知链', slug || chain || null, supported ? 'good' : 'warn'),
+      evidence(supported ? `${CHAIN_LABELS[slug]} · 原生资产 ${CHAIN_NATIVE[slug]} · 链 ID ${CHAIN_IDS[slug]}` : '未知链', slug || chain || null, supported ? 'good' : 'warn'),
+      ...(slug === 'robinhood' ? [evidence('重点覆盖：GMGN 行情 + Robinhood 链上/官方监控', 'market_and_chain_monitors', 'info')] : []),
       evidence(`行情状态：${marketStatus || 'unknown'} · 数据年龄：${freshness.ageMs == null ? '未知' : `${Math.round(freshness.ageMs / 1000)}秒`}`, freshness.ageMs, freshness.fresh ? 'good' : 'warn'),
     ],
     missing,
@@ -163,6 +166,16 @@ function flowReport({ token = {}, flow = {} } = {}) {
   const sells = finite(token.sells ?? flow.sells);
   const botRate = percent(token.botDegenRate);
   const bundler = percent(token.bundlerRate);
+  const lockPercent = percent(token.lockPercent);
+  const devTeamHoldRate = percent(token.devTeamHoldRate);
+  const top70SniperHoldRate = percent(token.top70SniperHoldRate);
+  const ratTraderAmountRate = percent(token.ratTraderAmountRate);
+  const bluechipOwnerPercentage = percent(token.bluechipOwnerPercentage);
+  const entrapmentRatio = percent(token.entrapmentRatio);
+  const sniperCount = finite(token.sniperCount);
+  const ctoFlag = bool(token.ctoFlag);
+  const flowStatus = clean(flow.status).toLowerCase();
+  const coverageGap = clean(flow.coverageGap);
   const wash = bool(token.isWashTrading);
   const highProfit = finite(flow.highProfitCount);
   const fomo = finite(flow.fomoCount);
@@ -201,15 +214,30 @@ function flowReport({ token = {}, flow = {} } = {}) {
   const flowSignalPass = flowFresh && highProfit != null && fomo != null && uniqueBuyers != null && netBuyUsd != null
     && highProfit >= 5 && fomo >= 3 && uniqueBuyers >= 6 && netBuyUsd >= 10_000;
   const activitySummary = `高盈利 ${highProfit == null ? '未知' : highProfit} · FOMO ${fomo == null ? '未知' : fomo} · 独立买家 ${uniqueBuyers == null ? '未知' : uniqueBuyers}`;
+  const flowStatusText = ({ healthy: '健康', partial: '部分覆盖', stale: '过期', unavailable: '不可用', rate_limited: '限流' })[flowStatus] || flowStatus || '未知';
+  const coverageSummary = flowStatus && flowStatus !== 'healthy'
+    ? `资金流${flowStatus === 'partial' ? '部分覆盖' : flowStatus}${coverageGap ? `（${coverageGap}）` : ''} · `
+    : '';
   facts.push(evidence(`聪明钱 ${smart == null ? '未知' : smart} · 知名地址 ${renowned == null ? '未知' : renowned}`, { smart, renowned }, smart != null ? 'good' : 'warn'));
   facts.push(evidence(`高盈利 ${highProfit == null ? '未知' : highProfit} · FOMO ${fomo == null ? '未知' : fomo} · 独立买家 ${uniqueBuyers == null ? '未知' : uniqueBuyers}`, { highProfit, fomo, uniqueBuyers, netBuyUsd }, highProfit != null || fomo != null ? 'info' : 'warn'));
   facts.push(evidence(`持有人 ${holders == null ? '未知' : holders.toLocaleString()} · Top10 ${top10 == null ? '未知' : `${round(top10)}%`}`, { holders, top10 }, top10 == null || concentrationRisk ? 'warn' : 'good'));
   facts.push(evidence(`买/卖 ${buys == null || sells == null ? '未知' : `${buys}/${sells}`} · 流动性 ${liquidity == null ? '未知' : `$${Math.round(liquidity).toLocaleString()}`}`, { buys, sells, liquidity }, liquidity != null ? 'good' : 'warn'));
+  if (flowStatus || coverageGap) facts.push(evidence(`资金流状态：${flowStatusText}${coverageGap ? ` · 缺口：${coverageGap}` : ''}`, { status: flowStatus || null, coverageGap: coverageGap || null }, flowStatus === 'healthy' && !coverageGap ? 'good' : 'warn'));
+  const chipFacts = [];
+  if (devTeamHoldRate != null) chipFacts.push(`开发团队 ${round(devTeamHoldRate)}%`);
+  if (top70SniperHoldRate != null) chipFacts.push(`Top70 狙击 ${round(top70SniperHoldRate)}%`);
+  if (ratTraderAmountRate != null) chipFacts.push(`鼠仓 ${round(ratTraderAmountRate)}%`);
+  if (bluechipOwnerPercentage != null) chipFacts.push(`蓝筹地址 ${round(bluechipOwnerPercentage)}%`);
+  if (lockPercent != null) chipFacts.push(`锁仓 ${round(lockPercent)}%`);
+  if (sniperCount != null) chipFacts.push(`狙击地址 ${sniperCount}`);
+  if (entrapmentRatio != null) chipFacts.push(`陷阱比 ${round(entrapmentRatio)}%`);
+  if (ctoFlag === true) chipFacts.push('CTO 标记');
+  if (chipFacts.length) facts.push(evidence(`GMGN 筹码字段：${chipFacts.join(' · ')}`, { lockPercent, devTeamHoldRate, top70SniperHoldRate, ratTraderAmountRate, bluechipOwnerPercentage, entrapmentRatio, sniperCount, ctoFlag }, 'info'));
   return {
     id: 'flow', label: '筹码资金部', status: score >= 14 && flowSignalPass && !concentrationRisk && !botRisk && missing.length === 0 ? '通过' : '部分', score: Math.min(20, round(score, 1)), maxScore: 20,
-    conclusion: botRisk ? `机器人/打包占比偏高，资金流降级 · ${activitySummary}` : concentrationRisk ? `Top10 偏集中，仅作风险代理 · ${activitySummary}` : !flowFresh ? `资金流快照已过期，不升级结论 · ${activitySummary}` : !flowSignalPass ? `高盈利/FOMO 地址未达到共振线 · ${activitySummary}` : score >= 14 ? `聪明钱与流动性达到纸上筛选线 · ${activitySummary}` : `筹码证据不完整，继续观察 · ${activitySummary}`,
+    conclusion: botRisk ? `${coverageSummary}机器人/打包占比偏高，资金流降级 · ${activitySummary}` : concentrationRisk ? `${coverageSummary}Top10 偏集中，仅作风险代理 · ${activitySummary}` : !flowFresh ? `${coverageSummary}资金流快照已过期，不升级结论 · ${activitySummary}` : !flowSignalPass ? `${coverageSummary}高盈利/FOMO 地址未达到共振线 · ${activitySummary}` : score >= 14 ? `${coverageSummary}聪明钱与流动性达到纸上筛选线 · ${activitySummary}` : `${coverageSummary}筹码证据不完整，继续观察 · ${activitySummary}`,
     facts, missing, proxy: top10 != null ? 'Top10 仅为筹码风险代理，不等同完整持仓分布' : '完整持仓分布未接入，暂无法计算筹码风险代理',
-    metrics: { liquidity, volume, smart, renowned, holders, top10, buys, sells, botRate, bundler, highProfit, fomo, uniqueBuyers, netBuyUsd, flowFresh },
+    metrics: { liquidity, volume, smart, renowned, holders, top10, buys, sells, botRate, bundler, lockPercent, devTeamHoldRate, top70SniperHoldRate, ratTraderAmountRate, bluechipOwnerPercentage, entrapmentRatio, sniperCount, ctoFlag, highProfit, fomo, uniqueBuyers, netBuyUsd, flowFresh, flowStatus, coverageGap: coverageGap || null },
   };
 }
 

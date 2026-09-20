@@ -16,6 +16,7 @@ test('dashboard serves the paper terminal, local paper bridge, and rejects path 
   assert.match(pageText, /只看持仓和买入逻辑/);
   assert.match(pageText, /买入逻辑/);
   assert.match(pageText, /当前持仓/);
+  assert.match(pageText, /Robinhood/);
   assert.match(pageText, /追踪回撤/);
   assert.match(pageText, /分段回收/);
   const css = await fetch(`${base}/styles.css`);
@@ -53,6 +54,10 @@ test('dashboard exposes read-only GMGN market and kline routes without trade exe
   assert.equal(calls[1][1].chain, 'bsc');
   assert.equal(calls[1][1].resolution, '1m');
   assert.equal(calls[1][1].address, '0xabc12345');
+  const defaultMarket = await fetch(`${base}/api/market`);
+  assert.equal(defaultMarket.status, 200);
+  assert.equal(calls[2][0], 'trending');
+  assert.equal(calls[2][1].chain, 'robinhood');
 });
 
 test('dashboard exposes a read-only AI research team report', async t => {

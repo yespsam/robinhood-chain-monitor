@@ -80,7 +80,7 @@ async function readNarrativeEvidence({ chain, address, token, nowMs = Date.now()
 }
 
 async function researchTeamSnapshot({ market, chain, address } = {}) {
-  const requestedChain = String(chain || 'bsc').toLowerCase();
+  const requestedChain = String(chain || 'robinhood').toLowerCase();
   let marketSnapshot;
   try {
     marketSnapshot = await market.trending({ chain: requestedChain, interval: '1m', limit: 20 });
@@ -136,14 +136,14 @@ export function createDashboardServer({ host = '127.0.0.1', port = 4173, market 
       const url = new URL(request.url || '/', `http://${request.headers.host || '127.0.0.1'}`);
       if (url.pathname === '/api/paper-state') { json(response, await readPaperState()); return; }
       if (url.pathname === '/api/market') {
-        const chain = (url.searchParams.get('chain') || 'bsc').toLowerCase();
+        const chain = (url.searchParams.get('chain') || 'robinhood').toLowerCase();
         const interval = (url.searchParams.get('interval') || '1m').toLowerCase();
         const limit = Number(url.searchParams.get('limit') || 20);
         try { json(response, await market.trending({ chain, interval, limit })); } catch { json(response, { status: 'unavailable', source: 'gmgn-cli', reason: 'invalid_request', tokens: [] }, 400); }
         return;
       }
       if (url.pathname === '/api/kline') {
-        const chain = (url.searchParams.get('chain') || 'bsc').toLowerCase();
+        const chain = (url.searchParams.get('chain') || 'robinhood').toLowerCase();
         const address = url.searchParams.get('address') || '';
         const resolution = (url.searchParams.get('resolution') || '1m').toLowerCase();
         const now = Math.floor(Date.now() / 1000);
@@ -152,7 +152,7 @@ export function createDashboardServer({ host = '127.0.0.1', port = 4173, market 
         return;
       }
       if (url.pathname === '/api/research-team') {
-        const chain = (url.searchParams.get('chain') || 'bsc').toLowerCase();
+        const chain = (url.searchParams.get('chain') || 'robinhood').toLowerCase();
         const address = url.searchParams.get('address') || '';
         try {
           json(response, await researchTeamSnapshot({ market, chain, address }));

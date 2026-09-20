@@ -3,7 +3,10 @@ import { promisify } from 'node:util';
 
 const execFile = promisify(nodeExecFile);
 
-export const GMGN_CHAINS = Object.freeze(['sol', 'bsc', 'base', 'eth']);
+// Robinhood Chain is supported by the read-only market/trenches CLI. It is
+// intentionally included here as a market feed only; this does not enable any
+// wallet, signer, or swap capability.
+export const GMGN_CHAINS = Object.freeze(['sol', 'bsc', 'base', 'eth', 'robinhood']);
 export const GMGN_INTERVALS = Object.freeze(['1m', '5m', '1h', '6h', '24h']);
 export const GMGN_RESOLUTIONS = Object.freeze(['30s', '1m', '5m', '15m', '1h', '4h', '1d']);
 const GMGN_ORDER_BY = 'volume';
@@ -107,6 +110,11 @@ function normalizeToken(item, fallbackChain) {
     bundlerRate: numberOrNull(item.bundler_rate),
     entrapmentRatio: numberOrNull(item.entrapment_ratio),
     sniperCount: numberOrNull(item.sniper_count),
+    devTeamHoldRate: numberOrNull(item.dev_team_hold_rate),
+    top70SniperHoldRate: numberOrNull(item.top70_sniper_hold_rate),
+    ratTraderAmountRate: numberOrNull(item.rat_trader_amount_rate),
+    bluechipOwnerPercentage: numberOrNull(item.bluechip_owner_percentage),
+    ctoFlag: boolOrNull(item.cto_flag),
     raw: item,
   };
   token.risk = riskGate(item);

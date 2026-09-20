@@ -3,7 +3,10 @@ const $$ = selector => [...document.querySelectorAll(selector)];
 const STORAGE_KEY = 'gmgn-paper-terminal-v1';
 const AUTO_STORAGE_KEY = 'yesp-atm-auto-v1';
 const PAPER_START = 100;
-const CHAINS = ['bsc', 'base', 'eth', 'sol'];
+// Robinhood is the primary research lane. Other GMGN market lanes remain
+// available through the same read-only cycle control.
+const CHAINS = ['robinhood', 'bsc', 'base', 'eth', 'sol'];
+const CHAIN_LABELS = Object.freeze({ robinhood: 'Robinhood', bsc: 'BSC', base: 'Base', eth: 'Ethereum', sol: 'Solana' });
 const REAL_REFRESH_MS = 60_000;
 const AUTO_POLICY = Object.freeze({
   entryUsd: 10,
@@ -24,7 +27,7 @@ const RISK_LABELS = Object.freeze({ STRONG: '强', WATCH: '观察', BLOCKED: '�
 
 const state = {
   selectedAddress: null,
-  chain: 'bsc',
+  chain: 'robinhood',
   interval: '1m',
   resolution: '1m',
   side: 'buy',
@@ -108,6 +111,7 @@ function shortClock(date = new Date()) { return date.toLocaleTimeString('en-GB',
 function formatAddress(address) { return typeof address === 'string' && address.length > 12 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address || '—'; }
 function intervalLabel(interval) { return INTERVAL_LABELS[interval] || interval; }
 function resolutionLabel(resolution) { return RESOLUTION_LABELS[resolution] || resolution; }
+function chainLabel(chain) { const key = String(chain || '').toLowerCase(); return CHAIN_LABELS[key] || String(chain || '').toUpperCase(); }
 function riskLabel(risk) { return RISK_LABELS[risk] || '观察'; }
 function hasRealData(status) { return status === 'ok' || status === 'stale'; }
 function ageLabel(timestamp) {
@@ -128,7 +132,7 @@ function markRealStatus(status, extra = {}) {
   $('#streamLabel').textContent = ok ? 'GMGN 真实行情' : stale ? 'GMGN 真实行情 · 上次成功快照' : status === 'loading' ? 'GMGN 行情 · 加载中' : 'GMGN 行情 · 暂不可用';
   $('#safetyCopy').textContent = ok ? 'GMGN 真实只读行情 · 不连接钱包 · 不签名 · 不广播' : stale ? 'GMGN 真实行情 · 上次成功快照 · 等待刷新 · 不连接钱包' : 'GMGN 真实行情暂不可用 · 未显示合成替代数据 · 不连接钱包';
   $('#sourceLabel').textContent = hasData
-    ? `GMGN CLI · 只读 · ${state.chain}/${intervalLabel(state.interval)} · ${state.real.observedAt ? shortClock(new Date(state.real.observedAt)) : '—'}`
+    ? `GMGN CLI · 只读 · ${chainLabel(state.chain)}/${intervalLabel(state.interval)} · ${state.real.observedAt ? shortClock(new Date(state.real.observedAt)) : '—'}`
     : status === 'loading' ? 'GMGN CLI · 连接中' : 'GMGN CLI · 暂不可用';
   $('#latency').textContent = Number.isFinite(state.real.latency) ? String(state.real.latency) : '--';
   $('#paperStateLabel').textContent = hasData ? '已同步' : '本地';
@@ -142,7 +146,7 @@ function renderWatchlist() {
     const risk = token.risk || 'WATCH';
     return `<button class="watch-item ${token.address === state.selectedAddress ? 'active' : ''}" data-token="${escapeHtml(token.address)}" type="button">
       <span class="watch-avatar" style="color:var(--lime);background:rgba(185,255,102,.08)">${escapeHtml(token.symbol.slice(0, 1))}</span>
-      <span><span class="watch-symbol">${escapeHtml(token.symbol)}</span><span class="watch-chain">${escapeHtml(String(token.chain).toUpperCase())} · ${escapeHtml(riskLabel(risk))}</span></span>
+      <span><span class="watch-symbol">${escapeHtml(token.symbol)}</span><span class="watch-chain">${escapeHtml(chainLabel(token.chain))} · ${escapeHtml(riskLabel(risk))}</span></span>
       <span><span class="watch-price">${tokenPrice(token)}</span><span class="watch-change ${positive ? 'positive' : 'negative'}">${positive ? '+' : ''}${number(token.change).toFixed(2)}%</span></span>
     </button>`;
   }).join('') || (state.real.status === 'unavailable'
@@ -156,7 +160,7 @@ function renderMarket() {
   const token = currentToken();
   if (!token) {
     $('#tokenAvatar').textContent = '?'; $('#tokenAvatar').style.color = 'var(--muted)'; $('#tokenAvatar').style.background = '#18221c';
-    $('#tokenName').textContent = '暂无实时代币'; $('#tokenChain').textContent = state.chain.toUpperCase(); $('#tokenAddress').textContent = '—'; $('#tokenAge').textContent = '—';
+    $('#tokenName').textContent = '暂无实时代币'; $('#tokenChain').textContent = chainLabel(state.chain); $('#tokenAddress').textContent = '—'; $('#tokenAge').textContent = '—';
     $('#tokenPrice').textContent = '—'; $('#tokenChange').textContent = '—'; $('#tokenChange').className = 'market-change';
     ['#metricMcap', '#metricLiquidity', '#metricVolume', '#metricHolders'].forEach(selector => { $(selector).textContent = '—'; });
     $('#metricRisk').innerHTML = '<i class="risk-dot"></i> 等待中'; $('#orderAvatar').textContent = '?'; $('#orderToken').textContent = '—';
@@ -164,11 +168,11 @@ function renderMarket() {
   }
   $('#simulateButton').disabled = false;
   $('#tokenAvatar').textContent = token.symbol.slice(0, 1); $('#tokenAvatar').style.color = 'var(--lime)'; $('#tokenAvatar').style.background = 'rgba(185,255,102,.08)';
-  $('#tokenName').textContent = token.symbol; $('#tokenChain').textContent = String(token.chain).toUpperCase(); $('#tokenAddress').textContent = formatAddress(token.address); $('#tokenAge').textContent = ageLabel(token.creationTimestamp || token.openTimestamp);
+  $('#tokenName').textContent = token.symbol; $('#tokenChain').textContent = chainLabel(token.chain); $('#tokenAddress').textContent = formatAddress(token.address); $('#tokenAge').textContent = ageLabel(token.creationTimestamp || token.openTimestamp);
   $('#tokenPrice').textContent = tokenPrice(token); const change = $('#tokenChange'); change.textContent = `${number(token.change) >= 0 ? '+' : ''}${number(token.change).toFixed(2)}%`; change.className = `market-change ${number(token.change) >= 0 ? 'positive' : 'negative'}`;
   $('#metricMcap').textContent = compact(token.marketCap); $('#metricLiquidity').textContent = compact(token.liquidity); $('#metricVolume').textContent = compact(token.volume); $('#metricHolders').textContent = token.holders == null ? '—' : Number(token.holders).toLocaleString('en-US');
   const riskColor = token.risk === 'BLOCKED' ? 'var(--red)' : token.risk === 'STRONG' ? 'var(--lime)' : 'var(--amber)'; $('#metricRisk').innerHTML = `<i class="risk-dot" style="background:${riskColor}"></i> ${escapeHtml(riskLabel(token.risk))}`;
-  $('#orderAvatar').textContent = token.symbol.slice(0, 1); $('#orderAvatar').style.color = 'var(--lime)'; $('#orderAvatar').style.background = 'rgba(185,255,102,.08)'; $('#orderToken').textContent = token.symbol; $('#orderToken').nextElementSibling.textContent = String(token.chain).toUpperCase();
+  $('#orderAvatar').textContent = token.symbol.slice(0, 1); $('#orderAvatar').style.color = 'var(--lime)'; $('#orderAvatar').style.background = 'rgba(185,255,102,.08)'; $('#orderToken').textContent = token.symbol; $('#orderToken').nextElementSibling.textContent = chainLabel(token.chain);
   updateChart(); updateQuote();
 }
 
@@ -244,7 +248,8 @@ function renderResearchTeam() {
   $('#researchTeamScore').textContent = hasReport && Number.isFinite(Number(report.opportunityScore)) ? `${Number(report.opportunityScore).toFixed(0)} / 100` : '—';
   $('#researchTeamConfidence').textContent = hasReport ? `${report.confidence || '低'}${Number.isFinite(Number(report.confidenceScore)) ? ` · ${Number(report.confidenceScore).toFixed(0)}` : ''}` : '—';
   $('#researchTeamUpdated').textContent = state.research.observedAt ? shortClock(new Date(state.research.observedAt)) : '—';
-  $('#researchTeamStatus').textContent = status === 'ok' ? '6部门 · 新鲜' : status === 'stale' ? '6部门 · 上次快照' : status === 'loading' ? '研究中' : '等待真实数据';
+  const focusTag = String(report?.chain || state.chain).toLowerCase() === 'robinhood' ? 'Robinhood重点 · ' : '';
+  $('#researchTeamStatus').textContent = status === 'ok' ? `${focusTag}6部门 · 新鲜` : status === 'stale' ? `${focusTag}6部门 · 上次快照` : status === 'loading' ? `${focusTag}研究中` : '等待真实数据';
   panel.innerHTML = hasReport
     ? RESEARCH_DEPARTMENTS.map(([id, label, marker]) => {
       const department = report.departments?.[id] || {};
@@ -291,7 +296,7 @@ function renderFocus() {
   $('#focusFreshness').textContent = freshness;
   $('#focusFreshness').className = `signal-state ${state.real.status === 'ok' ? 'fresh' : state.real.status === 'stale' ? 'stale' : ''}`;
   if (!token) {
-    $('#focusTokenAvatar').textContent = '?'; $('#focusTokenName').textContent = '等待 GMGN 行情'; $('#focusTokenMeta').textContent = `${state.chain.toUpperCase()} · —`;
+    $('#focusTokenAvatar').textContent = '?'; $('#focusTokenName').textContent = '等待 GMGN 行情'; $('#focusTokenMeta').textContent = `${chainLabel(state.chain)} · —`;
     $('#focusTokenPrice').textContent = '—'; $('#focusTokenChange').textContent = '—'; $('#focusRisk').textContent = '等待'; $('#focusLiquidity').textContent = '—'; $('#focusSmartMoney').textContent = '—'; $('#focusRug').textContent = '—';
     $('#focusSignalNote').textContent = '等待最新 GMGN 真实快照。';
     return;
@@ -299,7 +304,7 @@ function renderFocus() {
   const change = number(token.change);
   $('#focusTokenAvatar').textContent = token.symbol.slice(0, 1);
   $('#focusTokenName').textContent = token.symbol;
-  $('#focusTokenMeta').textContent = `${String(token.chain).toUpperCase()} · ${formatAddress(token.address)}`;
+  $('#focusTokenMeta').textContent = `${chainLabel(token.chain)} · ${formatAddress(token.address)}`;
   $('#focusTokenPrice').textContent = tokenPrice(token);
   const focusChange = $('#focusTokenChange'); focusChange.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`; focusChange.className = change >= 0 ? 'positive' : 'negative';
   $('#focusRisk').textContent = riskLabel(token.risk);
@@ -571,7 +576,7 @@ $('#resetPaper').addEventListener('click', () => { state.paper = { cash: PAPER_S
 $('#focusResetPaper').addEventListener('click', () => $('#resetPaper').click());
 $('#copyButton').addEventListener('click', async () => { const token = currentToken(); if (!token) return toast('没有可复制的真实合约地址。'); try { await navigator.clipboard.writeText(token.address); toast('GMGN 合约地址已复制。'); } catch { toast('当前浏览器无法使用剪贴板。'); } });
 $$('.chart-tab').forEach(button => button.addEventListener('click', () => { state.tab = button.dataset.tab; $$('.chart-tab').forEach(item => item.classList.toggle('active', item === button)); updateChart(); }));
-$('#chainButton').addEventListener('click', () => { state.chain = CHAINS[(CHAINS.indexOf(state.chain) + 1) % CHAINS.length]; state.selectedAddress = null; $('#chainLabel').textContent = state.chain.toUpperCase(); toast(`链筛选：${state.chain.toUpperCase()} · GMGN 只读`); refreshRealMarket(); });
+$('#chainButton').addEventListener('click', () => { state.chain = CHAINS[(CHAINS.indexOf(state.chain) + 1) % CHAINS.length]; state.selectedAddress = null; $('#chainLabel').textContent = chainLabel(state.chain); toast(`链筛选：${chainLabel(state.chain)} · GMGN 只读`); refreshRealMarket(); });
 $('#filterButton').addEventListener('click', () => { const intervals = ['1m', '5m', '1h', '6h', '24h']; state.interval = intervals[(intervals.indexOf(state.interval) + 1) % intervals.length]; $('#filterButton').textContent = `GMGN ${intervalLabel(state.interval)}`; toast(`GMGN 排行窗口：${intervalLabel(state.interval)}`); refreshRealMarket(); });
 $$('.timeframes button').forEach(button => button.addEventListener('click', () => { const resolution = button.dataset.resolution; if (!resolution) return; state.resolution = resolution; $$('.timeframes button').forEach(item => item.classList.toggle('active', item === button)); refreshKline(); }));
 $('#crosshair').addEventListener('mousemove', event => { const bounds = event.currentTarget.parentElement.getBoundingClientRect(); event.currentTarget.style.left = `${event.clientX - bounds.left}px`; });
