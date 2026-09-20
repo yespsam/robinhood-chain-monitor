@@ -1,9 +1,11 @@
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const STORAGE_KEY = 'gmgn-paper-terminal-v1';
+const AUTO_STORAGE_KEY = 'yesp-atm-auto-v1';
 const PAPER_START = 100;
 const CHAINS = ['bsc', 'base', 'eth', 'sol'];
 const REAL_REFRESH_MS = 60_000;
+const AUTO_POLICY = Object.freeze({ entryUsd: 10, maxPositions: 2, stopLoss: -.2, takeProfit: .4, maxHoldMs: 30 * 60_000 });
 const INTERVAL_LABELS = Object.freeze({ '1m': '1分钟', '5m': '5分钟', '1h': '1小时', '6h': '6小时', '24h': '24小时' });
 const RESOLUTION_LABELS = Object.freeze({ '30s': '30秒', '1m': '1分', '5m': '5分', '15m': '15分', '1h': '1小时', '4h': '4小时', '1d': '1天' });
 const RISK_LABELS = Object.freeze({ STRONG: '强', WATCH: '观察', BLOCKED: '拦截' });
@@ -22,6 +24,7 @@ const state = {
   chart: [],
   real: { status: 'loading', source: 'gmgn-cli', observedAt: null, latency: null, candleStatus: 'loading' },
   paper: loadPaper(),
+  auto: loadAuto(),
 };
 
 function loadPaper() {
@@ -32,7 +35,16 @@ function loadPaper() {
   return { cash: PAPER_START, pnl: 0, positions: {} };
 }
 
+function loadAuto() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(AUTO_STORAGE_KEY) || 'null');
+    if (raw && typeof raw.enabled === 'boolean') return { enabled: raw.enabled, lastRunAt: raw.lastRunAt || null, lastAction: raw.lastAction || '等待最新行情', lastReason: raw.lastReason || '' };
+  } catch { /* local-only fallback */ }
+  return { enabled: true, lastRunAt: null, lastAction: '已开启，等待最新行情', lastReason: '' };
+}
+
 function savePaper() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.paper)); }
+function saveAuto() { localStorage.setItem(AUTO_STORAGE_KEY, JSON.stringify(state.auto)); }
 function currentToken() { return state.tokens.find(token => token.address === state.selectedAddress) || state.tokens[0] || null; }
 function number(value, fallback = 0) { const n = Number(value); return Number.isFinite(n) ? n : fallback; }
 function money(value, digits = 2) { return Number.isFinite(Number(value)) ? `$${Number(value).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}` : '—'; }
@@ -140,10 +152,71 @@ function updateQuote() {
 function renderPaper() {
   $('#paperCash').textContent = money(state.paper.cash); $('#paperPnl').textContent = `${state.paper.pnl >= 0 ? '+' : ''}${money(state.paper.pnl)}`; $('#paperPnl').style.color = state.paper.pnl >= 0 ? 'var(--lime)' : 'var(--red)';
   const entries = Object.entries(state.paper.positions); $('#positionCount').textContent = `${entries.length} 个持仓`;
-  $('#positionsList').innerHTML = entries.length ? entries.map(([symbol, position]) => `<div class="position-row"><div><strong>${escapeHtml(symbol)}</strong><small>${position.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} 份额 · ${money(position.cost)}</small></div><div class="position-pnl">${money(position.markValue - position.cost)}<small>纸上盈亏</small></div></div>`).join('') : '<div class="empty-position">暂无持仓<br /><span>模拟成交后显示在这里</span></div>';
+  $('#positionsList').innerHTML = entries.length ? entries.map(([symbol, position]) => `<div class="position-row"><div><strong>${escapeHtml(symbol)}</strong><small>${position.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} 份额 · ${money(position.cost)} · ${position.auto ? '自动' : '手动'}</small></div><div class="position-pnl">${money(position.markValue - position.cost)}<small>纸上盈亏</small></div></div>`).join('') : '<div class="empty-position">暂无持仓<br /><span>模拟成交后显示在这里</span></div>';
 }
 
-function renderAll() { renderWatchlist(); renderMarket(); renderTrades(); renderPaper(); }
+function renderAuto() {
+  const toggle = $('#autoPaperToggle');
+  if (!toggle) return;
+  toggle.checked = state.auto.enabled;
+  $('#autoPaperLabel').textContent = state.auto.enabled ? '自动运行' : '已暂停';
+  const runAt = state.auto.lastRunAt ? `上次运行 ${shortClock(new Date(state.auto.lastRunAt))}` : '尚未运行';
+  const reason = state.auto.lastReason ? ` · ${state.auto.lastReason}` : '';
+  $('#autoPaperStatus').textContent = `${state.auto.lastAction || '等待最新行情'} · ${runAt}${reason}`;
+}
+
+function autoEligible(token) {
+  return token?.risk === 'STRONG'
+    && Number.isFinite(Number(token.price)) && Number(token.price) > 0
+    && Number.isFinite(Number(token.liquidity)) && Number(token.liquidity) >= 50_000
+    && Number.isFinite(Number(token.smartDegenCount)) && Number(token.smartDegenCount) >= 3
+    && Number.isFinite(Number(token.rugRatio)) && Number(token.rugRatio) < .2
+    && token.isWashTrading !== true
+    && number(token.change) >= 0;
+}
+
+function runPaperAutoCycle({ fresh = false, force = false } = {}) {
+  if (!state.auto.enabled) return;
+  const now = Date.now(); const previousRun = Date.parse(state.auto.lastRunAt || '');
+  if (!force && Number.isFinite(previousRun) && now - previousRun < REAL_REFRESH_MS) {
+    state.auto.lastAction = '等待下一个自动周期'; state.auto.lastReason = '自动周期为 60 秒'; saveAuto(); renderAuto(); return;
+  }
+  state.auto.lastRunAt = new Date(now).toISOString();
+  if (!fresh) {
+    state.auto.lastAction = '等待最新真实行情'; state.auto.lastReason = '旧快照不触发自动模拟'; saveAuto(); renderAuto(); return;
+  }
+  const prices = new Map(state.tokens.map(token => [token.symbol, Number(token.price)]));
+  const actions = [];
+  for (const [symbol, position] of Object.entries(state.paper.positions)) {
+    if (position.auto !== true) continue;
+    const price = prices.get(symbol);
+    if (!Number.isFinite(price) || price <= 0) continue;
+    position.markValue = position.quantity * price;
+    const returnRate = position.cost > 0 ? position.markValue / position.cost - 1 : 0;
+    const age = now - number(position.openedAt, now);
+    const exitReason = returnRate <= AUTO_POLICY.stopLoss ? '触发止损' : returnRate >= AUTO_POLICY.takeProfit ? '触发止盈' : age >= AUTO_POLICY.maxHoldMs ? '到达最长持仓时间' : null;
+    if (exitReason) {
+      state.paper.cash += position.markValue; state.paper.pnl += position.markValue - position.cost; delete state.paper.positions[symbol];
+      actions.push(`自动卖出 ${symbol} · ${exitReason}`);
+    }
+  }
+  const autoPositions = Object.values(state.paper.positions).filter(position => position.auto === true).length;
+  if (autoPositions < AUTO_POLICY.maxPositions && state.paper.cash >= AUTO_POLICY.entryUsd) {
+    const candidate = state.tokens.find(token => autoEligible(token) && !state.paper.positions[token.symbol]);
+    if (candidate) {
+      const quantity = AUTO_POLICY.entryUsd / Number(candidate.price);
+      state.paper.cash -= AUTO_POLICY.entryUsd;
+      state.paper.positions[candidate.symbol] = { quantity, cost: AUTO_POLICY.entryUsd, markValue: AUTO_POLICY.entryUsd, auto: true, openedAt: now };
+      actions.push(`自动买入 ${candidate.symbol} · ${money(AUTO_POLICY.entryUsd)}`);
+    } else state.auto.lastReason = '没有同时满足强信号、流动性和风控条件的代币';
+  } else if (autoPositions >= AUTO_POLICY.maxPositions) state.auto.lastReason = '已达到最多 2 个自动仓位';
+  else state.auto.lastReason = '纸上余额不足 10 美元';
+  state.auto.lastAction = actions.length ? actions.join('；') : '本轮没有交易动作';
+  if (actions.length) state.auto.lastReason = '仅写入本机模拟账本';
+  savePaper(); saveAuto(); renderAuto();
+}
+
+function renderAll() { renderWatchlist(); renderMarket(); renderTrades(); renderPaper(); renderAuto(); }
 
 function rowsFromTokens(tokens, observedAt) {
   const time = observedAt ? shortClock(new Date(observedAt)) : '--:--:--';
@@ -175,7 +248,7 @@ async function refreshRealMarket() {
     state.tokens = data.tokens.filter(token => token && token.address && Number.isFinite(Number(token.price)));
     if (!state.tokens.some(token => token.address === state.selectedAddress)) state.selectedAddress = state.tokens[0]?.address || null;
     state.trades = rowsFromTokens(state.tokens.slice(0, 8), data.observedAt); state.real.candleStatus = 'loading';
-    markRealStatus(data.status, { observedAt: data.observedAt, latency, staleReason: data.staleReason || null }); renderAll(); await refreshKline();
+    markRealStatus(data.status, { observedAt: data.observedAt, latency, staleReason: data.staleReason || null }); runPaperAutoCycle({ fresh: data.status === 'ok' }); renderAll(); await refreshKline();
   } catch {
     if (state.tokens.length) {
       state.real.candleStatus = state.chart.length > 1 ? 'stale' : 'unavailable';
@@ -197,7 +270,7 @@ async function syncPaperBridge() {
 function placePaperOrder() {
   const token = currentToken(); if (!token) return toast('当前没有 GMGN 真实行情，暂停模拟下单。'); if (token.risk === 'BLOCKED') return toast(`${token.symbol} 已触发风险拦截，停止模拟下单。`);
   const amount = Number.parseFloat($('#amountInput').value); if (!Number.isFinite(amount) || amount <= 0) return toast('请输入大于 0 的模拟金额。');
-  if (state.side === 'buy') { if (amount > state.paper.cash) return toast('纸上账户余额不足。'); state.paper.cash -= amount; const units = amount / token.price; const position = state.paper.positions[token.symbol] || { quantity: 0, cost: 0, markValue: 0 }; position.quantity += units; position.cost += amount; position.markValue = position.quantity * token.price; state.paper.positions[token.symbol] = position; toast(`模拟买入 · ${money(amount)} ${token.symbol} 已加入纸上账本`); }
+  if (state.side === 'buy') { if (state.paper.positions[token.symbol]?.auto) return toast(`${token.symbol} 正由自动策略持有，请等待自动退出。`); if (amount > state.paper.cash) return toast('纸上账户余额不足。'); state.paper.cash -= amount; const units = amount / token.price; const position = state.paper.positions[token.symbol] || { quantity: 0, cost: 0, markValue: 0, auto: false, openedAt: Date.now() }; position.auto = false; position.quantity += units; position.cost += amount; position.markValue = position.quantity * token.price; state.paper.positions[token.symbol] = position; toast(`模拟买入 · ${money(amount)} ${token.symbol} 已加入纸上账本`); }
   else { const position = state.paper.positions[token.symbol]; if (!position || position.quantity <= 0) return toast(`纸上账本没有 ${token.symbol} 持仓。`); const sellUnits = Math.min(position.quantity, amount / token.price); const proceeds = sellUnits * token.price; const costBasis = position.cost * (sellUnits / position.quantity); state.paper.cash += proceeds; state.paper.pnl += proceeds - costBasis; position.quantity -= sellUnits; position.cost -= costBasis; position.markValue = position.quantity * token.price; if (position.quantity < .00000001) delete state.paper.positions[token.symbol]; toast(`模拟卖出 · ${money(proceeds)} ${token.symbol} 已从纸上账本扣除`); }
   savePaper(); renderPaper(); updateQuote();
 }
@@ -207,8 +280,9 @@ $$('[data-amount]').forEach(button => button.addEventListener('click', () => { $
 $$('[data-slippage]').forEach(button => button.addEventListener('click', () => { state.slippage = Number(button.dataset.slippage); $$('[data-slippage]').forEach(item => item.classList.toggle('active', item === button)); updateQuote(); }));
 $('#amountInput').addEventListener('input', updateQuote); $('#maxButton').addEventListener('click', () => { const token = currentToken(); $('#amountInput').value = state.side === 'buy' ? state.paper.cash.toFixed(2) : (token ? state.paper.positions[token.symbol]?.markValue || 0 : 0).toFixed(2); updateQuote(); }); $('#simulateButton').addEventListener('click', placePaperOrder);
 $('#tokenSearch').addEventListener('input', renderWatchlist);
+$('#autoPaperToggle').addEventListener('change', event => { state.auto.enabled = event.target.checked; state.auto.lastAction = state.auto.enabled ? '已开启，等待最新行情' : '自动模拟已暂停'; state.auto.lastReason = state.auto.enabled ? '只使用最新 GMGN 真实快照' : '不会再自动买卖'; saveAuto(); renderAuto(); toast(state.auto.enabled ? '自动模拟交易已开启。' : '自动模拟交易已暂停。'); if (state.auto.enabled && state.real.status === 'ok') { runPaperAutoCycle({ fresh: true, force: true }); renderPaper(); updateQuote(); } });
 $('#pauseButton').addEventListener('click', () => { state.paused = !state.paused; $('#pauseButton').textContent = state.paused ? '▶' : 'Ⅱ'; $('#pauseButton').classList.toggle('active', state.paused); $('#streamLabel').textContent = state.paused ? 'GMGN 行情 · 已暂停' : hasRealData(state.real.status) ? state.real.status === 'stale' ? 'GMGN 真实行情 · 上次成功快照' : 'GMGN 真实行情' : 'GMGN 行情 · 加载中'; toast(state.paused ? 'GMGN 实时轮询已暂停。' : 'GMGN 实时轮询已恢复。'); if (!state.paused) refreshRealMarket(); });
-$('#resetPaper').addEventListener('click', () => { state.paper = { cash: PAPER_START, pnl: 0, positions: {} }; savePaper(); renderPaper(); toast('纸上账户已重置为 100 美元。'); });
+$('#resetPaper').addEventListener('click', () => { state.paper = { cash: PAPER_START, pnl: 0, positions: {} }; state.auto.lastAction = '纸上账户已重置'; state.auto.lastReason = '自动模拟仍按开关状态运行'; savePaper(); saveAuto(); renderPaper(); renderAuto(); toast('纸上账户已重置为 100 美元。'); });
 $('#copyButton').addEventListener('click', async () => { const token = currentToken(); if (!token) return toast('没有可复制的真实合约地址。'); try { await navigator.clipboard.writeText(token.address); toast('GMGN 合约地址已复制。'); } catch { toast('当前浏览器无法使用剪贴板。'); } });
 $$('.chart-tab').forEach(button => button.addEventListener('click', () => { state.tab = button.dataset.tab; $$('.chart-tab').forEach(item => item.classList.toggle('active', item === button)); updateChart(); }));
 $('#chainButton').addEventListener('click', () => { state.chain = CHAINS[(CHAINS.indexOf(state.chain) + 1) % CHAINS.length]; state.selectedAddress = null; $('#chainLabel').textContent = state.chain.toUpperCase(); toast(`链筛选：${state.chain.toUpperCase()} · GMGN 只读`); refreshRealMarket(); });

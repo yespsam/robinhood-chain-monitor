@@ -101,6 +101,11 @@
         <aside class="order-pane pane">
           <div class="order-heading"><div><span class="eyebrow">纸上账户</span><h2>模拟交易</h2></div><button class="reset-link" id="resetPaper" type="button">重置</button></div>
           <div class="paper-balance"><div><span>可用余额</span><strong id="paperCash">$100.00</strong></div><div class="pnl-block"><span>已实现盈亏</span><strong id="paperPnl">$0.00</strong></div></div>
+          <section class="auto-panel" aria-label="自动模拟交易">
+            <div class="auto-heading"><div><span class="eyebrow">自动纸上</span><h3>自动模拟交易</h3></div><label class="auto-switch"><input id="autoPaperToggle" type="checkbox" /><span id="autoPaperLabel">自动运行</span></label></div>
+            <div class="auto-policy">只选强信号 · 单笔 10 美元 · 最多 2 个仓位</div>
+            <div class="auto-status" id="autoPaperStatus">只使用最新 GMGN 只读行情；永不签名或广播。</div>
+          </section>
           <div class="order-tabs"><button class="order-tab buy active" type="button" data-side="buy">买入</button><button class="order-tab sell" type="button" data-side="sell">卖出</button></div>
           <div class="order-form">
             <div class="form-row token-row"><span class="form-label">代币</span><span class="order-token"><span class="tiny-avatar" id="orderAvatar">?</span><strong id="orderToken">—</strong><span class="muted">BSC</span></span></div>

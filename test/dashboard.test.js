@@ -12,6 +12,7 @@ test('dashboard serves the paper terminal, local paper bridge, and rejects path 
   const pageText = await page.text();
   assert.match(pageText, /仅模拟盘/);
   assert.match(pageText, /yesp atm/);
+  assert.match(pageText, /自动模拟交易/);
   const css = await fetch(`${base}/styles.css`);
   assert.equal(css.status, 200);
   assert.match(await css.text(), /--lime/);
