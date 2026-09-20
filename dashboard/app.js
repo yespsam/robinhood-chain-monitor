@@ -2,115 +2,180 @@ const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const STORAGE_KEY = 'gmgn-paper-terminal-v1';
 const PAPER_START = 100;
-
-const tokens = [
-  { symbol: 'GENIUS', chain: 'BSC', price: 0.02184, change: 18.42, mcap: '$21.8M', liquidity: '$632K', volume: '$4.8M', holders: '8,412', address: '0x9a7…4f2c', color: '#b9ff66', risk: 'WATCH', age: '12m', volatility: .006 },
-  { symbol: 'TOSHI', chain: 'BASE', price: 0.000891, change: 7.18, mcap: '$89.1M', liquidity: '$2.4M', volume: '$1.2M', holders: '31,209', address: '0x4b2…9ac1', color: '#6bd6ff', risk: 'LOW', age: '3h', volatility: .003 },
-  { symbol: 'BRETT', chain: 'BASE', price: 0.05822, change: -2.83, mcap: '$580M', liquidity: '$6.8M', volume: '$12.9M', holders: '72,883', address: '0x1c4…78d0', color: '#ffbe6b', risk: 'WATCH', age: '2d', volatility: .002 },
-  { symbol: 'MOG', chain: 'ETH', price: 0.0000016, change: 12.61, mcap: '$619M', liquidity: '$8.3M', volume: '$15.4M', holders: '44,308', address: '0x6f2…aa13', color: '#ff7d77', risk: 'WATCH', age: '4d', volatility: .004 },
-  { symbol: 'BNB', chain: 'BSC', price: 607.41, change: 1.22, mcap: '$90.7B', liquidity: '$1.2B', volume: '$1.1B', holders: '—', address: 'native asset', color: '#f0b90b', risk: 'LOW', age: 'native', volatility: .001 },
-];
+const CHAINS = ['bsc', 'base', 'eth', 'sol'];
+const REAL_REFRESH_MS = 20_000;
 
 const state = {
-  selected: 'GENIUS',
-  chain: 'BSC',
+  selectedAddress: null,
+  chain: 'bsc',
+  interval: '1m',
+  resolution: '1m',
   side: 'buy',
   slippage: 1,
   paused: false,
   tab: 'price',
-  lastTick: Date.now(),
-  chart: Array.from({ length: 54 }, (_, index) => 48 + Math.sin(index / 5) * 8 + index * .12 + (Math.random() - .5) * 4),
-  trades: [
-    { time: '09:51:14', type: 'BUY', price: '$0.02184', size: '$4.2K', wallet: '0x7d…e19a' },
-    { time: '09:51:08', type: 'BUY', price: '$0.02177', size: '$1.8K', wallet: '0xab…312f' },
-    { time: '09:50:59', type: 'SELL', price: '$0.02161', size: '$840', wallet: '0x91…8b2c' },
-    { time: '09:50:44', type: 'BUY', price: '$0.02152', size: '$3.1K', wallet: '0x4c…0a6e' },
-    { time: '09:50:31', type: 'SELL', price: '$0.02149', size: '$592', wallet: '0x2e…f81d' },
-    { time: '09:50:18', type: 'BUY', price: '$0.02137', size: '$1.1K', wallet: '0xf1…4c0b' },
-  ],
+  tokens: [],
+  trades: [],
+  chart: [],
+  real: { status: 'loading', source: 'gmgn-cli', observedAt: null, latency: null, candleStatus: 'loading' },
   paper: loadPaper(),
 };
 
 function loadPaper() {
   try {
     const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-    if (raw && Number.isFinite(raw.cash) && raw.cash >= 0 && raw.cash <= 100) return { cash: raw.cash, pnl: raw.pnl || 0, positions: raw.positions || {} };
+    if (raw && Number.isFinite(raw.cash) && raw.cash >= 0 && raw.cash <= PAPER_START) return { cash: raw.cash, pnl: raw.pnl || 0, positions: raw.positions || {} };
   } catch { /* local-only fallback */ }
   return { cash: PAPER_START, pnl: 0, positions: {} };
 }
+
 function savePaper() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.paper)); }
-function currentToken() { return tokens.find(token => token.symbol === state.selected) || tokens[0]; }
-function money(value, digits = 2) { return `$${Number(value).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`; }
-function compact(value) { if (value >= 1e9) return `$${(value / 1e9).toFixed(1)}B`; if (value >= 1e6) return `$${(value / 1e6).toFixed(1)}M`; if (value >= 1e3) return `$${(value / 1e3).toFixed(1)}K`; return money(value); }
-function parseCompact(value) { const match = String(value).replace(/[$,]/g, '').match(/^([0-9.]+)([KMB])?$/i); if (!match) return 0; const multiplier = { K: 1e3, M: 1e6, B: 1e9 }[String(match[2] || '').toUpperCase()] || 1; return Number(match[1]) * multiplier; }
-function tokenPrice(token) { const p = token.price; return p < .001 ? `$${p.toFixed(7)}` : p < 1 ? `$${p.toFixed(5)}` : `$${p.toFixed(2)}`; }
+function currentToken() { return state.tokens.find(token => token.address === state.selectedAddress) || state.tokens[0] || null; }
+function number(value, fallback = 0) { const n = Number(value); return Number.isFinite(n) ? n : fallback; }
+function money(value, digits = 2) { return Number.isFinite(Number(value)) ? `$${Number(value).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}` : '—'; }
+function compact(value) { const n = Number(value); if (!Number.isFinite(n)) return '—'; if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`; if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`; if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`; return money(n); }
+function tokenPrice(token) {
+  if (!token || !Number.isFinite(Number(token.price))) return '—';
+  const price = Number(token.price);
+  if (price < .001) return `$${price.toFixed(8)}`;
+  if (price < 1) return `$${price.toFixed(6)}`;
+  return `$${price.toFixed(2)}`;
+}
 function shortClock(date = new Date()) { return date.toLocaleTimeString('en-GB', { hour12: false }); }
-function toast(message) { const node = $('#toast'); node.textContent = message; node.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => node.classList.remove('show'), 2600); }
+function formatAddress(address) { return typeof address === 'string' && address.length > 12 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address || '—'; }
+function ageLabel(timestamp) {
+  const seconds = Math.max(0, Math.floor(Date.now() / 1000 - number(timestamp)));
+  if (!timestamp || seconds <= 0) return '—';
+  if (seconds < 3600) return `${Math.max(1, Math.floor(seconds / 60))}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
+}
+function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]); }
+function toast(message) { const node = $('#toast'); node.textContent = message; node.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => node.classList.remove('show'), 3000); }
+
+function markRealStatus(status, extra = {}) {
+  state.real = { ...state.real, status, ...extra };
+  const ok = status === 'ok';
+  $('#streamLabel').textContent = ok ? 'GMGN REAL FEED' : status === 'loading' ? 'GMGN FEED · LOADING' : 'GMGN FEED · UNAVAILABLE';
+  $('#safetyCopy').textContent = ok ? 'GMGN 真实只读行情 · 不连接钱包 · 不签名 · 不广播' : 'GMGN 真实行情不可用 · 未显示合成替代数据 · 不连接钱包';
+  $('#sourceLabel').textContent = ok
+    ? `GMGN CLI · read-only · ${state.chain}/${state.interval} · ${state.real.observedAt ? shortClock(new Date(state.real.observedAt)) : '—'}`
+    : status === 'loading' ? 'GMGN CLI · connecting' : 'GMGN CLI · unavailable';
+  $('#latency').textContent = Number.isFinite(state.real.latency) ? String(state.real.latency) : '--';
+  $('#paperStateLabel').textContent = ok ? 'synced' : 'local';
+}
 
 function renderWatchlist() {
   const query = $('#tokenSearch').value.trim().toLowerCase();
-  const visible = tokens.filter(token => !query || `${token.symbol} ${token.chain} ${token.address}`.toLowerCase().includes(query));
-  $('#watchlist').innerHTML = visible.map(token => `<button class="watch-item ${token.symbol === state.selected ? 'active' : ''}" data-token="${token.symbol}" type="button">
-    <span class="watch-avatar" style="color:${token.color};background:${token.color}18">${token.symbol[0]}</span><span><span class="watch-symbol">${token.symbol}</span><span class="watch-chain">${token.chain} · ${token.age}</span></span><span><span class="watch-price">${tokenPrice(token)}</span><span class="watch-change ${token.change >= 0 ? 'positive' : 'negative'}">${token.change >= 0 ? '+' : ''}${token.change.toFixed(2)}%</span></span>
-  </button>`).join('') || '<div class="empty-position" style="margin:12px">No matching assets</div>';
-  $$('.watch-item').forEach(button => button.addEventListener('click', () => { state.selected = button.dataset.token; renderAll(); }));
+  const visible = state.tokens.filter(token => !query || `${token.symbol} ${token.name} ${token.chain} ${token.address}`.toLowerCase().includes(query));
+  $('#watchlist').innerHTML = visible.map(token => {
+    const positive = number(token.change) >= 0;
+    const risk = token.risk || 'WATCH';
+    return `<button class="watch-item ${token.address === state.selectedAddress ? 'active' : ''}" data-token="${escapeHtml(token.address)}" type="button">
+      <span class="watch-avatar" style="color:var(--lime);background:rgba(185,255,102,.08)">${escapeHtml(token.symbol.slice(0, 1))}</span>
+      <span><span class="watch-symbol">${escapeHtml(token.symbol)}</span><span class="watch-chain">${escapeHtml(String(token.chain).toUpperCase())} · ${escapeHtml(risk)}</span></span>
+      <span><span class="watch-price">${tokenPrice(token)}</span><span class="watch-change ${positive ? 'positive' : 'negative'}">${positive ? '+' : ''}${number(token.change).toFixed(2)}%</span></span>
+    </button>`;
+  }).join('') || (state.real.status === 'unavailable'
+    ? '<div class="empty-position" style="margin:12px">GMGN 真实数据不可用<br /><span>未显示合成替代数据</span></div>'
+    : '<div class="empty-position" style="margin:12px">等待 GMGN 真实排行…</div>');
+  $$('.watch-item').forEach(button => button.addEventListener('click', () => { state.selectedAddress = button.dataset.token; refreshKline(); renderAll(); }));
   $('#watchCount').textContent = `${visible.length} assets`;
 }
 
 function renderMarket() {
   const token = currentToken();
-  $('#tokenAvatar').textContent = token.symbol[0]; $('#tokenAvatar').style.color = token.color; $('#tokenAvatar').style.background = `${token.color}18`;
-  $('#tokenName').textContent = token.symbol; $('#tokenChain').textContent = token.chain; $('#tokenAddress').textContent = token.address; $('#tokenAge').textContent = token.age;
-  $('#tokenPrice').textContent = tokenPrice(token); const change = $('#tokenChange'); change.textContent = `${token.change >= 0 ? '+' : ''}${token.change.toFixed(2)}%`; change.className = `market-change ${token.change >= 0 ? 'positive' : 'negative'}`;
-  $('#metricMcap').textContent = token.mcap; $('#metricLiquidity').textContent = token.liquidity; $('#metricVolume').textContent = token.volume; $('#metricHolders').textContent = token.holders;
-  $('#metricRisk').innerHTML = `<i class="risk-dot"></i> ${token.risk}`; $('#orderAvatar').textContent = token.symbol[0]; $('#orderAvatar').style.color = token.color; $('#orderAvatar').style.background = `${token.color}18`; $('#orderToken').textContent = token.symbol;
+  if (!token) {
+    $('#tokenAvatar').textContent = '?'; $('#tokenAvatar').style.color = 'var(--muted)'; $('#tokenAvatar').style.background = '#18221c';
+    $('#tokenName').textContent = 'NO LIVE TOKEN'; $('#tokenChain').textContent = state.chain.toUpperCase(); $('#tokenAddress').textContent = '—'; $('#tokenAge').textContent = '—';
+    $('#tokenPrice').textContent = '—'; $('#tokenChange').textContent = '—'; $('#tokenChange').className = 'market-change';
+    ['#metricMcap', '#metricLiquidity', '#metricVolume', '#metricHolders'].forEach(selector => { $(selector).textContent = '—'; });
+    $('#metricRisk').innerHTML = '<i class="risk-dot"></i> WAITING'; $('#orderAvatar').textContent = '?'; $('#orderToken').textContent = '—';
+    $('#simulateButton').disabled = true; updateChart(); updateQuote(); return;
+  }
+  $('#simulateButton').disabled = false;
+  $('#tokenAvatar').textContent = token.symbol.slice(0, 1); $('#tokenAvatar').style.color = 'var(--lime)'; $('#tokenAvatar').style.background = 'rgba(185,255,102,.08)';
+  $('#tokenName').textContent = token.symbol; $('#tokenChain').textContent = String(token.chain).toUpperCase(); $('#tokenAddress').textContent = formatAddress(token.address); $('#tokenAge').textContent = ageLabel(token.creationTimestamp || token.openTimestamp);
+  $('#tokenPrice').textContent = tokenPrice(token); const change = $('#tokenChange'); change.textContent = `${number(token.change) >= 0 ? '+' : ''}${number(token.change).toFixed(2)}%`; change.className = `market-change ${number(token.change) >= 0 ? 'positive' : 'negative'}`;
+  $('#metricMcap').textContent = compact(token.marketCap); $('#metricLiquidity').textContent = compact(token.liquidity); $('#metricVolume').textContent = compact(token.volume); $('#metricHolders').textContent = token.holders == null ? '—' : Number(token.holders).toLocaleString('en-US');
+  const riskColor = token.risk === 'BLOCKED' ? 'var(--red)' : token.risk === 'STRONG' ? 'var(--lime)' : 'var(--amber)'; $('#metricRisk').innerHTML = `<i class="risk-dot" style="background:${riskColor}"></i> ${escapeHtml(token.risk || 'WATCH')}`;
+  $('#orderAvatar').textContent = token.symbol.slice(0, 1); $('#orderAvatar').style.color = 'var(--lime)'; $('#orderAvatar').style.background = 'rgba(185,255,102,.08)'; $('#orderToken').textContent = token.symbol; $('#orderToken').nextElementSibling.textContent = String(token.chain).toUpperCase();
   updateChart(); updateQuote();
 }
 
 function updateChart() {
-  const points = state.chart; const min = Math.min(...points) - 5; const max = Math.max(...points) + 5; const width = 900; const height = 330;
-  const coords = points.map((value, index) => `${(index / (points.length - 1)) * width},${height - ((value - min) / (max - min)) * height}`).join(' ');
+  const points = state.tab === 'price' ? state.chart.filter(value => Number.isFinite(Number(value))).map(Number) : [];
+  const safePoints = points.length > 1 ? points : [0, 0]; const min = Math.min(...safePoints); const max = Math.max(...safePoints); const range = max - min || Math.max(Math.abs(max) * .02, .00000001); const width = 900; const height = 330;
+  const coords = safePoints.map((value, index) => `${(index / (safePoints.length - 1)) * width},${height - ((value - (min - range * .1)) / (range * 1.2)) * height}`).join(' ');
   $('#chartLine').setAttribute('points', coords); $('#chartArea').setAttribute('d', `M 0 ${height} L ${coords.replaceAll(' ', ' L ')} L ${width} ${height} Z`);
-  const last = points.at(-1); const x = width; const y = height - ((last - min) / (max - min)) * height; $('#chartCursor').setAttribute('cx', x); $('#chartCursor').setAttribute('cy', y);
-  const token = currentToken(); const base = token.price; $('#chartTop').textContent = tokenPrice({ price: base * 1.1 }); $('#chartMid').textContent = tokenPrice({ price: base }); $('#chartBottom').textContent = tokenPrice({ price: base * .9 });
-  $('#chartNote').textContent = `${state.tab === 'price' ? 'Synthetic price stream' : state.tab === 'trades' ? 'Synthetic buy/sell flow' : 'Synthetic holder delta'} · updated just now`;
+  const last = safePoints.at(-1); const y = height - ((last - (min - range * .1)) / (range * 1.2)) * height; $('#chartCursor').setAttribute('cx', width); $('#chartCursor').setAttribute('cy', y);
+  const token = currentToken(); const base = token?.price; $('#chartTop').textContent = Number.isFinite(base) ? tokenPrice({ price: base * 1.1 }) : '—'; $('#chartMid').textContent = Number.isFinite(base) ? tokenPrice({ price: base }) : '—'; $('#chartBottom').textContent = Number.isFinite(base) ? tokenPrice({ price: base * .9 }) : '—';
+  const candleNote = state.real.candleStatus === 'ok' ? `GMGN K-line ${state.resolution} · ${state.real.observedAt ? shortClock(new Date(state.real.observedAt)) : 'observed'}` : state.real.status === 'ok' ? 'GMGN ranking snapshot · K-line unavailable' : '等待 GMGN 真实 K 线'; $('#chartNote').textContent = state.tab === 'price' ? candleNote : `GMGN ${state.tab} aggregate unavailable · no synthetic series`;
 }
 
 function renderTrades() {
-  $('#tradeStream').innerHTML = state.trades.slice(0, 8).map(trade => `<div class="trade-row"><span class="trade-time">${trade.time}</span><span class="trade-type ${trade.type === 'BUY' ? 'buy' : 'sell'}">${trade.type}</span><span class="trade-price">${trade.price}</span><span class="trade-size">${trade.size}</span><span class="trade-wallet">${trade.wallet}</span></div>`).join('');
+  $('#tradeStream').innerHTML = state.trades.slice(0, 8).map(row => `<div class="trade-row"><span class="trade-time">${escapeHtml(row.time)}</span><span class="trade-type ${row.type === 'UP' ? 'buy' : 'sell'}">${row.type}</span><span class="trade-price">${escapeHtml(row.price)}</span><span class="trade-size">${escapeHtml(row.size)}</span><span class="trade-wallet">${escapeHtml(row.wallet)}</span></div>`).join('') || '<div class="empty-position" style="margin-top:8px">等待 GMGN 排行快照…</div>';
 }
 
 function updateQuote() {
-  const token = currentToken(); const amount = Math.max(0, Number.parseFloat($('#amountInput').value) || 0); const receive = amount / token.price * (1 - state.slippage / 10000);
-  $('#estimatedReceive').textContent = `${receive < 1 ? receive.toFixed(6) : receive.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${token.symbol}`; $('#priceImpact').textContent = `${Math.max(.12, amount / 1200).toFixed(2)}%`;
+  const token = currentToken(); const amount = Math.max(0, Number.parseFloat($('#amountInput').value) || 0); const price = token?.price; const receive = Number.isFinite(price) && price > 0 ? amount / price * (1 - state.slippage / 10000) : 0;
+  $('#estimatedReceive').textContent = token && Number.isFinite(price) ? `${receive < 1 ? receive.toFixed(8) : receive.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${token.symbol}` : '—'; $('#priceImpact').textContent = token ? `${Math.max(.12, amount / 1200).toFixed(2)}%` : '—';
   $('#simulateLabel').textContent = `Simulate ${state.side}`; $('#simulateButton').classList.toggle('sell-mode', state.side === 'sell');
 }
 
 function renderPaper() {
   $('#paperCash').textContent = money(state.paper.cash); $('#paperPnl').textContent = `${state.paper.pnl >= 0 ? '+' : ''}${money(state.paper.pnl)}`; $('#paperPnl').style.color = state.paper.pnl >= 0 ? 'var(--lime)' : 'var(--red)';
   const entries = Object.entries(state.paper.positions); $('#positionCount').textContent = `${entries.length} open`;
-  $('#positionsList').innerHTML = entries.length ? entries.map(([symbol, position]) => `<div class="position-row"><div><strong>${symbol}</strong><small>${position.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} units · ${money(position.cost)}</small></div><div class="position-pnl">${money(position.markValue - position.cost)}<small>paper PNL</small></div></div>`).join('') : '<div class="empty-position">No open positions<br /><span>模拟成交后显示在这里</span></div>';
+  $('#positionsList').innerHTML = entries.length ? entries.map(([symbol, position]) => `<div class="position-row"><div><strong>${escapeHtml(symbol)}</strong><small>${position.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} units · ${money(position.cost)}</small></div><div class="position-pnl">${money(position.markValue - position.cost)}<small>paper PNL</small></div></div>`).join('') : '<div class="empty-position">No open positions<br /><span>模拟成交后显示在这里</span></div>';
 }
 
 function renderAll() { renderWatchlist(); renderMarket(); renderTrades(); renderPaper(); }
 
-function tick() {
+function rowsFromTokens(tokens, observedAt) {
+  const time = observedAt ? shortClock(new Date(observedAt)) : '--:--:--';
+  return tokens.map(token => ({ time, type: number(token.change) >= 0 ? 'UP' : 'DOWN', price: tokenPrice(token), size: compact(token.volume), wallet: `${token.smartDegenCount ?? '—'} smart / ${token.holders ?? '—'} holders` }));
+}
+
+async function getJson(url) {
+  const started = performance.now(); const response = await fetch(url, { cache: 'no-store' }); const data = await response.json(); if (!response.ok) throw new Error('request failed'); return { data, latency: Math.round(performance.now() - started) };
+}
+
+async function refreshKline() {
+  const token = currentToken(); if (!token) { state.chart = []; state.real.candleStatus = 'unavailable'; updateChart(); return; }
+  state.real.candleStatus = 'loading';
+  try {
+    const { data } = await getJson(`/api/kline?chain=${encodeURIComponent(String(token.chain).toLowerCase())}&address=${encodeURIComponent(token.address)}&resolution=${encodeURIComponent(state.resolution)}&hours=6`);
+    if (data?.status !== 'ok' || !Array.isArray(data.candles)) throw new Error('kline unavailable');
+    state.chart = data.candles.map(candle => Number(candle.close)).filter(Number.isFinite); state.real.candleStatus = state.chart.length > 1 ? 'ok' : 'unavailable';
+  } catch { state.chart = []; state.real.candleStatus = 'unavailable'; }
+  updateChart();
+}
+
+async function refreshRealMarket() {
   if (state.paused) return;
-  const now = Date.now(); const token = currentToken(); const move = (Math.random() - .47) * token.volatility; token.price = Math.max(token.price * (1 + move), Number.MIN_VALUE); token.change += move * 130; token.volume = compact(parseCompact(token.volume) * (1 + Math.abs(move) * .18));
-  state.chart.push(50 + (token.change * .2) + Math.sin(now / 3700) * 6 + (Math.random() - .5) * 4); if (state.chart.length > 54) state.chart.shift();
-  if (Math.random() > .58) { const buy = Math.random() > .27; const size = Math.round(320 + Math.random() * 5200); state.trades.unshift({ time: shortClock(), type: buy ? 'BUY' : 'SELL', price: tokenPrice(token), size: compact(size), wallet: `0x${Math.random().toString(16).slice(2, 4)}…${Math.random().toString(16).slice(2, 6)}` }); state.trades = state.trades.slice(0, 12); }
-  state.lastTick = now; $('#latency').textContent = String(38 + Math.round(Math.random() * 44)); $('#clock').textContent = shortClock(); renderAll();
+  markRealStatus('loading');
+  try {
+    const { data, latency } = await getJson(`/api/market?chain=${encodeURIComponent(state.chain)}&interval=${encodeURIComponent(state.interval)}&limit=20`);
+    if (data?.status !== 'ok' || !Array.isArray(data.tokens)) throw new Error('market unavailable');
+    state.tokens = data.tokens.filter(token => token && token.address && Number.isFinite(Number(token.price)));
+    if (!state.tokens.some(token => token.address === state.selectedAddress)) state.selectedAddress = state.tokens[0]?.address || null;
+    state.trades = rowsFromTokens(state.tokens.slice(0, 8), data.observedAt); state.real.candleStatus = 'loading';
+    markRealStatus('ok', { observedAt: data.observedAt, latency }); renderAll(); await refreshKline();
+  } catch {
+    state.tokens = []; state.selectedAddress = null; state.trades = []; state.chart = []; state.real.candleStatus = 'unavailable'; markRealStatus('unavailable'); renderAll();
+  }
 }
 
 async function syncPaperBridge() {
   try {
     const response = await fetch('/api/paper-state', { cache: 'no-store' }); if (!response.ok) throw new Error('paper state unavailable'); const data = await response.json();
-    if (data?.status === 'ok') { $('#sourceLabel').textContent = `paper-100 status bridge: ${data.updatedAt ? 'synced' : 'ready'}`; $('#paperStateLabel').textContent = 'synced'; }
-  } catch { $('#sourceLabel').textContent = 'paper-100 status bridge: local-only'; $('#paperStateLabel').textContent = 'local'; }
+    $('#paperStateLabel').textContent = data?.status === 'ok' ? 'synced' : 'local';
+  } catch { $('#paperStateLabel').textContent = 'local'; }
 }
 
 function placePaperOrder() {
-  const token = currentToken(); const amount = Number.parseFloat($('#amountInput').value); if (!Number.isFinite(amount) || amount <= 0) return toast('Enter a positive paper amount.');
+  const token = currentToken(); if (!token) return toast('当前没有 GMGN 真实行情，暂停模拟下单。'); if (token.risk === 'BLOCKED') return toast(`${token.symbol} risk gate BLOCKED · paper order stopped.`);
+  const amount = Number.parseFloat($('#amountInput').value); if (!Number.isFinite(amount) || amount <= 0) return toast('Enter a positive paper amount.');
   if (state.side === 'buy') { if (amount > state.paper.cash) return toast('Paper balance is too low for this order.'); state.paper.cash -= amount; const units = amount / token.price; const position = state.paper.positions[token.symbol] || { quantity: 0, cost: 0, markValue: 0 }; position.quantity += units; position.cost += amount; position.markValue = position.quantity * token.price; state.paper.positions[token.symbol] = position; toast(`SIM BUY · ${money(amount)} ${token.symbol} added to paper book`); }
   else { const position = state.paper.positions[token.symbol]; if (!position || position.quantity <= 0) return toast(`No ${token.symbol} position in paper book.`); const sellUnits = Math.min(position.quantity, amount / token.price); const proceeds = sellUnits * token.price; const costBasis = position.cost * (sellUnits / position.quantity); state.paper.cash += proceeds; state.paper.pnl += proceeds - costBasis; position.quantity -= sellUnits; position.cost -= costBasis; position.markValue = position.quantity * token.price; if (position.quantity < .00000001) delete state.paper.positions[token.symbol]; toast(`SIM SELL · ${money(proceeds)} ${token.symbol} removed from paper book`); }
   savePaper(); renderPaper(); updateQuote();
@@ -119,12 +184,21 @@ function placePaperOrder() {
 $$('.order-tab').forEach(button => button.addEventListener('click', () => { state.side = button.dataset.side; $$('.order-tab').forEach(item => item.classList.toggle('active', item === button)); updateQuote(); }));
 $$('[data-amount]').forEach(button => button.addEventListener('click', () => { $('#amountInput').value = button.dataset.amount; updateQuote(); }));
 $$('[data-slippage]').forEach(button => button.addEventListener('click', () => { state.slippage = Number(button.dataset.slippage); $$('[data-slippage]').forEach(item => item.classList.toggle('active', item === button)); updateQuote(); }));
-$('#amountInput').addEventListener('input', updateQuote); $('#maxButton').addEventListener('click', () => { $('#amountInput').value = state.side === 'buy' ? state.paper.cash.toFixed(2) : (state.paper.positions[state.selected]?.markValue || 0).toFixed(2); updateQuote(); }); $('#simulateButton').addEventListener('click', placePaperOrder);
-$('#tokenSearch').addEventListener('input', renderWatchlist); $('#pauseButton').addEventListener('click', () => { state.paused = !state.paused; $('#pauseButton').textContent = state.paused ? '▶' : 'Ⅱ'; $('#pauseButton').classList.toggle('active', state.paused); $('#streamLabel').textContent = state.paused ? 'STREAM PAUSED' : 'SYNTHETIC FEED'; toast(state.paused ? 'Synthetic stream paused.' : 'Synthetic stream resumed.'); });
-$('#resetPaper').addEventListener('click', () => { state.paper = { cash: PAPER_START, pnl: 0, positions: {} }; savePaper(); renderPaper(); toast('Paper account reset to $100.00.'); }); $('#copyButton').addEventListener('click', async () => { try { await navigator.clipboard.writeText(currentToken().address); toast('Synthetic contract label copied.'); } catch { toast('Clipboard unavailable in this browser.'); } });
+$('#amountInput').addEventListener('input', updateQuote); $('#maxButton').addEventListener('click', () => { const token = currentToken(); $('#amountInput').value = state.side === 'buy' ? state.paper.cash.toFixed(2) : (token ? state.paper.positions[token.symbol]?.markValue || 0 : 0).toFixed(2); updateQuote(); }); $('#simulateButton').addEventListener('click', placePaperOrder);
+$('#tokenSearch').addEventListener('input', renderWatchlist);
+$('#pauseButton').addEventListener('click', () => { state.paused = !state.paused; $('#pauseButton').textContent = state.paused ? '▶' : 'Ⅱ'; $('#pauseButton').classList.toggle('active', state.paused); $('#streamLabel').textContent = state.paused ? 'GMGN FEED · PAUSED' : state.real.status === 'ok' ? 'GMGN REAL FEED' : 'GMGN FEED · LOADING'; toast(state.paused ? 'Real GMGN polling paused.' : 'Real GMGN polling resumed.'); if (!state.paused) refreshRealMarket(); });
+$('#resetPaper').addEventListener('click', () => { state.paper = { cash: PAPER_START, pnl: 0, positions: {} }; savePaper(); renderPaper(); toast('Paper account reset to $100.00.'); });
+$('#copyButton').addEventListener('click', async () => { const token = currentToken(); if (!token) return toast('没有可复制的真实合约地址。'); try { await navigator.clipboard.writeText(token.address); toast('GMGN contract address copied.'); } catch { toast('Clipboard unavailable in this browser.'); } });
 $$('.chart-tab').forEach(button => button.addEventListener('click', () => { state.tab = button.dataset.tab; $$('.chart-tab').forEach(item => item.classList.toggle('active', item === button)); updateChart(); }));
-$('#chainButton').addEventListener('click', () => { const chains = ['BSC', 'BASE', 'ETH']; state.chain = chains[(chains.indexOf(state.chain) + 1) % chains.length]; $('#chainLabel').textContent = state.chain; toast(`Chain filter: ${state.chain} · synthetic feed`); });
+$('#chainButton').addEventListener('click', () => { state.chain = CHAINS[(CHAINS.indexOf(state.chain) + 1) % CHAINS.length]; state.selectedAddress = null; $('#chainLabel').textContent = state.chain.toUpperCase(); toast(`Chain filter: ${state.chain.toUpperCase()} · GMGN read-only`); refreshRealMarket(); });
+$('#filterButton').addEventListener('click', () => { const intervals = ['1m', '5m', '1h', '6h', '24h']; state.interval = intervals[(intervals.indexOf(state.interval) + 1) % intervals.length]; $('#filterButton').textContent = `GMGN ${state.interval.toUpperCase()}`; toast(`GMGN ranking window: ${state.interval}`); refreshRealMarket(); });
+$$('.timeframes button').forEach(button => button.addEventListener('click', () => { const resolution = button.dataset.resolution; if (!resolution) return; state.resolution = resolution; $$('.timeframes button').forEach(item => item.classList.toggle('active', item === button)); refreshKline(); }));
 $('#crosshair').addEventListener('mousemove', event => { const bounds = event.currentTarget.parentElement.getBoundingClientRect(); event.currentTarget.style.left = `${event.clientX - bounds.left}px`; });
 document.addEventListener('keydown', event => { if (event.key === '/' && document.activeElement !== $('#tokenSearch')) { event.preventDefault(); $('#tokenSearch').focus(); } });
 
-renderAll(); $('#clock').textContent = shortClock(); setInterval(tick, 1200); setInterval(syncPaperBridge, 10000); syncPaperBridge();
+renderAll(); $('#clock').textContent = shortClock(); markRealStatus('loading');
+setInterval(() => { $('#clock').textContent = shortClock(); }, 1000);
+setInterval(refreshRealMarket, REAL_REFRESH_MS);
+setInterval(syncPaperBridge, 10_000);
+syncPaperBridge();
+refreshRealMarket();

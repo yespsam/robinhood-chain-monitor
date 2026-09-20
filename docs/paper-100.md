@@ -84,6 +84,19 @@ PAPER_100_BSC_RPC_URLS='https://你的第一个只读RPC,https://不同服务商
 
 目前仅支持 BSC 的 PancakeSwap V2，报价币为 WBNB、USDT、USDC。其他 GMGN 链仍可显示观察结论，但不能假装已支持交易模拟。没有私钥、钱包导入、GMGN swap、代币授权或自动交易入口。
 
+## GMGN 只读实时终端
+
+本地页面可用真实 GMGN CLI 行情做观察和纸上成交演练：
+
+```bash
+gmgn-cli config --check
+npm run dashboard
+```
+
+打开 `http://127.0.0.1:4173/` 后，排行来自 `market trending`，价格图来自 `market kline`；支持 BSC、Base、Ethereum、Solana 的链切换，以及排行窗口和 K 线周期切换。页面会明确显示 `GMGN REAL FEED`、观测时间和只读来源。CLI 请求失败时页面清空行情并标记不可用，不用随机或演示数据顶替。
+
+右侧 BUY/SELL 只写入当前浏览器的本地模拟账本，使用页面显示的真实价格快照；它不会改变 CLI `paper-100` 状态，也不会调用钱包、签名器或广播交易。CLI `paper-100` 仍是独立的观察型账户。
+
 可显式选择 `--watch --interval-seconds 60`，周期最短 60 秒，前台运行，用 Ctrl-C 停止。本文档及测试不会自动启动常驻任务，不创建系统服务，不发送 Telegram。
 
 ## 恢复与限制
