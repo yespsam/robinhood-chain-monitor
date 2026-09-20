@@ -18,6 +18,7 @@
     "test:paper-100": "node --test test/paper-100-*.test.js",
     "bot:replay": "node scripts/trade-bot.js --demo",
     "bot:status": "node scripts/trade-bot.js --status",
+    "dashboard": "node scripts/dashboard-server.js",
     "test:trade-bot": "node --test test/trade-bot-*.test.js",
     "test:shadow-soak": "node --test test/narrative-shadow-soak-sidecar.test.js",
     "test:telegram": "node scripts/telegram-smoke.js",

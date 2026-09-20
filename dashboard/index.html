@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b0f0e" />
+    <title>GMGN // Paper Terminal</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div>
+            <div class="brand-name">gmgn<span class="brand-slash">//</span>paper</div>
+            <div class="brand-caption">local trading terminal</div>
+          </div>
+        </div>
+        <div class="topbar-controls">
+          <button class="chain-select" id="chainButton" type="button" aria-label="选择模拟链">
+            <span class="chain-dot"></span><span id="chainLabel">BSC</span><span class="chevron">⌄</span>
+          </button>
+          <div class="data-status"><span class="status-pulse"></span><span id="streamLabel">SYNTHETIC FEED</span></div>
+          <div class="topbar-clock" id="clock">--:--:--</div>
+          <button class="icon-button" id="pauseButton" type="button" aria-label="暂停行情">Ⅱ</button>
+        </div>
+      </header>
+
+      <div class="safety-strip">
+        <span class="safety-lock">▣</span>
+        <span>SIMULATION ONLY</span>
+        <span class="safety-copy">本地合成行情 · 不连接钱包 · 不签名 · 不广播</span>
+        <span class="safety-spacer"></span>
+        <span class="latency-label">TICK <strong id="latency">--</strong> ms</span>
+        <span class="source-label" id="sourceLabel">paper-100 bridge: checking</span>
+      </div>
+
+      <main class="terminal-grid">
+        <aside class="watch-pane pane">
+          <div class="pane-heading">
+            <div><span class="eyebrow">MARKETS</span><h2>Watchlist</h2></div>
+            <button class="mini-button" id="filterButton" type="button">TRENDING</button>
+          </div>
+          <label class="search-field" for="tokenSearch">
+            <span>⌕</span><input id="tokenSearch" type="search" placeholder="Search token or CA" autocomplete="off" />
+            <kbd>/</kbd>
+          </label>
+          <div class="watchlist" id="watchlist" aria-live="polite"></div>
+          <div class="watch-footer"><span class="live-dot"></span><span id="watchCount">0 assets</span><span>·</span><span>updates 1.2s</span></div>
+        </aside>
+
+        <section class="market-pane pane">
+          <div class="market-header">
+            <div class="selected-token">
+              <div class="token-avatar" id="tokenAvatar">G</div>
+              <div>
+                <div class="token-title-row"><h1 id="tokenName">GENIUS</h1><span class="chain-tag" id="tokenChain">BSC</span><button class="copy-button" id="copyButton" type="button" aria-label="复制合约地址">▣</button></div>
+                <div class="token-meta"><span id="tokenAddress">0x9a7…4f2c</span><span class="verified-badge">✓ monitored</span><span id="tokenAge">12m</span></div>
+              </div>
+            </div>
+            <div class="market-price-block"><div class="market-price" id="tokenPrice">$0.02184</div><div class="market-change positive" id="tokenChange">+18.42%</div></div>
+          </div>
+
+          <div class="metric-strip">
+            <div class="metric"><span>MARKET CAP</span><strong id="metricMcap">$21.8M</strong></div>
+            <div class="metric"><span>LIQUIDITY</span><strong id="metricLiquidity">$632K</strong></div>
+            <div class="metric"><span>24H VOLUME</span><strong id="metricVolume">$4.8M</strong></div>
+            <div class="metric"><span>HOLDERS</span><strong id="metricHolders">8,412</strong></div>
+            <div class="metric risk-metric"><span>RISK GATE</span><strong id="metricRisk"><i class="risk-dot"></i> WATCH</strong></div>
+          </div>
+
+          <div class="chart-toolbar">
+            <div class="chart-tabs" role="tablist" aria-label="图表类型">
+              <button class="chart-tab active" type="button" data-tab="price">Price</button>
+              <button class="chart-tab" type="button" data-tab="trades">Trades</button>
+              <button class="chart-tab" type="button" data-tab="holders">Holders</button>
+            </div>
+            <div class="timeframes"><button type="button">5m</button><button type="button" class="active">15m</button><button type="button">1h</button><button type="button">4h</button><button type="button">All</button></div>
+          </div>
+          <div class="chart-wrap">
+            <div class="chart-grid-lines"><span></span><span></span><span></span><span></span></div>
+            <svg class="price-chart" viewBox="0 0 900 330" preserveAspectRatio="none" aria-label="模拟价格走势">
+              <defs><linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#b9ff66" stop-opacity=".2" /><stop offset="100%" stop-color="#b9ff66" stop-opacity="0" /></linearGradient></defs>
+              <path class="chart-area" id="chartArea" d="" />
+              <polyline class="chart-line" id="chartLine" points="" />
+              <circle class="chart-cursor" id="chartCursor" cx="0" cy="0" r="4" />
+            </svg>
+            <div class="chart-y-labels"><span id="chartTop">$0.0241</span><span id="chartMid">$0.0219</span><span id="chartBottom">$0.0197</span></div>
+            <div class="chart-x-labels"><span>09:00</span><span>09:15</span><span>09:30</span><span>09:45</span><span>NOW</span></div>
+            <div class="chart-crosshair" id="crosshair"><span></span></div>
+          </div>
+          <div class="chart-legend"><span><i class="legend-line"></i>price</span><span><i class="legend-green"></i>buy pressure</span><span class="chart-note" id="chartNote">Synthetic 15m stream · updated just now</span></div>
+
+          <div class="activity-heading"><div><span class="eyebrow">FLOW</span><h2>Recent trades</h2></div><span class="activity-live"><i></i> live</span></div>
+          <div class="trade-table-head"><span>TIME</span><span>TYPE</span><span>PRICE</span><span>SIZE</span><span>WALLET</span></div>
+          <div class="trade-stream" id="tradeStream" aria-live="polite"></div>
+        </section>
+
+        <aside class="order-pane pane">
+          <div class="order-heading"><div><span class="eyebrow">PAPER ACCOUNT</span><h2>Simulate trade</h2></div><button class="reset-link" id="resetPaper" type="button">reset</button></div>
+          <div class="paper-balance"><div><span>AVAILABLE</span><strong id="paperCash">$100.00</strong></div><div class="pnl-block"><span>REALIZED PNL</span><strong id="paperPnl">$0.00</strong></div></div>
+          <div class="order-tabs"><button class="order-tab buy active" type="button" data-side="buy">BUY</button><button class="order-tab sell" type="button" data-side="sell">SELL</button></div>
+          <div class="order-form">
+            <div class="form-row token-row"><span class="form-label">TOKEN</span><span class="order-token"><span class="tiny-avatar" id="orderAvatar">G</span><strong id="orderToken">GENIUS</strong><span class="muted">BSC</span></span></div>
+            <div class="form-label amount-label"><span>AMOUNT</span><span class="muted">USD</span></div>
+            <div class="amount-input-wrap"><span>$</span><input id="amountInput" inputmode="decimal" value="10.00" aria-label="模拟交易金额" /><button id="maxButton" type="button">MAX</button></div>
+            <div class="preset-row"><button type="button" data-amount="10">$10</button><button type="button" data-amount="25">$25</button><button type="button" data-amount="50">$50</button><button type="button" data-amount="100">$100</button></div>
+            <div class="form-row form-spread"><span class="form-label">SLIPPAGE</span><span class="slippage-control"><button type="button" class="slippage active" data-slippage="1">1%</button><button type="button" class="slippage" data-slippage="3">3%</button><button type="button" class="slippage" data-slippage="5">5%</button></span></div>
+            <div class="quote-box"><div><span>EST. RECEIVE</span><strong id="estimatedReceive">457.88 GENIUS</strong></div><div><span>PRICE IMPACT</span><strong id="priceImpact">0.82%</strong></div><div><span>NETWORK FEE</span><strong>$0.20 <em>paper</em></strong></div></div>
+            <button class="simulate-button" id="simulateButton" type="button"><span id="simulateLabel">Simulate buy</span><span>↗</span></button>
+            <p class="order-disclaimer">仅写入本机 paper 账本。不会调用 GMGN、钱包或签名器。</p>
+          </div>
+          <div class="positions-heading"><span class="eyebrow">POSITIONS</span><span id="positionCount">0 open</span></div>
+          <div class="positions-list" id="positionsList"><div class="empty-position">No open positions<br /><span>模拟成交后显示在这里</span></div></div>
+        </aside>
+      </main>
+
+      <footer class="bottom-status"><span><i class="live-dot"></i> local engine online</span><span>paper state <strong id="paperStateLabel">synced</strong></span><span>feed <strong>synthetic / 1.2s</strong></span><span class="footer-spacer"></span><span>GMGN-style paper terminal · v0.1</span></footer>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
