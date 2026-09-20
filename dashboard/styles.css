@@ -54,3 +54,52 @@ button:focus-visible, input:focus-visible { outline: 1px solid var(--lime); outl
 @keyframes pulse { 0%, 100% { opacity: .55; transform: scale(.86); } 50% { opacity: 1; transform: scale(1.1); } } @keyframes rowIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 1220px) { body { min-width: 960px; }.terminal-grid { grid-template-columns: 210px minmax(490px, 1fr) 270px; }.market-pane { padding-left: 20px; padding-right: 20px; }.metric { padding-left: 8px; padding-right: 8px; }.metric strong { font-size: 10px; } }
 @media (max-width: 850px) { body { min-width: 0; }.topbar { padding: 0 14px; }.topbar-controls { gap: 8px; }.data-status, .topbar-clock { display: none; }.safety-strip { padding: 0 14px; }.safety-copy, .source-label { display: none; }.terminal-grid { display: block; }.watch-pane, .order-pane { border: 0; }.watch-pane { border-bottom: 1px solid var(--line); }.watchlist { display: grid; grid-template-columns: repeat(2, 1fr); }.watch-item { border-left: 0; }.watch-item.active { border-left: 0; border-bottom: 2px solid var(--lime); }.watch-footer { display: none; }.market-pane { padding: 18px 14px; }.order-pane { border-top: 1px solid var(--line); }.bottom-status { padding: 0 14px; gap: 9px; }.bottom-status span:nth-child(2), .bottom-status span:nth-child(3) { display: none; }.chart-note { display: none; } }
+
+/* 聚焦工作台：隐藏旧的市场列表和下单表单，只保留持仓与决策依据。 */
+:root { color-scheme: dark; }
+html, body { background: #070b0a !important; }
+body { min-width: 0; }
+.app-shell { min-height: 100svh; background: radial-gradient(circle at 72% -20%, rgba(106, 164, 76, .15), transparent 35%), #070b0a; }
+.legacy-runtime { display: none !important; }
+.focus-shell { width: min(1180px, 100%); margin: 0 auto; padding: clamp(28px, 5vw, 64px) clamp(18px, 4vw, 52px) 44px; }
+.focus-intro { display: flex; align-items: end; justify-content: space-between; gap: 24px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+.focus-title h1 { margin: 0; font-size: clamp(28px, 4vw, 46px); font-weight: 500; letter-spacing: -.055em; line-height: 1.04; }
+.focus-title p { margin: 12px 0 0; color: var(--muted); font-size: 13px; }
+.focus-controls { display: flex; align-items: center; gap: 16px; padding-bottom: 4px; }
+.focus-toggle { padding: 9px 12px; border: 1px solid var(--lime-soft); background: rgba(185, 255, 102, .07); }
+.focus-toggle input { width: 13px; height: 13px; }
+.focus-reset { padding: 9px 12px; border: 1px solid var(--line); background: transparent; color: var(--muted); font: 10px var(--mono); }
+.focus-reset:hover { color: var(--text); border-color: var(--muted); }
+.focus-grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 16px; align-items: start; margin-top: 22px; }
+.focus-column { display: grid; gap: 16px; min-width: 0; }
+.focus-panel { background: rgba(13, 18, 16, .88); border: 1px solid var(--line); }
+.focus-panel-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; padding: 20px 22px 16px; }
+.focus-panel-heading h2 { margin: 0; font-size: 18px; font-weight: 500; letter-spacing: -.02em; }
+.focus-sync, .focus-count, .focus-policy-tag, .signal-state { color: var(--muted); font: 9px var(--mono); }
+.focus-policy-tag { color: var(--lime); border: 1px solid rgba(185, 255, 102, .26); padding: 5px 7px; }
+.signal-state { padding-top: 4px; }
+.signal-state.fresh { color: var(--lime); }.signal-state.stale { color: var(--amber); }
+.focus-balance-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin: 0 22px; background: var(--line); }
+.focus-balance-grid > div { padding: 18px; background: #0a100c; }
+.focus-balance-grid span, .focus-signal-metrics span { display: block; color: var(--dim); font: 9px var(--mono); }
+.focus-balance-grid strong { display: block; margin-top: 8px; color: var(--text); font: 24px var(--mono); letter-spacing: -.04em; }
+.focus-account-note { padding: 16px 22px 20px; color: var(--dim); font: 9px var(--mono); }
+.focus-positions-list { padding: 0 22px 10px; }
+.focus-position-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 17px 0; border-top: 1px solid var(--line-soft); }
+.focus-position-main { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.focus-position-avatar, .focus-token-avatar { display: grid; place-items: center; flex: 0 0 auto; background: rgba(185, 255, 102, .08); color: var(--lime); border: 1px solid rgba(185, 255, 102, .28); font: 14px var(--mono); }
+.focus-position-avatar { width: 34px; height: 34px; }
+.focus-position-main strong, .focus-token-copy strong { display: block; color: var(--text); font: 14px var(--mono); }
+.focus-position-main span, .focus-token-copy span { display: block; margin-top: 5px; color: var(--muted); font: 9px var(--mono); }
+.focus-position-numbers { text-align: right; }.focus-position-numbers strong { display: block; color: var(--text); font: 14px var(--mono); }.focus-position-numbers span { display: block; margin-top: 5px; font: 9px var(--mono); }
+.focus-empty { padding: 30px 0 34px; color: var(--muted); text-align: center; font-size: 14px; }.focus-empty span { display: block; margin-top: 7px; color: var(--dim); font: 9px var(--mono); }
+.focus-signal-main { display: grid; grid-template-columns: 52px 1fr auto; align-items: center; gap: 13px; padding: 2px 22px 21px; }
+.focus-token-avatar { width: 52px; height: 52px; font-size: 19px; background: linear-gradient(135deg, #203c28, #0d1c13); }
+.focus-signal-price { text-align: right; }.focus-signal-price strong { display: block; color: var(--text); font: 22px var(--mono); letter-spacing: -.04em; }.focus-signal-price span { display: block; margin-top: 5px; font: 10px var(--mono); }
+.focus-signal-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin: 0 22px; background: var(--line); }.focus-signal-metrics > div { padding: 13px 11px; background: #0a100c; }.focus-signal-metrics strong { display: block; margin-top: 7px; color: var(--text); font: 11px var(--mono); font-weight: 400; }.focus-signal-metrics strong.positive { color: var(--lime); }.focus-signal-metrics strong.warning { color: var(--amber); }.focus-signal-metrics strong.negative { color: var(--red); }
+.focus-signal-note { margin: 15px 22px 20px; padding-left: 10px; border-left: 2px solid var(--lime-soft); color: var(--muted); font: 10px/1.55 var(--mono); }
+.logic-list { list-style: none; counter-reset: logic; margin: 0; padding: 0 22px; }.logic-list li { position: relative; display: grid; grid-template-columns: 1fr; gap: 4px; padding: 14px 0 14px 31px; border-top: 1px solid var(--line-soft); counter-increment: logic; }.logic-list li::before { content: counter(logic, decimal-leading-zero); position: absolute; left: 0; top: 14px; color: var(--lime); font: 10px var(--mono); }.logic-list strong { font-size: 12px; font-weight: 500; }.logic-list span { color: var(--muted); font: 10px/1.45 var(--mono); }
+.logic-exits { display: flex; justify-content: space-between; gap: 12px; margin: 5px 22px 0; padding: 14px 0; border-top: 1px solid var(--line); color: var(--muted); font: 10px var(--mono); }.logic-exits strong { color: var(--amber); font-weight: 400; text-align: right; }
+.focus-last-action { margin: 0 22px 20px; padding: 15px 0 0; border-top: 1px solid var(--line); }.focus-last-action span { display: block; color: var(--dim); font: 9px var(--mono); }.focus-last-action strong { display: block; margin-top: 7px; color: var(--lime); font: 12px var(--mono); font-weight: 400; }.focus-last-action small { display: block; margin-top: 5px; color: var(--muted); font: 9px var(--mono); }
+.positive { color: var(--lime); }.negative { color: var(--red); }
+@media (max-width: 760px) { .focus-shell { padding: 28px 15px 32px; }.focus-intro { display: block; }.focus-controls { margin-top: 20px; justify-content: space-between; }.focus-grid { grid-template-columns: 1fr; }.focus-panel-heading, .focus-signal-main, .focus-signal-note, .focus-positions-list, .logic-list { padding-left: 16px; padding-right: 16px; }.focus-balance-grid, .focus-signal-metrics { margin-left: 16px; margin-right: 16px; }.logic-exits, .focus-last-action { margin-left: 16px; margin-right: 16px; }.focus-signal-metrics { grid-template-columns: repeat(2, 1fr); }.focus-position-row { align-items: start; }.focus-position-numbers { flex: 0 0 auto; } }

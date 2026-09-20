@@ -37,6 +37,69 @@
         <span class="source-label" id="sourceLabel">paper-100 状态同步中</span>
       </div>
 
+      <main class="focus-shell" aria-label="自动模拟交易工作台">
+        <section class="focus-intro">
+          <div class="focus-title">
+            <span class="eyebrow">自动纸上交易</span>
+            <h1>只看持仓和买入逻辑</h1>
+            <p>实时读取 GMGN 只读行情，所有动作只写入本机模拟账本。</p>
+          </div>
+          <div class="focus-controls">
+            <label class="auto-switch focus-toggle"><input id="focusAutoToggle" type="checkbox" /><span id="focusAutoLabel">自动运行</span></label>
+            <button class="focus-reset" id="focusResetPaper" type="button">重置账户</button>
+          </div>
+        </section>
+
+        <section class="focus-grid">
+          <div class="focus-column">
+            <section class="focus-panel balance-panel" aria-label="纸上账户">
+              <div class="focus-panel-heading"><div><span class="eyebrow">纸上账户</span><h2>资金状态</h2></div><span class="focus-sync" id="focusSyncState">本地账本</span></div>
+              <div class="focus-balance-grid">
+                <div><span>可用余额</span><strong id="focusCash">$100.00</strong></div>
+                <div><span>已实现盈亏</span><strong id="focusPnl">+$0.00</strong></div>
+              </div>
+              <div class="focus-account-note">仅模拟盘 · 不连接钱包 · 不签名 · 不广播</div>
+            </section>
+
+            <section class="focus-panel positions-panel" aria-label="当前持仓">
+              <div class="focus-panel-heading"><div><span class="eyebrow">当前持仓</span><h2>你现在持有什么</h2></div><strong class="focus-count" id="focusPositionCount">0 个仓位</strong></div>
+              <div class="focus-positions-list" id="focusPositionsList"><div class="focus-empty">暂无持仓<span>自动买入后会显示在这里</span></div></div>
+            </section>
+          </div>
+
+          <div class="focus-column">
+            <section class="focus-panel signal-panel" aria-label="当前监控信号">
+              <div class="focus-panel-heading"><div><span class="eyebrow">最新信号</span><h2>当前监控对象</h2></div><span class="signal-state" id="focusFreshness">等待行情</span></div>
+              <div class="focus-signal-main">
+                <div class="focus-token-avatar" id="focusTokenAvatar">?</div>
+                <div class="focus-token-copy"><strong id="focusTokenName">等待 GMGN 行情</strong><span id="focusTokenMeta">BSC · —</span></div>
+                <div class="focus-signal-price"><strong id="focusTokenPrice">—</strong><span id="focusTokenChange">—</span></div>
+              </div>
+              <div class="focus-signal-metrics">
+                <div><span>风险</span><strong id="focusRisk">等待</strong></div>
+                <div><span>流动性</span><strong id="focusLiquidity">—</strong></div>
+                <div><span>聪明钱</span><strong id="focusSmartMoney">—</strong></div>
+                <div><span>Rug 比例</span><strong id="focusRug">—</strong></div>
+              </div>
+              <p class="focus-signal-note" id="focusSignalNote">等待最新 GMGN 真实快照。</p>
+            </section>
+
+            <section class="focus-panel logic-panel" aria-label="自动买入逻辑">
+              <div class="focus-panel-heading"><div><span class="eyebrow">自动策略</span><h2>买入逻辑</h2></div><span class="focus-policy-tag">全部满足</span></div>
+              <ol class="logic-list">
+                <li><strong>只用新鲜行情</strong><span>GMGN 1 分钟排行成功刷新，旧快照不触发。</span></li>
+                <li><strong>通过风险门</strong><span>风险必须为“强”，且不判定为洗量。</span></li>
+                <li><strong>有真实资金流</strong><span>流动性至少 $50K，同时至少 3 个聪明钱地址。</span></li>
+                <li><strong>控制仓位</strong><span>每次 $10，最多同时持有 2 个自动仓位。</span></li>
+              </ol>
+              <div class="logic-exits"><span>自动退出</span><strong>止损 -20% · 止盈 +40% · 最长 30 分钟</strong></div>
+              <div class="focus-last-action"><span>最近动作</span><strong id="focusLastAction">等待行情</strong><small id="focusLastReason">仅写入本机模拟账本</small></div>
+            </section>
+          </div>
+        </section>
+      </main>
+
+      <div class="legacy-runtime" aria-hidden="true">
       <main class="terminal-grid">
         <aside class="watch-pane pane">
           <div class="pane-heading">
@@ -121,6 +184,7 @@
           <div class="positions-list" id="positionsList"><div class="empty-position">暂无持仓<br /><span>模拟成交后显示在这里</span></div></div>
         </aside>
       </main>
+      </div>
 
       <footer class="bottom-status"><span><i class="live-dot"></i> 本地引擎在线</span><span>paper-100 状态 <strong id="paperStateLabel">已同步</strong></span><span>浏览器纸上账本 <strong>本地</strong></span><span class="footer-spacer"></span><span>yesp atm · 模拟盘 · v0.2</span></footer>
     </div>
