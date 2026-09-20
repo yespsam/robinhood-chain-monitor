@@ -478,6 +478,10 @@ const GITHUB_DYNAMIC_POLL_MAX_INTERVAL_MS = 10 * 60_000;
 const GITHUB_DYNAMIC_POLL_DEFAULT_INTERVAL_MS = 5 * 60_000;
 const GITHUB_ORGANIZATION_MIN_INTERVAL_MS = 60_000;
 const GITHUB_ORGANIZATION_MAX_INTERVAL_MS = 10 * 60_000;
+const GITHUB_REPOSITORY_SCHEDULER_MIN_INTERVAL_MS = 60_000;
+const GITHUB_PRIORITY_PHASE_OFFSET_MS = 30_000;
+const GITHUB_REST_CIRCUIT_DEFAULT_MS = 60 * 60_000;
+const GITHUB_REST_CIRCUITS = new WeakMap();
 
 const GITHUB_CHANGE_OBJECT = "(?:factory|launcher|launchpad|module|plugin|bonding[ -]?curve|graduation|migration|pool|hook|router|reactor|strategy|vault|portal|deployer|adapter|policy|integration|auction|presale|fair[ -]?launch|subscription|quote[ -]?token|tax[ -]?(?:mode|token)|TaxToken\\d+|charity[ -]?(?:donation|badge|dashboard|tax)|donation[ -]?(?:feature|mode|tax)|open[ -]?four|proxy|version|v[2-9])";
 const GITHUB_NEW_ACTION = "(?:add(?:s|ed|ing)?|introduc(?:e|es|ed|ing)|launch(?:es|ed|ing)?|deploy(?:s|ed|ing)?|releas(?:e|es|ed|ing)|enabl(?:e|es|ed|ing)|support(?:s|ed|ing)?|implement(?:s|ed|ing)?|creat(?:e|es|ed|ing)|ship(?:s|ped|ping)|upgrad(?:e|es|ed|ing))";
@@ -506,6 +510,43 @@ function isOrganizationDynamicRepository(entry) {
   return entry?.pollingClass === "organization_dynamic";
 }
 
+function organizationTargetFor(organization) {
+  const normalized = String(organization || "").toLowerCase();
+  return ORGANIZATION_TARGETS.find((target) => target.organization.toLowerCase() === normalized) || null;
+}
+
+function repositoryMatchesOrganizationTarget(repository, target) {
+  if (!target?.discoverOnly || !target.repositoryPattern) return true;
+  const name = String(repository || "").split("/").at(-1) || "";
+  target.repositoryPattern.lastIndex = 0;
+  const matches = target.repositoryPattern.test(name);
+  target.repositoryPattern.lastIndex = 0;
+  return matches;
+}
+
+function successfulOrganizationSnapshot(organizations, organization) {
+  if (!organizations || !organization) return null;
+  const normalized = String(organization).toLowerCase();
+  const snapshot = organizations[organization]
+    || Object.entries(organizations).find(([name]) => name.toLowerCase() === normalized)?.[1];
+  return snapshot?.lastSuccessAt && Array.isArray(snapshot.repositories) ? snapshot : null;
+}
+
+function organizationSnapshotAdmission(organizations, repository, entry) {
+  if (!isOrganizationDynamicRepository(entry) || !entry.officialOrganization) return null;
+  const target = organizationTargetFor(entry.officialOrganization);
+  const snapshot = successfulOrganizationSnapshot(organizations, target?.organization || entry.officialOrganization);
+  if (!target || !snapshot) return null;
+  const normalized = String(repository || entry.repository || "").toLowerCase();
+  const listed = snapshot.repositories.some((candidate) => String(candidate).toLowerCase() === normalized);
+  const matchesDiscoveryFilter = repositoryMatchesOrganizationTarget(repository || entry.repository, target);
+  return {
+    active: listed && matchesDiscoveryFilter,
+    inactiveReason: listed ? "organization_discovery_filter" : "organization_repository_absent",
+    snapshotAt: snapshot.lastSuccessAt,
+  };
+}
+
 function isGithubTransportFailure(value) {
   const status = Number(value?.status ?? value?.lastErrorStatus);
   if ([403, 429].includes(status)) return false;
@@ -514,17 +555,17 @@ function isGithubTransportFailure(value) {
   return GITHUB_TRANSPORT_FAILURE.test(message);
 }
 
-function responseRetryAfterMs(response) {
+function responseRetryAfterMs(response, currentTime = Date.now()) {
   const retryAfter = response.headers?.get?.("retry-after");
   if (retryAfter) {
     const seconds = Number(retryAfter);
     if (Number.isFinite(seconds)) return Math.max(0, seconds * 1_000);
     const timestamp = Date.parse(retryAfter);
-    if (Number.isFinite(timestamp)) return Math.max(0, timestamp - Date.now());
+    if (Number.isFinite(timestamp)) return Math.max(0, timestamp - currentTime);
   }
   const rateLimitReset = Number(response.headers?.get?.("x-ratelimit-reset"));
   return Number.isFinite(rateLimitReset) && rateLimitReset > 0
-    ? Math.max(0, rateLimitReset * 1_000 - Date.now())
+    ? Math.max(0, rateLimitReset * 1_000 - currentTime)
     : null;
 }
 
@@ -532,17 +573,56 @@ function requestTimeoutMs(config) {
   return Math.max(1_000, Number(config?.githubRequestTimeoutMs) || 8_000);
 }
 
-async function github(config, pathname, { withoutToken = false } = {}) {
-  const headers = { accept: "application/vnd.github+json", "user-agent": "robinhood-launchpad-monitor" };
-  if (config.githubToken && !withoutToken) headers.authorization = `Bearer ${config.githubToken}`;
+function githubRestCircuit(config) {
+  let circuit = GITHUB_REST_CIRCUITS.get(config);
+  if (!circuit) {
+    circuit = { blockedUntil: 0, status: null };
+    GITHUB_REST_CIRCUITS.set(config, circuit);
+  }
+  return circuit;
+}
+
+function githubRestCircuitError(pathname, circuit, currentTime) {
+  const retryAfterMs = Math.max(1_000, circuit.blockedUntil - currentTime);
+  const error = new Error(`GitHub REST circuit is open for ${pathname}`);
+  error.name = "GithubRestCircuitOpenError";
+  error.code = "GITHUB_REST_CIRCUIT_OPEN";
+  error.status = circuit.status || 429;
+  error.retryAfterMs = retryAfterMs;
+  return error;
+}
+
+async function githubRestFetch(config, pathname, { headers, withoutToken = false } = {}) {
+  const circuit = githubRestCircuit(config);
+  const currentTime = Date.now();
+  if (circuit.blockedUntil > currentTime) throw githubRestCircuitError(pathname, circuit, currentTime);
   const response = await fetch(`https://api.github.com${pathname}`, {
     headers,
     signal: AbortSignal.timeout(requestTimeoutMs(config)),
   });
+  const authenticated = Boolean(config.githubToken && !withoutToken);
+  if (!authenticated && [403, 429].includes(response.status)) {
+    const responseDelay = responseRetryAfterMs(response, currentTime);
+    const delay = Number.isFinite(responseDelay) && responseDelay > 0
+      ? responseDelay
+      : GITHUB_REST_CIRCUIT_DEFAULT_MS;
+    circuit.blockedUntil = Math.max(circuit.blockedUntil, currentTime + delay);
+    circuit.status = response.status;
+  }
+  return response;
+}
+
+async function github(config, pathname, { withoutToken = false } = {}) {
+  const headers = { accept: "application/vnd.github+json", "user-agent": "robinhood-launchpad-monitor" };
+  if (config.githubToken && !withoutToken) headers.authorization = `Bearer ${config.githubToken}`;
+  const response = await githubRestFetch(config, pathname, { headers, withoutToken });
   if (!response.ok) {
     const error = new Error(`GitHub ${pathname} returned HTTP ${response.status}`);
     error.status = response.status;
-    error.retryAfterMs = responseRetryAfterMs(response);
+    const circuit = githubRestCircuit(config);
+    error.retryAfterMs = circuit.blockedUntil > Date.now()
+      ? circuit.blockedUntil - Date.now()
+      : responseRetryAfterMs(response);
     throw error;
   }
   return response.json();
@@ -554,10 +634,7 @@ async function githubCommitPage(config, repository, page = 1, { etag = null, wit
   const headers = { accept: "application/vnd.github+json", "user-agent": "robinhood-launchpad-monitor" };
   if (config.githubToken && !withoutToken) headers.authorization = `Bearer ${config.githubToken}`;
   if (etag) headers["if-none-match"] = etag;
-  const response = await fetch(`https://api.github.com${pathname}`, {
-    headers,
-    signal: AbortSignal.timeout(requestTimeoutMs(config)),
-  });
+  const response = await githubRestFetch(config, pathname, { headers, withoutToken });
   if (response.status === 304) {
     return {
       commits: [],
@@ -570,7 +647,10 @@ async function githubCommitPage(config, repository, page = 1, { etag = null, wit
   if (!response.ok) {
     const error = new Error(`GitHub ${pathname} returned HTTP ${response.status}`);
     error.status = response.status;
-    error.retryAfterMs = responseRetryAfterMs(response);
+    const circuit = githubRestCircuit(config);
+    error.retryAfterMs = circuit.blockedUntil > Date.now()
+      ? circuit.blockedUntil - Date.now()
+      : responseRetryAfterMs(response);
     throw error;
   }
   const commits = await response.json();
@@ -2073,10 +2153,17 @@ export function createGithubMonitor(config, dependencies = {}) {
   const stateFs = dependencies.stateFs || fs;
   const now = dependencies.now || (() => new Date());
   const random = dependencies.random || Math.random;
+  const setIntervalImpl = dependencies.setIntervalImpl || setInterval;
+  const clearIntervalImpl = dependencies.clearIntervalImpl || clearInterval;
+  const setTimeoutImpl = dependencies.setTimeoutImpl || setTimeout;
+  const clearTimeoutImpl = dependencies.clearTimeoutImpl || clearTimeout;
   const retryBaseMs = Math.max(1_000, Number(config.githubRetryBaseMs) || 60_000);
   const retryMaxMs = Math.max(retryBaseMs, Number(config.githubRetryMaxMs) || 3_600_000);
   const regularPollConcurrency = Math.max(1, Number(config.githubPollConcurrency) || 4);
-  const priorityPollIntervalMs = Math.max(5_000, Number(config.githubPriorityPollIntervalMs) || 10_000);
+  const priorityPollIntervalMs = Math.max(
+    GITHUB_REPOSITORY_SCHEDULER_MIN_INTERVAL_MS,
+    Number(config.githubPriorityPollIntervalMs) || GITHUB_REPOSITORY_SCHEDULER_MIN_INTERVAL_MS,
+  );
   const dynamicPollIntervalMs = boundedInterval(
     config.githubDynamicPollIntervalMs,
     GITHUB_DYNAMIC_POLL_DEFAULT_INTERVAL_MS,
@@ -2090,7 +2177,7 @@ export function createGithubMonitor(config, dependencies = {}) {
     GITHUB_ORGANIZATION_MAX_INTERVAL_MS,
   );
   const regularSchedulerIntervalMs = Math.max(
-    1_000,
+    GITHUB_REPOSITORY_SCHEDULER_MIN_INTERVAL_MS,
     Math.min(Number(config.githubPollIntervalMs) || 60_000, dynamicPollIntervalMs),
   );
   const requestedPullRequestIntervalMs = Math.max(1_000, Number(config.githubPrPollIntervalMs) || GITHUB_TOKEN_PR_MIN_INTERVAL_MS);
@@ -2141,6 +2228,7 @@ export function createGithubMonitor(config, dependencies = {}) {
         gapRecoveryMigrated = true;
       }
       let repositoryClassMigrated = false;
+      let repositoryActivationMigrated = false;
       for (const [repository, entry] of Object.entries(state._repositories)) {
         const normalized = repository.toLowerCase();
         const configured = configuredRepositories.get(normalized);
@@ -2180,6 +2268,45 @@ export function createGithubMonitor(config, dependencies = {}) {
             };
           }
         }
+        const snapshotAdmission = organizationSnapshotAdmission(state._organizations, repository, merged);
+        const remainsInactiveWithoutSnapshot = isOrganizationDynamicRepository(merged)
+          && entry.active === false
+          && snapshotAdmission?.active !== true;
+        if (snapshotAdmission?.active === false || remainsInactiveWithoutSnapshot) {
+          const inactiveReason = snapshotAdmission?.inactiveReason
+            || entry.inactiveReason
+            || "organization_repository_inactive";
+          const inactiveSnapshotAt = snapshotAdmission?.snapshotAt
+            || entry.inactiveOrganizationSnapshotAt
+            || null;
+          const inactiveEntry = {
+            ...merged,
+            active: false,
+            inactiveReason,
+            inactiveAt: entry.inactiveAt || inactiveSnapshotAt || migrationObservedAt,
+            ...(inactiveSnapshotAt ? { inactiveOrganizationSnapshotAt: inactiveSnapshotAt } : {}),
+          };
+          if (entry.active !== false
+            || entry.inactiveReason !== inactiveEntry.inactiveReason
+            || entry.inactiveAt !== inactiveEntry.inactiveAt
+            || entry.inactiveOrganizationSnapshotAt !== inactiveEntry.inactiveOrganizationSnapshotAt
+            || entry.priority !== inactiveEntry.priority
+            || entry.pollingClass !== inactiveEntry.pollingClass) repositoryActivationMigrated = true;
+          state._repositories[repository] = inactiveEntry;
+          repositories.delete(normalized);
+          PRIORITY_REPOSITORIES.delete(normalized);
+          continue;
+        }
+        if (Object.hasOwn(merged, "active")
+          || Object.hasOwn(merged, "inactiveReason")
+          || Object.hasOwn(merged, "inactiveAt")
+          || Object.hasOwn(merged, "inactiveOrganizationSnapshotAt")) {
+          delete merged.active;
+          delete merged.inactiveReason;
+          delete merged.inactiveAt;
+          delete merged.inactiveOrganizationSnapshotAt;
+          repositoryActivationMigrated = true;
+        }
         // Persisted records may now be intentionally outside the active scope.
         // Classify them before this gate so stale priority flags cannot make the
         // state file claim that disabled repositories are using the fast lane.
@@ -2211,7 +2338,7 @@ export function createGithubMonitor(config, dependencies = {}) {
         repositories.set(normalized, merged);
         if (merged.priority) PRIORITY_REPOSITORIES.add(normalized);
       }
-      if (repositoryClassMigrated || gapRecoveryMigrated) await writeState();
+      if (repositoryClassMigrated || repositoryActivationMigrated || gapRecoveryMigrated) await writeState();
       if (!startupTransportProbesInitialized) {
         for (const [normalized, entry] of repositories) {
           const health = state._health.repositories[normalized];
@@ -2276,10 +2403,7 @@ export function createGithubMonitor(config, dependencies = {}) {
   function organizationPushGateIsFresh(entry) {
     if (!isOrganizationDynamicRepository(entry) || !entry.organizationPushedAt) return false;
     const health = repositoryHealth(entry.repository);
-    if (entry.organizationPushedAt !== health?.lastOrganizationPushedAt) return false;
-    const metadataAt = Date.parse(entry.organizationMetadataAt || "");
-    return Number.isFinite(metadataAt)
-      && now().getTime() - metadataAt <= dynamicPollIntervalMs;
+    return entry.organizationPushedAt === health?.lastOrganizationPushedAt;
   }
 
   function canAttemptRepository(entry) {
@@ -2414,6 +2538,7 @@ export function createGithubMonitor(config, dependencies = {}) {
   async function processCommit(entry, commit) {
     const { repository, launchpad } = entry;
     const aiOfficial = isOfficialAiRepositoryEntry(entry);
+    const binanceOfficial = isOfficialBinanceRepositoryName(repository);
     const fetchedFiles = await commitFiles(config, repository, commit);
     const rawFiles = fetchedFiles
       .filter((file) => aiOfficial
@@ -2450,7 +2575,7 @@ export function createGithubMonitor(config, dependencies = {}) {
     });
     githubChange = mergeFlapSkillGithubChange(githubChange, flapSkillChange);
     const changeEvidence = githubChange.facts;
-    const binanceChange = isOfficialBinanceRepositoryName(repository)
+    const binanceChange = binanceOfficial
       ? classifyBinanceGithubChange(repository, commitEvidenceMessage, rawFiles, changeEvidence)
       : null;
     if (newContracts.length && !modeChange?.candidate) {
@@ -2492,7 +2617,7 @@ export function createGithubMonitor(config, dependencies = {}) {
       ...(modeChange ? { modeChange } : {}),
       ...eventChainContext,
       ...(entry.uniswapOfficial ? { uniswapOfficial: true, strong: modeChange.candidate || newContracts.length > 0 } : {}),
-      ...(isOfficialBinanceRepositoryName(repository) ? {
+      ...(binanceOfficial ? {
         binanceOfficial: true,
         strong: binanceChange
           ? binanceChange.substantive === true
@@ -2511,11 +2636,11 @@ export function createGithubMonitor(config, dependencies = {}) {
       observedAt: now().toISOString(),
     };
     const alertResult = await alertSender(config, event);
-    if (aiOfficial && !isAcceptedAiGithubAlertDelivery(alertResult)) {
+    if ((aiOfficial || binanceOfficial) && !isAcceptedAiGithubAlertDelivery(alertResult)) {
       const status = typeof alertResult === "object" && alertResult
         ? String(alertResult.status || alertResult.reason || "unknown")
         : String(alertResult);
-      const error = new Error(`AI GitHub alert was not durably accepted for ${repository}@${commit.sha}: ${status}`);
+      const error = new Error(`Official GitHub alert was not durably accepted for ${repository}@${commit.sha}: ${status}`);
       error.name = "GithubAlertDurabilityError";
       error.delivery = alertResult;
       throw error;
@@ -3045,19 +3170,25 @@ export function createGithubMonitor(config, dependencies = {}) {
     let dynamicActivityDetected = false;
     try {
       await ensureState();
-      for (const { organization, launchpad, sourceTrust: organizationTrust, baselineOnly, officialEvidence, discoverOnly, repositoryPattern, xaiOfficial } of ORGANIZATION_TARGETS) {
+      for (const { organization, launchpad, sourceTrust: organizationTrust, baselineOnly, officialEvidence, xaiOfficial } of ORGANIZATION_TARGETS) {
         try {
           const listed = await listOrganizationRepositories(config, organization);
           const visibleRepositories = listed.filter((item) => !item.archived && item.full_name);
           const names = visibleRepositories.map((item) => item.full_name);
+          const target = organizationTargetFor(organization);
+          const eligibleRepositories = visibleRepositories.filter((item) => repositoryMatchesOrganizationTarget(item.full_name, target));
+          const visibleNames = new Set(names.map((repository) => repository.toLowerCase()));
+          const eligibleNames = new Set(eligibleRepositories.map((item) => item.full_name.toLowerCase()));
           const listedByName = new Map(visibleRepositories.map((item) => [item.full_name.toLowerCase(), item]));
           const previous = new Set(state._organizations[organization]?.repositories || []);
           const initial = !state._organizations[organization];
-          for (const repository of names) {
-            if (discoverOnly && repositoryPattern && !repositoryPattern.test(repository.split("/").at(-1) || "")) continue;
+          for (const { full_name: repository } of eligibleRepositories) {
             await withRepositoryLock(repository, async () => {
               const normalized = repository.toLowerCase();
-              const current = repositories.get(normalized);
+              const persistedRecord = Object.entries(state._repositories)
+                .find(([candidate]) => candidate.toLowerCase() === normalized);
+              const persistedKey = persistedRecord?.[0] || repository;
+              const current = repositories.get(normalized) || persistedRecord?.[1];
               const newlyDiscovered = !initial && !previous.has(repository);
               const repositoryInfo = listedByName.get(normalized) || {};
               const repositoryMetadata = {
@@ -3099,6 +3230,10 @@ export function createGithubMonitor(config, dependencies = {}) {
                   ? { officialEvidence: configured?.officialEvidence || officialEvidence }
                   : {}),
               };
+              delete entry.active;
+              delete entry.inactiveReason;
+              delete entry.inactiveAt;
+              delete entry.inactiveOrganizationSnapshotAt;
               if (explicitlyConfigured && configured?.baselineOnly === true) delete entry.initialCatchupRequired;
               const sourceEnabled = isMonitoringSourceEnabled(config, entry)
                 || (xaiOfficial === true
@@ -3112,7 +3247,7 @@ export function createGithubMonitor(config, dependencies = {}) {
               repositories.set(normalized, entry);
               if (explicitlyPriority) PRIORITY_REPOSITORIES.add(normalized);
               else PRIORITY_REPOSITORIES.delete(normalized);
-              state._repositories[repository] = entry;
+              state._repositories[persistedKey] = entry;
               if (newlyDiscovered) {
                 // A repository discovered after the organization baseline is a
                 // source event, not a cold-start baseline. Read its bounded
@@ -3155,10 +3290,39 @@ export function createGithubMonitor(config, dependencies = {}) {
               }
             });
           }
+          const organizationObservedAt = now().toISOString();
+          for (const [repository, persistedEntry] of Object.entries(state._repositories)) {
+            const normalized = repository.toLowerCase();
+            if (String(persistedEntry?.officialOrganization || "").toLowerCase() !== organization.toLowerCase()) continue;
+            const configured = configuredRepositories.get(normalized);
+            const explicitlyConfigured = Boolean(configured
+              && !configured.officialOrganization
+              && !isOrganizationDynamicRepository(configured));
+            if (CORE_PRIORITY_REPOSITORIES.has(normalized) || explicitlyConfigured) continue;
+            const current = repositories.get(normalized) || persistedEntry;
+            if (!isOrganizationDynamicRepository(current) || eligibleNames.has(normalized)) continue;
+            await withRepositoryLock(repository, async () => {
+              const latest = repositories.get(normalized) || state._repositories[repository] || persistedEntry;
+              if (!isOrganizationDynamicRepository(latest)) return;
+              repositories.delete(normalized);
+              PRIORITY_REPOSITORIES.delete(normalized);
+              state._repositories[repository] = {
+                ...latest,
+                priority: false,
+                pollingClass: "organization_dynamic",
+                active: false,
+                inactiveReason: visibleNames.has(normalized)
+                  ? "organization_discovery_filter"
+                  : "organization_repository_absent",
+                inactiveAt: latest.inactiveAt || organizationObservedAt,
+                inactiveOrganizationSnapshotAt: organizationObservedAt,
+              };
+            });
+          }
           state._organizations[organization] = {
             repositories: names.sort(),
-            checkedAt: now().toISOString(),
-            lastSuccessAt: now().toISOString(),
+            checkedAt: organizationObservedAt,
+            lastSuccessAt: organizationObservedAt,
             lastError: null,
           };
           await writeState();
@@ -3285,6 +3449,7 @@ export function createGithubMonitor(config, dependencies = {}) {
 
   let timer = null;
   let priorityTimer = null;
+  let priorityPhaseTimer = null;
   let organizationTimer = null;
   let pullRequestTimer = null;
   if (dependencies.autoStart !== false) {
@@ -3292,15 +3457,24 @@ export function createGithubMonitor(config, dependencies = {}) {
     void check(true);
     void checkOrganizations();
     void checkPullRequests();
-    timer = setInterval(() => void check(false), regularSchedulerIntervalMs);
+    timer = setIntervalImpl(() => check(false), regularSchedulerIntervalMs);
     timer.unref();
-    priorityTimer = setInterval(() => void check(true), priorityPollIntervalMs);
-    priorityTimer.unref();
-    organizationTimer = setInterval(() => void checkOrganizations(), organizationPollIntervalMs);
+    // Keep both startup probes immediate, then spread recurring repository
+    // traffic evenly across the minute without weakening either lane.
+    priorityPhaseTimer = setTimeoutImpl(() => {
+      priorityPhaseTimer = null;
+      if (stopped) return;
+      const checking = check(true);
+      priorityTimer = setIntervalImpl(() => check(true), priorityPollIntervalMs);
+      priorityTimer.unref();
+      return checking;
+    }, GITHUB_PRIORITY_PHASE_OFFSET_MS);
+    priorityPhaseTimer.unref?.();
+    organizationTimer = setIntervalImpl(() => void checkOrganizations(), organizationPollIntervalMs);
     organizationTimer.unref();
     // Wake every minute so transport failures recover quickly. Healthy public
     // repositories retain their per-repository ten-minute due time.
-    pullRequestTimer = setInterval(() => void checkPullRequests(), GITHUB_TOKEN_PR_MIN_INTERVAL_MS);
+    pullRequestTimer = setIntervalImpl(() => void checkPullRequests(), GITHUB_TOKEN_PR_MIN_INTERVAL_MS);
     pullRequestTimer.unref();
   }
   return {
@@ -3321,12 +3495,14 @@ export function createGithubMonitor(config, dependencies = {}) {
       stopped = true;
       checkLanes.priority.rerunRequested = false;
       checkLanes.regular.rerunRequested = false;
-      if (timer) clearInterval(timer);
-      if (priorityTimer) clearInterval(priorityTimer);
-      if (organizationTimer) clearInterval(organizationTimer);
-      if (pullRequestTimer) clearInterval(pullRequestTimer);
+      if (timer) clearIntervalImpl(timer);
+      if (priorityTimer) clearIntervalImpl(priorityTimer);
+      if (priorityPhaseTimer) clearTimeoutImpl(priorityPhaseTimer);
+      if (organizationTimer) clearIntervalImpl(organizationTimer);
+      if (pullRequestTimer) clearIntervalImpl(pullRequestTimer);
       timer = null;
       priorityTimer = null;
+      priorityPhaseTimer = null;
       organizationTimer = null;
       pullRequestTimer = null;
       const inFlight = [

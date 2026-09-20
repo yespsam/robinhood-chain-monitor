@@ -29,6 +29,7 @@ const FLAP_EVIDENCE = "https://docs.flap.sh/flap/developers/deployed-contract-ad
 const FLAP_BOARD = "https://flap.sh/morph/board";
 const LONG_APP = "https://app.long.xyz/";
 const LONG_SITE = "https://long.xyz/";
+const MORPH_WEBSOCKET_SHUTDOWN_GRACE_MS = 1_000;
 const DEFAULT_RPC_URLS = [
   "https://rpc-quicknode.morph.network",
   "https://rpc.morph.network",
@@ -497,6 +498,12 @@ export function createMorphLaunchpadMonitor(config, dependencies = {}) {
   const fetchImpl = dependencies.fetchImpl || fetch;
   const logger = dependencies.logger || console;
   const now = dependencies.now || Date.now;
+  const WebSocketImpl = dependencies.WebSocketImpl || WebSocket;
+  const setTimeoutImpl = dependencies.setTimeoutImpl || setTimeout;
+  const clearTimeoutImpl = dependencies.clearTimeoutImpl || clearTimeout;
+  const websocketShutdownGraceMs = Math.max(0, Number(
+    dependencies.websocketShutdownGraceMs ?? MORPH_WEBSOCKET_SHUTDOWN_GRACE_MS,
+  ));
   const sendAlertsImpl = dependencies.sendAlertsImpl || sendAlerts;
   const assessSecurityImpl = dependencies.assessSecurityImpl || assessLocalTokenSecurity;
   const stateFile = path.join(config.dataDir, "morph-launchpad-state.json");
@@ -1036,6 +1043,21 @@ export function createMorphLaunchpadMonitor(config, dependencies = {}) {
       await establishBaseline(safeBlock);
       return;
     }
+    const durableCursor = Number(state.cursor);
+    const durableLastScannedBlock = Number(state.lastScannedBlock);
+    if (!Number.isSafeInteger(durableCursor) || durableCursor <= 0
+      || !Number.isSafeInteger(durableLastScannedBlock) || durableLastScannedBlock < 0
+      || durableCursor !== durableLastScannedBlock + 1) {
+      throw new Error("Morph durable cursor is malformed");
+    }
+    // A lagging RPC may briefly report a safe block behind our cursor, but it
+    // can never make an already scanned block greater than the current head.
+    // Querying that future block returns null; treating it as a reorg and
+    // rewinding only a handful of blocks would preserve an arbitrarily future
+    // cursor forever. Hold the cursor and surface a degraded cycle instead.
+    if (durableLastScannedBlock > head || durableCursor > head + 1) {
+      throw new Error(`Morph durable cursor ${durableCursor} is ahead of RPC head ${head}`);
+    }
     await reorgCheck();
     if (Number(state.cursor || 0) > safeBlock && Number(state.lastScannedBlock || 0) >= safeBlock) {
       state.health = {
@@ -1245,32 +1267,75 @@ export function createMorphLaunchpadMonitor(config, dependencies = {}) {
   function connectWebSocket() {
     const url = config.morphWsUrl;
     if (!url || stopped || dependencies.disableWebSocket) return;
+    let connectedSocket;
     try {
-      socket = new WebSocket(url);
-      socket.on("open", () => {
+      connectedSocket = new WebSocketImpl(url);
+      socket = connectedSocket;
+      connectedSocket.on("open", () => {
+        if (stopped || socket !== connectedSocket) return;
         state.health.websocket = "connected";
-        socket.send(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_subscribe", params: ["newHeads"] }));
+        connectedSocket.send(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_subscribe", params: ["newHeads"] }));
       });
-      socket.on("message", (payload) => {
+      connectedSocket.on("message", (payload) => {
+        if (stopped || socket !== connectedSocket) return;
         try {
           const message = JSON.parse(String(payload));
           if (message.method === "eth_subscription") void scan().catch(() => {});
         } catch { /* Ignore malformed remote frames. */ }
       });
-      socket.on("error", (error) => {
+      connectedSocket.on("error", (error) => {
+        if (socket !== connectedSocket) return;
         state.health.websocket = `error:${compactError(error)}`;
       });
-      socket.on("close", () => {
+      connectedSocket.on("close", () => {
+        if (socket !== connectedSocket) return;
         state.health.websocket = "disconnected";
         socket = null;
         if (!stopped) {
-          reconnectTimer = setTimeout(connectWebSocket, 3_000);
+          reconnectTimer = setTimeoutImpl(connectWebSocket, 3_000);
           reconnectTimer.unref?.();
         }
       });
     } catch (error) {
       state.health.websocket = `error:${compactError(error)}`;
     }
+  }
+
+  function closeWebSocketForShutdown(closingSocket) {
+    if (!closingSocket) return Promise.resolve();
+    const closedState = Number(WebSocketImpl.CLOSED ?? 3);
+    if (Number(closingSocket.readyState) === closedState) return Promise.resolve();
+    return new Promise((resolve) => {
+      let settled = false;
+      let deadline = null;
+      const removeCloseListener = () => {
+        if (typeof closingSocket.off === "function") closingSocket.off("close", finish);
+        else if (typeof closingSocket.removeEventListener === "function") {
+          closingSocket.removeEventListener("close", finish);
+        }
+      };
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        if (deadline) clearTimeoutImpl(deadline);
+        removeCloseListener();
+        resolve();
+      };
+      if (typeof closingSocket.once === "function") closingSocket.once("close", finish);
+      else if (typeof closingSocket.addEventListener === "function") {
+        closingSocket.addEventListener("close", finish, { once: true });
+      }
+      deadline = setTimeoutImpl(() => {
+        try { closingSocket.terminate?.(); } catch {}
+        finish();
+      }, websocketShutdownGraceMs);
+      try {
+        closingSocket.close(1_000, "monitor stopping");
+      } catch {
+        try { closingSocket.terminate?.(); } catch {}
+        finish();
+      }
+    });
   }
 
   async function start() {
@@ -1292,13 +1357,17 @@ export function createMorphLaunchpadMonitor(config, dependencies = {}) {
     started = false;
     clearInterval(timer);
     clearInterval(officialTimer);
-    clearTimeout(reconnectTimer);
+    clearTimeoutImpl(reconnectTimer);
     timer = null;
     officialTimer = null;
     reconnectTimer = null;
-    socket?.close();
+    const closingSocket = socket;
     socket = null;
+    // First drain every operation that can commit a cursor or alert. Once the
+    // durability boundary is closed, give the peer a brief closing handshake;
+    // `ws.close()` otherwise keeps a referenced 30-second fallback timer alive.
     await Promise.allSettled([scanPromise, officialPromise, savePromise].filter(Boolean));
+    await closeWebSocketForShutdown(closingSocket);
     for (const provider of ownedProviders) provider.destroy?.();
   }
 

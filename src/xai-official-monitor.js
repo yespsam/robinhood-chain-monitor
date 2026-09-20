@@ -578,26 +578,29 @@ export function createXaiOfficialMonitor(config = {}, dependencies = {}) {
       const health = state.health.sources[source.key];
       const nextAttempt = Date.parse(health.nextAttemptAt || 0);
       const legacyDeliveryBackoff = /^AI official alert was not durably queued\b/i.test(String(health.lastError || ""));
-      if (Number.isFinite(nextAttempt) && nextAttempt > current && !(startupRecoveryProbe && legacyDeliveryBackoff)) {
+      const eligibilityCheckedAt = nowMs(now);
+      if (Number.isFinite(nextAttempt) && nextAttempt > eligibilityCheckedAt && !(startupRecoveryProbe && legacyDeliveryBackoff)) {
         result.skipped.push(source.key);
         continue;
       }
+      const requestStartedAt = nowMs(now);
+      const sourceObservedAt = iso(requestStartedAt);
       result.checked.push(source.key);
       try {
-        const response = await fetchSource(source, health, observedAt);
+        const response = await fetchSource(source, health, sourceObservedAt);
         if (response.notModified) {
           if (!sourceState.initialized) throw new Error(`${source.name} returned 304 before its baseline existed`);
-          markHealthy(health, current, source, response);
+          markHealthy(health, requestStartedAt, source, response);
           await persist(state);
           continue;
         }
         if (!sourceState.initialized) {
           for (const item of response.entries) {
-            sourceState.entries[item.stableId] = aiStateEntry(item, classifyAiOfficialUpdate(item), observedAt);
+            sourceState.entries[item.stableId] = aiStateEntry(item, classifyAiOfficialUpdate(item), sourceObservedAt);
           }
           sourceState.initialized = true;
           sourceState.entries = pruneEntries(sourceState.entries, retention);
-          markHealthy(health, current, source, response);
+          markHealthy(health, requestStartedAt, source, response);
           await persist(state);
           continue;
         }
@@ -608,8 +611,8 @@ export function createXaiOfficialMonitor(config = {}, dependencies = {}) {
             // Backfill display fields for pre-snapshot state without emitting a false update.
             if (!previous.displaySnapshot || !previous.title || !previous.summary || !previous.stage || !Array.isArray(previous.identifiers)) {
               sourceState.entries[item.stableId] = {
-                ...aiStateEntry(item, signal, observedAt),
-                seenAt: previous.seenAt || observedAt,
+                ...aiStateEntry(item, signal, sourceObservedAt),
+                seenAt: previous.seenAt || sourceObservedAt,
               };
             }
             continue;
@@ -631,7 +634,7 @@ export function createXaiOfficialMonitor(config = {}, dependencies = {}) {
               summary: item.summary,
               url: item.url || source.url,
               publishedAt: item.publishedAt || null,
-              observedAt,
+              observedAt: sourceObservedAt,
               changeType: previous ? "revised" : "published",
               comparisonBasis: previous ? "exact_snapshot" : "monitoring_baseline",
               ...(!previous ? { baselineStatus: "not_recorded" } : { previousSnapshot }),
@@ -647,14 +650,14 @@ export function createXaiOfficialMonitor(config = {}, dependencies = {}) {
             });
             result.delivered += 1;
           }
-          sourceState.entries[item.stableId] = aiStateEntry(item, signal, observedAt);
+          sourceState.entries[item.stableId] = aiStateEntry(item, signal, sourceObservedAt);
           sourceState.entries = pruneEntries(sourceState.entries, retention);
           await persist(state);
         }
-        markHealthy(health, current, source, response);
+        markHealthy(health, requestStartedAt, source, response);
         await persist(state);
       } catch (error) {
-        markFailed(health, current, error);
+        markFailed(health, nowMs(now), error);
         result.failed.push({ source: source.key, error: error.message });
         result.status = "degraded";
         logger.error?.(`[xai-official][${source.key}] ${error.message}`);

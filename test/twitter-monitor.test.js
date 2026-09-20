@@ -1763,7 +1763,7 @@ The sprint is on. 🏁`;
   await monitor.check();
 
   assert.equal(telegramPayloads.length, 2, "each immutable missed tweet is recovered exactly once");
-  assert.ok(telegramPayloads.every((payload) => /勿追价|do not chase/iu.test(payload.text)));
+  assert.ok(telegramPayloads.every((payload) => !/风险|Risk:|勿追价|do not chase|非自动交易|no automatic trading|非买入建议|not a buy recommendation|\bT[0-2]\b/iu.test(payload.text)));
   assert.ok(telegramPayloads.every((payload) => payload.reply_markup.inline_keyboard[0][0].url
     === `https://x.com/fourdotmemezh/status/${payload.text.includes("ListaYield") ? listaId : campaignId}`));
 
@@ -2349,6 +2349,189 @@ test("FxTwitter cadence is five seconds start-to-start without overlapping a slo
   assert.deepEqual(flapStarts, [epoch, epoch + 5_000]);
   state = JSON.parse(await fs.readFile(path.join(dataDir, "twitter-state.json"), "utf8"));
   assert.equal(state.flapdotsh.latestId, "100", "cadence scheduling must not disturb the durable tweet cursor");
+});
+
+test("critical Fx opens one shared host circuit after two accounts fail within 250 ms and recovers single-flight", async (t) => {
+  const epoch = Date.parse("2026-09-11T12:00:00.000Z");
+  let current = epoch;
+  const timelines = steadyCriticalTimelines(epoch);
+  const focusKeys = ["flapdotsh", "fourdotmemezh"];
+  const initialState = Object.fromEntries(focusKeys.map((key) => [key, {
+    latestId: timelines[key][0].id,
+    checkedAt: new Date(epoch - 5_000).toISOString(),
+  }]));
+  const dataDir = await fixture(t, initialState);
+  const healthyFetch = criticalTestFetch(timelines);
+  const timelineCalls = [];
+  const hostLogs = [];
+  let phase = "outage";
+  let releaseProbe;
+  let markProbeStarted;
+  const probeGate = new Promise((resolve) => { releaseProbe = resolve; });
+  const probeStarted = new Promise((resolve) => { markProbeStarted = resolve; });
+  let recoveryProbeSeen = false;
+  const monitor = createTwitterMonitor(criticalOnlyConfig(dataDir, {
+    binanceCriticalXMonitorEnabled: false,
+    focusCriticalXMonitorEnabled: true,
+    ponMonitorEnabled: false,
+  }), {
+    autoStart: false,
+    now: () => current,
+    logger: {
+      error(message) { if (message.includes("[fx-host-circuit]")) hostLogs.push(message); },
+      info(message) { if (message.includes("[fx-host-circuit]")) hostLogs.push(message); },
+    },
+    fetchImpl: async (url) => {
+      const value = String(url);
+      const userId = value.match(/\/id:(\d+)\/statuses/)?.[1];
+      const account = Object.values(CRITICAL_TEST_ACCOUNTS).find((candidate) => candidate.userId === userId);
+      if (!account) return healthyFetch(url);
+      timelineCalls.push({ at: current, handle: account.handle.toLowerCase() });
+      if (phase === "outage") {
+        if (account.handle.toLowerCase() === "flapdotsh") {
+          return {
+            status: 200,
+            ok: true,
+            headers: { get: () => null },
+            text: async () => { throw Object.assign(new Error("body timed out"), { name: "TimeoutError" }); },
+          };
+        }
+        return response({ status: 429, retryAfter: "15" });
+      }
+      if (phase === "recovery" && !recoveryProbeSeen) {
+        recoveryProbeSeen = true;
+        markProbeStarted();
+        await probeGate;
+      }
+      return healthyFetch(url);
+    },
+    sendAlertsImpl: async () => ({ status: "queued" }),
+  });
+  t.after(() => monitor.stop());
+
+  await monitor.check();
+  assert.equal(timelineCalls.length, 2, "both accounts establish the host-wide outage quorum");
+  assert.ok(hostLogs.some((message) => /2 accounts failed within 250ms/.test(message)));
+
+  timelineCalls.length = 0;
+  current = epoch + 14_999;
+  await monitor.check();
+  assert.equal(timelineCalls.length, 0, "the open host circuit suppresses duplicate physical retries");
+
+  current = epoch + 15_000;
+  await monitor.check();
+  assert.equal(timelineCalls.length, 0, "one due account stays deferred until the host-wide Retry-After expires");
+
+  current = epoch + 15 * 60_000;
+  phase = "recovery";
+  const recovery = monitor.check();
+  await probeStarted;
+  const overlapped = monitor.check();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(timelineCalls.length, 1, "parallel due accounts share exactly one half-open physical probe");
+  releaseProbe();
+  await Promise.all([recovery, overlapped]);
+  assert.equal(timelineCalls.length, 2, "a successful probe releases the other due account in the coalesced catch-up");
+  assert.ok(hostLogs.some((message) => /recovered via @flapdotsh/.test(message)));
+
+  const state = JSON.parse(await fs.readFile(path.join(dataDir, "twitter-state.json"), "utf8"));
+  for (const key of focusKeys) {
+    assert.equal(state[key].latestId, initialState[key].latestId, `${key} cursor must not move during host recovery`);
+    const source = state._health[key].sources["https://api.fxtwitter.test/2/profile/id:{userId}/statuses?count=40"];
+    assert.equal(Number(source.consecutiveFailures || 0), 0);
+    assert.equal(source.circuitState, "closed");
+  }
+});
+
+test("a failed critical Fx half-open probe does not count skipped accounts as failures", async (t) => {
+  const epoch = Date.parse("2026-09-11T12:10:00.000Z");
+  let current = epoch;
+  const timelines = steadyCriticalTimelines(epoch);
+  const focusKeys = ["flapdotsh", "fourdotmemezh"];
+  const initialState = Object.fromEntries(focusKeys.map((key) => [key, {
+    latestId: timelines[key][0].id,
+    checkedAt: new Date(epoch - 5_000).toISOString(),
+  }]));
+  const dataDir = await fixture(t, initialState);
+  const healthyFetch = criticalTestFetch(timelines);
+  const timelineCalls = [];
+  const monitor = createTwitterMonitor(criticalOnlyConfig(dataDir, {
+    binanceCriticalXMonitorEnabled: false,
+    focusCriticalXMonitorEnabled: true,
+    ponMonitorEnabled: false,
+  }), {
+    autoStart: false,
+    now: () => current,
+    logger: { error() {} },
+    fetchImpl: async (url) => {
+      const value = String(url);
+      if (!/\/2\/profile\/id:\d+\/statuses/.test(value)) return healthyFetch(url);
+      timelineCalls.push(value);
+      throw Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
+    },
+    sendAlertsImpl: async () => ({ status: "queued" }),
+  });
+  t.after(() => monitor.stop());
+
+  await monitor.check();
+  let state = JSON.parse(await fs.readFile(path.join(dataDir, "twitter-state.json"), "utf8"));
+  const fourFailures = state._health.fourdotmemezh.consecutiveFailures;
+  const fourSourceFailures = state._health.fourdotmemezh
+    .sources["https://api.fxtwitter.test/2/profile/id:{userId}/statuses?count=40"].consecutiveFailures;
+
+  timelineCalls.length = 0;
+  current = epoch + 15_000;
+  await monitor.check();
+  assert.equal(timelineCalls.length, 1, "only the half-open probe may reach the failed host");
+  state = JSON.parse(await fs.readFile(path.join(dataDir, "twitter-state.json"), "utf8"));
+  assert.equal(state._health.flapdotsh.consecutiveFailures, 2, "the physical probe owns its failure");
+  assert.equal(state._health.fourdotmemezh.consecutiveFailures, fourFailures, "the skipped account keeps its aggregate failure count");
+  assert.equal(
+    state._health.fourdotmemezh.sources["https://api.fxtwitter.test/2/profile/id:{userId}/statuses?count=40"].consecutiveFailures,
+    fourSourceFailures,
+    "the skipped account keeps its source failure count",
+  );
+  assert.equal(state.flapdotsh.latestId, initialState.flapdotsh.latestId);
+  assert.equal(state.fourdotmemezh.latestId, initialState.fourdotmemezh.latestId);
+
+  timelineCalls.length = 0;
+  await monitor.check();
+  assert.equal(timelineCalls.length, 0, "a failed half-open probe reopens the shared host circuit");
+});
+
+test("critical Fx schema failures remain account-scoped and never open the transport host circuit", async (t) => {
+  const epoch = Date.parse("2026-09-11T12:20:00.000Z");
+  let current = epoch;
+  const timelines = steadyCriticalTimelines(epoch);
+  const dataDir = await fixture(t);
+  const healthyFetch = criticalTestFetch(timelines);
+  const timelineCalls = [];
+  let returnEmptyTimeline = true;
+  const monitor = createTwitterMonitor(criticalOnlyConfig(dataDir, {
+    binanceCriticalXMonitorEnabled: false,
+    focusCriticalXMonitorEnabled: true,
+    ponMonitorEnabled: false,
+  }), {
+    autoStart: false,
+    now: () => current,
+    logger: { error() {} },
+    fetchImpl: async (url) => {
+      const value = String(url);
+      if (!/\/2\/profile\/id:\d+\/statuses/.test(value)) return healthyFetch(url);
+      timelineCalls.push(value);
+      return returnEmptyTimeline ? textResponse({ code: 200, results: [] }) : healthyFetch(url);
+    },
+    sendAlertsImpl: async () => ({ status: "queued" }),
+  });
+  t.after(() => monitor.stop());
+
+  await monitor.check();
+  assert.equal(timelineCalls.length, 2);
+  timelineCalls.length = 0;
+  returnEmptyTimeline = false;
+  current = epoch + 15_000;
+  await monitor.check();
+  assert.equal(timelineCalls.length, 2, "reachable schema failures must not serialize the next account attempts");
 });
 
 test("Twitter control projection coalesces only steady telemetry fields", () => {

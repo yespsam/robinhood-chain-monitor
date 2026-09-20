@@ -19,18 +19,24 @@ import {
 } from "./platform-capability-monitor.js";
 import { createPonsVersionMonitor, PONS_V2_TOKEN_LAUNCHED_TOPIC } from "./pons-version-monitor.js";
 import { createPonMonitor } from "./pon-monitor.js";
+import { createGeniusMonitor } from "./genius-monitor.js";
+import { createPonReadOnlyRpcProvider } from "./pon-rpc-provider.js";
 import { createBinanceMonitor } from "./binance-monitor.js";
 import { createBscLaunchpadMonitor, createRpcPool } from "./bsc-launchpad-monitor.js";
 import { createFlapQuoteMonitor } from "./flap-quote-monitor.js";
 import { createFourRegistryMonitor } from "./four-registry-monitor.js";
 import { createAbortableJsonRpcProvider, createMorphLaunchpadMonitor, mapWithConcurrency } from "./morph-launchpad-monitor.js";
 import { createFomoCallMonitor } from "./fomo-call-monitor.js";
+import { createGmgnFlowMonitor } from "./gmgn-flow-monitor.js";
 import { createFomoHealthMonitor } from "./fomo-health-monitor.js";
 import { createFomoThesisMonitor } from "./fomo-thesis-monitor.js";
 import { createFomoXCallMonitor } from "./fomo-x-call-monitor.js";
 import { createUniswapMonitor } from "./uniswap-monitor.js";
 import { createXaiOfficialMonitor } from "./xai-official-monitor.js";
 import { createTelegramNewsMonitor } from "./telegram-news-monitor.js";
+import { createNarrativeSniperRuntime } from "./narrative-sniper-runtime.js";
+import { createNarrativeSourceAdapter } from "./narrative-source-adapter.js";
+import { createProductionNarrativeShadowQuoteProvider } from "./narrative-shadow-quote-runtime.js";
 import { isMonitoringSourceEnabled, isThreePlatformScope } from "./source-controls.js";
 import { createRobinhoodScanPolicy, loadRobinhoodSignalCandidate } from "./robinhood-scan-policy.js";
 import { createBoundedStartupQueue, startIndependentMonitor } from "./startup-stagger.js";
@@ -76,6 +82,7 @@ const fourRegistryLogProviders = new Map();
 const fourRegistryStateProviders = new Map();
 let flapQuoteRpcProvider = null;
 let fourRegistryRpcProvider = null;
+let ponRpcProvider = null;
 async function resolveFlapQuoteAssetMetadata({ address, chainId }) {
   if (shutdownRequested) return null;
   const numericChainId = Number(chainId);
@@ -125,6 +132,7 @@ let flapQuoteMonitor;
 let fourRegistryMonitor;
 let ponsVersionMonitor;
 let ponMonitor;
+let geniusMonitor;
 let binanceMonitor;
 let bscLaunchpadMonitor;
 let morphLaunchpadMonitor;
@@ -132,9 +140,12 @@ let fomoCallMonitor;
 let fomoHealthMonitor;
 let fomoThesisMonitor;
 let fomoXCallMonitor;
+let gmgnFlowMonitor;
 let uniswapMonitor;
 let xaiOfficialMonitor;
 let telegramNewsMonitor;
+let narrativeSniperRuntime;
+let narrativeEvidenceRpcProvider;
 let alertOutboxWorker;
 const PONS_V1_TOKEN_LAUNCHED_TOPIC = "0xdb51ea9ad51ab453a65a4cb7e60c3cb378c9501bb002609f8f97778fb6c4235a";
 const POOL_TOPICS = [
@@ -233,7 +244,14 @@ async function emit(item, transaction, block) {
   const event = envelope(item, transaction, block);
   await storage.append(event);
   if (config.logEventsToStdout) console.log(JSON.stringify(event));
-  await sendAlerts(config, event);
+  await deliverAlert(config, event);
+}
+
+async function deliverAlert(runtimeConfig, event) {
+  if (narrativeSniperRuntime?.enabled === true) {
+    return narrativeSniperRuntime.sendAlert(runtimeConfig, event);
+  }
+  return sendAlerts(runtimeConfig, event);
 }
 
 async function processCandidate(transaction, receipt, block) {
@@ -394,7 +412,36 @@ async function processRange(fromBlock, toBlock) {
 
 function startIndependentMonitors() {
   if (shutdownRequested) return;
+  if (config.narrativeShadowSimulatorEnabled && !config.narrativeSniperEnabled) {
+    throw new Error("NARRATIVE_SHADOW_SIMULATOR_ENABLED requires NARRATIVE_SNIPER_ENABLED=true");
+  }
   alertOutboxWorker = startAlertOutboxWorker(config);
+  if (config.narrativeSniperEnabled) {
+    narrativeEvidenceRpcProvider ||= createRpcPool(
+      config.bscCausalClassificationRpcUrls || config.bscRpcUrls || [config.bscRpcUrl],
+      [],
+      1,
+      {
+        requestTimeoutMs: Math.max(1_000, Math.min(
+          2_500,
+          Number(config.narrativeSniperRequestTimeoutMs || 5_000),
+          Number(config.bscCausalClassificationRpcRequestTimeoutMs || 6_000),
+        )),
+        standardConcurrency: 2,
+      },
+    );
+    const shadowQuoteProvider = createProductionNarrativeShadowQuoteProvider(config);
+    narrativeSniperRuntime = createNarrativeSniperRuntime(config, {
+      provider: narrativeEvidenceRpcProvider,
+      narrativeAdapter: createNarrativeSourceAdapter(),
+      shadowQuoteProvider,
+      sendAlertsImpl: sendAlerts,
+      logger: console,
+    });
+    void narrativeSniperRuntime.ready.catch((error) => {
+      console.error(`[narrative-sniper-init] ${error.message}`);
+    });
+  }
   const pendingBscGithubCandidates = createBoundedStartupQueue();
   const pendingBscSiteCandidates = createBoundedStartupQueue();
   const flushPending = (queue, deliver, label) => {
@@ -453,17 +500,24 @@ function startIndependentMonitors() {
     return handle;
   };
   startMonitor("bsc", () => {
-    bscLaunchpadMonitor = createBscLaunchpadMonitor(config, { onLaunchpadCandidate: onBscLaunchpadCandidate });
+    bscLaunchpadMonitor = createBscLaunchpadMonitor(config, {
+      onLaunchpadCandidate: onBscLaunchpadCandidate,
+      sendAlertsImpl: deliverAlert,
+    });
   });
   if (config.morphMonitorEnabled) startMonitor("morph", () => {
-    morphLaunchpadMonitor = createMorphLaunchpadMonitor(config);
+    morphLaunchpadMonitor = createMorphLaunchpadMonitor(config, { sendAlertsImpl: deliverAlert });
   });
   startMonitor("github", () => {
-    githubMonitor = createGithubMonitor(config, { onContractDiscovery: registerBscDiscovery });
+    githubMonitor = createGithubMonitor(config, {
+      onContractDiscovery: registerBscDiscovery,
+      sendAlertsImpl: deliverAlert,
+    });
     flushPending(pendingBscGithubCandidates, deliverGithubCandidate, "github");
   });
   startMonitor("site", () => {
     siteMonitor = startSiteMonitor(config, {
+      sendAlertsImpl: deliverAlert,
       onContractDiscovery: registerBscDiscovery,
       onOfficialRepository: (repository, evidence) => githubMonitor?.confirmOfficialRepository(repository, evidence),
     });
@@ -471,11 +525,13 @@ function startIndependentMonitors() {
   });
   if (config.twitterMonitorEnabled || config.binanceCriticalXMonitorEnabled || config.focusCriticalXMonitorEnabled || config.ponMonitorEnabled) startMonitor("twitter", () => {
     twitterMonitor = createTwitterMonitor(config, {
+      sendAlertsImpl: deliverAlert,
       onOfficialRepository: (repository, evidence) => githubMonitor?.confirmOfficialRepository(repository, evidence),
     });
   });
   startMonitor("platform-capability", () => {
     platformCapabilityMonitor = createPlatformCapabilityMonitor(config, {
+      sendAlertsImpl: deliverAlert,
       onContractDiscovery: registerBscDiscovery,
       resolveFlapQuoteAssetMetadata,
       onFlapFeatureActivation: async (records) => {
@@ -520,6 +576,7 @@ function startIndependentMonitors() {
     }
     flapQuoteMonitor = createFlapQuoteMonitor(config, {
       provider: flapQuoteRpcProvider,
+      sendAlertsImpl: deliverAlert,
       logVerificationProviders: [...flapQuoteLogProviders].map(([sourceId, logProvider]) => ({
         sourceId,
         provider: logProvider,
@@ -577,46 +634,52 @@ function startIndependentMonitors() {
         sourceId,
         provider: stateProvider,
       })),
-      onEvent: (event) => sendAlerts(config, event),
+      onEvent: (event) => deliverAlert(config, event),
       cancelPendingEvent: (evidence) => cancelPendingFourRegistryEvent(config, evidence),
       autoStart: true,
     });
   });
   if (config.binanceMonitorEnabled) startMonitor("binance", () => {
-    binanceMonitor = createBinanceMonitor(config);
+    binanceMonitor = createBinanceMonitor(config, { sendAlertsImpl: deliverAlert });
   });
   if (config.uniswapMonitorEnabled) startMonitor("uniswap", () => {
-    uniswapMonitor = createUniswapMonitor(config);
+    uniswapMonitor = createUniswapMonitor(config, { sendAlertsImpl: deliverAlert });
   });
   if (config.xaiOfficialMonitorEnabled) startMonitor("xai-official", () => {
-    xaiOfficialMonitor = createXaiOfficialMonitor(config);
+    xaiOfficialMonitor = createXaiOfficialMonitor(config, { sendAlertsImpl: deliverAlert });
   });
   if (config.telegramNewsMonitorEnabled) startMonitor("telegram-news", () => {
-    telegramNewsMonitor = createTelegramNewsMonitor(config);
+    telegramNewsMonitor = createTelegramNewsMonitor(config, { sendAlertsImpl: deliverAlert });
   });
   const anyFomoLaneEnabled = config.fomoBuyMonitorEnabled
     || config.fomoSmartMoneyMonitorEnabled
     || config.fomoPublishedCallEnabled
-    || config.fomoXCallEnabled;
+    || config.fomoXCallEnabled
+    || config.kolLaunchMonitorEnabled;
   if (config.fomoCallEnabled && config.fomoHealthMonitorEnabled && anyFomoLaneEnabled) {
     // This watchdog intentionally stays in the main process when the scanners
     // run in the standalone worker. Persisted heartbeats still reveal a stuck
     // or dead worker, and health transitions use the main durable outbox.
-    fomoHealthMonitor = createFomoHealthMonitor(config);
+    fomoHealthMonitor = createFomoHealthMonitor(config, { sendAlertsImpl: deliverAlert });
   }
   if (config.fomoCallEnabled && !config.fomoCallStandalone
     && (config.fomoBuyMonitorEnabled || config.fomoSmartMoneyMonitorEnabled)) {
-    fomoCallMonitor = createFomoCallMonitor(config);
+    fomoCallMonitor = createFomoCallMonitor(config, { sendAlertsImpl: deliverAlert });
+  }
+  if (config.fomoCallEnabled && !config.fomoCallStandalone && config.gmgnFlowMonitorEnabled) {
+    gmgnFlowMonitor = createGmgnFlowMonitor(config, { sendAlertsImpl: deliverAlert });
   }
   if (config.fomoCallEnabled && !config.fomoCallStandalone && config.fomoPublishedCallEnabled) {
-    fomoThesisMonitor = createFomoThesisMonitor(config, { sendAlertsImpl: sendAlerts });
+    fomoThesisMonitor = createFomoThesisMonitor(config, { sendAlertsImpl: deliverAlert });
   }
-  if (config.fomoCallEnabled && !config.fomoCallStandalone && config.fomoXCallEnabled) {
-    fomoXCallMonitor = createFomoXCallMonitor(config, { sendAlertsImpl: sendAlerts });
+  if (config.fomoCallEnabled && !config.fomoCallStandalone
+    && (config.fomoXCallEnabled || config.kolLaunchMonitorEnabled)) {
+    fomoXCallMonitor = createFomoXCallMonitor(config, { sendAlertsImpl: deliverAlert });
   }
   if (config.ponsMonitorEnabled) {
     ponsVersionMonitor = createPonsVersionMonitor(config, {
       provider,
+      sendAlertsImpl: deliverAlert,
       onOfficialRepository: (repository, evidence) => githubMonitor?.confirmOfficialRepository(repository, evidence),
       onFactory: async ({ address, version }) => {
         if (shutdownRequested) return;
@@ -632,7 +695,17 @@ function startIndependentMonitors() {
     });
   }
   if (config.ponMonitorEnabled) startMonitor("pon", () => {
-    ponMonitor = createPonMonitor(config, { provider });
+    // Keep pon.fun integrity reads out of the high-throughput chain scanner's
+    // JSON-RPC batches. Some public endpoints fail a partial overloaded batch
+    // as CALL_EXCEPTION even though the same pinned-block call succeeds alone.
+    ponRpcProvider ||= createPonReadOnlyRpcProvider(config.ponRpcUrls, config.chainId, {
+      requestTimeoutMs: Math.max(1_000, Number(config.ponRpcRequestTimeoutMs || 4_000)),
+      concurrency: Math.max(1, Number(config.ponRpcConcurrency || 1)),
+    });
+    ponMonitor = createPonMonitor(config, { provider: ponRpcProvider, sendAlertsImpl: deliverAlert });
+  });
+  if (config.geniusMonitorEnabled) startMonitor("genius", () => {
+    geniusMonitor = createGeniusMonitor(config, { sendAlertsImpl: deliverAlert });
   });
 }
 
@@ -681,7 +754,7 @@ async function runChainMonitor() {
         const txHash = event.lastTransactionHash;
         const enriched = { ...event, chainId: config.chainId, explorerUrl: txHash ? `https://robinhoodchain.blockscout.com/tx/${txHash}` : event.entry?.pool?.pool ? `https://robinhoodchain.blockscout.com/address/${event.entry.pool.pool}` : null };
         await storage.append(enriched);
-        await sendAlerts(config, enriched);
+        await deliverAlert(config, enriched);
       },
     });
     await earlyActivityMonitor.ready;
@@ -733,6 +806,7 @@ function stopNewScheduling() {
 function createdMonitorEntries() {
   return [
     ["alert-outbox", alertOutboxWorker],
+    ["narrative-sniper", narrativeSniperRuntime],
     ["github", githubMonitor],
     ["site", siteMonitor],
     ["early-activity", earlyActivityMonitor],
@@ -742,6 +816,7 @@ function createdMonitorEntries() {
     ["four-registry", fourRegistryMonitor],
     ["pons-version", ponsVersionMonitor],
     ["pon", ponMonitor],
+    ["genius", geniusMonitor],
     ["binance", binanceMonitor],
     ["bsc", bscLaunchpadMonitor],
     ["morph", morphLaunchpadMonitor],
@@ -749,6 +824,7 @@ function createdMonitorEntries() {
     ["fomo-health", fomoHealthMonitor],
     ["fomo-thesis", fomoThesisMonitor],
     ["fomo-x-call", fomoXCallMonitor],
+    ["gmgn-flow", gmgnFlowMonitor],
     ["uniswap", uniswapMonitor],
     ["xai-official", xaiOfficialMonitor],
     ["telegram-news", telegramNewsMonitor],
@@ -778,6 +854,8 @@ function gracefulShutdown(signal) {
       provider,
       flapQuoteRpcProvider,
       fourRegistryRpcProvider,
+      ponRpcProvider,
+      narrativeEvidenceRpcProvider,
       ...flapQuoteMetadataProviders.values(),
       ...flapQuoteLogProviders.values(),
       ...flapQuoteStateProviders.values(),

@@ -298,6 +298,98 @@ test("backs off a failed source independently while healthy sources continue", a
   await monitor.stop();
 });
 
+test("serial xAI sources anchor healthy cadence to each request start", async (t) => {
+  const dataDir = await fixture(t);
+  const epoch = Date.parse("2026-08-12T00:00:00.000Z");
+  let current = epoch;
+  let slowBaseline = true;
+  const starts = [];
+  const sourceKeyByUrl = new Map([
+    ["https://fixture.test/x.rss", "x_api_changelog"],
+    ["https://fixture.test/release.md", "xai_release_notes"],
+    ["https://fixture.test/news.md", "xai_news"],
+  ]);
+  const baselineDuration = new Map([
+    ["x_api_changelog", 20_000],
+    ["xai_release_notes", 15_000],
+    ["xai_news", 5_000],
+  ]);
+  const monitor = createXaiOfficialMonitor(config(dataDir), {
+    autoStart: false,
+    now: () => current,
+    sourceDefinitions: [
+      { key: "x_api_changelog", intervalMs: 60_000 },
+      { key: "xai_release_notes", intervalMs: 60_000 },
+      { key: "xai_news", intervalMs: 60_000 },
+    ],
+    fetchImpl: async (url) => {
+      const key = sourceKeyByUrl.get(url);
+      starts.push({ key, at: current });
+      if (slowBaseline) current += baselineDuration.get(key);
+      if (key === "x_api_changelog") return response(baseRss());
+      if (key === "xai_release_notes") return response(baseRelease());
+      return response(baseNews());
+    },
+    sendAlertsImpl: async () => ({ status: "queued" }),
+    logger: { error() {} },
+  });
+
+  await monitor.check();
+  let state = JSON.parse(await fs.readFile(monitor.stateFile, "utf8"));
+  assert.deepEqual(starts, [
+    { key: "x_api_changelog", at: epoch },
+    { key: "xai_release_notes", at: epoch + 20_000 },
+    { key: "xai_news", at: epoch + 35_000 },
+  ]);
+  assert.equal(state.health.sources.x_api_changelog.nextAttemptAt, new Date(epoch + 60_000).toISOString(), "the first source cadence is not extended by its 20-second response");
+  assert.equal(state.health.sources.xai_release_notes.nextAttemptAt, new Date(epoch + 80_000).toISOString());
+  assert.equal(state.health.sources.xai_news.nextAttemptAt, new Date(epoch + 95_000).toISOString());
+
+  slowBaseline = false;
+  starts.length = 0;
+  current = epoch + 60_000;
+  const next = await monitor.check();
+  assert.deepEqual(next.checked, ["x_api_changelog"]);
+  assert.deepEqual(new Set(next.skipped), new Set(["xai_release_notes", "xai_news"]));
+  assert.deepEqual(starts, [{ key: "x_api_changelog", at: epoch + 60_000 }], "later serial sources do not immediately catch up to the first source's cadence");
+  state = JSON.parse(await fs.readFile(monitor.stateFile, "utf8"));
+  assert.equal(state.health.sources.x_api_changelog.nextAttemptAt, new Date(epoch + 120_000).toISOString());
+  await monitor.stop();
+});
+
+test("xAI failure backoff starts at the actual error time while aggregate health keeps the cycle start", async (t) => {
+  const dataDir = await fixture(t);
+  const epoch = Date.parse("2026-08-12T00:00:00.000Z");
+  let current = epoch;
+  const monitor = createXaiOfficialMonitor(config(dataDir), {
+    autoStart: false,
+    now: () => current,
+    sourceDefinitions: [{
+      key: "x_api_changelog",
+      name: "X API delayed failure fixture",
+      url: "https://fixture.test/delayed-failure.rss",
+      intervalMs: 60_000,
+      parser: parseRawItems,
+    }],
+    fetchImpl: async () => {
+      current += 20_000;
+      return response("unavailable", 503);
+    },
+    sendAlertsImpl: async () => ({ status: "queued" }),
+    logger: { error() {} },
+  });
+
+  const failed = await monitor.check();
+  const state = JSON.parse(await fs.readFile(monitor.stateFile, "utf8"));
+  assert.equal(failed.status, "error");
+  assert.equal(state.health.status, "error");
+  assert.equal(state.health.checkedAt, new Date(epoch).toISOString(), "aggregate health retains the cycle-start timestamp");
+  assert.equal(state.health.sources.x_api_changelog.checkedAt, new Date(epoch + 20_000).toISOString());
+  assert.equal(state.health.sources.x_api_changelog.lastErrorAt, new Date(epoch + 20_000).toISOString());
+  assert.equal(state.health.sources.x_api_changelog.nextAttemptAt, new Date(epoch + 21_000).toISOString(), "backoff starts when the delayed request fails");
+  await monitor.stop();
+});
+
 test("a terminal xAI policy suppression advances the entry and does not retry", async (t) => {
   const dataDir = await fixture(t);
   let current = Date.parse("2026-08-12T00:00:00.000Z");

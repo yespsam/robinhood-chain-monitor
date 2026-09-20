@@ -71,12 +71,22 @@ function healthyCallState(nowMs, overrides = {}) {
   };
 }
 
-function xState(nowMs, { eligible = 23, live = eligible, status = live === eligible ? "healthy" : "degraded" } = {}) {
+function xState(nowMs, {
+  eligible = 23,
+  live = eligible,
+  status = live === eligible ? "healthy" : "degraded",
+  operationalStatus = "healthy",
+  lastOperationalSuccessAt = asIso(nowMs),
+  consecutiveFailures = 0,
+} = {}) {
   return {
     health: {
       status,
+      operationalStatus,
       checkedAt: asIso(nowMs),
       lastSuccessAt: status === "healthy" ? asIso(nowMs) : null,
+      lastOperationalSuccessAt,
+      consecutiveFailures,
       eligibleCount: eligible,
       liveCount: live,
       activeCount: live,
@@ -379,6 +389,67 @@ test("one X handle wobble stays silent but loss of half the effective live roste
   assert.deepEqual(delivered[0].reasonCodes, ["x_low_live_coverage"]);
   assert.deepEqual(delivered[0].summary.x, { status: "critical", live: 1, eligible: 23 });
   await monitor.stop();
+});
+
+test("X operational failure is critical even while cached roster coverage remains live", () => {
+  const snapshot = evaluateFomoHealthRecords(config("/unused", {
+    fomoSmartMoneyMonitorEnabled: false,
+    fomoXCallEnabled: true,
+  }), {
+    x: {
+      status: "ok",
+      value: xState(BASE_MS, {
+        eligible: 30,
+        live: 30,
+        status: "degraded",
+        operationalStatus: "error",
+        lastOperationalSuccessAt: asIso(BASE_MS - 60_001),
+        consecutiveFailures: 3,
+      }),
+    },
+  }, BASE_MS);
+  assert.equal(snapshot.summary.x.status, "critical");
+  assert.ok(snapshot.severeReasons.includes("x_operational_failure"));
+});
+
+test("X partial or circuit-backoff cycles remain coverage-only only with a recent operational success", () => {
+  const testConfig = config("/unused", {
+    fomoSmartMoneyMonitorEnabled: false,
+    fomoXCallEnabled: true,
+  });
+  for (const operationalStatus of ["partial", "backoff", "idle"]) {
+    const recent = evaluateFomoHealthRecords(testConfig, {
+      x: {
+        status: "ok",
+        value: xState(BASE_MS, {
+          eligible: 30,
+          live: 29,
+          status: "degraded",
+          operationalStatus,
+          lastOperationalSuccessAt: asIso(BASE_MS - 60_000),
+          consecutiveFailures: 1,
+        }),
+      },
+    }, BASE_MS);
+    assert.equal(recent.summary.x.status, "degraded");
+    assert.deepEqual(recent.severeReasons, []);
+  }
+
+  const stale = evaluateFomoHealthRecords(testConfig, {
+    x: {
+      status: "ok",
+      value: xState(BASE_MS, {
+        eligible: 30,
+        live: 29,
+        status: "degraded",
+        operationalStatus: "backoff",
+        lastOperationalSuccessAt: asIso(BASE_MS - 600_001),
+        consecutiveFailures: 1,
+      }),
+    },
+  }, BASE_MS);
+  assert.equal(stale.summary.x.status, "critical");
+  assert.ok(stale.severeReasons.includes("x_operational_success_stale"));
 });
 
 test("stale worker heartbeat and aged Fomo outbox failures are severe aggregate evidence", () => {

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
@@ -280,6 +281,164 @@ test("bounded transaction evidence waits for active reads before surfacing a fai
   assert.ok(started.length <= 6, "no new evidence reads should start after the first failure");
 });
 
+test("Morph shutdown drains active durability work before bounded WebSocket termination", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "morph-shutdown-test-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const provider = new FakeProvider();
+  const originalSend = provider.send.bind(provider);
+  let blockNextRead = false;
+  let releaseRead;
+  let readStartedResolve;
+  provider.send = async (...args) => {
+    if (blockNextRead) {
+      blockNextRead = false;
+      readStartedResolve();
+      await new Promise((resolve) => { releaseRead = resolve; });
+    }
+    return originalSend(...args);
+  };
+
+  const sockets = [];
+  class SilentCloseWebSocket extends EventEmitter {
+    static CLOSED = 3;
+    constructor() {
+      super();
+      this.readyState = 1;
+      this.closeCalls = 0;
+      this.terminateCalls = 0;
+      this.sendCalls = 0;
+      sockets.push(this);
+    }
+    send() { this.sendCalls += 1; }
+    close() { this.closeCalls += 1; }
+    terminate() {
+      this.terminateCalls += 1;
+      this.readyState = SilentCloseWebSocket.CLOSED;
+    }
+  }
+  const scheduled = [];
+  const setTimeoutImpl = (callback, delayMs) => {
+    const handle = { callback, delayMs, cleared: false, unref() {} };
+    scheduled.push(handle);
+    return handle;
+  };
+  const clearTimeoutImpl = (handle) => {
+    if (handle) handle.cleared = true;
+  };
+  const monitor = createMorphLaunchpadMonitor({
+    dataDir,
+    morphMonitorEnabled: true,
+    morphWsUrl: "wss://morph.test",
+    morphConfirmations: 1,
+    morphLogBatchSize: 2_000,
+    morphMaxCatchupBlocks: 5_000,
+    morphExplorerApiUrl: "https://explorer.test",
+  }, {
+    provider,
+    autoStart: false,
+    WebSocketImpl: SilentCloseWebSocket,
+    setTimeoutImpl,
+    clearTimeoutImpl,
+    websocketShutdownGraceMs: 75,
+    fetchImpl: baselineFetch(),
+    sendAlertsImpl: async () => ({ status: "delivered" }),
+    assessSecurityImpl: async () => ({ decision: "block", reasons: [], metrics: {}, source: "test" }),
+    logger: { info() {}, error() {} },
+  });
+  t.after(() => monitor.stop());
+
+  await monitor.start();
+  await monitor.awaitIdle();
+  assert.equal(sockets.length, 1);
+
+  blockNextRead = true;
+  const readStarted = new Promise((resolve) => { readStartedResolve = resolve; });
+  const activeScan = monitor.scan();
+  await readStarted;
+  const stopping = monitor.stop();
+  await Promise.resolve();
+  assert.equal(sockets[0].closeCalls, 0, "the socket must remain untouched until active durable work drains");
+  assert.equal(scheduled.length, 0);
+
+  releaseRead();
+  await activeScan;
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(sockets[0].closeCalls, 1);
+  assert.equal(sockets[0].terminateCalls, 0);
+  assert.equal(scheduled.length, 1);
+  assert.equal(scheduled[0].delayMs, 75);
+
+  scheduled[0].callback();
+  await stopping;
+  assert.equal(sockets[0].terminateCalls, 1, "a silent peer must be forcibly released at the bounded deadline");
+  assert.equal(scheduled[0].cleared, true);
+
+  sockets[0].emit("open");
+  sockets[0].emit("message", JSON.stringify({ method: "eth_subscription" }));
+  sockets[0].emit("close");
+  await Promise.resolve();
+  assert.equal(sockets[0].sendCalls, 0, "late socket events must be inert after shutdown");
+  assert.equal(sockets.length, 1, "a late close must not resurrect the reconnect loop");
+  assert.equal(scheduled.length, 1, "a late close must not schedule a reconnect timer");
+});
+
+test("Morph shutdown accepts a peer close within grace without terminating the socket", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "morph-graceful-close-test-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const sockets = [];
+  class GracefulCloseWebSocket extends EventEmitter {
+    static CLOSED = 3;
+    constructor() {
+      super();
+      this.readyState = 1;
+      this.closeCalls = 0;
+      this.terminateCalls = 0;
+      sockets.push(this);
+    }
+    send() {}
+    close() {
+      this.closeCalls += 1;
+      this.readyState = GracefulCloseWebSocket.CLOSED;
+      this.emit("close");
+    }
+    terminate() { this.terminateCalls += 1; }
+  }
+  const scheduled = [];
+  const monitor = createMorphLaunchpadMonitor({
+    dataDir,
+    morphMonitorEnabled: true,
+    morphWsUrl: "wss://morph.test",
+    morphConfirmations: 1,
+    morphLogBatchSize: 2_000,
+    morphMaxCatchupBlocks: 5_000,
+    morphExplorerApiUrl: "https://explorer.test",
+  }, {
+    provider: new FakeProvider(),
+    autoStart: false,
+    WebSocketImpl: GracefulCloseWebSocket,
+    setTimeoutImpl: (callback, delayMs) => {
+      const handle = { callback, delayMs, cleared: false, unref() {} };
+      scheduled.push(handle);
+      return handle;
+    },
+    clearTimeoutImpl: (handle) => { if (handle) handle.cleared = true; },
+    websocketShutdownGraceMs: 75,
+    fetchImpl: baselineFetch(),
+    sendAlertsImpl: async () => ({ status: "delivered" }),
+    assessSecurityImpl: async () => ({ decision: "block", reasons: [], metrics: {}, source: "test" }),
+    logger: { info() {}, error() {} },
+  });
+
+  await monitor.start();
+  await monitor.awaitIdle();
+  await monitor.stop();
+  assert.equal(sockets.length, 1);
+  assert.equal(sockets[0].closeCalls, 1);
+  assert.equal(sockets[0].terminateCalls, 0);
+  assert.equal(scheduled.length, 1);
+  assert.equal(scheduled[0].cleared, true, "the forced-close deadline must be cancelled after a peer close");
+});
+
 test("Morph Flap decoder binds TokenCreated to the exact official Portal receipt", () => {
   const evidence = creationEvidence({
     quote: "0x5555555555555555555555555555555555555555",
@@ -326,6 +485,48 @@ test("wrong-chain RPC fails closed without committing a Morph baseline", async (
   const state = await monitor.getState();
   assert.equal(state.baselineComplete, false);
   assert.equal(state.cursor, null);
+});
+
+test("a durable cursor beyond the RPC head fails closed instead of becoming permanently healthy", async (t) => {
+  const { dataDir, provider, monitor } = await fixture(t);
+  await monitor.scan();
+  await monitor.stop();
+
+  const stateFile = path.join(dataDir, "morph-launchpad-state.json");
+  const persisted = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  persisted.lastScannedBlock = provider.head + 10_000;
+  persisted.cursor = persisted.lastScannedBlock + 1;
+  persisted.lastScannedBlockHash = BLOCK_HASH_99;
+  persisted.health.status = "healthy";
+  persisted.health.headBlock = provider.head;
+  persisted.health.safeBlock = provider.head - 1;
+  persisted.health.lagBlocks = 0;
+  await fs.writeFile(stateFile, `${JSON.stringify(persisted)}\n`, { mode: 0o600 });
+
+  const restarted = createMorphLaunchpadMonitor({
+    dataDir,
+    morphMonitorEnabled: true,
+    morphConfirmations: 1,
+    morphLogBatchSize: 2_000,
+    morphMaxCatchupBlocks: 5_000,
+    morphExplorerApiUrl: "https://explorer.test",
+  }, {
+    provider,
+    autoStart: false,
+    disableWebSocket: true,
+    fetchImpl: baselineFetch(),
+    sendAlertsImpl: async () => ({ status: "delivered" }),
+    assessSecurityImpl: async () => ({ decision: "block", reasons: [], metrics: {}, source: "test" }),
+    logger: { info() {}, error() {} },
+  });
+  t.after(() => restarted.stop());
+
+  await assert.rejects(restarted.scan(), /ahead of RPC head/);
+  const failed = await restarted.getState();
+  assert.equal(failed.health.status, "degraded");
+  assert.match(failed.health.lastError, /ahead of RPC head/);
+  assert.equal(failed.cursor, persisted.cursor, "the invalid future cursor must not be advanced or silently rewound");
+  assert.equal(failed.lastScannedBlock, persisted.lastScannedBlock);
 });
 
 test("Portal upgrade alerts immediately and its first token alerts exactly once", async (t) => {

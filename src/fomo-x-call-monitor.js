@@ -3,6 +3,15 @@ import path from "node:path";
 import { isAddress } from "ethers";
 import { isTerminalAlertSuppression, sendAlerts } from "./alerts.js";
 import {
+  bindCapitalKolRuntimeIdentity,
+  capitalKolCatalogFreshness,
+  createCapitalKolEventSnapshot,
+  getCapitalKolCatalogManifest,
+  listReviewedCapitalKols,
+  verifyCapitalKolCatalogIntegrity,
+} from "./capital-kol-catalog.js";
+import { classifyKolSelfLaunchText } from "./kol-token-launch-alert.js";
+import {
   discoverGmgnBscKolCandidates,
   parseFomoScanProfile,
   parseFxTwitterProfile,
@@ -17,6 +26,7 @@ const HANDLE = /^[A-Za-z0-9_]{1,15}$/;
 const FORBIDDEN_GMGN_TAGS = new Set(["wash_trader", "arbitrager"]);
 const GMGN_CANDIDATE_SOURCE = "gmgn_bsc_kol_feed";
 const FOMOSCAN_SEED_SOURCE = "fomoscan_verified_profile";
+const CAPITAL_KOL_CANDIDATE_SOURCE = "reviewed_capital_person_catalog";
 const FX_PROFILE_SOURCE = "fxtwitter_profile";
 const FX_TIMELINE_SOURCE = "fxtwitter_timeline";
 const BSC_ACTIVITY_SOURCE = "bsc_activity";
@@ -96,6 +106,29 @@ function strictQualification(result, minimumLiquidityUsd) {
     && Number(result?.market?.liquidityUsd || 0) >= minimumLiquidityUsd;
 }
 
+function kolWatchQualification(result) {
+  const poolAddress = String(result?.market?.pairAddress || result?.market?.poolAddress || "").toLowerCase();
+  const liquidityUsd = Number(result?.market?.liquidityUsd);
+  const market = isAddress(poolAddress) && !/^0x0{40}$/u.test(poolAddress)
+    ? {
+      ...result.market,
+      pairAddress: poolAddress,
+      ...(Number.isFinite(liquidityUsd) && liquidityUsd >= 0 ? { liquidityUsd } : {}),
+    }
+    : undefined;
+  const securityDecision = ["pass", "watch", "block", "unknown"].includes(String(result?.security?.decision || ""))
+    ? result.security.decision : "unknown";
+  return {
+    decision: result?.decision === "pass" ? "pass" : "watch",
+    reason: String(result?.reason || (result?.decision === "pass" ? "screen_passed" : "screen_incomplete")).slice(0, 160),
+    ...(market ? { market } : {}),
+    security: {
+      ...(result?.security && typeof result.security === "object" ? result.security : {}),
+      decision: securityDecision,
+    },
+  };
+}
+
 /** A post is actionable only when it has one unambiguous EVM address and an explicit call verb. */
 export function classifyFomoXCallText(text) {
   const source = String(text || "");
@@ -106,6 +139,24 @@ export function classifyFomoXCallText(text) {
     return { relevant: false, reason: addresses.length ? "ambiguous_contract_addresses" : "missing_contract_address", token: null };
   }
   return { relevant: true, reason: "explicit_call_with_exact_contract", token: addresses[0] };
+}
+
+export { classifyKolSelfLaunchText } from "./kol-token-launch-alert.js";
+
+function classifyMonitoredXText(text, config) {
+  const launch = classifyKolSelfLaunchText(text);
+  // Launch-like wording never falls through to the buy/call lane. A missing
+  // or ambiguous CA must remain rejected instead of being rescued by a word
+  // such as "buy" elsewhere in the same post.
+  if (launch.launchLanguage) {
+    return config?.kolLaunchMonitorEnabled === true
+      ? { ...launch, signalKind: "kol_self_launch" }
+      : { ...launch, relevant: false, reason: "kol_launch_lane_disabled", signalKind: "kol_self_launch" };
+  }
+  const call = classifyFomoXCallText(text);
+  return config?.fomoXCallEnabled === true
+    ? { ...call, signalKind: "fomo_x_call" }
+    : { ...call, relevant: false, reason: "fomo_x_call_lane_disabled", signalKind: "fomo_x_call" };
 }
 
 function admissionError(message, code) {
@@ -205,8 +256,10 @@ function defaultState() {
     verifiedSeedFailures: {},
     health: {
       status: "initializing",
+      operationalStatus: "initializing",
       checkedAt: null,
       lastSuccessAt: null,
+      lastOperationalSuccessAt: null,
       lastError: null,
       consecutiveFailures: 0,
       rosterCount: 0,
@@ -455,6 +508,12 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
   const tokenDedupMs = Math.max(60_000, Number(config.fomoXCallTokenDedupMs || RETENTION_MS));
   const minimumFollowers = Math.max(0, Number(config.fomoXCallMinXFollowers ?? 10_000));
   const minimumLiquidityUsd = Math.max(1, Number(config.fomoXCallMinLiquidityUsd || 10_000));
+  const capitalKolRosterEnabled = config.kolCapitalRosterEnabled === true
+    && config.kolLaunchMonitorEnabled === true;
+  const capitalKolCatalogMaximumAgeMs = Math.max(DAY_MS,
+    Number(config.kolCapitalCatalogMaximumAgeMs || 180 * DAY_MS));
+  const configuredCapitalCategories = new Set((Array.isArray(config.kolCapitalCategories)
+    ? config.kolCapitalCategories : []).map((value) => String(value || "").trim()).filter(Boolean));
   const candidateLimit = Math.max(1, Math.min(1_000, Number(config.fomoXCallCandidateLimit || 500)));
   const batchSize = Math.max(1, Math.min(50, Number(config.fomoXCallBatchSize || 6)));
   const verifiedSeedBatchSize = Math.max(1, Math.min(50, Number(config.fomoXCallVerifiedSeedBatchSize || batchSize)));
@@ -463,6 +522,17 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
   const verifiedSeedHandles = [...new Set((Array.isArray(config.fomoCallPublicHandles) ? config.fomoCallPublicHandles : [])
     .map((value) => cleanHandle(value).toLowerCase())
     .filter((value) => HANDLE.test(value)))];
+  const listCapitalKols = dependencies.listCapitalKolsImpl || listReviewedCapitalKols;
+  const verifyCapitalCatalogIntegrity = dependencies.verifyCapitalKolCatalogIntegrityImpl
+    || verifyCapitalKolCatalogIntegrity;
+  const getCapitalCatalogManifest = dependencies.getCapitalKolCatalogManifestImpl
+    || getCapitalKolCatalogManifest;
+  const checkCapitalCatalogFreshness = dependencies.capitalKolCatalogFreshnessImpl
+    || capitalKolCatalogFreshness;
+  const createCapitalSnapshot = dependencies.createCapitalKolEventSnapshotImpl
+    || createCapitalKolEventSnapshot;
+  const bindCapitalIdentity = dependencies.bindCapitalKolRuntimeIdentityImpl
+    || bindCapitalKolRuntimeIdentity;
   const qualificationConfig = {
     ...config,
     fomoPublishedCallMinXFollowers: minimumFollowers,
@@ -470,6 +540,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
   };
   let state = null;
   let serial = Promise.resolve();
+  let activeCheck = null;
   let writeSerial = Promise.resolve();
   let verifiedSeedDiscovery = null;
   let verifiedSeedAbortController = null;
@@ -505,6 +576,25 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       && candidate?.ambiguousIdentity !== true && candidate?.ambiguousWallets !== true && candidate?.ambiguousHandles !== true;
   }
 
+  function isCapitalKolCandidate(candidate) {
+    return candidate?.source === CAPITAL_KOL_CANDIDATE_SOURCE
+      && candidate?.origin === CAPITAL_KOL_CANDIDATE_SOURCE
+      && candidate?.candidateSource === CAPITAL_KOL_CANDIDATE_SOURCE
+      && candidate?.candidateKind === "verified_capital_person";
+  }
+
+  function hasExactCapitalKolIdentity(candidate) {
+    if (!isCapitalKolCandidate(candidate)
+      || !HANDLE.test(String(candidate?.handle || ""))
+      || !/^\d+$/u.test(String(candidate?.expectedXUserId || ""))
+      || candidate?.subjectType !== "person") return false;
+    const expected = createCapitalSnapshot(candidate.handle);
+    return Boolean(expected)
+      && expected.xUserId === String(candidate.expectedXUserId)
+      && expected.catalogId === candidate.catalogId
+      && JSON.stringify(expected) === JSON.stringify(candidate.capitalKolSnapshot);
+  }
+
   function freshVerifiedBinding(candidate, binding, nowMs) {
     const checkedAtMs = Date.parse(binding?.checkedAt || binding?.lastCheckedAt || "");
     return binding?.status === "verified" && binding?.verified === true && binding?.proofSource === "fomoscan"
@@ -516,10 +606,12 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
 
   function freshCachedProfile(candidate, profile, nowMs) {
     const checkedAtMs = Date.parse(profile?.checkedAt || "");
+    const capitalCandidate = isCapitalKolCandidate(candidate);
     return /^\d+$/.test(String(profile?.id || ""))
       && cleanHandle(profile?.handle).toLowerCase() === candidate.handle
+      && (!capitalCandidate || String(profile.id) === String(candidate.expectedXUserId))
       && profile?.protected !== true
-      && Number(profile?.followers || 0) >= minimumFollowers
+      && (capitalCandidate || Number(profile?.followers || 0) >= minimumFollowers)
       && Number.isFinite(checkedAtMs) && checkedAtMs <= nowMs + FUTURE_TOLERANCE_MS
       && nowMs - checkedAtMs <= identityGraceMs;
   }
@@ -533,7 +625,24 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       && nowMs - checkedAtMs <= identityGraceMs;
   }
 
+  function freshCapitalKolBinding(candidate, profile, binding, nowMs) {
+    const observedAtMs = Date.parse(binding?.observedAt || "");
+    return hasExactCapitalKolIdentity(candidate)
+      && cleanHandle(binding?.handle).toLowerCase() === candidate.handle
+      && String(binding?.xUserId || "") === String(candidate.expectedXUserId)
+      && String(profile?.id || "") === String(candidate.expectedXUserId)
+      && cleanHandle(profile?.handle).toLowerCase() === candidate.handle
+      && binding?.source === "fxtwitter_public_profile"
+      && Number.isFinite(observedAtMs) && observedAtMs <= nowMs + FUTURE_TOLERANCE_MS
+      && nowMs - observedAtMs <= identityGraceMs;
+  }
+
   function freshCandidateEvidence(candidate, nowMs) {
+    if (isCapitalKolCandidate(candidate)) {
+      const freshness = checkCapitalCatalogFreshness({ nowMs, maximumAgeMs: capitalKolCatalogMaximumAgeMs });
+      return verifyCapitalCatalogIntegrity().valid === true && freshness?.valid === true
+        && hasExactCapitalKolIdentity(candidate);
+    }
     if (!hasExactCandidateIdentity(candidate)) return false;
     const discoveredAt = Number(candidate?.discoveredAt);
     if (!Number.isFinite(discoveredAt) || discoveredAt > nowMs + FUTURE_TOLERANCE_MS
@@ -551,7 +660,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
 
   function hasFreshCachedIdentity(candidate, stored, nowMs) {
     return freshCachedProfile(candidate, stored?.xProfile, nowMs)
-      && freshCachedBscActivity(candidate, stored?.bscActivity, nowMs)
+      && (isCapitalKolCandidate(candidate) || freshCachedBscActivity(candidate, stored?.bscActivity, nowMs))
       && freshCandidateEvidence(candidate, nowMs)
       && Number(stored?.admissionRejectedUntil || 0) <= nowMs;
   }
@@ -670,13 +779,18 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     };
   }
 
-  async function fetchXProfile(handle) {
+  async function fetchXProfile(candidate) {
+    const handle = candidate.handle;
+    const capitalCandidate = isCapitalKolCandidate(candidate);
     const payload = await fetchWithTransportCircuit(FX_PROFILE_SOURCE, handle,
       () => fetchJson(`${fxTwitterBase}/2/profile/${encodeURIComponent(handle)}`));
     const parsed = parseFxTwitterProfile(payload, handle);
     if (!parsed) throw admissionError(`@${handle} FxTwitter profile schema or handle/id mismatch`, "ineligible_x_profile");
-    if (!/^\d+$/.test(String(parsed.id || "")) || parsed.protected === true || parsed.followers < minimumFollowers) {
-      throw admissionError(`@${handle} failed numeric X identity or ${minimumFollowers}+ follower gate`, "ineligible_x_profile");
+    if (!/^\d+$/.test(String(parsed.id || "")) || parsed.protected === true
+      || capitalCandidate && String(parsed.id) !== String(candidate.expectedXUserId)
+      || !capitalCandidate && parsed.followers < minimumFollowers) {
+      const gate = capitalCandidate ? `pinned X id ${candidate.expectedXUserId}` : `${minimumFollowers}+ follower gate`;
+      throw admissionError(`@${handle} failed numeric X identity or ${gate}`, "ineligible_x_profile");
     }
     return { ...parsed, checkedAt: new Date(now()).toISOString() };
   }
@@ -806,6 +920,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       for (const candidate of selected) {
         const key = candidate.handle.toLowerCase();
         const previous = state.roster[key] || {};
+        if (previous.source === CAPITAL_KOL_CANDIDATE_SOURCE) continue;
         if (previous.source === FOMOSCAN_SEED_SOURCE) {
           previous.gmgnCandidate = candidate;
           continue;
@@ -832,6 +947,133 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       state.health.sources.gmgn = { status: "error", checkedAt: state.discoveryCheckedAt, error: String(error?.message || error).slice(0, 180) };
       return "error";
     }
+  }
+
+  function syncCapitalKolCatalog(nowMs) {
+    const checkedAt = new Date(nowMs).toISOString();
+    const removeCatalogRoster = () => {
+      for (const [key, candidate] of Object.entries(state.roster || {})) {
+        if (candidate?.source !== CAPITAL_KOL_CANDIDATE_SOURCE) continue;
+        delete state.roster[key];
+        clearHandleRuntimeState(state, key);
+      }
+    };
+    if (!capitalKolRosterEnabled) {
+      removeCatalogRoster();
+      state.health.sources.capitalCatalog = {
+        status: "disabled",
+        checkedAt,
+        configured: 0,
+        admitted: 0,
+        quarantined: 0,
+      };
+      return "disabled";
+    }
+
+    const integrity = verifyCapitalCatalogIntegrity();
+    const freshness = checkCapitalCatalogFreshness({ nowMs, maximumAgeMs: capitalKolCatalogMaximumAgeMs });
+    const manifest = getCapitalCatalogManifest();
+    if (integrity?.valid !== true || freshness?.valid !== true) {
+      removeCatalogRoster();
+      const reason = integrity?.valid !== true
+        ? `catalog_integrity_failed:${(integrity?.reasons || []).join(",")}`
+        : "catalog_stale";
+      state.health.sources.capitalCatalog = {
+        status: "error",
+        checkedAt,
+        configured: Number(manifest?.count || 0),
+        admitted: 0,
+        quarantined: Number(manifest?.count || 0),
+        version: manifest?.version || null,
+        hash: manifest?.hash || null,
+        reason: reason.slice(0, 180),
+      };
+      return "error";
+    }
+
+    const supportedCategories = new Set(Array.isArray(manifest?.categories) ? manifest.categories : []);
+    const unknownCategories = [...configuredCapitalCategories]
+      .filter((category) => !supportedCategories.has(category))
+      .sort();
+    if (unknownCategories.length) {
+      removeCatalogRoster();
+      state.health.sources.capitalCatalog = {
+        status: "error",
+        checkedAt,
+        configured: Number(manifest?.count || 0),
+        admitted: 0,
+        quarantined: Number(manifest?.count || 0),
+        version: manifest?.version || null,
+        hash: manifest?.hash || null,
+        publishedAt: manifest?.publishedAt || null,
+        categories: [...configuredCapitalCategories].sort(),
+        unknownCategories,
+        reason: `unknown_categories:${unknownCategories.join(",")}`.slice(0, 180),
+      };
+      return "error";
+    }
+
+    const entries = listCapitalKols().filter((entry) => !configuredCapitalCategories.size
+      || configuredCapitalCategories.has(entry.category));
+    const activeHandles = new Set();
+    let admitted = 0;
+    let quarantined = 0;
+    for (const entry of entries) {
+      const handle = cleanHandle(entry?.handle).toLowerCase();
+      const snapshot = createCapitalSnapshot(entry);
+      if (!HANDLE.test(handle) || !snapshot || snapshot.xUserId !== String(entry?.expectedXUserId || "")) {
+        quarantined += 1;
+        continue;
+      }
+      activeHandles.add(handle);
+      const previous = state.roster[handle] || {};
+      const sameCatalogIdentity = previous.source === CAPITAL_KOL_CANDIDATE_SOURCE
+        && previous.catalogId === snapshot.catalogId
+        && previous.expectedXUserId === snapshot.xUserId;
+      if (!sameCatalogIdentity && Object.keys(previous).length) clearHandleRuntimeState(state, handle);
+      state.roster[handle] = {
+        ...(sameCatalogIdentity ? previous : {}),
+        handle,
+        twitterHandles: [handle],
+        wallet: "",
+        wallets: [],
+        tags: ["kol", "capital_person"],
+        ambiguousIdentity: false,
+        ambiguousWallets: false,
+        ambiguousHandles: false,
+        source: CAPITAL_KOL_CANDIDATE_SOURCE,
+        origin: CAPITAL_KOL_CANDIDATE_SOURCE,
+        candidateSource: CAPITAL_KOL_CANDIDATE_SOURCE,
+        candidateKind: "verified_capital_person",
+        subjectType: "person",
+        catalogId: snapshot.catalogId,
+        expectedXUserId: snapshot.xUserId,
+        capitalKolSnapshot: snapshot,
+        discoveredAt: nowMs,
+        firstSeenAt: sameCatalogIdentity ? previous.firstSeenAt || nowMs : nowMs,
+        lastSeenAt: nowMs,
+      };
+      admitted += 1;
+    }
+    for (const [key, candidate] of Object.entries(state.roster || {})) {
+      if (candidate?.source === CAPITAL_KOL_CANDIDATE_SOURCE && !activeHandles.has(key)) {
+        delete state.roster[key];
+        clearHandleRuntimeState(state, key);
+      }
+    }
+    state.health.sources.capitalCatalog = {
+      status: quarantined ? "partial" : "healthy",
+      checkedAt,
+      configured: entries.length,
+      admitted,
+      quarantined,
+      version: manifest.version,
+      hash: manifest.hash,
+      publishedAt: manifest.publishedAt,
+      followersPolicy: manifest.followersPolicy,
+      categories: configuredCapitalCategories.size ? [...configuredCapitalCategories].sort() : manifest.categories,
+    };
+    return state.health.sources.capitalCatalog.status;
   }
 
   async function fetchVerifiedSeed(handle, nowMs, signal) {
@@ -964,6 +1206,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       }
       verified += 1;
       const previous = state.roster[handle] || {};
+      if (previous.source === CAPITAL_KOL_CANDIDATE_SOURCE) continue;
       const sameWallet = String(previous.wallet || "").toLowerCase() === candidate.wallet;
       if (!sameWallet && previous.wallet) clearHandleRuntimeState(state, handle);
       state.roster[handle] = {
@@ -1073,9 +1316,10 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
   }
 
   async function refreshDiscovery(nowMs) {
+    const capitalCatalog = syncCapitalKolCatalog(nowMs);
     const gmgn = await refreshGmgnDiscovery(nowMs);
     const fomoscanSeeds = scheduleVerifiedSeedRefresh(nowMs);
-    return { gmgn, fomoscanSeeds };
+    return { capitalCatalog, gmgn, fomoscanSeeds };
   }
 
   function eligibleRoster(nowMs) {
@@ -1084,6 +1328,10 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
         && Number(candidate.discoveredAt) <= nowMs + FUTURE_TOLERANCE_MS
         && nowMs - Number(candidate.discoveredAt) <= attributionMaxAgeMs)
       .filter((candidate) => {
+        if (isCapitalKolCandidate(candidate)) {
+          return capitalKolRosterEnabled && hasExactCapitalKolIdentity(candidate)
+            && freshCandidateEvidence(candidate, nowMs);
+        }
         if (!hasExactCandidateIdentity(candidate)) return false;
         if (candidate.source === FOMOSCAN_SEED_SOURCE) {
           const binding = freshVerifiedBinding(candidate, candidate.walletBinding, nowMs)
@@ -1127,6 +1375,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     for (const candidate of uniqueRoster) {
       const handle = candidate.handle.toLowerCase();
       const stored = state.roster[handle] || candidate;
+      const capitalCandidate = isCapitalKolCandidate(candidate);
       const reasons = [];
       const profile = stored.xProfile;
       const profileAt = Date.parse(profile?.checkedAt || "");
@@ -1134,24 +1383,26 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       const exactBscActivityWallet = String(stored.bscActivity?.wallet || "").toLowerCase() === candidate.wallet;
       const cached = /^\d+$/.test(String(profile?.id || ""))
         && cleanHandle(profile?.handle).toLowerCase() === handle
+        && (!capitalCandidate || String(profile.id) === String(candidate.expectedXUserId))
         && profile?.protected !== true
-        && Number(profile?.followers || 0) >= minimumFollowers
-        && Number(stored.bscActivity?.count || 0) > 0 && exactBscActivityWallet
+        && (capitalCandidate || Number(profile?.followers || 0) >= minimumFollowers)
+        && (capitalCandidate || Number(stored.bscActivity?.count || 0) > 0 && exactBscActivityWallet)
         && Number(stored.admissionRejectedUntil || 0) <= nowMs;
       if (cached) cachedHandles.push(handle);
       else if (Number(stored.admissionRejectedUntil || 0) > nowMs) reasons.push("admission_rejected");
       else if (!/^\d+$/.test(String(profile?.id || ""))) reasons.push("profile_missing_or_non_numeric");
       else if (cleanHandle(profile?.handle).toLowerCase() !== handle || profile?.protected === true
-        || Number(profile?.followers || 0) < minimumFollowers) reasons.push("profile_identity_gate");
-      else if (!(Number(stored.bscActivity?.count || 0) > 0)) reasons.push("bsc_identity_missing");
-      else if (!exactBscActivityWallet) reasons.push("bsc_identity_wallet_unbound");
+        || capitalCandidate && String(profile.id) !== String(candidate.expectedXUserId)
+        || !capitalCandidate && Number(profile?.followers || 0) < minimumFollowers) reasons.push("profile_identity_gate");
+      else if (!capitalCandidate && !(Number(stored.bscActivity?.count || 0) > 0)) reasons.push("bsc_identity_missing");
+      else if (!capitalCandidate && !exactBscActivityWallet) reasons.push("bsc_identity_wallet_unbound");
 
       const fresh = cached && hasFreshCachedIdentity(candidate, stored, nowMs);
       if (fresh) freshHandles.push(handle);
       else if (cached) {
         if (!Number.isFinite(profileAt) || nowMs - profileAt > identityGraceMs) reasons.push("profile_cache_stale");
-        if (!Number.isFinite(bscAt) || nowMs - bscAt > identityGraceMs) reasons.push("bsc_identity_stale");
-        if (!freshCandidateEvidence(candidate, nowMs)) reasons.push("wallet_identity_stale");
+        if (!capitalCandidate && (!Number.isFinite(bscAt) || nowMs - bscAt > identityGraceMs)) reasons.push("bsc_identity_stale");
+        if (!freshCandidateEvidence(candidate, nowMs)) reasons.push(capitalCandidate ? "capital_catalog_identity_stale" : "wallet_identity_stale");
       }
 
       const profileCircuit = state.transportCircuits[transportCircuitKey(FX_PROFILE_SOURCE, handle)];
@@ -1160,14 +1411,14 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       const cachedFallback = Boolean(profileCircuit && fresh && isTransientProfileReason(profileCircuit.reason));
       if (cachedFallback) profileFallbackHandles.push(handle);
       const effectiveProfileCircuit = Boolean(profileCircuit && !cachedFallback);
-      const bscActivityFallback = Boolean(bscActivityCircuit && fresh
+      const bscActivityFallback = Boolean(!capitalCandidate && bscActivityCircuit && fresh
         && isTransientBscActivityReason(bscActivityCircuit.reason));
       if (bscActivityFallback) {
         bscActivityFallbackHandles.push(handle);
         degradedSourceHandles.push(handle);
         reasons.push(`bsc_activity_${bscActivityCircuit.reason || "transport_error"}_cached_fallback`);
       }
-      const effectiveBscActivityCircuit = Boolean(bscActivityCircuit && !bscActivityFallback);
+      const effectiveBscActivityCircuit = Boolean(!capitalCandidate && bscActivityCircuit && !bscActivityFallback);
       if (effectiveProfileCircuit) reasons.push(`profile_${profileCircuit.reason || "transport_error"}`);
       if (timelineCircuit) reasons.push(`timeline_${timelineCircuit.reason || "transport_error"}`);
       if (effectiveBscActivityCircuit) reasons.push(`bsc_activity_${bscActivityCircuit.reason || "transport_error"}`);
@@ -1207,6 +1458,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       effectiveCircuitHandles: [...new Set(effectiveCircuitHandles)].sort(),
       reasonsByHandle,
       reasonCounts,
+      rotationMs,
       timelineFreshnessMs,
     };
   }
@@ -1242,12 +1494,22 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
         xUserId: tweet.xUserId || tweet.authorId || null,
         authorId: tweet.authorId || tweet.xUserId || null,
         isReply: tweet.isReply === true,
+        isQuote: tweet.isQuote === true,
       } : previous.tweet || null,
     };
   }
 
   function identityFields(candidate, profile, bscActivity, binding, nowMs) {
     const checkedAt = profile.checkedAt;
+    if (isCapitalKolCandidate(candidate) && hasExactCapitalKolIdentity(candidate)
+      && freshCapitalKolBinding(candidate, profile, candidate.capitalKolBinding, nowMs)) {
+      return {
+        identityLink: { state: "reviewed_person", source: "reviewed_catalog+fxtwitter" },
+        walletBinding: null,
+        capitalKolBinding: candidate.capitalKolBinding,
+        capitalKolSnapshot: candidate.capitalKolSnapshot,
+      };
+    }
     if (freshVerifiedBinding(candidate, binding, nowMs)) {
       return {
         identityLink: { state: "verified_wallet", source: "fomoscan+fxtwitter" },
@@ -1294,27 +1556,74 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     };
   }
 
-  function buildEvent(candidate, profile, bscActivity, binding, tweet, token, qualification, observedAt) {
+  function buildEvent(candidate, profile, bscActivity, binding, tweet, classification, qualification, observedAt) {
+    const token = classification.token;
+    const selfLaunch = classification.signalKind === "kol_self_launch";
+    const capitalCandidate = isCapitalKolCandidate(candidate);
     const identity = identityFields(candidate, profile, bscActivity, binding, observedAt);
+    const backgroundText = String(profile.description || "").replace(/\s+/gu, " ").trim();
+    const catalogBackgroundEvidence = capitalCandidate
+      ? candidate.capitalKolSnapshot.backgroundEvidence.find((item) => item.kind === "official_role")
+      : null;
     const caller = {
       handle: candidate.handle,
       twitter: `https://x.com/${candidate.handle}`,
       xProfileId: profile.id,
       followers: profile.followers,
       followersSyncedAt: profile.checkedAt,
-      identitySource: binding ? "fomoscan+fxtwitter" : "gmgn+fxtwitter",
-      bscTransactionCount: bscActivity.count,
-      bscActivityCheckedAt: bscActivity.checkedAt,
+      ...(selfLaunch && profile.displayName ? { displayName: profile.displayName } : {}),
+      ...(selfLaunch ? {
+        background: capitalCandidate
+          ? {
+            status: "primary_verified",
+            text: candidate.capitalKolSnapshot.background.zh,
+            textZh: candidate.capitalKolSnapshot.background.zh,
+            textEn: candidate.capitalKolSnapshot.background.en,
+            source: "reviewed_capital_person_catalog",
+            sourceUrl: catalogBackgroundEvidence?.url || null,
+            observedAt: profile.checkedAt,
+            checkedAt: catalogBackgroundEvidence?.checkedAt || null,
+            catalogVersion: candidate.capitalKolSnapshot.catalogVersion,
+            catalogHash: candidate.capitalKolSnapshot.catalogHash,
+          }
+          : backgroundText
+          ? {
+            status: "self_described",
+            text: backgroundText,
+            source: "fxtwitter_public_profile",
+            sourceUrl: `https://x.com/${candidate.handle}`,
+            observedAt: profile.checkedAt,
+          }
+          : {
+            status: "unverified",
+            text: null,
+            source: "fxtwitter_public_profile",
+            sourceUrl: `https://x.com/${candidate.handle}`,
+            observedAt: profile.checkedAt,
+          },
+      } : {}),
+      identitySource: capitalCandidate ? "reviewed_catalog+fxtwitter"
+        : binding ? "fomoscan+fxtwitter" : "gmgn+fxtwitter",
+      ...(capitalCandidate ? {
+        capitalKolBinding: identity.capitalKolBinding,
+        capitalKolSnapshot: candidate.capitalKolSnapshot,
+      } : {
+        bscTransactionCount: bscActivity.count,
+        bscActivityCheckedAt: bscActivity.checkedAt,
+      }),
     };
     const publishedAt = tweet.createdAt;
     return {
       type: "fomo_family_top_call",
-      signalKind: "fomo_x_call",
-      eventKey: `fomo-x-call:${tweet.id}:${token}`,
+      signalKind: classification.signalKind,
+      eventKey: selfLaunch
+        ? `kol-self-launch:${profile.id}:${tweet.id}:56:${token}`
+        : `fomo-x-call:${tweet.id}:${token}`,
       callId: tweet.id,
       stableId: tweet.id,
-      qualified: true,
-      strong: true,
+      qualified: !selfLaunch,
+      ...(selfLaunch ? { socialClaimVerified: true } : {}),
+      strong: !selfLaunch,
       official: false,
       fomoOfficial: false,
       source: {
@@ -1334,10 +1643,11 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
         sourceVerifiedBy: "official_x_oembed",
         text: tweet.text,
         createdAt: publishedAt,
+        ...(tweet.isQuote === true ? { isQuote: true } : {}),
       },
       caller,
       handle: candidate.handle,
-      walletAddress: candidate.wallet,
+      ...(!capitalCandidate ? { walletAddress: candidate.wallet } : {}),
       ...identity,
       chain: BSC_CHAIN,
       token,
@@ -1352,6 +1662,25 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       market: qualification.market,
       security: qualification.security,
       qualification,
+      ...(selfLaunch ? {
+        launchClaim: {
+          status: "self_declared",
+          explicitIssuerLanguage: true,
+          onchainCreatorVerified: false,
+          caSource: "official_x_oembed",
+          chainVerification: "declared_only",
+          chainSource: "declared_bsc_in_x_post",
+        },
+        shadow: {
+          decision: "watch",
+          executable: false,
+          reasonCodes: [
+            "creator_not_onchain_verified",
+            "holder_lp_cluster_coverage_incomplete",
+          ],
+        },
+        simulationOnly: true,
+      } : {}),
     };
   }
 
@@ -1362,6 +1691,10 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       markSeen(key, nowMs);
       return { status: "ignored_reply" };
     }
+    if (tweet.isQuote === true) {
+      markSeen(key, nowMs);
+      return { status: "ignored_quote" };
+    }
     const publishedMs = Date.parse(tweet.createdAt || "");
     const pendingEntry = state.pending[key];
     const pendingFresh = pendingEntry && nowMs - Number(pendingEntry.firstObservedAt || 0) <= pendingMaxAgeMs;
@@ -1370,46 +1703,66 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       markSeen(key, nowMs);
       return { status: "ignored_stale" };
     }
-    const preliminary = classifyFomoXCallText(tweet.text);
+    const preliminary = classifyMonitoredXText(tweet.text, config);
     if (!preliminary.relevant) {
       markSeen(key, nowMs);
       return { status: "ignored_text", reason: preliminary.reason };
     }
-    if (state.alertedTokens[preliminary.token]) {
+    if (isCapitalKolCandidate(candidate) && preliminary.signalKind !== "kol_self_launch") {
+      markSeen(key, nowMs);
+      return { status: "ignored_capital_person_non_launch" };
+    }
+    if (preliminary.signalKind === "fomo_x_call" && state.alertedTokens[preliminary.token]) {
       markSeen(key, nowMs);
       return { status: "duplicate_token" };
     }
     try {
       const verifiedTweet = await verifyOfficialPost(tweet, candidate.handle);
-      const official = classifyFomoXCallText(verifiedTweet.text);
-      if (!official.relevant || official.token !== preliminary.token) throw new Error("official X text did not preserve the exact call and contract");
+      const official = classifyMonitoredXText(verifiedTweet.text, config);
+      if (!official.relevant || official.token !== preliminary.token || official.signalKind !== preliminary.signalKind) {
+        throw new Error("official X text did not preserve the exact statement kind and contract");
+      }
+      const selfLaunch = official.signalKind === "kol_self_launch";
       const pairKey = `${verifiedTweet.id}:${official.token}`;
       if (state.seenTweetContracts[pairKey]) {
         markSeen(key, nowMs);
         return { status: "duplicate_tweet_contract" };
       }
-      const qualification = await qualifyCall({
-        token: official.token,
-        contractAddress: official.token,
-        chain: BSC_CHAIN,
-        handle: candidate.handle,
-        caller: {
+      let assessedQualification;
+      try {
+        assessedQualification = await qualifyCall({
+          token: official.token,
+          contractAddress: official.token,
+          chain: BSC_CHAIN,
           handle: candidate.handle,
-          twitterHandle: candidate.handle,
-          twitter: `https://x.com/${candidate.handle}`,
-          followers: profile.followers,
-        },
-        body: verifiedTweet.text,
-      }, { config: qualificationConfig, fetchImpl, bscProvider: dependencies.bscProvider });
-      if (!strictQualification(qualification, minimumLiquidityUsd)) {
-        markPending(key, official.token, qualification?.reason || "local_security_or_liquidity_blocked", nowMs, verifiedTweet);
+          caller: {
+            handle: candidate.handle,
+            twitterHandle: candidate.handle,
+            twitter: `https://x.com/${candidate.handle}`,
+            followers: profile.followers,
+          },
+          body: verifiedTweet.text,
+        }, { config: qualificationConfig, fetchImpl, bscProvider: dependencies.bscProvider });
+      } catch (error) {
+        if (!selfLaunch) throw error;
+        assessedQualification = {
+          decision: "watch",
+          reason: `qualification_unavailable:${String(error?.message || error).slice(0, 100)}`,
+          security: { decision: "unknown" },
+        };
+      }
+      if (!selfLaunch && !strictQualification(assessedQualification, minimumLiquidityUsd)) {
+        markPending(key, official.token, assessedQualification?.reason || "local_security_or_liquidity_blocked", nowMs, verifiedTweet);
         return { status: "qualification_pending" };
       }
-      const event = buildEvent(candidate, profile, bscActivity, binding, verifiedTweet, official.token, qualification, nowMs);
+      const qualification = selfLaunch
+        ? kolWatchQualification(assessedQualification)
+        : assessedQualification;
+      const event = buildEvent(candidate, profile, bscActivity, binding, verifiedTweet, official, qualification, nowMs);
       const delivery = await sendAlert(config, event);
       if (!acceptedDelivery(delivery)) throw new Error(`alert delivery was not durably accepted: ${delivery?.status || "missing"}`);
       state.seenTweetContracts[pairKey] = { observedAt: nowMs, handle: candidate.handle };
-      if (delivery?.status !== "suppressed") {
+      if (official.signalKind === "fomo_x_call" && delivery?.status !== "suppressed") {
         state.alertedTokens[official.token] = { observedAt: nowMs, tweetId: verifiedTweet.id, handle: candidate.handle };
       }
       markSeen(key, nowMs);
@@ -1420,10 +1773,30 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     }
   }
 
+  function bindObservedCapitalProfile(candidate, profile, nowMs) {
+    return bindCapitalIdentity({
+      subjectType: "person",
+      handle: candidate.capitalKolSnapshot.handle,
+      observedHandle: profile.handle,
+      xUserId: profile.id,
+      canonicalName: candidate.capitalKolSnapshot.canonicalName,
+      profileUrl: `https://x.com/${candidate.capitalKolSnapshot.handle}`,
+      source: "fxtwitter_public_profile",
+      observedAt: profile.checkedAt,
+      followers: profile.followers,
+    }, {
+      nowMs,
+      catalogMaximumAgeMs: capitalKolCatalogMaximumAgeMs,
+      observationMaximumAgeMs: identityGraceMs,
+    });
+  }
+
   async function processIdentity(candidate, nowMs, signal) {
     throwIfCheckCancelled(signal);
     const key = candidate.handle.toLowerCase();
     const stored = state.roster[key];
+    const capitalCandidate = isCapitalKolCandidate(candidate);
+    let transportIssue = null;
     if (Number(stored?.admissionRejectedUntil || 0) > nowMs) {
       return { status: "ineligible_cached", reason: stored.admissionRejectionReason || "admission gate" };
     }
@@ -1432,12 +1805,13 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     if (!profile || !Number.isFinite(profileAt) || nowMs - profileAt >= profileRefreshMs) {
       try {
         throwIfCheckCancelled(signal);
-        profile = await fetchXProfile(candidate.handle);
+        profile = await fetchXProfile(candidate);
       } catch (error) {
         const transportBackoff = transportBackoffResult(error);
         if (transportBackoff && isTransientProfileReason(transportBackoff.reason)
           && hasFreshCachedIdentity(candidate, stored, nowMs)) {
           profile = stored.xProfile;
+          transportIssue = transportBackoff;
           stored.profileRefreshHealth = {
             status: "cached_identity_fallback",
             checkedAt: new Date(nowMs).toISOString(),
@@ -1452,7 +1826,10 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
           stored.admissionRejectionReason = error.message;
           delete stored.xProfile;
           delete stored.timelineHealth;
-          return { status: "ineligible_profile", reason: error.message };
+          if (capitalCandidate) {
+            stored.capitalKolQuarantine = { reason: error.message, checkedAt: new Date(nowMs).toISOString() };
+          }
+          return { status: capitalCandidate ? "ineligible_capital_identity" : "ineligible_profile", reason: error.message };
         }
       }
       throwIfCheckCancelled(signal);
@@ -1464,7 +1841,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
           && previousBinding?.proofSource === "fomoscan"
           && String(previousBinding?.wallet || "").toLowerCase() === candidate.wallet
           && cleanHandle(previousBinding?.handle || previousBinding?.twitterHandle).toLowerCase() === candidate.handle;
-        try {
+        if (!capitalCandidate) try {
           throwIfCheckCancelled(signal);
           const resolvedBinding = await resolveVerifiedBinding(candidate);
           throwIfCheckCancelled(signal);
@@ -1493,12 +1870,34 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
         }
       }
     }
+    if (capitalCandidate) {
+      const capitalBinding = bindObservedCapitalProfile(candidate, profile, nowMs);
+      if (capitalBinding?.status !== "admitted"
+        || JSON.stringify(capitalBinding.snapshot) !== JSON.stringify(candidate.capitalKolSnapshot)) {
+        stored.admissionRejectedUntil = nowMs + admissionRetryMs;
+        stored.admissionRejectionReason = `@${candidate.handle} catalog identity quarantined: ${capitalBinding?.reason || "snapshot_mismatch"}`;
+        delete stored.xProfile;
+        delete stored.timelineHealth;
+        stored.capitalKolQuarantine = {
+          reason: capitalBinding?.reason || "snapshot_mismatch",
+          checkedAt: new Date(nowMs).toISOString(),
+        };
+        return { status: "ineligible_capital_identity", reason: stored.admissionRejectionReason };
+      }
+      stored.capitalKolBinding = capitalBinding.binding;
+      delete stored.capitalKolQuarantine;
+    }
     if (!/^\d+$/.test(String(profile.id || ""))
       || cleanHandle(profile.handle).toLowerCase() !== candidate.handle
-      || profile.protected === true || profile.followers < minimumFollowers) {
+      || profile.protected === true
+      || capitalCandidate && String(profile.id) !== String(candidate.expectedXUserId)
+      || !capitalCandidate && profile.followers < minimumFollowers) {
       stored.admissionRejectedUntil = nowMs + admissionRetryMs;
       stored.admissionRejectionReason = `@${candidate.handle} has no current qualifying numeric X identity`;
-      return { status: "ineligible_profile", reason: stored.admissionRejectionReason };
+      if (capitalCandidate) {
+        stored.capitalKolQuarantine = { reason: stored.admissionRejectionReason, checkedAt: new Date(nowMs).toISOString() };
+      }
+      return { status: capitalCandidate ? "ineligible_capital_identity" : "ineligible_profile", reason: stored.admissionRejectionReason };
     }
     if (candidate.source === FOMOSCAN_SEED_SOURCE && !freshVerifiedBinding(candidate, stored.walletBinding, nowMs)) {
       stored.admissionRejectedUntil = nowMs + admissionRetryMs;
@@ -1506,13 +1905,13 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       return { status: "ineligible_fomoscan_binding", reason: stored.admissionRejectionReason };
     }
 
-    let bscActivity = stored.bscActivity;
+    let bscActivity = capitalCandidate ? null : stored.bscActivity;
     const bscAt = Date.parse(bscActivity?.checkedAt || "");
     const bscActivityWallet = String(bscActivity?.wallet || "").toLowerCase();
     const bscActivityRefreshMs = Math.min(profileRefreshMs, identityGraceMs);
-    if (!bscActivity || !Number.isFinite(bscAt) || bscAt > nowMs + FUTURE_TOLERANCE_MS
+    if (!capitalCandidate && (!bscActivity || !Number.isFinite(bscAt) || bscAt > nowMs + FUTURE_TOLERANCE_MS
       || bscActivityWallet !== candidate.wallet
-      || nowMs - bscAt >= bscActivityRefreshMs) {
+      || nowMs - bscAt >= bscActivityRefreshMs)) {
       let count;
       try {
         throwIfCheckCancelled(signal);
@@ -1530,6 +1929,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
         if (transportBackoff && isTransientBscActivityReason(transportBackoff.reason)
           && freshCachedBscActivity(candidate, stored.bscActivity, nowMs)) {
           bscActivity = stored.bscActivity;
+          transportIssue = transportBackoff;
           stored.bscActivityRefreshHealth = {
             status: "cached_activity_fallback",
             checkedAt: new Date(nowMs).toISOString(),
@@ -1584,15 +1984,41 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     const latestId = maxTweetId(tweets);
     const initialized = state.initialized[key];
     const identityChanged = initialized && (String(initialized.xUserId || "") !== String(profile.id)
-      || String(initialized.wallet || "").toLowerCase() !== candidate.wallet);
+      || (capitalCandidate
+        ? initialized.catalogId !== candidate.catalogId
+        : String(initialized.wallet || "").toLowerCase() !== candidate.wallet));
     throwIfCheckCancelled(signal);
+    const operationalResult = transportIssue
+      ? {
+        operationalSuccess: true,
+        transportFailure: true,
+        circuitOpen: transportIssue.circuitOpen,
+        reason: transportIssue.reason,
+        source: transportIssue.source,
+        handle: transportIssue.handle,
+        nextRetryAt: transportIssue.nextRetryAt,
+      }
+      : { operationalSuccess: true };
     if (!initialized || identityChanged) {
       if (identityChanged) clearHandleRuntimeState(state, key);
-      if (!tweets.length) return { status: "baseline_pending", baseline: 0, delivered: 0 };
-      state.initialized[key] = { xUserId: profile.id, wallet: candidate.wallet, initializedAt: new Date(nowMs).toISOString(), latestId };
+      if (!tweets.length) return { status: "baseline_pending", baseline: 0, delivered: 0, ...operationalResult };
+      state.initialized[key] = {
+        xUserId: profile.id,
+        ...(capitalCandidate ? {
+          catalogId: candidate.catalogId,
+          catalogHash: candidate.capitalKolSnapshot.catalogHash,
+        } : { wallet: candidate.wallet }),
+        initializedAt: new Date(nowMs).toISOString(),
+        latestId,
+      };
       if (latestId) state.cursors[key] = latestId;
-      return { status: "baselined", baseline: tweets.length, delivered: 0 };
+      return { status: "baselined", baseline: tweets.length, delivered: 0, ...operationalResult };
     }
+
+    // A reviewed-catalog release may add people or refresh evidence without
+    // changing this person's pinned identity. Keep that person's cursor and
+    // pending work intact, while recording the catalog release now in use.
+    if (capitalCandidate) initialized.catalogHash = candidate.capitalKolSnapshot.catalogHash;
 
     const previousCursor = state.cursors[key] || initialized.latestId || null;
     const initializedAt = Date.parse(initialized.initializedAt || "");
@@ -1624,7 +2050,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     }
     throwIfCheckCancelled(signal);
     if (latestId && (!previousCursor || compareTweetIds(latestId, previousCursor) > 0)) state.cursors[key] = latestId;
-    return { status: "checked", candidates: candidates.length, delivered, pending };
+    return { status: "checked", candidates: candidates.length, delivered, pending, ...operationalResult };
   }
 
   async function runCheck() {
@@ -1634,8 +2060,13 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     // request or scheduling another state write.
     if (stopped) return { status: "stopped" };
     const nowMs = now();
-    if (config.fomoXCallEnabled !== true) {
-      state.health = { ...state.health, status: "disabled", checkedAt: new Date(nowMs).toISOString() };
+    if (config.fomoXCallEnabled !== true && config.kolLaunchMonitorEnabled !== true) {
+      state.health = {
+        ...state.health,
+        status: "disabled",
+        operationalStatus: "disabled",
+        checkedAt: new Date(nowMs).toISOString(),
+      };
       await persist(nowMs);
       return { status: "disabled" };
     }
@@ -1665,17 +2096,24 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     if (stopped || controller.signal.aborted) return stoppedResult();
     const failures = results.filter((result) => result.status === "rejected");
     const batchTransportBackoffs = results.filter((result) => result.status === "fulfilled" && result.value?.transportFailure === true);
+    const operationalSuccesses = results.filter((result) => result.status === "fulfilled"
+      && result.value?.operationalSuccess === true).length;
     const transportCoverage = summarizeTransportCircuits(state, nowMs);
     const delivered = results.reduce((total, result) => total + Number(result.value?.delivered || 0), 0);
     const checkedAt = new Date(nowMs).toISOString();
     const coverage = summarizeEffectiveCoverage(roster, nowMs);
     const admittedCount = coverage.cachedCount;
     const rejectedCount = roster.filter((candidate) => Number(candidate.admissionRejectedUntil || 0) > nowMs).length;
+    const capitalRuntimeQuarantined = roster.filter((candidate) => isCapitalKolCandidate(candidate)
+      && Number(candidate.admissionRejectedUntil || 0) > nowMs).length;
     const seedBacklog = Number(state.health.sources.fomoscanSeeds?.backlog || 0);
     const seedInFlight = state.health.sources.fomoscanSeeds?.inFlight === true;
-    const discoveryLimited = discoveryStatus.gmgn === "error"
+    const rotationSlaBreached = coverage.rotationMs > maximumPostAgeMs;
+    const discoveryLimited = discoveryStatus.capitalCatalog === "error"
+      || discoveryStatus.capitalCatalog === "partial"
+      || discoveryStatus.gmgn === "error"
       || discoveryStatus.fomoscanSeeds === "error" || seedInFlight || seedBacklog > 0;
-    const coverageLimited = coverage.liveCount < coverage.eligibleCount;
+    const coverageLimited = coverage.liveCount < coverage.eligibleCount || rotationSlaBreached;
     const sourceDegraded = coverage.degradedSourceHandles.length > 0;
     const sourceLimited = discoveryLimited || coverageLimited || sourceDegraded;
     const issueCount = failures.length + coverage.effectiveCircuitHandles.length + coverage.degradedSourceHandles.length;
@@ -1690,19 +2128,46 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
         : null;
     const discoveryFailure = discoveryStatus.gmgn === "error" ? state.health.sources.gmgn?.error
       : discoveryStatus.fomoscanSeeds === "error" ? state.health.sources.fomoscanSeeds?.error
+        : discoveryStatus.capitalCatalog === "error" ? state.health.sources.capitalCatalog?.reason
         : null;
+    const discoveryOperationalFailure = discoveryStatus.gmgn === "error"
+      || discoveryStatus.fomoscanSeeds === "error"
+      || discoveryStatus.capitalCatalog === "error";
+    // Coverage gaps are reported by status/lastError but are not transport
+    // failures. Only a real failed attempt increments this counter; a cooling
+    // circuit or an eligibility-only batch preserves it until a clean timeline
+    // poll proves recovery.
+    const cycleOperationalIssue = failures.length > 0 || batchTransportBackoffs.length > 0 || discoveryOperationalFailure;
+    const attemptedOperationalFailure = failures.length > 0 || discoveryOperationalFailure
+      || batchTransportBackoffs.some((result) => result.value?.circuitOpen !== true);
+    const cleanOperationalSuccess = operationalSuccesses > 0 && !cycleOperationalIssue;
+    const totalOperationalFailure = operationalSuccesses === 0 && attemptedOperationalFailure;
+    const operationalStatus = cleanOperationalSuccess ? "healthy"
+      : totalOperationalFailure ? "error"
+        : cycleOperationalIssue ? (operationalSuccesses > 0 ? "partial" : "backoff")
+          : "idle";
+    // A partial cycle still proves that at least one live source path worked.
+    // Keep the timestamp fresh for consumers without clearing the retained
+    // failure streak until a completely clean cycle proves full recovery.
+    const lastOperationalSuccessAt = operationalSuccesses > 0 ? checkedAt : state.health.lastOperationalSuccessAt;
+    const consecutiveFailures = cleanOperationalSuccess ? 0
+      : totalOperationalFailure ? Number(state.health.consecutiveFailures || 0) + 1
+        : Number(state.health.consecutiveFailures || 0);
     state.health = {
       ...state.health,
       status,
+      operationalStatus,
       checkedAt,
       lastSuccessAt: successful ? checkedAt : state.health.lastSuccessAt,
+      lastOperationalSuccessAt,
       lastError: sourceLimited || failures.length
         ? effectiveCoverageError(coverage, seedBacklog, batchFailure || discoveryFailure)
         : null,
-      consecutiveFailures: successful ? 0 : Number(state.health.consecutiveFailures || 0) + 1,
+      consecutiveFailures,
       rosterCount: Object.keys(state.roster).length,
       discoveredCandidateCount: Number(state.health.sources.gmgn?.discovered || 0)
-        + Number(state.health.sources.fomoscanSeeds?.verified || 0),
+        + Number(state.health.sources.fomoscanSeeds?.verified || 0)
+        + Number(state.health.sources.capitalCatalog?.admitted || 0),
       eligibleCount: roster.length,
       admittedCount,
       activeCount: coverage.liveCount,
@@ -1715,8 +2180,16 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       coverage,
       sources: {
         ...state.health.sources,
+        capitalCatalog: {
+          ...state.health.sources.capitalCatalog,
+          runtimeQuarantined: capitalRuntimeQuarantined,
+        },
         x: {
           status: sourceLimited || failures.length ? "partial" : coverage.liveCount ? "healthy" : "no_candidates",
+          operationalStatus,
+          operationalSuccesses,
+          lastOperationalSuccessAt,
+          consecutiveFailures,
           coverage: sourceLimited ? "source_limited" : "complete",
           checkedAt,
           checked: batch.length,
@@ -1742,6 +2215,9 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
           degradedSourceHandles: coverage.degradedSourceHandles,
           effectiveCircuitHandles: coverage.effectiveCircuitHandles,
           coverageReasons: coverage.reasonCounts,
+          rotationMs: coverage.rotationMs,
+          maximumPostAgeMs,
+          rotationSlaBreached,
         },
       },
     };
@@ -1770,13 +2246,20 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
   }
 
   const check = () => {
-    const current = serial.catch(() => {}).then(runCheck);
+    // Poll timers and manual health checks share the same in-flight cycle.
+    // Appending timer ticks behind a slow request otherwise builds an unbounded
+    // backlog and immediately replays old polls after the source recovers.
+    if (activeCheck) return activeCheck;
+    const current = serial.catch(() => {}).then(runCheck).finally(() => {
+      if (activeCheck === current) activeCheck = null;
+    });
+    activeCheck = current;
     serial = current.catch(() => {});
     return current;
   };
 
   async function start() {
-    if (started || config.fomoXCallEnabled !== true) return;
+    if (started || (config.fomoXCallEnabled !== true && config.kolLaunchMonitorEnabled !== true)) return;
     started = true;
     stopped = false;
     await check();

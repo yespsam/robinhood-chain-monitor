@@ -33,6 +33,18 @@ export const BINANCE_DEVELOPER_DOC_URLS = [
   "https://developers.binance.com/en/docs/products/announcements/cms-log.md",
   "https://developers.binance.com/en/docs/products/wallet-skills/supported-skills.md",
 ];
+export const BINANCE_WEB3_DEVELOPER_DOC_URLS = [
+  "https://developers.binance.com/en/docs/products/web3-dapp/self-testing.md",
+  "https://developers.binance.com/en/docs/products/web3-dapp/self-listing.md",
+  "https://developers.binance.com/en/docs/products/web3-dapp/operation-rules.md",
+  "https://developers.binance.com/en/docs/products/web3-connect/introduction.md",
+  "https://developers.binance.com/en/docs/products/web3-task-verification/apis.md",
+  "https://developers.binance.com/en/docs/products/web3-task-verification/on-chain-verification.md",
+  "https://developers.binance.com/en/docs/products/open-platform/self-testing-op.md",
+  "https://developers.binance.com/en/docs/products/open-platform/self-listing-op.md",
+  "https://developers.binance.com/en/docs/products/agentic-wallet/welcome.md",
+  "https://developers.binance.com/en/docs/products/wallet-skills/overview.md",
+];
 export const BINANCE_AGENT_NATIVE_DOC_URLS = BINANCE_DEVELOPER_DOC_URLS.filter((url) => (
   url.endsWith("/llms.txt") || url.includes("/agent-native/")
 ));
@@ -959,6 +971,19 @@ function cleanDeveloperDocLine(value) {
 const AGENT_NATIVE_IDENTITY = /\b(?:binance\s+)?(?:agent\s*os|agent\s+native|agentic\s+wallet|mcp\s+server|agent\s+rest\s+api)\b/i;
 const AGENT_NATIVE_MATERIAL_SIGNAL = /(?:\b(?:mcp\s+endpoint|endpoint|rest\s+api|api\s+keys?|oauth|authenticat(?:e|ion)|authoriz(?:e|ation)|permissions?|scopes?|read[- ]only|no\s+withdrawal|emergency\s+stop|sub[- ]account|market\s+data|order\s+books?|balances?|positions?|trade|spot|margin|convert|futures|payments?|x402|on[- ]chain|wallets?|transfer|send|receive|settle|portfolio)\b|https:\/\/agent\.binance\.com\/mcp\/agentic|\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/[a-z0-9_{}./-]+)/i;
 const AGENT_NATIVE_FUNCTIONAL_CHANGE = /\b(?:add(?:s|ed|ing)?|allow(?:s|ed|ing)?|authoriz(?:e|es|ed|ing)|deprecat(?:e|es|ed|ing|ion)|disabl(?:e|es|ed|ing)|enabl(?:e|es|ed|ing)|grant(?:s|ed|ing)?|introduc(?:e|es|ed|ing)|launch(?:es|ed|ing)?|migrat(?:e|es|ed|ing)|new|now|remov(?:e|es|ed|ing)|requir(?:e|es|ed|ing)|support(?:s|ed|ing)?|updat(?:e|es|ed|ing)|upgrad(?:e|es|ed|ing))\b/i;
+const BINANCE_DEVELOPER_SNAPSHOT_VERSION = 2;
+const WEB3_DEVELOPER_DOC_PATH = /\/(?:web3-dapp|web3-connect|web3-task-verification|open-platform|agentic-wallet|wallet-skills)(?:\/|\b)/i;
+const WEB3_DEVELOPER_IDENTITY = /\b(?:web3|dapp|binance\s+wallet\s+sdk|wallet\s+skills?|agentic\s+wallet|task\s+verification|open\s+platform)\b/i;
+const WEB3_DEVELOPER_CAPABILITY_SIGNAL = /(?:\b(?:apis?|endpoints?|providers?|sdk|methods?|rpc|namespaces?|chains?|networks?|wallets?|dapps?|self[- ]testing|self[- ]listing|operation\s+rules?|task\s+verification|on[- ]chain|connect(?:ion)?|sign(?:ing|ature)?|permissions?|capabilit(?:y|ies)|supported\s+(?:skills?|providers?|chains?|networks?|methods?))\b|\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/[a-z0-9_{}./-]+)/i;
+const WEB3_DEVELOPER_ACTIVITY_NOISE = /\b(?:airdrops?|campaigns?|giveaways?|rewards?|apr|boosters?|token\s+generation\s+event|tge)\b/i;
+const WEB3_DEVELOPER_CATEGORIES = new Set([
+  "web3_dapp",
+  "web3_connect",
+  "web3_task_verification",
+  "web3_open_platform",
+  "agentic_wallet",
+  "wallet_skills",
+]);
 const DEVELOPER_SIGNAL_NOISE = /^(?:table of contents|resources|support|privacy|terms|related|getting help)$/i;
 
 function classifyAgentNativeOfficialText(value) {
@@ -1005,7 +1030,9 @@ export function extractBinanceDeveloperSignalSnapshot(markdown, maximum = 1_200)
   const flushParagraph = () => {
     const value = cleanDeveloperDocLine(paragraph.join(" "));
     paragraph = [];
-    if (AGENT_NATIVE_IDENTITY.test(value) || (AGENT_NATIVE_MATERIAL_SIGNAL.test(value) && /\bagent(?:ic|s?)?\b|\bmcp\b/i.test(value))) {
+    if (AGENT_NATIVE_IDENTITY.test(value)
+      || (AGENT_NATIVE_MATERIAL_SIGNAL.test(value) && /\bagent(?:ic|s?)?\b|\bmcp\b/i.test(value))
+      || (WEB3_DEVELOPER_IDENTITY.test(value) && WEB3_DEVELOPER_CAPABILITY_SIGNAL.test(value))) {
       appendDeveloperSignal(candidates, value);
     }
   };
@@ -1014,12 +1041,18 @@ export function extractBinanceDeveloperSignalSnapshot(markdown, maximum = 1_200)
     mdxProps = {};
     const name = props.label || props.title;
     const detail = props.value || props.description || props.outcome || props.quote;
-    if (name && detail && (AGENT_NATIVE_IDENTITY.test(`${name} ${detail}`) || AGENT_NATIVE_MATERIAL_SIGNAL.test(`${name} ${detail}`))) {
+    if (name && detail && (AGENT_NATIVE_IDENTITY.test(`${name} ${detail}`)
+      || AGENT_NATIVE_MATERIAL_SIGNAL.test(`${name} ${detail}`)
+      || (WEB3_DEVELOPER_IDENTITY.test(`${name} ${detail}`) && WEB3_DEVELOPER_CAPABILITY_SIGNAL.test(`${name} ${detail}`)))) {
       appendDeveloperSignal(candidates, `${name}: ${detail}`);
       return;
     }
     for (const value of Object.values(props)) {
-      if (AGENT_NATIVE_IDENTITY.test(value) || AGENT_NATIVE_MATERIAL_SIGNAL.test(value)) appendDeveloperSignal(candidates, value);
+      if (AGENT_NATIVE_IDENTITY.test(value)
+        || AGENT_NATIVE_MATERIAL_SIGNAL.test(value)
+        || (WEB3_DEVELOPER_IDENTITY.test(value) && WEB3_DEVELOPER_CAPABILITY_SIGNAL.test(value))) {
+        appendDeveloperSignal(candidates, value);
+      }
     }
   };
 
@@ -1032,7 +1065,9 @@ export function extractBinanceDeveloperSignalSnapshot(markdown, maximum = 1_200)
       continue;
     }
     if (inCodeFence) {
-      if (AGENT_NATIVE_MATERIAL_SIGNAL.test(trimmed)) appendDeveloperSignal(candidates, `Code: ${trimmed}`);
+      if (AGENT_NATIVE_MATERIAL_SIGNAL.test(trimmed) || WEB3_DEVELOPER_CAPABILITY_SIGNAL.test(trimmed)) {
+        appendDeveloperSignal(candidates, `Code: ${trimmed}`);
+      }
       continue;
     }
 
@@ -1073,12 +1108,13 @@ export function extractBinanceDeveloperSignalSnapshot(markdown, maximum = 1_200)
   flushParagraph();
   flushMdxProps();
 
-  // Keep Agent OS / Agent Native discoveries even when a large directory has
+  // Keep Agent OS / Agent Native and Binance Wallet Web3 discoveries even when a large directory has
   // more than the persisted 1,200-signal window. Priority signals already in
   // the window do not change the semantic set; a newly appended Agent link is
   // pulled into the bounded snapshot and can be reported as an addition.
   const priority = candidates.filter((value) => AGENT_NATIVE_IDENTITY.test(value)
-    || /\/(?:agent-native|agent-os)(?:\/|\b)/i.test(value));
+    || /\/(?:agent-native|agent-os)(?:\/|\b)/i.test(value)
+    || WEB3_DEVELOPER_DOC_PATH.test(value));
   const selected = [];
   for (const value of [...priority, ...candidates]) {
     if (!selected.includes(value)) selected.push(value);
@@ -1099,6 +1135,47 @@ export function extractBinanceDeveloperSignals(markdown, maximum = 1_200) {
   return extractBinanceDeveloperSignalSnapshot(markdown, maximum).signals;
 }
 
+function web3DeveloperProfile(value) {
+  const pathname = String(value || "").toLowerCase();
+  if (pathname.includes("/web3-dapp/")) return {
+    label: "Binance Web3 DApp",
+    project: "binance-wallet",
+    strong: true,
+    category: "web3_dapp",
+  };
+  if (pathname.includes("/web3-connect/")) return {
+    label: "Binance Wallet SDK",
+    project: "binance-wallet",
+    strong: true,
+    category: "web3_connect",
+  };
+  if (pathname.includes("/web3-task-verification/")) return {
+    label: "Binance Web3 Task Verification",
+    project: "binance-wallet",
+    strong: true,
+    category: "web3_task_verification",
+  };
+  if (pathname.includes("/open-platform/")) return {
+    label: "Binance Web3 Open Platform",
+    project: "binance-wallet",
+    strong: true,
+    category: "web3_open_platform",
+  };
+  if (pathname.includes("/agentic-wallet/")) return {
+    label: "Binance Agentic Wallet",
+    project: "binance-wallet",
+    strong: true,
+    category: "agentic_wallet",
+  };
+  if (pathname.includes("/wallet-skills/")) return {
+    label: "Binance Wallet Skills",
+    project: "binance-wallet",
+    strong: true,
+    category: "wallet_skills",
+  };
+  return null;
+}
+
 function developerPageProfile(url) {
   const pathname = new URL(url).pathname.toLowerCase();
   if (pathname.endsWith("/llms.txt")) return { label: "Developer 文档目录", project: "binance", strong: true };
@@ -1108,7 +1185,8 @@ function developerPageProfile(url) {
     strong: true,
     category: "agent_native",
   };
-  if (pathname.includes("/wallet-skills/")) return { label: "Wallet Skills", project: "binance-wallet", strong: true };
+  const web3Profile = web3DeveloperProfile(pathname);
+  if (web3Profile) return web3Profile;
   if (pathname.includes("/copy-trading/")) return { label: "Copy Trading API", project: "binance", strong: true };
   if (pathname.includes("/w3w-prediction/")) return { label: "Prediction Trading API", project: "binance-wallet", strong: true };
   if (pathname.includes("/alpha/")) return { label: "Binance Alpha API", project: "binance-wallet", strong: true };
@@ -1119,7 +1197,35 @@ function developerPageProfile(url) {
 
 function classifyDeveloperDelta(url, added = [], removed = []) {
   const base = developerPageProfile(url);
-  const delta = [...added, ...removed].join("\n");
+  const changes = [...added, ...removed];
+  const delta = changes.join("\n");
+  const discoveredWeb3Profile = changes.map(web3DeveloperProfile).find(Boolean) || null;
+  const web3Product = WEB3_DEVELOPER_CATEGORIES.has(base.category)
+    || Boolean(base.category !== "agent_native" && discoveredWeb3Profile);
+  if (web3Product) {
+    const isMaterial = (line) => !WEB3_DEVELOPER_ACTIVITY_NOISE.test(line)
+      && (WEB3_DEVELOPER_DOC_PATH.test(line)
+        || WEB3_DEVELOPER_CAPABILITY_SIGNAL.test(line)
+        || (WEB3_DEVELOPER_IDENTITY.test(line) && AGENT_NATIVE_FUNCTIONAL_CHANGE.test(line)));
+    const materialAdded = added.filter(isMaterial);
+    const materialRemoved = removed.filter(isMaterial);
+    return {
+      ...base,
+      ...(discoveredWeb3Profile || {}),
+      label: WEB3_DEVELOPER_CATEGORIES.has(base.category)
+        ? base.label
+        : discoveredWeb3Profile?.label || "Binance Wallet Web3",
+      project: "binance-wallet",
+      category: WEB3_DEVELOPER_CATEGORIES.has(base.category)
+        ? base.category
+        : discoveredWeb3Profile?.category || "web3_product",
+      strong: true,
+      web3Product: true,
+      materialAdded,
+      materialRemoved,
+      relevant: materialAdded.length + materialRemoved.length > 0,
+    };
+  }
   const agentNative = base.category === "agent_native" || AGENT_NATIVE_IDENTITY.test(delta)
     || /\/agent-native\/|\/agent-os\b/i.test(delta);
   if (!agentNative) return { ...base, relevant: added.length + removed.length > 0 };
@@ -1262,7 +1368,7 @@ function parseVerifiedAgentOsPage(body, { reader = false, responseUrl = null } =
   }
   const snapshot = extractAgentOsPageSignals(content);
   if (snapshot.signals.length < 6) throw new Error("Agent OS page produced insufficient verified signals");
-  return { ...snapshot, verifiedSourceUrl };
+  return { ...snapshot, snapshotVersion: BINANCE_DEVELOPER_SNAPSHOT_VERSION, verifiedSourceUrl };
 }
 
 async function fetchAgentOsPage(fetchImpl, previous, observedAt, requestTimeoutMs = 12_000) {
@@ -1276,15 +1382,17 @@ async function fetchAgentOsPage(fetchImpl, previous, observedAt, requestTimeoutM
       accept: "text/plain,*/*;q=0.1",
       "user-agent": "robinhood-launchpad-monitor/0.1",
     };
-    if (previous?.retrievalMode === "verified_reader" && previous?.etag) readerHeaders["if-none-match"] = previous.etag;
-    if (previous?.retrievalMode === "verified_reader" && previous?.lastModified) readerHeaders["if-modified-since"] = previous.lastModified;
+    const compatiblePrevious = previous?.snapshotVersion === BINANCE_DEVELOPER_SNAPSHOT_VERSION;
+    if (compatiblePrevious && previous?.retrievalMode === "verified_reader" && previous?.etag) readerHeaders["if-none-match"] = previous.etag;
+    if (compatiblePrevious && previous?.retrievalMode === "verified_reader" && previous?.lastModified) readerHeaders["if-modified-since"] = previous.lastModified;
     const response = await fetchImpl(BINANCE_AGENT_OS_READER_URL, {
       headers: readerHeaders,
       signal: AbortSignal.timeout(timeoutMs),
     });
-    if (response?.status === 304 && previous?.retrievalMode === "verified_reader") {
+    if (response?.status === 304 && compatiblePrevious && previous?.retrievalMode === "verified_reader") {
       return {
         notModified: true,
+        snapshotVersion: BINANCE_DEVELOPER_SNAPSHOT_VERSION,
         retrievalMode: "verified_reader",
         sourceUrl: BINANCE_AGENT_OS_PAGE_URL,
         retrievalUrl: BINANCE_AGENT_OS_READER_URL,
@@ -1311,8 +1419,9 @@ async function fetchAgentOsPage(fetchImpl, previous, observedAt, requestTimeoutM
     "accept-language": "en-US,en;q=0.9",
     "user-agent": "Mozilla/5.0 (compatible; robinhood-launchpad-monitor/0.1)",
   };
-  if (previous?.retrievalMode === "canonical" && previous?.etag) directHeaders["if-none-match"] = previous.etag;
-  if (previous?.retrievalMode === "canonical" && previous?.lastModified) directHeaders["if-modified-since"] = previous.lastModified;
+  const compatiblePrevious = previous?.snapshotVersion === BINANCE_DEVELOPER_SNAPSHOT_VERSION;
+  if (compatiblePrevious && previous?.retrievalMode === "canonical" && previous?.etag) directHeaders["if-none-match"] = previous.etag;
+  if (compatiblePrevious && previous?.retrievalMode === "canonical" && previous?.lastModified) directHeaders["if-modified-since"] = previous.lastModified;
   try {
     const response = await fetchImpl(BINANCE_AGENT_OS_PAGE_URL, {
       headers: directHeaders,
@@ -1320,10 +1429,16 @@ async function fetchAgentOsPage(fetchImpl, previous, observedAt, requestTimeoutM
       signal: AbortSignal.timeout(timeoutMs),
     });
     const wafAction = responseHeader(response, "x-amzn-waf-action");
-    if (response?.status === 304 && previous?.retrievalMode === "canonical") {
+    if (response?.status === 304 && compatiblePrevious && previous?.retrievalMode === "canonical") {
       const readerResult = await readerAttempt;
       if (readerResult.status === "rejected") errors.push(prefixedSourceError("verified reader", readerResult.reason));
-      return { notModified: true, retrievalMode: "canonical", sourceUrl: BINANCE_AGENT_OS_PAGE_URL, errors };
+      return {
+        notModified: true,
+        snapshotVersion: BINANCE_DEVELOPER_SNAPSHOT_VERSION,
+        retrievalMode: "canonical",
+        sourceUrl: BINANCE_AGENT_OS_PAGE_URL,
+        errors,
+      };
     }
     if (wafAction || response?.status === 202) throw new Error(`canonical WAF ${wafAction || "challenge"}`);
     if (!response?.ok || response?.status !== 200) throw new Error(`canonical returned HTTP ${response?.status ?? "unknown"}`);
@@ -1721,6 +1836,18 @@ export function createBinanceMonitor(config, dependencies = {}) {
   const memeRushTargets = dependencies.memeRushTargets || DEFAULT_MEME_RUSH_TARGETS;
   const WebSocketImpl = dependencies.WebSocketImpl || WebSocket;
   const memeRushTokenIndexLimit = Math.max(1, Number(dependencies.memeRushTokenIndexLimit) || MEME_RUSH_TOKEN_INDEX_LIMIT);
+  const web3DeveloperDocUrls = Array.isArray(dependencies.web3DeveloperDocUrls)
+    ? dependencies.web3DeveloperDocUrls
+    : BINANCE_WEB3_DEVELOPER_DOC_URLS;
+  const requestedWeb3DeveloperPollIntervalMs = Number(
+    dependencies.web3DeveloperPollIntervalMs
+      ?? config.binanceWeb3DeveloperPollIntervalMs
+      ?? 60_000,
+  );
+  const web3DeveloperPollIntervalMs = Math.max(
+    60_000,
+    Number.isFinite(requestedWeb3DeveloperPollIntervalMs) ? requestedWeb3DeveloperPollIntervalMs : 60_000,
+  );
   const stateFile = path.join(config.dataDir, "binance-state.json");
   const mainSchedulerCheckpointFile = path.join(config.dataDir, "binance-main-scheduler-checkpoint.json");
   const agentNativeStateFile = path.join(config.dataDir, "binance-agent-native-state.json");
@@ -3210,20 +3337,35 @@ export function createBinanceMonitor(config, dependencies = {}) {
   async function checkDeveloperDocs(state, save, current, nowValue) {
     if (config.binanceDeveloperMonitorEnabled !== true) return;
     const health = sourceHealth(state, "developerDocs");
+    const web3Health = web3DeveloperDocUrls.length ? sourceHealth(state, "web3DeveloperDocs") : null;
     const intervalMs = config.binanceDeveloperPollIntervalMs ?? 30_000;
-    if (!due(health, intervalMs, current)) return;
+    const generalDue = due(health, intervalMs, current);
+    const web3Due = Boolean(web3Health && due(web3Health, web3DeveloperPollIntervalMs, current));
+    if (!generalDue && !web3Due) return;
     const previousSuccessAt = Date.parse(health.lastSuccessAt || "");
-    const continuousCoverage = Number.isFinite(previousSuccessAt) && current - previousSuccessAt <= 2 * intervalMs;
+    const generalContinuousCoverage = Number.isFinite(previousSuccessAt)
+      && current - previousSuccessAt <= 2 * intervalMs;
+    const previousWeb3SuccessAt = Date.parse(web3Health?.lastSuccessAt || "");
+    const web3ContinuousCoverage = Number.isFinite(previousWeb3SuccessAt)
+      && current - previousWeb3SuccessAt <= 2 * web3DeveloperPollIntervalMs;
     const wasInitialized = Boolean(state.developerDocs.initializedAt);
-    const failures = [];
-    let successes = 0;
-    const results = await Promise.allSettled(BINANCE_GENERAL_DEVELOPER_DOC_URLS.map(async (url) => {
+    const wasWeb3Initialized = Boolean(state.developerDocs.web3InitializedAt);
+    state.developerDocs.sourceControls ||= {};
+    const sourceControlKey = () => JSON.stringify(Object.entries(state.developerDocs.sourceControls)
+      .map(([url, control]) => [url, control.status, control.reason, control.blockedUntil]));
+    const previousSourceControlKey = sourceControlKey();
+
+    const fetchDeveloperPages = (urls) => Promise.allSettled(urls.map(async (url) => {
       const previous = state.developerDocs.pages[url];
       const headers = { accept: "text/plain,text/markdown;q=0.9,*/*;q=0.1", "user-agent": "robinhood-launchpad-monitor/0.1" };
-      if (previous?.etag) headers["if-none-match"] = previous.etag;
-      if (previous?.lastModified) headers["if-modified-since"] = previous.lastModified;
-      const response = await fetchImpl(url, { headers, signal: AbortSignal.timeout(12_000) });
-      if (response.status === 304) return { url, notModified: true };
+      const compatiblePrevious = previous?.snapshotVersion === BINANCE_DEVELOPER_SNAPSHOT_VERSION;
+      if (compatiblePrevious && previous?.etag) headers["if-none-match"] = previous.etag;
+      if (compatiblePrevious && previous?.lastModified) headers["if-modified-since"] = previous.lastModified;
+      const response = await controlledSourceFetch(state.developerDocs, url, { headers, signal: AbortSignal.timeout(12_000) });
+      if (response.status === 304) {
+        if (!compatiblePrevious) throw new Error(`${url} returned HTTP 304 without a current snapshot baseline`);
+        return { url, notModified: true, snapshotVersion: BINANCE_DEVELOPER_SNAPSHOT_VERSION };
+      }
       if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`);
       const markdown = await response.text();
       const snapshot = extractBinanceDeveloperSignalSnapshot(markdown);
@@ -3233,6 +3375,7 @@ export function createBinanceMonitor(config, dependencies = {}) {
       return {
         url,
         ...snapshot,
+        snapshotVersion: BINANCE_DEVELOPER_SNAPSHOT_VERSION,
         // Ordering-only documentation edits must not look like a product change.
         semanticHash: hash([...snapshot.signals].sort()),
         etag: responseHeader(response, "etag"),
@@ -3241,9 +3384,16 @@ export function createBinanceMonitor(config, dependencies = {}) {
       };
     }));
 
+    const [generalResults, web3Results] = await Promise.all([
+      generalDue ? fetchDeveloperPages(BINANCE_GENERAL_DEVELOPER_DOC_URLS) : Promise.resolve([]),
+      web3Due ? fetchDeveloperPages(web3DeveloperDocUrls) : Promise.resolve([]),
+    ]);
+
     const processDeveloperPage = async ({
       url,
       currentPage,
+      continuousCoverage,
+      coverageWindowMs,
       sourceId = "binance_developer_docs",
       sourceName = "Binance Developer 官方文档",
     }) => {
@@ -3252,38 +3402,52 @@ export function createBinanceMonitor(config, dependencies = {}) {
         if (previous) previous.checkedAt = nowValue;
         return;
       }
-      const previousSignals = Array.isArray(previous?.signals) ? previous.signals : [];
+      const compatiblePrevious = currentPage.snapshotVersion === BINANCE_DEVELOPER_SNAPSHOT_VERSION
+        && previous?.snapshotVersion === currentPage.snapshotVersion;
+      const previousSignals = compatiblePrevious && Array.isArray(previous?.signals) ? previous.signals : [];
       const previousSignalSet = new Set(previousSignals);
       const currentSignalSet = new Set(currentPage.signals);
-      const saturated = Boolean(previous && (
+      const saturated = Boolean(compatiblePrevious && (
         previous.truncated === true
         || previousSignals.length >= 1_200
         || currentPage.truncated === true
         || currentPage.signals.length >= 1_200
       ));
-      const added = previous ? currentPage.signals.filter((line) => !previousSignalSet.has(line)).slice(0, 8) : [];
-      const removed = previous && !saturated
-        ? previousSignals.filter((line) => !currentSignalSet.has(line)).slice(0, 8)
+      const added = compatiblePrevious ? currentPage.signals.filter((line) => !previousSignalSet.has(line)) : [];
+      const removed = compatiblePrevious && !saturated
+        ? previousSignals.filter((line) => !currentSignalSet.has(line))
         : [];
       const profile = classifyDeveloperDelta(url, added, removed);
-      const previousSnapshot = previous?.displaySnapshot || (previous
+      // Filter the complete bounded snapshot before applying the card budget.
+      // Cosmetic edits at the beginning must not hide a later API change.
+      const eventAdded = (profile.web3Product ? profile.materialAdded : added).slice(0, 8);
+      const eventRemoved = (profile.web3Product ? profile.materialRemoved : removed).slice(0, 8);
+      const previousSnapshot = compatiblePrevious ? (previous?.displaySnapshot || (previous
         ? developerDisplaySnapshot(previousSignals, previous)
-        : null);
+        : null)) : null;
       const currentSnapshot = developerDisplaySnapshot(currentPage.signals, currentPage);
-      if (previous
+      const previousCoverageAt = Date.parse(previous?.checkedAt || "");
+      const pageContinuousCoverage = Number.isFinite(previousCoverageAt)
+        && current - previousCoverageAt <= coverageWindowMs;
+      // Fresh source coverage is independent of outbox acceptance. Keep the
+      // old content/ETag on delivery failure, but let a later retry know this
+      // page was observed successfully rather than aging out the event.
+      if (previous) previous.checkedAt = nowValue;
+      if (compatiblePrevious
         && continuousCoverage
+        && pageContinuousCoverage
         && previous.semanticHash !== currentPage.semanticHash
-        && (added.length || removed.length)
+        && (eventAdded.length || eventRemoved.length)
         && profile.relevant) {
-        const critical = added.some((line) => BREAKING_API_CHANGE.test(line)
+        const critical = eventAdded.some((line) => BREAKING_API_CHANGE.test(line)
           || SECURITY_OR_EMERGENCY.test(line)
           || BINANCE_SOCIAL_TRADING_CONTEXT.test(line))
-          || removed.some((line) => BREAKING_API_CHANGE.test(line)
+          || eventRemoved.some((line) => BREAKING_API_CHANGE.test(line)
             || SECURITY_OR_EMERGENCY.test(line)
             || BINANCE_SOCIAL_TRADING_CONTEXT.test(line));
         const keyChanges = [
-          ...added,
-          ...removed.map((line) => `Removed: ${line}`),
+          ...eventAdded,
+          ...eventRemoved.map((line) => `Removed: ${line}`),
         ];
         const strong = profile.strong || critical;
         await deliver({
@@ -3302,14 +3466,22 @@ export function createBinanceMonitor(config, dependencies = {}) {
           title: `${profile.label} 官方更新`,
           keyChanges,
           factSummary: keyChanges.join("；"),
-          addedSignals: added,
-          removedSignals: removed,
+          addedSignals: eventAdded,
+          removedSignals: eventRemoved,
           changeType: "revised",
           comparisonBasis: saturated ? "bounded_additions_only" : "exact_snapshot",
           ...(saturated ? { removalInferenceSuppressed: true } : {}),
           previousSnapshot,
           currentSnapshot,
           changedFields: changedSnapshotFields(previousSnapshot, currentSnapshot),
+          ...(profile.web3Product ? {
+            developerChange: {
+              classification: "product_feature",
+              productFeature: true,
+              substantive: true,
+              category: "web3_product",
+            },
+          } : {}),
           strong,
           source: { id: sourceId, name: sourceName, url },
           url,
@@ -3321,6 +3493,7 @@ export function createBinanceMonitor(config, dependencies = {}) {
         });
       }
       state.developerDocs.pages[url] = {
+        snapshotVersion: currentPage.snapshotVersion,
         semanticHash: currentPage.semanticHash,
         signals: currentPage.signals,
         totalSignals: currentPage.totalSignals,
@@ -3337,28 +3510,67 @@ export function createBinanceMonitor(config, dependencies = {}) {
       await save();
     };
 
-    for (let index = 0; index < results.length; index += 1) {
-      const result = results[index];
-      const url = BINANCE_GENERAL_DEVELOPER_DOC_URLS[index];
-      if (result.status === "rejected") {
-        failures.push(new Error(`${url}: ${result.reason?.message || result.reason}`));
-        continue;
+    const processDeveloperGroup = async ({ urls, results, groupHealth, continuousCoverage, coverageWindowMs, label }) => {
+      const failures = [];
+      let successes = 0;
+      for (let index = 0; index < results.length; index += 1) {
+        const result = results[index];
+        const url = urls[index];
+        if (result.status === "rejected") {
+          failures.push(prefixedSourceError(url, result.reason));
+          continue;
+        }
+        try {
+          await processDeveloperPage({ url, currentPage: result.value, continuousCoverage, coverageWindowMs });
+          successes += 1;
+        } catch (error) {
+          failures.push(prefixedSourceError(url, error));
+        }
       }
-      successes += 1;
-      const currentPage = result.value;
-      await processDeveloperPage({ url, currentPage });
+      if (!successes) {
+        markFailed(groupHealth, failures[0] || new Error(`all ${label} probes failed`), nowValue);
+      } else if (failures.length) {
+        markDegraded(groupHealth, failures, nowValue);
+        groupHealth.lastSuccessAt = nowValue;
+        groupHealth.pagesChecked = successes;
+      } else {
+        markHealthy(groupHealth, nowValue, { pagesChecked: successes });
+      }
+      groupHealth.pagesChecked = successes;
+      groupHealth.pagesTotal = urls.length;
+      const blocked = urls.map((url) => state.developerDocs.sourceControls[url])
+        .filter((control) => Date.parse(control?.blockedUntil || "") > current);
+      groupHealth.pagesBlocked = blocked.length;
+      groupHealth.rateLimited = blocked.some((control) => control.sourceRateLimited === true);
+      groupHealth.wafBlocked = blocked.some((control) => ["waf_challenge", "http_403"].includes(control.reason));
+      if (blocked.length) groupHealth.nextRetryAt = blocked.map((control) => control.blockedUntil).sort()[0];
+      else delete groupHealth.nextRetryAt;
+    };
+
+    if (generalDue) {
+      await processDeveloperGroup({
+        urls: BINANCE_GENERAL_DEVELOPER_DOC_URLS,
+        results: generalResults,
+        groupHealth: health,
+        continuousCoverage: generalContinuousCoverage,
+        coverageWindowMs: 2 * intervalMs,
+        label: "Binance Developer",
+      });
+      state.developerDocs.initializedAt ||= nowValue;
     }
-    state.developerDocs.initializedAt ||= nowValue;
-    if (!successes) {
-      markFailed(health, failures[0] || new Error("all Binance Developer probes failed"), nowValue);
-    } else if (failures.length) {
-      markDegraded(health, failures, nowValue);
-      health.lastSuccessAt = nowValue;
-      health.pagesChecked = successes;
-    } else {
-      markHealthy(health, nowValue, { pagesChecked: successes });
+    if (web3Due) {
+      await processDeveloperGroup({
+        urls: web3DeveloperDocUrls,
+        results: web3Results,
+        groupHealth: web3Health,
+        continuousCoverage: web3ContinuousCoverage,
+        coverageWindowMs: 2 * web3DeveloperPollIntervalMs,
+        label: "Binance Web3 Developer",
+      });
+      state.developerDocs.web3InitializedAt ||= nowValue;
     }
-    if (!wasInitialized) await save();
+    if ((generalDue && !wasInitialized) || (web3Due && !wasWeb3Initialized)
+      || previousSourceControlKey !== sourceControlKey()) await save();
     else await save.telemetry();
   }
 
@@ -3905,7 +4117,7 @@ export function createBinanceMonitor(config, dependencies = {}) {
     if (control.lastLoggedReason !== reason
       || !Number.isFinite(priorLoggedAt)
       || current - priorLoggedAt >= logCooldownMs) {
-      logger.error(`[binance][agent-native-fast][source-circuit] ${url} ${reason}; retry at ${blockedUntil}`);
+      logger.error(`[binance][source-circuit] ${url} ${reason}; retry at ${blockedUntil}`);
       control.lastLoggedAt = observedAt;
       control.lastLoggedReason = reason;
     }
@@ -3985,13 +4197,17 @@ export function createBinanceMonitor(config, dependencies = {}) {
       accept: "text/plain,text/markdown;q=0.9,*/*;q=0.1",
       "user-agent": "robinhood-launchpad-monitor/0.1",
     };
-    if (previous?.etag) headers["if-none-match"] = previous.etag;
-    if (previous?.lastModified) headers["if-modified-since"] = previous.lastModified;
+    const compatiblePrevious = previous?.snapshotVersion === BINANCE_DEVELOPER_SNAPSHOT_VERSION;
+    if (compatiblePrevious && previous?.etag) headers["if-none-match"] = previous.etag;
+    if (compatiblePrevious && previous?.lastModified) headers["if-modified-since"] = previous.lastModified;
     const response = await controlledSourceFetch(state, url, {
       headers,
       signal: AbortSignal.timeout(agentNativeRequestTimeoutMs),
     }, { wafAware: true });
-    if (response?.status === 304) return { url, notModified: true };
+    if (response?.status === 304) {
+      if (!compatiblePrevious) throw new Error(`${url} returned HTTP 304 without a current snapshot baseline`);
+      return { url, notModified: true, snapshotVersion: BINANCE_DEVELOPER_SNAPSHOT_VERSION };
+    }
     if (!response?.ok) throw new Error(`${url} returned HTTP ${response?.status ?? "unknown"}`);
     const markdown = await response.text();
     const snapshot = extractBinanceDeveloperSignalSnapshot(markdown);
@@ -4002,6 +4218,7 @@ export function createBinanceMonitor(config, dependencies = {}) {
     return {
       url,
       ...snapshot,
+      snapshotVersion: BINANCE_DEVELOPER_SNAPSHOT_VERSION,
       semanticHash: hash([...snapshot.signals].sort()),
       etag: responseHeader(response, "etag"),
       lastModified: responseHeader(response, "last-modified"),
@@ -4057,23 +4274,27 @@ export function createBinanceMonitor(config, dependencies = {}) {
       await save.telemetry();
       return;
     }
-    const previousSignals = Array.isArray(previous?.signals) ? previous.signals : [];
+    const compatiblePrevious = currentPage.snapshotVersion === BINANCE_DEVELOPER_SNAPSHOT_VERSION
+      && previous?.snapshotVersion === currentPage.snapshotVersion;
+    const previousSignals = compatiblePrevious && Array.isArray(previous?.signals) ? previous.signals : [];
     const previousSignalSet = new Set(previousSignals);
     const currentSignalSet = new Set(currentPage.signals);
-    const saturated = Boolean(previous && (
+    const saturated = Boolean(compatiblePrevious && (
       previous.truncated === true
       || previousSignals.length >= 1_200
       || currentPage.truncated === true
       || currentPage.signals.length >= 1_200
     ));
-    const added = previous ? currentPage.signals.filter((line) => !previousSignalSet.has(line)).slice(0, 8) : [];
-    const removed = previous && !saturated
-      ? previousSignals.filter((line) => !currentSignalSet.has(line)).slice(0, 8)
+    const added = compatiblePrevious ? currentPage.signals.filter((line) => !previousSignalSet.has(line)) : [];
+    const removed = compatiblePrevious && !saturated
+      ? previousSignals.filter((line) => !currentSignalSet.has(line))
       : [];
     const profile = classifyDeveloperDelta(url, added, removed);
-    const previousSnapshot = previous?.displaySnapshot || (previous
+    const eventAdded = (profile.web3Product ? profile.materialAdded : added).slice(0, 8);
+    const eventRemoved = (profile.web3Product ? profile.materialRemoved : removed).slice(0, 8);
+    const previousSnapshot = compatiblePrevious ? (previous?.displaySnapshot || (previous
       ? developerDisplaySnapshot(previousSignals, previous)
-      : null);
+      : null)) : null;
     const currentSnapshot = developerDisplaySnapshot(currentPage.signals, currentPage);
     const observedMs = Date.parse(observedAt);
     const previousCoverageAt = Date.parse(previous?.checkedAt
@@ -4085,18 +4306,19 @@ export function createBinanceMonitor(config, dependencies = {}) {
     );
     const continuousCoverage = Number.isFinite(previousCoverageAt)
       && observedMs - previousCoverageAt <= effectiveCoverageWindowMs;
-    if (previous
+    if (previous) previous.checkedAt = observedAt;
+    if (compatiblePrevious
       && continuousCoverage
       && previous.semanticHash !== currentPage.semanticHash
-      && (added.length || removed.length)
+      && (eventAdded.length || eventRemoved.length)
       && profile.relevant) {
-      const critical = added.some((line) => BREAKING_API_CHANGE.test(line)
+      const critical = eventAdded.some((line) => BREAKING_API_CHANGE.test(line)
         || SECURITY_OR_EMERGENCY.test(line)
         || BINANCE_SOCIAL_TRADING_CONTEXT.test(line))
-        || removed.some((line) => BREAKING_API_CHANGE.test(line)
+        || eventRemoved.some((line) => BREAKING_API_CHANGE.test(line)
           || SECURITY_OR_EMERGENCY.test(line)
           || BINANCE_SOCIAL_TRADING_CONTEXT.test(line));
-      const keyChanges = [...added, ...removed.map((line) => `Removed: ${line}`)];
+      const keyChanges = [...eventAdded, ...eventRemoved.map((line) => `Removed: ${line}`)];
       const strong = profile.strong || critical;
       await deliver({
         type: "binance_official_update",
@@ -4114,14 +4336,22 @@ export function createBinanceMonitor(config, dependencies = {}) {
         title: `${profile.label} 官方更新`,
         keyChanges,
         factSummary: keyChanges.join("；"),
-        addedSignals: added,
-        removedSignals: removed,
+        addedSignals: eventAdded,
+        removedSignals: eventRemoved,
         changeType: "revised",
         comparisonBasis: saturated ? "bounded_additions_only" : "exact_snapshot",
         ...(saturated ? { removalInferenceSuppressed: true } : {}),
         previousSnapshot,
         currentSnapshot,
         changedFields: changedSnapshotFields(previousSnapshot, currentSnapshot),
+        ...(profile.web3Product ? {
+          developerChange: {
+            classification: "product_feature",
+            productFeature: true,
+            substantive: true,
+            category: "web3_product",
+          },
+        } : {}),
         strong,
         fastLane: "agent_native",
         deliverySla,
@@ -4135,6 +4365,7 @@ export function createBinanceMonitor(config, dependencies = {}) {
       });
     }
     const nextPage = {
+      snapshotVersion: currentPage.snapshotVersion,
       semanticHash: currentPage.semanticHash,
       signals: currentPage.signals,
       totalSignals: currentPage.totalSignals,
@@ -4149,6 +4380,7 @@ export function createBinanceMonitor(config, dependencies = {}) {
       displaySnapshot: currentSnapshot,
     };
     const pageChanged = !previous
+      || previous.snapshotVersion !== nextPage.snapshotVersion
       || previous.semanticHash !== nextPage.semanticHash
       || JSON.stringify(previous.signals || []) !== JSON.stringify(nextPage.signals || [])
       || previous.totalSignals !== nextPage.totalSignals
@@ -4723,6 +4955,7 @@ export function createBinanceMonitor(config, dependencies = {}) {
     config.binanceMemeRushPollIntervalMs ?? 5_000,
     config.binanceSquarePollIntervalMs ?? 10_000,
     config.binanceDeveloperPollIntervalMs ?? 30_000,
+    web3DeveloperPollIntervalMs,
     config.binanceAnnouncementPollIntervalMs ?? 15_000,
     config.binanceLaunchpoolPollIntervalMs ?? 15_000,
   ));
@@ -4757,6 +4990,7 @@ export function createBinanceMonitor(config, dependencies = {}) {
     mainSchedulerCheckpointFile,
     agentNativeStateFile,
     agentNativeCheckpointFile,
+    web3DeveloperPollIntervalMs,
     agentNativePollIntervalMs,
     agentNativeLocalDetectionBudgetMs: Math.max(
       agentNativeDeveloperPerUrlCadenceMs + agentNativeRequestTimeoutMs,

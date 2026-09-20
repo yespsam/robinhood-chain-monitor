@@ -1,5 +1,11 @@
 # macOS 本机稳定性守护
 
+## 按需检查全部功能
+
+在项目目录运行 `npm run health`，读取 launchd 服务、对应 PID 的 runtime heartbeat、各监控源及 durable outbox，并刷新 `data/health.json`。`npm run health -- --no-write` 不落盘；`--json` 查看完整语义诊断。这个报告是按需快照，判断当前状态时应重新运行，不能把旧 `checkedAt` 当实时状态。
+
+诊断不会启动/重启任何服务，不发送 Telegram 或外部心跳。数据源降级与进程失活分别报告；被筛选规则全部拒绝的空 Fomo 名单保持“覆盖不足”，其停止推进的链游标不会单独触发进程失活结论。现有 watchdog 继续使用独立 runtime heartbeat，不因业务源限流重启进程。
+
 这一目录只增加三个非 root LaunchAgent，不修改现有生产监控的 plist：
 
 - `com.qohfq.robinhood-ac-sleep-guard` 执行系统自带的 `/usr/bin/caffeinate -s`。`-s` 只在交流电供电时声明 system-sleep assertion；拔掉电源后不会阻止正常休眠，也不会修改 `pmset` 的持久系统设置。

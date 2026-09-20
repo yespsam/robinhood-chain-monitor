@@ -465,10 +465,9 @@ test("Fomo-linked X call card shows the CA-wallet-X link without claiming an off
   assert.match(text, new RegExp(TOKEN, "i"));
   assert.match(text, new RegExp(WALLET, "i"));
   assert.match(text, new RegExp(`X#${X_POST_ID}`));
-  assert.match(text, /GMGN 钱包关联仅观测/);
-  assert.match(text, /非 Fomo 官方/);
-  assert.match(text, /非买入建议/);
-  assert.match(text, /not a buy recommendation/iu);
+  assert.match(text, /证据：观测钱包/u);
+  assert.match(text, /Evidence: Observed wallet/u);
+  assert.doesNotMatch(text, /风险|Risk:|勿追价|do not chase|非自动交易|no automatic trading|非买入建议|not a buy recommendation|\bT[0-2]\b/iu);
   assert.doesNotMatch(text, /Fomo 官方发布|Official Fomo publication|链上首买|zero.position/i);
   assertFomoDisplayLayout(text);
 
@@ -605,9 +604,8 @@ test("Fomo published-call Telegram card is concise, bilingual and contains only 
   assert.match(text, /callId=thesis-1001/);
   assert.equal(text.match(/英文原文：/g)?.length, 1, "only the Chinese source fact is marked as English original");
   assert.deepEqual(translationHosts, [], "strong-alert delivery must not wait on either translation provider");
-  assert.match(text, /Fomo 认证 Feed 发布；安全初筛通过，非买入建议/);
-  assert.match(text, /Authenticated Fomo feed; Safety screened; not a buy recommendation/);
   assert.match(text, /时效|延迟|发现|Time:/);
+  assert.doesNotMatch(text, /风险|Risk:|勿追价|do not chase|非自动交易|no automatic trading|非买入建议|not a buy recommendation|\bT[0-2]\b/iu);
   assert.doesNotMatch(text, /Translation unavailable|Source fact \(translation pending\)/);
   assert.doesNotMatch(text, /首次买入|首仓|零仓位|first buy|zero.position/i);
   assertFomoDisplayLayout(text);

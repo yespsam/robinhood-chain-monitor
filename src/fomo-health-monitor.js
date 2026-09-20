@@ -266,7 +266,7 @@ function evaluateCallState(config, record, nowMs, maximumAgeMs, summary, severeR
 }
 
 function evaluateXState(config, record, nowMs, maximumAgeMs, summary, severeReasons) {
-  if (config.fomoXCallEnabled !== true) return;
+  if (config.fomoXCallEnabled !== true && config.kolLaunchMonitorEnabled !== true) return;
   if (record.status !== "ok") {
     summary.x.status = "critical";
     severeReasons.add(record.status === "missing" ? "x_state_missing" : "x_state_unreadable");
@@ -284,6 +284,36 @@ function evaluateXState(config, record, nowMs, maximumAgeMs, summary, severeReas
     severeReasons.add("x_state_stale");
     return;
   }
+  const operationalStatus = String(health.operationalStatus || "unknown").trim().toLowerCase();
+  const lastOperationalSuccessAt = parsedInstant(health.lastOperationalSuccessAt, nowMs);
+  const operationalSuccessFresh = lastOperationalSuccessAt !== null
+    && nowMs - lastOperationalSuccessAt <= maximumAgeMs;
+  const consecutiveFailures = Number(health.consecutiveFailures);
+  if (!Number.isSafeInteger(consecutiveFailures) || consecutiveFailures < 0) {
+    summary.x.status = "critical";
+    severeReasons.add("x_operational_telemetry_invalid");
+    return;
+  }
+  if (operationalStatus === "error") {
+    summary.x.status = "critical";
+    severeReasons.add("x_operational_failure");
+    return;
+  }
+  if (!["healthy", "partial", "backoff", "idle"].includes(operationalStatus)) {
+    summary.x.status = "critical";
+    severeReasons.add("x_operational_telemetry_invalid");
+    return;
+  }
+  if (!operationalSuccessFresh) {
+    summary.x.status = "critical";
+    severeReasons.add("x_operational_success_stale");
+    return;
+  }
+  if (operationalStatus === "healthy" && consecutiveFailures !== 0) {
+    summary.x.status = "critical";
+    severeReasons.add("x_operational_telemetry_invalid");
+    return;
+  }
   if (eligible === 0) {
     summary.x.status = "critical";
     severeReasons.add("x_no_eligible_targets");
@@ -298,7 +328,9 @@ function evaluateXState(config, record, nowMs, maximumAgeMs, summary, severeReas
   if (ratio < 0.5) {
     summary.x.status = "critical";
     severeReasons.add("x_low_live_coverage");
-  } else if (ratio < 1 || String(health.status || "").toLowerCase() === "degraded") {
+  } else if (ratio < 1
+    || String(health.status || "").toLowerCase() === "degraded"
+    || operationalStatus !== "healthy") {
     // A single-handle transport wobble remains visible in state but is not an
     // incident trigger. Only loss of at least half the effective live roster
     // is severe enough to open a Telegram transition.

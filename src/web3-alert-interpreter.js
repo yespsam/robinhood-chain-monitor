@@ -436,10 +436,191 @@ export function interpretTwitterWeb3Update(event, language = "zh") {
 }
 
 function officialEndpoints(event) {
-  const corpus = [event?.title, ...values(event?.keyChanges), ...values(event?.signal?.keyChanges)].map(text).join(" \n ");
+  const corpus = [
+    event?.title,
+    ...values(event?.addedSignals),
+    ...values(event?.keyChanges),
+    ...values(event?.signal?.keyChanges),
+  ].map(text).join(" \n ");
   const endpoints = [...corpus.matchAll(/\b(?:GET|POST|PUT|PATCH|DELETE)\s+`?\\?<*\/?[A-Za-z0-9_{}<>.\\\-/]+/gi)]
     .map((match) => match[0].replaceAll("\\", "").replaceAll("`", ""));
   return { corpus, endpoints: [...new Set(endpoints)] };
+}
+
+const BINANCE_WEB3_DEVELOPER_CATEGORIES = new Set([
+  "web3_dapp",
+  "web3_connect",
+  "web3_task_verification",
+  "web3_open_platform",
+  "agentic_wallet",
+  "wallet_skills",
+]);
+
+function exactAddedDeveloperSignals(event) {
+  const signals = [
+    ...values(event?.addedSignals),
+    ...values(event?.keyChanges),
+    ...values(event?.signal?.keyChanges),
+  ];
+  const unique = [];
+  const seen = new Set();
+  for (const value of signals) {
+    const signal = text(value).replace(/^Added\s*:\s*/i, "");
+    if (!signal
+      || /^Removed\s*:/i.test(signal)
+      || /^(?:signalDigest|semanticHash|contentHash)\s*:/i.test(signal)
+      || seen.has(signal)) continue;
+    seen.add(signal);
+    unique.push(signal);
+  }
+  return unique;
+}
+
+function developerDocEntry(signals) {
+  for (const signal of signals) {
+    const markdown = signal.match(/\[([^\]]+)\]\(([^)]+)\)/u);
+    if (markdown) return { label: text(markdown[1]), path: text(markdown[2]) };
+    const cleaned = signal.replace(/[`*_~]/g, "");
+    const parenthesized = cleaned.match(/^(.+?)\s+\((\/?(?:en\/)?docs\/[^)\s]+|\/[^)\s]+\.md)\)$/iu);
+    if (parenthesized) return { label: text(parenthesized[1]), path: text(parenthesized[2]) };
+  }
+  return null;
+}
+
+function developerTableRow(signals) {
+  for (const signal of signals) {
+    if (!signal.includes("|")) continue;
+    const cells = signal.split("|")
+      .map((value) => text(value).replace(/^`|`$/g, ""))
+      .filter(Boolean);
+    if (cells.length < 2 || cells.every((cell) => /^:?-{3,}:?$/.test(cell))) continue;
+    return { name: cells[0], detail: cells.slice(1).join(", ") };
+  }
+  return null;
+}
+
+function developerProvider(signals, entry) {
+  const linkedProvider = /\bProvider\b/i.test(entry?.label || "") ? entry.label : null;
+  if (linkedProvider) return linkedProvider;
+  const corpus = signals.join(" \n ");
+  return corpus.match(/\b[A-Z][A-Za-z0-9.+_-]*(?:\s+[A-Z][A-Za-z0-9.+_-]*){0,2}\s+Provider\b/u)?.[0] || null;
+}
+
+function developerCapabilities(source, language) {
+  const zh = language === "zh";
+  // Product names and URL paths identify the source; they do not prove a
+  // described capability (for example /web3-connect/ is not wallet support).
+  const narrative = text(source)
+    .replace(/\[[^\]]+\]\([^)]+\)/gu, "")
+    .replace(/(?:https?:\/\/|\/)[^\s)]+/gu, "")
+    .replace(/\bWeb3\s+Connect\b/gi, "");
+  const capabilities = [
+    { pattern: /wallet management|manage(?:ment)? wallets?/i, zh: "钱包管理", en: "wallet management" },
+    { pattern: /token transfers?|send(?:ing)? tokens?/i, zh: "代币转账", en: "token transfers" },
+    { pattern: /market swaps?|market swap/i, zh: "市价兑换", en: "market swaps" },
+    { pattern: /\bquotes?\b/i, zh: "报价", en: "quotes" },
+    { pattern: /limit orders?/i, zh: "限价单", en: "limit orders" },
+    { pattern: /order tracking|track(?:ing)? orders?/i, zh: "订单跟踪", en: "order tracking" },
+    { pattern: /connect(?:ing)?(?:\s+(?:a\s+)?wallet)?/i, zh: "钱包连接", en: "wallet connection" },
+    { pattern: /sign(?:ing)? transactions?/i, zh: "交易签名", en: "transaction signing" },
+  ].filter((item) => item.pattern.test(narrative)).map((item) => zh ? item.zh : item.en);
+  const unique = [...new Set(capabilities)];
+  if (zh || unique.length < 2) return unique.join(zh ? "、" : "");
+  if (unique.length === 2) return `${unique[0]} and ${unique[1]}`;
+  return `${unique.slice(0, -1).join(", ")}, and ${unique.at(-1)}`;
+}
+
+const BINANCE_WEB3_DEVELOPER_LABELS = {
+  web3_dapp: "Web3 DApp",
+  web3_connect: "Web3 Connect",
+  web3_task_verification: "Web3 Task Verification",
+  web3_open_platform: "Web3 Open Platform",
+  agentic_wallet: "Agentic Wallet",
+  wallet_skills: "Wallet Skills",
+};
+
+function categoryFallbackFact(category, signal, language) {
+  const zh = language === "zh";
+  const label = BINANCE_WEB3_DEVELOPER_LABELS[category];
+  return zh
+    ? `${label} 官方文档新增：${signal}`
+    : `${label} official docs added: ${signal}`;
+}
+
+function interpretCategorizedBinanceWeb3DeveloperUpdate(event, language) {
+  const category = text(event?.signal?.category).toLowerCase();
+  if (!BINANCE_WEB3_DEVELOPER_CATEGORIES.has(category)) return null;
+  const signals = exactAddedDeveloperSignals(event);
+  const zh = language === "zh";
+  const removed = [...new Set([
+    ...values(event?.removedSignals),
+    ...values(event?.keyChanges).filter((value) => /^\s*Removed\s*:/i.test(text(value))),
+  ].map((value) => text(value).replace(/^Removed\s*:\s*/i, "")).filter(Boolean))];
+  if (removed.length) {
+    const label = BINANCE_WEB3_DEVELOPER_LABELS[category];
+    const before = removed.slice(0, 2).join(zh ? "；" : "; ");
+    const after = signals.slice(0, 2).join(zh ? "；" : "; ");
+    // A changed line is not a newly launched capability. Mirror the exact
+    // documented values without inferring that the endpoint itself vanished.
+    return after
+      ? zh ? `${label} 文档修订：原 ${before}；现 ${after}`
+        : `${label} docs revised: before ${before}; now ${after}`
+      : zh ? `${label} 官方文档移除：${before}`
+        : `${label} official docs removed: ${before}`;
+  }
+  if (!signals.length) return null;
+  const entry = developerDocEntry(signals);
+  const row = developerTableRow(signals);
+  const endpoint = officialEndpoints({ keyChanges: signals }).endpoints[0] || null;
+  const reference = entry?.path
+    ? zh ? `；文档 ${entry.path}` : `; docs ${entry.path}`
+    : "";
+
+  if (category === "web3_dapp" && entry) return zh
+    ? `Web3 DApp 新增 ${entry.label}；涵盖 DApp 接入、自测与上架${reference}`
+    : `Web3 DApp added ${entry.label} for DApp integration, self-testing, and listing${reference}`;
+
+  if (category === "web3_connect") {
+    const provider = developerProvider(signals, entry);
+    const capabilities = developerCapabilities(signals.join(" "), language);
+    if (provider) return capabilities
+      ? zh ? `Web3 Connect 新增 ${provider}；支持${capabilities}${reference}`
+        : `Web3 Connect added ${provider} with ${capabilities}${reference}`
+      : zh ? `Web3 Connect 文档新增 ${provider}${reference}`
+        : `Web3 Connect docs added ${provider}${reference}`;
+    return capabilities
+      ? zh ? `Web3 Connect 支持标准${capabilities}`
+        : `Web3 Connect supports standard ${capabilities}`
+      : categoryFallbackFact(category, signals[0], language);
+  }
+
+  if (category === "web3_task_verification" && endpoint) return zh
+    ? `Web3 Task Verification 新增任务完成验证 API：${endpoint}`
+    : `Web3 Task Verification added a task-completion API: ${endpoint}`;
+
+  if (category === "web3_open_platform" && entry) return zh
+    ? `Web3 Open Platform 新增 ${entry.label}；说明 DApp 自助上架流程${reference}`
+    : `Web3 Open Platform added ${entry.label} for DApp self-listing${reference}`;
+
+  if (category === "agentic_wallet" && row) {
+    const capabilities = developerCapabilities(row.detail, language);
+    return capabilities
+      ? (zh
+          ? `Agentic Wallet 的 ${row.name} 能力包括${capabilities}`
+          : `Agentic Wallet ${row.name} supports ${capabilities}`)
+      : categoryFallbackFact(category, signals[0], language);
+  }
+
+  if (category === "wallet_skills" && row) {
+    const capabilities = developerCapabilities(row.detail, language);
+    return capabilities
+      ? (zh
+          ? `Wallet Skills 新增 ${row.name}；覆盖${capabilities}`
+          : `Wallet Skills added ${row.name} for ${capabilities}`)
+      : categoryFallbackFact(category, signals[0], language);
+  }
+
+  return categoryFallbackFact(category, signals[0], language);
 }
 
 function utcMinute(value) {
@@ -595,6 +776,8 @@ export function interpretBinanceOfficialUpdate(event, language = "zh") {
     return null;
   }
   if (event?.kind !== "developer_update") return null;
+  const categorizedWeb3 = interpretCategorizedBinanceWeb3DeveloperUpdate(event, language);
+  if (categorizedWeb3) return categorizedWeb3;
   const { corpus, endpoints } = officialEndpoints(event);
   const endpoint = endpoints[0] || null;
   if (/prediction|otc\/blocktrade|blocktrade/i.test(corpus)) {

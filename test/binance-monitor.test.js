@@ -11,6 +11,7 @@ import {
   BINANCE_AGENT_OS_PAGE_URL,
   BINANCE_AGENT_OS_READER_URL,
   BINANCE_DEVELOPER_DOC_URLS,
+  BINANCE_WEB3_DEVELOPER_DOC_URLS,
   BINANCE_LAUNCHPOOL_URLS,
   BINANCE_MEME_RUSH_URL,
   BINANCE_SQUARE_FEED_URL,
@@ -700,6 +701,48 @@ test("parses the official announcement stream, Square identity, and Developer se
   assert.ok(structured.signals.includes("MCP endpoint: https://agent.binance.com/mcp/agentic"));
   assert.ok(structured.signals.includes("There is no withdrawal scope for the Agentic sub-account."));
   assert.equal(structured.truncated, false);
+});
+
+test("curates only direct official Binance Web3 Markdown documents", () => {
+  assert.deepEqual(BINANCE_WEB3_DEVELOPER_DOC_URLS, [
+    "https://developers.binance.com/en/docs/products/web3-dapp/self-testing.md",
+    "https://developers.binance.com/en/docs/products/web3-dapp/self-listing.md",
+    "https://developers.binance.com/en/docs/products/web3-dapp/operation-rules.md",
+    "https://developers.binance.com/en/docs/products/web3-connect/introduction.md",
+    "https://developers.binance.com/en/docs/products/web3-task-verification/apis.md",
+    "https://developers.binance.com/en/docs/products/web3-task-verification/on-chain-verification.md",
+    "https://developers.binance.com/en/docs/products/open-platform/self-testing-op.md",
+    "https://developers.binance.com/en/docs/products/open-platform/self-listing-op.md",
+    "https://developers.binance.com/en/docs/products/agentic-wallet/welcome.md",
+    "https://developers.binance.com/en/docs/products/wallet-skills/overview.md",
+  ]);
+  for (const value of BINANCE_WEB3_DEVELOPER_DOC_URLS) {
+    const url = new URL(value);
+    assert.equal(url.protocol, "https:");
+    assert.equal(url.hostname, "developers.binance.com");
+    assert.match(url.pathname, /^\/en\/docs\/products\/.+\.md$/);
+    assert.doesNotMatch(url.pathname, /airdrop|campaign|activity/i);
+  }
+  assert.equal(new Set(BINANCE_WEB3_DEVELOPER_DOC_URLS).size, 10);
+});
+
+test("a saturated Developer directory keeps Binance Wallet Web3 and discovered provider paths", () => {
+  const ordinary = Array.from({ length: 1_200 }, (_, index) => (
+    `- [Ordinary document ${index}](/en/docs/products/ordinary-${index}.md)`
+  ));
+  const web3Paths = [
+    "DApp Self-Listing Manual (/en/docs/products/web3-dapp/self-listing.md)",
+    "Solana Provider (/en/docs/products/web3-connect/solana-provider.md)",
+    "Binance Agentic Wallet (/en/docs/products/agentic-wallet/welcome.md)",
+  ];
+  const snapshot = extractBinanceDeveloperSignalSnapshot([
+    ...ordinary,
+    ...web3Paths.map((value) => `- [${value.split(" (")[0]}](${value.match(/\(([^)]+)\)/)[1]})`),
+  ].join("\n"));
+
+  assert.equal(snapshot.truncated, true);
+  assert.equal(snapshot.totalSignals, 1_203);
+  for (const value of web3Paths) assert.ok(snapshot.signals.includes(value), value);
 });
 
 test("announcement stream reports polling fallback for missing credentials without opening a fake WebSocket", async (t) => {
@@ -1742,6 +1785,238 @@ test("Developer changelogs consume terminal scope rejections while preserving ex
   assert.equal(delivered.length, 2, "pure ordering changes are not product updates");
 });
 
+test("Web3 Developer pages baseline silently, retry durably, classify six products, and ignore presentation edits", async (t) => {
+  const dataDir = await fixture(t);
+  let stage = 0;
+  let current = Date.parse("2026-09-08T01:00:00Z");
+  const attempted = [];
+  const queued = [];
+  const web3Requests = [];
+  const representativeUrls = [
+    BINANCE_WEB3_DEVELOPER_DOC_URLS.find((url) => url.includes("/web3-dapp/")),
+    BINANCE_WEB3_DEVELOPER_DOC_URLS.find((url) => url.includes("/web3-connect/")),
+    BINANCE_WEB3_DEVELOPER_DOC_URLS.find((url) => url.includes("/web3-task-verification/")),
+    BINANCE_WEB3_DEVELOPER_DOC_URLS.find((url) => url.includes("/open-platform/")),
+    BINANCE_WEB3_DEVELOPER_DOC_URLS.find((url) => url.includes("/agentic-wallet/")),
+    BINANCE_WEB3_DEVELOPER_DOC_URLS.find((url) => url.includes("/wallet-skills/")),
+  ];
+  assert.ok(representativeUrls.every(Boolean));
+  const expectedCategories = new Map([
+    [representativeUrls[0], "web3_dapp"],
+    [representativeUrls[1], "web3_connect"],
+    [representativeUrls[2], "web3_task_verification"],
+    [representativeUrls[3], "web3_open_platform"],
+    [representativeUrls[4], "agentic_wallet"],
+    [representativeUrls[5], "wallet_skills"],
+  ]);
+  const retryUrl = representativeUrls[1];
+  const capability = "POST /v1/connect now supports signTransaction for the Solana provider.";
+  const presentationCopy = Array.from({ length: 12 }, (_, index) => `Documentation wording refreshed ${index}.`);
+  const web3Body = () => {
+    const baseline = ["# Binance Wallet Web3", "## Supported Providers", "- Existing EVM provider."];
+    if (stage === 0) return baseline.join("\n");
+    const reordered = [`- **${capability}**`, ...presentationCopy.map((line) => `- ${line}`), "## Supported Providers", "# Binance Wallet Web3", "- Existing EVM provider."];
+    if (stage === 1) return [...baseline, ...presentationCopy.map((line) => `- ${line}`), `- ${capability}`].join("\n");
+    if (stage === 2) return reordered.join("\n");
+    return [...reordered, "- Documentation wording refreshed on Tuesday."].join("\n");
+  };
+  const fetchImpl = async (url, options = {}) => {
+    if (BINANCE_ANNOUNCEMENT_URLS.includes(url)) return ok(announcements([]));
+    if (BINANCE_LAUNCHPOOL_URLS.includes(url)) return ok(launchpool([]));
+    if (url === BINANCE_MEME_RUSH_URL) return ok(memeRush([item()]));
+    if (url === BINANCE_AGENT_OS_PAGE_URL) {
+      return textResponse("", { status: 202, headers: { "x-amzn-waf-action": "challenge" } });
+    }
+    if (url === BINANCE_AGENT_OS_READER_URL) return textResponse(verifiedAgentOsReaderBody());
+    if (representativeUrls.includes(url)) {
+      web3Requests.push({ url, headers: { ...(options.headers || {}) } });
+      return textResponse(web3Body(), {
+        headers: {
+          etag: `"web3-${stage}"`,
+          "last-modified": new Date(current).toUTCString(),
+        },
+      });
+    }
+    if (BINANCE_DEVELOPER_DOC_URLS.includes(url)) {
+      return textResponse("# Existing developer document\n- Existing endpoint.");
+    }
+    throw new Error(`unexpected URL ${url}`);
+  };
+  let retryAttempts = 0;
+  const monitor = createBinanceMonitor({
+    ...monitorConfig(dataDir),
+    binanceDeveloperMonitorEnabled: true,
+    binanceDeveloperPollIntervalMs: 1_000,
+  }, {
+    autoStart: false,
+    agentNativeDeveloperPagesPerCycle: 4,
+    web3DeveloperDocUrls: representativeUrls,
+    web3DeveloperPollIntervalMs: 1_000,
+    memeRushTargets: [{ chainId: "56", rankType: 10 }],
+    fetchImpl,
+    now: () => current,
+    sendAlertsImpl: async (_config, event) => {
+      attempted.push(event);
+      if (event.source.url === retryUrl && retryAttempts++ === 0) {
+        return { status: "suppressed", reason: "retry_later", terminal: false };
+      }
+      queued.push(event);
+      return { status: "queued" };
+    },
+    logger: { error() {} },
+  });
+  t.after(() => monitor.stop());
+
+  assert.equal(monitor.web3DeveloperPollIntervalMs, 60_000, "production Web3 cadence has a sixty-second floor");
+  await monitor.check();
+  assert.equal(attempted.length, 0, "new Web3 pages only establish a baseline");
+  assert.ok(web3Requests.every(({ headers }) => headers["if-none-match"] == null));
+
+  stage = 1;
+  current += 60_000;
+  await monitor.check();
+  assert.equal(attempted.length, 6);
+  assert.equal(queued.length, 5);
+  const afterRetryableFailure = JSON.parse(await fs.readFile(monitor.stateFile, "utf8"));
+  assert.equal(afterRetryableFailure.developerDocs.pages[retryUrl].signals.includes(capability), false);
+  assert.equal(afterRetryableFailure._health.web3DeveloperDocs.status, "degraded");
+
+  current += 59_999;
+  await monitor.check();
+  assert.equal(attempted.length, 6, "retryable delivery does not bypass the Web3 polling floor");
+  current += 1;
+  await monitor.check();
+  assert.equal(attempted.length, 7);
+  assert.equal(queued.length, 6);
+  assert.equal(web3Requests.filter(({ url, headers }) => (
+    url === retryUrl && headers["if-none-match"] === '"web3-0"'
+  )).length, 2, "a retryable alert keeps using the last durable ETag until queue acceptance");
+
+  for (const event of queued) {
+    assert.equal(event.signal.category, expectedCategories.get(event.source.url));
+    assert.equal(event.signal.project, "binance-wallet");
+    assert.equal(event.signal.scope, "wallet");
+    assert.deepEqual(event.addedSignals, [capability]);
+    assert.deepEqual(event.developerChange, {
+      classification: "product_feature",
+      productFeature: true,
+      substantive: true,
+      category: "web3_product",
+    });
+  }
+
+  stage = 2;
+  current += 60_000;
+  await monitor.check();
+  assert.equal(attempted.length, 7, "ordering and Markdown emphasis changes do not alert");
+  stage = 3;
+  current += 60_000;
+  await monitor.check();
+  assert.equal(attempted.length, 7, "non-capability copy changes are not Web3 product events");
+});
+
+test("Web3 Developer Retry-After survives restart and a healthy sibling cannot make stale recovery realtime", async (t) => {
+  const dataDir = await fixture(t);
+  const limitedUrl = BINANCE_WEB3_DEVELOPER_DOC_URLS.find((url) => url.includes("/web3-task-verification/"));
+  const healthyUrl = BINANCE_WEB3_DEVELOPER_DOC_URLS.find((url) => url.includes("/web3-connect/"));
+  let current = Date.parse("2026-09-17T01:00:00Z");
+  let stage = 0;
+  let limitedRequests = 0;
+  let healthyRequests = 0;
+  let retryableDeliveries = 0;
+  const attempted = [];
+  const delivered = [];
+  const config = {
+    ...monitorConfig(dataDir),
+    binanceDeveloperMonitorEnabled: true,
+    binanceDeveloperPollIntervalMs: 60_000,
+  };
+  const fetchImpl = async (url) => {
+    if (BINANCE_ANNOUNCEMENT_URLS.includes(url)) return ok(announcements([]));
+    if (BINANCE_LAUNCHPOOL_URLS.includes(url)) return ok(launchpool([]));
+    if (url === BINANCE_MEME_RUSH_URL) return ok(memeRush([item()]));
+    if (url === BINANCE_AGENT_OS_PAGE_URL) return textResponse("", { status: 202 });
+    if (url === BINANCE_AGENT_OS_READER_URL) return textResponse(verifiedAgentOsReaderBody());
+    if (url === limitedUrl) {
+      limitedRequests += 1;
+      if (stage === 1) return textResponse("rate limited", { status: 429, headers: { "retry-after": "180" } });
+      const limit = stage === 0 ? 10 : stage === 2 ? 20 : 30;
+      return textResponse(`# Web3 Task Verification\n- POST /v1/verify request limit: ${limit}`, { headers: { etag: `"limit-${limit}"` } });
+    }
+    if (url === healthyUrl) {
+      healthyRequests += 1;
+      return stage === 0 ? textResponse("# Web3 Connect\n- Existing provider.") : textResponse("", { status: 304 });
+    }
+    if (BINANCE_DEVELOPER_DOC_URLS.includes(url)) return textResponse("# Existing developer document\n- Existing endpoint.");
+    throw new Error(`unexpected URL ${url}`);
+  };
+  const dependencies = {
+    autoStart: false,
+    web3DeveloperDocUrls: [limitedUrl, healthyUrl],
+    memeRushTargets: [{ chainId: "56", rankType: 10 }],
+    fetchImpl,
+    now: () => current,
+    sendAlertsImpl: async (_config, event) => {
+      attempted.push(event);
+      if (retryableDeliveries > 0) {
+        retryableDeliveries -= 1;
+        return { status: "suppressed", reason: "retry_later", terminal: false };
+      }
+      delivered.push(event);
+      return { status: "queued" };
+    },
+    logger: { error() {} },
+  };
+  let monitor = createBinanceMonitor(config, dependencies);
+  t.after(() => monitor.stop());
+  await monitor.check();
+  stage = 1;
+  current += 60_000;
+  await monitor.check();
+  let state = JSON.parse(await fs.readFile(monitor.stateFile, "utf8"));
+  assert.equal(state.developerDocs.sourceControls[limitedUrl].retryAfterMs, 180_000);
+  assert.equal(state._health.web3DeveloperDocs.pagesBlocked, 1);
+  assert.equal(state._health.web3DeveloperDocs.pagesChecked, 1);
+  assert.equal(state._health.web3DeveloperDocs.pagesTotal, 2);
+  assert.equal(state._health.web3DeveloperDocs.rateLimited, true);
+  assert.equal(state._health.web3DeveloperDocs.nextRetryAt, new Date(current + 180_000).toISOString());
+  assert.equal(limitedRequests, 2);
+  await monitor.stop();
+
+  monitor = createBinanceMonitor(config, dependencies);
+  current += 60_000;
+  await monitor.check();
+  assert.equal(limitedRequests, 2, "a restart retains the per-page upstream cooldown");
+  assert.equal(healthyRequests, 3, "unblocked sibling pages continue polling");
+  stage = 2;
+  current += 120_000;
+  await monitor.check();
+  assert.equal(limitedRequests, 3);
+  assert.equal(delivered.length, 0, "a stale recovered page silently establishes a fresh baseline");
+  state = JSON.parse(await fs.readFile(monitor.stateFile, "utf8"));
+  assert.equal(state._health.web3DeveloperDocs.status, "healthy");
+  assert.equal(state._health.web3DeveloperDocs.pagesBlocked, 0);
+  assert.equal(state._health.web3DeveloperDocs.rateLimited, false);
+  assert.equal(state._health.web3DeveloperDocs.nextRetryAt, undefined);
+
+  stage = 3;
+  retryableDeliveries = 3;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    current += 60_000;
+    await monitor.check();
+    if (attempt < 3) {
+      assert.equal(delivered.length, 0);
+      const pendingState = JSON.parse(await fs.readFile(monitor.stateFile, "utf8"));
+      assert.equal(pendingState.developerDocs.pages[limitedUrl].etag, '"limit-20"');
+    }
+  }
+  assert.equal(delivered.length, 1);
+  assert.equal(attempted.length, 4, "outbox retries remain eligible across several fresh source polling windows");
+  assert.equal(new Set(attempted.map((event) => event.eventKey)).size, 1);
+  assert.deepEqual(delivered[0].removedSignals, ["POST /v1/verify request limit: 20"]);
+  assert.deepEqual(delivered[0].addedSignals, ["POST /v1/verify request limit: 30"]);
+});
+
 test("Agent Native bodies preserve material API facts and keep verified Agent OS reader fallback healthy", async (t) => {
   const dataDir = await fixture(t);
   let stage = 0;
@@ -1880,6 +2155,86 @@ test("saturated Developer directory reports bounded additions without invented r
   assert.equal(fastState._health.agentOsPage.status, "degraded");
   assert.equal(fastState._health.agentOsPage.fallbackActive, "binance_developer_docs");
   assert.equal(fastState.pages[BINANCE_AGENT_OS_PAGE_URL], undefined);
+});
+
+test("a legacy Developer snapshot silently migrates before a real Web3 directory change alerts once", async (t) => {
+  const dataDir = await fixture(t);
+  let stage = 0;
+  let current = Date.parse("2026-09-08T02:00:00Z");
+  const delivered = [];
+  const directoryRequests = [];
+  const directoryUrl = BINANCE_DEVELOPER_DOC_URLS.find((url) => url.endsWith("/llms.txt"));
+  const preexistingWeb3Path = "DApp Self-Testing Manual (/en/docs/products/web3-dapp/self-testing.md)";
+  const newProviderPath = "Solana Provider (/en/docs/products/web3-connect/solana-provider.md)";
+  const directoryBody = () => [
+    "# Binance Developer Directory",
+    "- [Existing document](/en/docs/products/existing.md)",
+    ...(stage >= 1 ? ["- [DApp Self-Testing Manual](/en/docs/products/web3-dapp/self-testing.md)"] : []),
+    ...(stage >= 2 ? ["- [Solana Provider](/en/docs/products/web3-connect/solana-provider.md)"] : []),
+  ].join("\n");
+  const fetchImpl = async (url, options = {}) => {
+    if (BINANCE_ANNOUNCEMENT_URLS.includes(url)) return ok(announcements([]));
+    if (url === BINANCE_AGENT_OS_PAGE_URL) {
+      return textResponse("", { status: 202, headers: { "x-amzn-waf-action": "challenge" } });
+    }
+    if (url === BINANCE_AGENT_OS_READER_URL) return textResponse(verifiedAgentOsReaderBody());
+    if (BINANCE_DEVELOPER_DOC_URLS.includes(url)) {
+      if (url === directoryUrl) directoryRequests.push({ ...(options.headers || {}) });
+      return textResponse(url === directoryUrl ? directoryBody() : "# Existing developer document\n- Existing endpoint.", {
+        headers: { etag: `"directory-${stage}"`, "last-modified": new Date(current).toUTCString() },
+      });
+    }
+    throw new Error(`unexpected URL ${url}`);
+  };
+  const monitor = createBinanceMonitor({
+    ...monitorConfig(dataDir),
+    binanceDeveloperMonitorEnabled: true,
+    binanceDeveloperPollIntervalMs: 1_000,
+  }, {
+    autoStart: false,
+    agentNativeDeveloperPagesPerCycle: 4,
+    memeRushTargets: [{ chainId: "56", rankType: 10 }],
+    fetchImpl,
+    now: () => current,
+    sendAlertsImpl: async (_config, event) => {
+      delivered.push(event);
+      return { status: "queued" };
+    },
+    logger: { error() {} },
+  });
+  t.after(() => monitor.stop());
+
+  await monitor.checkAgentNative();
+  const legacyState = JSON.parse(await fs.readFile(monitor.agentNativeStateFile, "utf8"));
+  assert.equal(legacyState.pages[directoryUrl].snapshotVersion, 2);
+  delete legacyState.pages[directoryUrl].snapshotVersion;
+  await fs.writeFile(monitor.agentNativeStateFile, `${JSON.stringify(legacyState, null, 2)}\n`);
+
+  stage = 1;
+  current += 1_000;
+  await monitor.checkAgentNative();
+  assert.equal(delivered.length, 0, "new extractor output cannot be compared to a legacy snapshot");
+  assert.equal(directoryRequests.at(-1)["if-none-match"], undefined, "migration forces a full body instead of a legacy 304");
+  const migratedState = JSON.parse(await fs.readFile(monitor.agentNativeStateFile, "utf8"));
+  assert.equal(migratedState.pages[directoryUrl].snapshotVersion, 2);
+  assert.ok(migratedState.pages[directoryUrl].signals.includes(preexistingWeb3Path));
+
+  stage = 2;
+  current += 1_000;
+  await monitor.checkAgentNative();
+  assert.equal(delivered.length, 1);
+  assert.deepEqual(delivered[0].addedSignals, [newProviderPath]);
+  assert.equal(delivered[0].signal.category, "web3_connect");
+  assert.equal(delivered[0].signal.project, "binance-wallet");
+  assert.deepEqual(delivered[0].developerChange, {
+    classification: "product_feature",
+    productFeature: true,
+    substantive: true,
+    category: "web3_product",
+  });
+  current += 1_000;
+  await monitor.checkAgentNative();
+  assert.equal(delivered.length, 1, "the durable versioned cursor suppresses replay");
 });
 
 test("Agent Native fast lane completes a material endpoint alert within one shared five-second SLA without waiting for a slow sibling", async (t) => {
@@ -3382,6 +3737,7 @@ test("Agent Native content survives a checkpoint rename failure while restart sa
     version: 2,
     pages: {
       [agenticUrl]: {
+        snapshotVersion: 2,
         semanticHash: "old-semantic-hash",
         signals: baseline.signals,
         totalSignals: baseline.totalSignals,

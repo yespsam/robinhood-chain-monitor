@@ -653,6 +653,8 @@ const DEFAULT_STATE_WRITE_RETRY_MS = 1_000;
 const DIRECT_X_BASE = "https://x.com/{handle}";
 const FXTWITTER_TIMELINE_PATH = "/2/profile/id:{userId}/statuses?count=40";
 const MIN_FXTWITTER_POLL_INTERVAL_MS = 5_000;
+const CRITICAL_FX_HOST_FAILURE_WINDOW_MS = 250;
+const CRITICAL_FX_HOST_FAILURE_THRESHOLD = 2;
 const OFFICIAL_X_OEMBED_BASE = "https://publish.x.com/oembed";
 const BROWSER_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
 
@@ -886,9 +888,14 @@ export function parseFxTwitterTimeline(input, expectedHandle, expectedUserId) {
     const expandedUrls = (item?.raw_text?.facets || [])
       .filter((facet) => facet?.type === "url" && /^https?:\/\//i.test(String(facet?.replacement || "")))
       .map((facet) => facet.replacement);
+    const isQuote = Boolean(item?.quoted_tweet || item?.quoted_status || item?.quote_tweet
+      || item?.quote || item?.is_quote_status === true || item?.raw_text?.quoted_status_id);
     tweets.push({
       id,
-      text: String(item?.text || item?.raw_text?.text || ""),
+      // raw_text is the author's own status body. Prefer it over a provider's
+      // rendered text, which may inline a quoted post and create false issuer
+      // language in downstream classifiers.
+      text: String(item?.raw_text?.text || item?.text || ""),
       createdAt,
       authorName: String(item?.author?.name || authorHandle),
       handle: authorHandle,
@@ -899,6 +906,7 @@ export function parseFxTwitterTimeline(input, expectedHandle, expectedUserId) {
       likes: Number.isFinite(Number(item?.likes)) ? Number(item.likes) : null,
       url: `https://x.com/${authorHandle}/status/${id}`,
       isReply: item?.replying_to !== null && item?.replying_to !== undefined,
+      ...(isQuote ? { isQuote: true } : {}),
       ...(expandedUrls.length ? { expandedUrls: [...new Set(expandedUrls)] } : {}),
     });
   }
@@ -925,7 +933,7 @@ export function parseFxTwitterExactStatus(input, expectedHandle, expectedUserId,
     || (tweet.replying_to !== null && tweet.replying_to !== undefined)) {
     throw new Error(`FxTwitter exact-status identity mismatch for @${expectedHandle}/status/${expectedStatusId}`);
   }
-  const text = String(tweet.text || tweet.raw_text?.text || "").trim();
+  const text = String(tweet.raw_text?.text || tweet.text || "").trim();
   if (!text) throw new Error(`FxTwitter exact-status text missing for @${expectedHandle}/status/${expectedStatusId}`);
   const createdTimestamp = Number(tweet.created_timestamp);
   const createdAt = Number.isFinite(createdTimestamp) && createdTimestamp > 0
@@ -1562,6 +1570,13 @@ export function createTwitterMonitor(config, dependencies = {}) {
   let schedulerTimer = null;
   let stopping = false;
   let stopPromise = null;
+  // The five critical accounts share one Fx transport. Keep the healthy path
+  // completely unthrottled, but once two distinct accounts prove a host-wide
+  // failure in the same 250 ms window, suppress duplicate retries and admit
+  // exactly one half-open recovery probe. This state is intentionally
+  // process-local; durable tweet cursors and per-account source circuits remain
+  // the sole persisted control state.
+  const criticalFxHostCircuits = new Map();
   const telemetryPersistIntervalMs = Math.max(1_000, Math.min(
     DEFAULT_TELEMETRY_PERSIST_INTERVAL_MS,
     Number(dependencies.twitterTelemetryPersistIntervalMs) || DEFAULT_TELEMETRY_PERSIST_INTERVAL_MS,
@@ -1585,6 +1600,83 @@ export function createTwitterMonitor(config, dependencies = {}) {
     config.twitterFailureLogSummaryIntervalMs,
     DEFAULT_FAILURE_LOG_SUMMARY_INTERVAL_MS,
   );
+
+  const clockMs = () => {
+    const current = now();
+    return current instanceof Date ? current.getTime() : Number(current);
+  };
+
+  const criticalFxHost = (base, project) => {
+    try { return new URL(sourceUrl(base, project)).hostname.toLowerCase(); }
+    catch { return null; }
+  };
+
+  function acquireCriticalFxHostPermit(base, project) {
+    const host = criticalFxHost(base, project);
+    const account = String(project?.handle || "").toLowerCase();
+    if (!host || !account) return { allowed: true, host: null, account, halfOpen: false };
+    const circuit = criticalFxHostCircuits.get(host);
+    if (!circuit?.open) return { allowed: true, host, account, halfOpen: false };
+    const current = clockMs();
+    if (circuit.blockedUntil > current || circuit.probeInFlight) {
+      return {
+        allowed: false,
+        host,
+        account,
+        halfOpen: false,
+        retryAt: Math.max(circuit.blockedUntil, current + criticalLatencySettings(config).schedulerIntervalMs),
+      };
+    }
+    circuit.probeInFlight = true;
+    circuit.probeAccount = account;
+    return { allowed: true, host, account, halfOpen: true };
+  }
+
+  function closeCriticalFxHostCircuit(permit) {
+    if (!permit?.host) return;
+    const circuit = criticalFxHostCircuits.get(permit.host);
+    if (!circuit) return;
+    criticalFxHostCircuits.delete(permit.host);
+    if (circuit.open) {
+      try { logger.info?.(`[twitter][fx-host-circuit] ${permit.host}: recovered via @${permit.account}`); }
+      catch { /* Observability must never retain a released host gate. */ }
+    }
+  }
+
+  function recordCriticalFxHostFailure(permit, error, retryAtValue) {
+    if (!permit?.host || (!isTransportFailure(error) && error?.status !== 429 && error?.message !== "HTTP 429")) {
+      if (permit?.halfOpen) closeCriticalFxHostCircuit(permit);
+      return;
+    }
+    const current = clockMs();
+    const parsedRetryAt = Date.parse(retryAtValue || "");
+    const retryAt = Number.isFinite(parsedRetryAt) && parsedRetryAt > current
+      ? parsedRetryAt
+      : current + DEFAULT_FAILURE_BACKOFF_MS;
+    let circuit = criticalFxHostCircuits.get(permit.host);
+    if (permit.halfOpen && circuit?.open) {
+      circuit.blockedUntil = retryAt;
+      circuit.probeInFlight = false;
+      circuit.probeAccount = null;
+      circuit.failures = new Map([[permit.account, { at: current, retryAt }]]);
+      logger.error?.(`[twitter][fx-host-circuit] ${permit.host}: half-open probe failed; retry ${new Date(retryAt).toISOString()}`);
+      return;
+    }
+    if (circuit?.open) {
+      circuit.blockedUntil = Math.max(circuit.blockedUntil, retryAt);
+      return;
+    }
+    circuit ||= { open: false, blockedUntil: 0, probeInFlight: false, probeAccount: null, failures: new Map() };
+    for (const [account, failure] of circuit.failures) {
+      if (current - failure.at > CRITICAL_FX_HOST_FAILURE_WINDOW_MS) circuit.failures.delete(account);
+    }
+    circuit.failures.set(permit.account, { at: current, retryAt });
+    criticalFxHostCircuits.set(permit.host, circuit);
+    if (circuit.failures.size < CRITICAL_FX_HOST_FAILURE_THRESHOLD) return;
+    circuit.open = true;
+    circuit.blockedUntil = Math.max(...[...circuit.failures.values()].map((failure) => failure.retryAt));
+    logger.error?.(`[twitter][fx-host-circuit] ${permit.host}: ${circuit.failures.size} accounts failed within ${CRITICAL_FX_HOST_FAILURE_WINDOW_MS}ms; retry ${new Date(circuit.blockedUntil).toISOString()}`);
+  }
 
   const failureCategory = (error) => {
     const message = String(error?.message || error || "unknown failure");
@@ -2144,6 +2236,7 @@ export function createTwitterMonitor(config, dependencies = {}) {
   ) {
     const errors = [];
     let attempted = 0;
+    let criticalFxHostDeferral = null;
     const bases = sourceBases(config, project);
     const primaryBase = bases[0] || null;
     const criticalTiming = isCriticalFastLane(project) ? criticalLatencySettings(config) : null;
@@ -2209,10 +2302,18 @@ export function createTwitterMonitor(config, dependencies = {}) {
       if (!sourceAvailable(health, base, now(), startupRecoveryProbe)) continue;
       const remainingBudgetMs = deadline - now();
       if (remainingBudgetMs <= 0) break;
+      const fxTwitter = isFxTwitterSource(base);
+      const criticalFxHostPermit = isCriticalFastLane(project) && fxTwitter
+        ? acquireCriticalFxHostPermit(base, project)
+        : null;
+      if (criticalFxHostPermit && !criticalFxHostPermit.allowed) {
+        criticalFxHostDeferral ||= criticalFxHostPermit;
+        continue;
+      }
       attempted += 1;
+      let criticalFxHostResponseObserved = false;
       try {
         const directX = isDirectXSource(base);
-        const fxTwitter = isFxTwitterSource(base);
         const jinaReader = isJinaReaderSource(base);
         const configuredTimeoutMs = positiveInteger(
           directX ? config.twitterDirectRequestTimeoutMs
@@ -2237,11 +2338,22 @@ export function createTwitterMonitor(config, dependencies = {}) {
         });
         if (response.status === 429) {
           const error = new Error("HTTP 429");
+          error.status = 429;
           error.retryMs = retryAfterMs(response, now);
           throw error;
         }
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) {
+          if (criticalFxHostPermit) {
+            criticalFxHostResponseObserved = true;
+            closeCriticalFxHostCircuit(criticalFxHostPermit);
+          }
+          throw new Error(`HTTP ${response.status}`);
+        }
         const body = await response.text();
+        if (criticalFxHostPermit) {
+          criticalFxHostResponseObserved = true;
+          closeCriticalFxHostCircuit(criticalFxHostPermit);
+        }
         const immutableIdentityRequired = project.signalProfile === "ai" || isCriticalFastLane(project);
         if (immutableIdentityRequired && jinaReader) {
           throw new Error(project.signalProfile === "ai"
@@ -2392,6 +2504,9 @@ export function createTwitterMonitor(config, dependencies = {}) {
             : null,
         });
         const retryAfter = health.sources[base].circuitUntil;
+        if (criticalFxHostPermit && !criticalFxHostResponseObserved) {
+          recordCriticalFxHostFailure(criticalFxHostPermit, error, retryAfter);
+        }
         if (error.code === "TWITTER_PON_CURSOR_GAP") error.retryAfter = retryAfter;
         errors.push({ source: base, message: error.message, retryAfter });
         if (error.code === "TWITTER_PON_CURSOR_GAP") throw error;
@@ -2405,6 +2520,12 @@ export function createTwitterMonitor(config, dependencies = {}) {
     if (isCriticalFastLane(project)) {
       const discovery = await criticalDiscovery();
       if (discovery.tweets.length) return discoveryFetchResult(discovery, errors);
+      if (criticalFxHostDeferral) {
+        const error = new Error(`Fx host circuit is open for ${criticalFxHostDeferral.host}`);
+        error.code = "TWITTER_FX_HOST_CIRCUIT_DEFERRED";
+        error.retryAfter = new Date(criticalFxHostDeferral.retryAt).toISOString();
+        throw error;
+      }
       const primarySource = primaryBase ? health.sources?.[primaryBase] : null;
       if (attempted === 0 && primarySource?.status === "healthy" && sourceAttemptAt(primarySource) > now()) {
         return auxiliaryFetchResult(discovery);
@@ -2821,6 +2942,12 @@ export function createTwitterMonitor(config, dependencies = {}) {
       await persistState(state);
       return { ok: true };
     } catch (error) {
+      if (error.code === "TWITTER_FX_HOST_CIRCUIT_DEFERRED") {
+        health.checkedAt = timestamp(now);
+        health.scheduledUntil = error.retryAfter;
+        refreshCriticalSlaStatus();
+        return { ok: false, skipped: true, scheduled: true, hostCircuit: true };
+      }
       const deliveryRetry = error.code === "TWITTER_ALERT_NOT_DURABLE";
       const criticalSlaRetry = error.code === "TWITTER_CRITICAL_SLA_EXHAUSTED"
         || error.cause?.code === "TWITTER_CRITICAL_SLA_EXHAUSTED";

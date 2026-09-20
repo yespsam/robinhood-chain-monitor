@@ -156,11 +156,11 @@ function abortedError(source = "chain") {
   return ponError(source, "PON_STOPPED", "pon.fun monitor operation was stopped");
 }
 
-function abortable(promise, signal, source = "chain") {
+function abortable(promise, signal, source = "chain", abortError = () => abortedError(source)) {
   if (!signal) return Promise.resolve(promise);
-  if (signal.aborted) return Promise.reject(abortedError(source));
+  if (signal.aborted) return Promise.reject(abortError());
   return new Promise((resolve, reject) => {
-    const onAbort = () => reject(abortedError(source));
+    const onAbort = () => reject(abortError());
     signal.addEventListener("abort", onAbort, { once: true });
     Promise.resolve(promise).then(
       (value) => {
@@ -722,16 +722,30 @@ async function fetchOfficialJson(fetchImpl, url, timeoutMs, lifecycleSignal = nu
         "user-agent": "robinhood-chain-monitor/pon.fun",
       },
       signal,
-    }), signal, "http");
+    }), signal, "http", () => lifecycleSignal?.aborted
+      ? abortedError("http")
+      : ponError("http", "PON_HTTP_TIMEOUT", `${url} request timed out after ${timeoutMs}ms`));
   } catch (error) {
     if (lifecycleSignal?.aborted || error?.code === "PON_STOPPED") throw abortedError("http");
+    if (timeoutSignal.aborted || error?.code === "PON_HTTP_TIMEOUT" || error?.name === "TimeoutError") {
+      throw ponError("http", "PON_HTTP_TIMEOUT", `${url} request timed out after ${timeoutMs}ms`);
+    }
     throw ponError("http", "PON_HTTP_FAILED", `${url} request failed: ${error.message}`);
   }
   assertExactResponseUrl(response, url);
   if (!response.ok) throw ponError("http", "PON_HTTP_STATUS", `${url} returned HTTP ${response.status}`);
   let text;
-  try { text = await response.text(); }
-  catch (error) { throw ponError("http", "PON_HTTP_BODY_FAILED", `${url} body failed: ${error.message}`); }
+  try {
+    text = await abortable(response.text(), signal, "http", () => lifecycleSignal?.aborted
+      ? abortedError("http")
+      : ponError("http", "PON_HTTP_TIMEOUT", `${url} request timed out after ${timeoutMs}ms`));
+  } catch (error) {
+    if (lifecycleSignal?.aborted || error?.code === "PON_STOPPED") throw abortedError("http");
+    if (timeoutSignal.aborted || error?.code === "PON_HTTP_TIMEOUT" || error?.name === "TimeoutError") {
+      throw ponError("http", "PON_HTTP_TIMEOUT", `${url} request timed out after ${timeoutMs}ms`);
+    }
+    throw ponError("http", "PON_HTTP_BODY_FAILED", `${url} body failed: ${error.message}`);
+  }
   if (!text || text.length > 10_000_000) throw ponError("http", "PON_HTTP_BODY_INVALID", `${url} returned an invalid body`);
   try { return JSON.parse(text); }
   catch { throw ponError("http", "PON_HTTP_JSON_INVALID", `${url} returned invalid JSON`); }
@@ -1145,8 +1159,8 @@ async function verifyDeployment(provider, expectedCreationInputHash = PON_FACTOR
   // verifyIdentity fingerprints finalized runtime code on every cycle.
 }
 
-async function verifyIdentity(provider, health, finalizedBlock, expectedFactoryCodeHash, state) {
-  const chainId = await providerChainId(provider);
+async function verifyIdentity(provider, health, finalizedBlock, expectedFactoryCodeHash, state, verifiedChainId = null) {
+  const chainId = verifiedChainId ?? await providerChainId(provider);
   state._health.identity.observedChainId = chainId;
   state._health.identity.observedFactory = health.addresses.factory;
   if (chainId !== PON_CHAIN_ID) throw ponError("chain", "PON_RPC_CHAIN_MISMATCH", `RPC chain ${chainId} != ${PON_CHAIN_ID}`);
@@ -1657,6 +1671,13 @@ function markCycleFailed(state, current, error, backoffBaseMs, backoffMaxMs) {
   const failureAge = current - Date.parse(health.failureSince);
   health.status = failures >= INCIDENT_OPEN_FAILURES && failureAge >= INCIDENT_OPEN_AGE_MS ? "critical" : "degraded";
   health.nextAttemptAt = iso(current + Math.min(backoffMaxMs, backoffBaseMs * (2 ** Math.min(20, failures - 1))));
+  // The cycle gate suspends every source, including endpoints that succeeded
+  // before a later chain check failed. Publish their effective retry time so
+  // consumers do not treat a deliberate global cooldown as a stalled source.
+  const cycleRetryAt = Date.parse(health.nextAttemptAt);
+  for (const source of Object.values(health.sources)) {
+    source.nextAttemptAt = iso(Math.max(cycleRetryAt, Date.parse(source.nextAttemptAt || "") || 0));
+  }
 }
 
 function markCycleHealthy(state, current, intervalMs) {
@@ -2722,10 +2743,16 @@ export function createPonMonitor(config = {}, dependencies = {}) {
     await persist();
   }
 
-  async function runCycle() {
+  async function runCycle({ force = true } = {}) {
     await initialize();
     const current = nowMs(clock);
+    // The first non-forced check must also honor the durable backoff loaded
+    // during initialization; the outer fast path only sees in-memory state.
+    if (!force && Date.parse(state._health.nextAttemptAt || "") > current) {
+      return { status: "backoff", initialized: state.initialized, cursor: structuredClone(state.cursor) };
+    }
     const observedAt = iso(current);
+    const sourceHealthBeforeCycle = structuredClone(state._health.sources);
     try {
       if (stopped) throw abortedError();
       const baselineApi = state.initialized ? null : await fetchApiSnapshot(current);
@@ -2737,18 +2764,56 @@ export function createPonMonitor(config = {}, dependencies = {}) {
         if (error.source) throw error;
         throw ponError("chain", "PON_HEAD_FAILED", `could not read Robinhood Chain head: ${error.message}`);
       }
-      const finalizedBlock = Math.max(PON_FACTORY_DEPLOY_BLOCK, head - confirmations);
+      // Keep the raw RPC finality boundary separate from the API-aligned cycle
+      // anchor. API freshness must continue to measure the real head split;
+      // clamping that value would turn every lag into zero.
+      const rpcFinalizedBlock = Math.max(PON_FACTORY_DEPLOY_BLOCK, head - confirmations);
+      const chainId = await providerChainId(provider);
+      state._health.identity.observedChainId = chainId;
+      state._health.identity.observedFactory = health.addresses.factory;
+      if (chainId !== PON_CHAIN_ID) {
+        throw ponError("chain", "PON_RPC_CHAIN_MISMATCH", `RPC chain ${chainId} != ${PON_CHAIN_ID}`);
+      }
+      if (health.block > rpcFinalizedBlock + 128) {
+        throw ponError("api_health", "PON_HEALTH_BLOCK_AHEAD", "pon.fun health block is implausibly ahead of the RPC head");
+      }
+
+      let reorgDetected = false;
+      if (state.initialized) {
+        if (rpcFinalizedBlock < Number(state.cursor.lastScannedBlock)) {
+          throw ponError("chain", "PON_FINALIZED_HEAD_BEHIND_CURSOR", "finalized Robinhood Chain head moved behind the durable pon.fun cursor");
+        }
+        reorgDetected = await verifyCursor(observedAt);
+        await verifyTentativeAlertOrigins(observedAt);
+      }
+      verifyApiFreshness(health, rpcFinalizedBlock, observedAt, { allowRegression: reorgDetected });
+
+      const finalizedBlock = Math.min(rpcFinalizedBlock, health.block);
+      if (finalizedBlock < PON_FACTORY_DEPLOY_BLOCK) {
+        throw ponError("api_health", "PON_API_ANCHOR_BEFORE_DEPLOYMENT", "pon.fun API common anchor predates the pinned Factory deployment");
+      }
+      if (state.initialized && finalizedBlock < Number(state.cursor.lastScannedBlock)) {
+        throw ponError(
+          "api_health",
+          "PON_API_ANCHOR_BEHIND_CURSOR",
+          "pon.fun API common anchor moved behind the durable chain cursor",
+        );
+      }
       const finalizedBlockRecord = await provider.getBlock(finalizedBlock);
       if (!finalizedBlockRecord
         || Number(finalizedBlockRecord.number) !== finalizedBlock
         || !/^0x[a-fA-F0-9]{64}$/.test(String(finalizedBlockRecord.hash || ""))) {
         throw ponError("chain", "PON_FINALIZED_BLOCK_INVALID", `finalized block ${finalizedBlock} is invalid`);
       }
-      const factorySnapshot = await verifyIdentity(provider, health, finalizedBlock, expectedFactoryCodeHash, state);
-      markSourceHealthy(state, "chain", current, pollIntervalMs);
-
+      const factorySnapshot = await verifyIdentity(
+        provider,
+        health,
+        finalizedBlock,
+        expectedFactoryCodeHash,
+        state,
+        chainId,
+      );
       if (!state.initialized) {
-        verifyApiFreshness(health, finalizedBlock, observedAt);
         const platformTokenVerification = await verifyPlatformTokenOnchain(
           provider,
           baselineApi.platformToken,
@@ -2780,6 +2845,7 @@ export function createPonMonitor(config = {}, dependencies = {}) {
           baselineCheckpoints,
           observedAt,
         );
+        markSourceHealthy(state, "chain", current, pollIntervalMs);
         markSourceHealthy(state, "delivery", current, pollIntervalMs);
         markCycleHealthy(state, current, pollIntervalMs);
         state._health.reorg.recoveryPending = false;
@@ -2788,12 +2854,6 @@ export function createPonMonitor(config = {}, dependencies = {}) {
         return { status: "baseline", initialized: true, delivered: 0, cursor: structuredClone(state.cursor) };
       }
 
-      if (finalizedBlock < Number(state.cursor.lastScannedBlock)) {
-        throw ponError("chain", "PON_FINALIZED_HEAD_BEHIND_CURSOR", "finalized Robinhood Chain head moved behind the durable pon.fun cursor");
-      }
-      const reorgDetected = await verifyCursor(observedAt);
-      await verifyTentativeAlertOrigins(observedAt);
-      verifyApiFreshness(health, finalizedBlock, observedAt, { allowRegression: reorgDetected });
       const auxiliary = await fetchApiAuxiliary(current);
       const api = { health, ...auxiliary };
       const platformTokenVerification = await verifyPlatformTokenOnchain(
@@ -2847,6 +2907,7 @@ export function createPonMonitor(config = {}, dependencies = {}) {
       state.cursor.stockListingEventsSinceSnapshot = coverage.stockListingEventsSinceSnapshot;
       state.checkedAt = observedAt;
       state._health.reorg.recoveryPending = false;
+      markSourceHealthy(state, "chain", current, pollIntervalMs);
       markSourceHealthy(state, "delivery", current, pollIntervalMs);
       markCycleHealthy(state, current, pollIntervalMs);
       await persist();
@@ -2858,15 +2919,37 @@ export function createPonMonitor(config = {}, dependencies = {}) {
         cursor: structuredClone(state.cursor),
       };
     } catch (error) {
+      if (error?.code === "PON_STOPPED" && stopped) {
+        state.checkedAt = observedAt;
+        await persist();
+        return {
+          status: "stopped",
+          initialized: state.initialized,
+          error: error.message,
+          errorCode: error.code,
+          cursor: structuredClone(state.cursor),
+        };
+      }
       recordAnchorFailure(error, observedAt);
       if (!error.source) error.source = "chain";
       const failedSource = error.source in state._health.sources ? error.source : "chain";
-      if (state._health.sources[failedSource].lastAttemptAt !== observedAt
-        || state._health.sources[failedSource].status === "healthy") {
-        markSourceFailed(state, failedSource, current, error, backoffBaseMs, backoffMaxMs);
-      }
-      markCycleFailed(state, current, error, backoffBaseMs, backoffMaxMs);
-      state.checkedAt = observedAt;
+      // A source may pass an early transport/identity check and fail a later
+      // semantic or historical check. Only a complete source success clears
+      // its previous failure streak; intermediate success is not recovery.
+      // Restore before incrementing even if fetchApiDefinitions already marked
+      // this source failed, so each cycle records exactly one failure.
+      const previousSource = sourceHealthBeforeCycle[failedSource];
+      Object.assign(state._health.sources[failedSource], {
+        consecutiveFailures: previousSource.consecutiveFailures,
+        failureSince: previousSource.failureSince,
+        lastSuccessAt: previousSource.lastSuccessAt,
+      });
+      // Request latency is not cooldown time: a slow failed archive request
+      // must still wait the full backoff after the failure becomes known.
+      const failedAt = nowMs(clock);
+      markSourceFailed(state, failedSource, failedAt, error, backoffBaseMs, backoffMaxMs);
+      markCycleFailed(state, failedAt, error, backoffBaseMs, backoffMaxMs);
+      state.checkedAt = iso(failedAt);
       await persist();
       logger.error?.(`[pon.fun] ${error.code || "PON_FAILURE"}: ${error.message}`);
       return {
@@ -2889,7 +2972,7 @@ export function createPonMonitor(config = {}, dependencies = {}) {
     if (activeCheck) return activeCheck;
     const controller = new AbortController();
     cycleController = controller;
-    activeCheck = runCycle().finally(() => {
+    activeCheck = runCycle({ force }).finally(() => {
       if (cycleController === controller) cycleController = null;
       activeCheck = null;
     });
@@ -2900,7 +2983,7 @@ export function createPonMonitor(config = {}, dependencies = {}) {
     void check({ force: false }).catch((error) => logger.error?.(`[pon.fun] scheduler: ${error.message}`));
   }, pollIntervalMs) : null;
   timer?.unref();
-  if (autoStart && enabled) void check({ force: true }).catch((error) => logger.error?.(`[pon.fun] startup: ${error.message}`));
+  if (autoStart && enabled) void check({ force: false }).catch((error) => logger.error?.(`[pon.fun] startup: ${error.message}`));
 
   return {
     check,

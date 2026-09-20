@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
 import { sendAlerts, startAlertOutboxWorker } from "./alerts.js";
 import { createFomoCallMonitor } from "./fomo-call-monitor.js";
+import { createGmgnFlowMonitor } from "./gmgn-flow-monitor.js";
 import { createFomoThesisMonitor } from "./fomo-thesis-monitor.js";
 import { createFomoXCallMonitor } from "./fomo-x-call-monitor.js";
 import { startRuntimeHeartbeat } from "./runtime-heartbeat.js";
@@ -17,6 +18,7 @@ export function createFomoWorkerShutdown({
   buyMonitor = null,
   thesisMonitor = null,
   xCallMonitor = null,
+  gmgnFlowMonitor = null,
   outbox = null,
   runtimeHeartbeat = null,
   processRef = process,
@@ -35,6 +37,7 @@ export function createFomoWorkerShutdown({
         ["buy", buyMonitor],
         ["thesis", thesisMonitor],
         ["x-call", xCallMonitor],
+        ["gmgn-flow", gmgnFlowMonitor],
       ].filter(([, monitor]) => monitor?.stop);
       const monitorResults = await Promise.allSettled(
         monitors.map(([, monitor]) => Promise.resolve().then(() => monitor.stop())),
@@ -89,7 +92,9 @@ function startFomoWorker() {
     console.info("[fomo-call] monitor is disabled; the worker will not start a scanner or outbox");
     return null;
   }
-  if (!config.fomoBuyMonitorEnabled && !config.fomoSmartMoneyMonitorEnabled && !config.fomoPublishedCallEnabled && !config.fomoXCallEnabled) {
+  if (!config.fomoBuyMonitorEnabled && !config.fomoSmartMoneyMonitorEnabled
+    && !config.fomoPublishedCallEnabled && !config.fomoXCallEnabled && !config.kolLaunchMonitorEnabled
+    && !config.gmgnFlowMonitorEnabled) {
     console.info("[fomo-call] all Fomo monitoring lanes are disabled");
     return null;
   }
@@ -106,13 +111,17 @@ function startFomoWorker() {
     return sendAlerts(alertConfig, event);
   };
   const inferredWalletMonitorEnabled = config.fomoBuyMonitorEnabled || config.fomoSmartMoneyMonitorEnabled;
+  const gmgnFlowMonitor = config.gmgnFlowMonitorEnabled
+    ? createGmgnFlowMonitor(config, { sendAlertsImpl: deliverAlert })
+    : null;
+  if (gmgnFlowMonitor) console.info("[gmgn-flow] cross-chain joint volume / profitable-wallet / FOMO-tag observation enabled");
   const buyMonitor = inferredWalletMonitorEnabled
     ? createFomoCallMonitor(config, { sendAlertsImpl: deliverAlert })
     : null;
   const thesisMonitor = config.fomoPublishedCallEnabled
     ? createFomoThesisMonitor(config, { sendAlertsImpl: deliverAlert })
     : null;
-  const xCallMonitor = config.fomoXCallEnabled
+  const xCallMonitor = config.fomoXCallEnabled || config.kolLaunchMonitorEnabled
     ? createFomoXCallMonitor(config, { sendAlertsImpl: deliverAlert })
     : null;
   if (!buyMonitor) console.info("[fomo-call] inferred wallet-buy monitoring is disabled");
@@ -120,6 +129,9 @@ function startFomoWorker() {
     console.info("[fomo-smart-money] profitable-wallet monitoring enabled; legacy KOL buy delivery remains disabled");
   }
   if (xCallMonitor) console.info("[fomo-x-call] public X call monitoring enabled; this lane is not a Fomo official feed");
+  if (config.kolLaunchMonitorEnabled) {
+    console.info("[kol-launch] verified public X self-launch claims enabled; creator attribution remains watch-only");
+  }
   if (thesisMonitor) {
     const activeSources = [
       config.fomoOfficialBearerToken ? "official" : null,
@@ -139,6 +151,7 @@ function startFomoWorker() {
     buyMonitor,
     thesisMonitor,
     xCallMonitor,
+    gmgnFlowMonitor,
     outbox,
     runtimeHeartbeat,
   });

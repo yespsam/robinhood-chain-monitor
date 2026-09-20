@@ -141,8 +141,8 @@ test("bilingual rendering preserves layout, entities, and protected technical id
     assert.match(bundle.en.text, new RegExp(literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.match(rendered, new RegExp(address));
-  assert.equal(bundle.version, 24);
-  assert.equal(bundle.format, "telegram_zh_en_compact_v14");
+  assert.equal(bundle.version, 27);
+  assert.equal(bundle.format, "telegram_zh_en_compact_v15");
   assert.match(rendered, /^🔴 强提醒 \| STRONG ALERT\n🇨🇳 中文\n/);
   assert.match(rendered, /\n\n🇬🇧 English\n/);
   assertShortFieldLayout(rendered);
@@ -209,8 +209,8 @@ test("Binance connector cards state the one concrete diff and never disguise SDK
     assert.ok(bundle.en.text.includes(item.stageEn));
     assert.equal(bundle.zh.text.split("\n").length, 2);
     assert.equal(bundle.en.text.split("\n").length, 2);
-    assert.equal(bundle.version, 24);
-    assert.equal(bundle.format, "telegram_zh_en_compact_v14");
+    assert.equal(bundle.version, 27);
+    assert.equal(bundle.format, "telegram_zh_en_compact_v15");
   }
 });
 
@@ -572,11 +572,119 @@ test("Binance Agent Native developer diff renders the new MCP entry without sign
   assert.equal(bundle.zh.status, "not_needed");
   assert.equal(bundle.en.status, "not_needed");
   assert.equal(providerCalls, 0);
-  assert.equal(bundle.version, 24);
-  assert.equal(bundle.format, "telegram_zh_en_compact_v14");
+  assert.equal(bundle.version, 27);
+  assert.equal(bundle.format, "telegram_zh_en_compact_v15");
   assert.equal(bundle.zh.text.split("\n").length, 2);
   assert.equal(bundle.en.text.split("\n").length, 2);
   assert.ok(rendered.length <= 600, `card is ${rendered.length} characters`);
+});
+
+test("categorized Binance Web3 developer update renders a facts-only Telegram card with its exact API", async () => {
+  clearTranslationCache();
+  const endpoint = "POST /api/v1/task/completion";
+  const event = {
+    type: "binance_official_update",
+    kind: "developer_update",
+    project: { id: "binance-wallet", name: "Binance Wallet" },
+    title: "Web3 Task Verification official update",
+    signal: {
+      relevant: true,
+      scope: "wallet",
+      category: "web3_task_verification",
+      strong: true,
+    },
+    keyChanges: [`${endpoint}: verify completion of a Web3 task`],
+    addedSignals: [`${endpoint}: verify completion of a Web3 task`],
+    source: {
+      id: "binance_web3_task_verification_docs",
+      name: "Binance Web3 Task Verification docs",
+      url: "https://developers.binance.com/en/docs/products/web3-task-verification/api.md",
+    },
+    url: "https://developers.binance.com/en/docs/products/web3-task-verification/api.md",
+    observedAt: "2026-09-08T09:45:00.000Z",
+  };
+  const original = structuredClone(event);
+  const bundle = await buildBilingualAlertBundle({}, event, "Binance Web3 developer update");
+  const rendered = renderBilingualTelegramText(bundle, true);
+  const blocks = renderedLanguageBlocks(rendered);
+
+  assert.deepEqual(event, original);
+  assert.equal(blocks.zh[0], "平台：Binance Wallet");
+  assert.equal(blocks.en[0], "Platform: Binance Wallet");
+  assert.match(blocks.zh[1], /^事件：Web3 Task Verification 新增任务完成验证 API/u);
+  assert.match(blocks.en[1], /^Event: Web3 Task Verification added a task-completion API/u);
+  assert.equal(blocks.zh[2], `证据：API ${endpoint}`);
+  assert.equal(blocks.en[2], `Evidence: API ${endpoint}`);
+  for (const block of [blocks.zh.join("\n"), blocks.en.join("\n")]) {
+    assert.ok(block.includes(endpoint));
+  }
+  assert.equal(bundle.zh.provider, "local_structured");
+  assert.equal(bundle.en.provider, "local_structured");
+  assert.doesNotMatch(
+    rendered,
+    /开发者 API 接口更新|Developer API endpoint updated|风险|Risk|入场=|entry=|失效=|invalid=|非自动交易|no auto(?:matic)? trading/iu,
+  );
+  assertShortFieldLayout(rendered);
+  assert.ok(rendered.length <= 700, `card is ${rendered.length} characters`);
+});
+
+test("Web3 API revision and removal Telegram cards show the concrete old/new fact in both languages", async () => {
+  const before = "POST /v1/verify request limit: 10";
+  const after = "POST /v1/verify request limit: 20";
+  for (const removedOnly of [false, true]) {
+    const event = {
+      type: "binance_official_update",
+      kind: "developer_update",
+      project: { id: "binance-wallet", name: "Binance Wallet" },
+      title: "Web3 Task Verification official update",
+      signal: { relevant: true, scope: "wallet", category: "web3_task_verification", strong: true },
+      addedSignals: removedOnly ? [] : [after],
+      removedSignals: [before],
+      keyChanges: [...(removedOnly ? [] : [after]), `Removed: ${before}`],
+      source: { id: "binance_developer_docs", name: "Binance Developer 官方文档", url: "https://developers.binance.com/en/docs/products/web3-task-verification/apis.md" },
+      observedAt: "2026-09-17T01:00:00.000Z",
+    };
+    const original = structuredClone(event);
+    const bundle = await buildBilingualAlertBundle({}, event, "Binance Web3 developer update");
+    const rendered = renderBilingualTelegramText(bundle, true);
+    const blocks = renderedLanguageBlocks(rendered);
+    for (const block of [blocks.zh.join("\n"), blocks.en.join("\n")]) {
+      assert.ok(block.includes(before), block);
+      if (!removedOnly) assert.ok(block.includes(after), block);
+    }
+    assert.deepEqual(event, original);
+    assert.doesNotMatch(rendered, /新增任务完成验证|added a task-completion API|风险|risk|入场|entry|失效|invalid/iu);
+    assertShortFieldLayout(rendered);
+    assert.ok(rendered.length <= 800, `card is ${rendered.length} characters`);
+  }
+});
+
+test("categorized Agentic Wallet facts outrank the legacy Agent Native fallback", async () => {
+  clearTranslationCache();
+  const url = "https://developers.binance.com/en/docs/products/agentic-wallet/welcome.md";
+  const event = {
+    type: "binance_official_update",
+    kind: "developer_update",
+    project: { id: "binance-wallet", name: "Binance Wallet" },
+    title: "Binance Agentic Wallet and Agent Native official update",
+    signal: { relevant: true, scope: "wallet", category: "agentic_wallet", strong: true },
+    keyChanges: ["Market Order | Market swap, quote, order tracking"],
+    addedSignals: ["Market Order | Market swap, quote, order tracking"],
+    source: { id: "binance_developer_docs", name: "Binance Developer 官方文档", url },
+    url,
+    sourceOccurredAt: "2026-09-08T01:00:00.000Z",
+    observedAt: "2026-09-08T01:00:05.000Z",
+  };
+  const bundle = await buildBilingualAlertBundle({}, event, "Binance Agentic Wallet developer update");
+  const rendered = renderBilingualTelegramText(bundle, true);
+  const blocks = renderedLanguageBlocks(rendered);
+
+  assert.match(blocks.zh[1], /Agentic Wallet 的 Market Order 能力包括市价兑换、报价、订单跟踪/u);
+  assert.match(blocks.en[1], /Agentic Wallet Market Order supports market swaps, quotes, and order tracking/u);
+  assert.equal(blocks.zh[2], "证据：官方开发文档 · /en/docs/products/agentic-wallet/welcome.md");
+  assert.equal(blocks.en[2], "Evidence: Official developer docs · /en/docs/products/agentic-wallet/welcome.md");
+  assert.doesNotMatch(rendered, /Agent Native Developer|产品可用范围待确认|product availability unconfirmed|风险|Risk|入场|entry|失效|invalid/iu);
+  assertShortFieldLayout(rendered);
 });
 
 test("official Binance X Agent OS launch renders the exact capability and release stage", async () => {
@@ -808,8 +916,9 @@ test("Fomo inferred first-buy card says on-chain inference, preserves the zero-p
   assert.match(bundle.en.text, new RegExp(`CA ${token} · Position proof verified`));
   assert.match(bundle.zh.text, /链上推断，非 Fomo 官方喊单；前一区块代币零仓位；安全初筛通过，非买入建议/);
   assert.match(bundle.en.text, /On-chain inference, not an official Fomo call; Token zero position at previous block; Safety screened; not a buy recommendation/);
-  assert.match(rendered, /风险：安全初筛通过，非买入建议/u);
-  assert.match(rendered, /Risk: Safety screened; not a buy recommendation/u);
+  assert.match(rendered, /事件：@alpha · 买入 \$1,250/u);
+  assert.match(rendered, /Event: @alpha · Bought \$1,250/u);
+  assert.doesNotMatch(rendered, /风险|Risk|非买入建议|not a buy recommendation|非自动交易|no automatic trading/iu);
   assertShortFieldLayout(rendered);
   assert.doesNotMatch(rendered, new RegExp(transactionHash));
   assert.equal(event.transactionHash, transactionHash, "the immutable event retains the full Tx for its Telegram button");
@@ -901,8 +1010,7 @@ test("Fomo published and linked-X T0/T1 cards persist a bounded source thesis wi
       assert.ok(lines.every((line) => line.length <= 150));
     }
     assert.ok(rendered.includes(`CA ${token}`));
-    assert.match(rendered, /非买入建议/u);
-    assert.match(rendered, /not a buy recommendation/iu);
+    assert.doesNotMatch(rendered, /风险|Risk|非买入建议|not a buy recommendation|非自动交易|no automatic trading/iu);
     if (event.signalKind === "fomo_x_call") {
       assert.ok(rendered.includes("0x1111111111111111111111111111111111111111"));
       assert.ok(rendered.includes("X#2090"));
@@ -958,31 +1066,16 @@ test("BSC feature-first-token card prioritizes mode and token over addresses and
   assert.ok(rendered.length <= 600, `card is ${rendered.length} characters`);
 });
 
-test("Flap tracked pool-token cards put CA on its own line for pass, unknown, and block", async () => {
+test("Flap tracked pool-token cards show only token facts for pass, unknown, and block", async () => {
   clearTranslationCache();
   let providerCalls = 0;
   let passEvent = null;
   const observedAt = "2026-09-04T01:00:05.000Z";
   const generationKey = `quote:0xd97d097a89113fa59b76c572e5b2eb647e8eefaf:generation:0x${"a".repeat(64)}:0x${"b".repeat(64)}:4`;
   const cases = [
-    {
-      ordinal: 1,
-      decision: "pass",
-      zh: "状态：观察｜静态初筛通过；可卖性仍待验证｜非买入建议",
-      en: "Status: Watch | static screening passed; sellability unverified | not a buy signal",
-    },
-    {
-      ordinal: 2,
-      decision: "unknown",
-      zh: "状态：安全未完成｜不买",
-      en: "Status: Safety incomplete | do not buy",
-    },
-    {
-      ordinal: 3,
-      decision: "block",
-      zh: "状态：⛔ 安全门已拦截｜不买",
-      en: "Status: ⛔ Safety gate blocked | do not buy",
-    },
+    { ordinal: 1, decision: "pass" },
+    { ordinal: 2, decision: "unknown" },
+    { ordinal: 3, decision: "block" },
   ];
 
   for (const item of cases) {
@@ -1028,22 +1121,20 @@ test("Flap tracked pool-token cards put CA on its own line for pass, unknown, an
     const rendered = renderBilingualTelegramText(bundle, item.decision === "pass");
     const blocks = renderedLanguageBlocks(rendered);
 
-    assert.equal(blocks.zh.length, 6);
-    assert.equal(blocks.en.length, 6);
-    assert.equal(blocks.zh[0], `平台：Flap｜SOXLB 新底池｜前三个 CA｜${item.ordinal}/3`);
-    assert.equal(blocks.en[0], `Platform: Flap | SOXLB new pool | first 3 CAs | ${item.ordinal}/3`);
-    assert.ok(blocks.zh.includes(item.zh));
-    assert.ok(blocks.en.includes(item.en));
+    assert.equal(blocks.zh.length, 5);
+    assert.equal(blocks.en.length, 5);
+    assert.equal(blocks.zh[0], `新币：Flap｜SOXLB 底池｜第 ${item.ordinal}/3 个`);
+    assert.equal(blocks.en[0], `New token: Flap | SOXLB pool | ${item.ordinal}/3`);
     assert.equal(blocks.zh[2], `CA：${token}`);
     assert.equal(blocks.en[2], `CA: ${token}`);
-    assert.equal(blocks.zh[3], "代币：Signal Cat (SCAT)");
-    assert.equal(blocks.en[3], "Token: Signal Cat (SCAT)");
-    assert.match(blocks.zh[4], /^链上：官方 TokenCreated｜报价资产 SOXLB$/u);
-    assert.match(blocks.en[4], /^On-chain: Official TokenCreated \| quote asset SOXLB$/u);
-    assert.match(blocks.zh[5], /^时间：.*｜非自动交易$/u);
-    assert.match(blocks.en[5], /^Time: .* \| no automatic trading$/u);
-    assert.doesNotMatch(rendered, /selector=|security=|liquidityConfirmed=|路径=|flow=|入场=|entry=/iu);
-    assert.equal(bundle.version, 24);
+    assert.equal(blocks.zh[1], "代币：Signal Cat (SCAT)");
+    assert.equal(blocks.en[1], "Token: Signal Cat (SCAT)");
+    assert.match(blocks.zh[3], /^事件：TokenCreated｜报价资产 SOXLB$/u);
+    assert.match(blocks.en[3], /^Event: TokenCreated \| quote asset SOXLB$/u);
+    assert.match(blocks.zh[4], /^时间：/u);
+    assert.match(blocks.en[4], /^Time: /u);
+    assert.doesNotMatch(rendered, /风险|Risk|安全|Safety|不买|do not buy|勿追价|do not chase|非自动交易|no automatic trading|selector=|security=|liquidityConfirmed=|路径=|flow=|入场=|entry=/iu);
+    assert.equal(bundle.version, 27);
     if (item.decision === "pass") passEvent = event;
   }
   assert.equal(providerCalls, 0);
@@ -1064,11 +1155,10 @@ test("Flap tracked pool-token cards put CA on its own line for pass, unknown, an
   };
   const recoveryBundle = await buildBilingualAlertBundle({}, producerRecovery, "must stay structured");
   const recoveryBlocks = renderedLanguageBlocks(renderBilingualTelegramText(recoveryBundle, false));
-  assert.equal(recoveryBlocks.zh.length, 6);
-  assert.equal(recoveryBlocks.en.length, 6);
-  assert.match(recoveryBlocks.zh[1], /^状态：延迟补报｜勿追价｜/u);
-  assert.match(recoveryBlocks.en[1], /^Status: Delayed recovery \| do not chase \|/);
-  assert.doesNotMatch(recoveryBlocks.zh.join("\n"), /断线/u);
+  assert.equal(recoveryBlocks.zh.length, 5);
+  assert.equal(recoveryBlocks.en.length, 5);
+  assert.doesNotMatch(recoveryBlocks.zh.join("\n"), /风险|安全|不买|勿追价|非自动交易/u);
+  assert.doesNotMatch(recoveryBlocks.en.join("\n"), /Risk|Safety|do not buy|do not chase|no automatic trading/iu);
 
   const deliveryDelayed = {
     ...passEvent,
@@ -1084,11 +1174,10 @@ test("Flap tracked pool-token cards put CA on its own line for pass, unknown, an
   };
   const deliveryBundle = await buildBilingualAlertBundle({}, deliveryDelayed, "must stay structured");
   const deliveryBlocks = renderedLanguageBlocks(renderBilingualTelegramText(deliveryBundle, false));
-  assert.equal(deliveryBlocks.zh.length, 6);
-  assert.equal(deliveryBlocks.en.length, 6);
-  assert.match(deliveryBlocks.zh[1], /^状态：延迟送达｜勿追价｜/u);
-  assert.match(deliveryBlocks.en[1], /^Status: Delayed delivery \| do not chase \|/);
-  assert.match(deliveryBlocks.zh[5], /^时间：.*｜非自动交易$/u);
+  assert.equal(deliveryBlocks.zh.length, 5);
+  assert.equal(deliveryBlocks.en.length, 5);
+  assert.doesNotMatch(deliveryBlocks.zh.join("\n"), /风险|安全|不买|勿追价|非自动交易/u);
+  assert.doesNotMatch(deliveryBlocks.en.join("\n"), /Risk|Safety|do not buy|do not chase|no automatic trading/iu);
 
   const revisionBlockHash = `0x${"f".repeat(64)}`;
   const revisionEvent = {
@@ -1106,11 +1195,10 @@ test("Flap tracked pool-token cards put CA on its own line for pass, unknown, an
   };
   const revisionBundle = await buildBilingualAlertBundle({}, revisionEvent, "must stay structured");
   const revisionBlocks = renderedLanguageBlocks(renderBilingualTelegramText(revisionBundle, false));
-  assert.equal(revisionBlocks.zh.length, 6);
-  assert.equal(revisionBlocks.en.length, 6);
-  assert.equal(revisionBlocks.zh[1], "状态：链重组修订｜以本条 CA 为准｜不买");
-  assert.equal(revisionBlocks.en[1], "Status: Chain-reorg revision | use this CA as canonical | do not buy");
-  assert.match(revisionBlocks.zh[5], /非自动交易/u);
+  assert.equal(revisionBlocks.zh.length, 5);
+  assert.equal(revisionBlocks.en.length, 5);
+  assert.match(revisionBlocks.zh[3], /TokenCreated（链重组修订）/u);
+  assert.match(revisionBlocks.en[3], /TokenCreated \(chain-reorg revision\)/u);
 });
 
 test("Flap Agentic Wallet first-token candidate keeps complete chain evidence and honest attribution", async () => {
@@ -1273,7 +1361,7 @@ test("Flap quote-pool timeout fallback stays bilingual, structured, JSON-free, a
   assert.ok(rendered.split("\n").length <= 18);
 });
 
-test("Flap official bStock quote-pair announcement names every asset and keeps the no-auto-trade boundary", async () => {
+test("Flap official bStock quote-pair announcement names every asset with a facts-only card", async () => {
   clearTranslationCache();
   const observedAt = new Date().toISOString();
   const event = withTradingPriority({
@@ -1315,15 +1403,16 @@ test("Flap official bStock quote-pair announcement names every asset and keeps t
     assert.match(blocks.zh.join("\n"), new RegExp(literal));
     assert.match(blocks.en.join("\n"), new RegExp(literal));
   }
-  assert.match(blocks.zh.join("\n"), /官方 X 已验证；链上启用待确认/u);
-  assert.match(blocks.en.join("\n"), /Official X verified; on-chain enablement pending/u);
-  assert.match(blocks.zh.join("\n"), /不等于 ETF\/股票所有权.*非自动交易/u);
-  assert.match(blocks.en.join("\n"), /not ETF\/share ownership.*no automatic trading/iu);
+  assert.match(blocks.zh.join("\n"), /事件：Flap 预告新增报价底池/u);
+  assert.match(blocks.en.join("\n"), /Event: Flap announced new quote pools/i);
+  assert.match(blocks.zh.join("\n"), /SOXLB/u);
+  assert.match(blocks.en.join("\n"), /SOXSB/u);
+  assert.doesNotMatch(rendered, /风险|Risk|勿追价|do not chase|非自动交易|no automatic trading/iu);
   assert.ok(rendered.split("\n").length <= 18);
   assert.ok(rendered.length < 3_800);
 });
 
-test("Flap verified quote-pool activation renders symbol, name, CA, chain and risk instead of a raw address", async () => {
+test("Flap verified quote-pool activation renders a plain company-and-meme fact card", async () => {
   clearTranslationCache();
   const quoteAddress = "0xd97d097a89113fa59b76c572e5b2eb647e8eefaf";
   const observedAt = new Date().toISOString();
@@ -1358,14 +1447,14 @@ test("Flap verified quote-pool activation renders symbol, name, CA, chain and ri
     assert.match(block, /SOXLB/);
     assert.match(block, /Semicon Bull 3X ETF/);
     assert.match(block, new RegExp(quoteAddress));
-    assert.match(block, /chainId=56/);
+    assert.match(block, /BNB Smart Chain \(56\)/);
   }
-  assert.match(blocks.zh.join("\n"), /Portal 回执 \+ ERC-20 元数据已核验/u);
-  assert.match(blocks.en.join("\n"), /Portal receipt \+ ERC-20 metadata verified/u);
-  assert.match(blocks.zh.join("\n"), /已建立跟踪窗口，后续仅播报该池 CA 1\/3、2\/3、3\/3/u);
-  assert.match(blocks.en.join("\n"), /tracking opened: only CA 1\/3, 2\/3, and 3\/3 will be reported for this pool/iu);
-  assert.match(blocks.zh.join("\n"), /不等于 ETF\/股票所有权.*非自动交易/u);
-  assert.match(blocks.en.join("\n"), /not ETF\/share ownership.*no automatic trading/iu);
+  assert.match(rendered, /^🆕 新底池 \| NEW POOL/u);
+  assert.match(blocks.zh.join("\n"), /事件：Portal 报价资产已启用/u);
+  assert.match(blocks.en.join("\n"), /Event: Portal quote asset enabled/u);
+  assert.match(blocks.zh.join("\n"), /业务：.*单日 \+300%/u);
+  assert.match(blocks.zh.join("\n"), /梗：/u);
+  assert.doesNotMatch(rendered, /风险|Risk|核验|Verification|勿追价|do not chase|非自动交易|no automatic trading/iu);
   assert.doesNotMatch(rendered, /平台新模式.*首个安全代币|Platform mode\/upgrade.*first safe token/iu);
   assert.ok(rendered.split("\n").length <= 18);
   assert.ok(rendered.length < 3_800);
@@ -1422,22 +1511,12 @@ test("Flap Board metadata recovery says first observed, keeps original time, and
   const bundle = await buildBilingualAlertBundle({ alertForceLocalStructured: true }, event, "Flap Board quote observation");
   const rendered = renderBilingualTelegramText(bundle, false);
   const blocks = renderedLanguageBlocks(rendered);
-  assert.match(blocks.zh.join("\n"), /报价底池已发现：SOXLB/u);
-  assert.match(blocks.zh.join("\n"), /官方看板首次确认观察到报价资产/u);
-  assert.match(blocks.zh.join("\n"), /名称\/符号已解析/u);
-  assert.match(blocks.en.join("\n"), /quote pools observed: SOXLB/i);
-  assert.match(blocks.en.join("\n"), /official Board first confirmed the quote asset/i);
-  assert.match(blocks.en.join("\n"), /name\/symbol resolved/i);
-  assert.match(blocks.zh.join("\n"), /Portal 0→1 待确认/u);
-  assert.match(blocks.en.join("\n"), /Portal 0→1 pending/i);
+  assert.match(rendered, /^🆕 新底池 \| NEW POOL/u);
+  assert.match(blocks.zh.join("\n"), /事件：Flap Board 新增报价资产/u);
+  assert.match(blocks.en.join("\n"), /Event: Flap Board added a quote asset/i);
   assert.match(blocks.zh.join("\n"), /09-02 20:20 CST/u);
   assert.match(blocks.en.join("\n"), /09-02 20:20 CST/u);
-  assert.match(blocks.zh.join("\n"), /元数据延迟补齐，勿追价/u);
-  assert.match(blocks.zh.join("\n"), /不等于 ETF\/股票所有权.*非自动交易/u);
-  assert.match(blocks.en.join("\n"), /not ETF\/share ownership.*no automatic trading/i);
-  assert.doesNotMatch(blocks.zh.join("\n"), /报价底池已启用|当前启用/u);
-  assert.doesNotMatch(blocks.en.join("\n"), /quote pools? enabled|currently enabled/i);
-  assert.doesNotMatch(rendered, /ERC-20 元数据已核验|ERC-20 metadata verified/iu);
+  assert.doesNotMatch(rendered, /风险|Risk|核验|Verification|勿追价|do not chase|非自动交易|no automatic trading|Portal 报价资产已启用/iu);
   assertShortFieldLayout(rendered);
   assert.ok(rendered.length < 3_800);
 });
@@ -1772,15 +1851,16 @@ test("Four.Meme named-mode and official campaign cards expose the trading mechan
   const templateRendered = renderBilingualTelegramText(templateBundle, true);
 
   for (const [rendered, expected] of [
-    [listaRendered, ["ListaYield", "交易税分成→Lista 收益产品", "流动性默认迁移 Lista DEX", "仅模式公告，暂无 CA", "no CA yet", "链上启用后再播报首个 TokenCreated CA", "2095361508700258731"]],
-    [campaignRendered, ["150,000 USDT", "50,000 USDT", "Top 500", "流量催化；非协议升级；暂无指定 CA", "延迟补报｜勿追价", "2095713912188739967"]],
-    [githubRendered, ["ListaYield", "Lista V2 stake-tax", "StrategyTaxToken", "尚未确认产品上线", "four-meme-community/openfour-docs#bcf52911"]],
-    [templateRendered, ["Bonding Lista V2 Stake Tax V1", "参数 10% → 25%", "仅模板更新，暂无 CA", "template update only; no CA yet", "等待链上启用及首个 TokenCreated CA", "four.meme/meme-api/v1/public/token_template/search"]],
+    [listaRendered, ["ListaYield", "交易税分成→Lista 收益产品", "流动性默认迁移 Lista DEX", "新模式公告", "no token CA in this event", "2095361508700258731"]],
+    [campaignRendered, ["150,000 USDT", "50,000 USDT", "Top 500", "bStocks 交易活动", "no CA specified", "2095713912188739967"]],
+    [githubRendered, ["ListaYield", "Lista V2 stake-tax", "StrategyTaxToken", "代码与文档更新", "four-meme-community/openfour-docs#bcf52911"]],
+    [templateRendered, ["Bonding Lista V2 Stake Tax V1", "参数 10% → 25%", "该模板事件未提供代币 CA", "no token CA in this template event", "four.meme/meme-api/v1/public/token_template/search"]],
   ]) {
     assertShortFieldLayout(rendered);
     for (const literal of expected) assert.ok(rendered.includes(literal), literal);
     assert.doesNotMatch(rendered, /selector=|security=|liquidityConfirmed=|Translation unavailable|\[object Object\]/i);
     assert.doesNotMatch(rendered, /首个安全代币|first safety-cleared token/iu);
+    assert.doesNotMatch(rendered, /风险|Risk|勿追价|do not chase|非自动交易|no automatic trading|不买|do not buy/iu);
   }
   assert.match(listaBundle.en.text, /ListaYield/);
   assert.match(campaignBundle.en.text, /150,000 USDT/);
@@ -1876,12 +1956,13 @@ test("Four.Meme Registry capability and first-token cards separate provenance fr
   const tokenText = renderBilingualTelegramText(tokenBundle, true);
 
   for (const [rendered, expected] of [
-    [capabilityText, ["OpenFour Registry 能力更新", produced.added.name, `Preset ${produced.added.id}`, "新增预设", "暂无代币 CA", "启用后再播报首个 TokenCreated CA", "安全另行核验", rawCapability.explorerUrl]],
-    [tokenText, [produced.added.name, "First Confirmed (FIRST)", `CA：${rawFirstToken.token.address}`, "官方 Core TokenCreated", "链上归属已确认；安全未完成｜不买", rawFirstToken.explorerUrl]],
+    [capabilityText, ["OpenFour Registry 能力更新", produced.added.name, `Preset ${produced.added.id}`, "新增预设", rawCapability.explorerUrl]],
+    [tokenText, [produced.added.name, "First Confirmed (FIRST)", `CA：${rawFirstToken.token.address}`, "官方 Core TokenCreated", rawFirstToken.explorerUrl]],
   ]) {
     assertShortFieldLayout(rendered);
     for (const literal of expected) assert.ok(rendered.includes(literal), literal);
     assert.doesNotMatch(rendered, /selector=|security=|Translation unavailable|自动买入|buy now/i);
+    assert.doesNotMatch(rendered, /风险|Risk|勿追价|do not chase|非自动交易|no automatic trading|不买|do not buy/iu);
   }
   const tokenBlocks = renderedLanguageBlocks(tokenText);
   assert.equal(tokenBlocks.zh.filter((line) => line.startsWith("CA：")).length, 1);
@@ -1900,13 +1981,14 @@ test("Four.Meme Registry protocol cards name Module, TokenImpl, Tag, and authent
     true,
   )));
   for (const [rendered, expected] of [
-    [freshRendered[0], ["OpenFour Module", "ModuleUpserted", "kind=curve", "active=true", fresh.events[0].module.implementation, "安全性未知｜不买"]],
-    [freshRendered[1], ["OpenFour TokenImpl", "TokenImplUpserted", "version=2.0.0", fresh.events[1].tokenImplementation.tokenImplId, "安全性未知｜不买"]],
-    [freshRendered[2], ["OpenFour Tag", "TagRegistered", "module.curve.lista_yield", fresh.events[2].tag.tagId, "不代表代币或组件安全｜不买"]],
+    [freshRendered[0], ["OpenFour Module", "ModuleUpserted", "kind=curve", "active=true", fresh.events[0].module.implementation]],
+    [freshRendered[1], ["OpenFour TokenImpl", "TokenImplUpserted", "version=2.0.0", fresh.events[1].tokenImplementation.tokenImplId]],
+    [freshRendered[2], ["OpenFour Tag", "TagRegistered", "module.curve.lista_yield", fresh.events[2].tag.tagId]],
   ]) {
     assertShortFieldLayout(rendered);
     for (const literal of expected) assert.ok(rendered.includes(literal), literal);
     assert.doesNotMatch(rendered, /自动买入|buy now|GMGN/i);
+    assert.doesNotMatch(rendered, /风险|Risk|勿追价|do not chase|非自动交易|no automatic trading|不买|do not buy/iu);
   }
 
   const recovered = await produceFourRegistryProtocolEvents(t, {
@@ -1917,9 +1999,10 @@ test("Four.Meme Registry protocol cards name Module, TokenImpl, Tag, and authent
     await buildBilingualAlertBundle({}, recovered.events[0], recovered.events[0].signal.headline),
     true,
   );
-  for (const literal of ["延迟补报｜勿追价", "源 09-04 15:58 CST", "恢复 09-04 20:00 CST", "延迟 4小时1分", "非自动交易"]) {
+  for (const literal of ["延迟补报", "09-04 15:58 CST"]) {
     assert.ok(recoveredText.includes(literal), literal);
   }
+  assert.doesNotMatch(recoveredText, /风险|Risk|勿追价|do not chase|非自动交易|no automatic trading|不买|do not buy/iu);
 });
 
 test("Binance funding notices lead with the actual rule change instead of an internal version", async () => {
@@ -1959,8 +2042,8 @@ test("Binance funding notices lead with the actual rule change instead of an int
   ].join("\n"));
   const rendered = renderBilingualTelegramText(bundle, false);
 
-  assert.equal(bundle.version, 24);
-  assert.equal(bundle.format, "telegram_zh_en_compact_v14");
+  assert.equal(bundle.version, 27);
+  assert.equal(bundle.format, "telegram_zh_en_compact_v15");
   assert.match(bundle.zh.text, /^平台：Binance/m);
   assert.match(bundle.zh.text, /更新了什么：UNITREEUSDT 永续：8小时→4小时，费率上下限 \+2\.00%\/-2\.00%/);
   assert.match(bundle.zh.text, /官方公告 · 1309b6ac/);
@@ -1970,6 +2053,46 @@ test("Binance funding notices lead with the actual rule change instead of an int
   assert.equal(bundle.zh.text.split("\n").length, 2);
   assert.equal(bundle.en.text.split("\n").length, 2);
   assert.ok(rendered.length <= 600);
+});
+
+test("Binance LPP and Monitoring Tag notices render concise facts instead of validator backfill", async () => {
+  const common = {
+    type: "binance_official_update",
+    kind: "announcement",
+    project: { id: "binance", name: "Binance" },
+    source: { id: "binance_cms", trust: "official_verified" },
+    sourceTrust: "official_verified",
+    publishedAt: "2026-09-04T08:00:00.000Z",
+    observedAt: "2026-09-04T08:00:02.000Z",
+  };
+  const cases = [
+    {
+      event: {
+        ...common,
+        title: "Binance Futures Will Apply Last Price Protected Mechanism on USDⓈ-Margined TACUSDT Perpetual Contract (2026-08-27)",
+        keyChanges: ["Binance Futures will apply Last Price Protected (“LPP”) Mechanism on USDⓈ-Margined TACUSDT Perpetual Contract."],
+      },
+      expected: ["TACUSDT 永续合约将启用 LPP 价格保护机制", "Targets: TACUSDT"],
+    },
+    {
+      event: {
+        ...common,
+        title: "Binance Will Extend the Monitoring Tag to Include AVA, GNS, SCR & TOWNS on 2026-09-04",
+        keyChanges: ["The tokens to be added to the Monitoring Tag list are: AVA (AVA) Gains Network (GNS) Scroll (SCR) Towns Protocol (TOWNS) Tokens with the Monitoring Tag."],
+      },
+      expected: ["Monitoring Tag 新增 4 个代币", "Targets: AVA, GNS, SCR, TOWNS"],
+    },
+  ];
+
+  for (const { event, expected } of cases) {
+    const rendered = renderBilingualTelegramText(
+      await buildBilingualAlertBundle({ alertForceLocalStructured: true }, event, "Binance official notice"),
+      false,
+    );
+    for (const literal of expected) assert.ok(rendered.includes(literal), literal);
+    assert.doesNotMatch(rendered, /原文标识|Source IDs|风险[:：]|\bRisk:/iu);
+    assertShortFieldLayout(rendered);
+  }
 });
 
 test("real multi-contract Binance notice renders every target and the first launch in CST plus UTC", async () => {
@@ -2008,19 +2131,14 @@ test("real multi-contract Binance notice renders every target and the first laun
   const blocks = renderedLanguageBlocks(rendered);
 
   assertShortFieldLayout(rendered);
-  assert.equal(blocks.zh.length, 6);
-  assert.equal(blocks.en.length, 6);
+  assert.equal(blocks.zh.length, 5);
+  assert.equal(blocks.en.length, 5);
   assert.match(rendered, /事件：上线 7个 USDⓈ-M 永续合约/u);
   assert.match(rendered, new RegExp(`标的：${symbols.join("、")}`));
   assert.match(rendered, new RegExp(`Targets: ${symbols.join(", ")}`));
-  assert.match(rendered, /验证：.*入场=.*失效=.*官方时间表；待开盘核验/u);
-  assert.match(rendered, /Verification: .*entry=.*invalid=.*Official schedule; verify at launch/u);
   assert.match(rendered, /时间：首批开盘=09-02 18:00 CST（09-02 10:00 UTC）/u);
   assert.match(rendered, /Time: First launch=09-02 18:00 CST \(09-02 10:00 UTC\)/u);
-  assert.match(rendered, /永续→深度\/持仓\/资金费率\/基差/u);
-  assert.match(rendered, /perpetual→depth\/OI\/funding\/basis/u);
-  assert.match(rendered, /永续≠股票/u);
-  assert.match(rendered, /perpetual≠stock/u);
+  assert.doesNotMatch(rendered, /风险|Risk|入场=|entry=|失效=|invalid=|非自动交易|no automatic trading/iu);
   assert.doesNotMatch(rendered, /现货→合约|spot→contract/iu);
   assert.ok(rendered.length <= 900, `multi-contract card is ${rendered.length} characters`);
 });
@@ -2052,8 +2170,8 @@ test("Binance Alpha, spot, and spot-delist cards use the structured market plan 
           instruments: [{ symbol: "MARSCOIN", launchAt: "2026-09-03T02:00:00.000Z" }],
         },
       },
-      expected: /Alpha开盘→成交深度与价格发现/u,
-      expectedEn: /Alpha launch→trading depth and price discovery/u,
+      expected: /事件：上币 现货资产/u,
+      expectedEn: /Event: List spot assets/u,
     },
     {
       name: "spot listing",
@@ -2071,8 +2189,8 @@ test("Binance Alpha, spot, and spot-delist cards use the structured market plan 
           instruments: [{ symbol: "AERO", launchAt: "2026-09-03T02:05:00.000Z" }],
         },
       },
-      expected: /现货开盘→成交深度与价格发现/u,
-      expectedEn: /Spot launch→trading depth and price discovery/u,
+      expected: /事件：上币 现货资产/u,
+      expectedEn: /Event: List spot assets/u,
     },
     {
       name: "spot delisting",
@@ -2090,8 +2208,8 @@ test("Binance Alpha, spot, and spot-delist cards use the structured market plan 
           instruments: [{ symbol: "ICX", effectiveAt: "2026-09-03T03:00:00.000Z" }],
         },
       },
-      expected: /现货下架→订单、退出与流动性/u,
-      expectedEn: /Spot delisting→orders, exits, and liquidity/u,
+      expected: /事件：下架 现货资产/u,
+      expectedEn: /Event: Delist spot assets/u,
     },
   ];
 
@@ -2109,10 +2227,10 @@ test("Binance Alpha, spot, and spot-delist cards use the structured market plan 
     assert.match(rendered, item.expectedEn, item.name);
     assert.doesNotMatch(rendered, /永续|perpetual/iu, item.name);
     if (item.event.announcementDetails.action === "delist") {
-      assert.match(rendered, /不新增仓位/u);
-      assert.match(rendered, /Do not add positions/u);
-      assert.match(rendered, /待生效核验|verify at effective time/u);
+      assert.match(rendered, /时间：首批生效=/u);
+      assert.match(rendered, /Time: First effective=/u);
     }
+    assert.doesNotMatch(rendered, /风险|Risk|入场=|entry=|失效=|invalid=|非自动交易|no automatic trading/iu);
     assertShortFieldLayout(rendered);
   }
 });
@@ -2246,8 +2364,8 @@ test("real hooklist registrations distinguish the Hook file address from an unre
   const rendered = renderBilingualTelegramText(bundle, true);
 
   assert.deepEqual(event, original);
-  assert.equal(bundle.version, 24);
-  assert.equal(bundle.format, "telegram_zh_en_compact_v14");
+  assert.equal(bundle.version, 27);
+  assert.equal(bundle.format, "telegram_zh_en_compact_v15");
   assert.match(bundle.zh.text, /^平台：Uniswap/m);
   assert.match(bundle.en.text, /^Platform: Uniswap/m);
   for (const block of [bundle.zh.text, bundle.en.text]) {
@@ -2496,7 +2614,7 @@ test("Telegram news renders the two-field bilingual template and can never becom
   const en = bundle.en.text.split("\n");
 
   assert.ok(providerCalls > 0, "the existing translation provider path must be preferred");
-  assert.equal(bundle.version, 24);
+  assert.equal(bundle.version, 27);
   assert.equal(bundle.eventType, "telegram_news_update");
   assert.equal(bundle.focusModel.telegramNews.messageUrl, event.messageUrl);
   assert.equal(zh.length, 2);
@@ -2573,13 +2691,48 @@ test("Telegram news falls back honestly in either direction when both translatio
     assert.equal(block.en.text.split("\n").length, 2);
     const fallbackRendered = renderBilingualTelegramText(block, true);
     assert.match(fallbackRendered, /@maxguruai#4822/u);
-    assert.match(fallbackRendered, /公开频道观察，待官方核实/u);
-    assert.match(fallbackRendered, /Public-channel observation; awaiting official verification/u);
+    assert.match(fallbackRendered, /来源：/u);
+    assert.match(fallbackRendered, /Source:/u);
+    assert.doesNotMatch(fallbackRendered, /风险|Risk|验证：|Verification:|非自动交易|no automatic trading/iu);
     assert.doesNotMatch(fallbackRendered, /请看下方英文原文[\s\S]*see verified Chinese facts above/iu);
     assertShortFieldLayout(fallbackRendered);
     assert.ok(fallbackRendered.length <= 900);
   }
   assert.match(rendered, /^🔔 监控提醒 \| MONITOR ALERT\n/u);
+});
+
+test("Telegram news fallback keeps useful identifiers and reconstructs one clean external link", async () => {
+  clearTranslationCache();
+  const fullUrl = "https://www.dailysignal.com/2026/08/24/manufacturing-investments/";
+  const bundle = await buildBilingualAlertBundle({
+    alertTranslationFetchImpl: async () => ({ ok: false, status: 503, text: async () => "unavailable" }),
+    alertTranslationFallbackUrl: "https://api.mymemory.translated.net/get",
+    alertTranslationTimeoutMs: 100,
+  }, {
+    type: "telegram_news_update",
+    messageId: 4823,
+    sourceTrust: "public_telegram_observed",
+    channel: { username: "maxguruai", visibility: "public" },
+    sourceOccurredAt: "2026-08-24T02:05:05.000Z",
+    news: {
+      category: "market",
+      headline: "制造业投资更新 https://www.dailysignal.",
+      summary: "com/2026/08/24/manufacturing-investments/ 涉及 $INJ、$DTF、Aave V3 与 BTC/ETH",
+      externalUrls: [fullUrl],
+      confidence: "observed",
+    },
+  }, "Telegram public-channel observation");
+  const rendered = renderBilingualTelegramText(bundle, false);
+  const blocks = renderedLanguageBlocks(rendered);
+
+  for (const literal of ["$INJ", "$DTF", "V3", "BTC/ETH", fullUrl]) {
+    assert.ok(blocks.zh.join("\n").includes(literal), `Chinese block lost ${literal}`);
+    assert.ok(blocks.en.join("\n").includes(literal), `English block lost ${literal}`);
+  }
+  assert.doesNotMatch(rendered, /原文标识|Source IDs|com\/2026\/08\/24\/manufacturing-investments\/ 涉及/u);
+  assert.match(rendered, /相关：/u);
+  assert.match(rendered, new RegExp(`Link: ${fullUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+  assertShortFieldLayout(rendered);
 });
 
 test("Telegram translates only narrative fragments and preserves #3191 financial meaning without marker collision", async () => {
@@ -2894,8 +3047,8 @@ test("every supported Telegram event type uses the same compact bilingual envelo
     ].join("\n"));
     const rendered = renderBilingualTelegramText(bundle, false);
 
-    assert.equal(bundle.version, 24, type);
-    assert.equal(bundle.format, "telegram_zh_en_compact_v14", type);
+    assert.equal(bundle.version, 27, type);
+    assert.equal(bundle.format, "telegram_zh_en_compact_v15", type);
     assert.match(bundle.zh.text, /[\u3400-\u9fff]/, type);
     assert.match(bundle.en.text, /[A-Za-z]{3,}/, type);
     assert.match(rendered, /^🔔 监控提醒 \| MONITOR ALERT\n🇨🇳 中文\n/, type);
@@ -2906,6 +3059,20 @@ test("every supported Telegram event type uses the same compact bilingual envelo
     assert.ok(rendered.split("\n").length <= 18, type);
     assert.ok(rendered.length <= 600, type);
   }
+});
+
+test("legacy technical-literal metadata can never append internal fields to a non-news card", async () => {
+  const bundle = await buildBilingualAlertBundle({ alertForceLocalStructured: true }, {
+    type: "ai_official_update",
+    project: { id: "xai", name: "xAI" },
+    currentSnapshot: { title: "Grok API update" },
+    observedAt: "2026-08-13T00:00:00.000Z",
+  }, "xAI official update");
+  bundle.requiredTechnicalLiterals = ["security=block", "liquidityConfirmed=false", "API/schema"];
+  const rendered = renderBilingualTelegramText(bundle, false);
+
+  assert.doesNotMatch(rendered, /原文标识|Source IDs|security=|liquidityConfirmed=|API\/schema/u);
+  assertShortFieldLayout(rendered);
 });
 
 test("every bilingual alert persists a one-glance before/after model and fails over honestly", async () => {
@@ -2930,8 +3097,8 @@ test("every bilingual alert persists a one-glance before/after model and fails o
     source: { name: "Binance Wallet 官方公告" },
   }, "🚨 Binance Wallet 更新\n事件: Wallet API v2\n状态: 官方公告已确认\n时间: 2026-08-13 00:00:00");
 
-  assert.equal(bundle.version, 24);
-  assert.equal(bundle.format, "telegram_zh_en_compact_v14");
+  assert.equal(bundle.version, 27);
+  assert.equal(bundle.format, "telegram_zh_en_compact_v15");
   assert.equal(bundle.changeModel.basis, "exact_snapshot");
   assert.match(bundle.zh.text, /更新了什么：中文翻译暂不可用；请看英文原文/);
   assert.match(bundle.en.text, /What changed:.*Wallet API v1.*→.*Wallet API v2/i);
@@ -3150,10 +3317,10 @@ test("Binance venue security T0 renders risk containment instead of a listing tr
   ].join("\n"));
   const rendered = renderBilingualTelegramText(bundle, true);
   assert.match(rendered, /事件：Binance 确认安全事件并暂停提现/u);
-  assert.match(rendered, /路径=平台风险→充提\/交易\/流动性/u);
-  assert.match(rendered, /入场=核对范围\+链上异常\+恢复条件/u);
+  assert.match(rendered, /证据：官方公告/u);
   assert.match(rendered, /Event: Binance confirmed a security incident and suspended withdrawals/u);
-  assert.match(rendered, /flow=venue risk→funding\/trading\/liquidity/u);
+  assert.match(rendered, /Evidence: Official announcement/u);
+  assert.doesNotMatch(rendered, /路径=|flow=|入场=|entry=|失效=|invalid=|风险：|Risk:/iu);
   assert.doesNotMatch(rendered, /现货\/Alpha|spot\/Alpha|开盘量价|opening price-volume/iu);
   assertShortFieldLayout(rendered);
   assert.ok(rendered.length < 900, `security card was ${rendered.length}`);
@@ -3258,7 +3425,7 @@ test("Telegram retries reuse the persisted bilingual render bundle without retra
   assert.equal((await sendAlerts(config, event)).status, "queued");
   const firstOutbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   const entry = firstOutbox.events[Object.keys(firstOutbox.events)[0]];
-  assert.equal(entry.renderBundle.version, 24);
+  assert.equal(entry.renderBundle.version, 27);
   const callsAfterFirstRender = translationCalls;
   entry.destinations.telegram.nextAttemptAt = null;
   await fs.writeFile(path.join(dataDir, "alert-outbox.json"), `${JSON.stringify(firstOutbox, null, 2)}\n`);
@@ -3273,12 +3440,12 @@ test("Telegram retries reuse the persisted bilingual render bundle without retra
 
   const finalOutbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   const finalEntry = finalOutbox.events[Object.keys(finalOutbox.events)[0]];
-  assert.equal(finalEntry.destinations.telegram.receipt.renderVersion, 24);
+  assert.equal(finalEntry.destinations.telegram.receipt.renderVersion, 27);
   assert.equal(finalEntry.destinations.telegram.receipt.translation.zh.status, finalEntry.renderBundle.zh.status);
   assert.equal(finalEntry.destinations.telegram.receipt.translation.en.status, finalEntry.renderBundle.en.status);
 });
 
-test("a pending v14 card is rebuilt once as v24 while terminal v14 is not migrated", async (t) => {
+test("a pending v14 card is rebuilt once as v27 while terminal v14 is not migrated", async (t) => {
   clearTranslationCache();
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-bilingual-v6-migration-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -3346,8 +3513,8 @@ test("a pending v14 card is rebuilt once as v24 while terminal v14 is not migrat
 
   const migrated = JSON.parse(await fs.readFile(file, "utf8"));
   const migratedEntry = migrated.events[Object.keys(migrated.events)[0]];
-  assert.equal(migratedEntry.renderBundle.version, 24);
-  assert.equal(migratedEntry.renderBundle.format, "telegram_zh_en_compact_v14");
+  assert.equal(migratedEntry.renderBundle.version, 27);
+  assert.equal(migratedEntry.renderBundle.format, "telegram_zh_en_compact_v15");
   assert.notEqual(migratedEntry.renderBundle.sourceHash, "V14_SENTINEL_HASH");
   assert.equal(migratedEntry.renderBundle.zh.text.split("\n").length, 2);
   assert.equal(migratedEntry.renderBundle.en.text.split("\n").length, 2);
@@ -3400,7 +3567,7 @@ test("an unknown Binance official kind is suppressed before rendering", async (t
   assert.equal(payload, undefined);
 });
 
-test("pon.fun official API plus Factory lifecycle card keeps the stock boundary and no-trading warning atomic", async () => {
+test("pon.fun official API plus Factory lifecycle card keeps stock-linked facts without runtime warnings", async () => {
   const nowMs = Date.parse("2026-09-02T04:00:30.000Z");
   const factory = "0xF698d13348686C1529c2DC54847C123424d9DAE0";
   const stockToken = "0x3333333333333333333333333333333333333333";
@@ -3431,10 +3598,10 @@ test("pon.fun official API plus Factory lifecycle card keeps the stock boundary 
   const rendered = renderBilingualTelegramText(bundle, false);
   const blocks = renderedLanguageBlocks(rendered);
 
-  assert.match(blocks.zh.join("\n"), /验证：官方 API 与 Factory 指纹绑定/u);
-  assert.match(blocks.zh.join("\n"), /风险：coin 不是股票；非自动交易/u);
-  assert.match(blocks.en.join("\n"), /Verification: Official API bound to Factory fingerprint/u);
-  assert.match(blocks.en.join("\n"), /Risk: coin is not the stock; no automatic trading/u);
+  assert.match(blocks.zh.join("\n"), /事件：市场生命周期 RWA/u);
+  assert.match(blocks.zh.join("\n"), new RegExp(stockToken));
+  assert.match(blocks.en.join("\n"), /Event: Market lifecycle RWA/u);
+  assert.doesNotMatch(rendered, /风险|Risk|验证：|Verification:|非自动交易|no automatic trading/iu);
   assert.doesNotMatch(blocks.en.join("\n"), /[\u3400-\u9fff]/u);
   assertShortFieldLayout(rendered);
 });
@@ -3519,6 +3686,7 @@ test("pon.fun structural and official-X cards keep a clear bounded bilingual fac
     assert.match(bundle.en.text, /^Platform: pon\.fun/m);
     assert.match(bundle.en.text, /^What changed: /m);
     assert.doesNotMatch(bundle.en.text, /[\u3400-\u9fff]/u);
+    assert.doesNotMatch(rendered, /风险|Risk|勿追价|do not chase|非自动交易|no automatic trading/iu);
     assertShortFieldLayout(rendered);
     assert.ok(rendered.length < 3_800, `pon.fun card is ${rendered.length} characters`);
     for (const identifier of identifiers) {
@@ -3547,15 +3715,18 @@ test("pon.fun structural and official-X cards keep a clear bounded bilingual fac
   const delayedRendered = renderBilingualTelegramText(delayedBundle, true);
   assert.equal(delayedX.tradingPriority.tier, "T2");
   assert.match(delayedBundle.zh.text, /监控恢复补报/);
-  assert.match(delayedBundle.zh.text, /勿追价/);
+  assert.match(delayedBundle.zh.text, /延迟 20分钟/u);
+  assert.match(delayedBundle.zh.text, /原始证据已保留/u);
   assert.match(delayedBundle.en.text, /Delayed recovery/);
-  assert.match(delayedBundle.en.text, /do not chase/);
+  assert.match(delayedBundle.en.text, /20m late/u);
+  assert.match(delayedBundle.en.text, /original proof retained/u);
+  assert.doesNotMatch(delayedRendered, /风险|Risk|勿追价|do not chase|非自动交易|no automatic trading/iu);
   assert.doesNotMatch(delayedBundle.en.text, /[\u3400-\u9fff]/u);
   assertShortFieldLayout(delayedRendered);
   assert.ok(delayedRendered.length < 3_800, `delayed pon.fun card is ${delayedRendered.length} characters`);
 });
 
-test("Flap Portal delayed recovery is a bilingual T2 outage card with original time and no-chase boundary", async () => {
+test("Flap Portal delayed recovery uses the same plain new-pool fact card", async () => {
   const occurredAt = "2026-09-03T06:40:00.000Z";
   const recoveredAt = "2026-09-03T07:00:00.000Z";
   const quoteAddress = "0xe28c09e21db5bb63c4821c3f44c26ee5aee8280f";
@@ -3612,15 +3783,12 @@ test("Flap Portal delayed recovery is a bilingual T2 outage card with original t
   const rendered = renderBilingualTelegramText(bundle, false);
   const blocks = renderedLanguageBlocks(rendered);
   assert.equal(event.tradingPriority.tier, "T2");
-  assert.match(rendered, /^🔔 监控提醒 \| MONITOR ALERT/u);
-  assert.match(blocks.zh.join("\n"), /断线恢复补报/u);
-  assert.match(blocks.zh.join("\n"), /勿追价/u);
-  assert.match(blocks.zh.join("\n"), /非自动交易/u);
-  assert.match(blocks.zh.join("\n"), /原始发生=.*恢复=/u);
-  assert.match(blocks.en.join("\n"), /Delayed recovery/i);
-  assert.match(blocks.en.join("\n"), /do not chase/i);
-  assert.match(blocks.en.join("\n"), /no automatic trading/i);
-  assert.match(blocks.en.join("\n"), /bStock quote token is not ETF\/share ownership/i);
+  assert.match(rendered, /^🆕 新底池 \| NEW POOL/u);
+  assert.match(blocks.zh.join("\n"), /事件：Portal 报价资产已启用/u);
+  assert.match(blocks.en.join("\n"), /Event: Portal quote asset enabled/i);
+  assert.match(blocks.zh.join("\n"), /09-03 14:40 CST/u);
+  assert.match(blocks.en.join("\n"), /09-03 14:40 CST/u);
+  assert.doesNotMatch(rendered, /风险|Risk|核验|Verification|断线恢复|Delayed recovery|勿追价|do not chase|非自动交易|no automatic trading/iu);
   for (const literal of ["Brk.B", quoteAddress]) {
     assert.match(blocks.zh.join("\n"), new RegExp(literal.replaceAll(".", "\\.")));
     assert.match(blocks.en.join("\n"), new RegExp(literal.replaceAll(".", "\\.")));
@@ -3651,13 +3819,9 @@ test("Flap Portal delayed recovery is a bilingual T2 outage card with original t
     "Flap generic quote delayed recovery",
   );
   const genericRendered = renderBilingualTelegramText(genericBundle, false);
-  assert.match(genericRendered, /报价代币仍有合约、流动性与可卖性风险/u);
-  assert.match(genericRendered, /quote-token contract, liquidity, and sellability risks remain/i);
   assert.doesNotMatch(genericRendered, /bStock|ETF|share ownership/iu);
-  assert.match(genericRendered, /勿追价/u);
-  assert.match(genericRendered, /do not chase/i);
-  assert.match(genericRendered, /非自动交易/u);
-  assert.match(genericRendered, /no automatic trading/i);
+  assert.match(genericRendered, /^🆕 新底池 \| NEW POOL/u);
+  assert.doesNotMatch(genericRendered, /风险|Risk|勿追价|do not chase|非自动交易|no automatic trading/iu);
   assertShortFieldLayout(genericRendered);
 
   const firstObserved = structuredClone(genericEvent);
@@ -3700,14 +3864,12 @@ test("Flap Portal delayed recovery is a bilingual T2 outage card with original t
   assert.match(observedBlocks.zh.join("\n"), /补扫首次观察/u);
   assert.match(observedBlocks.zh.join("\n"), /当前确认启用/u);
   assert.match(observedBlocks.zh.join("\n"), /此前是否新增\/0→1 未证/u);
-  assert.match(observedBlocks.zh.join("\n"), /勿追价/u);
-  assert.match(observedBlocks.zh.join("\n"), /非自动交易/u);
+  assert.doesNotMatch(observedBlocks.zh.join("\n"), /风险|勿追价|非自动交易/u);
   assert.doesNotMatch(observedBlocks.zh.join("\n"), /新增底池|报价底池已启用/u);
   assert.match(observedBlocks.en.join("\n"), /First observed after (?:a )?gap/i);
   assert.match(observedBlocks.en.join("\n"), /currently confirmed enabled/i);
   assert.match(observedBlocks.en.join("\n"), /prior listing\/0→1 unproven/i);
-  assert.match(observedBlocks.en.join("\n"), /do not chase/i);
-  assert.match(observedBlocks.en.join("\n"), /no automatic trading/i);
+  assert.doesNotMatch(observedBlocks.en.join("\n"), /Risk|do not chase|no automatic trading/i);
   assert.doesNotMatch(observedBlocks.en.join("\n"), /new quote pools?|quote pools enabled/i);
   assert.doesNotMatch(observedRendered, /bStock|ETF|share ownership/iu);
   assertShortFieldLayout(observedRendered);

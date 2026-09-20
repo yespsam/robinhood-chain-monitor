@@ -29,10 +29,11 @@ export const parseDistinctRpcOrigins = (name, rawValue, fallbackValue, { require
 
 const flapQuoteMonitorEnabled = !/^false$/i.test(process.env.FLAP_QUOTE_MONITOR_ENABLED || "true");
 const fourRegistryMonitorEnabled = !/^false$/i.test(process.env.FOUR_REGISTRY_MONITOR_ENABLED || "true");
+const robinhoodRpcUrl = process.env.RPC_URL || "https://rpc.mainnet.chain.robinhood.com";
 
 export const config = {
   monitorScope: String(process.env.MONITOR_SCOPE || "all").trim().toLowerCase(),
-  rpcUrl: process.env.RPC_URL || "https://rpc.mainnet.chain.robinhood.com",
+  rpcUrl: robinhoodRpcUrl,
   chainId: integer("CHAIN_ID", 4663),
   confirmations: integer("CONFIRMATIONS", 2),
   pollIntervalMs: integer("POLL_INTERVAL_MS", 1_000),
@@ -48,6 +49,42 @@ export const config = {
   telegramNewsPollIntervalMs: integer("TELEGRAM_NEWS_POLL_INTERVAL_MS", 4_000),
   telegramNewsRequestTimeoutMs: integer("TELEGRAM_NEWS_REQUEST_TIMEOUT_MS", 3_000),
   telegramNewsMaxBackoffMs: integer("TELEGRAM_NEWS_MAX_BACKOFF_MS", 900_000),
+  // AI narrative sniper v2 is shadow-only and opt-in. Enabling it admits
+  // verified monitor events into a durable local evidence/ledger pipeline; it
+  // never creates a signer or broadcasts a transaction.
+  narrativeSniperEnabled: /^true$/i.test(process.env.NARRATIVE_SNIPER_ENABLED || "false"),
+  narrativeSniperEvaluationIntervalMs: integer("NARRATIVE_SNIPER_EVALUATION_INTERVAL_MS", 1_000),
+  narrativeSniperRequestTimeoutMs: integer("NARRATIVE_SNIPER_REQUEST_TIMEOUT_MS", 5_000),
+  narrativeSniperMarketEvidenceMaxAgeMs: integer("NARRATIVE_SNIPER_MARKET_EVIDENCE_MAX_AGE_MS", 30_000),
+  narrativeSniperRiskEvidenceMaxAgeMs: integer("NARRATIVE_SNIPER_RISK_EVIDENCE_MAX_AGE_MS", 300_000),
+  narrativeSniperNewsMaxAgeMs: integer("NARRATIVE_SNIPER_NEWS_MAX_AGE_MS", 600_000),
+  narrativeSniperCandidateMaxAgeMs: integer("NARRATIVE_SNIPER_CANDIDATE_MAX_AGE_MS", 600_000),
+  narrativeSniperStateLimit: integer("NARRATIVE_SNIPER_STATE_LIMIT", 2_000),
+  narrativeShadowEntryTtlMs: integer("NARRATIVE_SHADOW_ENTRY_TTL_MS", 30_000),
+  narrativeShadowInitialEquityUsd: integer("NARRATIVE_SHADOW_INITIAL_EQUITY_USD", 10_000),
+  // The lifecycle worker is separately opt-in and still shadow-only. The main
+  // runtime must also inject a trusted read-only quote provider before this can
+  // be enabled; otherwise construction fails closed.
+  narrativeShadowSimulatorEnabled: /^true$/i.test(process.env.NARRATIVE_SHADOW_SIMULATOR_ENABLED || "false"),
+  narrativeShadowMarkIntervalMs: integer("NARRATIVE_SHADOW_MARK_INTERVAL_MS", 5_000),
+  // A quote independently replays the full V2 route and oracle state through
+  // two RPC providers. Keep the aggregate evidence budget below this outer
+  // simulator deadline so a failed read closes cleanly before the next cycle.
+  narrativeShadowProviderTimeoutMs: integer("NARRATIVE_SHADOW_PROVIDER_TIMEOUT_MS", 30_000),
+  narrativeShadowQuoteRpcBudgetMs: integer("NARRATIVE_SHADOW_QUOTE_RPC_BUDGET_MS", 25_000),
+  narrativeShadowQuoteRpcRequestTimeoutMs: integer("NARRATIVE_SHADOW_QUOTE_RPC_REQUEST_TIMEOUT_MS", 5_000),
+  narrativeShadowQuoteConfirmations: integer("NARRATIVE_SHADOW_QUOTE_CONFIRMATIONS", 2),
+  narrativeShadowQuoteMaxHeadLagBlocks: integer("NARRATIVE_SHADOW_QUOTE_MAX_HEAD_LAG_BLOCKS", 3),
+  narrativeShadowOracleMaxAgeMs: integer("NARRATIVE_SHADOW_ORACLE_MAX_AGE_MS", 5_400_000),
+  narrativeShadowQuoteMaxAgeMs: integer("NARRATIVE_SHADOW_QUOTE_MAX_AGE_MS", 15_000),
+  narrativeShadowQuoteBlockMaxAgeMs: integer("NARRATIVE_SHADOW_QUOTE_BLOCK_MAX_AGE_MS", 30_000),
+  narrativeShadowQuoteMaxValidityMs: integer("NARRATIVE_SHADOW_QUOTE_MAX_VALIDITY_MS", 30_000),
+  narrativeShadowQuoteFutureSkewMs: integer("NARRATIVE_SHADOW_QUOTE_FUTURE_SKEW_MS", 1_000),
+  narrativeShadowTakeProfitBps: integer("NARRATIVE_SHADOW_TAKE_PROFIT_BPS", 5_000),
+  narrativeShadowStopLossBps: integer("NARRATIVE_SHADOW_STOP_LOSS_BPS", 2_000),
+  narrativeShadowTimeStopMs: integer("NARRATIVE_SHADOW_TIME_STOP_MS", 900_000),
+  narrativeShadowMaxOrdersPerCycle: integer("NARRATIVE_SHADOW_MAX_ORDERS_PER_CYCLE", 100),
+  narrativeShadowTerminalAuditPerCycle: integer("NARRATIVE_SHADOW_TERMINAL_AUDIT_PER_CYCLE", 10),
   alertBilingualEnabled: !/^false$/i.test(process.env.ALERT_BILINGUAL_ENABLED || "true"),
   alertChineseTranslationEnabled: !/^false$/i.test(process.env.ALERT_CHINESE_TRANSLATION_ENABLED || "true"),
   alertTranslationUrl: process.env.ALERT_TRANSLATION_URL || "https://translate.googleapis.com/translate_a/single",
@@ -211,8 +248,30 @@ export const config = {
   // pon.fun is a separate Robinhood Chain launchpad and must never inherit
   // the legacy pons.family switch or identity graph.
   ponMonitorEnabled: /^true$/i.test(process.env.PON_MONITOR_ENABLED || "false"),
+  geniusMonitorEnabled: /^true$/i.test(process.env.GENIUS_MONITOR_ENABLED || "false"),
+  geniusPollIntervalMs: integer("GENIUS_POLL_INTERVAL_MS", 10_000),
+  geniusDocsPollIntervalMs: integer("GENIUS_DOCS_POLL_INTERVAL_MS", 60_000),
+  geniusXPollIntervalMs: integer("GENIUS_X_POLL_INTERVAL_MS", 30_000),
+  geniusRequestTimeoutMs: integer("GENIUS_REQUEST_TIMEOUT_MS", 6_000),
+  geniusBlockRange: integer("GENIUS_BLOCK_RANGE", 512),
+  geniusRpcUrls: parseDistinctRpcOrigins("GENIUS_RPC_URLS", process.env.GENIUS_RPC_URLS,
+    "https://bsc-mainnet.public.blastapi.io,https://rpc-bnb.blockmachine.io",
+    { required: /^true$/i.test(process.env.GENIUS_MONITOR_ENABLED || "false") }),
+  geniusLogRpcUrls: parseDistinctRpcOrigins("GENIUS_LOG_RPC_URLS", process.env.GENIUS_LOG_RPC_URLS,
+    "https://rpc.48.club,https://rpc-bnb.blockmachine.io",
+    { required: /^true$/i.test(process.env.GENIUS_MONITOR_ENABLED || "false") }),
+  alertGeniusRealtimeMaxAgeMs: integer("ALERT_GENIUS_REALTIME_MAX_AGE_MS", 600_000),
+  alertGeniusTelegramMaxAgeMs: integer("ALERT_GENIUS_TELEGRAM_MAX_AGE_MS", 3_600_000),
   ponPollIntervalMs: integer("PON_POLL_INTERVAL_MS", 3_000),
   ponRequestTimeoutMs: integer("PON_REQUEST_TIMEOUT_MS", 10_000),
+  ponRpcUrls: parseDistinctRpcOrigins(
+    "PON_RPC_URLS",
+    process.env.PON_RPC_URLS,
+    `https://robinhood-rpc.publicnode.com,https://rpc.ordofi.network,${robinhoodRpcUrl}`,
+    { required: false },
+  ),
+  ponRpcRequestTimeoutMs: integer("PON_RPC_REQUEST_TIMEOUT_MS", 4_000),
+  ponRpcConcurrency: integer("PON_RPC_CONCURRENCY", 1),
   ponEventChunkSize: integer("PON_EVENT_CHUNK_SIZE", 2_000),
   ponMaxBlocksPerCycle: integer("PON_MAX_BLOCKS_PER_CYCLE", 10_000),
   ponBackoffBaseMs: integer("PON_BACKOFF_BASE_MS", 5_000),
@@ -232,6 +291,12 @@ export const config = {
   binanceDeveloperPollIntervalMs: integer("BINANCE_DEVELOPER_POLL_INTERVAL_MS", 10_000),
   fomoCallEnabled: !/^false$/i.test(process.env.FOMO_CALL_ENABLED || "true"),
   fomoCallStandalone: !/^false$/i.test(process.env.FOMO_CALL_STANDALONE || "true"),
+  gmgnFlowMonitorEnabled: /^true$/i.test(process.env.GMGN_FLOW_MONITOR_ENABLED || "false"),
+  gmgnFlowCliPath: process.env.GMGN_FLOW_CLI_PATH || process.env.FOMO_CALL_GMGN_CLI_PATH || "gmgn-cli",
+  gmgnFlowPollIntervalMs: integer("GMGN_FLOW_POLL_INTERVAL_MS", 15_000),
+  gmgnFlowRequestIntervalMs: integer("GMGN_FLOW_REQUEST_INTERVAL_MS", 3_000),
+  gmgnFlowRequestTimeoutMs: integer("GMGN_FLOW_REQUEST_TIMEOUT_MS", 15_000),
+  gmgnFlowTokenCooldownMs: integer("GMGN_FLOW_TOKEN_COOLDOWN_MS", 1_800_000),
   fomoHealthMonitorEnabled: !/^false$/i.test(process.env.FOMO_HEALTH_MONITOR_ENABLED || "true"),
   fomoHealthPollIntervalMs: integer("FOMO_HEALTH_POLL_INTERVAL_MS", 30_000),
   fomoHealthStateStaleMs: integer("FOMO_HEALTH_STATE_STALE_MS", 180_000),
@@ -257,6 +322,11 @@ export const config = {
   fomoPublishedCallBscOnly: !/^false$/i.test(process.env.FOMO_PUBLISHED_CALL_BSC_ONLY || "true"),
   fomoThesisRelayWebSocketEnabled: !/^false$/i.test(process.env.FOMOSCAN_THESIS_WEBSOCKET_ENABLED || "true"),
   fomoXCallEnabled: !/^false$/i.test(process.env.FOMO_X_CALL_ENABLED || "true"),
+  kolLaunchMonitorEnabled: /^true$/i.test(process.env.KOL_LAUNCH_MONITOR_ENABLED || "false"),
+  kolCapitalRosterEnabled: !/^false$/i.test(process.env.KOL_CAPITAL_ROSTER_ENABLED || "true"),
+  kolCapitalCatalogMaximumAgeMs: integer("KOL_CAPITAL_CATALOG_MAX_AGE_MS", 15_552_000_000),
+  kolCapitalCategories: (process.env.KOL_CAPITAL_CATEGORIES || "")
+    .split(",").map((value) => value.trim()).filter(Boolean),
   fomoXCallPollIntervalMs: integer("FOMO_X_CALL_POLL_INTERVAL_MS", 5_000),
   fomoXCallDiscoveryIntervalMs: integer("FOMO_X_CALL_DISCOVERY_INTERVAL_MS", 60_000),
   fomoXCallAttributionMaxAgeMs: integer("FOMO_X_CALL_ATTRIBUTION_MAX_AGE_MS", 86_400_000),

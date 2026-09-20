@@ -443,7 +443,7 @@ async function harness(t, options = {}) {
   }, {
     provider,
     fetchImpl,
-    autoStart: false,
+    autoStart: options.autoStart === true,
     expectedFactoryCodeHash: keccak256(FACTORY_CODE),
     expectedCreationInputHash: keccak256(CREATION_DATA),
     sendAlertsImpl: options.sendAlertsImpl || (async (_config, event) => {
@@ -546,6 +546,141 @@ test("API disconnect records degradation without advancing the chain cursor or s
   const recovered = await fixture.monitor.check();
   assert.equal(recovered.status, "healthy");
   assert.equal(fixture.monitor.state().cursor.nextBlock, fixture.provider.head + 1);
+});
+
+test("historical Factory failures retain their streak and publish the effective global retry deadline", async (t) => {
+  let current = Date.parse("2026-09-17T07:00:00.000Z");
+  const provider = new FakePonProvider();
+  const originalCall = provider.call.bind(provider);
+  let historicalUnavailable = true;
+  let historicalFailures = 0;
+  provider.call = async (request) => {
+    const factoryCall = String(request.to).toLowerCase() === PON_FACTORY.toLowerCase()
+      ? PON_FACTORY_INTERFACE.parseTransaction({ data: request.data }) : null;
+    if (historicalUnavailable && factoryCall?.name === "marketCount" && Number(request.blockTag) < provider.head) {
+      historicalFailures += 1;
+      current += 8_000;
+      throw new Error("independent RPC hosts unavailable");
+    }
+    return originalCall(request);
+  };
+  const configuration = { ponBackoffBaseMs: 5_000, ponBackoffMaxMs: 300_000 };
+  const fixture = await harness(t, { provider, now: () => current, config: configuration });
+  let firstFailureAt;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const result = await fixture.monitor.check({ force: false });
+    assert.equal(result.errorCode, "PON_FACTORY_CALL_FAILED");
+    assert.equal(result.initialized, false);
+    const health = fixture.monitor.state()._health;
+    firstFailureAt ||= health.sources.chain.failureSince;
+    assert.equal(health.sources.chain.consecutiveFailures, attempt);
+    assert.equal(health.sources.chain.failureSince, firstFailureAt);
+    assert.equal(health.sources.chain.lastSuccessAt, null, "partial identity success is not a complete chain recovery");
+    assert.equal(health.consecutiveFailures, attempt);
+    const retryAt = current + 5_000 * 2 ** (attempt - 1);
+    assert.equal(Date.parse(health.nextAttemptAt), retryAt);
+    for (const source of Object.values(health.sources)) {
+      assert.ok(Date.parse(source.nextAttemptAt) >= retryAt, "no source can run before the global cooldown");
+    }
+    const requestsBeforeCooldown = fixture.api.requests.length;
+    const failedCallsBeforeCooldown = historicalFailures;
+    current = retryAt - 1;
+    assert.equal((await fixture.monitor.check({ force: false })).status, "backoff");
+    assert.equal(fixture.api.requests.length, requestsBeforeCooldown);
+    assert.equal(historicalFailures, failedCallsBeforeCooldown);
+    current = retryAt;
+  }
+  assert.equal(fixture.alerts.length, 0);
+  await fixture.monitor.stop();
+  current -= 1;
+  const requestsBeforeRestart = fixture.api.requests.length;
+  const restarted = await harness(t, {
+    provider, api: fixture.api, dataDir: fixture.dataDir, now: () => current, config: configuration,
+  });
+  assert.equal((await restarted.monitor.check({ force: false })).status, "backoff");
+  assert.equal(fixture.api.requests.length, requestsBeforeRestart, "initialization must honor durable cooldown before fetching");
+  assert.equal(restarted.monitor.state()._health.sources.chain.consecutiveFailures, 3);
+  current += 1;
+  historicalUnavailable = false;
+  assert.equal((await restarted.monitor.check({ force: false })).status, "baseline");
+  const recovered = restarted.monitor.state()._health;
+  assert.equal(recovered.sources.chain.consecutiveFailures, 0);
+  assert.equal(recovered.sources.chain.lastSuccessAt, new Date(current).toISOString());
+  assert.equal(recovered.consecutiveFailures, 0);
+});
+
+test("a parsed API response cannot clear repeated semantic identity failures", async (t) => {
+  let current = Date.parse("2026-09-17T07:00:00.000Z");
+  const fixture = await harness(t, { now: () => current });
+  await fixture.monitor.check();
+  const healthy = fixture.monitor.state();
+  fixture.api.healthBlock = fixture.provider.head + 129;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    current += 1_000;
+    const result = await fixture.monitor.check();
+    assert.equal(result.errorCode, "PON_HEALTH_BLOCK_AHEAD");
+    const source = fixture.monitor.state()._health.sources.api_health;
+    assert.equal(source.consecutiveFailures, attempt);
+    assert.equal(source.lastSuccessAt, healthy._health.sources.api_health.lastSuccessAt);
+    assert.equal(source.lastErrorCode, "PON_HEALTH_BLOCK_AHEAD");
+    assert.equal(fixture.monitor.state().cursor.nextBlock, healthy.cursor.nextBlock);
+  }
+  assert.equal(fixture.alerts.length, 0);
+});
+
+test("production autoStart preserves persisted cooldown without performing a startup network attempt", async (t) => {
+  let current = Date.parse("2026-09-17T07:00:00.000Z");
+  const fixture = await harness(t, { now: () => current });
+  await fixture.monitor.check();
+  fixture.api.fail.add(PON_MARKETS_URL);
+  current += 1_000;
+  assert.equal((await fixture.monitor.check()).errorCode, "PON_HTTP_FAILED");
+  const failed = fixture.monitor.state();
+  await fixture.monitor.stop();
+  const requestsBeforeRestart = fixture.api.requests.length;
+  current = Date.parse(failed._health.nextAttemptAt) - 1;
+  const restarted = await harness(t, {
+    provider: fixture.provider, api: fixture.api, dataDir: fixture.dataDir,
+    now: () => current, autoStart: true,
+  });
+  assert.equal((await restarted.monitor.check({ force: false })).status, "backoff");
+  assert.equal(fixture.api.requests.length, requestsBeforeRestart);
+  assert.equal(restarted.monitor.state()._health.consecutiveFailures, failed._health.consecutiveFailures);
+  assert.deepEqual(restarted.monitor.state().cursor, failed.cursor);
+});
+
+test("official API request timeout is degraded transport health, not a stopped monitor", async (t) => {
+  const fixture = await harness(t, {
+    config: { ponRequestTimeoutMs: 10 },
+    fetchImpl: async () => new Promise(() => {}),
+  });
+
+  const result = await fixture.monitor.check();
+
+  assert.equal(result.status, "degraded");
+  assert.equal(result.errorCode, "PON_HTTP_TIMEOUT");
+  assert.equal(result.initialized, false);
+  assert.match(result.error, /timed out after 250ms/);
+  assert.notEqual(result.errorCode, "PON_STOPPED");
+  assert.equal(fixture.monitor.state()._health.sources.api_health.status, "backoff");
+});
+
+test("official API body timeout remains abortable and is not reported as monitor shutdown", async (t) => {
+  const fixture = await harness(t, {
+    config: { ponRequestTimeoutMs: 10 },
+    fetchImpl: async (url) => ({
+      ok: true,
+      status: 200,
+      url,
+      text: async () => new Promise(() => {}),
+    }),
+  });
+
+  const result = await fixture.monitor.check();
+
+  assert.equal(result.status, "degraded");
+  assert.equal(result.errorCode, "PON_HTTP_TIMEOUT");
+  assert.notEqual(result.errorCode, "PON_STOPPED");
 });
 
 test("fake response source, wrong RPC chain, wrong API Factory and runtime mismatch all fail closed", async (t) => {
@@ -1197,9 +1332,12 @@ test("stop aborts a hanging dependency promptly and drains its durable state wri
   assert.ok(performance.now() - started < 1_000, "stop must wake lifecycle-bound HTTP/RPC waits");
   releaseMarkets();
   const result = await check;
+  assert.equal(result.status, "stopped");
   assert.equal(result.errorCode, "PON_STOPPED");
   const persisted = JSON.parse(await fs.readFile(path.join(fixture.dataDir, "pon-state.json"), "utf8"));
   assert.equal(persisted.initialized, false);
+  assert.equal(persisted._health.consecutiveFailures, 0);
+  assert.equal(persisted._health.lastErrorCode, null);
 });
 
 test("finalized StockListed(false) retires zero or prior-token mappings and permits later API removal", async (t) => {
@@ -1241,6 +1379,133 @@ test("finalized StockListed(false) retires zero or prior-token mappings and perm
   }
 });
 
+test("an API/RPC head split clamps every snapshot and scan to the authenticated common block", async (t) => {
+  const provider = new FakePonProvider();
+  const api = {
+    markets: provider.markets.map(clone),
+    healthFactory: PON_FACTORY,
+    responseUrls: {},
+    fail: new Set(),
+    healthBlock: provider.head,
+  };
+  const fixture = await harness(t, { provider, api });
+  await fixture.monitor.check();
+
+  provider.head += 40;
+  api.healthBlock = provider.head - 33;
+  const commonAnchor = api.healthBlock;
+  const observedCalls = [];
+  const observedCodeReads = [];
+  const observedLogFilters = [];
+  const originalCall = provider.call.bind(provider);
+  const originalGetCode = provider.getCode.bind(provider);
+  const originalGetLogs = provider.getLogs.bind(provider);
+  provider.call = async (request) => {
+    observedCalls.push(structuredClone(request));
+    return originalCall(request);
+  };
+  provider.getCode = async (candidate, blockTag) => {
+    observedCodeReads.push({ candidate, blockTag });
+    return originalGetCode(candidate, blockTag);
+  };
+  provider.getLogs = async (filter) => {
+    observedLogFilters.push(structuredClone(filter));
+    return originalGetLogs(filter);
+  };
+
+  const result = await fixture.monitor.check();
+  const coverage = fixture.monitor.state()._health.apiCoverage;
+  assert.equal(result.status, "healthy");
+  assert.equal(fixture.monitor.state().cursor.lastScannedBlock, commonAnchor);
+  assert.equal(fixture.monitor.state().cursor.nextBlock, commonAnchor + 1);
+  assert.equal(coverage.reportedBlock, commonAnchor);
+  assert.equal(coverage.finalizedBlock, provider.head, "coverage must retain the unclamped RPC finality boundary");
+  assert.equal(coverage.blockLag, 33, "clamping must not erase the measured API lag");
+  const fixedFactoryCalls = observedCalls.filter((request) =>
+    String(request.to || "").toLowerCase() === PON_FACTORY.toLowerCase()
+      && request.blockTag !== undefined);
+  assert.ok(fixedFactoryCalls.length >= 14);
+  assert.deepEqual([...new Set(fixedFactoryCalls.map((request) => request.blockTag))], [commonAnchor]);
+  assert.equal(observedCalls.filter((request) => request.blockTag === undefined).length, 2,
+    "only the intentional latest oracle/USDG binding checks may omit a block tag");
+  assert.equal(observedCodeReads.some(({ candidate, blockTag }) =>
+    String(candidate).toLowerCase() === PON_FACTORY.toLowerCase() && blockTag === commonAnchor), true);
+  assert.ok(observedLogFilters.length > 0);
+  assert.equal(observedLogFilters.every((filter) => Number(filter.toBlock) <= commonAnchor), true);
+  assert.equal(observedLogFilters.at(-1).toBlock, commonAnchor);
+  assert.equal(fixture.alerts.length, 0);
+});
+
+test("a proven finalized reorg is still the only path that may lower the API high-water", async (t) => {
+  const provider = new FakePonProvider();
+  const api = {
+    markets: provider.markets.map(clone),
+    healthFactory: PON_FACTORY,
+    responseUrls: {},
+    fail: new Set(),
+    healthBlock: provider.head,
+  };
+  const fixture = await harness(t, { provider, api });
+  await fixture.monitor.check();
+  const oldCursor = fixture.monitor.state().cursor.lastScannedBlock;
+  provider.blockHashes.set(oldCursor, id("api-high-water-reorg"));
+  api.healthBlock = oldCursor - 1;
+
+  const recovered = await fixture.monitor.check();
+  assert.equal(recovered.status, "healthy");
+  assert.equal(fixture.monitor.state()._health.reorg.count, 1);
+  assert.equal(fixture.monitor.state()._health.reorg.commonAncestorProven, true);
+  assert.equal(fixture.monitor.state()._health.apiCoverage.highWaterBlock, api.healthBlock);
+  assert.equal(fixture.monitor.state().cursor.lastScannedBlock, api.healthBlock);
+  assert.equal(fixture.alerts.length, 0);
+});
+
+test("an API common anchor behind a valid durable cursor freezes without rewinding it", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "pon-monitor-api-anchor-cursor-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const provider = new FakePonProvider();
+  const api = {
+    markets: provider.markets.map(clone),
+    healthFactory: PON_FACTORY,
+    responseUrls: {},
+    fail: new Set(),
+    healthBlock: provider.head,
+  };
+  const alerts = [];
+  const first = await harness(t, { dataDir, provider, api, alerts });
+  await first.monitor.check();
+  const durableCursor = first.monitor.state().cursor.lastScannedBlock;
+  await first.monitor.stop();
+
+  const stateFile = path.join(dataDir, "pon-state.json");
+  const persisted = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  persisted._health.apiCoverage.reportedBlock = durableCursor - 10;
+  persisted._health.apiCoverage.finalizedBlock = durableCursor;
+  persisted._health.apiCoverage.blockLag = 10;
+  persisted._health.apiCoverage.highWaterBlock = durableCursor - 10;
+  await fs.writeFile(stateFile, JSON.stringify(persisted), { mode: 0o600 });
+
+  provider.head = durableCursor + 20;
+  api.healthBlock = durableCursor - 5;
+  let logReads = 0;
+  const originalGetLogs = provider.getLogs.bind(provider);
+  provider.getLogs = async (...args) => {
+    logReads += 1;
+    return originalGetLogs(...args);
+  };
+  const second = await harness(t, { dataDir, provider, api, alerts });
+  const frozen = await second.monitor.check();
+  const state = second.monitor.state();
+  assert.equal(frozen.errorCode, "PON_API_ANCHOR_BEHIND_CURSOR");
+  assert.equal(state.cursor.lastScannedBlock, durableCursor);
+  assert.equal(state.cursor.nextBlock, durableCursor + 1);
+  assert.equal(state._health.apiCoverage.highWaterBlock, api.healthBlock);
+  assert.equal(state._health.apiCoverage.finalizedBlock, provider.head);
+  assert.equal(state._health.apiCoverage.blockLag, 25);
+  assert.equal(logReads, 0);
+  assert.equal(alerts.length, 0);
+});
+
 test("API block freshness is bounded, monotonic across restart, and recovers without moving a stale cursor", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "pon-monitor-api-freshness-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -1256,6 +1521,8 @@ test("API block freshness is bounded, monotonic across restart, and recovers wit
   assert.equal(stale.errorCode, "PON_API_BLOCK_STALE");
   assert.equal(first.monitor.state().cursor.nextBlock, before);
   assert.equal(first.monitor.state()._health.apiCoverage.blockLag, 20);
+  assert.equal(first.monitor.state()._health.apiCoverage.finalizedBlock, provider.head,
+    "stale detection must use the raw RPC finality boundary rather than the common anchor");
   api.healthBlock = provider.head;
   assert.equal((await first.monitor.check()).status, "healthy");
   await first.monitor.stop();
@@ -1265,6 +1532,7 @@ test("API block freshness is bounded, monotonic across restart, and recovers wit
   const regressed = await second.monitor.check();
   assert.equal(regressed.errorCode, "PON_API_BLOCK_REGRESSION");
   assert.equal(second.monitor.state().cursor.nextBlock, provider.head + 1);
+  assert.equal(second.monitor.state()._health.apiCoverage.highWaterBlock, provider.head);
   api.healthBlock = provider.head;
   assert.equal((await second.monitor.check()).status, "healthy");
 });

@@ -28,14 +28,73 @@ health_env_mode="$(stat -c '%a' -- "$CONFIG_DIR/health.env")"
 grep -Eq '^HEALTH_HEARTBEAT_URL=https://[^[:space:]]+$' "$CONFIG_DIR/health.env" \
   || fail "configure an HTTPS HEALTH_HEARTBEAT_URL in health.env before activation"
 [[ -x "$ENV_SETTING_READER" ]] || fail "$ENV_SETTING_READER is missing"
-pon_monitor_setting="$("$ENV_SETTING_READER" "$CONFIG_DIR/monitor.env" PON_MONITOR_ENABLED)" \
-  || fail "could not read PON_MONITOR_ENABLED from monitor.env"
-if [[ "$pon_monitor_setting" == "true" ]]; then
-  pon_health_setting="$("$ENV_SETTING_READER" "$CONFIG_DIR/health.env" HEALTH_REQUIRE_PON)" \
-    || fail "could not read HEALTH_REQUIRE_PON from health.env"
-  [[ "$pon_health_setting" == "true" || "$pon_health_setting" == "1" || "$pon_health_setting" == "yes" ]] \
-    || fail "PON_MONITOR_ENABLED=true requires HEALTH_REQUIRE_PON=true in health.env"
+
+read_monitor_setting() {
+  "$ENV_SETTING_READER" "$CONFIG_DIR/monitor.env" "$1" \
+    || fail "could not read $1 from monitor.env"
+}
+
+enabled_unless_false() {
+  [[ "$1" != "false" ]]
+}
+
+enabled_only_true() {
+  [[ "$1" == "true" ]]
+}
+
+require_health_for_enabled_lane() {
+  local enabled="$1"
+  local health_key="$2"
+  local monitor_description="$3"
+  [[ "$enabled" == "true" ]] || return 0
+  local health_setting
+  health_setting="$("$ENV_SETTING_READER" "$CONFIG_DIR/health.env" "$health_key")" \
+    || fail "could not read $health_key from health.env"
+  [[ "$health_setting" == "true" || "$health_setting" == "1" || "$health_setting" == "yes" ]] \
+    || fail "$monitor_description requires $health_key=true in health.env"
+}
+
+pon_monitor_setting="$(read_monitor_setting PON_MONITOR_ENABLED)"
+morph_monitor_setting="$(read_monitor_setting MORPH_MONITOR_ENABLED)"
+flap_quote_monitor_setting="$(read_monitor_setting FLAP_QUOTE_MONITOR_ENABLED)"
+four_registry_monitor_setting="$(read_monitor_setting FOUR_REGISTRY_MONITOR_ENABLED)"
+uniswap_monitor_setting="$(read_monitor_setting UNISWAP_MONITOR_ENABLED)"
+xai_monitor_setting="$(read_monitor_setting XAI_OFFICIAL_MONITOR_ENABLED)"
+telegram_monitor_setting="$(read_monitor_setting TELEGRAM_NEWS_MONITOR_ENABLED)"
+twitter_monitor_setting="$(read_monitor_setting TWITTER_MONITOR_ENABLED)"
+binance_critical_x_setting="$(read_monitor_setting BINANCE_CRITICAL_X_MONITOR_ENABLED)"
+focus_critical_x_setting="$(read_monitor_setting FOCUS_CRITICAL_X_MONITOR_ENABLED)"
+
+pon_enabled=false
+morph_enabled=false
+flap_quote_enabled=false
+four_registry_enabled=false
+uniswap_enabled=false
+xai_enabled=false
+telegram_enabled=false
+twitter_enabled=false
+enabled_only_true "$pon_monitor_setting" && pon_enabled=true
+enabled_unless_false "$morph_monitor_setting" && morph_enabled=true
+enabled_unless_false "$flap_quote_monitor_setting" && flap_quote_enabled=true
+enabled_unless_false "$four_registry_monitor_setting" && four_registry_enabled=true
+enabled_unless_false "$uniswap_monitor_setting" && uniswap_enabled=true
+enabled_unless_false "$xai_monitor_setting" && xai_enabled=true
+enabled_only_true "$telegram_monitor_setting" && telegram_enabled=true
+if enabled_unless_false "$twitter_monitor_setting" \
+  || enabled_unless_false "$binance_critical_x_setting" \
+  || enabled_unless_false "$focus_critical_x_setting" \
+  || [[ "$pon_enabled" == "true" ]]; then
+  twitter_enabled=true
 fi
+
+require_health_for_enabled_lane "$pon_enabled" HEALTH_REQUIRE_PON "PON_MONITOR_ENABLED=true"
+require_health_for_enabled_lane "$morph_enabled" HEALTH_REQUIRE_MORPH "Morph monitoring"
+require_health_for_enabled_lane "$flap_quote_enabled" HEALTH_REQUIRE_FLAP_QUOTE "Flap quote monitoring"
+require_health_for_enabled_lane "$four_registry_enabled" HEALTH_REQUIRE_FOUR_REGISTRY "Four registry monitoring"
+require_health_for_enabled_lane "$uniswap_enabled" HEALTH_REQUIRE_UNISWAP "Uniswap monitoring"
+require_health_for_enabled_lane "$xai_enabled" HEALTH_REQUIRE_XAI_OFFICIAL "xAI official monitoring"
+require_health_for_enabled_lane "$telegram_enabled" HEALTH_REQUIRE_TELEGRAM_NEWS "Telegram news monitoring"
+require_health_for_enabled_lane "$twitter_enabled" HEALTH_REQUIRE_TWITTER "effective Twitter monitoring"
 [[ -r "$CONFIG_DIR/node-id" ]] || fail "node-id is missing"
 [[ -d "$STATE_DIR" ]] || fail "state directory is missing"
 

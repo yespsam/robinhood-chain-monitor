@@ -340,7 +340,7 @@ test("Registry late discovery and durable Telegram retry stay T2 immediate beyon
     assert.equal(entry.event.tradingPriority.tier, "T2");
     assert.equal(entry.event.tradingPriority.hardGates.t1Eligible, false);
     assert.equal(entry.deliveryDisposition.reason, "four_registry_delayed_delivery");
-    assert.match(entry.renderBundle.zh.text, /延迟发现｜勿追价/u);
+    assert.match(entry.renderBundle.zh.text, /延迟发现/u);
   }
 
   now.value += 3 * 60 * 60_000;
@@ -352,7 +352,8 @@ test("Registry late discovery and durable Telegram retry stay T2 immediate beyon
   assert.ok(Object.values(outbox.events).every((entry) => entry.deliveryDisposition.reason === "four_registry_delayed_delivery"));
   const successful = attempts.filter((attempt) => attempt.ok);
   assert.equal(successful.length, 2);
-  assert.ok(successful.every(({ payload }) => /延迟送达｜勿追价/u.test(payload.text)));
+  assert.ok(successful.every(({ payload }) => /延迟送达/u.test(payload.text)));
+  assert.ok(successful.every(({ payload }) => !/风险|Risk:|勿追价|do not chase|非自动交易|no automatic trading|非买入建议|not a buy recommendation|\bT[0-2]\b/iu.test(payload.text)));
   assert.ok(successful.every(({ payload }) => !/gmgn|swap|买入按钮|buy now/iu.test(JSON.stringify(payload.reply_markup || {}))));
 
   const boundaryDataDir = await temporaryDirectory(t, "four-registry-late-boundary-");
@@ -421,7 +422,8 @@ test("a producer-committed fresh Registry event survives a crash before alert en
   assert.equal(recovered.delivery.accepted, 2);
   assert.equal((await restarted.monitor.getState()).outbox.length, 0);
   assert.equal(payloads.length, 2);
-  assert.ok(payloads.every((payload) => /延迟送达｜勿追价/u.test(payload.text)));
+  assert.ok(payloads.every((payload) => /延迟送达/u.test(payload.text)));
+  assert.ok(payloads.every((payload) => !/风险|Risk:|勿追价|do not chase|非自动交易|no automatic trading|非买入建议|not a buy recommendation|\bT[0-2]\b/iu.test(payload.text)));
   const alertOutbox = await readAlertOutbox(alertDataDir);
   for (const entry of Object.values(alertOutbox.events)) {
     assert.equal(entry.status, "delivered");
@@ -446,9 +448,8 @@ test("OpenFour first-token cross-producer ownership preserves one provenance car
   assert.equal((await sendAlerts(weakFirst, weak)).status, "delivered");
   assert.equal((await sendAlerts(weakFirst, strong)).status, "delivered");
   assert.equal(payloads.length, 2);
-  assert.match(payloads[1].text, /本地流动性安全初筛通过/u);
-  assert.match(payloads[1].text, /仍非买入信号/u);
-  assert.doesNotMatch(payloads[1].text, /安全升级/u);
+  assert.match(payloads[1].text, /已取得本地流动性数据/u);
+  assert.doesNotMatch(payloads[1].text, /风险|Risk:|勿追价|do not chase|非自动交易|no automatic trading|非买入建议|not a buy recommendation|仍非买入信号|安全升级|\bT[0-2]\b/iu);
   assert.ok(payloads.every((payload) => !/gmgn|swap|买入|buy now/iu.test(JSON.stringify(payload.reply_markup || {}))));
 
   const strongFirstDir = await temporaryDirectory(t, "openfour-cross-strong-first-");
@@ -1272,7 +1273,8 @@ test("A-B-A-B finalized Registry transitions each emit one epoch-bound correctio
   ], [1, 2, 3]);
   assert.equal(new Set([branchA.eventKey, branchB.eventKey, branchASecond.eventKey, branchBSecond.eventKey]).size, 4);
   assert.equal(payloads.length, 4, "the original plus every finalized correction is visible once");
-  assert.ok(payloads.slice(1).every((payload) => /链重组修订｜旧证据失效｜以本条为准/u.test(payload.text)));
+  assert.ok(payloads.slice(1).every((payload) => /链重组修订｜以本条为准/u.test(payload.text)));
+  assert.ok(payloads.slice(1).every((payload) => !/风险|Risk:|勿追价|do not chase|非自动交易|no automatic trading|非买入建议|not a buy recommendation|旧证据失效|\bT[0-2]\b/iu.test(payload.text)));
 
   assert.equal((await sendAlerts(config, branchBSecond)).status, "delivered");
   assert.equal(payloads.length, 4, "retrying the same recovery epoch cannot post twice");

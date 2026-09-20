@@ -11,7 +11,13 @@ import {
   FLAP_MRNAB_ADDRESS,
   FLAP_PORTAL_ADDRESS,
   FLAP_PORTAL_IMPLEMENTATION_SLOT,
+  FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION,
+  FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH,
+  FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION,
   FLAP_PORTAL_RUNTIME_HASH,
+  FLAP_PORTAL_UPGRADE_BLOCK,
+  FLAP_PORTAL_UPGRADE_BLOCK_HASH,
+  FLAP_PORTAL_UPGRADE_TRANSACTION,
   FLAP_PORTAL_VERIFIED_IMPLEMENTATION,
   FLAP_PORTAL_VERIFIED_IMPLEMENTATION_HASH,
   FLAP_PORTAL_VERIFIED_VERSION,
@@ -371,6 +377,10 @@ async function harness(t, {
   dataDir,
   logVerificationProviders,
   stateVerificationProviders,
+  expectedPortalRuntimeHash = keccak256(PORTAL_CODE),
+  expectedPortalVersion = "v5.22.0",
+  expectedPortalImplementation = IMPLEMENTATION,
+  expectedPortalImplementationHash = keccak256(IMPLEMENTATION_CODE),
   config: configOverrides = {},
   now = () => Date.parse("2026-09-03T07:00:00.000Z"),
   random = () => 0.5,
@@ -401,10 +411,10 @@ async function harness(t, {
   const monitorDependencies = {
     provider,
     autoStart: false,
-    expectedPortalRuntimeHash: keccak256(PORTAL_CODE),
-    expectedPortalVersion: "v5.22.0",
-    expectedPortalImplementation: IMPLEMENTATION,
-    expectedPortalImplementationHash: keccak256(IMPLEMENTATION_CODE),
+    expectedPortalRuntimeHash,
+    expectedPortalVersion,
+    expectedPortalImplementation,
+    expectedPortalImplementationHash,
     sendAlertsImpl: sendAlertsImpl || (async (_config, event) => {
       alerts.push(event);
       return { status: "delivered", eventId: event.eventKey };
@@ -554,6 +564,28 @@ test("runtime wiring owns and destroys one fixed provider per configured Flap lo
   assert.match(configSource, new RegExp(stateDefaults.replaceAll(".", "\\.")));
   assert.match(envExample, new RegExp(`FLAP_QUOTE_LOG_RPC_URLS=${logDefaults.replaceAll(".", "\\.")}`));
   assert.match(envExample, new RegExp(`FLAP_QUOTE_STATE_RPC_URLS=${stateDefaults.replaceAll(".", "\\.")}`));
+});
+
+test("production Portal pins carry the exact independently reproduced v5.23.1 upgrade evidence", () => {
+  assert.equal(FLAP_PORTAL_VERIFIED_VERSION, "v5.23.1");
+  assert.equal(FLAP_PORTAL_VERIFIED_IMPLEMENTATION, "0xAb8Ec926b6e113c2212aF152b086eA62d1FDced9");
+  assert.equal(
+    FLAP_PORTAL_VERIFIED_IMPLEMENTATION_HASH,
+    "0x78653cdd7296d940ae531c86bc6700ae163f1f9dec002c2af3143c9ae6696a15",
+  );
+  assert.equal(FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION, "v5.23.0");
+  assert.equal(FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION, "0xeb8d85bACe2AE64B74aa29cC95678a3bBb804350");
+  assert.equal(FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH,
+    "0x3ad289cea90449a420c91a8de3a077c4d74a8d41230cb32229fcd843ff1dc3e5");
+  assert.equal(FLAP_PORTAL_UPGRADE_BLOCK, 121_652_738);
+  assert.equal(
+    FLAP_PORTAL_UPGRADE_BLOCK_HASH,
+    "0x417ed36b65fcf27dd3cd1e213fdcb9f0fce64ae13b9e403ff4b98fd0f7197845",
+  );
+  assert.equal(
+    FLAP_PORTAL_UPGRADE_TRANSACTION,
+    "0xfa9f414b3a98527d52b3015ee4df17d61a5eb712ce7764cbfc6757e62fa1190f",
+  );
 });
 
 test("first check establishes a silent finalized-head-plus-one baseline", async (t) => {
@@ -1397,10 +1429,11 @@ test("a fresh direct Portal event reaches the real durable T1 Telegram pipeline"
   assert.equal(result.delivered, 1);
   assert.ok(telegramPayload);
   assert.equal(telegramPayload.disable_notification, false, "a valid fresh T1 is delivered immediately");
+  assert.match(telegramPayload.text, /^🆕 新底池 \| NEW POOL/u);
+  assert.match(telegramPayload.text, /Portal 报价资产已启用/u);
   assert.match(telegramPayload.text, /SQQQB/);
   assert.match(telegramPayload.text, new RegExp(lower(FLAP_SQQQB_ADDRESS), "i"));
-  assert.match(telegramPayload.text, /bStock[^\n]*(?:不等于 ETF\/股票所有权|not ETF\/share ownership)/iu);
-  assert.match(telegramPayload.text, /(?:非自动交易|no automatic trading)/iu);
+  assert.doesNotMatch(telegramPayload.text, /风险|Risk:|勿追价|do not chase|非自动交易|no automatic trading|非买入建议|not a buy recommendation|\bT[0-2]\b/iu);
 
   const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   const [entry] = Object.values(outbox.events);
@@ -1474,11 +1507,11 @@ test("a stale direct Portal enable reaches the real durable T2 recovery pipeline
   assert.equal(result.status, "healthy");
   assert.equal(result.delivered, 1);
   assert.ok(telegramPayload);
-  assert.match(telegramPayload.text, /(?:断线恢复补报|Delayed recovery)/u);
-  assert.match(telegramPayload.text, /(?:勿追价|do not chase)/iu);
+  assert.match(telegramPayload.text, /^🆕 新底池 \| NEW POOL/u);
+  assert.match(telegramPayload.text, /Portal 报价资产已启用/u);
   assert.match(telegramPayload.text, /SQQQB/);
   assert.match(telegramPayload.text, new RegExp(lower(FLAP_SQQQB_ADDRESS), "i"));
-  assert.match(telegramPayload.text, /(?:非自动交易|no automatic trading)/iu);
+  assert.doesNotMatch(telegramPayload.text, /风险|Risk:|勿追价|do not chase|非自动交易|no automatic trading|非买入建议|not a buy recommendation|\bT[0-2]\b/iu);
 
   const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   const [entry] = Object.values(outbox.events);
@@ -1606,10 +1639,9 @@ test("archive-state loss produces a truthful first-observed T2 through the real 
   assert.ok(telegramPayload);
   assert.match(telegramPayload.text, /补扫首次观察/u);
   assert.match(telegramPayload.text, /(?:0→1 未证|未证明.*0→1)/u);
-  assert.match(telegramPayload.text, /勿追价/u);
-  assert.match(telegramPayload.text, /非自动交易/u);
   assert.match(telegramPayload.text, /SQQQB/);
   assert.match(telegramPayload.text, new RegExp(lower(FLAP_SQQQB_ADDRESS), "i"));
+  assert.doesNotMatch(telegramPayload.text, /风险|Risk:|勿追价|do not chase|非自动交易|no automatic trading|非买入建议|not a buy recommendation|\bT[0-2]\b/iu);
 
   const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   const [entry] = Object.values(outbox.events);
@@ -1986,7 +2018,9 @@ test("a queued fresh alert holds the cursor, then recovers once as T2 after the 
   assert.equal(recovered.delivered, 1);
   assert.equal(deliveredPayloads.length, 1);
   assert.equal(deliveredPayloads[0].disable_notification, true);
-  assert.match(deliveredPayloads[0].text, /(?:断线恢复补报|Delayed recovery)/u);
+  assert.match(deliveredPayloads[0].text, /^🆕 新底池 \| NEW POOL/u);
+  assert.match(deliveredPayloads[0].text, /MRNAB|Moderna/u);
+  assert.doesNotMatch(deliveredPayloads[0].text, /风险|Risk:|勿追价|do not chase|非自动交易|no automatic trading|非买入建议|not a buy recommendation|\bT[0-2]\b/iu);
   assert.equal(first.monitor.state().processedEventKeys[0], originalEventKey);
 
   outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
@@ -3565,6 +3599,217 @@ test("persisted Portal identity pins cannot be forged or carried across an upgra
   const result = await second.monitor.check();
   assert.equal(result.errorCode, "FLAP_QUOTE_STATE_IDENTITY_MISMATCH");
   assert.equal(provider.getLogsCalls.length, 0);
+});
+
+test("the exact v5.23.0 state migrates only after v5.23.1 quorum verification and resumes its cursor", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-quote-pin-migration-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const provider = new FakeBscProvider();
+  const first = await harness(t, { provider, dataDir });
+  assert.equal((await first.monitor.check()).status, "baseline");
+
+  addAssetEvent(provider, { blockNumber: 99 });
+  provider.head = 101;
+  assert.equal((await first.monitor.check()).delivered, 1);
+  provider.setConfiguration(FLAP_MRNAB_ADDRESS, [1, 33, 34, 7, 0]);
+  provider.addQuoteEvent({
+    address: FLAP_MRNAB_ADDRESS,
+    configuration: [1, 33, 34, 7, 0],
+    blockNumber: 100,
+    logIndex: 11,
+  });
+  provider.head = 102;
+  assert.equal((await first.monitor.check()).audited, 1);
+  await first.monitor.stop();
+
+  const stateFile = first.monitor.stateFile;
+  const legacy = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  legacy.identity.version = FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION;
+  legacy.identity.implementation = FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION;
+  legacy.identity.implementationCodeHash = FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH;
+  legacy._health = {
+    ...legacy._health,
+    status: "degraded",
+    consecutiveFailures: 1,
+    lastErrorAt: legacy.checkedAt,
+    lastError: `Flap Portal version ${FLAP_PORTAL_VERIFIED_VERSION} does not match pinned ${FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION}`,
+    lastErrorCode: "FLAP_QUOTE_PORTAL_VERSION_MISMATCH",
+    lastAttemptAt: legacy.checkedAt,
+    nextAttemptAt: "2026-09-03T07:05:00.000Z",
+    failureClass: "chain",
+  };
+  await fs.writeFile(stateFile, `${JSON.stringify(legacy)}\n`, { mode: 0o600 });
+  const preserved = clone({
+    cursor: legacy.cursor,
+    quoteAssets: legacy.quoteAssets,
+    pendingEnableCandidates: legacy.pendingEnableCandidates,
+    processedEventKeys: legacy.processedEventKeys,
+    reorgOrphanedEventKeys: legacy.reorgOrphanedEventKeys,
+    eventRecords: legacy.eventRecords,
+    finalizedCheckpoints: legacy.finalizedCheckpoints,
+    auditTrail: legacy.auditTrail,
+  });
+
+  const currentImplementationCode = "0x60126000556013600055";
+  provider.portalVersion = FLAP_PORTAL_VERIFIED_VERSION;
+  provider.implementation = FLAP_PORTAL_VERIFIED_IMPLEMENTATION;
+  provider.implementationCode = currentImplementationCode;
+  provider.head = 103;
+  const callsBeforeRestart = provider.getLogsCalls.length;
+  provider.callTags = [];
+  let migrationWrites = 0;
+  const restarted = await harness(t, {
+    provider,
+    dataDir,
+    expectedPortalVersion: FLAP_PORTAL_VERIFIED_VERSION,
+    expectedPortalImplementation: FLAP_PORTAL_VERIFIED_IMPLEMENTATION,
+    expectedPortalImplementationHash: keccak256(currentImplementationCode),
+    atomicWriteImpl: async (file, value) => {
+      migrationWrites += 1;
+      const versionReads = provider.callTags.filter(({ selector, blockTag }) => (
+        selector === FLAP_PORTAL_INTERFACE.getFunction("version").selector && blockTag === 101
+      ));
+      assert.ok(versionReads.length >= 2, "both fixed state readers verify the new identity before any migration write");
+      await atomicWriteFlapQuoteState(file, value);
+    },
+  });
+
+  const result = await restarted.monitor.check();
+  assert.equal(result.status, "healthy", "a recognized pin migration bypasses the stale persisted retry window");
+  assert.equal(result.delivered, 0);
+  assert.equal(restarted.alerts.length, 0);
+  assert.ok(migrationWrites >= 1);
+  const migrated = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  assert.equal(migrated.identity.version, FLAP_PORTAL_VERIFIED_VERSION);
+  assert.equal(migrated.identity.implementation, FLAP_PORTAL_VERIFIED_IMPLEMENTATION);
+  assert.equal(migrated.identity.implementationCodeHash, keccak256(currentImplementationCode));
+  assert.equal(migrated.identity.verifiedBlock, 101);
+  assert.equal(migrated.cursor.baselineEstablishedAt, preserved.cursor.baselineEstablishedAt);
+  assert.equal(migrated.cursor.nextBlock, preserved.cursor.nextBlock + 1);
+  assert.deepEqual(migrated.quoteAssets, preserved.quoteAssets);
+  assert.deepEqual(migrated.pendingEnableCandidates, preserved.pendingEnableCandidates);
+  assert.deepEqual(migrated.processedEventKeys, preserved.processedEventKeys);
+  assert.deepEqual(migrated.reorgOrphanedEventKeys, preserved.reorgOrphanedEventKeys);
+  assert.deepEqual(migrated.eventRecords, preserved.eventRecords);
+  assert.deepEqual(migrated.auditTrail, preserved.auditTrail);
+  const firstMigrationLogRead = provider.getLogsCalls.slice(callsBeforeRestart)[0];
+  assert.equal(firstMigrationLogRead.fromBlock, preserved.cursor.nextBlock);
+  assert.equal(firstMigrationLogRead.toBlock, 101);
+});
+
+test("legacy pin migration writes nothing when the new finalized identity cannot be proved", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-quote-pin-migration-freeze-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const oldProvider = new FakeBscProvider();
+  const first = await harness(t, { provider: oldProvider, dataDir });
+  await first.monitor.check();
+  await first.monitor.stop();
+  const legacy = JSON.parse(await fs.readFile(first.monitor.stateFile, "utf8"));
+  legacy.identity.version = FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION;
+  legacy.identity.implementation = FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION;
+  legacy.identity.implementationCodeHash = FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH;
+  const before = `${JSON.stringify(legacy)}\n`;
+  await fs.writeFile(first.monitor.stateFile, before, { mode: 0o600 });
+
+  const currentImplementationCode = "0x60146000556015600055";
+  const mismatched = new FakeBscProvider();
+  mismatched.portalVersion = "v5.23.2";
+  mismatched.implementation = FLAP_PORTAL_VERIFIED_IMPLEMENTATION;
+  mismatched.implementationCode = currentImplementationCode;
+  const restarted = await harness(t, {
+    provider: mismatched,
+    dataDir,
+    expectedPortalVersion: FLAP_PORTAL_VERIFIED_VERSION,
+    expectedPortalImplementation: FLAP_PORTAL_VERIFIED_IMPLEMENTATION,
+    expectedPortalImplementationHash: keccak256(currentImplementationCode),
+  });
+
+  const result = await restarted.monitor.check();
+  assert.equal(result.errorCode, "FLAP_QUOTE_PORTAL_VERSION_MISMATCH");
+  assert.equal(mismatched.getLogsCalls.length, 0);
+  assert.equal(await fs.readFile(first.monitor.stateFile, "utf8"), before);
+  assert.equal(restarted.monitor.state().identity.version, FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION);
+  assert.deepEqual(restarted.monitor.state().cursor, legacy.cursor);
+});
+
+test("a failed migration write re-verifies the current identity before any retry", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-quote-pin-migration-write-retry-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const provider = new FakeBscProvider();
+  const first = await harness(t, { provider, dataDir });
+  await first.monitor.check();
+  await first.monitor.stop();
+  const stateFile = first.monitor.stateFile;
+  const legacy = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  legacy.identity.version = FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION;
+  legacy.identity.implementation = FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION;
+  legacy.identity.implementationCodeHash = FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH;
+  const legacyBytes = `${JSON.stringify(legacy)}\n`;
+  await fs.writeFile(stateFile, legacyBytes, { mode: 0o600 });
+
+  const currentImplementationCode = "0x60166000556017600055";
+  provider.portalVersion = FLAP_PORTAL_VERIFIED_VERSION;
+  provider.implementation = FLAP_PORTAL_VERIFIED_IMPLEMENTATION;
+  provider.implementationCode = currentImplementationCode;
+  let writes = 0;
+  const restarted = await harness(t, {
+    provider,
+    dataDir,
+    expectedPortalVersion: FLAP_PORTAL_VERIFIED_VERSION,
+    expectedPortalImplementation: FLAP_PORTAL_VERIFIED_IMPLEMENTATION,
+    expectedPortalImplementationHash: keccak256(currentImplementationCode),
+    atomicWriteImpl: async (file, value) => {
+      writes += 1;
+      if (writes === 1) throw new Error("migration rename did not happen");
+      await atomicWriteFlapQuoteState(file, value);
+    },
+  });
+
+  const failed = await restarted.monitor.check();
+  assert.equal(failed.errorCode, "FLAP_QUOTE_FAILURE");
+  assert.equal(await fs.readFile(stateFile, "utf8"), legacyBytes);
+
+  provider.portalVersion = "v5.23.2";
+  const rejected = await restarted.monitor.check();
+  assert.equal(rejected.errorCode, "FLAP_QUOTE_PORTAL_VERSION_MISMATCH");
+  assert.equal(writes, 1, "the rejected retry must not flush an unverified migration snapshot");
+  assert.equal(await fs.readFile(stateFile, "utf8"), legacyBytes);
+  assert.equal(restarted.monitor.state().identity.version, FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION);
+});
+
+test("nearby but non-exact legacy identity tuples never enter the migration RPC path", async (t) => {
+  for (const [label, mutate] of [
+    ["version", (identity) => { identity.version = `${FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION}+forged`; }],
+    ["implementation", (identity) => { identity.implementation = "0x2222222222222222222222222222222222222222"; }],
+    ["implementation hash", (identity) => { identity.implementationCodeHash = lower(id("forged-old-implementation")); }],
+  ]) {
+    await t.test(label, async (subtest) => {
+      const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-quote-pin-migration-attack-"));
+      subtest.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+      const first = await harness(subtest, { dataDir });
+      await first.monitor.check();
+      await first.monitor.stop();
+      const persisted = JSON.parse(await fs.readFile(first.monitor.stateFile, "utf8"));
+      persisted.identity.version = FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION;
+      persisted.identity.implementation = FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION;
+      persisted.identity.implementationCodeHash = FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH;
+      mutate(persisted.identity);
+      await fs.writeFile(first.monitor.stateFile, `${JSON.stringify(persisted)}\n`, { mode: 0o600 });
+
+      const provider = new FakeBscProvider();
+      const restarted = await harness(subtest, {
+        provider,
+        dataDir,
+        expectedPortalVersion: FLAP_PORTAL_VERIFIED_VERSION,
+        expectedPortalImplementation: FLAP_PORTAL_VERIFIED_IMPLEMENTATION,
+        expectedPortalImplementationHash: keccak256(provider.implementationCode),
+      });
+      const result = await restarted.monitor.check();
+      assert.equal(result.errorCode, "FLAP_QUOTE_STATE_IDENTITY_MISMATCH");
+      assert.equal(provider.getLogsCalls.length, 0);
+      assert.equal(provider.callTags.length, 0, "unknown persisted identities fail before finalized identity RPC calls");
+    });
+  }
 });
 
 test("raw Node error codes are normalized before degraded health survives restart", async (t) => {

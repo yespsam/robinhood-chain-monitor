@@ -1,5 +1,45 @@
 # Robinhood Chain 发射台与合约部署监控
 
+## 100 美元模拟交易脚本（2026-09-20）
+
+新增独立的 `paper:100`，从现有监控 outbox 只读获取 GMGN 增量信号，账户总初始现金为 100 美元，**不是实盘，也不代表已收到资金或已经盈利**。默认离线检查一次，不增加常驻进程，不发送 Telegram，不读取私钥、不签名、不授权、不广播交易。
+
+```sh
+npm run paper:100 -- --once
+npm run paper:100 -- --status
+npm run test:paper-100
+```
+
+每笔模拟投入 10 美元，最多 2 个持仓，现金实际扣减、禁止重复信号开仓。池内费用以只读报价为准，另按每边 0.20 美元 gas、1% 输出折减作保守成本假设；这些不是实时成交成本。净值触发 -20% 止损、+40% 止盈或持仓 30 分钟退出，按当时能取得的有效报价计价，不假装能按触发价成交。UTC 单日累计已实现亏损达到 5 美元、累计亏损达到 10 美元时停止新开仓；这不是损失上限保证。
+
+第一版报价仅支持 BSC PancakeSwap V2（WBNB/USDT/USDC 报价币）。GMGN 的盈利地址/FOMO 标签不能替代独立的钱包群体、LP、持仓分布、控制权限与卖出验证；缺少这些证据时保持观察。官方更新或 Factory 地址不直接生成买入。只有提供精确绑定的独立模拟审核证据，并显式允许只读公网报价，才可能产生模拟成交。详见 [使用说明与未完成事项](docs/paper-100.md)。此功能使用独立现金账本，不启用旧版无限累计名义敞口的影子意向通道。
+
+## Genius.fun 官方监控（2026-09-18）
+
+新增独立、显式启用的 Genius.fun 通道：官方部署清单、接入/机制文档、两个固定数字身份的官方 X 账号、BNB Chain Factory 事件，以及已核实官方地址关联代币的生命周期。官方测试币声明和 CA 会被捕获，但不把同名社区币或一般官方提及误认成官方发行。详见 [Genius.fun 接入说明](docs/genius-monitor.md) 与 [官方来源核验](docs/genius-official-evidence.md)。
+
+## 0.2.0 运行与筛选升级（2026-09-17）
+
+本轮变更、2,086 项测试结果、上线实测与仍存在的数据源限制见 [升级记录](docs/upgrade-2026-09-17.md)。Flap 已在多源身份核验后迁移到 v5.23.1，原游标与基线保留；pon.fun 的跨重启退避与失败计数也已修复。
+
+BSC 满载队列现在根据实际空位恢复历史补扫；实时 RPC 报错不再让队列排空与实时扫描相互等待。所有未补齐的区块和待确认交易继续保留，覆盖缺口不会因升级被清空。
+
+币安普通/Web3 文档请求复用跨重启的限流退避，完整筛选差异后再压缩播报。新增、修订和移除分别表述，接口修订显示旧值与新值；每组文档报告成功页数、总页数和阻断页数。单页断档不会被其他页面成功掩盖。
+
+500 人 KOL 候选筛选支持逐条原子断点、过期证据重试、最久未尝试优先和跨账号数字 ID 冲突隔离。资料核验、人工角色审核与实时监控是不同阶段；500 候选不表示 500 人已审核或已实时覆盖。Fomo X 的重复轮询共享在途任务，避免慢请求形成无限待执行队列。
+
+本机诊断会读取 macOS LaunchAgent、匹配进程 PID 的心跳，以及全部业务状态与播报队列，不再用 Linux 服务名判断 Mac 是否正常：
+
+```sh
+npm run health
+npm run health -- --json
+npm run health -- --no-write
+```
+
+默认按需刷新 `data/health.json`，`--no-write` 只读取状态，`--json` 输出完整报告；不调用 Telegram，也不发送外部健康心跳。报告分别展示 `operationalHealthy`（进程/调度）、`coverageComplete`（数据覆盖）、`deliveryComplete`（投递）。只有进程或实际调度故障返回非零退出码；源限流、缺凭据、没有合格跟踪对象仍明确列为覆盖不足。Fomo 空名单只有在最新采集状态与实际空名单相互吻合时，才不把静止链游标误报为卡死。
+
+Ubuntu 的 `deploy/health-check.mjs` 仍默认使用 systemd 和 ACTIVE 标记；本机命令在 macOS 上显式选择 launchd，未改变服务器切主流程。
+
 ## 当前生产范围（focus3）
 
 当前 `.env` 使用 `MONITOR_SCOPE=focus3`。Telegram 的通用发射台结构性更新只允许以下 3 个核心平台进入告警队列；pon.fun 采用独立、显式启用的官方身份通道，Morph 另有一条只接受 Long 官方身份和 Flap 官方链上入口的窄通道，Binance 以及 X/xAI/Grok 也保留固定官方身份白名单：
@@ -46,16 +86,56 @@ npm start
 
 默认最多追赶 `MAX_CATCHUP_BLOCKS=10000` 个历史区块，并按每批最多 200 个区块补扫。RPC短暂中断或服务重启后不再因为只保留 10 个区块而轻易漏掉中断期间的新 Factory；积压超过约 10000 个区块时才会优先恢复实时监控。
 
+### AI 叙事狙击（影子版）
+
+这一版把“已验证新闻/新底池事实”“叙事评分”“实时市场与安全证据”“影子意向台账”和“双语卡片”分开处理。它会把现有官方新闻事件与 Flap、Four.Meme、pon.fun 的精确新底池身份连接起来；股票、ETF 或其他映射资产只用于解释公司业务和梗，绝不会被当成要买的新币地址。只有精确目标 CA、真实交易池、数据覆盖、可卖性、流动性和保守滑点全部通过，且新闻来源、主体匹配、时效与市场确认达到门槛时，才会生成不可执行的 `shadow` 影子意向；任何 AI 分数都不能绕过硬门。
+
+实时安全证据首版只对 BSC 上身份完整的 V2 池开放：DEX pair 必须精确匹配目标 CA 和池地址，本地合约检查及 GoPlus 字段必须完整且新鲜，单候选总外部请求预算为 5 秒。缺字段、超时、跨链、地址冲突、V3/V4、无法验证可卖性或过期证据一律降为观察/拒绝，不会产生影子意向。pon.fun 的新闻、市场身份和公司叙事可以正常连接，但 Robinhood Chain 的实时滑点/安全适配器尚未实现，因此当前只会观察，不会进入可做状态。
+
+该功能默认关闭。启用本地影子链路：
+
+```bash
+NARRATIVE_SNIPER_ENABLED=true npm start
+```
+
+接入后，原始监控告警仍走原有 durable outbox；叙事候选同时写入 `data/narrative-sniper-state.json`。通过全部硬门的影子意向写入 `data/narrative-shadow-ledger.json` 及其 checksummed WAL，并以稳定 decision hash 保证重启幂等。影子生命周期 worker 已支持在可信、只读报价证据下完成虚拟开仓、定时估值、止盈、止损、时间退出、重组作废与 PnL 统计；任何未知、过期、冲突或超时证据都只会阻断。
+
+生产影子报价首版只支持 BSC PancakeSwap V2 中目标币与 WBNB、USDT 或 USDC 组成的池。每次报价会从两个不同 RPC 提供商选择共同确认区块，分别重验 pair 的 factory、token 顺序、reserves、decimals、Pancake factory `getPair` 回指，并在同一区块读取审核过的 Chainlink USD feed；两侧结果不一致、区块变化、oracle 过期或自定义 quote asset 都返回 `unknown`。现有保留状态中约三成已核 Flap V2 池为 WBNB 路由；股票等自定义新底池仍只做叙事观察，绝不猜美元成交价。
+
+要同时运行完整影子生命周期，两个开关都必须显式开启：
+
+```bash
+NARRATIVE_SNIPER_ENABLED=true NARRATIVE_SHADOW_SIMULATOR_ENABLED=true npm start
+```
+
+该路径复用 `BSC_CAUSAL_CLASSIFICATION_RPC_URLS` 中前两个不同提供商根域。默认单 RPC 超时 5 秒、双源证据预算 25 秒、模拟器外层硬超时 30 秒；这是为了完整校验而接受的延迟，不适合作为真实成交执行器。
+
+本实现没有钱包、私钥、签名器、授权、Swap 路由或交易广播代码。`NARRATIVE_SNIPER_ENABLED=true` 也只会产生本地审计记录及 Telegram 影子候选卡，不会真实买入。
+
+运行内置的确定性模拟场景：
+
+```bash
+npm run demo:narrative-sniper
+npm run demo:narrative-sniper -- --scenario=watch
+npm run demo:narrative-sniper -- --scenario=reject
+npm run demo:narrative-sniper -- --json
+npm run demo:shadow-lifecycle
+npm run demo:shadow-lifecycle -- --json
+```
+
+演示不访问网络、不读取私钥、不签名、不广播，也不会连接真实交易账户。叙事演示输出 `可做 / 观察 / 不做`、双语理由和可复现的虚拟订单；生命周期演示进一步用固定 fixture 行情走完入场、估值、退出与 PnL。实时链路同样保持 shadow-only，但会读取公开的市场与安全证据；来源不可用时失败关闭。
+
 实时扫描优先索引 Uniswap V2/V3 建池，以及当前已启用发射台的稀疏核心事件，再读取命中交易的完整收据并解析铸币。只有进程启动时会跳过超出恢复窗口的旧积压，正常运行期间按 200 区块批次连续追赶、不主动跳块。若需要无遗漏地覆盖未知内部曲线平台，应配置 Alchemy/QuickNode 专用 RPC。
 
-现有 Docker Compose 只启动主进程，不包含独立的 Fomo worker，仅适合本地 main-only 调试：
+Docker Compose 同时定义主监控进程 `monitor` 与独立 `fomo-worker`，使 `FOMO_CALL_STANDALONE=true` 时的 X/Fomo 扫描不会因主进程跳过 worker 而形成监控盲区。大V发币 lane 仍不会被部署动作自动打开，必须显式设置 `KOL_LAUNCH_MONITOR_ENABLED=true`；默认 `false` 保持只读代码就绪、运行未启用：
 
 ```bash
 docker compose up -d --build
 docker compose logs -f monitor
+docker compose logs -f fomo-worker
 ```
 
-云端生产环境不要使用这份 main-only Compose；请按 [Ubuntu 24.04 单活部署](deploy/README.md) 同时运行主服务与 Fomo 服务，并执行旧节点停机、状态增量同步、ACTIVE 标记切换。生产规格直接建议 4 vCPU / 8 GiB / 80 GiB；2 vCPU / 4 GiB 仅是降低 heap 并通过压力测试后的最低线。生产环境还应把 `RPC_URL` 换成 Alchemy/QuickNode 等专用 Robinhood Chain RPC，官方公共 RPC 有频率限制。
+云端生产环境仍请按 [Ubuntu 24.04 单活部署](deploy/README.md) 同时运行主服务与 Fomo 服务，并执行旧节点停机、状态增量同步、ACTIVE 标记切换。生产规格直接建议 4 vCPU / 8 GiB / 80 GiB；2 vCPU / 4 GiB 仅是降低 heap 并通过压力测试后的最低线。生产环境还应把 `RPC_URL` 换成 Alchemy/QuickNode 等专用 Robinhood Chain RPC，官方公共 RPC 有频率限制。
 
 本机 launchd 部署同时安装 `com.qohfq.robinhood-monitor-log-rotate`，每 15 分钟检查运行日志。单个日志达到 64 MiB 时先压缩到 `data/logs/archive/`，确认压缩文件写入成功后再清空原日志；链上事件、断点、outbox 和监控状态不会被轮转。
 
@@ -74,6 +154,8 @@ docker compose logs -f monitor
 ## GMGN 差异与新模式
 
 在 `.env` 的 `GMGN_INTEGRATED_FACTORIES` 中维护 GMGN 已覆盖的工厂地址。任何不在该集合中的 launcher 都标记为 `gmgn_gap_candidate`。
+
+跨链成交额突增＋高盈利地址＋FOMO 地址联合播报为独立 opt-in 通道，配置、阈值、叙事出处和链覆盖边界见 [GMGN flow monitor](docs/gmgn-flow-monitor.md)。沿用现有 Fomo worker，不额外启动浏览器或模型常驻进程。
 
 运行 `npm run sync:gmgn` 会通过官方 `gmgn-cli` 拉取 Robinhood Trenches 的三个生命周期列表，生成 `data/gmgn-baseline.json`。监控优先逐币匹配该实时基线，并以 Factory 地址表作为补充。建议通过 cron 每分钟刷新一次；新币刚出现但 GMGN 尚未完成索引时会先保持为缺口候选。
 
@@ -188,6 +270,37 @@ Fomo 的钱包买入推断链路已经弃用并默认关闭；系统不会再把
 
 当前只接收 BSC Thesis，每 5 秒轮询一次，只处理发布后 2 分钟内的新信号。首次启动会静默建立基线，不回放历史喊单；后续以平台的 `thesisExternalId` 作为稳定去重键，同一 Thesis 只播报一次。Telegram 卡片保留 KOL、原始 Thesis、代币与安全结论，并附 Fomo、X、GMGN 和合约快捷入口。
 
+### 大V本人发币声明（监控默认关闭）
+
+`KOL_LAUNCH_MONITOR_ENABLED=false` 是默认值。大V本人发币声明与普通喊单分开建模：即使帖子包含明确的第一人称发行语义和唯一 BSC CA，社交声明也只证明“该账号这样说过”，不能证明链上 `creator` 属于该账号。未取得精确创建日志和 creator 钱包匹配时，结果固定为 `watch-only`，粉丝数仅展示且不参与交易评分。
+
+启用该 lane 时，`KOL_CAPITAL_ROSTER_ENABLED=true` 会接入版本化人工复核名录，覆盖加密协议创始人、交易所高管、加密 VC/基金合伙人，以及 Web2 科技、AI 和金融资本负责人。名录人物不需要钱包绑定或“本人钱包有 BSC 活动”，也不受粉丝阈值限制；但运行时必须同时匹配精确 X handle、名录固定 numeric X ID、numeric-ID timeline 和官方 X oEmbed 原帖。只有本人近期明确声明在 BSC/BNB Smart Chain 发币且正文仅含一个显式标注的 CA 才会播报；普通买入/看多文案会被忽略。背景取自名录中一手机构来源的中英双语证据，未知人物、ID 变化、名录篡改或名录过期全部隔离并 fail-closed。`KOL_CAPITAL_CATEGORIES` 可按类别精确过滤，留空表示全部人工复核类别。
+
+人物发现现分为两层：`capital-kol-screening-universe` 固定保存 500 个待筛选账号，但它本身没有告警、台账或交易权限；`capital-kol-catalog` 只保存已经完成人工一手来源审核的人物，当前首批为 30 人。候选必须依次通过官方角色、官方账号关联、numeric X ID 旁证和人工复核后才能晋级。粉丝数只用于卡片展示和人工复核队列排序，不能改变身份、告警准入或交易评分。社区名单、媒体榜单和历史投资人目录只用于发现，不能作为“大V身份已核验”的证据。
+
+查看 500 人筛选概况（完全离线、不会发消息）：
+
+```bash
+npm run kol:screen -- --limit=25
+```
+
+如需抓取公开 X 镜像资料做第一阶段身份旁证，必须显式加 `--live`；单次最多 50 人、并发最多 2、失败不重试，结果仍然只会进入“待官方角色人工复核”，不会自动晋级：
+
+```bash
+npm run kol:screen -- --live --offset=0 --limit=25
+```
+
+先用内置虚构 fixture 查看中英双语模板：
+
+```bash
+npm run demo:kol-launch
+npm run --silent demo:kol-launch -- --json
+```
+
+演示中的人物、numeric X ID、粉丝数、X 简介自述、帖子和 BSC CA 全部是确定性的虚构数据。脚本只构造事件并调用现有告警 renderer；它不读取实时 X、GMGN、Fomo、RPC 或 Telegram，不加载私钥，不启动生产监控，不发送消息，不签名，也不广播交易。`--json` 输出同一个 fixture 事件、持久化格式的双语 render bundle 与最终模板，便于验收和后续回归测试。
+
+如以后显式打开 `KOL_LAUNCH_MONITOR_ENABLED=true`，当前阶段仍只允许生成观察证据；`creator 未链上核验`、安全/流动性/可卖性证据不完整或来源过期时必须失败关闭，不能升级为模拟买入，更不能触发真实交易。
+
 ### Binance / Binance Wallet 平台能力监控
 
 Binance、Binance Wallet 与 Binance Futures 在 `focus3` 外使用严格官方白名单通道；名称相似的第三方账号、域名和仓库不会放行。公告 CMS、Square、开发者文档、Meme Rush、Launchpool、GitHub 与官方 X 独立交叉验证并共享语义去重：
@@ -195,7 +308,8 @@ Binance、Binance Wallet 与 Binance Futures 在 `focus3` 外使用严格官方�
 - Binance 官方公告 CMS 每 10 秒一次拉取 7 个官方目录，并提取正文中最多 3 条具体变化。交易所侧播报现货首次上币/整币下架、API、核心交易规则、新产品、充提与网络维护；普通永续合约、普通交易对/机器人、活动奖励、法币/空投和股票/bStocks 不推送。首次上币、整币下架和安全紧急事件使用强提醒，计划维护、Tick Size、保证金与普通 API 更新使用静音提醒。
 - Binance Wallet 没有独立公告目录，因此新文章会立即读取官方详情的标题、SEO 摘要和正文，已见文章的详情每 10 秒复核，识别 Wallet、Meme Rush、Alpha、DEX、API/SDK、新链/协议和安全架构。新发射模式、API、新链与安全变化强提醒；普通 UI 更新静音；单币推荐、Alpha 加币、空投、APR、比赛和营销活动过滤。详情限流按文章隔离，不会阻断同批后续公告；官方摘要的实质修订最多形成一个独立修订事件，正文排版变化只更新状态不重复推送。
 - Binance Square 官方主页每 5 秒读取一次，按 post ID、发布时间、编辑次数和正文指纹识别新发与实质修订；KOL 买入分享、跟单、交易信号和其他社交交易能力属于强提醒，访谈与普通内容静默。
-- Binance Developer 的机器可读目录及 Wallet、Alpha、Copy Trading、Prediction、Spot、Announcements、Wallet Skills 变更页每 10 秒检查一次，并使用 ETag/Last-Modified；只有新增产品/API/端点/能力进入提醒。
+- Binance Developer 的机器可读目录及 Wallet、Alpha、Copy Trading、Prediction、Spot、Announcements 变更页使用 ETag/Last-Modified 检查；只有新增产品/API/端点/能力进入提醒。
+- Binance 官方 Web3 Developer 页面独立以不低于 60 秒的周期检查，覆盖 Web3 DApp 接入与上架、Web3 Connect/provider、Task Verification、Open Platform、Agentic Wallet 和 Wallet Skills。首次接入或旧快照升级只建立静默基线；之后仅播报结构化能力、接口、provider 与流程变化，普通文案调整和营销活动静默。
 - Binance Wallet Meme Rush 官方接口每 5 秒并发轮询 3 个“链 × 生命周期”目标并读取前 200 条；BSC、Solana、Base 的新创建榜每 15 秒内检查一次，9 个目标约 15 秒完整覆盖一轮。普通代币不推送，只有新协议、新 `tokenVersion`、迁移/曲线/税费/防狙击等平台字段变化才提醒；新版本必须至少由 2 个不同合约确认。
 - 首次启动默认只建立静默基线。唯一例外是官方生产接口中最近 24 小时仍在活动、尚未进入官方 Skills 文档且能由模式命名确认的新协议，此类实时文档缺口只补发一次强提醒。
 - Launchpool 官方接口每 10 秒检查质押资产、生命周期状态、数据分组和字段能力，只播报结构变化，不播报普通新项目。

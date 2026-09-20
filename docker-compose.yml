@@ -3,5 +3,16 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    environment:
+      FOMO_CALL_STANDALONE: "true"
+    volumes:
+      - ./data:/app/data
+  fomo-worker:
+    build: .
+    command: ["node", "src/fomo-worker.js"]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      FOMO_CALL_STANDALONE: "true"
     volumes:
       - ./data:/app/data

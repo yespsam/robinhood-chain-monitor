@@ -36,6 +36,19 @@ import {
   isTradingPriority,
   withTradingPriority,
 } from "./trading-priority.js";
+import { verifyNarrativeTradeSignalIntegrity } from "./narrative-trade-signal.js";
+import {
+  isKolSelfLaunchEvent,
+  kolTokenLaunchCanonicalSignalIds,
+  kolTokenLaunchEventKey,
+  verifyKolTokenLaunchEvent,
+} from "./kol-token-launch-alert.js";
+import { deriveNewPoolContext } from "./new-pool-context.js";
+import { isGeniusHistorical, isGeniusOfficialEvent } from "./genius-source-policy.js";
+import { renderGeniusAlertLines } from "./genius-alert.js";
+import { assertGeniusChainDeliveryCanonical } from "./genius-delivery-verification.js";
+import { isGmgnFlowEvent } from "./gmgn-flow-signal.js";
+import { renderGmgnFlowAlertLines } from "./gmgn-flow-alert.js";
 
 const OFFICIAL_TOKEN_COOLDOWN_MS = 6 * 60 * 60 * 1_000;
 const DEFAULT_FRESHNESS_REALTIME_MAX_AGE_MS = 10 * 60 * 1_000;
@@ -450,6 +463,29 @@ function nonNegativeLimit(config, name, fallback) {
 }
 
 function freshnessSource(event) {
+  if (event?.type === "gmgn_flow_surge") return { scope: "gmgn_flow", basis: "sourceOccurredAt", value: event.sourceOccurredAt };
+  if (event?.type === "genius_fun_update") {
+    const historical = isGeniusHistorical(event);
+    return {
+      scope: "genius_official",
+      basis: historical ? "historical_record_observedAt" : event.sourceOccurredAt ? "sourceOccurredAt" : "observedAt_snapshot_change",
+      value: historical ? event.observedAt : event.sourceOccurredAt || event.observedAt,
+    };
+  }
+  if (isKolSelfLaunchEvent(event)) {
+    return {
+      scope: "kol_self_launch",
+      basis: event.sourceOccurredAt ? "sourceOccurredAt" : "tweet.createdAt",
+      value: event.sourceOccurredAt || event.tweet?.createdAt || event.publishedAt,
+    };
+  }
+  if (event.type === "narrative_trade_signal") {
+    return {
+      scope: "narrative_trade_signal",
+      basis: "signal.event.asOf",
+      value: event.signal?.event?.asOf || event.observedAt,
+    };
+  }
   if (event.type === "telegram_news_update") {
     return { scope: "telegram_news", basis: "sourceOccurredAt", value: event.sourceOccurredAt };
   }
@@ -590,6 +626,7 @@ function freshnessSource(event) {
 }
 
 function freshnessLimits(config, scope) {
+  if (scope === "gmgn_flow") return { realtimeMaxAgeMs: 600_000, telegramMaxAgeMs: 900_000 };
   if (scope === "pon_delayed_recovery") {
     return {
       realtimeMaxAgeMs: DEFAULT_FRESHNESS_REALTIME_MAX_AGE_MS,
@@ -612,8 +649,11 @@ function freshnessLimits(config, scope) {
     github: ["alertGithubRealtimeMaxAgeMs", "alertGithubTelegramMaxAgeMs"],
     uniswap: ["alertUniswapRealtimeMaxAgeMs", "alertUniswapTelegramMaxAgeMs"],
     ai_official: ["alertAiOfficialRealtimeMaxAgeMs", "alertAiOfficialTelegramMaxAgeMs"],
+    genius_official: ["alertGeniusRealtimeMaxAgeMs", "alertGeniusTelegramMaxAgeMs"],
     binance_announcement: ["alertBinanceAnnouncementRealtimeMaxAgeMs", "alertBinanceAnnouncementTelegramMaxAgeMs"],
     telegram_news: ["alertTelegramNewsRealtimeMaxAgeMs", "alertTelegramNewsTelegramMaxAgeMs"],
+    kol_self_launch: ["alertTwitterRealtimeMaxAgeMs", "alertTwitterTelegramMaxAgeMs"],
+    narrative_trade_signal: ["alertBscRealtimeMaxAgeMs", "alertBscTelegramMaxAgeMs"],
     flap_delayed_recovery: ["alertBscRealtimeMaxAgeMs", "alertBscTelegramMaxAgeMs"],
     flap_first_observed_after_gap: ["alertBscRealtimeMaxAgeMs", "alertBscTelegramMaxAgeMs"],
   }[scope];
@@ -1228,6 +1268,25 @@ function ponFunKindLabel(kind) {
 }
 
 const compact = (event) => {
+  if (event?.type === "gmgn_flow_surge") return renderGmgnFlowAlertLines(event, "zh").join("\n");
+  if (event?.type === "genius_fun_update") return renderGeniusAlertLines(event, "zh").join("\n");
+  if (isKolSelfLaunchEvent(event)) {
+    const caller = event.caller || {};
+    return compactCard("📣 KOL 本人发币声明（观察）", [
+      `人物: @${caller.handle || event.handle || "未取得"} · X ID ${caller.xProfileId || caller.xUserId || "未取得"} · 粉丝 ${Number.isSafeInteger(caller.followers) ? caller.followers.toLocaleString("en-US") : "未取得"}`,
+      `事件: 本人在 X 自述发行 ${event.tokenSymbol ? `$${event.tokenSymbol}` : "代币"} · creator 未链上核验`,
+      `标的: BSC · CA ${event.token || event.contractAddress || "未取得"}`,
+      compactAlertEventTime(event, event.sourceOccurredAt || event.tweet?.createdAt || event.publishedAt, event.observedAt),
+    ]);
+  }
+  if (event.type === "narrative_trade_signal") {
+    const signal = event.signal || {};
+    return compactCard("🎯 AI 叙事分析", [
+      `结果: ${signal.decision === "do" ? "入选" : signal.decision === "watch" ? "观察" : "未入选"} · 评分 ${signal.score ?? "—"}/100`,
+      `标的: ${signal.target?.symbol || "未知"} · CA ${signal.target?.ca || "未取得"}`,
+      compactAlertEventTime(event, signal.event?.asOf, event.observedAt),
+    ]);
+  }
   if (event.type === "fomo_monitor_health_update") {
     const label = event.transition === "recovered" ? "聚合监控恢复"
       : event.transition === "updated" ? "聚合监控故障扩大" : "聚合监控严重降级";
@@ -1256,7 +1315,6 @@ const compact = (event) => {
       `具体更新: ${ponFunChangeFacts(event)}`,
       event.token || event.contractAddress ? `标的: ${asset} · CA ${event.token || event.contractAddress}` : `标的: ${asset}`,
       `证据: Factory ${event.factory}${event.transactionHash ? ` · Tx ${event.transactionHash}#${event.blockNumber}` : " · 官方 API 与 Factory 指纹绑定"}`,
-      "风险: PON coin/股票映射不是股票；预言机、背书、流动性、可卖性与管理员权限仍需核验",
       compactAlertEventTime(event, event.blockTimestamp || event.observedAt, event.observedAt),
     ]);
   }
@@ -1270,7 +1328,6 @@ const compact = (event) => {
           : null,
         `Portal: ${event.launcher || "未取得"}`,
         "状态: 官方 Morph 合约升级已链上确认；新增功能仍待首币验证",
-        "风险: 这是平台基础设施信号，不代表任何代币可买",
         compactAlertEventTime(event, event.blockTimestamp, event.observedAt),
       ]);
     }
@@ -1303,7 +1360,6 @@ const compact = (event) => {
         `模块: ${event.mode?.officialName || "新发行控制器"}`,
         `Factory: ${event.launcher || "未取得"}`,
         "证据: 官方接口连续两次一致",
-        "风险: 仅基础设施信号，不代表代币可买",
         compactAlertEventTime(event, event.blockTimestamp || event.timestamp, event.alertQueuedAt || event.observedAt),
       ]);
     }
@@ -1329,7 +1385,6 @@ const compact = (event) => {
         `事件: ${event.mode?.componentMode || event.mode?.selectorName || "未命名"}${event.mode?.tournamentId ? ` #${event.mode.tournamentId}` : ""}`,
         `合约: ${event.launcher || "未取得"}`,
         "证据: 官网、公开合约与链上事件交叉一致",
-        "风险: 玩法上线不代表参赛代币可买",
         compactAlertEventTime(event, event.blockTimestamp || event.timestamp, event.alertQueuedAt || event.observedAt),
       ]);
     }
@@ -1350,7 +1405,6 @@ const compact = (event) => {
         `控制合约: ${event.launcher || "未取得"}`,
         `Hook: ${event.mode.hook || "未解析"}`,
         `证据: ${event.uniqueTokens || 0}币/${event.launchCount || 0}次发行 · ${event.mode.poolKinds?.join("+") || "单例池"} · ${event.structural?.usesCreate2 ? "CREATE2" : "CREATE"}`,
-        "风险: 仅基础设施线索，不代表代币可买",
         compactAlertEventTime(event, event.blockTimestamp || event.timestamp, event.alertQueuedAt || event.observedAt),
       ]);
     }
@@ -1448,7 +1502,6 @@ const compact = (event) => {
       event.mode?.vaultFactory ? `VaultFactory: ${event.mode.vaultFactory}${event.mode.componentMode ? ` · ${event.mode.componentMode}` : ""}` : null,
       `证据: ${fourMemeFeature ? (event.mode?.presetId ? "官方 presetId 与链上 TokenCreated 精确匹配" : event.mode?.templateId ? "官方 templateId、Manager 事件与代币 API 精确匹配" : "官方报价配置与链上 _tokenInfos 精确匹配") : attributionLabel} · ${event.featureFirstToken || event.officialFirstToken ? firstTokenSafetyEvidence : evidence || "结构证据未取得"}`,
       `市场: ${poolText} · 流动性 ${liquidity}`,
-      `风险: ${safety}`,
       compactAlertEventTime(event, event.timestamp || event.blockTimestamp, event.alertQueuedAt || event.detectedAt || event.observedAt),
     ]);
   }
@@ -1616,7 +1669,6 @@ const compact = (event) => {
         `观点: ${thesis}`,
         `代币: ${event.tokenSymbol || event.symbol || "?"} · BSC · CA ${event.token || event.contractAddress || "未取得"}`,
         `关联: ${event.walletAddress || "未取得"} · ${identity}`,
-        `风险: ${securitySummary(event.security)}；X 喊单不等于安全或收益保证`,
         "来源: X 原帖已由官方 oEmbed 核验；非 Fomo 官方发布",
         compactAlertEventTime(event, event.publishedAt || event.tweet?.createdAt, event.observedAt || event.alertQueuedAt),
       ]);
@@ -1631,7 +1683,6 @@ const compact = (event) => {
         `观点: ${thesis}`,
         `代币: ${event.tokenSymbol || event.symbol || "?"} · BSC · CA ${event.token || event.contractAddress || "未取得"}`,
         `市场: 流动性 ${money(market.liquidityUsd)} · 5分钟量 ${money(market.volumeM5)} · 市值 ${money(market.marketCap)}`,
-        `风险: ${securitySummary(event.security)}；平台喊单不等于安全或收益保证`,
         `来源: ${source}`,
         compactAlertEventTime(event, event.publishedAt || event.thesis?.createdAt, event.observedAt || event.alertQueuedAt),
       ]);
@@ -1677,7 +1728,6 @@ const compact = (event) => {
       `代币: ${event.tokenSymbol || "?"} · ${event.chain?.name || event.chainId || "链未取得"} · CA ${event.token || "未取得"}`,
       `信号: ${action} · 支付 ${paymentText}`,
       `市场: 流动性 ${money(firstValue(market.liquidityUsd, market.curveReserveUsd))} · 5分钟量 ${money(market.volumeM5)} · 市值 ${money(firstValue(market.marketCap, event.marketCapAtDetection))}`,
-      `风险: ${proofRisk}；${securitySummary(event.security)}${gmgnObservedWallet ? "；公开链上归因，非本人签名证明" : ""}`,
       compactEventTime(publishedAt, deliveredAt),
     ]);
   }
@@ -1723,7 +1773,6 @@ const compact = (event) => {
       return compactCard("🧭 项目资料补全", [
         `项目: ${entry.name || metadata.name || "未命名"} (${entry.symbol || metadata.symbol || "?"}) · CA ${entry.token || "未取得"}`,
         `新增: ${compactList(additions) || "字段变化，具体值未解析"}`,
-        `风险: 资料待核验；${securitySummary(security, entry.securityDecision)}`,
         compactEventTime(observedAt, event.alertQueuedAt || observedAt),
       ]);
     }
@@ -1748,7 +1797,6 @@ const compact = (event) => {
       `发射台: ${launchpad.name || "未确认"} · ${mechanism || "机制未取得"} · 池 ${poolText}`,
       `1分钟: ${oneMinuteParts.join(" · ") || "数据未取得"}${acceleration} · ${triggerCriteria}`,
       fiveMinuteParts.length ? `5分钟: ${fiveMinuteParts.join(" · ")}` : null,
-      `风险: ${securitySummary(security, entry.securityDecision)}`,
       compactAlertEventTime(event, event.latestSwapAt || observedAt, observedAt),
     ]);
   }
@@ -1761,7 +1809,6 @@ const compact = (event) => {
       `代币: ${event.tokenMetadata?.symbol || event.tokenMetadata?.name || "?"} · CA ${event.token || "未取得"}`,
       `数量: ${Number.isFinite(display) ? display.toLocaleString("en-US", { maximumFractionDigits: 6 }) : event.amount}`,
       `地址: ${event.actor || event.to || event.from || "未取得"}`,
-      "提示: 仅链上行为，不代表官方推荐",
       compactAlertEventTime(event, event.blockTimestamp || event.timestamp, event.alertQueuedAt || event.observedAt),
     ]);
   }
@@ -1862,17 +1909,12 @@ const compact = (event) => {
         ? "✅ Robinhood 可复用发射台确认"
       : "🚀 Robinhood 新模式发射";
     const evidence = event.launcherAnalysis ? [event.launcherAnalysis.usesCreate2 && "CREATE2", event.launcherAnalysis.selectorSimilarity >= 0.2 && `Factory相似度 ${(event.launcherAnalysis.selectorSimilarity * 100).toFixed(1)}%`, event.launcherAnalysis.codeSize >= 10_000 && `平台级代码 ${event.launcherAnalysis.codeSize}B`, (metadata.website || metadata.twitter) && "公开资料"].filter(Boolean).join(" · ") : "";
-    const safeEnough = security?.decision === "pass" && security?.metrics?.liquidityConfirmed === true;
-    const conclusion = security?.decision === "block"
-      ? "不买"
-      : safeEnough ? "观察（本地初筛通过，不代表可买）" : "不买（安全检查未完成）";
     const chainTime = event.timestamp || event.blockTimestamp;
     const discoveredAt = event.freshness?.discoveredAt || event.alertQueuedAt || event.observedAt;
     return compactCard(discovery, [
-      `结论: ${conclusion}${gap} · ${metadata.name || "未命名"} (${metadata.symbol || "?"}) · CA ${token.token || "未取得"}`,
+      `代币: ${metadata.name || "未命名"} (${metadata.symbol || "?"}) · CA ${token.token || "未取得"}${gap}`,
       `发射台: ${profile?.name || "未知候选"} · ${profile?.model || event.mode?.selector || "机制未取得"}`,
       event.launcherAnalysis || mode ? `证据: ${event.launcherAnalysis ? evidence || `${event.launcherAnalysis.selector || "入口未取得"} · 相似度 ${(event.launcherAnalysis.selectorSimilarity * 100).toFixed(1)}%` : "结构差异已确认"}${mode ? ` · ${mode}` : ""}` : null,
-      `风险: ${securitySummary(security)}`,
       compactAlertEventTime(event, chainTime, discoveredAt),
     ]);
   }
@@ -1938,9 +1980,13 @@ function isRelevantBinanceGithubUpdate(event) {
 }
 
 export function isStrongAlert(event) {
+  if (event?.type === "gmgn_flow_surge") return false;
+  if (event?.type === "genius_fun_update") return isGeniusOfficialEvent(event) && !isGeniusHistorical(event) && event.strong === true;
+  if (isKolSelfLaunchEvent(event)) return false;
   if (event?.type === "fomo_monitor_health_update") return false;
   if (event?.type === "telegram_news_update") return false;
   if (["late", "suppress"].includes(effectiveFreshnessDecision(event))) return false;
+  if (event?.type === "narrative_trade_signal") return event.signal?.decision === "do";
   // New outbox entries carry a deterministic trading tier. The tier, rather
   // than translated wording or an LLM summary, controls Telegram sound and
   // the five-second critical path. Pending legacy entries are intentionally
@@ -2090,6 +2136,18 @@ function absoluteTweetUrl(tweet = {}) {
 }
 
 export function telegramButtons(event) {
+  if (event?.type === "gmgn_flow_surge") {
+    if (!isGmgnFlowEvent(event)) return { inline_keyboard: [] };
+    return { inline_keyboard: [
+      [{ text: "查看 GMGN | View token", url: event.source.url }, copyButton(event.token.address)],
+      ...(event.narrative.sourceUrl && event.narrative.sourceUrl !== event.source.url
+        ? [[{ text: "叙事出处 | Narrative source", url: event.narrative.sourceUrl }]] : []),
+    ] };
+  }
+  if (event?.type === "genius_fun_update") {
+    return { inline_keyboard: isGeniusOfficialEvent(event)
+      ? [[{ text: "查看官方来源 | Official source", url: event.sourceUrl }], [{ text: "Genius.fun", url: "https://genius.fun" }]] : [] };
+  }
   if (event.type === "telegram_news_update") {
     const messageId = String(event.messageId || "");
     const numericMessageId = Number(messageId);
@@ -2186,6 +2244,18 @@ export function telegramButtons(event) {
     return { inline_keyboard: rows };
   }
   if (event.type === "fomo_family_top_call") {
+    if (isKolSelfLaunchEvent(event)) {
+      if (!verifyKolTokenLaunchEvent(event).valid) return { inline_keyboard: [] };
+      const rows = [[copyButton(event.token || event.contractAddress, "📋 复制声明 CA")].filter(Boolean)];
+      const evidence = [];
+      const tweetUrl = absoluteTweetUrl(event.tweet || {});
+      if (httpsUrl(tweetUrl)) evidence.push({ text: "𝕏 查看本人声明", url: tweetUrl });
+      if (httpsUrl(event.explorerUrl)) evidence.push({ text: "📄 查看合约", url: event.explorerUrl });
+      if (evidence.length) rows.push(evidence.slice(0, 2));
+      const backgroundUrl = httpsUrl(event.caller?.background?.sourceUrl, event.caller?.twitter);
+      if (backgroundUrl) rows.push([{ text: "👤 查看背景来源", url: backgroundUrl }]);
+      return { inline_keyboard: rows.filter((row) => row.length) };
+    }
     const rows = [[copyButton(event.token)].filter(Boolean)];
     if (event.signalKind === SMART_WALLET_SIGNAL_KIND) {
       const links = [];
@@ -2770,6 +2840,8 @@ function isSpecificModeAlias(value) {
 }
 
 export function focusNoveltyKeys(event) {
+  if (event?.type === "gmgn_flow_surge") return [];
+  if (event?.type === "genius_fun_update") return [];
   if (event?.type === "telegram_news_update") return [];
   const platform = focusNoveltyPlatform(event);
   if (!platform) return [];
@@ -3258,6 +3330,16 @@ function telegramNewsNoveltyKeys(event) {
 }
 
 function withFocusNovelty(config, event) {
+  if (event?.type === "gmgn_flow_surge") {
+    const { freshness, tradingPriority, ...sourceEvent } = event;
+    return { ...sourceEvent, canonicalSignalId: event.eventKey, canonicalSignalIds: [event.eventKey] };
+  }
+  if (event?.type === "genius_fun_update") {
+    // Only exact source/event identity may consume a Genius observation.
+    // Ignore producer-provided generic concept keys or ticker-based novelty.
+    const { freshness, tradingPriority, ...sourceEvent } = event;
+    return { ...sourceEvent, canonicalSignalId: event.eventKey, canonicalSignalIds: [event.eventKey] };
+  }
   if (event?.type === "telegram_news_update") {
     // Keep public-channel identity in its own namespace. It can collapse the
     // same observed story/stage across message revisions, but can never cover
@@ -3271,7 +3353,10 @@ function withFocusNovelty(config, event) {
   }
   const fomoKeys = fomoNoveltyKeys(event);
   const ponKeys = ponFunNoveltyKeys(event);
-  if (!isThreePlatformScope(config) && !fomoKeys.length && !ponKeys.length) return event;
+  const kolLaunchKeys = isKolSelfLaunchEvent(event)
+    ? kolTokenLaunchCanonicalSignalIds(event)
+    : [];
+  if (!isThreePlatformScope(config) && !fomoKeys.length && !ponKeys.length && !kolLaunchKeys.length) return event;
   const canonicalSignalIds = [...new Set([
     ...(isThreePlatformScope(config) ? focusNoveltyKeys(event) : []),
     ...(isThreePlatformScope(config) ? binanceNoveltyKeys(event) : []),
@@ -3279,6 +3364,7 @@ function withFocusNovelty(config, event) {
     ...(isThreePlatformScope(config) ? githubSemanticNoveltyKeys(event) : []),
     ...ponKeys,
     ...fomoKeys,
+    ...kolLaunchKeys,
   ])].sort();
   return canonicalSignalIds.length ? { ...event, canonicalSignalId: canonicalSignalIds[0], canonicalSignalIds } : event;
 }
@@ -3774,6 +3860,7 @@ function semanticDuplicate(outbox, eventId, event, now = Date.now()) {
   const binanceSignal = [...incoming].every((key) => key.startsWith("binance:"));
   const aiSignal = [...incoming].every((key) => key.startsWith("ai:"));
   const fomoSignal = [...incoming].every((key) => key.startsWith("fomo:call:bsc:"));
+  const kolLaunchSignal = [...incoming].every((key) => key.startsWith("kol:token-launch:"));
   const ponSignal = [...incoming].every((key) => key.startsWith("pon:"));
   const telegramSignal = [...incoming].every((key) => key.startsWith("telegram:story:"));
   const dedupWindowMs = binanceSignal || ponSignal ? 6 * 60 * 60 * 1_000
@@ -3791,7 +3878,8 @@ function semanticDuplicate(outbox, eventId, event, now = Date.now()) {
   for (const entry of Object.values(outbox.events || {})) {
     if (telegramSignal !== (entry.event?.type === "telegram_news_update")) continue;
     const eligibleStatus = ["pending", "delivered"].includes(entry.status)
-      || ((fomoSignal || telegramSignal) && entry.status === "suppressed" && !entry.semanticDuplicateOf);
+      || ((fomoSignal || kolLaunchSignal || telegramSignal)
+        && entry.status === "suppressed" && !entry.semanticDuplicateOf);
     if (entry.id === eventId || !eligibleStatus) continue;
     const priorFlapProofBase = isFlapPortalQuoteEvent(entry.event)
       ? entry.event.originalEventKey || entry.event.eventKey
@@ -3835,6 +3923,7 @@ function semanticDuplicate(outbox, eventId, event, now = Date.now()) {
       ...githubSemanticNoveltyKeys(entry.event || {}),
       ...ponFunNoveltyKeys(entry.event || {}),
       ...fomoNoveltyKeys(entry.event || {}),
+      ...(isKolSelfLaunchEvent(entry.event) ? kolTokenLaunchCanonicalSignalIds(entry.event) : []),
       ...telegramNewsNoveltyKeys(entry.event || {}),
     ];
     // Early focus3 entries collapsed every unversioned Flap Vault into one
@@ -3874,6 +3963,13 @@ function semanticDuplicate(outbox, eventId, event, now = Date.now()) {
 }
 
 export function alertEventKey(event) {
+  if (event?.type === "gmgn_flow_surge") return String(event.eventKey);
+  if (isKolSelfLaunchEvent(event)) {
+    return kolTokenLaunchEventKey(event) || String(event.eventKey || "kol-self-launch:invalid");
+  }
+  if (event.type === "narrative_trade_signal") {
+    return String(event.eventKey || `narrative-trade:${event.signal?.decisionHash || "invalid"}`);
+  }
   if (event.type === "fomo_monitor_health_update") return String(event.eventKey);
   if (event.type === "telegram_news_update") {
     return `telegram-news:${event.chatId}:${String(event.messageId)}:${String(event.contentDigest).slice(0, 16)}`;
@@ -4301,8 +4397,28 @@ async function inspectOutbox(config, inspection) {
   return withFileLock(file, async () => inspection(await readOutbox(file)));
 }
 
+function isCurrentTelegramRenderBundle(event, bundle) {
+  if (bundle?.version !== BILINGUAL_RENDER_VERSION) return false;
+  if (event?.type === "gmgn_flow_surge") return bundle.format === "telegram_zh_en_gmgn_flow_v1" && bundle.eventType === event.type;
+  // Preserve already persisted v1 wording on delivery retries; new events use v2.
+  if (event?.type === "genius_fun_update") return ["telegram_zh_en_genius_v1", "telegram_zh_en_genius_v2"].includes(bundle.format) && bundle.eventType === event.type;
+  if (isKolSelfLaunchEvent(event)) {
+    return bundle.format === "telegram_zh_en_kol_launch_v3"
+      && bundle.signalKind === "kol_self_launch";
+  }
+  if (event?.type === "narrative_trade_signal") {
+    return bundle.format === "telegram_zh_en_narrative_v2"
+      && bundle.focusModel?.eventType === "narrative_trade_signal";
+  }
+  if (deriveNewPoolContext(event)) {
+    return bundle.format === "telegram_zh_en_pool_context_v2"
+      && Boolean(bundle.focusModel?.newPoolContext);
+  }
+  return true;
+}
+
 async function ensureTelegramRenderBundle(config, eventId, event, claimedBundle = null) {
-  if (claimedBundle?.version === BILINGUAL_RENDER_VERSION) return claimedBundle;
+  if (isCurrentTelegramRenderBundle(event, claimedBundle)) return claimedBundle;
   // claimAlertDestinations returns the immutable persisted event and the
   // current render bundle in the same locked snapshot. Do not parse the full
   // outbox again on the critical path when that bundle is absent or stale.
@@ -4314,7 +4430,7 @@ async function ensureTelegramRenderBundle(config, eventId, event, claimedBundle 
   const persisted = await mutateOutbox(config, (outbox) => {
     const entry = outbox.events[eventId];
     if (!entry) return generated;
-    if (entry.renderBundle?.version !== BILINGUAL_RENDER_VERSION) {
+    if (!isCurrentTelegramRenderBundle(event, entry.renderBundle)) {
       entry.renderBundle = generated;
       entry.updatedAt = new Date(alertPipelineNow(config)).toISOString();
     }
@@ -4348,7 +4464,12 @@ async function deliverDestination(config, event, destination, renderBundle = nul
     const strong = config.telegramStrongAlerts && isStrongAlert(event);
     let renderedText;
     const bilingualDelivery = config.alertBilingualEnabled === true
-      || event.type === "fomo_monitor_health_update";
+      || event.type === "gmgn_flow_surge"
+      || event.type === "genius_fun_update"
+      || event.type === "fomo_monitor_health_update"
+      || isKolSelfLaunchEvent(event)
+      || event.type === "narrative_trade_signal"
+      || Boolean(deriveNewPoolContext(event));
     if (bilingualDelivery) {
       const bundle = renderBundle || await buildBilingualAlertBundle(config, event, telegramFreshnessText(event, compact(event)));
       renderedText = telegramSafeText(renderBilingualTelegramText(bundle, strong), 3_900);
@@ -4514,8 +4635,24 @@ function isRealtimeExactPonT2(event, priority) {
  * relevance gates, but only these explicit lanes are allowed to fan out now.
  */
 export function alertDeliveryDisposition(event = {}) {
+  if (event.type === "gmgn_flow_surge" && isGmgnFlowEvent(event) && effectiveFreshnessDecision(event) !== "suppress") {
+    return Object.freeze({ mode: "immediate", deliverImmediately: true, tier: null, reason: "gmgn_flow_watch_only" });
+  }
+  if (event.type === "genius_fun_update" && isGeniusOfficialEvent(event) && effectiveFreshnessDecision(event) !== "suppress") {
+    return Object.freeze({ mode: "immediate", deliverImmediately: true, tier: null, reason: "genius_official_watch_only" });
+  }
   if (event.type === "fomo_monitor_health_update") {
     return Object.freeze({ mode: "immediate", deliverImmediately: true, tier: null, reason: "fomo_health_realtime" });
+  }
+  if (isKolSelfLaunchEvent(event)
+    && verifyKolTokenLaunchEvent(event).valid
+    && effectiveFreshnessDecision(event) !== "suppress") {
+    return Object.freeze({
+      mode: "immediate",
+      deliverImmediately: true,
+      tier: null,
+      reason: "kol_self_launch_watch_only",
+    });
   }
   const priority = isTradingPriority(event.tradingPriority) ? event.tradingPriority : null;
   const tier = priority?.tier || null;
@@ -4758,12 +4895,13 @@ function disableExpiredTelegramDelivery(config, entry, evaluatedAt = Date.now())
   if (isFourMemePolicyFixRecoveryEvent(entry.event)) return false;
 
   const isFomo = entry.event?.type === "fomo_family_top_call";
+  const isGmgnFlow = entry.event?.type === "gmgn_flow_surge";
   const isPonDelayedRecovery = isPonFunDelayedRecoveryEvent(entry.event);
   // Fomo is useful only as an immediate signal. Anchor its five-minute TTL to
   // immutable source time whenever available; a restart or duplicate scan must
   // never turn an old buy/call into a fresh Telegram delivery. Other alerts
   // retain the durable queue-age contract.
-  const sourceAtMs = isFomo
+  const sourceAtMs = isGmgnFlow ? epochMs(entry.event.sourceOccurredAt) : isFomo
     ? epochMs(entry.event?.freshness?.sourceOccurredAt)
       ?? epochMs(entry.event?.publishedAt)
       ?? epochMs(entry.event?.blockTimestamp)
@@ -4773,7 +4911,7 @@ function disableExpiredTelegramDelivery(config, entry, evaluatedAt = Date.now())
   const queuedAtMs = sourceAtMs ?? epochMs(entry.createdAt) ?? epochMs(entry.event?.alertQueuedAt);
   const evaluatedAtMs = epochMs(evaluatedAt) ?? Date.now();
   if (queuedAtMs === null) return false;
-  const maxAgeMs = isFomo
+  const maxAgeMs = isGmgnFlow ? 900_000 : isFomo
     ? FOMO_TELEGRAM_DELIVERY_MAX_AGE_MS
     : isPonDelayedRecovery
       ? PON_DELAYED_RECOVERY_DELIVERY_MAX_AGE_MS
@@ -4981,7 +5119,7 @@ async function enqueueAlert(config, event) {
       ? { ...event, alertQueuedAt: existing.event?.alertQueuedAt || existing.createdAt || now }
       : existing?.event || { ...event, alertQueuedAt: event.alertQueuedAt || now };
     if ((activeExisting || reactivatingCancelledFlapQuote || fourRegistryReactivation)
-      && queuedEvent.type !== "fomo_monitor_health_update") {
+      && !["fomo_monitor_health_update", "genius_fun_update", "gmgn_flow_surge"].includes(queuedEvent.type)) {
       // A valid schema is not a timeless eligibility grant. Re-score active
       // retries at the duplicate observation time so a formerly fresh T1
       // cannot be delivered after its trading window has closed.
@@ -5740,11 +5878,27 @@ async function deliverOutboxEvent(config, eventId, { force = false, pipelineStar
     const claimedAtMs = Date.parse(claim.claimedAt || "");
     const renderStartedAtMs = alertPipelineNow(config);
     const bilingualDelivery = config.alertBilingualEnabled === true
-      || claim.event.type === "fomo_monitor_health_update";
+      || claim.event.type === "gmgn_flow_surge"
+      || claim.event.type === "genius_fun_update"
+      || claim.event.type === "fomo_monitor_health_update"
+      || isKolSelfLaunchEvent(claim.event)
+      || claim.event.type === "narrative_trade_signal"
+      || Boolean(deriveNewPoolContext(claim.event));
     const renderBundle = bilingualDelivery && claim.destinations.includes("telegram")
       ? await ensureTelegramRenderBundle(config, eventId, claim.event, claim.renderBundle)
       : null;
     const renderCompletedAtMs = alertPipelineNow(config);
+    try {
+      // A source proof can become orphaned while Telegram/webhook delivery is
+      // queued. Revalidate at actual fan-out, including generic outbox retries.
+      // Failure is recoverable work, never a delivered or terminally consumed
+      // notification. Other official Genius sources perform no chain requests.
+      await assertGeniusChainDeliveryCanonical(config, claim.event);
+    } catch (error) {
+      const failed = await completeAlertDestinations(config, eventId, claim.destinations,
+        claim.destinations.map(() => ({ status: "rejected", reason: error })));
+      return failed?.entry || null;
+    }
     const commonDeliveryContext = {
       pipelineStartedAtMs,
       claimedAtMs,
@@ -5829,7 +5983,7 @@ export async function drainAlertOutbox(config) {
       // authentication schema. It is operational telemetry rather than a
       // news-trading event, so keep that event byte-safe and rank it through
       // the comparator's ordinary legacy fallback without adding metadata.
-      if (entry.event?.type !== "fomo_monitor_health_update") {
+      if (!["fomo_monitor_health_update", "genius_fun_update", "gmgn_flow_surge"].includes(entry.event?.type)) {
         entry.event = withTradingPriority(entry.event || {}, { nowMs: now });
       }
       entry.event = withAlertFreshness(config, entry.event || {}, entry.createdAt || now);
@@ -6332,6 +6486,13 @@ function isStructurallyRelevantFomoConvergence(event) {
 }
 
 export function isRelevantAlert(event) {
+  if (event?.type === "gmgn_flow_surge") return isGmgnFlowEvent(event);
+  if (event?.type === "genius_fun_update") return isGeniusOfficialEvent(event);
+  if (isKolSelfLaunchEvent(event)) return verifyKolTokenLaunchEvent(event).valid;
+  if (event?.type === "narrative_trade_signal") {
+    const integrity = verifyNarrativeTradeSignalIntegrity(event.signal);
+    return integrity.valid && event.signal.decision === "do";
+  }
   if (event?.type === "fomo_monitor_health_update") {
     return isFomoMonitorHealthUpdateAllowed({ fomoHealthMonitorEnabled: true }, event);
   }
@@ -6489,7 +6650,7 @@ export async function sendAlerts(config, event) {
   // explicitly share their monitor clock without trusting event.observedAt as
   // a way around the stale-news gate.
   const preparedEvent = withAlertFreshness(config, withFocusNovelty(config, event), pipelineStartedAtMs);
-  const queuedEvent = preparedEvent.type === "fomo_monitor_health_update"
+  const queuedEvent = ["fomo_monitor_health_update", "genius_fun_update", "gmgn_flow_surge"].includes(preparedEvent.type)
     ? preparedEvent
     : withTradingPriority(preparedEvent, { nowMs: pipelineStartedAtMs });
   if (effectiveFreshnessDecision(queuedEvent) !== "suppress" && await isRepeatedOfficialToken(config, queuedEvent)) {

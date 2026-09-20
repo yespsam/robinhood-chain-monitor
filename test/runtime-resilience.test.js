@@ -15,7 +15,9 @@ test("independent update monitors start before fallible chain initialization", a
   assert.match(independentBody, /createFlapQuoteMonitor/);
   assert.match(independentBody, /createFourRegistryMonitor/);
   assert.match(independentBody, /if \(config\.fourRegistryMonitorEnabled\) startMonitor\("four-registry"/);
-  assert.match(independentBody, /onEvent: \(event\) => sendAlerts\(config, event\)/);
+  assert.match(independentBody, /onEvent: \(event\) => deliverAlert\(config, event\)/);
+  assert.match(source, /async function deliverAlert\(runtimeConfig, event\)/);
+  assert.match(source, /narrativeSniperRuntime\.sendAlert\(runtimeConfig, event\)/);
   assert.match(independentBody, /cancelPendingEvent: \(evidence\) => cancelPendingFourRegistryEvent\(config, evidence\)/);
   assert.match(independentBody, /onFlapQuotePoolLifecycle:\s*async \(record\)/);
   assert.match(independentBody, /bscLaunchpadMonitor\.registerFlapQuotePoolLifecycle\(record\)/);
@@ -103,6 +105,10 @@ test("graceful shutdown covers every independently created monitor and stops new
 
   for (const handle of expectedHandles) assert.match(entries, new RegExp(`\\b${handle}\\b`));
   assert.match(source, /fourRegistryRpcProvider/);
+  assert.match(source, /ponRpcProvider \|\|= createPonReadOnlyRpcProvider\(config\.ponRpcUrls, config\.chainId,/);
+  assert.match(source, /ponRpcConcurrency/);
+  assert.match(source, /createPonMonitor\(config, \{ provider: ponRpcProvider,/);
+  assert.match(source, /provider,\s+flapQuoteRpcProvider,\s+fourRegistryRpcProvider,\s+ponRpcProvider,/);
   assert.match(source, /const fourRegistryLogProviders = new Map\(\)/);
   assert.match(source, /const fourRegistryStateProviders = new Map\(\)/);
   assert.match(source, /fourRegistryLogProviders\.set\(sourceId, createAbortableJsonRpcProvider\(rpcUrl, 56,/);
@@ -121,4 +127,24 @@ test("main starts a producer-owned runtime heartbeat independent of upstream pol
   assert.ok(source.indexOf("runtimeHeartbeat = startRuntimeHeartbeat") < source.indexOf("mainPromise = main()"));
   assert.match(fomoSource, /startRuntimeHeartbeat\(\{\s*file: path\.join\(config\.dataDir, "fomo-runtime-heartbeat\.json"\),\s*producer: "fomo"/);
   assert.match(fomoSource, /runtimeHeartbeat\.stop\(\)/);
+});
+
+test("Docker Compose starts exactly one standalone Fomo worker beside the main monitor", async () => {
+  const compose = await fs.readFile(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  const exampleEnv = await fs.readFile(new URL("../.env.example", import.meta.url), "utf8");
+  const worker = await fs.readFile(new URL("../src/fomo-worker.js", import.meta.url), "utf8");
+  const main = await fs.readFile(new URL("../src/index.js", import.meta.url), "utf8");
+
+  assert.match(compose, /services:\s+[\s\S]*?monitor:\s+[\s\S]*?fomo-worker:/u);
+  assert.equal((compose.match(/^\s{2}fomo-worker:\s*$/gmu) || []).length, 1);
+  assert.match(compose, /fomo-worker:[\s\S]*?command:\s*\["node",\s*"src\/fomo-worker\.js"\]/u);
+  assert.match(compose, /monitor:[\s\S]*?environment:\s+FOMO_CALL_STANDALONE:\s*"true"[\s\S]*?fomo-worker:/u);
+  assert.match(compose, /fomo-worker:[\s\S]*?environment:\s+FOMO_CALL_STANDALONE:\s*"true"/u);
+  assert.equal((compose.match(/^\s{6}FOMO_CALL_STANDALONE:\s*"true"\s*$/gmu) || []).length, 2,
+    "both Compose processes must override a conflicting .env value with standalone topology");
+  assert.equal((compose.match(/- \.\/data:\/app\/data/gu) || []).length, 2);
+  assert.match(exampleEnv, /^FOMO_CALL_STANDALONE=true$/mu);
+  assert.match(exampleEnv, /^KOL_LAUNCH_MONITOR_ENABLED=false$/mu);
+  assert.match(worker, /config\.fomoXCallEnabled \|\| config\.kolLaunchMonitorEnabled/u);
+  assert.match(main, /!config\.fomoCallStandalone\s*\n\s*&& \(config\.fomoXCallEnabled \|\| config\.kolLaunchMonitorEnabled\)/u);
 });

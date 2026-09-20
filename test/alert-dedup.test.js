@@ -628,9 +628,10 @@ test("a durably queued Flap tracked token survives the two-hour TTL and delivers
   shouldFail = false;
   assert.equal(await drainAlertOutbox(config), 1);
   assert.equal(payloads.length, 2);
-  assert.match(payloads[1].text, /延迟送达｜勿追价/u);
-  assert.match(payloads[1].text, /Delayed delivery \| do not chase/i);
-  assert.match(payloads[1].text, /非自动交易/u);
+  assert.match(payloads[1].text, /新币：Flap/u);
+  assert.match(payloads[1].text, /New token: Flap/i);
+  assert.match(payloads[1].text, /TokenCreated/u);
+  assert.doesNotMatch(payloads[1].text, /风险|Risk|勿追价|do not chase|非自动交易|no automatic trading/iu);
   assert.match(payloads[1].text, /0x1111111111111111111111111111111111111111/);
   const retryButtons = payloads[1].reply_markup.inline_keyboard.flat();
   assert.ok(retryButtons.some((button) => button.copy_text?.text === event.tokens[0].token));
@@ -642,7 +643,7 @@ test("a durably queued Flap tracked token survives the two-hour TTL and delivers
   assert.equal(entry.event.tradingPriority.tier, "T2");
   assert.equal(entry.deliveryDisposition.reason, "flap_tracked_token_delayed_delivery");
   assert.equal(entry.destinations.telegram.receipt.messageId, 7301);
-  assert.equal(entry.renderBundle.version, 24);
+  assert.equal(entry.renderBundle.version, 27);
   assert.equal(await drainAlertOutbox(config), 0);
   assert.equal(payloads.length, 2, "terminal delivery is exact-once across later drains");
 });
@@ -690,9 +691,9 @@ test("a canonical Flap tracked-token reorg revision is a distinct T2 no-buy aler
   assert.equal((await sendAlerts(config, original)).status, "delivered");
   assert.equal((await sendAlerts(config, revision)).status, "delivered");
   assert.equal(payloads.length, 2);
-  assert.match(payloads[1].text, /链重组修订｜以本条 CA 为准｜不买/u);
-  assert.match(payloads[1].text, /Chain-reorg revision \| use this CA as canonical \| do not buy/);
-  assert.match(payloads[1].text, /非自动交易/u);
+  assert.match(payloads[1].text, /事件：TokenCreated（链重组修订）/u);
+  assert.match(payloads[1].text, /Event: TokenCreated \(chain-reorg revision\)/i);
+  assert.doesNotMatch(payloads[1].text, /风险|Risk|不买|do not buy|非自动交易|no automatic trading/iu);
   assert.ok(payloads[1].reply_markup.inline_keyboard.flat().every((button) => !/GMGN|买入|交易/i.test(button.text)));
 
   const retry = await sendAlerts(config, structuredClone(revision));
@@ -885,7 +886,7 @@ test("Flap quote-token prose and structured pools receive stable identities and 
     changes: {
       newFlapPools: [
         { identity: `vault:STAKING:${factory}`, kind: "vault_factory", category: "STAKING", vaultFactory: factory, quoteAddress: null, quoteSymbol: null, sourceUrl: "https://flap.sh/board" },
-        { identity: `quote:${quoteAddress}`, kind: "quote_asset", category: null, vaultFactory: null, quoteAddress, quoteSymbol: "BABAB", sourceUrl: "https://flap.sh/board" },
+        { identity: `quote:${quoteAddress}`, kind: "quote_asset", category: null, vaultFactory: null, chainId: 56, quoteAddress, quoteSymbol: "BABAB", sourceUrl: "https://flap.sh/board" },
       ],
     },
     observedAt: new Date().toISOString(),
@@ -918,12 +919,11 @@ test("Flap quote-token prose and structured pools receive stable identities and 
   assert.deepEqual(event, before, "rendering and semantic identity must not mutate the source event");
   assert.equal(payloads.length, 1);
   const payload = payloads[0];
-  assert.match(payload.text, /^🔴 强提醒 \| STRONG ALERT/);
-  assert.match(payload.text, /🇨🇳 中文[\s\S]*Flap 报价底池已发现：BABAB/);
-  assert.match(payload.text, /🇬🇧 English[\s\S]*Flap quote pools observed: BABAB/i);
+  assert.match(payload.text, /^🆕 新底池 \| NEW POOL/);
+  assert.match(payload.text, /🇨🇳 中文[\s\S]*项目：Flap[^\n]*BABAB[^\n]*新报价底池/);
+  assert.match(payload.text, /🇬🇧 English[\s\S]*Project: Flap[^\n]*BABAB[^\n]*new quote pool/i);
   assert.doesNotMatch(payload.text, /报价底池已启用|quote pools enabled/iu);
-  assert.match(payload.text, /非自动交易/);
-  assert.match(payload.text, /no automatic trading/i);
+  assert.doesNotMatch(payload.text, /风险|Risk|勿追价|do not chase|非自动交易|no automatic trading/iu);
   assert.equal(payload.text.split(quoteAddress).length - 1, 2, "Quote address remains byte-for-byte in both language blocks");
   const buttons = payload.reply_markup.inline_keyboard.flat();
   assert.ok(buttons.some((button) => button.text === "📋 复制底池 Factory" && button.copy_text?.text === factory));
@@ -1697,9 +1697,9 @@ function flapPortalDelayedRecoveryEvent({
     chainId: 56,
     portal,
     portalRuntimeCodeHash: "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3",
-    portalVersion: "v5.22.0",
-    portalImplementation: "0xE3CfDbb959e4EFb6fFD22E8659e8CBeEeD362019",
-    portalImplementationCodeHash: "0x357c9245739d6af7c4727744d479ec7d8c4ae461c2fb37d56eafb9d7dc9ccbaa",
+    portalVersion: "v5.23.1",
+    portalImplementation: "0xAb8Ec926b6e113c2212aF152b086eA62d1FDced9",
+    portalImplementationCodeHash: "0x78653cdd7296d940ae531c86bc6700ae163f1f9dec002c2af3143c9ae6696a15",
     eventSignature: "QuoteTokenConfigurationSet(address,(uint8,uint8,uint8,uint8,uint8))",
     topic0: "0x9a1f38e55c729ebf0c45d240a00b09f0a79a715df7cfd6e8942bd3f8da839199",
     logIndex,
@@ -2418,7 +2418,7 @@ test("BSC launchpad confirmations are strong, concise, and include copy plus GMG
   await sendAlerts(alertConfig(dataDir), event);
   assert.match(requestBody.text, /BSC 新发射台确认/);
   assert.match(requestBody.text, /2 个独立代币/);
-  assert.match(requestBody.text, /风险:/);
+  assert.doesNotMatch(requestBody.text, /风险:|Risk:|非自动交易|no automatic trading/iu);
   assert.doesNotMatch(requestBody.text, /安全矩阵|社交覆盖|过滤:/);
   assertCompactCard(requestBody);
 });
@@ -2481,9 +2481,10 @@ test("unsafe first-token observations stay audit-only and safe confirmed first t
   assert.equal(payloads.length, 1);
 
   const passedCard = payloads.find((payload) => payload.text.includes("Four.Meme"));
-  assert.match(passedCard.text, /🇨🇳 中文[\s\S]*安全初筛通过，非买入建议/);
-  assert.match(passedCard.text, /🇬🇧 English[\s\S]*Safety screening passed/);
-  assert.doesNotMatch(passedCard.text, /本地安全门已拦截|Blocked by local safety gate/);
+  assert.match(passedCard.text, /🇨🇳 中文[\s\S]*事件：Safety Gate Mode/u);
+  assert.match(passedCard.text, /🇬🇧 English[\s\S]*Event: Safety Gate Mode/i);
+  assert.match(passedCard.text, /0x2222222222222222222222222222222222222222/u);
+  assert.doesNotMatch(passedCard.text, /风险|Risk|安全初筛|Safety screen|不买|do not buy|非自动交易|no automatic trading/iu);
 });
 
 test("early activity escalation keys preserve the first Stage 2 alert", () => {
@@ -3415,7 +3416,7 @@ test("generic BSC discovery is audit-only while a qualified Fomo call still rend
   assert.match(fomo.text, /前一区块零仓位首仓候选/);
   assert.match(fomo.text, /支付 0\.25 WETH（已核验）/);
   assert.match(fomo.text, /流动性 \$25,000 · 5分钟量 \$9,000 · 市值 \$420,000/);
-  assert.match(fomo.text, /风险: 仅前一区块零仓位，精确首仓待核验/);
+  assert.doesNotMatch(fomo.text, /风险:|Risk:|非自动交易|no automatic trading/iu);
   assert.doesNotMatch(fomo.text, /覆盖:|Tx:|钱包:|DEX |检查矩阵:/);
   assert.equal(fomo.reply_markup.inline_keyboard.flat().find((button) => button.text === "🔍 查看交易").url, transactionUrl);
   assertCompactCard(fomo);
@@ -3652,16 +3653,14 @@ test("Flap first-observed recovery is an exact-once T2 and never hides a later p
   assert.equal(observedResult.status, "delivered");
   assert.equal(payloads.length, 1);
   assert.equal(payloads[0].disable_notification, true);
-  assert.match(payloads[0].text, /Flap · T2/u);
+  assert.match(payloads[0].text, /平台：Flap/u);
+  assert.doesNotMatch(payloads[0].text, /Flap · T2/u);
   assert.match(payloads[0].text, /补扫首次观察/u);
   assert.match(payloads[0].text, /当前确认启用/u);
   assert.match(payloads[0].text, /此前是否新增\/0→1 未证/u);
-  assert.match(payloads[0].text, /勿追价/u);
-  assert.match(payloads[0].text, /非自动交易/u);
   assert.match(payloads[0].text, /First observed after (?:a )?gap/i);
   assert.match(payloads[0].text, /prior listing\/0→1 unproven/i);
-  assert.match(payloads[0].text, /do not chase/i);
-  assert.match(payloads[0].text, /no automatic trading/i);
+  assert.doesNotMatch(payloads[0].text, /风险|Risk|勿追价|do not chase|非自动交易|no automatic trading/iu);
   assert.doesNotMatch(payloads[0].text, /新增底池|报价底池已启用|new quote pools?|quote pools enabled/iu);
   assert.equal((await sendAlerts(config, structuredClone(observed))).status, "delivered");
   assert.equal(payloads.length, 1, "same weak proof remains exact-once");
@@ -3862,17 +3861,10 @@ test("a >15m Flap Portal recovery survives a >2h failed delivery and restart, th
   assert.equal((await sendAlerts(config, structuredClone(event))).status, "delivered");
   assert.equal(payloads.length, 1);
   assert.equal(payloads[0].disable_notification, true);
-  assert.match(payloads[0].text, /^🔔 监控提醒 \| MONITOR ALERT/u);
-  assert.match(payloads[0].text, /断线恢复补报/u);
-  assert.match(payloads[0].text, /送达等待 3小时/u);
-  assert.match(payloads[0].text, /总延迟 3小时20分/u);
-  assert.match(payloads[0].text, /勿追价/u);
-  assert.match(payloads[0].text, /非自动交易/u);
-  assert.match(payloads[0].text, /Delayed recovery/i);
-  assert.match(payloads[0].text, /delivery wait 3h/i);
-  assert.match(payloads[0].text, /total delay 3h20m/i);
-  assert.match(payloads[0].text, /do not chase/i);
-  assert.match(payloads[0].text, /no automatic trading/i);
+  assert.match(payloads[0].text, /^🆕 新底池 \| NEW POOL/u);
+  assert.match(payloads[0].text, /事件：Portal 报价资产已启用/u);
+  assert.match(payloads[0].text, /Event: Portal quote asset enabled/i);
+  assert.doesNotMatch(payloads[0].text, /风险|Risk|勿追价|do not chase|非自动交易|no automatic trading|送达等待|delivery wait|总延迟|total delay/iu);
 
   assert.equal((await sendAlerts(config, structuredClone(event))).status, "delivered");
   assert.equal(await drainAlertOutbox(config), 0);
@@ -3921,9 +3913,10 @@ test("a queued Flap Board observation survives TTL and rebuilds its stale card b
   assert.equal(await drainAlertOutbox({ ...config }), 1);
   assert.equal(attempts, 2);
   assert.equal(payloads.length, 1);
-  assert.match(payloads[0].text, /Flap · T2/u);
-  assert.match(payloads[0].text, /元数据延迟补齐，勿追价/u);
-  assert.match(payloads[0].text, /Late metadata; do not chase/i);
+  assert.match(payloads[0].text, /^🆕 新底池 \| NEW POOL/u);
+  assert.match(payloads[0].text, /事件：Flap Board 新增报价资产/u);
+  assert.match(payloads[0].text, /Event: Flap Board added a quote asset/i);
+  assert.doesNotMatch(payloads[0].text, /风险|Risk|勿追价|do not chase|非自动交易|no automatic trading/iu);
   assert.doesNotMatch(payloads[0].text, /报价底池已启用|quote pools enabled/iu);
 
   const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
@@ -3986,13 +3979,10 @@ test("a fresh Flap Portal queue held by Telegram outage is superseded after 15m 
   assert.equal(recovered.status, "delivered");
   assert.equal(payloads.length, 1);
   assert.equal(payloads[0].disable_notification, true);
-  assert.match(payloads[0].text, /Flap · T2/u);
-  assert.match(payloads[0].text, /断线恢复补报/u);
-  assert.match(payloads[0].text, /总延迟 4小时/u);
-  assert.match(payloads[0].text, /勿追价/u);
-  assert.match(payloads[0].text, /Delayed recovery/i);
-  assert.match(payloads[0].text, /total delay 4h/i);
-  assert.match(payloads[0].text, /do not chase/i);
+  assert.match(payloads[0].text, /^🆕 新底池 \| NEW POOL/u);
+  assert.match(payloads[0].text, /事件：Portal 报价资产已启用/u);
+  assert.match(payloads[0].text, /Event: Portal quote asset enabled/i);
+  assert.doesNotMatch(payloads[0].text, /风险|Risk|勿追价|do not chase|非自动交易|no automatic trading|总延迟|total delay/iu);
 
   outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   assert.equal(outbox.events[fresh.eventKey].status, "suppressed");
@@ -5709,13 +5699,12 @@ test("pon.fun producer events pass the closed gate, render durably, and deduplic
   assert.equal(payloads[0].disable_notification, true, "ordinary MarketCreated is T2");
   assert.ok(payloads[0].text.length < 3_800);
   assert.ok(payloads[0].text.split("\n").length <= 18);
-  assert.match(payloads[0].text, /^🔔 监控提醒 \| MONITOR ALERT/m);
-  assert.match(payloads[0].text, /^平台：pon\.fun · T2/m);
-  assert.match(payloads[0].text, /^结论：/m);
-  assert.match(payloads[0].text, /^事件：/m);
-  assert.match(payloads[0].text, /^Platform: pon\.fun · T2/m);
-  assert.match(payloads[0].text, /^Decision: /m);
-  assert.match(payloads[0].text, /^Event: /m);
+  assert.match(payloads[0].text, /^🆕 新市场 \| NEW MARKET/m);
+  assert.match(payloads[0].text, /^项目：pon\.fun/m);
+  assert.match(payloads[0].text, /^事件：MarketCreated/m);
+  assert.match(payloads[0].text, /^Project: pon\.fun/m);
+  assert.match(payloads[0].text, /^Event: MarketCreated/m);
+  assert.doesNotMatch(payloads[0].text, /风险|Risk|勿追价|do not chase|非自动交易|no automatic trading/iu);
 
   const officialX = {
     type: "twitter_update",
@@ -6106,6 +6095,6 @@ test("pon.fun producer events pass the closed gate, render durably, and deduplic
   assert.deepEqual(outbox.events[first.eventId].event.canonicalSignalIds, [`pon:${coin}:created`]);
   assert.equal(outbox.events[graduatedResult.eventId].deliveryDisposition.reason, "pon_exact_onchain_realtime");
   assert.equal(outbox.events[graduatedResult.eventId].event.tradingPriority.tier, "T2");
-  assert.equal(outbox.events[first.eventId].renderBundle.version, 24);
+  assert.equal(outbox.events[first.eventId].renderBundle.version, 27);
   assert.equal(outbox.events[duplicate.eventId].semanticDuplicateOf, first.eventId);
 });

@@ -17,6 +17,20 @@
       "articles": {}
     },
     "_health": {
+      "developerDocs": {
+        "status": "healthy",
+        "checkedAt": "__NOW__",
+        "lastSuccessAt": "__NOW__",
+        "pagesChecked": 7,
+        "pagesTotal": 7
+      },
+      "web3DeveloperDocs": {
+        "status": "healthy",
+        "checkedAt": "__NOW__",
+        "lastSuccessAt": "__NOW__",
+        "pagesChecked": 10,
+        "pagesTotal": 10
+      },
       "announcements": {
         "status": "healthy",
         "checkedAt": "__NOW__",
@@ -47,7 +61,7 @@
     }
   },
   "bsc-launchpad-state.json": {
-    "version": 6,
+    "version": 7,
     "journalRevision": 0,
     "realtimeTailNextBlock": 201,
     "_health": {
@@ -282,6 +296,243 @@
         },
         "coverage": {}
       }
+    },
+    "_meta": {
+      "health": {
+        "status": "healthy",
+        "checkedAt": "__NOW__",
+        "lastSuccessAt": "__NOW__",
+        "coverageAccounts": {
+          "total": 1,
+          "covered": 1,
+          "healthy": 1,
+          "fallback": 0,
+          "unavailable": 0,
+          "priorityTotal": 1,
+          "priorityCovered": 1
+        }
+      }
+    }
+  },
+  "morph-launchpad-state.json": {
+    "version": 1,
+    "chainId": 2818,
+    "baselineComplete": true,
+    "cursor": 301,
+    "lastScannedBlock": 300,
+    "lastScannedBlockHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "health": {
+      "status": "healthy",
+      "lastAttemptAt": "__NOW__",
+      "lastSuccessAt": "__NOW__",
+      "lastErrorAt": null,
+      "lastError": null,
+      "headBlock": 300,
+      "safeBlock": 300,
+      "lagBlocks": 0,
+      "websocket": "connected"
+    },
+    "long": {
+      "initialized": true,
+      "contentHash": "healthy",
+      "candidate": null,
+      "lastAlertHash": null,
+      "roots": {},
+      "checkedAt": "__NOW__"
+    }
+  },
+  "flap-quote-state.json": {
+    "version": 1,
+    "initialized": true,
+    "initializedAt": "__OLD__",
+    "cursor": {
+      "nextBlock": 401,
+      "afterLogIndex": -1,
+      "anchorBlock": 400,
+      "anchorBlockHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "baselineEstablishedAt": "__OLD__"
+    },
+    "identity": {
+      "chainId": 56,
+      "portal": "0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0",
+      "portalRuntimeCodeHash": "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3",
+      "version": "v5.23.1",
+      "implementation": "0xAb8Ec926b6e113c2212aF152b086eA62d1FDced9",
+      "implementationCodeHash": "0x78653cdd7296d940ae531c86bc6700ae163f1f9dec002c2af3143c9ae6696a15",
+      "verifiedBlock": 400,
+      "verifiedBlockHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "portalRuntimeCodeBytes": 2882,
+      "implementationCodeBytes": 20438
+    },
+    "quoteAssets": {},
+    "pendingEnableCandidates": {},
+    "checkedAt": "__NOW__",
+    "_health": {
+      "status": "healthy",
+      "consecutiveFailures": 0,
+      "lastSuccessAt": "__NOW__",
+      "lastErrorAt": null,
+      "lastError": null,
+      "lastErrorCode": null,
+      "reorgCount": 0,
+      "lastReorgAt": null,
+      "lastAttemptAt": "__NOW__",
+      "nextAttemptAt": null,
+      "failureClass": null
+    }
+  },
+  "four-registry-state.json": {
+    "version": 11,
+    "initialized": true,
+    "chainId": 56,
+    "registry": "0x912cef0c3ae9ab6eb3ec87cab69371cfb317ab94",
+    "core": "0xebe7b6c1089d9f72ad07f34e36d898e44e5e27f3",
+    "cursor": {
+      "nextBlock": 501,
+      "anchorBlock": 500,
+      "anchorBlockHash": "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "presets": {},
+    "presetAuditCursor": 0,
+    "presetAuditProofs": {},
+    "pendingConfirmations": {},
+    "outbox": [],
+    "processedEvents": {},
+    "processedEventKeys": [],
+    "orphanedDeliveredEvents": {},
+    "canonicalRecoveryEpoch": 0,
+    "checkpoints": [
+      {
+        "blockNumber": 500,
+        "blockHash": "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "presets": {},
+        "pendingConfirmations": {}
+      }
+    ],
+    "reorgRecoveries": [],
+    "tokenBackfillSuppressedThroughBlock": null,
+    "baselineBlock": 100,
+    "baselineAt": "__OLD__",
+    "updatedAt": "__NOW__"
+  },
+  "uniswap-state.json": {
+    "version": 1,
+    "blog": {
+      "initializedAt": "__OLD__",
+      "entries": {}
+    },
+    "governance": {
+      "initializedAt": "__OLD__",
+      "lastPostId": "1"
+    },
+    "githubReleases": {
+      "feeds": {
+        "https://github.com/Uniswap/liquidity-launcher/releases.atom": {
+          "repository": "Uniswap/liquidity-launcher",
+          "initializedAt": "__OLD__",
+          "knownIds": {}
+        }
+      }
+    },
+    "_health": {
+      "blog": {
+        "status": "healthy",
+        "consecutiveFailures": 0,
+        "lastAttemptAt": "__NOW__",
+        "lastSuccessAt": "__NOW__",
+        "lastErrorAt": null,
+        "lastError": null,
+        "nextAttemptAt": "__NEXT__"
+      },
+      "governance": {
+        "status": "healthy",
+        "consecutiveFailures": 0,
+        "lastAttemptAt": "__NOW__",
+        "lastSuccessAt": "__NOW__",
+        "lastErrorAt": null,
+        "lastError": null,
+        "nextAttemptAt": "__NEXT__"
+      },
+      "githubReleases": {
+        "https://github.com/Uniswap/liquidity-launcher/releases.atom": {
+          "status": "healthy",
+          "consecutiveFailures": 0,
+          "lastAttemptAt": "__NOW__",
+          "lastSuccessAt": "__NOW__",
+          "lastErrorAt": null,
+          "lastError": null,
+          "nextAttemptAt": "__NEXT__"
+        }
+      }
+    }
+  },
+  "xai-official-state.json": {
+    "version": 1,
+    "sources": {
+      "x_api_changelog": {
+        "initialized": true,
+        "entries": {}
+      },
+      "xai_release_notes": {
+        "initialized": true,
+        "entries": {}
+      },
+      "xai_news": {
+        "initialized": true,
+        "entries": {}
+      }
+    },
+    "health": {
+      "status": "healthy",
+      "checkedAt": "__NOW__",
+      "sources": {
+        "x_api_changelog": {
+          "status": "healthy",
+          "checkedAt": "__NOW__",
+          "lastSuccessAt": "__NOW__",
+          "consecutiveFailures": 0,
+          "nextAttemptAt": "__NEXT__"
+        },
+        "xai_release_notes": {
+          "status": "healthy",
+          "checkedAt": "__NOW__",
+          "lastSuccessAt": "__NOW__",
+          "consecutiveFailures": 0,
+          "nextAttemptAt": "__NEXT__"
+        },
+        "xai_news": {
+          "status": "healthy",
+          "checkedAt": "__NOW__",
+          "lastSuccessAt": "__NOW__",
+          "consecutiveFailures": 0,
+          "nextAttemptAt": "__NEXT__"
+        }
+      }
+    }
+  },
+  "telegram-news-state.json": {
+    "version": 1,
+    "initializedAt": "__OLD__",
+    "identity": {
+      "chatId": "-1002540748528",
+      "username": "maxguruai",
+      "visibility": "public"
+    },
+    "messages": {},
+    "stories": {},
+    "http": {
+      "etag": null,
+      "lastModified": null
+    },
+    "health": {
+      "status": "healthy",
+      "consecutiveFailures": 0,
+      "lastAttemptAt": "__NOW__",
+      "lastSuccessAt": "__NOW__",
+      "lastErrorAt": null,
+      "lastError": null,
+      "nextAttemptAt": "__NEXT__",
+      "lastResponseStatus": 200
     }
   },
   "github-state.json": {

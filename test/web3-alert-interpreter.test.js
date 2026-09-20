@@ -136,6 +136,138 @@ test("Binance developer endpoints become product-level API explanations", () => 
   assert.match(interpretBinanceOfficialUpdate(copy, "en"), /lead-trading symbol allowlist/i);
 });
 
+test("authoritative Binance Web3 developer categories render concrete bilingual product facts", () => {
+  const cases = [
+    {
+      category: "web3_dapp",
+      addedSignals: ["[DApp Self-Testing Manual](/en/docs/products/web3-dapp/self-testing.md)"],
+      technical: ["DApp Self-Testing Manual", "/en/docs/products/web3-dapp/self-testing.md"],
+      zh: /Web3 DApp.*接入、自测与上架/u,
+      en: /Web3 DApp.*integration, self-testing, and listing/i,
+    },
+    {
+      category: "web3_connect",
+      keyChanges: [
+        "[Aptos Provider](/en/docs/products/web3-connect/aptos-provider.md)",
+        "Support for standard functions such as connecting and signing transactions.",
+      ],
+      technical: ["Aptos Provider", "/en/docs/products/web3-connect/aptos-provider.md"],
+      zh: /钱包连接、交易签名/u,
+      en: /wallet connection and transaction signing/i,
+    },
+    {
+      category: "web3_task_verification",
+      keyChanges: ["POST /api/v1/task/completion"],
+      technical: ["POST /api/v1/task/completion"],
+      zh: /任务完成验证 API/u,
+      en: /task-completion API/i,
+    },
+    {
+      category: "web3_open_platform",
+      addedSignals: ["[DApp Self-Listing Manual](/en/docs/products/open-platform/self-listing-op.md)"],
+      technical: ["DApp Self-Listing Manual", "/en/docs/products/open-platform/self-listing-op.md"],
+      zh: /DApp 自助上架流程/u,
+      en: /DApp self-listing/i,
+    },
+    {
+      category: "agentic_wallet",
+      keyChanges: ["Market Order | Market swap, quote, order tracking"],
+      technical: ["Market Order"],
+      zh: /市价兑换、报价、订单跟踪/u,
+      en: /market swaps, quotes, and order tracking/i,
+    },
+    {
+      category: "wallet_skills",
+      addedSignals: ["binance-agentic-wallet | Wallet management, token transfers, market swaps, limit orders"],
+      technical: ["binance-agentic-wallet"],
+      zh: /钱包管理、代币转账、市价兑换、限价单/u,
+      en: /wallet management, token transfers, market swaps, and limit orders/i,
+    },
+  ];
+
+  for (const item of cases) {
+    const event = {
+      type: "binance_official_update",
+      kind: "developer_update",
+      title: "Binance Web3 official docs update",
+      signal: { category: item.category },
+      keyChanges: item.keyChanges || [],
+      addedSignals: item.addedSignals || [],
+    };
+    const zh = interpretBinanceOfficialUpdate(event, "zh");
+    const en = interpretBinanceOfficialUpdate(event, "en");
+    assert.match(zh, item.zh, item.category);
+    assert.match(en, item.en, item.category);
+    for (const literal of item.technical) {
+      assert.ok(zh.includes(literal), `${item.category} Chinese fact lost ${literal}`);
+      assert.ok(en.includes(literal), `${item.category} English fact lost ${literal}`);
+    }
+    assert.doesNotMatch(
+      `${zh}\n${en}`,
+      /开发者 API 接口更新|Developer API endpoint updated|风险|risk|入场|entry|失效|invalid|非自动交易|no auto(?:matic)? trading/iu,
+      item.category,
+    );
+  }
+});
+
+test("Web3 document revisions and removals preserve the exact old and new facts without claiming a new API", () => {
+  for (const category of ["web3_dapp", "web3_connect", "web3_task_verification", "web3_open_platform", "agentic_wallet", "wallet_skills"]) {
+    const before = "POST /v1/verify request limit: 10";
+    const after = "POST /v1/verify request limit: 20";
+    const event = {
+      type: "binance_official_update",
+      kind: "developer_update",
+      signal: { category },
+      addedSignals: [after],
+      removedSignals: [before],
+      keyChanges: [after, `Removed: ${before}`],
+    };
+    const original = structuredClone(event);
+    for (const language of ["zh", "en"]) {
+      const revision = interpretBinanceOfficialUpdate(event, language);
+      assert.ok(revision.includes(before), revision);
+      assert.ok(revision.includes(after), revision);
+      assert.doesNotMatch(revision, /新增|added|supports standard|风险|risk/iu);
+      const removal = interpretBinanceOfficialUpdate({ ...event, addedSignals: [], keyChanges: [`Removed: ${before}`] }, language);
+      assert.ok(removal.includes(before), removal);
+      assert.match(removal, /文档移除|docs removed/iu);
+      assert.doesNotMatch(removal, /新增|added|deployed|endpoint removed/iu);
+    }
+    assert.deepEqual(event, original);
+  }
+});
+
+test("Web3 Connect does not invent transaction-signing support from a provider link or a numeric parameter", () => {
+  for (const signal of [
+    "[Example Provider](/en/docs/products/web3-connect/example-provider.md)",
+    "Web3 API timeout: 5000ms",
+  ]) {
+    const event = {
+      type: "binance_official_update",
+      kind: "developer_update",
+      signal: { category: "web3_connect" },
+      addedSignals: [signal],
+    };
+    for (const language of ["zh", "en"]) {
+      const interpreted = interpretBinanceOfficialUpdate(event, language);
+      assert.doesNotMatch(interpreted, /交易签名|transaction signing|wallet connection/iu);
+      assert.ok(interpreted.includes(signal.includes("5000ms") ? "5000ms" : "Example Provider"));
+    }
+  }
+});
+
+test("Web3 product wording requires the source-profile category and is not guessed from text", () => {
+  const event = {
+    type: "binance_official_update",
+    kind: "developer_update",
+    title: "Developer docs update",
+    signal: { category: "官方开发文档" },
+    addedSignals: ["[Aptos Provider](/en/docs/products/web3-connect/aptos-provider.md)"],
+  };
+  assert.equal(interpretBinanceOfficialUpdate(event, "zh"), null);
+  assert.equal(interpretBinanceOfficialUpdate(event, "en"), null);
+});
+
 test("Binance listings, contracts, Alpha, activities, and product launches use local Web3 terminology", () => {
   const event = (title, category, project = "binance") => ({
     type: "binance_official_update",

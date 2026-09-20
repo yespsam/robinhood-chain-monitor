@@ -6,9 +6,14 @@ import os from "node:os";
 import path from "node:path";
 import {
   classifyFomoXCallText,
+  classifyKolSelfLaunchText,
   createFomoXCallMonitor,
   selectFomoXCallCandidates,
 } from "../src/fomo-x-call-monitor.js";
+import {
+  CAPITAL_KOL_CATALOG_PUBLISHED_AT,
+  createCapitalKolEventSnapshot,
+} from "../src/capital-kol-catalog.js";
 import { isRelevantAlert } from "../src/alerts.js";
 import { isMonitoringSourceEnabled } from "../src/source-controls.js";
 
@@ -69,6 +74,70 @@ function passQualification() {
   };
 }
 
+function capitalCatalogFixtureDependencies(overrides = {}) {
+  const snapshot = {
+    schemaVersion: 1,
+    catalogVersion: overrides.catalogVersion || "test.1",
+    catalogHash: overrides.catalogHash || `sha256:${"a".repeat(64)}`,
+    catalogId: "alpha-capital",
+    subjectType: "person",
+    handle: "alpha",
+    xUserId: X_ID,
+    canonicalName: "Alpha Capital",
+    category: "web2_tech",
+    affiliation: { name: "Alpha Labs", officialDomains: ["alpha.example"] },
+    background: {
+      zh: "Alpha Labs 创始人兼首席执行官，长期参与科技与人工智能投资。",
+      en: "Founder and CEO of Alpha Labs, active in technology and artificial-intelligence investing.",
+    },
+    backgroundEvidence: [{
+      kind: "official_role",
+      url: "https://alpha.example/leadership",
+      status: "primary_verified",
+      checkedAt: "2026-09-06",
+    }],
+    reviewStatus: "reviewed",
+    identityKey: `capital-kol:x:${X_ID}`,
+  };
+  const entry = {
+    id: snapshot.catalogId,
+    subjectType: "person",
+    handle: snapshot.handle,
+    expectedXUserId: snapshot.xUserId,
+    canonicalName: snapshot.canonicalName,
+    category: snapshot.category,
+  };
+  return {
+    snapshot,
+    dependencies: {
+      listCapitalKolsImpl: () => [entry],
+      verifyCapitalKolCatalogIntegrityImpl: () => ({ valid: true, reasons: [] }),
+      capitalKolCatalogFreshnessImpl: () => ({ valid: true, ageMs: 0 }),
+      getCapitalKolCatalogManifestImpl: () => ({
+        version: snapshot.catalogVersion,
+        hash: snapshot.catalogHash,
+        publishedAt: "2026-09-06T00:00:00.000Z",
+        count: 1,
+        categories: [snapshot.category],
+        followersPolicy: "display_only",
+      }),
+      createCapitalKolEventSnapshotImpl: (value) => {
+        const handle = typeof value === "string" ? value : value?.handle;
+        return String(handle || "").toLowerCase() === "alpha" ? structuredClone(snapshot) : null;
+      },
+      bindCapitalKolRuntimeIdentityImpl: (observation) => String(observation?.xUserId) === X_ID
+        && String(observation?.observedHandle).toLowerCase() === "alpha"
+        ? {
+          status: "admitted",
+          monitorEligible: true,
+          snapshot: structuredClone(snapshot),
+          binding: { handle: "alpha", xUserId: X_ID, source: "fxtwitter_public_profile", observedAt: observation.observedAt },
+        }
+        : { status: "quarantined", monitorEligible: false, reason: "expected_x_user_id_mismatch" },
+    },
+  };
+}
+
 function captureLogger() {
   const entries = { error: [], warn: [], info: [], log: [] };
   return {
@@ -90,6 +159,7 @@ function config(dataDir, overrides = {}) {
   return {
     dataDir,
     fomoXCallEnabled: true,
+    kolLaunchMonitorEnabled: false,
     fomoXCallPollIntervalMs: 5_000,
     fomoXCallDiscoveryIntervalMs: 5_000,
     fomoXCallAttributionMaxAgeMs: 86_400_000,
@@ -127,6 +197,7 @@ function createHarness({
   sendAlertsImpl,
   fetchImpl,
   logger = quietLogger,
+  extraDependencies = {},
 }) {
   const tweetArchive = new Map();
   return createFomoXCallMonitor(config(dataDir, configOverrides), {
@@ -156,6 +227,7 @@ function createHarness({
       }
       throw new Error(`unexpected URL ${url}`);
     }),
+    ...extraDependencies,
   });
 }
 
@@ -208,6 +280,47 @@ test("call text requires an explicit call word and exactly one EVM contract", ()
   assert.equal(classifyFomoXCallText(`Scam warning: avoid this CA ${TOKEN}`).reason, "negative_exit_or_warning_language");
   assert.equal(classifyFomoXCallText(`I am short this. CA ${TOKEN}`).reason, "negative_exit_or_warning_language");
   assert.equal(classifyFomoXCallText(`This token has buy pressure. CA ${TOKEN}`).reason, "missing_first_person_positive_call");
+});
+
+test("self-launch text requires original, recent BSC issuer language and one explicitly labeled contract", () => {
+  assert.deepEqual(classifyKolSelfLaunchText(`I just launched my token on BNB Smart Chain. CA ${TOKEN}`), {
+    relevant: true,
+    launchLanguage: true,
+    reason: "self_declared_launch_with_exact_contract",
+    token: TOKEN,
+  });
+  assert.equal(classifyKolSelfLaunchText(`我刚发了一个币，在 BNB链。CA ${TOKEN}`).relevant, true);
+  assert.equal(classifyKolSelfLaunchText(`Official contract: ${TOKEN}`).reason, "missing_first_person_launch_language");
+  assert.equal(classifyKolSelfLaunchText(`Official token is live. CA ${TOKEN}`).reason, "missing_first_person_launch_language");
+  assert.equal(classifyKolSelfLaunchText("I launched my token today on BSC").reason, "missing_contract_address");
+  assert.equal(classifyKolSelfLaunchText(`We just launched our coin on BSC. CA ${TOKEN} and ${TOKEN_TWO}`).reason, "ambiguous_contract_addresses");
+  assert.equal(classifyKolSelfLaunchText("I just launched my token on BSC. CA 0x0000000000000000000000000000000000000000").reason,
+    "invalid_zero_contract_address");
+  assert.equal(classifyKolSelfLaunchText(`Scam warning: I just launched my token on BSC. CA ${TOKEN}`).reason, "negative_exit_or_warning_language");
+  assert.equal(classifyKolSelfLaunchText(`CZ said: "I just launched my token on BSC. CA ${TOKEN}"`).reason,
+    "reported_or_hypothetical_launch_language");
+  assert.equal(classifyKolSelfLaunchText(`Quoting the founder: I just launched my token on BSC. CA ${TOKEN}`).reason,
+    "reported_or_hypothetical_launch_language");
+  assert.equal(classifyKolSelfLaunchText(`A report: “I just launched my token on BSC. CA ${TOKEN}”`).reason,
+    "reported_or_hypothetical_launch_language");
+  assert.equal(classifyKolSelfLaunchText(`Imagine I just launched my token on BSC. CA ${TOKEN}`).reason,
+    "reported_or_hypothetical_launch_language");
+  assert.equal(classifyKolSelfLaunchText(`假设我刚发了一个币，在 BNB链。CA ${TOKEN}`).reason,
+    "reported_or_hypothetical_launch_language");
+  assert.equal(classifyKolSelfLaunchText(`I just launched my token on Base. CA ${TOKEN}`).reason,
+    "ambiguous_or_unsupported_chain");
+  assert.equal(classifyKolSelfLaunchText(`I just launched my token on BSC and Base. CA ${TOKEN}`).reason,
+    "ambiguous_or_unsupported_chain");
+  assert.equal(classifyKolSelfLaunchText(`I just launched my token on BSC testnet. CA ${TOKEN}`).reason,
+    "testnet_launch_not_supported");
+  assert.equal(classifyKolSelfLaunchText(`I just launched my token on BSC. Treasury ${TOKEN}`).reason,
+    "contract_not_explicitly_labeled_ca");
+  assert.equal(classifyKolSelfLaunchText(`I launched my token on BSC in 2021. It is live. CA ${TOKEN}`).reason,
+    "historical_launch_language");
+  assert.equal(classifyKolSelfLaunchText(`My token is live on BSC since 2021. CA ${TOKEN}`).reason,
+    "historical_launch_language");
+  assert.equal(classifyKolSelfLaunchText(`Joking: I just launched my token on BSC. CA ${TOKEN}`).reason,
+    "non_literal_launch_language");
 });
 
 test("roster admits only recent clean unique kol+fomo mappings without ranking by trades", () => {
@@ -324,6 +437,454 @@ test("first timeline is silent; a new oEmbed-verified X call emits one observed-
   assert.equal(mode, 0o600);
 });
 
+test("verified first-person launch emits follower, self-described background and watch-only CA context", async (t) => {
+  const dataDir = await fixture(t);
+  const nowRef = { value: Date.parse("2026-08-19T06:30:00.000Z") };
+  const rowsRef = { value: [candidate(nowRef.value)] };
+  const tweetsRef = { value: [timelineTweet("150", "ordinary baseline", nowRef.value - 1_000)] };
+  const alerts = [];
+  const profileRef = {
+    value: {
+      id: X_ID,
+      screen_name: "alpha",
+      name: "Alpha Research",
+      description: "Onchain researcher and founder.",
+      followers: 1_234_567,
+      protected: false,
+    },
+  };
+  const monitor = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef,
+    tweetsRef,
+    alerts,
+    profileRef,
+    configOverrides: { fomoXCallEnabled: false, kolLaunchMonitorEnabled: true },
+  });
+  await monitor.check();
+
+  nowRef.value += 5_000;
+  tweetsRef.value = [
+    timelineTweet("151", `I just launched my token on BNB Smart Chain. CA ${TOKEN}`, nowRef.value - 500),
+    ...tweetsRef.value,
+  ];
+  const result = await monitor.check();
+  assert.equal(result.delivered, 1);
+  assert.equal(alerts.length, 1);
+  const event = alerts[0];
+  assert.equal(event.signalKind, "kol_self_launch");
+  assert.equal(event.eventKey, `kol-self-launch:${X_ID}:151:56:${TOKEN}`);
+  assert.equal(event.strong, false);
+  assert.equal(event.token, TOKEN);
+  assert.equal(event.caller.xProfileId, X_ID);
+  assert.equal(event.caller.followers, 1_234_567);
+  assert.equal(event.caller.displayName, "Alpha Research");
+  assert.deepEqual(event.caller.background, {
+    status: "self_described",
+    text: "Onchain researcher and founder.",
+    source: "fxtwitter_public_profile",
+    sourceUrl: "https://x.com/alpha",
+    observedAt: new Date(nowRef.value - 5_000).toISOString(),
+  });
+  assert.deepEqual(event.launchClaim, {
+    status: "self_declared",
+    explicitIssuerLanguage: true,
+    onchainCreatorVerified: false,
+    caSource: "official_x_oembed",
+    chainVerification: "declared_only",
+    chainSource: "declared_bsc_in_x_post",
+  });
+  assert.deepEqual(event.shadow, {
+    decision: "watch",
+    executable: false,
+    reasonCodes: ["creator_not_onchain_verified", "holder_lp_cluster_coverage_incomplete"],
+  });
+  assert.equal(event.simulationOnly, true);
+
+  const routeConfig = {
+    ...config(dataDir),
+    monitorScope: "focus3",
+    fomoCallEnabled: true,
+    fomoBuyMonitorEnabled: false,
+    fomoCallAllowGmgnObservedWallets: true,
+    fomoCallGmgnAttributionMaxAgeMs: 86_400_000,
+    kolLaunchMonitorEnabled: true,
+  };
+  assert.equal(isMonitoringSourceEnabled(routeConfig, event), true);
+  assert.equal(isRelevantAlert(event), true);
+  assert.equal((await monitor.getState()).alertedTokens[TOKEN], undefined,
+    "a KOL launch claim must not globally suppress another KOL's claim for the same CA");
+});
+
+test("reviewed capital person bypasses wallet and follower gates but only emits an exact self-launch", async (t) => {
+  const dataDir = await fixture(t);
+  const nowRef = { value: Date.parse("2026-09-06T08:00:00.000Z") };
+  const rowsRef = { value: [] };
+  const tweetsRef = { value: [timelineTweet("200", "catalog baseline", nowRef.value - 1_000)] };
+  const alerts = [];
+  const requests = [];
+  let bscActivityCalls = 0;
+  const profileRef = {
+    value: {
+      id: X_ID,
+      screen_name: "alpha",
+      name: "Alpha Capital",
+      description: "Mutable X bio must not become reviewed background.",
+      followers: 0,
+      protected: false,
+    },
+  };
+  const catalog = capitalCatalogFixtureDependencies();
+  const monitor = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef,
+    tweetsRef,
+    alerts,
+    requests,
+    profileRef,
+    getBscActivityImpl: async () => { bscActivityCalls += 1; return 0; },
+    configOverrides: {
+      fomoXCallEnabled: true,
+      kolLaunchMonitorEnabled: true,
+      kolCapitalRosterEnabled: true,
+      kolCapitalCatalogMaximumAgeMs: 180 * 86_400_000,
+      fomoXCallMinXFollowers: 10_000_000,
+    },
+    extraDependencies: catalog.dependencies,
+  });
+  await monitor.check();
+
+  nowRef.value += 5_000;
+  tweetsRef.value = [
+    timelineTweet("201", `I am buying this. CA ${TOKEN_TWO}`, nowRef.value - 500),
+    ...tweetsRef.value,
+  ];
+  const ordinary = await monitor.check();
+  assert.equal(ordinary.delivered, 0);
+  assert.equal(alerts.length, 0);
+  assert.equal(requests.filter((url) => url.startsWith("https://publish.x.test/oembed?")).length, 0,
+    "ordinary calls from catalog-only people are consumed before oEmbed");
+
+  nowRef.value += 5_000;
+  tweetsRef.value = [
+    timelineTweet("202", `I just launched my token on BNB Smart Chain. CA ${TOKEN}`, nowRef.value - 500),
+    ...tweetsRef.value,
+  ];
+  const launch = await monitor.check();
+  assert.equal(launch.delivered, 1);
+  assert.equal(bscActivityCalls, 0, "catalog people must not be forced through a wallet activity gate");
+  assert.equal(alerts.length, 1);
+  const event = alerts[0];
+  assert.equal(event.signalKind, "kol_self_launch");
+  assert.equal(event.qualified, false);
+  assert.equal(event.socialClaimVerified, true);
+  assert.equal(event.caller.followers, 0);
+  assert.equal(event.caller.identitySource, "reviewed_catalog+fxtwitter");
+  assert.equal(event.caller.background.status, "primary_verified");
+  assert.equal(event.caller.background.textZh, catalog.snapshot.background.zh);
+  assert.equal(event.caller.background.textEn, catalog.snapshot.background.en);
+  assert.equal(event.caller.background.sourceUrl, "https://alpha.example/leadership");
+  assert.deepEqual(event.capitalKolSnapshot, catalog.snapshot);
+  assert.deepEqual(event.caller.capitalKolSnapshot, catalog.snapshot);
+  assert.deepEqual(event.caller.capitalKolBinding, {
+    handle: "alpha",
+    xUserId: X_ID,
+    source: "fxtwitter_public_profile",
+    observedAt: new Date(nowRef.value - 10_000).toISOString(),
+  });
+  assert.equal("walletAddress" in event, false);
+  assert.equal("bscTransactionCount" in event.caller, false);
+  const state = await monitor.getState();
+  assert.equal(state.health.sources.capitalCatalog.status, "healthy");
+  assert.equal(state.health.sources.capitalCatalog.admitted, 1);
+  assert.equal(state.health.sources.x.rotationSlaBreached, false);
+});
+
+test("reviewed catalog expansion preserves an unchanged person's cursor and sees the next launch", async (t) => {
+  const dataDir = await fixture(t);
+  const nowRef = { value: Date.parse("2026-09-06T08:05:00.000Z") };
+  const rowsRef = { value: [] };
+  const tweetsRef = { value: [timelineTweet("205", "catalog baseline", nowRef.value - 1_000)] };
+  const profileRef = {
+    value: { id: X_ID, screen_name: "alpha", followers: 0, protected: false },
+  };
+  const firstCatalog = capitalCatalogFixtureDependencies();
+  const firstMonitor = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef,
+    tweetsRef,
+    alerts: [],
+    profileRef,
+    configOverrides: {
+      fomoXCallEnabled: false,
+      kolLaunchMonitorEnabled: true,
+      kolCapitalRosterEnabled: true,
+    },
+    extraDependencies: firstCatalog.dependencies,
+  });
+  assert.equal((await firstMonitor.check()).delivered, 0);
+  assert.equal((await firstMonitor.getState()).cursors.alpha, "205");
+  await firstMonitor.stop();
+
+  nowRef.value += 5_000;
+  tweetsRef.value = [
+    timelineTweet("206", `I just launched my token on BSC today. CA ${TOKEN}`, nowRef.value - 100),
+    ...tweetsRef.value,
+  ];
+  const expandedCatalog = capitalCatalogFixtureDependencies({
+    catalogVersion: "test.2",
+    catalogHash: `sha256:${"b".repeat(64)}`,
+  });
+  const alerts = [];
+  const secondMonitor = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef,
+    tweetsRef,
+    alerts,
+    profileRef,
+    configOverrides: {
+      fomoXCallEnabled: false,
+      kolLaunchMonitorEnabled: true,
+      kolCapitalRosterEnabled: true,
+    },
+    extraDependencies: expandedCatalog.dependencies,
+  });
+  const result = await secondMonitor.check();
+  const state = await secondMonitor.getState();
+  assert.equal(result.delivered, 1, "a catalog-only hash change must not silently rebaseline the next post");
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].tweet.id, "206");
+  assert.equal(state.cursors.alpha, "206");
+  assert.equal(state.initialized.alpha.catalogHash, expandedCatalog.snapshot.catalogHash);
+  assert.equal(state.roster.alpha.capitalKolSnapshot.catalogHash, expandedCatalog.snapshot.catalogHash);
+});
+
+test("reviewed capital person is quarantined on a pinned numeric X id mismatch", async (t) => {
+  const dataDir = await fixture(t);
+  const nowRef = { value: Date.parse("2026-09-06T08:10:00.000Z") };
+  const rowsRef = { value: [] };
+  const tweetsRef = { value: [timelineTweet("210", "baseline", nowRef.value - 1_000)] };
+  const alerts = [];
+  const requests = [];
+  const profileRef = {
+    value: { id: "999999999", screen_name: "alpha", followers: 999_999_999, protected: false },
+  };
+  const catalog = capitalCatalogFixtureDependencies();
+  const monitor = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef,
+    tweetsRef,
+    alerts,
+    requests,
+    profileRef,
+    configOverrides: { kolLaunchMonitorEnabled: true, kolCapitalRosterEnabled: true },
+    extraDependencies: catalog.dependencies,
+  });
+  const result = await monitor.check();
+  assert.equal(result.delivered, 0);
+  assert.equal(result.rejected, 1);
+  assert.equal(alerts.length, 0);
+  assert.equal(requests.some((url) => url.includes("/statuses?")), false);
+  assert.equal(requests.some((url) => url.startsWith("https://publish.x.test/oembed?")), false);
+  const state = await monitor.getState();
+  assert.match(state.roster.alpha.admissionRejectionReason, /pinned X id/u);
+  assert.equal(state.health.sources.capitalCatalog.runtimeQuarantined, 1);
+  assert.equal(state.cursors.alpha, undefined);
+});
+
+test("unknown configured capital category fails closed and degrades health instead of reporting zero-candidate healthy", async (t) => {
+  const dataDir = await fixture(t);
+  const nowRef = { value: Date.parse("2026-09-06T08:15:00.000Z") };
+  const rowsRef = { value: [] };
+  const tweetsRef = { value: [] };
+  const alerts = [];
+  const catalog = capitalCatalogFixtureDependencies();
+  const validMonitor = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef,
+    tweetsRef,
+    alerts,
+    configOverrides: {
+      fomoXCallEnabled: false,
+      kolLaunchMonitorEnabled: true,
+      kolCapitalRosterEnabled: true,
+      kolCapitalCategories: ["web2_tech"],
+    },
+    extraDependencies: catalog.dependencies,
+  });
+  await validMonitor.check();
+  assert.ok((await validMonitor.getState()).roster.alpha,
+    "fixture must persist a previously valid catalog candidate before the invalid-category restart");
+  await validMonitor.stop();
+
+  let invalidListed = 0;
+  const monitor = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef,
+    tweetsRef,
+    alerts,
+    configOverrides: {
+      fomoXCallEnabled: false,
+      kolLaunchMonitorEnabled: true,
+      kolCapitalRosterEnabled: true,
+      kolCapitalCategories: ["web2_tech", "unknown_capital_category"],
+    },
+    extraDependencies: {
+      ...catalog.dependencies,
+      listCapitalKolsImpl: () => {
+        invalidListed += 1;
+        return catalog.dependencies.listCapitalKolsImpl();
+      },
+    },
+  });
+
+  const result = await monitor.check();
+  const state = await monitor.getState();
+  assert.equal(result.status, "degraded");
+  assert.equal(result.roster, 0);
+  assert.equal(invalidListed, 0, "an invalid category set must fail before catalog candidates are admitted");
+  assert.equal(alerts.length, 0);
+  assert.equal(state.health.status, "degraded");
+  assert.match(state.health.lastError, /unknown_categories:unknown_capital_category/u);
+  assert.deepEqual(state.health.sources.capitalCatalog.unknownCategories, ["unknown_capital_category"]);
+  assert.equal(state.health.sources.capitalCatalog.status, "error");
+  assert.equal(state.health.sources.capitalCatalog.admitted, 0);
+  assert.equal(state.health.sources.capitalCatalog.quarantined, 1);
+  assert.deepEqual(state.roster, {}, "the invalid restart must remove previously persisted catalog candidates");
+});
+
+test("capital-person launch remains watch-only when pool qualification is unavailable", async (t) => {
+  const dataDir = await fixture(t);
+  const nowRef = { value: Date.parse("2026-09-06T08:20:00.000Z") };
+  const rowsRef = { value: [] };
+  const tweetsRef = { value: [timelineTweet("220", "baseline", nowRef.value - 1_000)] };
+  const alerts = [];
+  const catalog = capitalCatalogFixtureDependencies();
+  const monitor = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef,
+    tweetsRef,
+    alerts,
+    profileRef: { value: { id: X_ID, screen_name: "alpha", followers: 1, protected: false } },
+    qualifyCallImpl: async () => { throw new Error("RPC unavailable"); },
+    configOverrides: { fomoXCallEnabled: false, kolLaunchMonitorEnabled: true, kolCapitalRosterEnabled: true },
+    extraDependencies: catalog.dependencies,
+  });
+  await monitor.check();
+  nowRef.value += 5_000;
+  tweetsRef.value = [
+    timelineTweet("221", `I just launched my token on BSC today. CA ${TOKEN}`, nowRef.value - 100),
+    ...tweetsRef.value,
+  ];
+  const result = await monitor.check();
+  assert.equal(result.delivered, 1);
+  assert.equal(alerts[0].market, undefined);
+  assert.equal(alerts[0].security.decision, "unknown");
+  assert.equal(alerts[0].launchClaim.chainVerification, "declared_only");
+  assert.equal(alerts[0].launchClaim.chainSource, "declared_bsc_in_x_post");
+  assert.equal(alerts[0].shadow.executable, false);
+  assert.equal(Object.keys((await monitor.getState()).pending).length, 0);
+});
+
+test("real reviewed catalog snapshot passes the final alert route with zero followers", async (t) => {
+  const dataDir = await fixture(t);
+  const nowRef = { value: Date.parse(CAPITAL_KOL_CATALOG_PUBLISHED_AT) + 60_000 };
+  const rowsRef = { value: [] };
+  const capitalSnapshot = createCapitalKolEventSnapshot("VitalikButerin");
+  assert.ok(capitalSnapshot);
+  const makeTweet = (id, text, at) => ({
+    id: String(id),
+    text,
+    created_timestamp: Math.floor(at / 1_000),
+    url: `https://x.com/VitalikButerin/status/${id}`,
+    author: { id: capitalSnapshot.xUserId, screen_name: "VitalikButerin", name: "Vitalik Buterin" },
+    replying_to: null,
+  });
+  const tweetsRef = { value: [makeTweet("230", "baseline", nowRef.value - 1_000)] };
+  const alerts = [];
+  const fetchImpl = async (url) => {
+    if (url === "https://api.fxtwitter.test/2/profile/vitalikbuterin") {
+      return jsonResponse(200, {
+        code: 200,
+        user: {
+          id: capitalSnapshot.xUserId,
+          screen_name: "VitalikButerin",
+          name: "Vitalik Buterin",
+          followers: 0,
+          protected: false,
+        },
+      });
+    }
+    if (url === `https://api.fxtwitter.test/2/profile/id:${capitalSnapshot.xUserId}/statuses?count=40`) {
+      return jsonResponse(200, { code: 200, results: tweetsRef.value });
+    }
+    if (url.startsWith("https://publish.x.test/oembed?")) {
+      const requested = new URL(url).searchParams.get("url");
+      const id = requested.match(/\/status\/(\d+)$/u)?.[1];
+      const tweet = tweetsRef.value.find((item) => item.id === id);
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          author_url: "https://x.com/VitalikButerin",
+          url: `https://x.com/VitalikButerin/status/${id}`,
+          html: `<blockquote><p>${tweet.text}</p>&mdash; Vitalik Buterin (@VitalikButerin) <a href="https://x.com/VitalikButerin/status/${id}">September 6, 2026</a></blockquote>`,
+        }),
+      };
+    }
+    throw new Error(`unexpected URL ${url}`);
+  };
+  const monitor = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef,
+    tweetsRef,
+    alerts,
+    fetchImpl,
+    getBscActivityImpl: async () => { throw new Error("catalog lane requested BSC person activity"); },
+    configOverrides: {
+      fomoXCallEnabled: false,
+      kolLaunchMonitorEnabled: true,
+      kolCapitalRosterEnabled: true,
+      kolCapitalCategories: ["crypto_founder"],
+      kolCapitalCatalogMaximumAgeMs: 180 * 86_400_000,
+      fomoXCallMinXFollowers: 10_000_000,
+    },
+  });
+  await monitor.check();
+  nowRef.value += 5_000;
+  tweetsRef.value = [
+    makeTweet("231", `I just launched my token on BNB Smart Chain. CA ${TOKEN}`, nowRef.value - 100),
+    ...tweetsRef.value,
+  ];
+  const result = await monitor.check();
+  assert.equal(result.delivered, 1);
+  assert.equal(alerts.length, 1);
+  assert.deepEqual(alerts[0].capitalKolSnapshot, capitalSnapshot);
+  const routeConfig = {
+    ...config(dataDir),
+    fomoCallEnabled: true,
+    kolLaunchMonitorEnabled: true,
+    kolCapitalRosterEnabled: true,
+    kolLaunchMinXFollowers: 10_000_000,
+  };
+  assert.equal(isMonitoringSourceEnabled(routeConfig, alerts[0]), true,
+    "an exact reviewed catalog snapshot must bypass the numeric follower gate");
+  assert.equal(isRelevantAlert(alerts[0]), true);
+  const tamperedBinding = structuredClone(alerts[0]);
+  tamperedBinding.caller.capitalKolBinding.xUserId = "999999999";
+  assert.equal(isMonitoringSourceEnabled(routeConfig, tamperedBinding), false);
+  assert.equal(isRelevantAlert(tamperedBinding), false);
+});
+
 test("retryable X alert suppression keeps the tweet pending while terminal suppression consumes it", async (t) => {
   const dataDir = await fixture(t);
   const nowRef = { value: Date.parse("2026-08-19T06:10:00.000Z") };
@@ -374,6 +935,10 @@ test("reply, repost, weak text and ambiguous CA are ignored before oEmbed", asyn
 
   nowRef.value += 5_000;
   tweetsRef.value = [
+    timelineTweet("206", `I just launched my token on BSC. CA ${TOKEN}`, nowRef.value - 50, {
+      quote_tweet: { id: "999" },
+      raw_text: { text: `I just launched my token on BSC. CA ${TOKEN}`, facets: [] },
+    }),
     timelineTweet("205", `Buying ${TOKEN} and ${TOKEN_TWO}`, nowRef.value - 100),
     timelineTweet("204", `CA ${TOKEN}`, nowRef.value - 200),
     timelineTweet("203", `Buying ${TOKEN}`, nowRef.value - 300, { replying_to: "10" }),
@@ -709,6 +1274,248 @@ test("an ineligible X profile is cached instead of being requested every five se
   assert.equal(state.health.backlogCount, 1);
   assert.equal(state.health.sources.x.coverage, "source_limited");
   assert.equal(state.health.sources.x.failures, 0);
+});
+
+test("22 live timelines out of 41 keep coverage degraded but record a clean operational success", async (t) => {
+  const dataDir = await fixture(t);
+  const startedAt = Date.parse("2026-09-11T02:00:00.000Z");
+  const nowRef = { value: startedAt };
+  const identities = Array.from({ length: 41 }, (_, index) => ({
+    handle: `kol${String(index).padStart(2, "0")}`,
+    id: `8${String(index + 1).padStart(17, "0")}`,
+    wallet: `0x${(index + 1).toString(16).padStart(40, "0")}`,
+    admitted: index < 22,
+  }));
+  const byHandle = new Map(identities.map((identity) => [identity.handle, identity]));
+  const byId = new Map(identities.map((identity) => [identity.id, identity]));
+  const rowsRef = { value: identities.map((identity) => candidate(startedAt, {
+    handle: identity.handle,
+    wallet: identity.wallet,
+    wallets: [identity.wallet],
+    twitterHandles: [identity.handle],
+  })) };
+  const fetchImpl = async (url) => {
+    const profileMatch = url.match(/\/2\/profile\/([a-z0-9_]+)$/u);
+    if (profileMatch) {
+      const identity = byHandle.get(profileMatch[1]);
+      return jsonResponse(200, { code: 200, user: {
+        id: identity.id,
+        screen_name: identity.handle,
+        followers: identity.admitted ? 25_000 : 9_999,
+        protected: false,
+      } });
+    }
+    const timelineMatch = url.match(/\/2\/profile\/id:(\d+)\/statuses\?count=40$/u);
+    if (timelineMatch) {
+      const identity = byId.get(timelineMatch[1]);
+      const index = identities.indexOf(identity);
+      return jsonResponse(200, { code: 200, results: [timelineTweet(String(10_000 + index), "baseline", startedAt - 1_000, {
+        author: { id: identity.id, screen_name: identity.handle, name: identity.handle },
+        url: `https://x.com/${identity.handle}/status/${10_000 + index}`,
+      })] });
+    }
+    throw new Error(`unexpected URL ${url}`);
+  };
+  const monitor = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef,
+    tweetsRef: { value: [] },
+    alerts: [],
+    fetchImpl,
+    configOverrides: { fomoXCallBatchSize: 100, fomoXCallConcurrency: 10 },
+  });
+
+  const result = await monitor.check();
+  const state = await monitor.getState();
+  const checkedAt = new Date(startedAt).toISOString();
+  assert.equal(result.status, "degraded");
+  assert.equal(state.health.status, "degraded");
+  assert.equal(state.health.sources.x.status, "partial");
+  assert.equal(state.health.sources.x.coverage, "source_limited");
+  assert.equal(state.health.eligibleCount, 41);
+  assert.equal(state.health.liveCount, 22);
+  assert.equal(state.health.rejectedCount, 19);
+  assert.equal(state.health.operationalStatus, "healthy");
+  assert.equal(state.health.sources.x.operationalStatus, "healthy");
+  assert.equal(state.health.sources.x.operationalSuccesses, 22);
+  assert.equal(state.health.lastOperationalSuccessAt, checkedAt);
+  assert.equal(state.health.sources.x.lastOperationalSuccessAt, checkedAt);
+  assert.equal(state.health.lastSuccessAt, null, "coverage-complete success remains distinct from operational success");
+  assert.equal(state.health.consecutiveFailures, 0);
+  assert.match(state.health.lastError, /X effective coverage limited: 22\/41/u);
+});
+
+test("a total X transport failure increments once while circuit cooling does not inflate the counter", async (t) => {
+  const dataDir = await fixture(t);
+  const startedAt = Date.parse("2026-09-11T02:10:00.000Z");
+  const nowRef = { value: startedAt };
+  const rowsRef = { value: [candidate(startedAt)] };
+  const monitor = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef,
+    tweetsRef: { value: [] },
+    alerts: [],
+    fetchImpl: async () => {
+      const error = new Error("FxTwitter timed out");
+      error.name = "TimeoutError";
+      throw error;
+    },
+  });
+
+  let result = await monitor.check();
+  let state = await monitor.getState();
+  assert.equal(result.status, "degraded");
+  assert.equal(state.health.operationalStatus, "error");
+  assert.equal(state.health.consecutiveFailures, 1);
+  assert.equal(state.health.lastOperationalSuccessAt, null);
+  assert.equal(state.health.sources.x.operationalSuccesses, 0);
+
+  nowRef.value += 5_000;
+  result = await monitor.check();
+  state = await monitor.getState();
+  assert.equal(result.status, "degraded");
+  assert.equal(state.health.operationalStatus, "backoff");
+  assert.equal(state.health.consecutiveFailures, 1, "an open circuit is not another failed transport attempt");
+  assert.equal(state.health.lastOperationalSuccessAt, null);
+});
+
+test("a partial X cycle refreshes operational success without claiming a clean cycle", async (t) => {
+  const dataDir = await fixture(t);
+  const startedAt = Date.parse("2026-09-11T02:15:00.000Z");
+  const nowRef = { value: startedAt };
+  const betaWallet = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  const betaId = "223456789012345678";
+  let alphaAvailable = false;
+  const rowsRef = { value: [
+    candidate(startedAt),
+    candidate(startedAt, {
+      handle: "beta",
+      wallet: betaWallet,
+      wallets: [betaWallet],
+      twitterHandles: ["beta"],
+    }),
+  ] };
+  const fetchImpl = async (url) => {
+    if (url.endsWith("/2/profile/alpha")) {
+      return jsonResponse(200, { code: 200, user: {
+        id: X_ID, screen_name: "alpha", followers: 25_000, protected: false,
+      } });
+    }
+    if (url.endsWith("/2/profile/beta")) {
+      return jsonResponse(200, { code: 200, user: {
+        id: betaId, screen_name: "beta", followers: 25_000, protected: false,
+      } });
+    }
+    if (url.includes(`/2/profile/id:${X_ID}/statuses`)) {
+      if (!alphaAvailable) {
+        const error = new Error("alpha timeline timed out");
+        error.name = "TimeoutError";
+        throw error;
+      }
+      return jsonResponse(200, { code: 200, results: [
+        timelineTweet("12500", "baseline", nowRef.value - 1_000),
+      ] });
+    }
+    if (url.includes(`/2/profile/id:${betaId}/statuses`)) {
+      const error = new Error("beta timeline timed out");
+      error.name = "TimeoutError";
+      throw error;
+    }
+    throw new Error(`unexpected URL ${url}`);
+  };
+  const monitor = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef,
+    tweetsRef: { value: [] },
+    alerts: [],
+    fetchImpl,
+    configOverrides: { fomoXCallBatchSize: 10 },
+  });
+
+  await monitor.check();
+  let state = await monitor.getState();
+  assert.equal(state.health.operationalStatus, "error");
+  assert.equal(state.health.consecutiveFailures, 1);
+  assert.equal(state.health.lastOperationalSuccessAt, null);
+
+  alphaAvailable = true;
+  nowRef.value += 60_000;
+  const result = await monitor.check();
+  state = await monitor.getState();
+  const checkedAt = new Date(nowRef.value).toISOString();
+  assert.equal(result.status, "degraded");
+  assert.equal(state.health.operationalStatus, "partial");
+  assert.equal(state.health.sources.x.operationalSuccesses, 1);
+  assert.equal(state.health.lastOperationalSuccessAt, checkedAt);
+  assert.equal(state.health.sources.x.lastOperationalSuccessAt, checkedAt);
+  assert.equal(state.health.consecutiveFailures, 1,
+    "partial liveness must not manufacture the clean cycle needed to reset a retained failure streak");
+});
+
+test("a clean recovered timeline resets operational failures even while another identity keeps coverage partial", async (t) => {
+  const dataDir = await fixture(t);
+  const startedAt = Date.parse("2026-09-11T02:20:00.000Z");
+  const nowRef = { value: startedAt };
+  const betaWallet = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  const betaId = "223456789012345678";
+  const rowsRef = { value: [
+    candidate(startedAt),
+    candidate(startedAt, { handle: "beta", wallet: betaWallet, wallets: [betaWallet], twitterHandles: ["beta"] }),
+  ] };
+  let alphaAvailable = false;
+  const fetchImpl = async (url) => {
+    if (url.endsWith("/2/profile/alpha")) {
+      if (!alphaAvailable) {
+        const error = new Error("FxTwitter timed out");
+        error.name = "TimeoutError";
+        throw error;
+      }
+      return jsonResponse(200, { code: 200, user: {
+        id: X_ID, screen_name: "alpha", followers: 25_000, protected: false,
+      } });
+    }
+    if (url.endsWith("/2/profile/beta")) {
+      return jsonResponse(200, { code: 200, user: {
+        id: betaId, screen_name: "beta", followers: 9_999, protected: false,
+      } });
+    }
+    if (url.includes(`/2/profile/id:${X_ID}/statuses`)) {
+      return jsonResponse(200, { code: 200, results: [timelineTweet("12000", "baseline", nowRef.value - 1_000)] });
+    }
+    throw new Error(`unexpected URL ${url}`);
+  };
+  const monitor = createHarness({
+    dataDir,
+    nowRef,
+    rowsRef,
+    tweetsRef: { value: [] },
+    alerts: [],
+    fetchImpl,
+    configOverrides: { fomoXCallBatchSize: 10 },
+  });
+
+  await monitor.check();
+  let state = await monitor.getState();
+  assert.equal(state.health.operationalStatus, "error");
+  assert.equal(state.health.consecutiveFailures, 1);
+
+  alphaAvailable = true;
+  nowRef.value += 60_000;
+  const recoveredAt = new Date(nowRef.value).toISOString();
+  const recovered = await monitor.check();
+  state = await monitor.getState();
+  assert.equal(recovered.status, "degraded");
+  assert.equal(state.health.status, "degraded");
+  assert.equal(state.health.liveCount, 1);
+  assert.equal(state.health.rejectedCount, 1);
+  assert.equal(state.health.operationalStatus, "healthy");
+  assert.equal(state.health.sources.x.operationalStatus, "healthy");
+  assert.equal(state.health.lastOperationalSuccessAt, recoveredAt);
+  assert.equal(state.health.consecutiveFailures, 0);
+  assert.equal(state.health.lastSuccessAt, null);
 });
 
 test("fresh FomoScan verified public handles seed the roster without a GMGN trade", async (t) => {
@@ -1776,6 +2583,40 @@ test("stop drains two pre-queued checks without letting the second create a late
   assert.equal(activityCalls, 2);
   assert.equal(await fs.readFile(path.join(dataDir, "fomo-x-call-state.json"), "utf8"), durableState);
   assert.deepEqual(unhandled, []);
+});
+
+test("slow Fomo X polls coalesce concurrent requests without replaying a queued backlog", async (t) => {
+  const dataDir = await fixture(t);
+  const nowRef = { value: Date.parse("2026-09-17T07:00:00.000Z") };
+  const rowsRef = { value: [candidate(nowRef.value)] };
+  const tweetsRef = { value: [timelineTweet("940", "baseline", nowRef.value - 1_000)] };
+  let activityStarted;
+  const entered = new Promise((resolve) => { activityStarted = resolve; });
+  let releaseActivity;
+  const blocked = new Promise((resolve) => { releaseActivity = resolve; });
+  let activityCalls = 0;
+  const monitor = createHarness({
+    dataDir, nowRef, rowsRef, tweetsRef, alerts: [],
+    getBscActivityImpl: async () => {
+      activityCalls += 1;
+      if (activityCalls === 1) { activityStarted(); await blocked; }
+      return 7;
+    },
+  });
+  t.after(() => monitor.stop());
+  const first = monitor.check();
+  await entered;
+  const repeated = Array.from({ length: 50 }, () => monitor.check());
+  assert.ok(repeated.every((promise) => promise === first));
+  releaseActivity();
+  const results = await Promise.all([first, ...repeated]);
+  assert.ok(results.every((result) => result === results[0]));
+  assert.equal(activityCalls, 1);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(activityCalls, 1, "missed ticks must not be replayed after recovery");
+  nowRef.value += 60_000;
+  await monitor.check();
+  assert.equal(activityCalls, 2, "a subsequent poll after completion still performs fresh work");
 });
 
 test("stop reloads a background seed write that completed while the active BSC check was blocked", async (t) => {

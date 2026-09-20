@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { Interface, JsonRpcProvider, formatUnits, id, isAddress } from "ethers";
 import { isTerminalAlertSuppression, sendAlerts } from "./alerts.js";
 import { assessLocalTokenSecurity } from "./local-security.js";
+import { createGmgnFlowClient } from "./gmgn-flow-client.js";
 
 export const COPE_API_BASE = "https://api.cope.capital";
 export const FOMO_PLATFORM_URL = "https://fomo.family";
@@ -382,6 +383,7 @@ const evmLogIdentityMatches = (log, expected) => {
 };
 
 const gmgnRateLimitResetMs = (error, nowMs = Date.now()) => {
+  if (error?.code === "GMGN_RATE_LIMITED" && Date.parse(error.retryAt) > nowMs) return Date.parse(error.retryAt);
   const text = [error?.message, error?.stderr, error?.stdout].filter(Boolean).join(" ");
   if (!/(?:HTTP\s*429|RATE_LIMIT_(?:EXCEEDED|BANNED)|rate limit|code["'=:\s]+429)/i.test(text)) return null;
   const rawReset = text.match(/["']?reset_at["']?\s*[:=]\s*["']?([^,"'\s}]+)/i)?.[1];
@@ -764,6 +766,10 @@ export function parseFxTwitterProfile(payload, expectedHandle = "") {
     protected: user?.protected === true,
     verification: user?.verification || null,
     source: "fxtwitter_public_profile",
+    ...(String(user?.name || "").trim() ? { displayName: String(user.name).replace(/\s+/gu, " ").trim().slice(0, 120) } : {}),
+    ...(String(user?.description || user?.bio || "").trim()
+      ? { description: String(user.description || user.bio).replace(/\s+/gu, " ").trim().slice(0, 280) }
+      : {}),
   };
 }
 
@@ -2572,8 +2578,14 @@ export function createFomoCallMonitor(config, dependencies = {}) {
   const newWalletLookbackBlocks = Math.max(0, Number(config.fomoCallNewWalletLookbackBlocks ?? 600));
   const requireConvergence = config.fomoCallRequireConvergence !== false;
   const legacyBuyEnabled = config.fomoBuyMonitorEnabled === true;
+  // The added cross-chain lane and the existing BSC lane share one CLI queue
+  // and durable account cooldown. Separate clients retain independent stops.
+  const gmgnSharedClient = config.gmgnFlowMonitorEnabled
+    ? (dependencies.gmgnFlowClient || createGmgnFlowClient(config)) : null;
   const discoverBscKolCandidates = dependencies.discoverBscKolCandidatesImpl || (async () => {
-    const candidates = await discoverGmgnBscKolCandidates({
+    const candidates = gmgnSharedClient
+      ? parseGmgnBscKolCandidates(await gmgnSharedClient.trades("bsc", "kol"))
+      : await discoverGmgnBscKolCandidates({
       cliPath: config.fomoCallGmgnCliPath || "gmgn-cli",
       limit: config.fomoCallGmgnDiscoveryLimit || 100,
       timeoutMs: config.fomoCallGmgnDiscoveryTimeoutMs || 30_000,
@@ -2615,13 +2627,17 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     minimumRoi30d: Math.max(0, Number(config.fomoSmartMoneyMinRoi30dBps ?? 150) / 10_000),
     minimumTokenCount30d: Math.max(1, Number(config.fomoSmartMoneyMinTokenCount30d ?? 100)),
   };
-  const discoverSmartMoneyTrades = dependencies.discoverSmartMoneyTradesImpl || (async (observedAtMs) => discoverGmgnBscSmartMoneyBuys({
+  const discoverSmartMoneyTrades = dependencies.discoverSmartMoneyTradesImpl || (async (observedAtMs) => gmgnSharedClient
+    ? parseGmgnBscSmartMoneyBuys(await gmgnSharedClient.trades("bsc", "smartmoney"), { observedAtMs })
+    : discoverGmgnBscSmartMoneyBuys({
     cliPath: config.fomoCallGmgnCliPath || "gmgn-cli",
     limit: smartMoneyFeedLimit,
     timeoutMs: config.fomoCallGmgnDiscoveryTimeoutMs || 30_000,
     observedAtMs,
   }));
-  const fetchSmartMoneyStats = dependencies.fetchSmartMoneyStatsImpl || (async (wallet, period, checkedAtMs) => fetchGmgnWalletStats({
+  const fetchSmartMoneyStats = dependencies.fetchSmartMoneyStatsImpl || (async (wallet, period, checkedAtMs) => gmgnSharedClient
+    ? parseGmgnWalletStats(await gmgnSharedClient.stats("bsc", wallet, period), { wallet, period, checkedAtMs })
+    : fetchGmgnWalletStats({
     cliPath: config.fomoCallGmgnCliPath || "gmgn-cli",
     wallet,
     period,
@@ -6111,6 +6127,7 @@ export function createFomoCallMonitor(config, dependencies = {}) {
       stopping = true;
       if (timer) clearInterval(timer);
       const stopAttempt = (async () => {
+        await gmgnSharedClient?.stop();
         await activeCheckDone;
         try {
           await checkpointWriteQueue;

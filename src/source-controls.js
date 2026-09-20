@@ -1,10 +1,16 @@
 import { createHash } from "node:crypto";
+import { claimsGeniusSource, isGeniusOfficialEvent } from "./genius-source-policy.js";
+import { isGmgnFlowEvent } from "./gmgn-flow-signal.js";
 import {
   FOUR_REGISTRY_CAPABILITY_KINDS,
   FOUR_REGISTRY_FIRST_TOKEN_KIND,
   isFourRegistryCapabilityEvent as isRawFourRegistryCapabilityEvent,
   isFourRegistryFirstTokenEvent as isRawFourRegistryFirstTokenEvent,
 } from "./four-registry-monitor.js";
+import {
+  isKolSelfLaunchEvent,
+  verifyKolTokenLaunchEvent,
+} from "./kol-token-launch-alert.js";
 
 const PONS_REPOSITORIES = new Set([
   "ponsdotdev/ponsfamily",
@@ -33,6 +39,7 @@ const BINANCE_OFFICIAL_EVENT_SOURCE_IDS = new Set([
   "binance_wallet_cms",
   "binance_square_cms",
   "binance_developer_docs",
+  "binance_agent_os_page",
   "meme_rush_api",
   "launchpool_api",
 ]);
@@ -139,9 +146,9 @@ const FLAP_QUOTE_SOURCE_ID = "flap_portal_quote_configuration";
 const FLAP_QUOTE_SOURCE_TRUST = "official_docs_bound_fingerprinted_portal_receipt";
 const FLAP_QUOTE_DOCS_URL = "https://docs.flap.sh/flap/developers/deployed-contract-addresses";
 const FLAP_QUOTE_PORTAL_RUNTIME_HASH = "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3";
-const FLAP_QUOTE_PORTAL_VERSION = "v5.22.0";
-const FLAP_QUOTE_PORTAL_IMPLEMENTATION = "0xE3CfDbb959e4EFb6fFD22E8659e8CBeEeD362019";
-const FLAP_QUOTE_PORTAL_IMPLEMENTATION_HASH = "0x357c9245739d6af7c4727744d479ec7d8c4ae461c2fb37d56eafb9d7dc9ccbaa";
+const FLAP_QUOTE_PORTAL_VERSION = "v5.23.1";
+const FLAP_QUOTE_PORTAL_IMPLEMENTATION = "0xAb8Ec926b6e113c2212aF152b086eA62d1FDced9";
+const FLAP_QUOTE_PORTAL_IMPLEMENTATION_HASH = "0x78653cdd7296d940ae531c86bc6700ae163f1f9dec002c2af3143c9ae6696a15";
 const FLAP_QUOTE_CONFIGURATION_SIGNATURE = "QuoteTokenConfigurationSet(address,(uint8,uint8,uint8,uint8,uint8))";
 const FLAP_QUOTE_CONFIGURATION_TOPIC = "0x9a1f38e55c729ebf0c45d240a00b09f0a79a715df7cfd6e8942bd3f8da839199";
 const FLAP_QUOTE_RISK = "A Portal quote configuration is platform capability evidence, not proof of token safety, liquidity depth, backing, or favorable execution.";
@@ -4783,6 +4790,43 @@ export function isFomoMonitorHealthUpdateAllowed(config, source, now = Date.now(
 }
 
 export function isMonitoringSourceEnabled(config, source) {
+  if (source?.type === "gmgn_flow_surge" || source?.source?.id === "gmgn_flow_observed") {
+    return config?.gmgnFlowMonitorEnabled === true && isGmgnFlowEvent(source)
+      && Date.parse(source.observedAt) <= Date.now() + 30_000;
+  }
+  // Genius is an explicit independent lane, not an addition to the generic
+  // focus3 matcher. Claimed Genius provenance must fail closed in every scope.
+  if (claimsGeniusSource(source)) return config?.geniusMonitorEnabled === true && isGeniusOfficialEvent(source);
+  if (isKolSelfLaunchEvent(source)) {
+    const verification = verifyKolTokenLaunchEvent(source);
+    const minimumFollowers = Number(config?.kolLaunchMinXFollowers
+      ?? config?.fomoXCallMinXFollowers
+      ?? 10_000);
+    const capitalIdentity = String(source?.caller?.identitySource || "").toLowerCase()
+      === "reviewed_catalog+fxtwitter";
+    const enabledCategories = Array.isArray(config?.kolCapitalCategories)
+      ? config.kolCapitalCategories.map((value) => String(value || "").trim()).filter(Boolean)
+      : [];
+    const capitalCategory = String(source?.caller?.capitalKolSnapshot?.category
+      || source?.capitalKolSnapshot?.category || "").trim();
+    const capitalRosterAllowed = capitalIdentity
+      && config?.kolCapitalRosterEnabled === true
+      && (enabledCategories.length === 0 || enabledCategories.includes(capitalCategory));
+    return config?.fomoCallEnabled !== false
+      && config?.kolLaunchMonitorEnabled === true
+      && Number.isFinite(minimumFollowers)
+      && minimumFollowers >= 0
+      && verification.valid
+      && (capitalIdentity
+        ? capitalRosterAllowed
+        : Number(source?.caller?.followers) >= minimumFollowers);
+  }
+  // Narrative trade signals are internal, deterministic derivatives of an
+  // already admitted source event. They have their own integrity gate in the
+  // alert pipeline and are opt-in independently from the originating monitor.
+  if (source?.type === "narrative_trade_signal") {
+    return config?.narrativeSniperEnabled === true;
+  }
   if (source?.type === "fomo_monitor_health_update") {
     return isFomoMonitorHealthUpdateAllowed(config, source);
   }

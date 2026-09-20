@@ -291,8 +291,9 @@ test("crypto perpetual and perpetual-delist cards use action-aware derivatives p
   }));
   const launchBundle = await buildBilingualAlertBundle(config, launch, `official monitoring update\n具体更新: ${launch.title}\n状态: verified source\n时间: ${launch.observedAt}`);
   const launchCard = renderBilingualTelegramText(launchBundle, true);
-  assert.match(launchCard, /永续→深度\/持仓\/资金费率/u);
-  assert.match(launchCard, /perpetual→depth\/OI\/funding/u);
+  assert.match(launchCard, /事件：新增 MARSCOINUSDT U 本位永续合约/u);
+  assert.match(launchCard, /Event: Added the MARSCOINUSDT USDⓈ-M perpetual contract/u);
+  assert.doesNotMatch(launchCard, /风险|Risk|入场=|entry=|失效=|invalid=|非自动交易|no automatic trading/iu);
   assert.doesNotMatch(launchCard, /现货\/Alpha→|spot\/Alpha→/iu);
 
   const delistSource = withInstrumentChange(fixtures.marscoin, {
@@ -308,9 +309,9 @@ test("crypto perpetual and perpetual-delist cards use action-aware derivatives p
   const delistBundle = await buildBilingualAlertBundle(config, delist, `official monitoring update\n具体更新: ${delist.title}\n状态: verified source\n时间: ${delist.observedAt}`);
   const delistCard = renderBilingualTelegramText(delistBundle, true);
   assert.match(delist.tradingPriority.plan.entryCondition.zh, /不新增仓位.*结算时间/u);
-  assert.match(delistCard, /永续下架→仓位\/保证金\/结算/u);
-  assert.match(delistCard, /不新增仓位/u);
-  assert.match(delistCard, /settlement/iu);
+  assert.match(delistCard, /事件：Binance Futures Will Delist MARSCOINUSDT Perpetual Contract/u);
+  assert.match(delistCard, /Event: Binance Futures Will Delist MARSCOINUSDT Perpetual Contract/u);
+  assert.doesNotMatch(delistCard, /风险|Risk|入场=|entry=|失效=|invalid=|非自动交易|no automatic trading/iu);
   assert.doesNotMatch(delistCard, /现货\/Alpha→|spot\/Alpha→/iu);
 });
 
@@ -1087,6 +1088,21 @@ test("structured Binance product features are T1 while SDK and schema maintenanc
   const developerPriority = deriveTradingPriority(developerFeature);
   assert.equal(developerPriority.category, "binance_product");
   assert.equal(developerPriority.tier, "T1");
+
+  const agentOsPageFeature = {
+    ...developerFeature,
+    project: { id: "binance-wallet", name: "Binance Web3" },
+    title: "Binance Agent OS 官方 Web3 developer product feature",
+    addedSignals: ["Binance Agent OS adds an on-chain developer capability"],
+    developerChange: { classification: "product_feature", productFeature: true, substantive: true },
+    source: { id: "binance_agent_os_page", url: "https://www.binance.com/agent-os" },
+    url: "https://www.binance.com/agent-os",
+    comparisonBasis: "exact_snapshot",
+  };
+  const agentOsPagePriority = deriveTradingPriority(agentOsPageFeature);
+  assert.equal(agentOsPagePriority.confirmation.trusted, true);
+  assert.equal(agentOsPagePriority.category, "binance_product");
+  assert.equal(agentOsPagePriority.tier, "T1");
 
   const missingSourceTime = copy(developerFeature);
   delete missingSourceTime.publishedAt;

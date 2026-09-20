@@ -477,6 +477,66 @@ test("retryable, unknown, and thrown AI delivery failures keep the previous SHA"
   assert.equal(state._health.repositories[repository].status, "healthy");
 });
 
+test("official Binance commits advance SHA only after a durable alert acceptance", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "github-binance-alert-durable-"));
+  const repository = "binance/binance-skills-hub";
+  const entry = DEFAULT_REPOSITORIES.find(({ repository: candidate }) => candidate === repository);
+  let current = new Date("2026-08-20T05:00:00.000Z");
+  let attempts = 0;
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(console, "error", () => {});
+  await fs.writeFile(path.join(dataDir, "github-state.json"), JSON.stringify({
+    [repository]: { sha: "aaaa9001", checkedAt: "2026-08-20T04:59:00.000Z" },
+  }));
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).endsWith(".atom")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => `<feed>
+          <entry><id>tag:github.com,2008:Grit::Commit/bbbb9002</id><updated>2026-08-20T05:00:00Z</updated><title>feat: add Binance Web3 launchpad skill</title></entry>
+          <entry><id>tag:github.com,2008:Grit::Commit/aaaa9001</id><updated>2026-08-20T04:59:00Z</updated><title>old</title></entry>
+        </feed>`,
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      text: async () => "diff --git a/skills/binance-web3/new-launchpad/SKILL.md b/skills/binance-web3/new-launchpad/SKILL.md\nnew file mode 100644\n--- /dev/null\n+++ b/skills/binance-web3/new-launchpad/SKILL.md\n+New Web3 launchpad and bonding curve integration",
+    };
+  });
+  const monitor = createGithubMonitor({
+    dataDir,
+    githubToken: "",
+    githubRetryBaseMs: 1_000,
+    githubRetryMaxMs: 8_000,
+  }, {
+    autoStart: false,
+    repositories: [entry],
+    now: () => new Date(current),
+    random: () => 0.5,
+    sendAlertsImpl: async () => {
+      attempts += 1;
+      return attempts === 1
+        ? { status: "suppressed", reason: "delivery_backpressure", disposition: "retry" }
+        : { status: "queued", eventId: "github:binance-skills-hub:bbbb9002" };
+    },
+  });
+
+  await monitor.check(true);
+  let state = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
+  assert.equal(attempts, 1);
+  assert.equal(state[repository].sha, "aaaa9001");
+  assert.equal(state._health.repositories[repository].status, "degraded");
+
+  current = new Date("2026-08-20T05:00:01.000Z");
+  await monitor.check(true);
+  state = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
+  assert.equal(attempts, 2);
+  assert.equal(state[repository].sha, "bbbb9002");
+  assert.equal(state._health.repositories[repository].status, "healthy");
+});
+
 test("BSC launchpad repositories start from silent baselines and XFOUR stays a candidate", () => {
   const configured = new Map(DEFAULT_REPOSITORIES.map((entry) => [entry.repository.toLowerCase(), entry]));
   for (const repository of [
@@ -870,6 +930,49 @@ test("an Atom transport failure falls back to REST in the same poll", async (t) 
   assert.equal(state[repository].sha, "aaaa0001");
   assert.equal(state._health.repositories[repository].status, "healthy");
   assert.equal(state._health.repositories[repository].lastAtomRestFallbackReason, "atom_transport_failure");
+});
+
+test("an unauthenticated REST rate limit opens a shared circuit while public Atom polling continues", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "github-rest-circuit-"));
+  const repositories = ["example/rate-limited-one", "example/rate-limited-two"];
+  const atomRequests = [];
+  const apiRequests = [];
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(console, "error", () => {});
+  t.mock.method(globalThis, "fetch", async (url) => {
+    const parsed = new URL(url);
+    if (parsed.hostname === "github.com" && parsed.pathname.endsWith("/commits/main.atom")) {
+      atomRequests.push(parsed.pathname);
+      return { ok: false, status: 503, headers: new Headers(), text: async () => "" };
+    }
+    if (parsed.hostname === "api.github.com") {
+      apiRequests.push(parsed.pathname);
+      return { ok: false, status: 403, headers: new Headers(), json: async () => ({ message: "rate limited" }) };
+    }
+    throw new Error(`unexpected request ${url}`);
+  });
+  const monitor = createGithubMonitor({
+    dataDir,
+    githubToken: "",
+    githubPollConcurrency: 1,
+    githubRetryBaseMs: 1_000,
+    githubRetryMaxMs: 8_000,
+  }, {
+    autoStart: false,
+    repositories: repositories.map((repository) => ({ repository, launchpad: "test", baselineOnly: true })),
+    sendAlertsImpl: async () => {},
+    now: () => new Date("2026-08-12T00:25:00.000Z"),
+    random: () => 0.5,
+  });
+
+  await monitor.check(false);
+
+  const state = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
+  assert.equal(atomRequests.length, 2, "the circuit must not suppress public Atom reads");
+  assert.deepEqual(apiRequests, ["/repos/example/rate-limited-one/commits"]);
+  assert.match(state._health.repositories[repositories[1]].lastError, /REST circuit is open/);
+  assert.ok(state._health.repositories[repositories[0]].backoffMs >= 59 * 60_000);
+  assert.ok(state._health.repositories[repositories[1]].backoffMs >= 59 * 60_000);
 });
 
 test("the REST commit path keeps token, ETag, and rate-limit retry metadata", async (t) => {
@@ -1457,7 +1560,10 @@ test("the public Atom producer emits Binance maintenance normally and makes only
   const monitor = createGithubMonitor({ dataDir, githubToken: "" }, {
     autoStart: false,
     repositories: [{ repository, launchpad: "Binance", sourceTrust: "official_verified" }],
-    sendAlertsImpl: async (_config, event) => alerts.push(event),
+    sendAlertsImpl: async (_config, event) => {
+      alerts.push(event);
+      return { status: "queued" };
+    },
     now: () => new Date("2026-08-19T13:05:00.000Z"),
   });
 
@@ -1647,6 +1753,158 @@ test("overlapping GitHub lane ticks coalesce into one immediate follow-up withou
     [priorityRepository]: 1,
     [regularRepository]: 1,
   });
+});
+
+test("GitHub keeps both startup probes immediate then phases sixty-second repository lanes by thirty seconds", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "github-lane-phase-"));
+  const priorityRepository = "cadence-fixture/priority";
+  const regularRepository = "cadence-fixture/regular";
+  const atomRequests = new Map([[priorityRepository, 0], [regularRepository, 0]]);
+  const intervals = [];
+  const timeouts = [];
+  const clearedIntervals = new Set();
+  const clearedTimeouts = new Set();
+  const timerHandle = (kind, callback, delay) => ({
+    kind,
+    callback,
+    delay,
+    unref() {},
+  });
+  const waitFor = async (predicate, message) => {
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      if (predicate()) return;
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    assert.fail(message);
+  };
+  t.after(() => {
+    PRIORITY_REPOSITORIES.delete(priorityRepository);
+    return fs.rm(dataDir, { recursive: true, force: true });
+  });
+  t.mock.method(globalThis, "fetch", async (url) => {
+    const parsed = new URL(url);
+    if (parsed.hostname === "api.github.com" && parsed.pathname.startsWith("/orgs/")) {
+      return { ok: true, status: 200, headers: new Headers(), json: async () => [] };
+    }
+    const atom = String(url).match(/^https:\/\/github\.com\/(cadence-fixture\/(?:priority|regular))\/commits\/main\.atom$/);
+    assert.ok(atom, `unexpected GitHub cadence request: ${url}`);
+    atomRequests.set(atom[1], atomRequests.get(atom[1]) + 1);
+    return { ok: false, status: 304, headers: new Headers() };
+  });
+
+  const monitor = createGithubMonitor({
+    dataDir,
+    githubToken: "",
+    githubPollIntervalMs: 5_000,
+    githubPriorityPollIntervalMs: 5_000,
+  }, {
+    repositories: [
+      { repository: priorityRepository, launchpad: "test", priority: true, baselineOnly: true },
+      { repository: regularRepository, launchpad: "test", baselineOnly: true },
+    ],
+    pullRequestRepositories: [],
+    sendAlertsImpl: async () => ({ status: "queued" }),
+    now: () => new Date("2026-08-08T00:00:00.000Z"),
+    setIntervalImpl: (callback, delay) => {
+      const handle = timerHandle("interval", callback, delay);
+      intervals.push(handle);
+      return handle;
+    },
+    clearIntervalImpl: (handle) => { clearedIntervals.add(handle); },
+    setTimeoutImpl: (callback, delay) => {
+      const handle = timerHandle("timeout", callback, delay);
+      timeouts.push(handle);
+      return handle;
+    },
+    clearTimeoutImpl: (handle) => { clearedTimeouts.add(handle); },
+  });
+
+  await waitFor(
+    () => atomRequests.get(priorityRepository) === 1 && atomRequests.get(regularRepository) === 1,
+    "both startup repository lanes should check immediately",
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(monitor.pollingIntervals.priorityRepositoryMs, 60_000);
+  assert.deepEqual(monitor.pollingIntervals.regularSchedulerMs, 60_000);
+  assert.deepEqual(timeouts.map(({ delay }) => delay), [30_000]);
+  assert.deepEqual(intervals.map(({ delay }) => delay), [60_000, 600_000, 60_000], "priority recurrence waits for its phase offset");
+
+  await timeouts[0].callback();
+  assert.equal(atomRequests.get(priorityRepository), 2, "the phase callback should check only the priority lane");
+  assert.equal(atomRequests.get(regularRepository), 1);
+  assert.deepEqual(intervals.map(({ delay }) => delay), [60_000, 600_000, 60_000, 60_000]);
+
+  await intervals[0].callback();
+  assert.equal(atomRequests.get(regularRepository), 2, "the regular lane should recur independently at sixty seconds");
+  assert.equal(atomRequests.get(priorityRepository), 2);
+  await intervals[3].callback();
+  assert.equal(atomRequests.get(priorityRepository), 3, "the phased priority lane should recur every sixty seconds");
+  assert.equal(atomRequests.get(regularRepository), 2);
+
+  await monitor.stop();
+  assert.equal(clearedIntervals.size, 4);
+  assert.equal(clearedTimeouts.size, 0, "the fired phase timeout is no longer pending at shutdown");
+});
+
+test("GitHub stop clears a pending priority phase and rejects its late callback", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "github-pending-phase-stop-"));
+  const priorityRepository = "cadence-fixture/priority-stop";
+  let atomRequests = 0;
+  const intervals = [];
+  const timeouts = [];
+  const clearedIntervals = new Set();
+  const clearedTimeouts = new Set();
+  const timerHandle = (kind, callback, delay) => ({
+    kind,
+    callback,
+    delay,
+    unref() {},
+  });
+  t.after(() => {
+    PRIORITY_REPOSITORIES.delete(priorityRepository);
+    return fs.rm(dataDir, { recursive: true, force: true });
+  });
+  t.mock.method(globalThis, "fetch", async (url) => {
+    const parsed = new URL(url);
+    if (parsed.hostname === "api.github.com" && parsed.pathname.startsWith("/orgs/")) {
+      return { ok: true, status: 200, headers: new Headers(), json: async () => [] };
+    }
+    if (parsed.hostname === "github.com" && parsed.pathname === `/${priorityRepository}/commits/main.atom`) {
+      atomRequests += 1;
+      return { ok: false, status: 304, headers: new Headers() };
+    }
+    throw new Error(`unexpected GitHub pending-phase request: ${url}`);
+  });
+
+  const monitor = createGithubMonitor({ dataDir, githubToken: "" }, {
+    repositories: [{ repository: priorityRepository, launchpad: "test", priority: true, baselineOnly: true }],
+    pullRequestRepositories: [],
+    sendAlertsImpl: async () => ({ status: "queued" }),
+    setIntervalImpl: (callback, delay) => {
+      const handle = timerHandle("interval", callback, delay);
+      intervals.push(handle);
+      return handle;
+    },
+    clearIntervalImpl: (handle) => { clearedIntervals.add(handle); },
+    setTimeoutImpl: (callback, delay) => {
+      const handle = timerHandle("timeout", callback, delay);
+      timeouts.push(handle);
+      return handle;
+    },
+    clearTimeoutImpl: (handle) => { clearedTimeouts.add(handle); },
+  });
+
+  assert.equal(timeouts.length, 1);
+  assert.equal(timeouts[0].delay, 30_000);
+  await monitor.stop();
+  assert.deepEqual([...clearedTimeouts], [timeouts[0]], "shutdown clears the still-pending phase timeout");
+  assert.equal(clearedIntervals.size, 3, "shutdown clears only the recurring timers that already exist");
+
+  const intervalCountAfterStop = intervals.length;
+  const requestCountAfterStop = atomRequests;
+  await timeouts[0].callback();
+  assert.equal(intervals.length, intervalCountAfterStop, "a late phase callback cannot create the priority interval");
+  assert.equal(atomRequests, requestCountAfterStop, "a late phase callback cannot start another priority request");
 });
 
 test("falls back to user repositories when an official Four.Meme account is not an organization", async (t) => {
@@ -2065,7 +2323,7 @@ test("organization discovery keeps explicit core repositories fast and assigns d
   assert.equal(PRIORITY_REPOSITORIES.has("flap-sh/flap-skills"), true);
   assert.equal(PRIORITY_REPOSITORIES.has(dynamicRepository), false);
   assert.deepEqual(monitor.pollingIntervals, {
-    priorityRepositoryMs: 10_000,
+    priorityRepositoryMs: 60_000,
     regularSchedulerMs: 60_000,
     dynamicRepositoryMs: 300_000,
     organizationMs: 600_000,
@@ -2225,7 +2483,7 @@ test("a persisted Binance Go connector discovery migrates to configured regular 
   assert.equal(PRIORITY_REPOSITORIES.has(repository), false);
   assert.equal(monitor.pollingIntervals.regularSchedulerMs, 60_000);
   assert.equal(monitor.pollingIntervals.dynamicRepositoryMs, 300_000);
-  assert.equal(monitor.pollingIntervals.priorityRepositoryMs, 5_000);
+  assert.equal(monitor.pollingIntervals.priorityRepositoryMs, 60_000);
 });
 
 test("Binance Go connector cadence migration preserves an active GitHub policy backoff", async (t) => {
@@ -2337,6 +2595,116 @@ test("persisted organization priority cannot override the explicit core fast lan
   assert.equal(state._repositories[repository].pollingClass, "organization_dynamic");
 });
 
+test("successful organization snapshots retire absent and filtered dynamic repositories across restart without touching cursors or core repositories", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "github-org-retired-dynamic-"));
+  const absentRepository = "xdevplatform/retired-sample-app";
+  const filteredRepository = "Uniswap/random-docs";
+  const coreRepository = "xdevplatform/xdk";
+  const snapshotAt = "2026-08-08T03:50:00.000Z";
+  let atomRequests = 0;
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  await fs.writeFile(path.join(dataDir, "github-state.json"), JSON.stringify({
+    [absentRepository]: { sha: "aaaa1001", checkedAt: snapshotAt },
+    [filteredRepository]: { sha: "bbbb1002", checkedAt: snapshotAt },
+    [coreRepository]: { sha: "cccc1003", checkedAt: snapshotAt },
+    _repositories: {
+      [absentRepository]: {
+        repository: absentRepository,
+        launchpad: "X",
+        sourceTrust: "official_verified",
+        officialOrganization: "xdevplatform",
+        xaiOfficial: true,
+        priority: false,
+        pollingClass: "organization_dynamic",
+        baselineOnly: true,
+        organizationPushedAt: "2026-08-08T03:45:00.000Z",
+      },
+      [filteredRepository]: {
+        repository: filteredRepository,
+        launchpad: "Uniswap",
+        sourceTrust: "official_verified",
+        officialOrganization: "Uniswap",
+        uniswapOfficial: true,
+        priority: false,
+        pollingClass: "organization_dynamic",
+        baselineOnly: true,
+        organizationPushedAt: "2026-08-08T03:46:00.000Z",
+      },
+      [coreRepository]: {
+        repository: coreRepository,
+        launchpad: "X",
+        sourceTrust: "official_verified",
+        officialOrganization: "xdevplatform",
+        xaiOfficial: true,
+        priority: false,
+        pollingClass: "organization_dynamic",
+        baselineOnly: true,
+        organizationPushedAt: "2026-08-08T03:47:00.000Z",
+      },
+    },
+    _organizations: {
+      xdevplatform: {
+        repositories: [absentRepository, coreRepository],
+        lastSuccessAt: snapshotAt,
+      },
+      Uniswap: {
+        repositories: [filteredRepository],
+        lastSuccessAt: snapshotAt,
+      },
+    },
+  }));
+  t.mock.method(globalThis, "fetch", async (url) => {
+    const parsed = new URL(url);
+    if (parsed.hostname === "api.github.com" && parsed.pathname.startsWith("/orgs/")) {
+      if (parsed.pathname === "/orgs/Uniswap/repos") {
+        return { ok: true, status: 200, json: async () => [{ full_name: filteredRepository, archived: false }] };
+      }
+      return { ok: true, status: 200, json: async () => [] };
+    }
+    if (parsed.hostname === "github.com" && parsed.pathname.includes("/commits/")) {
+      atomRequests += 1;
+      throw new Error(`inactive repository must not read its Atom feed: ${url}`);
+    }
+    throw new Error(`unexpected GitHub request: ${url}`);
+  });
+  const config = {
+    dataDir,
+    githubToken: "",
+    monitorScope: "focus3",
+    xaiOfficialMonitorEnabled: true,
+    ponsMonitorEnabled: false,
+  };
+  const dependencies = {
+    autoStart: false,
+    repositories: [],
+    sendAlertsImpl: async () => {},
+    now: () => new Date("2026-08-08T04:00:00.000Z"),
+  };
+
+  const monitor = createGithubMonitor(config, dependencies);
+  await monitor.checkOrganizations();
+  let state = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
+  assert.equal(atomRequests, 0);
+  assert.equal(state._repositories[absentRepository].active, false);
+  assert.equal(state._repositories[absentRepository].inactiveReason, "organization_repository_absent");
+  assert.equal(state._repositories[filteredRepository].active, false);
+  assert.equal(state._repositories[filteredRepository].inactiveReason, "organization_discovery_filter");
+  assert.equal(state[absentRepository].sha, "aaaa1001");
+  assert.equal(state[filteredRepository].sha, "bbbb1002");
+  assert.equal(state._repositories[coreRepository].pollingClass, "core_priority");
+  assert.notEqual(state._repositories[coreRepository].active, false);
+  assert.equal(state[coreRepository].sha, "cccc1003");
+
+  const restarted = createGithubMonitor(config, dependencies);
+  await restarted.check(false);
+  state = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
+  assert.equal(atomRequests, 0, "retired dynamic repositories must remain inactive after restart");
+  assert.equal(state._repositories[absentRepository].active, false);
+  assert.equal(state._repositories[filteredRepository].active, false);
+  assert.equal(state[absentRepository].sha, "aaaa1001");
+  assert.equal(state[filteredRepository].sha, "bbbb1002");
+});
+
 test("dynamic repositories use pushed_at to skip unchanged commit feeds and bypass the timer when activity changes", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "github-org-pushed-gate-"));
   const repository = "flap-sh/experimental-pool-module";
@@ -2389,12 +2757,16 @@ test("dynamic repositories use pushed_at to skip unchanged commit feeds and bypa
   await monitor.check(false);
   assert.equal(atomRequests, 1, "a new dynamic repository still establishes its commit baseline");
 
-  currentTime = new Date("2026-08-08T04:05:00Z");
+  currentTime = new Date("2026-08-08T04:10:00Z");
   await monitor.check(false);
-  assert.equal(atomRequests, 1, "an unchanged fresh pushed_at value gates the commit feed read");
+  assert.equal(atomRequests, 1, "an unchanged pushed_at value gates the commit feed even after the dynamic interval expires");
 
-  currentTime = new Date("2026-08-08T04:06:00Z");
-  pushedAt = "2026-08-08T04:06:00Z";
+  currentTime = new Date("2026-08-08T04:11:00Z");
+  await monitor.checkOrganizations();
+  assert.equal(atomRequests, 1, "a successful organization refresh with the same pushed_at value performs no commit read");
+
+  currentTime = new Date("2026-08-08T04:12:00Z");
+  pushedAt = "2026-08-08T04:12:00Z";
   await monitor.checkOrganizations();
   assert.equal(atomRequests, 2, "a changed pushed_at value triggers an immediate commit read");
   await monitor.check(false);
@@ -2404,15 +2776,15 @@ test("dynamic repositories use pushed_at to skip unchanged commit feeds and bypa
   assert.equal(state._health.repositories[repository].lastOrganizationPushedAt, pushedAt);
   assert.equal(state._health.repositories[repository].organizationPushGate, "commit_read");
 
-  currentTime = new Date("2026-08-08T04:07:00Z");
-  pushedAt = "2026-08-08T04:07:00Z";
+  currentTime = new Date("2026-08-08T04:13:00Z");
+  pushedAt = "2026-08-08T04:13:00Z";
   atomFailure = true;
   await monitor.checkOrganizations();
   assert.equal(atomRequests, 3, "a second pushed_at change gets one immediate attempt");
   await monitor.check(false);
   assert.equal(atomRequests, 3, "the failed immediate attempt is not duplicated by the regular loop");
 
-  currentTime = new Date("2026-08-08T04:08:00Z");
+  currentTime = new Date("2026-08-08T04:14:00Z");
   await monitor.check(false);
   assert.equal(atomRequests, 3, "the same pushed_at value cannot repeatedly bypass failure backoff");
 });
@@ -2686,6 +3058,8 @@ test("a real-size terminal gap keeps full in-memory evidence, durably queues onl
   const anchor = makeCommit(anchorSha, "previous cursor");
   let phase = "terminal_gap";
   let current = new Date("2026-08-20T00:01:00.000Z");
+  // Keep outbox retention on the same clock as the monitor and alert pipeline.
+  t.mock.method(Date, "now", () => current.getTime());
   let gapAlertStoredBoundedPayload = false;
   let terminalSuppressions = 0;
   const deliveredCommits = [];

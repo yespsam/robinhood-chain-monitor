@@ -22,7 +22,7 @@ import {
   createPlatformCapabilityMonitor,
   runPlatformCapabilityCheck,
 } from "../src/platform-capability-monitor.js";
-import { sendAlerts } from "../src/alerts.js";
+import { focusNoveltyKeys, sendAlerts } from "../src/alerts.js";
 import { buildBilingualAlertBundle, renderBilingualTelegramText } from "../src/bilingual-alert-renderer.js";
 import { withTradingPriority } from "../src/trading-priority.js";
 
@@ -800,9 +800,11 @@ test("Flap metadata pending crosses the real source gate, outbox, renderer, and 
   assert.equal(telegramPayloads.length, 1);
   assert.equal(producerEvents[0].sourceOccurredAt, firstObservedAt);
   assert.equal(producerEvents[0].kind, "flap_quote_asset_board_observed");
-  assert.match(telegramPayloads[0].text, /Flap quote pools observed: SOXSB/i);
-  assert.match(telegramPayloads[0].text, /元数据延迟补齐，勿追价/u);
-  assert.match(telegramPayloads[0].text, /Late metadata; do not chase/i);
+  assert.match(telegramPayloads[0].text, /^🆕 新底池 \| NEW POOL/u);
+  assert.match(telegramPayloads[0].text, /项目：Flap[^\n]*SOXSB[^\n]*新报价底池/u);
+  assert.match(telegramPayloads[0].text, /Project: Flap[^\n]*SOXSB[^\n]*new quote pool/i);
+  assert.match(telegramPayloads[0].text, /事件：Flap Board 新增报价资产/u);
+  assert.doesNotMatch(telegramPayloads[0].text, /风险|Risk|勿追价|do not chase|非自动交易|no automatic trading/iu);
   assert.doesNotMatch(telegramPayloads[0].text, /quote pools enabled|报价底池已启用/i);
 
   const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
@@ -1376,6 +1378,7 @@ test("Flap v3 to v4 migration silences only chain-scoped BSC pool equivalents an
   const oldQuote = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
   const newBscQuote = "0xcccccccccccccccccccccccccccccccccccccccc";
   const newMorphQuote = "0xdddddddddddddddddddddddddddddddddddddddd";
+  const secondMorphQuote = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
   const oldBoard = JSON.stringify({ initialBoard: { items: [{
     quoteToken: oldQuote,
     vault: { vaultFactory: oldFactory, vaultFactoryCategory: ["index"] },
@@ -1387,7 +1390,10 @@ test("Flap v3 to v4 migration silences only chain-scoped BSC pool equivalents an
     },
     { quoteToken: { address: newBscQuote, name: "New BSC Quote", symbol: "BSCQ" } },
   ] } });
-  const morphPayload = JSON.stringify({ initialBoard: { quoteToken: { address: newMorphQuote, name: "New Morph Quote", symbol: "MORPHQ" } } });
+  const morphPayload = JSON.stringify({ initialBoard: { items: [
+    { quoteToken: { address: newMorphQuote, name: "New Morph Quote", symbol: "MORPHQ" } },
+    { quoteToken: { address: secondMorphQuote, name: "Second Morph Quote", symbol: "MORPH2" } },
+  ] } });
   const alerts = [];
   let upgraded = false;
   let minute = 0;
@@ -1433,17 +1439,23 @@ test("Flap v3 to v4 migration silences only chain-scoped BSC pool equivalents an
   await check(targetV4);
   const boardAlerts = alerts.filter(({ kind }) => kind === "flap_quote_asset_board_observed");
   const chainAlerts = alerts.filter(({ kind }) => kind !== "flap_quote_asset_board_observed");
+  const chainPoolAlerts = chainAlerts.filter(({ changes }) => changes.newFlapPools.length);
+  const [chainResidual] = chainAlerts.filter(({ changes }) => !changes.newFlapPools.length);
   assert.equal(boardAlerts.length, 1);
   assert.deepEqual(boardAlerts.flatMap(({ changes }) => changes.newFlapPools.map(({ identity }) => identity)), [
     `chain-56:quote:${newBscQuote}`,
   ]);
-  assert.equal(chainAlerts.length, 1);
-  assert.deepEqual(chainAlerts[0].changes.newFlapPools.map(({ identity }) => identity), [
+  assert.equal(chainAlerts.length, 3, "each new pool owns one alert and unrelated chain facts own one residual alert");
+  assert.equal(chainPoolAlerts.length, 2);
+  assert.equal(chainPoolAlerts.every(({ changes }) => changes.newFlapPools.length === 1), true);
+  assert.deepEqual(chainPoolAlerts.flatMap(({ changes }) => changes.newFlapPools.map(({ identity }) => identity)).sort(), [
     `chain-2818:quote:${newMorphQuote}`,
-  ]);
-  assert.deepEqual(chainAlerts[0].changes.newChains.map(({ name, chainId }) => ({ name, chainId })), [
+    `chain-2818:quote:${secondMorphQuote}`,
+  ].sort());
+  assert.deepEqual(chainResidual.changes.newChains.map(({ name, chainId }) => ({ name, chainId })), [
     { name: "Morph", chainId: 2818 },
   ]);
+  assert.equal(new Set(chainAlerts.map(({ eventKey }) => eventKey)).size, 3);
   assert.equal(boardAlerts.some(({ changes }) => changes.newFlapPools.some(({ identity }) => identity === `chain-56:quote:${oldQuote}`)), false);
   assert.equal(boardAlerts.some(({ changes }) => changes.newFlapPools.some(({ identity }) => identity === `chain-56:vault:INDEX:${oldFactory}`)), false);
 
@@ -1466,10 +1478,11 @@ test("Flap v3 to v4 migration silences only chain-scoped BSC pool equivalents an
   await fs.writeFile(stateFile, `${JSON.stringify(state)}\n`);
 
   await check(targetV4);
-  assert.equal(alerts.length, 2, "the migrated checkpoint and genuine discoveries remain stable on the next poll");
+  assert.equal(alerts.length, 4, "the migrated checkpoint and genuine discoveries remain stable on the next poll");
   state = JSON.parse(await fs.readFile(stateFile, "utf8"));
   const expectedScopedIdentities = [
     `chain-2818:quote:${newMorphQuote}`,
+    `chain-2818:quote:${secondMorphQuote}`,
     `chain-56:quote:${newBscQuote}`,
     `chain-56:quote:${oldQuote}`,
     `chain-56:vault:INDEX:${oldFactory}`,
@@ -1823,9 +1836,23 @@ test("official config accepts only MEME/BSC/PUBLISH and preserves structured pro
 test("official config schema guard rejects API errors and empty publish sets", () => {
   assert.throws(() => extractFourMemeConfigCapabilities({ code: 500, data: [] }), /code=0/);
   assert.throws(() => extractFourMemeConfigCapabilities({ code: 0, data: [{ symbol: "UUSD", status: "INIT", networkCode: "BSC", platform: "MEME" }] }), /no MEME\/BSC PUBLISH/);
+  assert.throws(() => extractFourMemeConfigCapabilities({ code: 0, data: [{
+    symbol: "SPCXB",
+    symbolAddress: `0x${"0".repeat(40)}`,
+    status: "PUBLISH",
+    networkCode: "BSC",
+    platform: "MEME",
+  }] }), /non-zero symbolAddress/);
+  assert.deepEqual(extractFourMemeConfigCapabilities({ code: 0, data: [{
+    symbol: "BNB",
+    symbolAddress: `0x${"0".repeat(40)}`,
+    status: "PUBLISH",
+    networkCode: "BSC",
+    platform: "MEME",
+  }] }).quoteConfigs, [], "the native BNB sentinel is not an ERC-20 pool identity");
 });
 
-test("new Four.meme quote pools activate first-token correlation without entering contract discovery", async (t) => {
+test("new Four.meme quote pools emit one alert per pool before one activation handoff", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "fourmeme-quote-activation-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
   const configUrl = "https://four.meme/meme-api/v1/public/config";
@@ -1862,30 +1889,192 @@ test("new Four.meme quote pools activate first-token correlation without enterin
     networkCode: "BSC",
     platform: "MEME",
   };
+  const nvdab = {
+    ...spcxb,
+    symbol: "NVDAB",
+    nativeSymbol: "NVDAB",
+    symbolAddress: "0x02fca66c1d1afb4e2a7884261eb00f63598a7436",
+  };
+  const eth = {
+    symbol: "ETH",
+    nativeSymbol: "ETH",
+    symbolAddress: "0x0000000000000000000000000000000000000003",
+    status: "PUBLISH",
+    networkCode: "ETH",
+    platform: "MEME",
+  };
   let payload = { code: 0, data: [bnb] };
   const alerts = [];
-  const activations = [];
+  const activationBatches = [];
   const discoveries = [];
+  let activeDeliveries = 0;
+  let maximumActiveDeliveries = 0;
+  const deliverySla = {
+    startedAt: "2026-08-10T09:02:52.000Z",
+    deadlineAt: "2026-08-10T09:02:55.500Z",
+    budgetMs: 5_000,
+    pollAllowanceMs: 1_500,
+    basis: "critical_source_poll",
+  };
   const options = {
     targets: [target],
     fetchImpl: async (url) => response(payload, { url }),
-    sendAlertsImpl: async (_config, event) => alerts.push(event),
-    onFourMemeFeatureActivation: async (records) => activations.push(...records),
+    sendAlertsImpl: async (_config, event) => {
+      alerts.push(structuredClone(event));
+      activeDeliveries += 1;
+      maximumActiveDeliveries = Math.max(maximumActiveDeliveries, activeDeliveries);
+      await new Promise((resolve) => setImmediate(resolve));
+      activeDeliveries -= 1;
+      return { status: "queued", persisted: true, eventId: event.eventKey };
+    },
+    onFourMemeFeatureActivation: async (records) => {
+      assert.equal(activeDeliveries, 0, "activation waits for every durable alert handoff");
+      activationBatches.push(structuredClone(records));
+    },
     onContractDiscovery: async (signal) => discoveries.push(signal),
     logger: quietLogger,
     now: () => new Date("2026-08-10T09:02:52.000Z"),
+    sourceLane: "fast",
+    deliverySla,
   };
 
   await runPlatformCapabilityCheck({ dataDir }, options);
+  payload = { code: 0, data: [bnb, spcxb, nvdab, eth] };
+  await runPlatformCapabilityCheck({ dataDir }, options);
+
+  const quoteAlerts = alerts.filter((event) => event.changes.newQuoteConfigs.length);
+  const residualAlerts = alerts.filter((event) => !event.changes.newQuoteConfigs.length);
+  assert.equal(alerts.length, 3, "two quote pools plus one residual chain change are independent alerts");
+  assert.equal(quoteAlerts.length, 2);
+  assert.equal(residualAlerts.length, 1, "unrelated changes stay in at most one residual event");
+  assert.deepEqual(quoteAlerts.map((event) => event.changes.newQuoteConfigs[0].symbol).sort(), ["NVDAB", "SPCXB"]);
+  assert.equal(quoteAlerts.every((event) => event.changes.newQuoteConfigs.length === 1), true);
+  assert.equal(quoteAlerts.every((event) => (
+    event.changes.newQuoteTokens.length === 1
+      && event.changes.newQuoteTokens[0] === event.changes.newQuoteConfigs[0].symbol
+  )), true);
+  assert.deepEqual(quoteAlerts.map((event) => focusNoveltyKeys(event)), [
+    ["fourmeme:quote:nvdab"],
+    ["fourmeme:quote:spcxb"],
+  ]);
+  assert.equal(quoteAlerts.every((event) => (
+    withTradingPriority(event, { nowMs: Date.parse(event.observedAt) }).tradingPriority.tier === "T1"
+  )), true);
+  assert.deepEqual(residualAlerts[0].changes.newQuoteTokens, []);
+  assert.deepEqual(residualAlerts[0].changes.newQuoteConfigs, []);
+  assert.deepEqual(residualAlerts[0].changes.newChains.map((chain) => chain.chainId), [1]);
+  assert.equal(new Set(alerts.map((event) => event.eventKey)).size, 3);
+  assert.equal(alerts.every((event) => JSON.stringify(event.deliverySla) === JSON.stringify(deliverySla)), true);
+  assert.equal(maximumActiveDeliveries, 3, "all events start within the shared source SLA instead of serializing delivery");
+
+  assert.equal(activationBatches.length, 1);
+  assert.equal(activationBatches[0].length, 2);
+  assert.equal(activationBatches[0].every((record) => record.changeType === "new_published_quote"), true);
+  assert.deepEqual(activationBatches[0].map((record) => record.quoteConfig.symbol).sort(), ["NVDAB", "SPCXB"]);
+  assert.deepEqual(activationBatches[0].map((record) => record.quoteConfig.address).sort(), [
+    nvdab.symbolAddress,
+    spcxb.symbolAddress,
+  ].sort());
+  assert.deepEqual(discoveries, [], "quote-token addresses are not launchpad contracts or factories");
+
+  const audit = (await fs.readFile(path.join(dataDir, "platform-capability-events.jsonl"), "utf8"))
+    .trim().split("\n").map(JSON.parse);
+  const committed = audit.filter((entry) => entry.delivery.status === "checkpoint_committed");
+  assert.deepEqual(new Set(committed.map((entry) => entry.eventKey)), new Set(alerts.map((event) => event.eventKey)));
+});
+
+test("Four.meme quote alert identity survives a failed singleton handoff when more pools join the retry", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "fourmeme-quote-retry-identity-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const configUrl = "https://four.meme/meme-api/v1/public/config";
+  const target = {
+    id: "fourmeme",
+    name: "Four.meme",
+    website: "https://four.meme",
+    apiSources: [{ url: configUrl, parser: "fourmeme-config", authoritativeQuotes: true, requiredForBaseline: true }],
+    pagePattern: /$a/,
+  };
+  const quote = (symbol, symbolAddress) => ({
+    symbol,
+    nativeSymbol: symbol,
+    symbolAddress,
+    deployCost: "0",
+    buyFee: "0.01",
+    sellFee: "0.01",
+    totalBAmount: "60",
+    totalAmount: "1000000000",
+    saleRate: "0.8",
+    status: "PUBLISH",
+    networkCode: "BSC",
+    platform: "MEME",
+  });
+  const bnb = quote("BNB", "0x0000000000000000000000000000000000000000");
+  const spcxb = quote("SPCXB", "0xbe9d5f8c23dad991aa03f9c8d9fe14aafc28a001");
+  const nvdab = quote("NVDAB", "0x02fca66c1d1afb4e2a7884261eb00f63598a7436");
+  const soxlb = quote("SOXLB", "0xd97d097a89113fa59b76c572e5b2eb647e8eefaf");
+  let payload = { code: 0, data: [bnb] };
+  let phase = 0;
+  const attempts = [];
+  const activationBatches = [];
+  const options = {
+    targets: [target],
+    fetchImpl: async (url) => response(payload, { url }),
+    sendAlertsImpl: async (_config, event) => {
+      const symbol = event.changes.newQuoteConfigs[0]?.symbol || null;
+      attempts.push({ phase, symbol, event: structuredClone(event) });
+      if (phase === 1) {
+        return {
+          status: "suppressed",
+          reason: "semantic_duplicate",
+          persisted: true,
+          canonicalOwnerDelivered: false,
+          eventId: event.eventKey,
+        };
+      }
+      return { status: "queued", persisted: true, eventId: event.eventKey };
+    },
+    onFourMemeFeatureActivation: async (records) => activationBatches.push(structuredClone(records)),
+    logger: quietLogger,
+    now: () => new Date("2026-08-10T09:10:00.000Z"),
+  };
+
+  await runPlatformCapabilityCheck({ dataDir }, options);
+  phase = 1;
   payload = { code: 0, data: [bnb, spcxb] };
   await runPlatformCapabilityCheck({ dataDir }, options);
 
-  assert.equal(alerts.length, 1);
-  assert.equal(activations.length, 1);
-  assert.equal(activations[0].changeType, "new_published_quote");
-  assert.equal(activations[0].quoteConfig.symbol, "SPCXB");
-  assert.equal(activations[0].quoteConfig.address, spcxb.symbolAddress);
-  assert.deepEqual(discoveries, [], "quote-token addresses are not launchpad contracts or factories");
+  const firstAttempt = attempts.find((attempt) => attempt.phase === 1);
+  assert.equal(firstAttempt.symbol, "SPCXB");
+  assert.deepEqual(firstAttempt.event.changes.newQuoteTokens, ["SPCXB"]);
+  assert.equal(firstAttempt.event.changes.newQuoteConfigs.length, 1, "a singleton still uses the per-pool projection");
+  assert.deepEqual(firstAttempt.event.changes.changedSources, []);
+  assert.equal(activationBatches.length, 0, "a pending semantic owner cannot arm first-token tracking");
+  let state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  assert.deepEqual(state.fourmeme.capabilities.quoteTokens, [], "the old non-ERC20 baseline remains retryable");
+
+  phase = 2;
+  payload = { code: 0, data: [bnb, spcxb, nvdab, soxlb] };
+  await runPlatformCapabilityCheck({ dataDir }, options);
+
+  const retryAttempts = attempts.filter((attempt) => attempt.phase === 2);
+  assert.deepEqual(retryAttempts.map(({ symbol }) => symbol).sort(), ["NVDAB", "SOXLB", "SPCXB"]);
+  assert.equal(retryAttempts.every(({ event }) => event.changes.newQuoteConfigs.length === 1), true);
+  assert.equal(
+    retryAttempts.find(({ symbol }) => symbol === "SPCXB").event.eventKey,
+    firstAttempt.event.eventKey,
+    "later siblings do not perturb the original pool event key",
+  );
+  assert.equal(new Set(retryAttempts.map(({ event }) => event.eventKey)).size, 3);
+  assert.equal(activationBatches.length, 1);
+  assert.deepEqual(activationBatches[0].map((record) => record.quoteConfig.symbol).sort(), ["NVDAB", "SOXLB", "SPCXB"]);
+  state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  assert.deepEqual(state.fourmeme.capabilities.quoteTokens, ["NVDAB", "SOXLB", "SPCXB"]);
+
+  const audit = (await fs.readFile(path.join(dataDir, "platform-capability-events.jsonl"), "utf8"))
+    .trim().split("\n").map(JSON.parse);
+  const firstAttemptCheckpoints = audit.filter((entry) => entry.eventKey === firstAttempt.event.eventKey
+    && entry.delivery.status === "checkpoint_committed");
+  assert.equal(firstAttemptCheckpoints.length, 1, "only the durably accepted retry commits the child checkpoint");
 });
 
 test("Four.meme v3 migration silently removes quote assets that v2 misclassified as factories", async (t) => {
@@ -2592,12 +2781,16 @@ test("legacy Four.meme migration catches up every structured capability exactly 
     logger: quietLogger,
     now: () => new Date("2026-07-31T00:00:00.000Z"),
   });
-  assert.equal(alerts.length, 1);
-  assert.deepEqual(alerts[0].changes.newQuoteTokens, ["NVDAB", "UUSD"]);
-  assert.deepEqual(alerts[0].changes.removedQuoteTokens, ["CAKE"]);
-  assert.ok(alerts[0].changes.newModules.includes("Agentic"));
-  assert.ok(alerts[0].changes.newModules.includes("Creator Mode"));
-  assert.ok(alerts[0].changes.removedModules.includes("Historical Mode"));
+  assert.equal(alerts.length, 4);
+  const quoteAlerts = alerts.filter((event) => event.changes.newQuoteConfigs.length);
+  const [residual] = alerts.filter((event) => !event.changes.newQuoteConfigs.length);
+  assert.deepEqual(quoteAlerts.map((event) => event.changes.newQuoteConfigs[0].symbol), ["BNB", "NVDAB", "UUSD"]);
+  assert.deepEqual(quoteAlerts.map((event) => event.changes.newQuoteTokens), [[], ["NVDAB"], ["UUSD"]]);
+  assert.deepEqual(residual.changes.removedQuoteTokens, ["CAKE"]);
+  assert.ok(residual.changes.newModules.includes("Agentic"));
+  assert.ok(residual.changes.newModules.includes("Creator Mode"));
+  assert.ok(residual.changes.removedModules.includes("Historical Mode"));
+  assert.equal(new Set(alerts.map((event) => event.eventKey)).size, 4);
   await runPlatformCapabilityCheck({ dataDir }, {
     targets: [target],
     fetchImpl,
@@ -2605,7 +2798,7 @@ test("legacy Four.meme migration catches up every structured capability exactly 
     logger: quietLogger,
     now: () => new Date("2026-07-31T00:01:00.000Z"),
   });
-  assert.equal(alerts.length, 1);
+  assert.equal(alerts.length, 4);
   const migrated = JSON.parse(await fs.readFile(stateFile, "utf8"));
   assert.deepEqual(migrated.fourmeme.capabilities.quoteTokens, ["BNB", "NVDAB", "UUSD"]);
   assert.ok(migrated.fourmeme.sources);

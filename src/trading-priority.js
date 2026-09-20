@@ -21,6 +21,7 @@ const BINANCE_SOURCE_IDS = new Set([
   "binance_wallet_cms",
   "binance_square_cms",
   "binance_developer_docs",
+  "binance_agent_os_page",
   "meme_rush_api",
   "launchpool_api",
 ]);

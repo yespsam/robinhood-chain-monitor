@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import { createHash } from "node:crypto";
 import http from "node:http";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import { Interface, keccak256 } from "ethers";
 import {
   BSC_EXCLUDED_CONTROLLERS,
@@ -29,6 +31,7 @@ import {
   RUG_LAUNCH_SUCCEEDED_TOPIC,
   bscRealtimeProcessLimit,
   bscDeepRpcPriority,
+  buildBscOutstandingCausalHeads,
   commitBscDecision,
   compactBscNearHeadRecoveryGaps,
   compactFocus3LiveCoverageState,
@@ -57,6 +60,7 @@ import {
   parseOfficialRugspullCatalog,
   parseBscPoolLogs,
   platformForAddress,
+  selectEarliestBscQueueEntries,
   selectBscRealtimeEntries,
   shouldYieldBscNearHeadRecovery,
   bscNearHeadRecoveryPermittedLagBlocks,
@@ -155,6 +159,78 @@ function disabledJournalTimerDependencies() {
     journalSetTimeoutImpl: () => ({ unref() {} }),
     journalClearTimeoutImpl() {},
   };
+}
+
+async function seedModernBscJournal(dataDir, mutate = () => {}) {
+  const seed = createBscLaunchpadMonitor({ dataDir }, {
+    autoStart: false,
+    provider: { destroy() {} },
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  await seed.getState();
+  await seed.stop();
+  const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
+  const snapshot = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  snapshot.initializedAt = "2026-08-24T09:00:00.000Z";
+  snapshot.lastFinalizedBlock = 100;
+  snapshot.realtimeTailNextBlock = 101;
+  mutate(snapshot);
+  await fs.writeFile(stateFile, `${JSON.stringify(snapshot)}\n`, { mode: 0o600 });
+  await fs.writeFile(`${stateFile}.wal`, "", { mode: 0o600 });
+  return stateFile;
+}
+
+function createBscHealthWalTestMonitor(dataDir, {
+  clock,
+  journalAppendImpl,
+  journalStateDeltaVisitImpl = null,
+} = {}) {
+  const provider = {
+    async getNetwork() { return { chainId: 56n }; },
+    async getBlockNumber() { return 102; },
+    async send(method) {
+      if (method === "eth_getLogs") return [];
+      throw new Error(`unexpected method ${method}`);
+    },
+    destroy() {},
+  };
+  class IdleWebSocket {
+    addEventListener() {}
+    close() {}
+  }
+  const fetchImpl = async (url) => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ code: 0, data: String(url).includes("/address")
+      ? [{ name: "TokenManager3", address: "0x5c952063c7fc8610ffdb798152d69f0b9550762b", networkCode: "BSC" }]
+      : String(url).includes("token_template")
+        ? [{ id: 1, name: "Baseline", tag: "Curve", codeType: "SOLIDITY", descr: "base", status: "PUBLISHED" }]
+        : [{ symbol: "WBNB", symbolAddress: BSC_WBNB, platform: "MEME", networkCode: "BSC", status: "PUBLISH" }] }),
+  });
+  return createBscLaunchpadMonitor({
+    dataDir,
+    bscMonitorEnabled: true,
+    bscWsUrl: "wss://example.invalid",
+    bscRpcUrl: "https://example.invalid",
+    bscConfirmations: 2,
+    bscHealthPersistIntervalMs: 30_000,
+    bscHttpHeadPollIntervalMs: 3_600_000,
+    bscOfficialPollIntervalMs: 3_600_000,
+    bscDeferredRetryIntervalMs: 3_600_000,
+    monitorScope: "focus3",
+  }, {
+    autoStart: false,
+    provider,
+    WebSocketImpl: IdleWebSocket,
+    fetchImpl,
+    now: () => clock.value,
+    journalAppendImpl,
+    journalStateDeltaVisitImpl,
+    sendAlertsImpl: async () => assert.fail("health WAL persistence must not alert"),
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
 }
 
 const EIP1967_IMPLEMENTATION_SLOT_TEST = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
@@ -462,6 +538,278 @@ test("same-block realtime candidates follow transaction and log order, not hash 
   );
 });
 
+test("stable streaming BSC top selection matches the previous bounded-sort oracle", () => {
+  const position = (value) => {
+    let numeric;
+    try { numeric = Number(value); }
+    catch { return Number.MAX_SAFE_INTEGER; }
+    return Number.isSafeInteger(numeric) && numeric >= 0 ? numeric : Number.MAX_SAFE_INTEGER;
+  };
+  const compare = (left, right) => Number(left.blockNumber) - Number(right.blockNumber)
+    || position(left.transactionIndex) - position(right.transactionIndex)
+    || position(left.logIndex) - position(right.logIndex)
+    || String(left.transactionHash || "").localeCompare(String(right.transactionHash || ""));
+  const oldBoundedSort = (entries, limit, eligible) => {
+    const selected = [];
+    for (const entry of entries) {
+      if (!eligible(entry)) continue;
+      selected.push(entry);
+      selected.sort(compare);
+      if (selected.length > limit) selected.pop();
+    }
+    return selected;
+  };
+  let seed = 0x92f37ab1;
+  const random = () => {
+    seed = (Math.imul(seed, 1_664_525) + 1_013_904_223) >>> 0;
+    return seed / 0x1_0000_0000;
+  };
+  for (let round = 0; round < 600; round += 1) {
+    const count = Math.floor(random() * 140);
+    const limit = Math.floor(random() * 9);
+    const entries = Array.from({ length: count }, (_, index) => {
+      // Deliberate coordinate/hash collisions exercise stable equal ordering.
+      const bucket = Math.floor(random() * Math.max(1, Math.ceil(count / 5)));
+      return {
+        id: `${round}:${index}`,
+        blockNumber: Math.floor(random() * 35),
+        transactionIndex: random() < 0.12 ? null : bucket % 7,
+        logIndex: random() < 0.12 ? undefined : bucket % 11,
+        transactionHash: random() < 0.18 ? `duplicate-${bucket % 3}` : `hash-${bucket}`,
+        eligible: random() >= 0.23,
+      };
+    });
+    const eligible = (entry) => entry.eligible;
+    assert.deepEqual(
+      selectEarliestBscQueueEntries(entries, limit, eligible).map((entry) => entry.id),
+      oldBoundedSort(entries, limit, eligible).map((entry) => entry.id),
+      `randomized bounded selection round ${round}`,
+    );
+  }
+});
+
+test("BSC top selection gives invalid block coordinates one deterministic terminal order", () => {
+  // The former Number(left.blockNumber)-Number(right.blockNumber) comparator
+  // produced A<B, B<C and C<A for this triple because either invalid operand
+  // fell through to transactionIndex. A strict queue position puts the
+  // invalid block last and makes every source permutation select identically.
+  const invalid = { id: "A", blockNumber: "not-a-block", transactionIndex: 1, logIndex: 0, transactionHash: "0xa" };
+  const first = { id: "B", blockNumber: 0, transactionIndex: 2, logIndex: 0, transactionHash: "0xb" };
+  const second = { id: "C", blockNumber: 1, transactionIndex: 0, logIndex: 0, transactionHash: "0xc" };
+  const permutations = [
+    [invalid, first, second],
+    [invalid, second, first],
+    [first, invalid, second],
+    [first, second, invalid],
+    [second, invalid, first],
+    [second, first, invalid],
+  ];
+  for (const entries of permutations) {
+    assert.deepEqual(
+      selectEarliestBscQueueEntries(entries, 3).map((entry) => entry.id),
+      ["B", "C", "A"],
+    );
+    assert.deepEqual(
+      selectEarliestBscQueueEntries(entries, 1).map((entry) => entry.id),
+      ["B"],
+    );
+  }
+});
+
+test("25k BSC top-four selection is bounded, stable, and reentrant", async () => {
+  const entryCount = 25_000;
+  const entries = Array.from({ length: entryCount }, (_, index) => ({
+    id: index,
+    blockNumber: (index * 15_485_863) % entryCount,
+    transactionIndex: index % 13,
+    logIndex: index % 17,
+    transactionHash: `0x${index.toString(16).padStart(64, "0")}`,
+  }));
+  const originalEnds = [entries[0].id, entries.at(-1).id];
+  const expectedIds = [...entries]
+    .sort((left, right) => left.blockNumber - right.blockNumber
+      || left.transactionIndex - right.transactionIndex
+      || left.logIndex - right.logIndex
+      || left.transactionHash.localeCompare(right.transactionHash))
+    .slice(0, 4)
+    .map((entry) => entry.id);
+  const startedAt = performance.now();
+  const results = await Promise.all(Array.from({ length: 8 }, async () =>
+    selectEarliestBscQueueEntries(entries, 4).map((entry) => entry.id)));
+  const elapsedMs = performance.now() - startedAt;
+  for (const result of results) assert.deepEqual(result, expectedIds);
+  assert.deepEqual([entries[0].id, entries.at(-1).id], originalEnds, "selection must not reorder the durable source");
+  assert.ok(elapsedMs < 2_000, `eight 25k bounded selections took ${elapsedMs.toFixed(1)}ms`);
+});
+
+test("BSC keyed-only causal heads match the legacy full-backlog oracle", () => {
+  const transactionHash = (index) => `0x${index.toString(16).padStart(64, "0")}`;
+  const record = (hash, blockNumber, extra = {}) => ({
+    transactionHash: hash,
+    blockNumber,
+    transactionIndex: 1,
+    logIndex: 0,
+    causalBarrierKeys: [],
+    ...extra,
+  });
+  const normalizeKeys = (values = []) => {
+    const normalized = [...new Set((Array.isArray(values) ? values : [])
+      .map((value) => String(value || ""))
+      .filter((value) => /^(?:feature|first3):[^\s]{1,480}$/.test(value)))].sort();
+    if (normalized.length > 64) {
+      const error = new Error(`BSC causal barrier capacity ${normalized.length}>64`);
+      error.code = "BSC_CAUSAL_BARRIER_CAPACITY";
+      throw error;
+    }
+    return normalized;
+  };
+  const featureKeys = (entry) => {
+    if (!entry?.featureActivationReplayKey
+      && !entry?.flapQuoteFirstThreeReplayGenerationKey
+      && !(Array.isArray(entry?.causalBarrierKeys) && entry.causalBarrierKeys.length)) return [];
+    return [
+      entry.featureActivationReplayKey ? `feature:${entry.featureActivationReplayKey}` : null,
+      entry.flapQuoteFirstThreeReplayGenerationKey
+        ? `first3:${entry.flapQuoteFirstThreeReplayGenerationKey}` : null,
+      ...normalizeKeys(entry.causalBarrierKeys),
+    ].filter(Boolean);
+  };
+  const position = (value) => {
+    let numeric;
+    try { numeric = Number(value); } catch { return Number.MAX_SAFE_INTEGER; }
+    return Number.isSafeInteger(numeric) && numeric >= 0 ? numeric : Number.MAX_SAFE_INTEGER;
+  };
+  const compare = (left, right) => position(left.blockNumber) - position(right.blockNumber)
+    || position(left.transactionIndex) - position(right.transactionIndex)
+    || position(left.logIndex) - position(right.logIndex)
+    || String(left.transactionHash || "").localeCompare(String(right.transactionHash || ""));
+  const legacyHeads = ({ realtimePendingEntries, deferredCreationEvidence, rawQueue, seenTransactions }) => {
+    const records = new Map();
+    for (const item of [
+      ...Object.values(realtimePendingEntries),
+      ...Object.values(deferredCreationEvidence),
+      ...[...rawQueue.values()].filter((entry) => featureKeys(entry).length),
+    ]) {
+      const hash = String(item?.transactionHash || "").toLowerCase();
+      if (!/^0x[0-9a-f]{64}$/.test(hash) || seenTransactions[hash]) continue;
+      const previous = records.get(hash);
+      if (!previous) {
+        records.set(hash, { ...item, transactionHash: hash, causalBarrierKeys: normalizeKeys(item?.causalBarrierKeys) });
+        continue;
+      }
+      previous.causalBarrierKeys = normalizeKeys([
+        ...(previous.causalBarrierKeys || []),
+        ...(item.causalBarrierKeys || []),
+      ]);
+      for (const field of ["featureActivationReplayKey", "flapQuoteFirstThreeReplayGenerationKey"]) {
+        if (previous[field] && item?.[field] && previous[field] !== item[field]) {
+          throw new Error(`BSC causal key conflict for ${hash} ${field}`);
+        }
+        previous[field] ||= item?.[field] || null;
+      }
+      if (compare(item, previous) < 0) {
+        previous.blockNumber = item.blockNumber;
+        previous.transactionIndex = item.transactionIndex;
+        previous.logIndex = item.logIndex;
+      }
+    }
+    const heads = new Map();
+    for (const item of records.values()) {
+      for (const key of featureKeys(item)) {
+        const currentHead = heads.get(key);
+        if (!currentHead || compare(item, currentHead) < 0) heads.set(key, item);
+      }
+    }
+    return heads;
+  };
+  const summarize = (heads) => [...heads.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, item]) => [key, {
+      transactionHash: item.transactionHash,
+      blockNumber: item.blockNumber,
+      transactionIndex: item.transactionIndex,
+      logIndex: item.logIndex,
+      featureActivationReplayKey: item.featureActivationReplayKey || null,
+      flapQuoteFirstThreeReplayGenerationKey: item.flapQuoteFirstThreeReplayGenerationKey || null,
+      causalBarrierKeys: item.causalBarrierKeys,
+    }]);
+
+  const realtimePendingEntries = Object.fromEntries(Array.from({ length: 25_000 }, (_, index) => {
+    const hash = transactionHash(index + 1);
+    return [hash, record(hash, 1_000 + index)];
+  }));
+  const deferredCreationEvidence = {};
+  const rawQueue = new Map();
+  const seenTransactions = {};
+  const shared = transactionHash(30_001);
+  realtimePendingEntries[shared] = record(shared, 5, { transactionIndex: 8, logIndex: 9 });
+  deferredCreationEvidence[shared] = record(shared, 50, { featureActivationReplayKey: "alpha" });
+  rawQueue.set(shared, record(shared, 40, { causalBarrierKeys: ["first3:beta"] }));
+  const laterAlpha = transactionHash(30_002);
+  deferredCreationEvidence[laterAlpha] = record(laterAlpha, 6, { featureActivationReplayKey: "alpha" });
+  const rawExcluded = transactionHash(30_003);
+  realtimePendingEntries[rawExcluded] = record(rawExcluded, 100, { featureActivationReplayKey: "gamma" });
+  rawQueue.set(rawExcluded, record(rawExcluded, 1));
+  const tieHigh = transactionHash(30_005);
+  const tieLow = transactionHash(30_004);
+  realtimePendingEntries[tieHigh] = record(tieHigh, 200, { featureActivationReplayKey: "delta" });
+  deferredCreationEvidence[tieLow] = record(tieLow, 200, { featureActivationReplayKey: "delta" });
+  const rawOnly = transactionHash(30_006);
+  rawQueue.set(rawOnly, record(rawOnly, 300, { causalBarrierKeys: ["feature:raw"] }));
+  const seen = transactionHash(30_007);
+  realtimePendingEntries[seen] = record(seen, 0, { featureActivationReplayKey: "alpha" });
+  seenTransactions[seen] = 777;
+  realtimePendingEntries.invalid = record("not-a-hash", 0, { featureActivationReplayKey: "alpha" });
+
+  const input = { realtimePendingEntries, deferredCreationEvidence, rawQueue, seenTransactions };
+  const actual = buildBscOutstandingCausalHeads(input);
+  const expected = legacyHeads(input);
+  assert.deepEqual(summarize(actual), summarize(expected));
+  assert.equal(actual.get("feature:alpha").transactionHash, shared);
+  assert.equal(actual.get("feature:alpha").blockNumber, 5,
+    "a no-key durable representative still contributes the transaction's earliest coordinates");
+  assert.equal(actual.get("feature:gamma").blockNumber, 100,
+    "an unkeyed raw queue representative remains excluded from the pre-WAL causal handoff");
+  assert.equal(actual.get("feature:delta").transactionHash, tieLow);
+  assert.equal(actual.get("feature:raw").transactionHash, rawOnly);
+});
+
+test("BSC keyed-only causal heads retain conflict and capacity fail-close semantics", () => {
+  const hash = `0x${"f".repeat(64)}`;
+  const base = {
+    transactionHash: hash,
+    blockNumber: 1,
+    transactionIndex: 0,
+    logIndex: 0,
+    causalBarrierKeys: [],
+  };
+  assert.throws(() => buildBscOutstandingCausalHeads({
+    realtimePendingEntries: { [hash]: { ...base, featureActivationReplayKey: "one" } },
+    deferredCreationEvidence: { [hash]: { ...base, featureActivationReplayKey: "two" } },
+  }), new RegExp(`BSC causal key conflict for ${hash} featureActivationReplayKey`));
+  assert.throws(() => buildBscOutstandingCausalHeads({
+    realtimePendingEntries: { [hash]: { ...base, flapQuoteFirstThreeReplayGenerationKey: "one" } },
+    deferredCreationEvidence: { [hash]: { ...base, flapQuoteFirstThreeReplayGenerationKey: "two" } },
+  }), new RegExp(`BSC causal key conflict for ${hash} flapQuoteFirstThreeReplayGenerationKey`));
+
+  const first = Array.from({ length: 32 }, (_, index) => `feature:left-${index}`);
+  const second = Array.from({ length: 33 }, (_, index) => `first3:right-${index}`);
+  assert.throws(() => buildBscOutstandingCausalHeads({
+    realtimePendingEntries: { [hash]: { ...base, causalBarrierKeys: first } },
+    deferredCreationEvidence: { [hash]: { ...base, causalBarrierKeys: second } },
+  }), (error) => error?.code === "BSC_CAUSAL_BARRIER_CAPACITY"
+    && /BSC causal barrier capacity 65>64/.test(error.message));
+
+  const rawQueue = new Map([["invalid", {
+    ...base,
+    transactionHash: "invalid",
+    causalBarrierKeys: [...first, ...second],
+  }]]);
+  assert.throws(() => buildBscOutstandingCausalHeads({ rawQueue }),
+    (error) => error?.code === "BSC_CAUSAL_BARRIER_CAPACITY",
+    "raw evidence validates its own barrier capacity before hash filtering");
+});
+
 test("near-head BSC candidates outrank an old durable realtime backlog", () => {
   const entry = (transactionHash, blockNumber) => ({
     transactionHash,
@@ -587,6 +935,21 @@ test("focus3 deep RPC priority requires two healthy tail batches and has capacit
   assert.equal(capacity.allowFreshQueue, true, "capacity backpressure may drain only already-durable queue work");
   assert.equal(capacity.allowFreshDeferred, false);
   assert.equal(capacity.oldDeepIntervalMs, 750, "capacity recovery must not take eight days at the repair-gap quota");
+  const overwrittenCapacity = bscDeepRpcPriority({
+    ...base,
+    realtimeTailNextBlock: 900,
+    realtimeTailStatus: "error",
+    realtimePendingAtCapacity: true,
+  });
+  assert.equal(overwrittenCapacity.capacityDrainReady, true,
+    "a later RPC error must not strand a still-full durable queue after replacing its capacity error");
+  assert.equal(overwrittenCapacity.allowFreshDeferred, false,
+    "queue saturation does not authorize unrelated deferred work");
+  assert.equal(bscDeepRpcPriority({
+    ...base,
+    realtimeTailRunning: true,
+    realtimePendingAtCapacity: true,
+  }).capacityDrainReady, false, "capacity draining still yields to an active tail batch");
 
   const durationMs = 10 * 60_000;
   const arrivalEveryMs = 1_000 / 0.6;
@@ -3613,6 +3976,13 @@ test("Four.Meme quote parser treats published quote assets as modes with stable 
   assert.equal(first.symbol, "SPCXB");
   assert.equal(first.fingerprint, priceOnly.fingerprint);
   assert.notEqual(first.fingerprint, mechanismChange.fingerprint);
+  assert.throws(() => parseFourMemeQuotePayload(make({
+    symbolAddress: `0x${"0".repeat(40)}`,
+  })), /non-zero address/);
+  assert.deepEqual(parseFourMemeQuotePayload(make({
+    symbol: "BNB",
+    symbolAddress: `0x${"0".repeat(40)}`,
+  })), [], "the native BNB sentinel cannot become an ERC-20 quote activation");
 });
 
 test("DappBay is parsed only as a BSC launchpad discovery candidate with build contracts", () => {
@@ -3796,6 +4166,7 @@ test("v2 BSC state is normalized and durably migrated while a future version is 
     deferredCreationEvidence: {
       [malformedHash]: {
         transactionHash: malformedHash,
+        blockNumber: 1,
         causalReceiptClassificationDigest: "NOT-A-CANONICAL-DIGEST",
       },
     },
@@ -5246,6 +5617,12 @@ test("a background Four.Meme activation replay returns after the durable handoff
     observedAt: new Date(clock).toISOString(),
   };
 
+  assert.equal(await monitor.registerFourMemeFeatureActivations([{
+    quoteConfig: { symbol: "ZERO", address: `0x${"0".repeat(40)}`, status: "PUBLISH" },
+    observedAt: new Date(clock).toISOString(),
+  }], { awaitReplay: false }), 0);
+  assert.deepEqual((await monitor.getState()).officialSources.fourMeme.featureActivations, {});
+
   const registration = monitor.registerFourMemeFeatureActivations([record], { awaitReplay: false });
   let timeout;
   const outcome = await Promise.race([
@@ -6594,6 +6971,389 @@ test("stop waits for alert, processors, state and save locks before destroying t
   assert.equal(destroyCalls, 1);
   const durable = await readBscLaunchpadDurableState(path.join(dataDir, "bsc-launchpad-state.json"));
   assert.equal(durable.seenTransactions[second.transactionHash], 101);
+});
+
+function bscShutdownTestProvider(onDestroy = () => {}) {
+  return {
+    hosts: ["shutdown.test"],
+    async getNetwork() { return { chainId: 56n }; },
+    async getBlockNumber() { return 100; },
+    async getBlock(blockNumber) { return { number: blockNumber, transactions: [] }; },
+    async getLogs() { return []; },
+    async send(method) {
+      if (method === "eth_getLogs" || method === "eth_getBlockReceipts") return [];
+      throw new Error(`unexpected shutdown-test RPC method ${method}`);
+    },
+    async getCode() { return "0x"; },
+    async getStorage() { return "0x"; },
+    async call() { return "0x"; },
+    destroy() { onDestroy(); },
+  };
+}
+
+function bscShutdownTestFetch() {
+  return Promise.resolve({
+    ok: true,
+    status: 200,
+    headers: { get() { return null; } },
+    text: async () => JSON.stringify({ code: 0, data: [] }),
+  });
+}
+
+function bscShutdownTestConfig(dataDir, bscWsUrl = "ws://shutdown.test") {
+  return {
+    dataDir,
+    monitorScope: "focus3",
+    bscMonitorEnabled: true,
+    bscWsUrl,
+    bscRpcUrl: "https://shutdown.test",
+    bscConfirmations: 2,
+    bscHttpHeadPollIntervalMs: 3_600_000,
+    bscOfficialPollIntervalMs: 3_600_000,
+    bscDeferredRetryIntervalMs: 3_600_000,
+  };
+}
+
+function controlledShutdownTimers() {
+  const scheduled = [];
+  return {
+    scheduled,
+    setTimeoutImpl(callback, delayMs) {
+      const handle = {
+        callback() {
+          if (handle.fired || handle.cleared) return;
+          handle.fired = true;
+          callback();
+        },
+        delayMs,
+        fired: false,
+        cleared: false,
+        unref() {},
+      };
+      scheduled.push(handle);
+      return handle;
+    },
+    clearTimeoutImpl(handle) {
+      if (handle) handle.cleared = true;
+    },
+  };
+}
+
+class ControlledShutdownWebSocket {
+  static CLOSED = 3;
+  static instances = [];
+
+  constructor() {
+    this.handlers = new Map();
+    this.readyState = 0;
+    this.closeCalls = 0;
+    this.terminateCalls = 0;
+    this.sendCalls = 0;
+    ControlledShutdownWebSocket.instances.push(this);
+    queueMicrotask(() => {
+      this.readyState = 1;
+      this.emit("open", {});
+    });
+  }
+
+  addEventListener(kind, handler) {
+    const handlers = this.handlers.get(kind) || new Set();
+    handlers.add(handler);
+    this.handlers.set(kind, handlers);
+  }
+
+  removeEventListener(kind, handler) {
+    this.handlers.get(kind)?.delete(handler);
+  }
+
+  emit(kind, event) {
+    for (const handler of [...(this.handlers.get(kind) || [])]) handler(event);
+  }
+
+  send() { this.sendCalls += 1; }
+
+  close() {
+    this.closeCalls += 1;
+    this.readyState = 2;
+  }
+
+  terminate() {
+    this.terminateCalls += 1;
+    this.readyState = ControlledShutdownWebSocket.CLOSED;
+  }
+}
+
+test("BSC shutdown drains durability before bounded WebSocket termination and stays idempotent", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-ws-shutdown-bound-"));
+  const timers = controlledShutdownTimers();
+  const secondHash = `0x${"b".repeat(64)}`;
+  let releaseWrite;
+  let markWriteStarted;
+  let writeReleased = false;
+  let gatedWrite = false;
+  let destroyCalls = 0;
+  const writeStarted = new Promise((resolve) => { markWriteStarted = resolve; });
+  const writeGate = new Promise((resolve) => { releaseWrite = resolve; });
+  const releaseWriteGate = () => {
+    if (writeReleased) return;
+    writeReleased = true;
+    releaseWrite();
+  };
+  const atomicWriteImpl = async (file, snapshot) => {
+    if (!gatedWrite && snapshot.seenTransactions?.[secondHash] === 101) {
+      gatedWrite = true;
+      markWriteStarted();
+      await writeGate;
+    }
+    await fs.writeFile(file, `${JSON.stringify(snapshot)}\n`, { mode: 0o600 });
+  };
+  ControlledShutdownWebSocket.instances = [];
+  const monitor = createBscLaunchpadMonitor(bscShutdownTestConfig(dataDir), {
+    autoStart: false,
+    provider: bscShutdownTestProvider(() => { destroyCalls += 1; }),
+    WebSocketImpl: ControlledShutdownWebSocket,
+    fetchImpl: bscShutdownTestFetch,
+    fourMemeFastReplayEnabled: false,
+    externalAttribution: false,
+    websocketShutdownGraceMs: 75,
+    websocketTerminateSettleMs: 25,
+    websocketShutdownSetTimeoutImpl: timers.setTimeoutImpl,
+    websocketShutdownClearTimeoutImpl: timers.clearTimeoutImpl,
+    atomicWriteImpl,
+    sendAlertsImpl: async () => ({ status: "delivered" }),
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  t.after(async () => {
+    releaseWriteGate();
+    for (const handle of timers.scheduled) handle.callback();
+    await monitor.stop().catch(() => {});
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  await monitor.start();
+  await waitUntil(() => ControlledShutdownWebSocket.instances.length === 1);
+  await monitor.observe(observation());
+  const second = observation({
+    token: "0x4444444444444444444444444444444444444444",
+    transactionHash: secondHash,
+    blockNumber: 101,
+  });
+  const pendingObservation = monitor.observe(second);
+  await writeStarted;
+  const socket = ControlledShutdownWebSocket.instances[0];
+  const sendCallsAtStop = socket.sendCalls;
+  let stopSettled = false;
+  const stopping = monitor.stop();
+  void stopping.then(() => { stopSettled = true; });
+  assert.equal(monitor.stop(), stopping, "concurrent stops must share the same shutdown barrier");
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(socket.closeCalls, 0, "shutdown only detaches the socket while durability is pending");
+  assert.equal(socket.terminateCalls, 0);
+  assert.equal(timers.scheduled.length, 0, "physical-close bounds start only after durability drains");
+  assert.equal(stopSettled, false);
+  assert.equal(destroyCalls, 0);
+  socket.emit("open", {});
+  socket.emit("message", { data: JSON.stringify({ jsonrpc: "2.0", id: 1, result: "late" }) });
+  assert.equal(socket.sendCalls, sendCallsAtStop, "late events cannot resubscribe after logical detach");
+
+  releaseWriteGate();
+  await pendingObservation;
+  await waitUntil(() => timers.scheduled.length === 2);
+  assert.equal(socket.closeCalls, 1, "graceful close begins after the durable write");
+  assert.equal(timers.scheduled.length, 2);
+  assert.equal(timers.scheduled[0].delayMs, 75);
+  assert.equal(timers.scheduled[1].delayMs, 100);
+  assert.equal(stopSettled, false, "stop must await physical WebSocket release");
+  assert.equal(destroyCalls, 0, "providers remain available through the WebSocket release barrier");
+
+  timers.scheduled[0].callback();
+  assert.equal(socket.terminateCalls, 1);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(stopSettled, false, "terminate does not complete stop before close is observed");
+  assert.equal(destroyCalls, 0);
+  socket.emit("close", {});
+  await stopping;
+  assert.ok(timers.scheduled.every((handle) => handle.cleared));
+  assert.equal(destroyCalls, 1);
+  assert.equal(monitor.stop(), stopping, "a completed stop remains idempotent");
+  const durable = await readBscLaunchpadDurableState(path.join(dataDir, "bsc-launchpad-state.json"));
+  assert.equal(durable.seenTransactions[second.transactionHash], 101);
+
+  socket.emit("open", {});
+  socket.emit("message", { data: "{}" });
+  socket.emit("close", {});
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(ControlledShutdownWebSocket.instances.length, 1, "late close cannot resurrect reconnect");
+  assert.equal(socket.sendCalls, sendCallsAtStop);
+});
+
+test("BSC shutdown accepts a graceful WebSocket close and cancels forced termination", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-ws-shutdown-graceful-"));
+  const timers = controlledShutdownTimers();
+  ControlledShutdownWebSocket.instances = [];
+  const monitor = createBscLaunchpadMonitor(bscShutdownTestConfig(dataDir), {
+    autoStart: false,
+    provider: bscShutdownTestProvider(),
+    WebSocketImpl: ControlledShutdownWebSocket,
+    fetchImpl: bscShutdownTestFetch,
+    fourMemeFastReplayEnabled: false,
+    externalAttribution: false,
+    websocketShutdownGraceMs: 75,
+    websocketTerminateSettleMs: 25,
+    websocketShutdownSetTimeoutImpl: timers.setTimeoutImpl,
+    websocketShutdownClearTimeoutImpl: timers.clearTimeoutImpl,
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  t.after(async () => {
+    const socket = ControlledShutdownWebSocket.instances[0];
+    if (socket && socket.readyState !== ControlledShutdownWebSocket.CLOSED) {
+      socket.readyState = ControlledShutdownWebSocket.CLOSED;
+      socket.emit("close", {});
+    }
+    for (const handle of timers.scheduled) handle.callback();
+    await monitor.stop().catch(() => {});
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  await monitor.start();
+  await waitUntil(() => ControlledShutdownWebSocket.instances.length === 1);
+  const socket = ControlledShutdownWebSocket.instances[0];
+  const stopping = monitor.stop();
+  await waitUntil(() => timers.scheduled.length === 2);
+  assert.equal(timers.scheduled.length, 2);
+  assert.equal(socket.closeCalls, 1);
+  socket.readyState = ControlledShutdownWebSocket.CLOSED;
+  socket.emit("close", {});
+  await stopping;
+  assert.equal(socket.terminateCalls, 0);
+  assert.ok(timers.scheduled.every((handle) => handle.cleared),
+    "peer close cancels both shutdown deadlines");
+});
+
+test("BSC shutdown total deadline releases a non-signalling terminated WebSocket", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-ws-shutdown-total-bound-"));
+  const timers = controlledShutdownTimers();
+  let destroyCalls = 0;
+  ControlledShutdownWebSocket.instances = [];
+  const monitor = createBscLaunchpadMonitor(bscShutdownTestConfig(dataDir), {
+    autoStart: false,
+    provider: bscShutdownTestProvider(() => { destroyCalls += 1; }),
+    WebSocketImpl: ControlledShutdownWebSocket,
+    fetchImpl: bscShutdownTestFetch,
+    fourMemeFastReplayEnabled: false,
+    externalAttribution: false,
+    websocketShutdownGraceMs: 75,
+    websocketTerminateSettleMs: 25,
+    websocketShutdownSetTimeoutImpl: timers.setTimeoutImpl,
+    websocketShutdownClearTimeoutImpl: timers.clearTimeoutImpl,
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  t.after(async () => {
+    for (const handle of timers.scheduled) handle.callback();
+    await monitor.stop().catch(() => {});
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  await monitor.start();
+  await waitUntil(() => ControlledShutdownWebSocket.instances.length === 1);
+  const socket = ControlledShutdownWebSocket.instances[0];
+  let stopSettled = false;
+  const stopping = monitor.stop();
+  void stopping.then(() => { stopSettled = true; });
+  await waitUntil(() => timers.scheduled.length === 2);
+  assert.equal(socket.closeCalls, 1);
+  timers.scheduled[0].callback();
+  assert.equal(socket.terminateCalls, 1);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(stopSettled, false);
+  assert.equal(destroyCalls, 0);
+
+  timers.scheduled[1].callback();
+  await stopping;
+  assert.equal(stopSettled, true);
+  assert.equal(socket.terminateCalls, 1);
+  assert.equal(destroyCalls, 1);
+});
+
+test("BSC production WebSocket releases a silent raw peer within shutdown grace", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-ws-shutdown-raw-peer-"));
+  let rawSocket = null;
+  let markHandshakeAccepted;
+  let markPeerClosed;
+  const handshakeAccepted = new Promise((resolve) => { markHandshakeAccepted = resolve; });
+  const peerClosed = new Promise((resolve) => { markPeerClosed = resolve; });
+  const server = net.createServer((socket) => {
+    rawSocket = socket;
+    socket.on("error", () => {});
+    socket.once("close", markPeerClosed);
+    let request = "";
+    socket.on("data", (chunk) => {
+      if (request === null) return;
+      request += chunk.toString("latin1");
+      const headerEnd = request.indexOf("\r\n\r\n");
+      if (headerEnd < 0) return;
+      const key = request.match(/\r\nsec-websocket-key:\s*([^\r\n]+)/i)?.[1]?.trim();
+      assert.ok(key, "client handshake includes Sec-WebSocket-Key");
+      const accept = createHash("sha1")
+        .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+        .digest("base64");
+      request = null;
+      socket.write([
+        "HTTP/1.1 101 Switching Protocols",
+        "Upgrade: websocket",
+        "Connection: Upgrade",
+        `Sec-WebSocket-Accept: ${accept}`,
+        "",
+        "",
+      ].join("\r\n"));
+      markHandshakeAccepted();
+      // Deliberately ignore every subsequent frame, including CLOSE.
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const monitor = createBscLaunchpadMonitor(
+    bscShutdownTestConfig(dataDir, `ws://127.0.0.1:${address.port}`),
+    {
+      autoStart: false,
+      provider: bscShutdownTestProvider(),
+      fetchImpl: bscShutdownTestFetch,
+      fourMemeFastReplayEnabled: false,
+      externalAttribution: false,
+      websocketShutdownGraceMs: 50,
+      logger: { error() {}, info() {} },
+      ...disabledJournalTimerDependencies(),
+    },
+  );
+  t.after(async () => {
+    await monitor.stop().catch(() => {});
+    rawSocket?.destroy();
+    await new Promise((resolve) => server.close(() => resolve()));
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  await monitor.start();
+  await handshakeAccepted;
+  const startedAt = performance.now();
+  await monitor.stop();
+  const elapsedMs = performance.now() - startedAt;
+  let peerCloseTimeout;
+  try {
+    await Promise.race([
+      peerClosed,
+      new Promise((_resolve, reject) => {
+        peerCloseTimeout = setTimeout(() => reject(new Error("silent peer remained connected")), 1_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(peerCloseTimeout);
+  }
+  assert.ok(elapsedMs < 1_000, `bounded shutdown took ${elapsedMs.toFixed(1)}ms`);
 });
 
 test("a failed initial RPC retries the complete BSC start and reconciles finalized receipts", async (t) => {
@@ -7992,6 +8752,7 @@ test("focus3 background deep RPC prioritizes delivery deadlines and fairly drain
   }));
 
   const deepOrder = [];
+  let eligibilityScans = 0;
   const provider = {
     async getNetwork() { return { chainId: 56n }; },
     async getBlockNumber() { return head; },
@@ -8038,6 +8799,7 @@ test("focus3 background deep RPC prioritizes delivery deadlines and fairly drain
     fetchImpl,
     now: () => clock,
     realtimeTailMinIntervalMsForTesting: 0,
+    onBackgroundDeepEligibilityScanImpl: () => { eligibilityScans += 1; },
     backgroundSetTimeoutImpl,
     backgroundClearTimeoutImpl,
     logger: { error() {}, info() {} },
@@ -8054,8 +8816,14 @@ test("focus3 background deep RPC prioritizes delivery deadlines and fairly drain
 
   for (let slot = 0; slot < 44; slot += 1) {
     const before = deepOrder.length;
+    eligibilityScans = 0;
     await monitor.processRealtimeQueue();
+    assert.ok(eligibilityScans <= 2,
+      `one realtime scheduler turn must scan eligibility at most twice, observed ${eligibilityScans}`);
+    eligibilityScans = 0;
     await monitor.retryDeferredCreationEvidence();
+    assert.ok(eligibilityScans <= 2,
+      `one deferred scheduler turn must scan eligibility at most twice, observed ${eligibilityScans}`);
     assert.ok(deepOrder.length <= before + 1, "the shared deep lease starts at most one transaction per slot");
     clock += 750;
   }
@@ -8071,6 +8839,183 @@ test("focus3 background deep RPC prioritizes delivery deadlines and fairly drain
     "ordinary old work retains its bounded quota after both live classes receive a slot");
   assert.equal(dependencyDescendantIndex, 5,
     "the newly unblocked descendant follows its old causal head without waiting for another 30-second quota");
+});
+
+test("25k focus3 deep scheduler reuses one eligibility decision and preserves an existing earlier wake", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-deep-rpc-wake-dedup-"));
+  const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
+  let clock = Date.parse("2026-09-11T12:00:00.000Z");
+  const head = 5_000;
+  const firstHash = `0x${"71".repeat(32)}`;
+  const secondHash = `0x${"72".repeat(32)}`;
+  const record = (transactionHash, blockNumber, transactionIndex) => ({
+    transactionHash,
+    blockNumber,
+    transactionIndex,
+    logIndex: 0,
+    reasons: ["http_tail"],
+    mintEmitters: [],
+    candidateTokens: [],
+    verifiedNewContracts: [],
+    upgradeEmitters: ["0x1111111111111111111111111111111111111111"],
+    lifecycleEmitters: [],
+    hookPools: [],
+    hasProtocolTrigger: false,
+    revision: 1,
+  });
+  const pendingEntries = {
+    [secondHash]: record(secondHash, 101, 0),
+    [firstHash]: record(firstHash, 100, 1),
+  };
+  for (let index = 0; index < 24_998; index += 1) {
+    const transactionHash = `0x${(index + 1).toString(16).padStart(64, "0")}`;
+    pendingEntries[transactionHash] = record(transactionHash, 102 + (index % 2_000), index % 32);
+  }
+  await fs.writeFile(stateFile, JSON.stringify({
+    version: 6,
+    initializedAt: new Date(clock - 60_000).toISOString(),
+    lastFinalizedBlock: head - 2,
+    realtimeTailNextBlock: head - 1,
+    realtimeTailInitializedAt: new Date(clock - 60_000).toISOString(),
+    realtimePendingEntries: pendingEntries,
+    deferredCreationEvidence: {},
+    nearHeadRecoveryGaps: [{
+      id: "scheduler-dedup-permanent-gap",
+      fromBlock: 200,
+      toBlock: 200,
+      nextBlock: 200,
+      reason: "realtime_tail_stale_rebuild",
+      attempts: 1,
+      nextAttemptAt: new Date(clock + 60_000).toISOString(),
+    }],
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    coverageGaps: [],
+    _health: { realtimeTail: { status: "healthy", consecutiveFailures: 0 } },
+  }));
+
+  const deepOrder = [];
+  const provider = {
+    async getNetwork() { return { chainId: 56n }; },
+    async getBlockNumber() { return head; },
+    async getTransaction(transactionHash) {
+      deepOrder.push(transactionHash);
+      return {
+        hash: transactionHash,
+        blockNumber: transactionHash === firstHash ? 100 : 101,
+        transactionIndex: transactionHash === firstHash ? 1 : 0,
+        to: null,
+        from: `0x${"9".repeat(40)}`,
+        data: "0x",
+      };
+    },
+    async getTransactionReceipt(transactionHash) {
+      return {
+        hash: transactionHash,
+        transactionHash,
+        blockNumber: transactionHash === firstHash ? 100 : 101,
+        status: 1,
+        logs: [],
+      };
+    },
+    async send() { return []; },
+    destroy() {},
+  };
+  const timers = [];
+  const backgroundSetTimeoutImpl = (callback, delay) => {
+    const timer = { callback, delay, dueAt: clock + delay, cancelled: false, unref() {} };
+    timers.push(timer);
+    return timer;
+  };
+  const backgroundClearTimeoutImpl = (timer) => { timer.cancelled = true; };
+  let eligibilityScans = 0;
+  class IdleWebSocket { addEventListener() {} close() {} }
+  const monitor = createBscLaunchpadMonitor({
+    dataDir,
+    monitorScope: "focus3",
+    bscMonitorEnabled: true,
+    bscWsUrl: "wss://example.invalid",
+    bscRpcUrl: "https://example.invalid",
+    bscConfirmations: 2,
+    bscHttpHeadPollIntervalMs: 60_000,
+    bscOfficialPollIntervalMs: 60_000,
+    bscDeferredRetryIntervalMs: 60_000,
+  }, {
+    autoStart: false,
+    externalAttribution: false,
+    provider,
+    realtimeProvider: provider,
+    WebSocketImpl: IdleWebSocket,
+    fetchImpl: async () => ({ ok: false, status: 403, headers: { get() { return null; } }, text: async () => "forbidden" }),
+    now: () => clock,
+    realtimeTailMinIntervalMsForTesting: 0,
+    causalClassificationEnabled: false,
+    // Exercise the ordinary historical quota with a production-sized map.
+    // A completely full map now correctly uses the faster capacity-drain lane.
+    realtimePendingMaxEntries: 25_001,
+    onBackgroundDeepEligibilityScanImpl: () => { eligibilityScans += 1; },
+    backgroundSetTimeoutImpl,
+    backgroundClearTimeoutImpl,
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  t.after(async () => {
+    t.mock.timers.reset();
+    await monitor.stop();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  await monitor.start();
+  await monitor.scanRealtimeTail();
+  const earlyWake = timers.find((timer) => !timer.cancelled);
+  assert.ok(earlyWake);
+  assert.equal(earlyWake.dueAt, clock + 25);
+
+  eligibilityScans = 0;
+  await monitor.scanRealtimeTail();
+  assert.equal(eligibilityScans, 1,
+    "the second healthy tail result makes one eligibility decision and reuses it for scheduling");
+  assert.equal(timers.filter((timer) => !timer.cancelled).length, 1);
+
+  eligibilityScans = 0;
+  await monitor.processRealtimeQueue();
+  assert.deepEqual(deepOrder, [firstHash], "the streaming lane still selects the earliest durable record");
+  assert.equal(eligibilityScans, 2,
+    "a completed realtime turn scans once before work and once after its state mutation");
+  assert.equal(timers.filter((timer) => !timer.cancelled)[0], earlyWake,
+    "the old-work deadline must not replace an already scheduled earlier wake");
+  assert.equal(earlyWake.cancelled, false);
+
+  eligibilityScans = 0;
+  assert.equal((await monitor.retryDeferredCreationEvidence()).reason, "deep_rpc_fairness");
+  assert.equal(eligibilityScans, 2,
+    "a deferred fairness return has only its admission and final scheduling scans");
+  assert.equal(timers.filter((timer) => !timer.cancelled)[0], earlyWake);
+
+  clock += 25;
+  eligibilityScans = 0;
+  earlyWake.cancelled = true;
+  earlyWake.callback();
+  for (let turn = 0; turn < 10; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(deepOrder, [firstHash], "an intentionally early wake cannot bypass the old-work quota");
+  assert.equal(eligibilityScans, 2,
+    "the early wake reschedules from one decision without a timer-only full scan");
+  const quotaWake = timers.find((timer) => !timer.cancelled);
+  assert.ok(quotaWake);
+  assert.equal(quotaWake.dueAt, clock - 25 + 30_000);
+
+  clock = quotaWake.dueAt;
+  eligibilityScans = 0;
+  quotaWake.cancelled = true;
+  quotaWake.callback();
+  for (let turn = 0; turn < 20 && deepOrder.length < 2; turn += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.deepEqual(deepOrder, [firstHash, secondHash]);
+  assert.ok(eligibilityScans <= 2,
+    `the due old-work turn must scan eligibility at most twice, observed ${eligibilityScans}`);
 });
 
 test("strict receipt classification releases a fresh causal descendant before historical runtime inspection", async (t) => {
@@ -9034,6 +9979,7 @@ test("focus3 mixed archive 429 and method failure share one durable deep RPC gat
   let mixedFailure = true;
   const deepCalls = [];
   const codeCalls = [];
+  let eligibilityScans = 0;
   const provider = createRpcPool(
     ["https://mixed-monitor-standard.test"],
     ["https://mixed-monitor-archive.test"],
@@ -9133,6 +10079,7 @@ test("focus3 mixed archive 429 and method failure share one durable deep RPC gat
     fetchImpl,
     now: () => clock,
     realtimeTailMinIntervalMsForTesting: 0,
+    onBackgroundDeepEligibilityScanImpl: () => { eligibilityScans += 1; },
     backgroundSetTimeoutImpl,
     backgroundClearTimeoutImpl,
     logger: { error() {}, info() {} },
@@ -9158,10 +10105,16 @@ test("focus3 mixed archive 429 and method failure share one durable deep RPC gat
   assert.equal(snapshot.transactionFailures[queueHash], undefined,
     "mixed host evidence is installed before a candidate attempt is charged");
   assert.equal(snapshot.deferredCreationEvidence[deferredHash].attempts, 2);
+  const coolingTimers = timers.filter((item) => !item.cancelled);
   clock += 500;
+  eligibilityScans = 0;
   await monitor.retryDeferredCreationEvidence();
   await monitor.processRealtimeQueue();
   snapshot = await monitor.getState();
+  assert.equal(eligibilityScans, 0,
+    "the shared host deadline must reject both lanes before walking durable eligibility");
+  assert.deepEqual(timers.filter((item) => !item.cancelled), coolingTimers,
+    "cooling wakeups preserve the already earlier timers instead of replacing or duplicating them");
   assert.deepEqual(deepCalls, [queueHash], "neither lane makes a physical call during the shared host cooldown");
   assert.deepEqual(codeCalls, ["archive", "standard"]);
   assert.equal(snapshot.transactionFailures[queueHash], undefined);
@@ -10001,6 +10954,213 @@ test("near-head handoff capacity is all-or-none and cannot advance a partially p
   const durable = await readBscLaunchpadDurableState(path.join(dataDir, "bsc-launchpad-state.json"));
   assert.deepEqual(Object.keys(durable.realtimePendingEntries), []);
   assert.equal(durable.nearHeadRecoveryGaps[0].nextBlock, 90);
+});
+
+async function createBscPendingCapacityHarness(t, { historySlots = null, failTail = false, historyLogs = [] } = {}) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-pending-capacity-recovery-"));
+  let clock = Date.parse("2026-09-17T07:00:00.000Z");
+  const transactionHashes = ["81", "82", "83"].map((prefix) => `0x${prefix.repeat(32)}`);
+  const pending = Object.fromEntries(transactionHashes.map((transactionHash, index) => [transactionHash, {
+    transactionHash,
+    blockNumber: 40 + index,
+    transactionIndex: 0,
+    logIndex: 0,
+    reasons: ["http_tail"],
+    upgradeEmitters: ["0x1111111111111111111111111111111111111111"],
+  }]));
+  await fs.writeFile(path.join(dataDir, "bsc-launchpad-state.json"), JSON.stringify({
+    version: 6,
+    initializedAt: new Date(clock).toISOString(),
+    lastFinalizedBlock: 50,
+    realtimeTailNextBlock: 101,
+    realtimePendingEntries: pending,
+    launchers: {},
+    hooks: {},
+    seenTransactions: {},
+    nearHeadRecoveryGaps: [],
+    coverageGaps: [],
+    _health: historySlots === null ? {} : {
+      rpc: {
+        status: "error",
+        backpressureReason: "realtime_pending_capacity",
+        ...(historySlots > 0 ? { newEntryCount: historySlots } : {}),
+      },
+    },
+  }));
+  const historyRanges = [];
+  let transactionCalls = 0;
+  const provider = {
+    async getNetwork() { return { chainId: 56n }; },
+    async getBlockNumber() { return failTail ? 105 : 102; },
+    async send(method, [request]) {
+      assert.equal(method, "eth_getLogs");
+      historyRanges.push([Number.parseInt(request.fromBlock, 16), Number.parseInt(request.toBlock, 16)]);
+      return Array.isArray(request.topics?.[0]) && request.topics[0].includes(FLAP_TOKEN_CREATED_TOPIC)
+        ? historyLogs
+        : [];
+    },
+    async getTransaction(transactionHash) {
+      transactionCalls += 1;
+      return { hash: transactionHash, to: null, from: "0x1111111111111111111111111111111111111111", data: "0x" };
+    },
+    async getTransactionReceipt(transactionHash) { return { transactionHash, status: 0, logs: [] }; },
+    destroy() {},
+  };
+  class IdleWebSocket { addEventListener() {} close() {} }
+  const monitor = createBscLaunchpadMonitor({
+    dataDir,
+    monitorScope: "focus3",
+    bscMonitorEnabled: true,
+    bscWsUrl: "wss://example.invalid",
+    bscRpcUrl: "https://example.invalid",
+    bscConfirmations: 2,
+    bscRecoveryLogBatchSize: 10,
+    bscHttpHeadPollIntervalMs: 60_000,
+    bscOfficialPollIntervalMs: 60_000,
+  }, {
+    autoStart: false,
+    externalAttribution: false,
+    provider,
+    realtimeProvider: {
+      ...provider,
+      async send() {
+        const error = new Error("eth_getLogs failed on every BSC RPC: providers cooling down");
+        error.retryAfterMs = 60_000;
+        throw error;
+      },
+    },
+    WebSocketImpl: IdleWebSocket,
+    realtimePendingMaxEntries: 3,
+    realtimeTailMinIntervalMsForTesting: 0,
+    now: () => clock,
+    fetchImpl: async () => ({ ok: false, status: 403, headers: { get() { return null; } }, text: async () => "forbidden" }),
+    backgroundSetTimeoutImpl: () => ({ unref() {} }),
+    backgroundClearTimeoutImpl() {},
+    sendAlertsImpl: async () => assert.fail("capacity recovery cannot invent an alert"),
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  t.after(async () => {
+    t.mock.timers.reset();
+    await monitor.stop();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+  await monitor.start();
+  return {
+    monitor,
+    dataDir,
+    transactionHashes,
+    historyRanges,
+    transactionCalls: () => transactionCalls,
+    advance() { clock += 751; },
+  };
+}
+
+test("full durable pending queue keeps draining after a log RPC error replaces tail capacity telemetry", async (t) => {
+  const harness = await createBscPendingCapacityHarness(t, { failTail: true });
+  await assert.rejects(() => harness.monitor.scanRealtimeTail(), /providers cooling down/);
+  let snapshot = await harness.monitor.getState();
+  assert.equal(snapshot._health.realtimeTail.status, "error");
+  assert.equal(snapshot._health.realtimeTail.backpressureReason, undefined);
+  await harness.monitor.processRealtimeQueue();
+  snapshot = await harness.monitor.getState();
+  assert.equal(harness.transactionCalls(), 1);
+  assert.equal(Object.keys(snapshot.realtimePendingEntries).length, 2,
+    "one already-durable failed transaction releases a slot despite the separate log outage");
+  assert.equal(snapshot.seenTransactions[harness.transactionHashes[0]], 40);
+  assert.equal(snapshot.lastFinalizedBlock, 50, "draining is not proof of historical range coverage");
+  assert.equal(snapshot.realtimeTailNextBlock, 101, "the failed tail range remains uncovered");
+  harness.advance();
+  await harness.monitor.processRealtimeQueue();
+  assert.equal(harness.transactionCalls(), 1,
+    "once capacity is available, the ordinary unhealthy-tail gate applies again");
+});
+
+for (const historySlots of [0, 2]) {
+  test(`historical capacity backpressure resumes after ${historySlots || "legacy"} required slots become free`, async (t) => {
+    const harness = await createBscPendingCapacityHarness(t, { historySlots });
+    const { monitor } = harness;
+    await monitor.scanRealtimeTail();
+    await monitor.scanRealtimeTail();
+    await monitor.advanceCoverage();
+    assert.deepEqual(harness.historyRanges, [], "a full queue must not reread the blocked history range");
+    await monitor.processRealtimeQueue();
+    let snapshot = await monitor.getState();
+    assert.equal(Object.keys(snapshot.realtimePendingEntries).length, 2);
+    await monitor.advanceCoverage();
+    if (historySlots === 2) {
+      assert.deepEqual(harness.historyRanges, [], "one slot is insufficient for the known two-candidate range");
+      harness.advance();
+      await monitor.processRealtimeQueue();
+      await monitor.advanceCoverage();
+    }
+    snapshot = await monitor.getState();
+    assert.ok(harness.historyRanges.length > 0, "released capacity admits an actual authoritative RPC range scan");
+    assert.ok(harness.historyRanges.every(([from, to]) => from === 51 && to === 60));
+    assert.equal(snapshot.lastFinalizedBlock, 60, "the historical cursor advances only after the real range succeeds");
+    assert.equal(snapshot._health.rpc.backpressureReason, undefined);
+    const durable = await readBscLaunchpadDurableState(path.join(harness.dataDir, "bsc-launchpad-state.json"));
+    assert.equal(durable.lastFinalizedBlock, 60);
+    assert.equal(Object.keys(durable.realtimePendingEntries).length, historySlots === 2 ? 1 : 2);
+  });
+}
+
+test("historical capacity recovery retains its entire failed batch and atomically retries after sufficient drain", async (t) => {
+  const iface = new Interface(["event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)"]);
+  const logs = [0, 1].map((index) => {
+    const encoded = iface.encodeEventLog(iface.getEvent("TokenCreated"), [
+      1n,
+      "0x1111111111111111111111111111111111111111",
+      BigInt(index + 1),
+      `0x${String(index + 3).repeat(40)}`,
+      "Retained",
+      "RET",
+      "ipfs://retained",
+    ]);
+    return {
+      address: "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0",
+      topics: encoded.topics,
+      data: encoded.data,
+      transactionHash: `0x${String(index + 4).repeat(64)}`,
+      blockNumber: "0x37",
+      transactionIndex: `0x${index.toString(16)}`,
+      logIndex: `0x${index.toString(16)}`,
+    };
+  });
+  const harness = await createBscPendingCapacityHarness(t, { historyLogs: logs });
+  const { monitor } = harness;
+  await monitor.scanRealtimeTail();
+  await monitor.scanRealtimeTail();
+  await monitor.advanceCoverage();
+  let snapshot = await monitor.getState();
+  assert.equal(snapshot._health.rpc.backpressureReason, "realtime_pending_capacity");
+  assert.equal(snapshot._health.rpc.newEntryCount, 2);
+  assert.equal(snapshot._health.rpc.pendingEntryCount, 3);
+  assert.equal(snapshot.lastFinalizedBlock, 50);
+  assert.equal(Object.keys(snapshot.realtimePendingEntries).length, 3);
+  assert.ok(logs.every((log) => !snapshot.realtimePendingEntries[log.transactionHash]),
+    "the failed range cannot partially enter the durable queue");
+  const failedRangeCalls = harness.historyRanges.length;
+  await monitor.processRealtimeQueue();
+  await monitor.advanceCoverage();
+  assert.equal(harness.historyRanges.length, failedRangeCalls,
+    "the known two-candidate range does not restart after only one slot is released");
+  harness.advance();
+  await monitor.processRealtimeQueue();
+  // Releasing the earlier low-lane lease requires fresh healthy tail evidence.
+  await monitor.scanRealtimeTail();
+  await monitor.scanRealtimeTail();
+  await monitor.advanceCoverage();
+  snapshot = await monitor.getState();
+  assert.equal(snapshot.lastFinalizedBlock, 60);
+  assert.equal(Object.keys(snapshot.realtimePendingEntries).length, 3);
+  assert.ok(logs.every((log) => snapshot.realtimePendingEntries[log.transactionHash]));
+  assert.equal(harness.transactionCalls(), 2, "uncommitted recovered entries are never processed to manufacture capacity");
+  const durable = await readBscLaunchpadDurableState(path.join(harness.dataDir, "bsc-launchpad-state.json"));
+  assert.equal(durable.lastFinalizedBlock, 60);
+  assert.ok(logs.every((log) => durable.realtimePendingEntries[log.transactionHash]),
+    "every candidate and the covered cursor cross the same durable retry boundary");
 });
 
 test("a saturated recovery pool cannot block the isolated realtime tail", async (t) => {
@@ -12374,6 +13534,543 @@ test("pure BSC health telemetry coalesces while a durable discovery mutation per
   await restarted.stop();
 });
 
+test("BSC health-only WAL saves skip a large unchanged cold branch", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-health-wal-roots-"));
+  const coldRecords = Object.fromEntries(Array.from({ length: 2_000 }, (_, index) => [
+    `cold-${index.toString().padStart(4, "0")}`,
+    { index, evidence: "c".repeat(256) },
+  ]));
+  const stateFile = await seedModernBscJournal(dataDir, (snapshot) => {
+    snapshot.coldArchive = { marker: "health-save-must-not-visit", records: coldRecords };
+  });
+  const clock = { value: Date.parse("2026-08-24T10:00:00.000Z") };
+  const frames = [];
+  const visitedPaths = [];
+  const journalAppendImpl = async (file, frame) => {
+    frames.push(frame);
+    const handle = await fs.open(file, "a", 0o600);
+    try {
+      await handle.writeFile(frame);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  };
+  const monitor = createBscHealthWalTestMonitor(dataDir, {
+    clock,
+    journalAppendImpl,
+    journalStateDeltaVisitImpl: (parts) => visitedPaths.push([...parts]),
+  });
+  t.after(async () => {
+    await monitor.stop().catch(() => {});
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  await monitor.start();
+  await monitor.awaitIdle();
+  visitedPaths.length = 0;
+  const baselineFrameCount = frames.length;
+  clock.value += 31_000;
+  await monitor.checkHttpHead();
+  await monitor.awaitIdle();
+
+  assert.equal(frames.length, baselineFrameCount + 1);
+  assert.ok(visitedPaths.length > 0, "the test must observe the tracked delta walk");
+  assert.ok(visitedPaths.every((parts) => parts[0] === "_health"),
+    `health-only traversal escaped its root: ${JSON.stringify(visitedPaths.slice(0, 10))}`);
+  assert.equal(visitedPaths.some((parts) => parts.includes("coldArchive")), false);
+  const frame = JSON.parse(frames.at(-1));
+  assert.ok(frame.ops.every((operation) => operation.path[0] === "_health" || operation.path[0] === "journalRevision"));
+  assert.doesNotMatch(JSON.stringify(frame.ops), /health-save-must-not-visit/);
+  const durable = await readBscLaunchpadDurableState(stateFile);
+  assert.equal(durable.coldArchive.marker, "health-save-must-not-visit");
+  assert.equal(Object.keys(durable.coldArchive.records).length, 2_000);
+});
+
+test("BSC exact hot-state WAL add, update, and delete stay independent of a 25k pending map", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-exact-hot-pending-"));
+  const stateFile = await seedModernBscJournal(dataDir, (snapshot) => {
+    const transactionHash = (index) => `0x${index.toString(16).padStart(64, "0")}`;
+    snapshot.realtimePendingEntries = Object.fromEntries(Array.from({ length: 25_000 }, (_, offset) => {
+      const index = offset + 1;
+      const hash = transactionHash(index);
+      return [hash, {
+        transactionHash: hash,
+        blockNumber: index === 24_999 ? 102 : index === 25_000 ? 40 : 1,
+        transactionIndex: index,
+        logIndex: 0,
+        reasons: ["http_tail"],
+        mintEmitters: [],
+        candidateTokens: [],
+        verifiedNewContracts: [],
+        upgradeEmitters: [],
+        lifecycleEmitters: [],
+        hookPools: [],
+        flapCreationHotCandidates: [],
+        fourMemeCreationHotCandidates: [],
+        causalBarrierKeys: [],
+        revision: 0,
+      }];
+    }));
+    snapshot.realtimeTailNextBlock = 101;
+    snapshot.lastFinalizedBlock = 100;
+  });
+  const transactionHash = (index) => `0x${index.toString(16).padStart(64, "0")}`;
+  const updateHash = transactionHash(24_999);
+  const deleteHash = transactionHash(25_000);
+  const addHash = transactionHash(30_000);
+  const launcher = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
+  const creator = "0x2222222222222222222222222222222222222222";
+  const iface = new Interface(["event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)"]);
+  const creationLog = (hash, blockNumber, token, nonce) => {
+    const encoded = iface.encodeEventLog(
+      iface.getEvent("TokenCreated"),
+      [1n, creator, BigInt(nonce), token, `Hot ${nonce}`, `H${nonce}`, "ipfs://hot"],
+    );
+    return {
+      address: launcher,
+      topics: encoded.topics,
+      data: encoded.data,
+      transactionHash: hash,
+      blockHash: `0x${(blockNumber + 40_000).toString(16).padStart(64, "0")}`,
+      blockNumber: `0x${blockNumber.toString(16)}`,
+      transactionIndex: "0x1",
+      logIndex: "0x1",
+      removed: false,
+    };
+  };
+  const logs = [
+    creationLog(addHash, 101, "0x3111111111111111111111111111111111111111", 1),
+    creationLog(updateHash, 102, "0x3222222222222222222222222222222222222222", 2),
+  ];
+  const provider = {
+    async getBlockNumber() { return 104; },
+    async send(method, [request]) {
+      assert.equal(method, "eth_getLogs");
+      const fromBlock = Number.parseInt(request.fromBlock, 16);
+      const toBlock = Number.parseInt(request.toBlock, 16);
+      return logs.filter((log) => {
+        const blockNumber = Number.parseInt(log.blockNumber, 16);
+        return blockNumber >= fromBlock && blockNumber <= toBlock;
+      });
+    },
+    destroy() {},
+  };
+  const frames = [];
+  const visitedPaths = [];
+  const journalAppendImpl = async (file, frame) => {
+    frames.push(frame);
+    const handle = await fs.open(file, "a", 0o600);
+    try {
+      await handle.writeFile(frame);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  };
+  let monitor = createBscLaunchpadMonitor({
+    dataDir,
+    monitorScope: "focus3",
+    bscConfirmations: 2,
+    bscRealtimeTailBatchSize: 1,
+    bscProcessBatchSize: 1,
+    bscBacklogProcessBatchSize: 1,
+  }, {
+    autoStart: false,
+    provider,
+    realtimeProvider: provider,
+    causalClassificationEnabled: false,
+    initialHeadForTesting: 104,
+    realtimePendingMaxEntries: 25_001,
+    realtimeTailMinIntervalMsForTesting: 0,
+    journalAppendImpl,
+    journalStateDeltaVisitImpl: (parts) => visitedPaths.push([...parts]),
+    backgroundSetTimeoutImpl: () => ({ unref() {} }),
+    backgroundClearTimeoutImpl() {},
+    healthSetTimeoutImpl: () => ({ unref() {} }),
+    healthClearTimeoutImpl() {},
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  t.after(async () => {
+    await monitor?.stop().catch(() => {});
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  await monitor.getState();
+  await monitor.awaitIdle();
+  const exactHotRoots = new Set(["realtimePendingEntries", "deferredCreationEvidence"]);
+  const assertExactHotTraversal = (expectedHash) => {
+    const hotVisits = visitedPaths.filter((parts) =>
+      exactHotRoots.has(parts[0]));
+    assert.ok(hotVisits.length > 0, "the changed hot record must be visited");
+    assert.ok(hotVisits.every((parts) => parts[1] === expectedHash),
+      `exact traversal escaped ${expectedHash}: ${JSON.stringify(hotVisits.slice(0, 10))}`);
+    assert.ok(hotVisits.length < 100,
+      `one hot-record traversal must stay bounded, observed ${hotVisits.length} nodes`);
+  };
+
+  visitedPaths.length = 0;
+  await monitor.scanRealtimeTail();
+  assertExactHotTraversal(addHash);
+  assert.match(JSON.stringify(JSON.parse(frames.at(-1)).ops), new RegExp(addHash));
+
+  visitedPaths.length = 0;
+  await monitor.scanRealtimeTail();
+  assertExactHotTraversal(updateHash);
+  assert.match(JSON.stringify(JSON.parse(frames.at(-1)).ops), new RegExp(updateHash));
+
+  visitedPaths.length = 0;
+  await monitor.processRealtimeQueue();
+  assertExactHotTraversal(deleteHash);
+  assert.ok(JSON.parse(frames.at(-1)).ops.some((operation) =>
+    operation.op === "delete"
+      && operation.path.join(".") === `realtimePendingEntries.${deleteHash}`));
+
+  let durable = await readBscLaunchpadDurableState(stateFile);
+  assert.ok(durable.realtimePendingEntries[addHash]);
+  assert.ok(durable.realtimePendingEntries[updateHash]?.candidateTokens
+    ?.includes("0x3222222222222222222222222222222222222222"));
+  assert.equal(durable.realtimePendingEntries[deleteHash], undefined);
+  assert.ok(durable.realtimePendingEntries[transactionHash(1)], "an untouched sibling remains durable");
+
+  await monitor.stop();
+  monitor = createBscLaunchpadMonitor({ dataDir }, {
+    autoStart: false,
+    provider: { destroy() {} },
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  durable = await monitor.getState();
+  assert.ok(durable.realtimePendingEntries[addHash], "restart replays the exact add");
+  assert.ok(durable.realtimePendingEntries[updateHash]?.candidateTokens
+    ?.includes("0x3222222222222222222222222222222222222222"), "restart replays the exact update");
+  assert.equal(durable.realtimePendingEntries[deleteHash], undefined, "restart replays the exact delete");
+});
+
+test("a failed exact BSC hot-state append forces the next exact transaction through a full recovery walk", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-exact-hot-failure-"));
+  const siblingHash = `0x${"41".repeat(32)}`;
+  const failedHash = `0x${"42".repeat(32)}`;
+  const stateFile = await seedModernBscJournal(dataDir, (snapshot) => {
+    snapshot.realtimePendingEntries = {
+      [siblingHash]: {
+        transactionHash: siblingHash,
+        blockNumber: 40,
+        transactionIndex: 0,
+        logIndex: 0,
+        reasons: ["http_tail"],
+        mintEmitters: [],
+        candidateTokens: [],
+        verifiedNewContracts: [],
+        upgradeEmitters: [],
+        lifecycleEmitters: [],
+        hookPools: [],
+        flapCreationHotCandidates: [],
+        fourMemeCreationHotCandidates: [],
+        causalBarrierKeys: [],
+      },
+    };
+    snapshot.realtimeTailNextBlock = 101;
+    snapshot.lastFinalizedBlock = 100;
+  });
+  const iface = new Interface(["event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)"]);
+  const encoded = iface.encodeEventLog(
+    iface.getEvent("TokenCreated"),
+    [1n, "0x4222222222222222222222222222222222222222", 1n,
+      "0x4211111111111111111111111111111111111111", "Failure", "FAIL", "ipfs://failure"],
+  );
+  const creationLog = {
+    address: "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0",
+    topics: encoded.topics,
+    data: encoded.data,
+    transactionHash: failedHash,
+    blockHash: `0x${"43".repeat(32)}`,
+    blockNumber: "0x65",
+    transactionIndex: "0x1",
+    logIndex: "0x1",
+  };
+  const provider = {
+    async send(method, [request]) {
+      assert.equal(method, "eth_getLogs");
+      const fromBlock = Number.parseInt(request.fromBlock, 16);
+      const toBlock = Number.parseInt(request.toBlock, 16);
+      return fromBlock <= 101 && toBlock >= 101 ? [creationLog] : [];
+    },
+    destroy() {},
+  };
+  let failedAppendsRemaining = 2;
+  const successfulFrames = [];
+  const visitedPaths = [];
+  const journalAppendImpl = async (file, frame) => {
+    if (failedAppendsRemaining > 0) {
+      failedAppendsRemaining -= 1;
+      throw new Error("simulated exact hot-state append failure");
+    }
+    successfulFrames.push(frame);
+    const handle = await fs.open(file, "a", 0o600);
+    try {
+      await handle.writeFile(frame);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  };
+  let clock = Date.parse("2026-09-11T00:00:00.000Z");
+  let monitor = createBscLaunchpadMonitor({
+    dataDir,
+    monitorScope: "focus3",
+    bscConfirmations: 2,
+    bscRealtimeTailBatchSize: 1,
+  }, {
+    autoStart: false,
+    provider,
+    realtimeProvider: provider,
+    initialHeadForTesting: 104,
+    now: () => clock,
+    realtimeTailMinIntervalMsForTesting: 0,
+    causalClassificationEnabled: false,
+    journalAppendImpl,
+    journalStateDeltaVisitImpl: (parts) => visitedPaths.push([...parts]),
+    backgroundSetTimeoutImpl: () => ({ unref() {} }),
+    backgroundClearTimeoutImpl() {},
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  t.after(async () => {
+    await monitor?.stop().catch(() => {});
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  await monitor.getState();
+  await assert.rejects(() => monitor.scanRealtimeTail(), /simulated exact hot-state append failure/);
+  let durable = await readBscLaunchpadDurableState(stateFile);
+  assert.equal(durable.realtimePendingEntries[failedHash], undefined);
+  assert.equal(durable.realtimeTailNextBlock, 101);
+
+  clock += 1_000;
+  visitedPaths.length = 0;
+  await monitor.scanRealtimeTail();
+  assert.ok(visitedPaths.some((parts) => parts.length === 0),
+    "the failed exact frame must poison exact traversal until one full comparison succeeds");
+  assert.ok(visitedPaths.some((parts) =>
+    parts[0] === "realtimePendingEntries" && parts[1] === siblingHash),
+  "the recovery walk must visit an untouched hot sibling instead of trusting the failed path set");
+  assert.equal(successfulFrames.length, 1);
+  durable = await readBscLaunchpadDurableState(stateFile);
+  assert.ok(durable.realtimePendingEntries[failedHash]);
+  assert.equal(durable.realtimeTailNextBlock, 103);
+
+  await monitor.stop();
+  monitor = createBscLaunchpadMonitor({ dataDir }, {
+    autoStart: false,
+    provider: { destroy() {} },
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  const restarted = await monitor.getState();
+  assert.ok(restarted.realtimePendingEntries[failedHash]);
+  assert.equal(restarted.realtimeTailNextBlock, 103);
+});
+
+test("BSC exact hot-state WAL defers a mutation made behind the append gate to the next revision", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-exact-hot-gate-"));
+  const deleteHash = `0x${"51".repeat(32)}`;
+  const addHash = `0x${"52".repeat(32)}`;
+  const stateFile = await seedModernBscJournal(dataDir, (snapshot) => {
+    snapshot.realtimePendingEntries = {
+      [deleteHash]: {
+        transactionHash: deleteHash,
+        blockNumber: 40,
+        transactionIndex: 0,
+        logIndex: 0,
+        reasons: ["http_tail"],
+        mintEmitters: [],
+        candidateTokens: [],
+        verifiedNewContracts: [],
+        upgradeEmitters: [],
+        lifecycleEmitters: [],
+        hookPools: [],
+        flapCreationHotCandidates: [],
+        fourMemeCreationHotCandidates: [],
+        causalBarrierKeys: [],
+      },
+    };
+    snapshot.realtimeTailNextBlock = 101;
+    snapshot.lastFinalizedBlock = 100;
+  });
+  const iface = new Interface(["event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)"]);
+  const encoded = iface.encodeEventLog(
+    iface.getEvent("TokenCreated"),
+    [1n, "0x5222222222222222222222222222222222222222", 1n,
+      "0x5211111111111111111111111111111111111111", "Gate", "GATE", "ipfs://gate"],
+  );
+  const creationLog = {
+    address: "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0",
+    topics: encoded.topics,
+    data: encoded.data,
+    transactionHash: addHash,
+    blockHash: `0x${"53".repeat(32)}`,
+    blockNumber: "0x65",
+    transactionIndex: "0x1",
+    logIndex: "0x1",
+  };
+  const provider = {
+    async send(method) {
+      assert.equal(method, "eth_getLogs");
+      return [creationLog];
+    },
+    destroy() {},
+  };
+  let releaseFirstAppend;
+  let signalFirstAppend;
+  let signalAddSave;
+  const firstAppendGate = new Promise((resolve) => { releaseFirstAppend = resolve; });
+  const firstAppendStarted = new Promise((resolve) => { signalFirstAppend = resolve; });
+  const addSaveQueued = new Promise((resolve) => { signalAddSave = resolve; });
+  const frames = [];
+  const journalAppendImpl = async (file, frame) => {
+    frames.push(frame);
+    if (frames.length === 1) {
+      signalFirstAppend();
+      await firstAppendGate;
+    }
+    const handle = await fs.open(file, "a", 0o600);
+    try {
+      await handle.writeFile(frame);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  };
+  let monitor = createBscLaunchpadMonitor({
+    dataDir,
+    monitorScope: "focus3",
+    bscConfirmations: 2,
+    bscRealtimeTailBatchSize: 1,
+    bscProcessBatchSize: 1,
+    bscBacklogProcessBatchSize: 1,
+  }, {
+    autoStart: false,
+    provider,
+    realtimeProvider: provider,
+    initialHeadForTesting: 103,
+    realtimeTailMinIntervalMsForTesting: 0,
+    causalClassificationEnabled: false,
+    journalAppendImpl,
+    onExactHotStateSaveImpl: (paths) => {
+      if (paths.some((parts) => parts[0] === "realtimePendingEntries" && parts[1] === addHash)) {
+        signalAddSave();
+      }
+    },
+    backgroundSetTimeoutImpl: () => ({ unref() {} }),
+    backgroundClearTimeoutImpl() {},
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  t.after(async () => {
+    releaseFirstAppend?.();
+    await monitor?.stop().catch(() => {});
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  await monitor.getState();
+  const deletion = monitor.processRealtimeQueue();
+  await firstAppendStarted;
+  const addition = monitor.scanRealtimeTail();
+  await addSaveQueued;
+  assert.equal(frames.length, 1, "the second exact save is queued while revision one is blocked");
+  const firstOperations = JSON.stringify(JSON.parse(frames[0]).ops);
+  assert.match(firstOperations, new RegExp(deleteHash));
+  assert.doesNotMatch(firstOperations, new RegExp(addHash),
+    "an append-gate mutation cannot leak into the detached first frame");
+
+  releaseFirstAppend();
+  await Promise.all([deletion, addition]);
+  assert.equal(frames.length, 2);
+  const secondOperations = JSON.stringify(JSON.parse(frames[1]).ops);
+  assert.match(secondOperations, new RegExp(addHash));
+  const durable = await readBscLaunchpadDurableState(stateFile);
+  assert.equal(durable.realtimePendingEntries[deleteHash], undefined);
+  assert.ok(durable.realtimePendingEntries[addHash]);
+  assert.equal(durable.journalRevision, 2);
+
+  await monitor.stop();
+  monitor = createBscLaunchpadMonitor({ dataDir }, {
+    autoStart: false,
+    provider: { destroy() {} },
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  const restarted = await monitor.getState();
+  assert.equal(restarted.realtimePendingEntries[deleteHash], undefined);
+  assert.ok(restarted.realtimePendingEntries[addHash]);
+});
+
+test("a failed full BSC WAL append forces the next health save to recover the complete state", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-health-wal-full-recovery-"));
+  const stateFile = await seedModernBscJournal(dataDir);
+  const clock = { value: Date.parse("2026-08-24T10:00:00.000Z") };
+  const attempts = [];
+  const successfulFrames = [];
+  const visitedPaths = [];
+  let failNextAppend = false;
+  const journalAppendImpl = async (file, frame) => {
+    attempts.push(frame);
+    if (failNextAppend) {
+      failNextAppend = false;
+      throw new Error("simulated full WAL append failure");
+    }
+    successfulFrames.push(frame);
+    const handle = await fs.open(file, "a", 0o600);
+    try {
+      await handle.writeFile(frame);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  };
+  const monitor = createBscHealthWalTestMonitor(dataDir, {
+    clock,
+    journalAppendImpl,
+    journalStateDeltaVisitImpl: (parts) => visitedPaths.push([...parts]),
+  });
+  t.after(async () => {
+    await monitor.stop().catch(() => {});
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  await monitor.start();
+  await monitor.awaitIdle();
+  const address = "0x1234567890123456789012345678901234567890";
+  failNextAppend = true;
+  await assert.rejects(() => monitor.registerDiscoveryCandidates([{
+    address,
+    platformName: "Failed Full Save Recovery",
+    sourceTrust: "candidate",
+    sourceId: "failed-full-save",
+    sourceUrl: "https://example.com/failed-full-save",
+    observedAt: new Date(clock.value).toISOString(),
+  }]), /simulated full WAL append failure/);
+  const durableBeforeRecovery = await readBscLaunchpadDurableState(stateFile);
+  assert.equal(durableBeforeRecovery.discoverySources.external.contracts[address], undefined);
+
+  visitedPaths.length = 0;
+  const successesBeforeRecovery = successfulFrames.length;
+  clock.value += 31_000;
+  await monitor.checkHttpHead();
+  await monitor.awaitIdle();
+
+  assert.equal(successfulFrames.length, successesBeforeRecovery + 1);
+  assert.ok(visitedPaths.some((parts) => parts.length === 0),
+    "an unpersisted full mutation must force a root-level full comparison");
+  const recoveryFrame = JSON.parse(successfulFrames.at(-1));
+  assert.match(JSON.stringify(recoveryFrame.ops), new RegExp(address));
+  const recovered = await readBscLaunchpadDurableState(stateFile);
+  assert.equal(recovered.discoverySources.external.contracts[address].sources[0].sourceId, "failed-full-save");
+  assert.ok(attempts.length > successfulFrames.length, "the failed append must not count as durable");
+});
+
 test("BSC latest-revision persistence coalesces concurrent saves without resolving a newer durability boundary early", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-save-latest-revision-"));
   const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
@@ -12855,6 +14552,187 @@ test("BSC WAL fails closed on middle corruption, checksum conflict, and revision
       const monitor = createBscLaunchpadMonitor({ dataDir }, { autoStart: false, provider: { destroy() {} } });
       await assert.rejects(() => monitor.getState(), fixture.error);
       await fs.rm(dataDir, { recursive: true, force: true });
+    });
+  }
+});
+
+test("BSC WAL cannot replace or delete an exact hot-state map", async (t) => {
+  for (const [root, operation] of [
+    ["realtimePendingEntries", { op: "set", path: ["realtimePendingEntries"], value: [] }],
+    ["realtimePendingEntries", { op: "set", path: ["realtimePendingEntries"], value: {} }],
+    ["deferredCreationEvidence", { op: "set", path: ["deferredCreationEvidence"], value: null }],
+    ["deferredCreationEvidence", { op: "set", path: ["deferredCreationEvidence"], value: {} }],
+    ["realtimePendingEntries", { op: "delete", path: ["realtimePendingEntries"] }],
+  ]) {
+    await t.test(`${root}:${operation.op}`, async (subtest) => {
+      const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-wal-invalid-hot-root-"));
+      subtest.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+      const stateFile = await seedModernBscJournal(dataDir);
+      await fs.writeFile(`${stateFile}.wal`, testBscWalFrame(1, [operation]), { mode: 0o600 });
+      const monitor = createBscLaunchpadMonitor({ dataDir }, {
+        autoStart: false,
+        provider: { destroy() {} },
+        logger: { error() {}, info() {} },
+        ...disabledJournalTimerDependencies(),
+      });
+      subtest.after(() => monitor.stop().catch(() => {}));
+      const snapshotBefore = await fs.readFile(stateFile, "utf8");
+      const walBefore = await fs.readFile(`${stateFile}.wal`, "utf8");
+      await assert.rejects(
+        () => monitor.getState(),
+        new RegExp(`invalid BSC state WAL hot-state root operation ${root}`),
+      );
+      await monitor.stop();
+      assert.equal(await fs.readFile(stateFile, "utf8"), snapshotBefore,
+        "a failed startup must not compact the invalid replay view into the snapshot");
+      assert.equal(await fs.readFile(`${stateFile}.wal`, "utf8"), walBefore,
+        "a failed startup must leave the rejecting WAL evidence intact");
+
+      const restarted = createBscLaunchpadMonitor({ dataDir }, {
+        autoStart: false,
+        provider: { destroy() {} },
+        logger: { error() {}, info() {} },
+        ...disabledJournalTimerDependencies(),
+      });
+      subtest.after(() => restarted.stop().catch(() => {}));
+      await assert.rejects(
+        () => restarted.getState(),
+        new RegExp(`invalid BSC state WAL hot-state root operation ${root}`),
+      );
+    });
+  }
+});
+
+test("BSC WAL rejects hot-state records whose key is not the canonical transaction hash", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-wal-invalid-hot-key-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const stateFile = await seedModernBscJournal(dataDir);
+  const transactionHash = `0x${"a".repeat(64)}`;
+  await fs.writeFile(`${stateFile}.wal`, testBscWalFrame(1, [{
+    op: "set",
+    path: ["realtimePendingEntries", "not-the-transaction-hash"],
+    value: { transactionHash },
+  }]), { mode: 0o600 });
+  const monitor = createBscLaunchpadMonitor({ dataDir }, {
+    autoStart: false,
+    provider: { destroy() {} },
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  t.after(() => monitor.stop().catch(() => {}));
+  await assert.rejects(
+    () => monitor.getState(),
+    /invalid BSC post-WAL hot-state key not-the-transaction-hash/,
+  );
+});
+
+test("BSC snapshot fails closed when an explicit hot-state container is malformed", async (t) => {
+  for (const [root, value] of [
+    ["realtimePendingEntries", []],
+    ["deferredCreationEvidence", null],
+  ]) {
+    await t.test(root, async (subtest) => {
+      const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-snapshot-invalid-hot-root-"));
+      subtest.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+      const stateFile = await seedModernBscJournal(dataDir);
+      const snapshot = JSON.parse(await fs.readFile(stateFile, "utf8"));
+      snapshot[root] = value;
+      await fs.writeFile(stateFile, `${JSON.stringify(snapshot)}\n`, { mode: 0o600 });
+      const monitor = createBscLaunchpadMonitor({ dataDir }, {
+        autoStart: false,
+        provider: { destroy() {} },
+        logger: { error() {}, info() {} },
+        ...disabledJournalTimerDependencies(),
+      });
+      subtest.after(() => monitor.stop().catch(() => {}));
+      await assert.rejects(
+        () => monitor.getState(),
+        new RegExp(`invalid BSC snapshot hot-state container ${root}`),
+      );
+    });
+  }
+});
+
+test("BSC snapshot rejects malformed records before migration can normalize them", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-snapshot-invalid-hot-record-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const stateFile = await seedModernBscJournal(dataDir);
+  const snapshot = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  const transactionHash = `0x${"b".repeat(64)}`;
+  snapshot.realtimePendingEntries[transactionHash] = null;
+  const snapshotBytes = `${JSON.stringify(snapshot)}\n`;
+  await fs.writeFile(stateFile, snapshotBytes, { mode: 0o600 });
+  const walBytes = await fs.readFile(`${stateFile}.wal`, "utf8");
+
+  const monitor = createBscLaunchpadMonitor({ dataDir }, {
+    autoStart: false,
+    provider: { destroy() {} },
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  await assert.rejects(
+    () => monitor.getState(),
+    new RegExp(`invalid BSC snapshot hot-state record realtimePendingEntries\\.${transactionHash}`),
+  );
+  await monitor.stop();
+  assert.equal(await fs.readFile(stateFile, "utf8"), snapshotBytes);
+  assert.equal(await fs.readFile(`${stateFile}.wal`, "utf8"), walBytes);
+
+  const restarted = createBscLaunchpadMonitor({ dataDir }, {
+    autoStart: false,
+    provider: { destroy() {} },
+    logger: { error() {}, info() {} },
+    ...disabledJournalTimerDependencies(),
+  });
+  t.after(() => restarted.stop().catch(() => {}));
+  await assert.rejects(
+    () => restarted.getState(),
+    /invalid BSC snapshot hot-state record realtimePendingEntries/,
+  );
+});
+
+test("BSC hot-state records require a finite durable block before scheduling", async (t) => {
+  for (const source of ["snapshot", "wal"]) {
+    await t.test(source, async (subtest) => {
+      const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `bsc-${source}-missing-hot-block-`));
+      subtest.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+      const stateFile = await seedModernBscJournal(dataDir);
+      const transactionHash = `0x${"c".repeat(64)}`;
+      if (source === "snapshot") {
+        const snapshot = JSON.parse(await fs.readFile(stateFile, "utf8"));
+        snapshot.realtimePendingEntries[transactionHash] = { transactionHash };
+        await fs.writeFile(stateFile, `${JSON.stringify(snapshot)}\n`, { mode: 0o600 });
+      } else {
+        await fs.writeFile(`${stateFile}.wal`, testBscWalFrame(1, [{
+          op: "set",
+          path: ["realtimePendingEntries", transactionHash],
+          value: { transactionHash },
+        }]), { mode: 0o600 });
+      }
+      const snapshotBefore = await fs.readFile(stateFile, "utf8");
+      const walBefore = await fs.readFile(`${stateFile}.wal`, "utf8");
+      const monitor = createBscLaunchpadMonitor({ dataDir }, {
+        autoStart: false,
+        provider: { destroy() {} },
+        logger: { error() {}, info() {} },
+        ...disabledJournalTimerDependencies(),
+      });
+      await assert.rejects(
+        () => monitor.getState(),
+        new RegExp(`invalid BSC ${source === "snapshot" ? "snapshot" : "post-WAL"} hot-state block`),
+      );
+      await monitor.stop();
+      assert.equal(await fs.readFile(stateFile, "utf8"), snapshotBefore);
+      assert.equal(await fs.readFile(`${stateFile}.wal`, "utf8"), walBefore);
+
+      const restarted = createBscLaunchpadMonitor({ dataDir }, {
+        autoStart: false,
+        provider: { destroy() {} },
+        logger: { error() {}, info() {} },
+        ...disabledJournalTimerDependencies(),
+      });
+      subtest.after(() => restarted.stop().catch(() => {}));
+      await assert.rejects(() => restarted.getState(), /hot-state block/);
     });
   }
 });

@@ -92,10 +92,28 @@ async function installStack(dataDir, nowMs, overrideName = null) {
   const overrides = overrideName ? await fixture(overrideName) : {};
   const filenames = new Set([...Object.keys(base), ...Object.keys(overrides)]);
   for (const filename of filenames) {
-    const value = Object.hasOwn(overrides, filename)
+    const value = hydrate(Object.hasOwn(overrides, filename)
       ? deepMerge(base[filename] || {}, overrides[filename])
-      : base[filename];
-    await writeJson(dataDir, filename, hydrate(value, nowMs), nowMs);
+      : base[filename], nowMs);
+    if (filename === "fomo-x-call-state.json" && value?.health) {
+      // The shared fixture predates the producer's operational/coverage split.
+      // Keep this test-local hydration until that fixture can be revised in a
+      // change which is allowed to touch shared fixture data.
+      value.health.operationalStatus ??= "healthy";
+      value.health.lastOperationalSuccessAt ??= value.health.checkedAt;
+      value.health.consecutiveFailures ??= 0;
+      value.health.sources ||= {};
+      value.health.sources.x ||= {};
+      value.health.sources.x.operationalStatus ??= value.health.operationalStatus;
+      value.health.sources.x.lastOperationalSuccessAt ??= value.health.lastOperationalSuccessAt;
+      value.health.sources.x.consecutiveFailures ??= value.health.consecutiveFailures;
+    }
+    if (filename === "pon-state.json" && value?.platformToken) {
+      // The shared fixture predates parsePlatformToken persisting exact
+      // decimal supplies canonically as strings.
+      value.platformToken.supply = String(value.platformToken.supply);
+    }
+    await writeJson(dataDir, filename, value, nowMs);
   }
 }
 
@@ -105,6 +123,7 @@ function healthEnv({
   heartbeat = false,
   requireComplete = false,
   requirePon = false,
+  overrides = {},
 } = {}) {
   return {
     DATA_DIR: dataDir,
@@ -113,22 +132,183 @@ function healthEnv({
     HEALTH_REQUIRE_EXTERNAL_HEARTBEAT: heartbeat ? "true" : "false",
     HEALTH_HEARTBEAT_URL: heartbeat ? "https://heartbeat.example.test/ping/super-secret-token" : "",
     HEALTH_HEARTBEAT_REQUIRE_COVERAGE_COMPLETE: requireComplete ? "true" : "false",
+    ...overrides,
   };
 }
 
 const activeService = async () => "active";
 
-test("Ubuntu installer emits explicit opt-in Pon health defaults and remains valid Bash", async (t) => {
+test("a proved Pon cycle cooldown covers dependent idle sources without hiding integrity errors", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const state = JSON.parse(await fs.readFile(path.join(dataDir, "pon-state.json"), "utf8"));
+  const failedAt = new Date(BASE_NOW - 240_000).toISOString();
+  const retryAt = new Date(BASE_NOW + 60_000).toISOString();
+  const code = "PON_FACTORY_CALL_FAILED";
+  Object.assign(state._health, { status: "degraded", checkedAt: failedAt, lastErrorAt: failedAt,
+    lastErrorCode: code, lastError: "marketCount() RPC timeout", nextAttemptAt: retryAt });
+  state._health.apiCoverage.lastVerifiedAt = failedAt;
+  for (const source of Object.values(state._health.sources)) {
+    Object.assign(source, { lastAttemptAt: failedAt, lastSuccessAt: failedAt, nextAttemptAt: retryAt });
+  }
+  Object.assign(state._health.sources.chain, { status: "backoff", lastErrorAt: failedAt,
+    lastErrorCode: code, lastError: "marketCount() RPC timeout", consecutiveFailures: 7 });
+  const options = { env: healthEnv({ dataDir, configDir, requirePon: true }), nowMs: BASE_NOW,
+    serviceStateImpl: activeService, writeReportFile: false };
+  await writeJson(dataDir, "pon-state.json", state, BASE_NOW);
+  const waiting = await runHealthCheck(options);
+  assert.equal(waiting.lanes.pon.operationalHealthy, true, waiting.lanes.pon.operationalReasons.join(","));
+  assert.equal(waiting.lanes.pon.coverageComplete, false);
+  assert.equal(waiting.lanes.pon.semantic.cycleUpstreamBackoff, true);
+  state._health.sources.api_health.nextAttemptAt = failedAt;
+  await writeJson(dataDir, "pon-state.json", state, BASE_NOW);
+  const unproved = await runHealthCheck(options);
+  assert.equal(unproved.lanes.pon.operationalHealthy, false);
+  state._health.sources.api_health.nextAttemptAt = retryAt;
+  state._health.lastErrorCode = "PON_CHAIN_ID_MISMATCH";
+  state._health.sources.chain.lastErrorCode = "PON_CHAIN_ID_MISMATCH";
+  await writeJson(dataDir, "pon-state.json", state, BASE_NOW);
+  const wrongChain = await runHealthCheck(options);
+  assert.equal(wrongChain.lanes.pon.operationalHealthy, false);
+  assert.equal(wrongChain.lanes.pon.semantic.cycleUpstreamBackoff, false);
+});
+
+test("healthy Binance announcements cannot hide missing or stalled Web3 document monitoring", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const filename = path.join(dataDir, "binance-state.json");
+  const state = JSON.parse(await fs.readFile(filename, "utf8"));
+  const source = state._health.web3DeveloperDocs;
+  const options = { env: healthEnv({ dataDir, configDir }), nowMs: BASE_NOW,
+    serviceStateImpl: activeService, writeReportFile: false };
+  state._health.web3DeveloperDocs = { ...source, status: "degraded", pagesChecked: 8, pagesBlocked: 2,
+    rateLimited: true, nextRetryAt: new Date(BASE_NOW + 300_000).toISOString() };
+  await writeJson(dataDir, "binance-state.json", state, BASE_NOW);
+  const limited = await runHealthCheck(options);
+  assert.equal(limited.lanes.binance.operationalHealthy, true);
+  assert.equal(limited.lanes.binance.coverageComplete, false);
+  assert.ok(limited.lanes.binance.coverageReasons.includes("binance_web3DeveloperDocs_pages_incomplete"));
+  assert.equal(limited.lanes.binance.semantic.documents.web3DeveloperDocs.pagesTotal, 10);
+  state._health.web3DeveloperDocs = { ...source, checkedAt: new Date(BASE_NOW - 600_000).toISOString() };
+  await writeJson(dataDir, "binance-state.json", state, BASE_NOW);
+  const stalled = await runHealthCheck(options);
+  assert.ok(stalled.lanes.binance.operationalReasons.includes("binance_web3DeveloperDocs_checked_stale"));
+  delete state._health.web3DeveloperDocs;
+  await writeJson(dataDir, "binance-state.json", state, BASE_NOW);
+  const missing = await runHealthCheck(options);
+  assert.ok(missing.lanes.binance.operationalReasons.includes("binance_web3DeveloperDocs_health_missing"));
+});
+
+test("an idle Fomo cursor is coverage-degraded only with fresh proof of zero admitted targets", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const callFile = path.join(dataDir, "fomo-call-state.json");
+  const checkpointFile = path.join(dataDir, "fomo-call-checkpoint.json");
+  const call = JSON.parse(await fs.readFile(callFile, "utf8"));
+  call.health = { ...call.health, status: "partial", consecutiveFailures: 0, lastError: null,
+    checkedAt: new Date(BASE_NOW - 5_000).toISOString() };
+  call.coverageSummary = { ...call.coverageSummary,
+    checkedAt: new Date(BASE_NOW - 5_000).toISOString(), monitoredTopCount: 0,
+    targetWallets: { evm: 0, solana: 0 },
+    chainCoverage: { bsc: "not_configured", smartMoney: { qualification: "empty", admitted: 0 } },
+  };
+  call.publicOnchain = { ...call.publicOnchain, smartMoney: { admittedWallets: [], pendingTrades: {} } };
+  await writeJson(dataDir, "fomo-call-state.json", call, BASE_NOW);
+  const checkpoint = JSON.parse(await fs.readFile(checkpointFile, "utf8"));
+  checkpoint.updatedAt = new Date(BASE_NOW - 3_600_000).toISOString();
+  await writeJson(dataDir, "fomo-call-checkpoint.json", checkpoint, BASE_NOW - 3_600_000);
+  const options = { env: healthEnv({ dataDir, configDir }), nowMs: BASE_NOW,
+    serviceStateImpl: activeService, writeReportFile: false };
+  const idle = await runHealthCheck(options);
+  assert.equal(idle.lanes.fomoCheckpoint.operationalHealthy, true);
+  assert.equal(idle.lanes.fomoCheckpoint.coverageComplete, false);
+  assert.equal(idle.lanes.fomoCheckpoint.semantic.idleWithoutTargets, true);
+  for (const changed of [
+    { ...call, coverageSummary: { ...call.coverageSummary, checkedAt: checkpoint.updatedAt } },
+    { ...call, publicOnchain: { smartMoney: { admittedWallets: ["wallet"], pendingTrades: {} } } },
+    { ...call, publicOnchain: { smartMoney: { admittedWallets: [], pendingTrades: { tx: {} } } } },
+    { ...call, publicOnchain: { smartMoney: { admittedWallets: {}, pendingTrades: {} } } },
+    { ...call, publicOnchain: { smartMoney: { admittedWallets: [], pendingTrades: [] } } },
+    { ...call, health: { ...call.health, checkedAt: checkpoint.updatedAt } },
+  ]) {
+    await writeJson(dataDir, "fomo-call-state.json", changed, BASE_NOW);
+    const report = await runHealthCheck(options);
+    assert.equal(report.lanes.fomoCheckpoint.operationalHealthy, false);
+  }
+});
+
+test("macOS health uses launchd and PID-matched heartbeats without requiring a Linux ACTIVE marker", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  await fs.rm(path.join(configDir, "ACTIVE"));
+  const options = {
+    env: healthEnv({ dataDir, configDir, overrides: { HEALTH_SERVICE_MANAGER: "launchd" } }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: async () => { throw new Error("must not call systemd on macOS"); },
+    launchdServiceImpl: async ({ label, producer }) => ({
+      label, state: "active", pid: producer === "main" ? 42 : 43,
+      heartbeat: { healthy: true, reasons: [], ageSeconds: 5 },
+    }),
+  };
+  const healthy = await runHealthCheck(options);
+  assert.equal(healthy.healthy, true);
+  assert.equal(healthy.serviceManager, "launchd");
+  assert.equal(healthy.runtimeServices.main.pid, 42);
+  const stale = await runHealthCheck({ ...options,
+    launchdServiceImpl: async ({ producer }) => ({ state: "active", pid: 42,
+      heartbeat: { healthy: producer !== "fomo", reasons: producer === "fomo" ? ["heartbeat_pid_mismatch"] : [] },
+    }),
+  });
+  assert.equal(stale.operationalHealthy, false);
+  assert.ok(stale.operationalFailures.includes("fomo runtime: heartbeat_pid_mismatch"));
+  assert.equal(stale.coverageComplete, true, "worker liveness and source coverage remain distinct");
+});
+
+test("Ubuntu installer emits explicit semantic-lane health defaults and remains valid Bash", async (t) => {
   const source = await fs.readFile(INSTALLER, "utf8");
   assert.equal((source.match(/printf 'HEALTH_PON_MAX_AGE_SECONDS=180\\n'/g) || []).length, 1);
   assert.equal((source.match(/printf 'HEALTH_REQUIRE_PON=false\\n'/g) || []).length, 1);
+  for (const setting of [
+    "HEALTH_REQUIRE_MORPH=true",
+    "HEALTH_REQUIRE_FLAP_QUOTE=true",
+    "HEALTH_REQUIRE_FOUR_REGISTRY=true",
+    "HEALTH_REQUIRE_UNISWAP=true",
+    "HEALTH_REQUIRE_XAI_OFFICIAL=true",
+    "HEALTH_REQUIRE_TELEGRAM_NEWS=false",
+    "HEALTH_REQUIRE_TWITTER=true",
+  ]) {
+    assert.equal(source.includes(`printf '${setting}\\n'`), true, `${setting} must be explicit`);
+  }
   const [activate, assertActive] = await Promise.all([
     fs.readFile(ACTIVATE, "utf8"),
     fs.readFile(ASSERT_ACTIVE, "utf8"),
   ]);
   assert.match(activate, /PON_MONITOR_ENABLED/, "activation must inspect the monitor switch");
   assert.match(activate, /HEALTH_REQUIRE_PON/, "activation must require semantic health coverage");
-  assert.match(activate, /requires HEALTH_REQUIRE_PON=true/, "activation must fail with an actionable message");
+  assert.match(
+    activate,
+    /require_health_for_enabled_lane "\$pon_enabled" HEALTH_REQUIRE_PON/,
+    "activation must bind enabled Pon monitoring to required semantic health",
+  );
+  for (const [monitorSetting, healthSetting] of [
+    ["MORPH_MONITOR_ENABLED", "HEALTH_REQUIRE_MORPH"],
+    ["FLAP_QUOTE_MONITOR_ENABLED", "HEALTH_REQUIRE_FLAP_QUOTE"],
+    ["FOUR_REGISTRY_MONITOR_ENABLED", "HEALTH_REQUIRE_FOUR_REGISTRY"],
+    ["UNISWAP_MONITOR_ENABLED", "HEALTH_REQUIRE_UNISWAP"],
+    ["XAI_OFFICIAL_MONITOR_ENABLED", "HEALTH_REQUIRE_XAI_OFFICIAL"],
+    ["TELEGRAM_NEWS_MONITOR_ENABLED", "HEALTH_REQUIRE_TELEGRAM_NEWS"],
+  ]) {
+    assert.match(activate, new RegExp(monitorSetting), `activation must inspect ${monitorSetting}`);
+    assert.match(activate, new RegExp(healthSetting), `activation must enforce ${healthSetting}`);
+  }
+  for (const setting of [
+    "TWITTER_MONITOR_ENABLED",
+    "BINANCE_CRITICAL_X_MONITOR_ENABLED",
+    "FOCUS_CRITICAL_X_MONITOR_ENABLED",
+    "HEALTH_REQUIRE_TWITTER",
+  ]) {
+    assert.match(activate, new RegExp(setting), `activation must close the effective Twitter gate for ${setting}`);
+  }
   assert.match(activate, /read-env-setting\.sh/, "activation must resolve the effective last assignment");
   assert.match(assertActive, /PON_MONITOR_ENABLED/, "service preflight must inspect the systemd-injected switch");
   assert.doesNotMatch(assertActive, /read-env-setting\.sh/, "unprivileged preflight must not read root-only env files");
@@ -180,6 +360,610 @@ test("semantic health reports a fully advancing stack as healthy", async (t) => 
   assert.equal(report.lanes.bsc.semantic.realtime.status, "healthy");
   assert.equal(report.lanes.bsc.semantic.historical.status, "healthy");
   assert.equal(report.lanes.fomoCheckpoint.progress.value, 201);
+  for (const lane of ["morph", "flapQuote", "fourRegistry", "uniswap", "xaiOfficial", "twitter"]) {
+    assert.equal(report.lanes[lane].required, true, `${lane} should mirror its default-enabled monitor`);
+    assert.equal(report.lanes[lane].status, "healthy", `${lane} should expose healthy progress`);
+  }
+  assert.equal(report.lanes.telegramNews.required, false);
+  assert.equal(report.lanes.telegramNews.status, "disabled");
+});
+
+test("new semantic lanes mirror monitor enable switches and ignore missing disabled state", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const files = [
+    "morph-launchpad-state.json",
+    "flap-quote-state.json",
+    "four-registry-state.json",
+    "uniswap-state.json",
+    "xai-official-state.json",
+    "telegram-news-state.json",
+    "twitter-state.json",
+  ];
+  await Promise.all(files.map((file) => fs.rm(path.join(dataDir, file))));
+  const report = await runHealthCheck({
+    env: healthEnv({
+      dataDir,
+      configDir,
+      overrides: {
+        MORPH_MONITOR_ENABLED: "false",
+        FLAP_QUOTE_MONITOR_ENABLED: "false",
+        FOUR_REGISTRY_MONITOR_ENABLED: "false",
+        UNISWAP_MONITOR_ENABLED: "false",
+        XAI_OFFICIAL_MONITOR_ENABLED: "false",
+        TELEGRAM_NEWS_MONITOR_ENABLED: "false",
+        TWITTER_MONITOR_ENABLED: "false",
+        BINANCE_CRITICAL_X_MONITOR_ENABLED: "false",
+        FOCUS_CRITICAL_X_MONITOR_ENABLED: "false",
+        PON_MONITOR_ENABLED: "false",
+      },
+    }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+
+  for (const lane of ["morph", "flapQuote", "fourRegistry", "uniswap", "xaiOfficial", "telegramNews", "twitter"]) {
+    assert.equal(report.lanes[lane].required, false);
+    assert.equal(report.lanes[lane].status, "disabled");
+    assert.deepEqual(report.lanes[lane].operationalReasons, []);
+  }
+  assert.equal(report.operationalHealthy, true);
+  assert.equal(report.coverageComplete, true);
+});
+
+test("Pon health mirrors its enabled monitor unless an explicit health override disables it", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+
+  const enabled = await runHealthCheck({
+    env: healthEnv({
+      dataDir,
+      configDir,
+      overrides: {
+        HEALTH_REQUIRE_PON: undefined,
+        PON_MONITOR_ENABLED: "true",
+      },
+    }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+  assert.equal(enabled.lanes.pon.required, true);
+  assert.equal(enabled.lanes.pon.status, "healthy");
+
+  const explicitlyOptional = await runHealthCheck({
+    env: healthEnv({
+      dataDir,
+      configDir,
+      overrides: {
+        HEALTH_REQUIRE_PON: "false",
+        PON_MONITOR_ENABLED: "true",
+      },
+    }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+  assert.equal(explicitlyOptional.lanes.pon.required, false);
+  assert.equal(explicitlyOptional.lanes.pon.status, "disabled");
+});
+
+test("critical X lanes keep Twitter health required when ordinary Twitter monitoring is disabled", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+
+  const report = await runHealthCheck({
+    env: healthEnv({
+      dataDir,
+      configDir,
+      overrides: {
+        HEALTH_REQUIRE_TWITTER: undefined,
+        HEALTH_REQUIRE_PON: "false",
+        TWITTER_MONITOR_ENABLED: "false",
+        PON_MONITOR_ENABLED: "false",
+      },
+    }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+
+  assert.equal(report.lanes.twitter.required, true);
+  assert.equal(report.lanes.twitter.status, "healthy");
+});
+
+test("isolated health requirements can distinguish configured monitoring from optional lanes", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  await fs.rm(path.join(dataDir, "morph-launchpad-state.json"));
+
+  const report = await runHealthCheck({
+    env: healthEnv({
+      dataDir,
+      configDir,
+      overrides: {
+        MORPH_MONITOR_ENABLED: "false",
+        HEALTH_REQUIRE_MORPH: "true",
+      },
+    }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+
+  assert.equal(report.requirements.morph, true);
+  assert.equal(report.lanes.morph.required, true);
+  assert.equal(report.lanes.morph.operationalHealthy, false);
+  assert.equal(report.lanes.morph.operationalReasons.includes("morph-launchpad-state.json_missing"), true);
+});
+
+test("enabled semantic lane with missing state is an operational failure", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  await fs.rm(path.join(dataDir, "xai-official-state.json"));
+
+  const report = await runHealthCheck({
+    env: healthEnv({ dataDir, configDir }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+
+  assert.equal(report.lanes.xaiOfficial.required, true);
+  assert.equal(report.lanes.xaiOfficial.operationalHealthy, false);
+  assert.equal(report.lanes.xaiOfficial.operationalReasons.includes("xai-official-state.json_missing"), true);
+});
+
+test("chain-backed semantic lanes detect fresh state with frozen cursors", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const first = await runHealthCheck({
+    env: healthEnv({ dataDir, configDir }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+  const later = BASE_NOW + 10 * 60_000;
+  await installStack(dataDir, later);
+  const previous = {
+    version: 3,
+    lanes: Object.fromEntries(["morph", "flapQuote", "fourRegistry"].map((lane) => [
+      lane,
+      structuredClone(first.lanes[lane]),
+    ])),
+  };
+  for (const lane of Object.values(previous.lanes)) {
+    lane.progress.lastAdvancedAt = new Date(later - 10 * 60_000).toISOString();
+  }
+  await writeJson(dataDir, "health.json", previous, later);
+
+  const report = await runHealthCheck({
+    env: healthEnv({ dataDir, configDir }),
+    nowMs: later,
+    serviceStateImpl: activeService,
+  });
+
+  for (const [lane, reason] of [
+    ["morph", "morph_cursor_frozen"],
+    ["flapQuote", "flap_quote_cursor_frozen"],
+    ["fourRegistry", "four_registry_cursor_frozen"],
+  ]) {
+    assert.equal(report.lanes[lane].authoritative.ageSeconds <= 5, true);
+    assert.equal(report.lanes[lane].progress.frozen, true);
+    assert.equal(report.lanes[lane].operationalHealthy, false);
+    assert.equal(report.lanes[lane].operationalReasons.includes(reason), true);
+  }
+});
+
+test("Flap quote integrity mismatch is operational while transport backoff is coverage-only", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const stateFile = path.join(dataDir, "flap-quote-state.json");
+  const state = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  state._health = {
+    ...state._health,
+    status: "degraded",
+    lastErrorAt: new Date(BASE_NOW - 5_000).toISOString(),
+    lastAttemptAt: new Date(BASE_NOW - 5_000).toISOString(),
+    nextAttemptAt: new Date(BASE_NOW + 60_000).toISOString(),
+    failureClass: "chain",
+    lastErrorCode: "FLAP_QUOTE_PORTAL_VERSION_MISMATCH",
+  };
+  await writeJson(dataDir, "flap-quote-state.json", state, BASE_NOW);
+  const mismatch = await runHealthCheck({
+    env: healthEnv({ dataDir, configDir }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+  assert.equal(mismatch.lanes.flapQuote.operationalHealthy, false);
+  assert.equal(
+    mismatch.lanes.flapQuote.operationalReasons.includes(
+      "flap_quote_integrity_failure:FLAP_QUOTE_PORTAL_VERSION_MISMATCH",
+    ),
+    true,
+  );
+
+  state._health.lastErrorCode = "FLAP_QUOTE_GET_LOGS_FAILED";
+  state._health.lastSuccessAt = new Date(BASE_NOW - 10 * 60_000).toISOString();
+  await writeJson(dataDir, "flap-quote-state.json", state, BASE_NOW);
+  const backoff = await runHealthCheck({
+    env: healthEnv({ dataDir, configDir }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+  assert.equal(backoff.lanes.flapQuote.operationalHealthy, true);
+  assert.equal(backoff.lanes.flapQuote.coverageComplete, false);
+  assert.equal(backoff.lanes.flapQuote.semantic.sourceLimited, true);
+});
+
+test("Flap quote health accepts only the producer's two closed cursor states", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const stateFile = path.join(dataDir, "flap-quote-state.json");
+  const baseline = JSON.parse(await fs.readFile(stateFile, "utf8"));
+
+  const midBlock = structuredClone(baseline);
+  midBlock.cursor.nextBlock = midBlock.cursor.anchorBlock;
+  midBlock.cursor.afterLogIndex = 7;
+  await writeJson(dataDir, "flap-quote-state.json", midBlock, BASE_NOW);
+  const valid = await runHealthCheck({
+    env: healthEnv({ dataDir, configDir }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+  assert.equal(valid.lanes.flapQuote.operationalHealthy, true);
+  assert.equal(valid.lanes.flapQuote.operationalReasons.includes("flap_quote_cursor_missing_or_invalid"), false);
+
+  for (const [afterLogIndex, nextBlock] of [
+    [7, baseline.cursor.anchorBlock + 1],
+    [-1, baseline.cursor.anchorBlock],
+  ]) {
+    const invalid = structuredClone(baseline);
+    invalid.cursor.afterLogIndex = afterLogIndex;
+    invalid.cursor.nextBlock = nextBlock;
+    await writeJson(dataDir, "flap-quote-state.json", invalid, BASE_NOW);
+    const report = await runHealthCheck({
+      env: healthEnv({ dataDir, configDir }),
+      nowMs: BASE_NOW,
+      serviceStateImpl: activeService,
+    });
+    assert.equal(report.lanes.flapQuote.operationalHealthy, false);
+    assert.equal(report.lanes.flapQuote.operationalReasons.includes("flap_quote_cursor_missing_or_invalid"), true);
+  }
+});
+
+test("semantic health rejects internally inconsistent producer state", async (t) => {
+  const cases = [
+    {
+      file: "morph-launchpad-state.json",
+      reason: "morph_chain_progress_inconsistent",
+      mutate(state) {
+        state.lastScannedBlock = state.health.headBlock + 100;
+        state.cursor = state.lastScannedBlock + 1;
+        state.health.lagBlocks = 0;
+      },
+      lane: "morph",
+    },
+    {
+      file: "twitter-state.json",
+      reason: "twitter_coverage_counters_invalid",
+      mutate(state) {
+        state._meta.health.coverageAccounts = {
+          total: 1,
+          covered: 1,
+          healthy: 1,
+          fallback: 1,
+          unavailable: 0,
+          priorityTotal: 1,
+          priorityCovered: 1,
+        };
+      },
+      lane: "twitter",
+    },
+    {
+      file: "four-registry-state.json",
+      reason: "four_registry_processed_events_invalid",
+      mutate(state) { state.processedEvents = []; },
+      lane: "fourRegistry",
+    },
+    {
+      file: "flap-quote-state.json",
+      reason: "flap_quote_pinned_identity_mismatch",
+      mutate(state) { delete state.identity.implementationCodeHash; },
+      lane: "flapQuote",
+    },
+  ];
+
+  for (const fixtureCase of cases) {
+    await t.test(fixtureCase.lane, async (subtest) => {
+      const { dataDir, configDir } = await makeWorkspace(subtest);
+      await installStack(dataDir, BASE_NOW);
+      const filename = path.join(dataDir, fixtureCase.file);
+      const state = JSON.parse(await fs.readFile(filename, "utf8"));
+      fixtureCase.mutate(state);
+      await writeJson(dataDir, fixtureCase.file, state, BASE_NOW);
+      const report = await runHealthCheck({
+        env: healthEnv({ dataDir, configDir }),
+        nowMs: BASE_NOW,
+        serviceStateImpl: activeService,
+      });
+      assert.equal(report.lanes[fixtureCase.lane].operationalHealthy, false);
+      assert.equal(
+        report.lanes[fixtureCase.lane].operationalReasons.includes(fixtureCase.reason),
+        true,
+      );
+    });
+  }
+});
+
+test("Morph health accepts the producer's bounded ahead-of-safe observation", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const filename = path.join(dataDir, "morph-launchpad-state.json");
+  const state = JSON.parse(await fs.readFile(filename, "utf8"));
+  state.health.headBlock = 300;
+  state.health.safeBlock = 299;
+  state.health.lagBlocks = 0;
+  await writeJson(dataDir, "morph-launchpad-state.json", state, BASE_NOW);
+  const report = await runHealthCheck({
+    env: healthEnv({ dataDir, configDir }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+  assert.equal(report.lanes.morph.operationalHealthy, true);
+  assert.equal(report.lanes.morph.operationalReasons.includes("morph_chain_progress_inconsistent"), false);
+});
+
+test("Morph health preserves truthful catching-up coverage lag", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const filename = path.join(dataDir, "morph-launchpad-state.json");
+  const state = JSON.parse(await fs.readFile(filename, "utf8"));
+  state.health.status = "catching_up";
+  state.health.headBlock = 310;
+  state.health.safeBlock = 309;
+  state.health.lagBlocks = 9;
+  await writeJson(dataDir, "morph-launchpad-state.json", state, BASE_NOW);
+  const report = await runHealthCheck({
+    env: healthEnv({ dataDir, configDir }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+  assert.equal(report.lanes.morph.operationalHealthy, true);
+  assert.equal(report.lanes.morph.coverageComplete, false);
+  assert.equal(report.lanes.morph.coverageReasons.includes("morph_chain_coverage_lagging"), true);
+});
+
+test("Morph health derives coverage lag from a valid mid-cycle cursor snapshot", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const filename = path.join(dataDir, "morph-launchpad-state.json");
+  const state = JSON.parse(await fs.readFile(filename, "utf8"));
+  state.health.headBlock = 310;
+  state.health.safeBlock = 309;
+  state.health.lagBlocks = 0;
+  await writeJson(dataDir, "morph-launchpad-state.json", state, BASE_NOW);
+  const report = await runHealthCheck({
+    env: healthEnv({ dataDir, configDir }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+  assert.equal(report.lanes.morph.operationalHealthy, true);
+  assert.equal(report.lanes.morph.coverageComplete, false);
+  assert.equal(report.lanes.morph.operationalReasons.includes("morph_chain_progress_inconsistent"), false);
+  assert.equal(report.lanes.morph.coverageReasons.includes("morph_chain_coverage_lagging"), true);
+});
+
+test("Morph pre-baseline transport failure remains coverage-only before chain progress exists", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const filename = path.join(dataDir, "morph-launchpad-state.json");
+  const state = JSON.parse(await fs.readFile(filename, "utf8"));
+  state.baselineComplete = false;
+  state.cursor = null;
+  state.lastScannedBlock = null;
+  state.lastScannedBlockHash = null;
+  state.health.status = "baseline_blocked";
+  state.health.lastSuccessAt = null;
+  state.health.lastErrorAt = new Date(BASE_NOW - 5_000).toISOString();
+  state.health.lastError = "RPC unavailable";
+  state.health.headBlock = null;
+  state.health.safeBlock = null;
+  state.health.lagBlocks = null;
+  state.long.initialized = false;
+  state.long.checkedAt = null;
+  await writeJson(dataDir, "morph-launchpad-state.json", state, BASE_NOW);
+  const report = await runHealthCheck({
+    env: healthEnv({ dataDir, configDir }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+  assert.equal(report.lanes.morph.operationalHealthy, true);
+  assert.equal(report.lanes.morph.coverageComplete, false);
+  assert.equal(report.lanes.morph.operationalReasons.includes("morph_chain_progress_inconsistent"), false);
+  assert.equal(report.lanes.morph.operationalReasons.includes("morph_lag_invalid"), false);
+});
+
+test("Fomo X total operational failure is critical even after a recent success", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const filename = path.join(dataDir, "fomo-x-call-state.json");
+  const state = JSON.parse(await fs.readFile(filename, "utf8"));
+  state.health.status = "degraded";
+  state.health.operationalStatus = "error";
+  state.health.lastOperationalSuccessAt = new Date(BASE_NOW - 30_000).toISOString();
+  state.health.consecutiveFailures = 1;
+  await writeJson(dataDir, "fomo-x-call-state.json", state, BASE_NOW);
+
+  const report = await runHealthCheck({
+    env: healthEnv({ dataDir, configDir }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+  assert.equal(report.lanes.fomoX.operationalHealthy, false);
+  assert.equal(report.lanes.fomoX.operationalReasons.includes("fomo_x_operational_status_error"), true);
+});
+
+test("Fomo X stale operational success is critical despite a fresh coverage check", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const filename = path.join(dataDir, "fomo-x-call-state.json");
+  const state = JSON.parse(await fs.readFile(filename, "utf8"));
+  state.health.lastOperationalSuccessAt = new Date(BASE_NOW - 10 * 60_000).toISOString();
+  await writeJson(dataDir, "fomo-x-call-state.json", state, BASE_NOW);
+
+  const report = await runHealthCheck({
+    env: healthEnv({ dataDir, configDir }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+  assert.equal(report.lanes.fomoX.operationalHealthy, false);
+  assert.equal(report.lanes.fomoX.operationalReasons.includes("fomo_x_operational_success_stale"), true);
+});
+
+test("Fomo X partial operation with a recent success is coverage-only degradation", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const filename = path.join(dataDir, "fomo-x-call-state.json");
+  const state = JSON.parse(await fs.readFile(filename, "utf8"));
+  state.health.status = "degraded";
+  state.health.operationalStatus = "partial";
+  state.health.lastOperationalSuccessAt = new Date(BASE_NOW - 30_000).toISOString();
+  state.health.consecutiveFailures = 0;
+  await writeJson(dataDir, "fomo-x-call-state.json", state, BASE_NOW);
+
+  const report = await runHealthCheck({
+    env: healthEnv({ dataDir, configDir }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+  assert.equal(report.lanes.fomoX.operationalHealthy, true);
+  assert.equal(report.lanes.fomoX.coverageComplete, false);
+  assert.equal(report.lanes.fomoX.coverageReasons.includes("fomo_x_operational_partial"), true);
+});
+
+test("Fomo X backlog-only idle cycle does not become an operational failure", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const filename = path.join(dataDir, "fomo-x-call-state.json");
+  const state = JSON.parse(await fs.readFile(filename, "utf8"));
+  state.health.status = "degraded";
+  state.health.operationalStatus = "idle";
+  state.health.lastSuccessAt = new Date(BASE_NOW - 10 * 60_000).toISOString();
+  state.health.lastOperationalSuccessAt = new Date(BASE_NOW - 30_000).toISOString();
+  state.health.consecutiveFailures = 0;
+  state.health.liveCount = 3;
+  state.health.backlogCount = 1;
+  state.health.coverage.liveCount = 3;
+  state.health.coverage.backlogCount = 1;
+  state.health.sources.x.status = "partial";
+  state.health.sources.x.coverage = "source_limited";
+  await writeJson(dataDir, "fomo-x-call-state.json", state, BASE_NOW);
+
+  const report = await runHealthCheck({
+    env: healthEnv({ dataDir, configDir }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+  assert.equal(report.lanes.fomoX.operationalHealthy, true);
+  assert.deepEqual(report.lanes.fomoX.operationalReasons, []);
+  assert.equal(report.lanes.fomoX.coverageComplete, false);
+  assert.equal(report.lanes.fomoX.coverageReasons.includes("fomo_x_live_coverage_incomplete"), true);
+});
+
+test("source scheduler backoff stays operational but reports incomplete coverage", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const old = new Date(BASE_NOW - 10 * 60_000).toISOString();
+  const next = new Date(BASE_NOW + 5 * 60_000).toISOString();
+
+  const uniswapFile = path.join(dataDir, "uniswap-state.json");
+  const uniswap = JSON.parse(await fs.readFile(uniswapFile, "utf8"));
+  Object.assign(uniswap._health.blog, {
+    status: "backoff",
+    lastAttemptAt: old,
+    lastSuccessAt: old,
+    nextAttemptAt: next,
+    lastError: "HTTP 429",
+  });
+  await writeJson(dataDir, "uniswap-state.json", uniswap, BASE_NOW);
+
+  const xaiFile = path.join(dataDir, "xai-official-state.json");
+  const xai = JSON.parse(await fs.readFile(xaiFile, "utf8"));
+  xai.health.status = "degraded";
+  Object.assign(xai.health.sources.xai_news, {
+    status: "backoff",
+    checkedAt: old,
+    lastSuccessAt: old,
+    nextAttemptAt: next,
+    lastError: "HTTP 429",
+  });
+  await writeJson(dataDir, "xai-official-state.json", xai, BASE_NOW);
+
+  const telegramFile = path.join(dataDir, "telegram-news-state.json");
+  const telegram = JSON.parse(await fs.readFile(telegramFile, "utf8"));
+  Object.assign(telegram.health, {
+    status: "backoff",
+    lastAttemptAt: old,
+    lastSuccessAt: old,
+    nextAttemptAt: next,
+    lastError: "HTTP 429",
+  });
+  await writeJson(dataDir, "telegram-news-state.json", telegram, BASE_NOW);
+
+  const report = await runHealthCheck({
+    env: healthEnv({
+      dataDir,
+      configDir,
+      overrides: { TELEGRAM_NEWS_MONITOR_ENABLED: "true" },
+    }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+
+  for (const lane of ["uniswap", "xaiOfficial", "telegramNews"]) {
+    assert.equal(report.lanes[lane].operationalHealthy, true, lane);
+    assert.equal(report.lanes[lane].coverageComplete, false, lane);
+    assert.equal(report.lanes[lane].status, "degraded", lane);
+  }
+  assert.equal(report.operationalHealthy, true);
+  assert.equal(report.coverageComplete, false);
+});
+
+test("missing xAI critical source and partial priority Twitter coverage remain visible", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const xaiFile = path.join(dataDir, "xai-official-state.json");
+  const xai = JSON.parse(await fs.readFile(xaiFile, "utf8"));
+  delete xai.sources.xai_news;
+  delete xai.health.sources.xai_news;
+  await writeJson(dataDir, "xai-official-state.json", xai, BASE_NOW);
+
+  const twitterFile = path.join(dataDir, "twitter-state.json");
+  const twitter = JSON.parse(await fs.readFile(twitterFile, "utf8"));
+  twitter._meta.health.status = "partial";
+  twitter._meta.health.coverageAccounts = {
+    total: 5,
+    covered: 4,
+    healthy: 3,
+    fallback: 1,
+    unavailable: 1,
+    priorityTotal: 2,
+    priorityCovered: 1,
+  };
+  await writeJson(dataDir, "twitter-state.json", twitter, BASE_NOW);
+
+  const report = await runHealthCheck({
+    env: healthEnv({ dataDir, configDir }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+
+  assert.equal(report.lanes.xaiOfficial.operationalHealthy, false);
+  assert.equal(
+    report.lanes.xaiOfficial.operationalReasons.includes("xai_official_critical_source_missing:xai_news"),
+    true,
+  );
+  assert.equal(report.lanes.twitter.operationalHealthy, true);
+  assert.equal(report.lanes.twitter.coverageComplete, false);
+  assert.equal(
+    report.lanes.twitter.coverageReasons.includes("twitter_critical_source_coverage_incomplete"),
+    true,
+  );
 });
 
 test("Pon lane is optional when disabled and healthy when explicitly required", async (t) => {
@@ -197,6 +981,7 @@ test("Pon lane is optional when disabled and healthy when explicitly required", 
   assert.equal(disabled.operationalHealthy, true);
 
   const pon = hydrate((await fixture("healthy-stack.json"))["pon-state.json"], BASE_NOW);
+  pon.platformToken.supply = String(pon.platformToken.supply);
   await writeJson(dataDir, "pon-state.json", pon, BASE_NOW);
   const required = await runHealthCheck({
     env: healthEnv({ dataDir, configDir, requirePon: true }),
@@ -383,6 +1168,7 @@ test("Pon X delayed recovery remains visible until every oldest-first item is du
     status: "complete",
     completedAt: new Date(BASE_NOW - 1_000).toISOString(),
   };
+  lane.lastGapResolvedAt = lane.coverage.delayedRecovery.completedAt;
   await writeJson(dataDir, "twitter-state.json", state, BASE_NOW);
   const recovered = await runHealthCheck({
     env: healthEnv({ dataDir, configDir, requirePon: true }),
@@ -422,6 +1208,132 @@ test("Pon X delayed recovery remains visible until every oldest-first item is du
   assert.equal(malformed.lanes.pon.operationalHealthy, false);
   assert.equal(
     malformed.lanes.pon.operationalReasons.includes("pon_x_state_schema_invalid:coverage.delayedRecovery"),
+    true,
+  );
+});
+
+test("Pon X keeps a completed recovery audit record while a later gap is active", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const stateFile = path.join(dataDir, "twitter-state.json");
+  const state = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  const lane = state._health.pondotfun;
+  const recoveredGapSince = new Date(BASE_NOW - 60_000).toISOString();
+  const completedAt = new Date(BASE_NOW - 30_000).toISOString();
+  const activeGapSince = new Date(BASE_NOW - 10_000).toISOString();
+  const recoveredCursorId = state.pondotfun.latestId;
+
+  // This is the producer's real transition: recovery completes, the cursor
+  // can advance, and a later failed poll opens a new gap without overwriting
+  // the completed delayedRecovery audit record.
+  lane.coverage.delayedRecovery = {
+    status: "complete",
+    gapSince: recoveredGapSince,
+    cursorId: recoveredCursorId,
+    completedAt,
+  };
+  lane.lastGapResolvedAt = completedAt;
+  lane.gapSince = activeGapSince;
+  state.pondotfun.latestId = (BigInt(recoveredCursorId) + 1n).toString();
+  await writeJson(dataDir, "twitter-state.json", state, BASE_NOW);
+
+  const report = await runHealthCheck({
+    env: healthEnv({ dataDir, configDir, requirePon: true }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+  assert.equal(report.lanes.pon.operationalHealthy, true);
+  assert.equal(
+    report.lanes.pon.operationalReasons.includes("pon_x_state_schema_invalid:coverage.delayedRecovery"),
+    false,
+  );
+  assert.equal(report.lanes.pon.coverageComplete, false);
+  assert.equal(report.lanes.pon.coverageReasons.includes("pon_x_gap_active"), true);
+  assert.equal(report.lanes.pon.semantic.x.delayedRecoveryStatus, "complete");
+  assert.equal(report.lanes.pon.semantic.x.gapSince, activeGapSince);
+});
+
+test("Pon X rejects a completed recovery record reused for the active gap epoch", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const stateFile = path.join(dataDir, "twitter-state.json");
+  const state = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  const lane = state._health.pondotfun;
+  const sameEpoch = new Date(BASE_NOW - 20_000).toISOString();
+  lane.gapSince = sameEpoch;
+  lane.lastGapResolvedAt = sameEpoch;
+  lane.coverage.delayedRecovery = {
+    status: "complete",
+    gapSince: sameEpoch,
+    cursorId: state.pondotfun.latestId,
+    completedAt: sameEpoch,
+  };
+  await writeJson(dataDir, "twitter-state.json", state, BASE_NOW);
+
+  const report = await runHealthCheck({
+    env: healthEnv({ dataDir, configDir, requirePon: true }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+  assert.equal(report.lanes.pon.operationalHealthy, false);
+  assert.equal(
+    report.lanes.pon.operationalReasons.includes("pon_x_state_schema_invalid:coverage.delayedRecovery"),
+    true,
+  );
+});
+
+test("Pon X rejects an active gap timestamp that predates the completed recovery epoch", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const stateFile = path.join(dataDir, "twitter-state.json");
+  const state = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  const lane = state._health.pondotfun;
+  lane.coverage.delayedRecovery = {
+    status: "complete",
+    gapSince: new Date(BASE_NOW - 60_000).toISOString(),
+    cursorId: state.pondotfun.latestId,
+    completedAt: new Date(BASE_NOW - 20_000).toISOString(),
+  };
+  lane.lastGapResolvedAt = new Date(BASE_NOW - 15_000).toISOString();
+  lane.gapSince = new Date(BASE_NOW - 30_000).toISOString();
+  await writeJson(dataDir, "twitter-state.json", state, BASE_NOW);
+
+  const report = await runHealthCheck({
+    env: healthEnv({ dataDir, configDir, requirePon: true }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+  assert.equal(report.lanes.pon.operationalHealthy, false);
+  assert.equal(
+    report.lanes.pon.operationalReasons.includes("pon_x_state_schema_invalid:coverage.delayedRecovery"),
+    true,
+  );
+});
+
+test("Pon X rejects a completed recovery cursor ahead of the durable cursor", async (t) => {
+  const { dataDir, configDir } = await makeWorkspace(t);
+  await installStack(dataDir, BASE_NOW);
+  const stateFile = path.join(dataDir, "twitter-state.json");
+  const state = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  const lane = state._health.pondotfun;
+  const completedAt = new Date(BASE_NOW - 10_000).toISOString();
+  lane.coverage.delayedRecovery = {
+    status: "complete",
+    gapSince: new Date(BASE_NOW - 30_000).toISOString(),
+    cursorId: (BigInt(state.pondotfun.latestId) + 1n).toString(),
+    completedAt,
+  };
+  lane.lastGapResolvedAt = completedAt;
+  await writeJson(dataDir, "twitter-state.json", state, BASE_NOW);
+
+  const report = await runHealthCheck({
+    env: healthEnv({ dataDir, configDir, requirePon: true }),
+    nowMs: BASE_NOW,
+    serviceStateImpl: activeService,
+  });
+  assert.equal(report.lanes.pon.operationalHealthy, false);
+  assert.equal(
+    report.lanes.pon.operationalReasons.includes("pon_x_state_schema_invalid:coverage.delayedRecovery"),
     true,
   );
 });
@@ -498,6 +1410,75 @@ test("Pon platform-token state must retain its finalized ERC-20 closure", async 
       });
       assert.equal(report.lanes.pon.operationalHealthy, false);
       assert.equal(report.lanes.pon.operationalReasons.includes("pon_platform_token_verification_invalid"), true);
+    });
+  }
+});
+
+test("Pon platform-token health accepts canonical exact-decimal string supplies", async (t) => {
+  for (const scenario of [
+    {
+      label: "integer supply",
+      supply: "1000000000",
+      totalSupplyRaw: "1000000000000000000000000000",
+    },
+    {
+      label: "precision beyond JavaScript safe integers",
+      supply: "9007199254740993.000000000000000001",
+      totalSupplyRaw: "9007199254740993000000000000000001",
+    },
+  ]) {
+    await t.test(scenario.label, async (subtest) => {
+      const { dataDir, configDir } = await makeWorkspace(subtest);
+      await installStack(dataDir, BASE_NOW);
+      const stateFile = path.join(dataDir, "pon-state.json");
+      const state = JSON.parse(await fs.readFile(stateFile, "utf8"));
+      state.platformToken.supply = scenario.supply;
+      state.platformTokenVerification.totalSupplyRaw = scenario.totalSupplyRaw;
+      await writeJson(dataDir, "pon-state.json", state, BASE_NOW);
+
+      const report = await runHealthCheck({
+        env: healthEnv({ dataDir, configDir, requirePon: true }),
+        nowMs: BASE_NOW,
+        serviceStateImpl: activeService,
+      });
+      assert.equal(report.lanes.pon.operationalHealthy, true);
+      assert.equal(
+        report.lanes.pon.operationalReasons.includes("pon_platform_token_verification_invalid"),
+        false,
+      );
+    });
+  }
+});
+
+test("Pon platform-token health rejects non-canonical or inexact supplies", async (t) => {
+  for (const scenario of [
+    { label: "numeric representation", supply: Number("9007199254740993") },
+    { label: "exponent notation", supply: "1e9" },
+    { label: "negative supply", supply: "-1" },
+    { label: "zero supply", supply: "0", totalSupplyRaw: "0" },
+    { label: "excess decimal precision", supply: "1.0000000000000000001" },
+  ]) {
+    await t.test(scenario.label, async (subtest) => {
+      const { dataDir, configDir } = await makeWorkspace(subtest);
+      await installStack(dataDir, BASE_NOW);
+      const stateFile = path.join(dataDir, "pon-state.json");
+      const state = JSON.parse(await fs.readFile(stateFile, "utf8"));
+      state.platformToken.supply = scenario.supply;
+      if (scenario.totalSupplyRaw !== undefined) {
+        state.platformTokenVerification.totalSupplyRaw = scenario.totalSupplyRaw;
+      }
+      await writeJson(dataDir, "pon-state.json", state, BASE_NOW);
+
+      const report = await runHealthCheck({
+        env: healthEnv({ dataDir, configDir, requirePon: true }),
+        nowMs: BASE_NOW,
+        serviceStateImpl: activeService,
+      });
+      assert.equal(report.lanes.pon.operationalHealthy, false);
+      assert.equal(
+        report.lanes.pon.operationalReasons.includes("pon_platform_token_verification_invalid"),
+        true,
+      );
     });
   }
 });
@@ -1616,7 +2597,7 @@ test("a future BSC state version is rejected exactly as it is by the production 
   await installStack(dataDir, BASE_NOW);
   const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
   const state = JSON.parse(await fs.readFile(stateFile, "utf8"));
-  state.version = 7;
+  state.version = 8;
   await fs.writeFile(stateFile, `${JSON.stringify(state)}\n`, { mode: 0o600 });
   const timestamp = new Date(BASE_NOW - 5_000);
   await fs.utimes(stateFile, timestamp, timestamp);

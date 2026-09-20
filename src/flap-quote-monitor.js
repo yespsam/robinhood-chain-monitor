@@ -14,9 +14,26 @@ export const FLAP_DEPLOYED_CONTRACTS_URL = "https://docs.flap.sh/flap/developers
 export const FLAP_QUOTE_CONFIGURATION_SIGNATURE = "QuoteTokenConfigurationSet(address,(uint8,uint8,uint8,uint8,uint8))";
 export const FLAP_PORTAL_RUNTIME_HASH = "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3";
 export const FLAP_PORTAL_IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
-export const FLAP_PORTAL_VERIFIED_VERSION = "v5.22.0";
-export const FLAP_PORTAL_VERIFIED_IMPLEMENTATION = "0xE3CfDbb959e4EFb6fFD22E8659e8CBeEeD362019";
-export const FLAP_PORTAL_VERIFIED_IMPLEMENTATION_HASH = "0x357c9245739d6af7c4727744d479ec7d8c4ae461c2fb37d56eafb9d7dc9ccbaa";
+export const FLAP_PORTAL_VERIFIED_VERSION = "v5.23.1";
+export const FLAP_PORTAL_VERIFIED_IMPLEMENTATION = "0xAb8Ec926b6e113c2212aF152b086eA62d1FDced9";
+export const FLAP_PORTAL_VERIFIED_IMPLEMENTATION_HASH = "0x78653cdd7296d940ae531c86bc6700ae163f1f9dec002c2af3143c9ae6696a15";
+// The only persisted Portal identity accepted for an in-place pin migration.
+// These values are deliberately not configurable: an arbitrary predecessor
+// would turn a local-state edit into authority to cross an implementation
+// boundary without first proving which monitor produced the cursor.
+export const FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION = "v5.23.0";
+export const FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION = "0xeb8d85bACe2AE64B74aa29cC95678a3bBb804350";
+export const FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH = "0x3ad289cea90449a420c91a8de3a077c4d74a8d41230cb32229fcd843ff1dc3e5";
+// Canonical EIP-1967 Upgraded(address) evidence for the currently pinned
+// implementation. The block and transaction were independently reproduced
+// from rpc.48.club and rpc-bnb.blockmachine.io (receipt status 1, transaction
+// included in the same canonical block, and identical Portal upgrade log).
+// PublicNode, BNB Chain and BlockRazor also agreed on version, EIP-1967 slot,
+// proxy hash and implementation hash at fixed block 0x74b3eec, block hash
+// 0x5079cf13eb3f061b4c9b24b01e4f70555069d07cc62014acdba7a523c6b85557.
+export const FLAP_PORTAL_UPGRADE_BLOCK = 121_652_738;
+export const FLAP_PORTAL_UPGRADE_BLOCK_HASH = "0x417ed36b65fcf27dd3cd1e213fdcb9f0fce64ae13b9e403ff4b98fd0f7197845";
+export const FLAP_PORTAL_UPGRADE_TRANSACTION = "0xfa9f414b3a98527d52b3015ee4df17d61a5eb712ce7764cbfc6757e62fa1190f";
 export const FLAP_QUOTE_REFERENCE_BLOCK = 119_678_948;
 export const FLAP_QUOTE_REFERENCE_BLOCK_HASH = "0x63fd84ecfc1fc73d2a2179c4735bfe1b2def3f018118db896f278a39a5349f1b";
 export const FLAP_QUOTE_REFERENCE_TRANSACTION = "0x76d94a5561c88f6e86f107ebaa1b7188aa9596a60517346f816abdd3a528eb72";
@@ -181,6 +198,14 @@ function expectedPortalPins(overrides = {}) {
       "expected Portal implementation code hash",
     ),
   };
+}
+
+function previousPortalPins() {
+  return expectedPortalPins({
+    version: FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION,
+    implementation: FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION,
+    implementationCodeHash: FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH,
+  });
 }
 
 function logIndex(log) {
@@ -822,15 +847,31 @@ function normalizeState(parsed, expectedRuntimeHash, pinOverrides = {}) {
 }
 
 async function readState(file, fsImpl, expectedRuntimeHash, pinOverrides) {
+  let parsed;
   try {
-    return normalizeState(
-      JSON.parse(await fsImpl.readFile(file, "utf8")),
-      expectedRuntimeHash,
-      pinOverrides,
-    );
+    parsed = JSON.parse(await fsImpl.readFile(file, "utf8"));
   } catch (error) {
-    if (error?.code === "ENOENT") return emptyState(expectedRuntimeHash, pinOverrides);
+    if (error?.code === "ENOENT") {
+      return {
+        state: emptyState(expectedRuntimeHash, pinOverrides),
+        portalIdentityMigrationRequired: false,
+      };
+    }
     throw error;
+  }
+  try {
+    return {
+      state: normalizeState(parsed, expectedRuntimeHash, pinOverrides),
+      portalIdentityMigrationRequired: false,
+    };
+  } catch (error) {
+    if (error?.code !== "FLAP_QUOTE_STATE_IDENTITY_MISMATCH") throw error;
+    // This second normalization is a narrow allow-list, not a relaxed
+    // identity comparison. Every state invariant is still checked, and only
+    // the exact previous verified implementation tuple may reach migration.
+    const legacyState = normalizeState(parsed, expectedRuntimeHash, previousPortalPins());
+    if (!legacyState.initialized) throw error;
+    return { state: legacyState, portalIdentityMigrationRequired: true };
   }
 }
 
@@ -1483,10 +1524,11 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
   }) : null;
   let state = emptyState(expectedRuntimeHash, portalPins);
   let initialized = false;
-  // Before the first durable baseline there is intentionally no persisted
-  // monitor state.  Keep retry pacing in memory so a transient RPC/identity
-  // failure cannot turn the canonical empty state into an invalid, partially
-  // initialized snapshot on the next process start.
+  let portalIdentityMigrationRequired = false;
+  // Before the first durable baseline, and while an exact legacy identity is
+  // awaiting current-chain verification, keep retry pacing in memory. A
+  // transient RPC failure must not create a partially trusted durable state
+  // or mutate the legacy cursor before the replacement identity is proved.
   let preBaselineFailures = 0;
   let preBaselineNextAttemptAt = null;
   let preBaselineLastErrorCode = null;
@@ -1502,8 +1544,13 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
 
   async function initialize() {
     if (initialized) return;
-    state = await readState(stateFile, fsImpl, expectedRuntimeHash, portalPins);
-    if (state.initialized && state._health.status === "degraded" && state._health.nextAttemptAt) {
+    const loaded = await readState(stateFile, fsImpl, expectedRuntimeHash, portalPins);
+    state = loaded.state;
+    portalIdentityMigrationRequired = loaded.portalIdentityMigrationRequired;
+    if (!portalIdentityMigrationRequired
+      && state.initialized
+      && state._health.status === "degraded"
+      && state._health.nextAttemptAt) {
       const persistedNextMs = Date.parse(state._health.nextAttemptAt);
       const lastAttemptMs = Date.parse(state._health.lastAttemptAt || "");
       const configuredNextMs = lastAttemptMs + backoffMaxMs;
@@ -2806,7 +2853,7 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
     try {
       await initialize();
       if (stopped) throw stoppedError();
-      const persistedBackoff = state.initialized;
+      const persistedBackoff = state.initialized && !portalIdentityMigrationRequired;
       const activeNextAttemptAt = persistedBackoff
         ? state._health.nextAttemptAt
         : preBaselineNextAttemptAt;
@@ -2863,6 +2910,38 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
         finalizedBlockHash: identity.verifiedBlockHash,
         requiredConfirmations,
       };
+      if (state.initialized && finalizedBlock < state.cursor.anchorBlock) {
+        throw monitorError("chain", "FLAP_QUOTE_FINALIZED_HEAD_BEHIND_CURSOR", "finalized BSC head moved behind the durable Flap quote cursor");
+      }
+      if (portalIdentityMigrationRequired) {
+        const migrated = structuredClone(state);
+        migrated.identity = { ...migrated.identity, ...identity };
+        markHealthy(migrated, observedAt);
+        // Validate closure against the new pins before the first migration
+        // write. This preserves the exact cursor/journals while refusing a
+        // legacy snapshot whose anchor is inconsistent with the verified
+        // finalized identity block.
+        try {
+          await commit(normalizeState(migrated, expectedRuntimeHash, portalPins));
+        } catch (error) {
+          // Unlike an ordinary cursor/event commit, an unconfirmed identity
+          // migration may never be replayed before the next finalized quorum
+          // check. The generic pending snapshot would otherwise persist the
+          // new pin at the start of the next cycle even if the proxy changed
+          // again or the verification block was reorged in between.
+          pendingCommitSnapshot = null;
+          // The failed migration write is intentionally discarded. Consume
+          // that rejected queue tail as well, otherwise stop() would surface
+          // the obsolete write error after a later identity recheck already
+          // failed closed (or succeeded with a newly verified snapshot).
+          writeQueue = writeQueue.catch(() => {});
+          throw error;
+        }
+        portalIdentityMigrationRequired = false;
+        preBaselineFailures = 0;
+        preBaselineNextAttemptAt = null;
+        preBaselineLastErrorCode = null;
+      }
       if (!state.initialized) {
         await requireCanonicalHash(
           finalizedBlock,
@@ -2888,9 +2967,6 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
         preBaselineNextAttemptAt = null;
         preBaselineLastErrorCode = null;
         return { status: "baseline", initialized: true, delivered: 0, cursor: structuredClone(next.cursor) };
-      }
-      if (finalizedBlock < state.cursor.anchorBlock) {
-        throw monitorError("chain", "FLAP_QUOTE_FINALIZED_HEAD_BEHIND_CURSOR", "finalized BSC head moved behind the durable Flap quote cursor");
       }
       const reorgRecovered = await recoverReorg(observedAt, identity, finalizedBlock);
       let nextBlock = state.cursor.nextBlock;
@@ -2963,9 +3039,12 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
       const stableErrorCode = /^FLAP_QUOTE_[A-Z0-9_]+$/.test(String(error?.code || ""))
         ? error.code
         : "FLAP_QUOTE_FAILURE";
-      let returnedNextAttemptAt = state._health.nextAttemptAt;
+      let returnedNextAttemptAt = portalIdentityMigrationRequired
+        ? preBaselineNextAttemptAt
+        : state._health.nextAttemptAt;
       if (initialized && error?.source !== "state") {
-        const consecutiveFailures = state.initialized
+        const durableFailureState = state.initialized && !portalIdentityMigrationRequired;
+        const consecutiveFailures = durableFailureState
           ? Number(state._health.consecutiveFailures || 0) + 1
           : preBaselineFailures + 1;
         const exponent = Math.min(10, Math.max(0, consecutiveFailures - 1));
@@ -2976,7 +3055,7 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
         const retryAfterMs = Math.min(backoffMaxMs, Math.max(0, Number(error?.retryAfterMs) || 0));
         const delayMs = Math.max(jitteredBackoffMs, retryAfterMs);
         returnedNextAttemptAt = delayMs > 0 ? iso(observedMs + delayMs) : null;
-        if (state.initialized) {
+        if (durableFailureState) {
           // If the failed operation was an ambiguous state commit, carry its
           // full intended cursor/journal forward into the degraded retry
           // snapshot. Never overwrite it with health fields based on the old

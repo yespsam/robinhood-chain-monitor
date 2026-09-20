@@ -271,9 +271,8 @@ test("smart wallet card extracts performance and omits purchase amount and Fomo/
   assert.doesNotMatch(rendered, new RegExp(TX, "i"));
   assert.equal(event.transactionHash, TX, "the immutable event and transaction button retain the full hash");
   assert.doesNotMatch(rendered, /\$0\.01|Fomo|KOL|喊单|X call|绑定钱包|linked wallet/i);
-  assert.match(rendered, /前一区块代币零仓位|Token zero position at previous block/);
-  assert.match(languageBlocks[2], /Verification: .*wallet ownership unverified/u);
-  assert.match(languageBlocks[2], /Risk: Safety screened; not a buy recommendation/u);
+  assert.match(rendered, /30D \+\$17\.5K|30d \+\$17\.5K/u);
+  assert.doesNotMatch(rendered, /风险|Risk:|核验|Verification:|勿追价|do not chase|非自动交易|no automatic trading|非买入建议|not a buy recommendation|\bT[0-2]\b/iu);
   assert.doesNotMatch(rendered, /交易前仓位|首仓|first.position|lifetime first/i);
 });
 

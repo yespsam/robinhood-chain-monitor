@@ -321,6 +321,11 @@ export function extractPlatformCapabilities(text, pagePattern = /$a/) {
 }
 
 const EVM_ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
+const ZERO_EVM_ADDRESS = `0x${"0".repeat(40)}`;
+const isNonZeroEvmAddress = (value) => {
+  const address = String(value || "").trim().toLowerCase();
+  return EVM_ADDRESS_PATTERN.test(address) && address !== ZERO_EVM_ADDRESS;
+};
 const KNOWN_FLAP_STOCK_QUOTE_ASSETS = new Set([
   // Alphabet tokenized bStock observed on the official Flap BSC board. Keep
   // the address rule even when a public RPC temporarily cannot return ERC-20
@@ -1021,13 +1026,19 @@ export function extractFourMemeConfigCapabilities(input, sourceUrl = FOUR_MEME_C
   const publishedNetworks = payload.data.filter((item) => item && item.platform === "MEME" && item.status === "PUBLISH" && typeof item.networkCode === "string");
   const published = publishedNetworks.filter((item) => item.networkCode === "BSC");
   if (!published.length) throw new Error("Four.meme config schema: no MEME/BSC PUBLISH entries");
-  const quoteConfigs = published.map((item) => {
+  const quoteConfigs = published.flatMap((item) => {
     if (typeof item.symbol !== "string" || !item.symbol.trim()) throw new Error("Four.meme config schema: published entry missing symbol");
     if (!/^0x[a-fA-F0-9]{40}$/.test(item.symbolAddress || "")) throw new Error(`Four.meme config schema: ${item.symbol} missing valid symbolAddress`);
-    return {
-      symbol: item.symbol.trim().toUpperCase(),
+    const symbol = item.symbol.trim().toUpperCase();
+    const address = item.symbolAddress.toLowerCase();
+    // Four.Meme represents the native BNB quote with the zero-address sentinel.
+    // It is a valid source capability but never an ERC-20 pool identity.
+    if (address === ZERO_EVM_ADDRESS && symbol === "BNB") return [];
+    if (!isNonZeroEvmAddress(address)) throw new Error(`Four.meme config schema: ${symbol} missing non-zero symbolAddress`);
+    return [{
+      symbol,
       nativeSymbol: typeof item.nativeSymbol === "string" ? item.nativeSymbol : null,
-      address: item.symbolAddress.toLowerCase(),
+      address,
       status: item.status,
       platform: item.platform,
       networkCode: item.networkCode,
@@ -1046,7 +1057,7 @@ export function extractFourMemeConfigCapabilities(input, sourceUrl = FOUR_MEME_C
         tradeLevel: Array.isArray(item.tradeLevel) ? item.tradeLevel.map(String) : [],
       },
       source: { kind: "api", url: sourceUrl },
-    };
+    }];
   }).sort((left, right) => left.symbol.localeCompare(right.symbol));
   const chains = mergeChainRecords(publishedNetworks.map((item) => {
     const code = item.networkCode.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
@@ -2518,6 +2529,67 @@ const eventSources = (changes, current) => {
   return [...urls].sort();
 };
 
+function platformAlertChangeSets(platform, changes) {
+  const flapPools = Array.isArray(changes?.newFlapPools) ? changes.newFlapPools : [];
+  if (platform?.id === "flap" && flapPools.length) {
+    const residualFlapPools = [];
+    const poolChangeSets = [];
+    for (const pool of flapPools) {
+      const validPool = pool?.kind === "quote_asset"
+        ? isNonZeroEvmAddress(pool?.quoteAddress)
+        : isNonZeroEvmAddress(pool?.vaultFactory) && isNonZeroEvmAddress(pool?.quoteAddress);
+      if (!validPool) {
+        residualFlapPools.push(pool);
+        continue;
+      }
+      const poolChanges = emptyChanges();
+      poolChanges.newFlapPools = [pool];
+      poolChangeSets.push(poolChanges);
+    }
+    if (!poolChangeSets.length) return [changes];
+    const residualChanges = { ...changes, newFlapPools: residualFlapPools };
+    return [
+      ...poolChangeSets,
+      ...(meaningful(residualChanges) ? [residualChanges] : []),
+    ];
+  }
+
+  const quoteConfigs = Array.isArray(changes?.newQuoteConfigs) ? changes.newQuoteConfigs : [];
+  if (platform?.id !== "fourmeme" || !quoteConfigs.length) return [changes];
+
+  const quoteTokens = Array.isArray(changes.newQuoteTokens) ? changes.newQuoteTokens : [];
+  const consumedQuoteTokens = new Set();
+  const residualQuoteConfigs = [];
+  const quoteChangeSets = [];
+  for (const quoteConfig of quoteConfigs) {
+    const symbol = typeof quoteConfig?.symbol === "string" ? quoteConfig.symbol : "";
+    if (!symbol || !isNonZeroEvmAddress(quoteConfig?.address)) {
+      // The official parser rejects this shape. If a migrated state somehow
+      // contains it, retain the evidence in the generic event instead of
+      // claiming that it is a verified quote pool.
+      residualQuoteConfigs.push(quoteConfig);
+      continue;
+    }
+    const matchingQuoteTokens = quoteTokens.filter((candidate) => candidate === symbol);
+    for (const token of matchingQuoteTokens) consumedQuoteTokens.add(token);
+    const quoteChanges = emptyChanges();
+    quoteChanges.newQuoteTokens = matchingQuoteTokens;
+    quoteChanges.newQuoteConfigs = [quoteConfig];
+    quoteChangeSets.push(quoteChanges);
+  }
+  if (!quoteChangeSets.length) return [changes];
+
+  const residualChanges = {
+    ...changes,
+    newQuoteTokens: quoteTokens.filter((token) => !consumedQuoteTokens.has(token)),
+    newQuoteConfigs: residualQuoteConfigs,
+  };
+  return [
+    ...quoteChangeSets,
+    ...(meaningful(residualChanges) ? [residualChanges] : []),
+  ];
+}
+
 const contractDiscoveryBatches = (platform, addresses, current, sources) => {
   if (platform.id === "fourmeme") return [{ chainId: 56, addresses: uniqueStrings(addresses) }];
   if (platform.id !== "flap") return [];
@@ -2574,6 +2646,18 @@ const flapQuoteNotificationDeliveryCommitted = (delivery) => delivery?.status ==
     && delivery?.reason === "semantic_duplicate"
     && delivery?.persisted === true
     && delivery?.canonicalOwnerDelivered === true);
+
+const platformAlertDeliveryDurablyAccepted = (delivery) => {
+  // Lightweight injected senders historically return void/a primitive. The
+  // production sender returns the structured cases below.
+  if (!delivery || typeof delivery !== "object" || Array.isArray(delivery)) return true;
+  if (delivery.status === "delivered") return true;
+  if (delivery.status === "queued" && delivery.persisted === true) return true;
+  return delivery.status === "suppressed"
+    && delivery.reason === "semantic_duplicate"
+    && delivery.persisted === true
+    && delivery.canonicalOwnerDelivered === true;
+};
 
 async function readPlatformCapabilityState(stateFile, fsImpl) {
   let state = {};
@@ -3106,41 +3190,82 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
         notificationStateChanged = true;
       }
 
-      let emittedEventKey = null;
+      const emittedEventKeys = [];
       if (changes && meaningful(changes)) {
-        const sources = eventSources(changes, current);
-        const source = sources[0] || platform.apiSources?.[0]?.url || platform.sources?.[0] || platform.website;
-        const eventKey = `platform-capability:${platform.id}:${fingerprint({ changes, source })}`;
-        emittedEventKey = eventKey;
-        const deliverySla = sourceLane === "fast"
-          ? platformEventDeliverySla(platform, changes, stabilizedBoard.boardCandidateState, dependencies.deliverySla)
-          : null;
-        const event = {
-          type: "platform_capability_update",
-          eventKey,
-          platform,
-          previous: previousEntry.capabilities,
-          current,
-          changes,
-          source,
-          sources,
-          url: source,
-          observedAt,
-          ...(deliverySla ? { deliverySla } : {}),
-        };
-        const auditBase = { eventKey, type: event.type, platform: platform.id, source, sources, changes, observedAt };
-        await appendAudit(auditFile, fsImpl, { ...auditBase, delivery: { status: "pending", baselineCommitted: false } });
-        try {
-          const delivery = await alertSender(config, event);
+        const batchSources = eventSources(changes, current);
+        const batchSource = batchSources[0] || platform.apiSources?.[0]?.url || platform.sources?.[0] || platform.website;
+        const alertRecords = platformAlertChangeSets(platform, changes).map((eventChanges) => {
+          const sources = eventSources(eventChanges, current);
+          const source = sources[0] || batchSource;
+          const eventKey = `platform-capability:${platform.id}:${fingerprint({ changes: eventChanges, source })}`;
+          const deliverySla = sourceLane === "fast"
+            ? platformEventDeliverySla(platform, eventChanges, stabilizedBoard.boardCandidateState, dependencies.deliverySla)
+            : null;
+          const event = {
+            type: "platform_capability_update",
+            eventKey,
+            platform,
+            previous: previousEntry.capabilities,
+            current,
+            changes: eventChanges,
+            source,
+            sources,
+            url: source,
+            observedAt,
+            ...(deliverySla ? { deliverySla } : {}),
+          };
+          return {
+            event,
+            auditBase: {
+              eventKey,
+              type: event.type,
+              platform: platform.id,
+              source,
+              sources,
+              changes: eventChanges,
+              observedAt,
+            },
+            fourMemeQuoteChild: platform.id === "fourmeme"
+              && eventChanges.newQuoteConfigs?.length === 1,
+          };
+        });
+        emittedEventKeys.push(...alertRecords.map(({ event }) => event.eventKey));
+        for (const { auditBase } of alertRecords) {
+          await appendAudit(auditFile, fsImpl, { ...auditBase, delivery: { status: "pending", baselineCommitted: false } });
+        }
+
+        // Every event shares the source poll's deadline. Start their durable
+        // alert handoffs together so a batch of new quote pools does not turn
+        // the five-second source SLA into N sequential delivery windows.
+        const deliveryResults = await Promise.allSettled(alertRecords.map(({ event }) => (
+          Promise.resolve().then(() => alertSender(config, event))
+        )));
+        let deliveryFailed = false;
+        for (let index = 0; index < alertRecords.length; index += 1) {
+          const { event, auditBase, fourMemeQuoteChild } = alertRecords[index];
+          const result = deliveryResults[index];
+          if (result.status === "fulfilled") {
+            const delivery = result.value;
+            await appendAudit(auditFile, fsImpl, {
+              ...auditBase,
+              delivery: { status: delivery?.status || "delivered", eventId: delivery?.eventId || event.eventKey, baselineCommitted: false },
+            });
+            if (fourMemeQuoteChild && !platformAlertDeliveryDurablyAccepted(delivery)) {
+              deliveryFailed = true;
+              logger.error(`[platform-capability] ${platform.id} delivery was not durably accepted: ${delivery?.reason || delivery?.status || "unknown"}`);
+            }
+            continue;
+          }
+          deliveryFailed = true;
           await appendAudit(auditFile, fsImpl, {
             ...auditBase,
-            delivery: { status: delivery?.status || "delivered", eventId: delivery?.eventId || eventKey, baselineCommitted: false },
+            delivery: { status: "failed", baselineCommitted: false, error: result.reason?.message || String(result.reason) },
           });
-        } catch (error) {
-          await appendAudit(auditFile, fsImpl, { ...auditBase, delivery: { status: "failed", baselineCommitted: false, error: error.message } });
-          logger.error(`[platform-capability] ${platform.id} delivery: ${error.message}`);
-          return state;
+          logger.error(`[platform-capability] ${platform.id} delivery: ${result.reason?.message || result.reason}`);
         }
+        if (deliveryFailed) return state;
+
+        const auditBase = alertRecords[0].auditBase;
         if (changes.newContracts?.length && dependencies.onContractDiscovery) {
           const discoveryBatches = contractDiscoveryBatches(platform, changes.newContracts, current, nextSources);
           try {
@@ -3150,7 +3275,7 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
                 platformName: platform.name,
                 sourceTrust: "official_verified",
                 sourceId: `platform-capability:${platform.id}`,
-                sourceUrl: source,
+                sourceUrl: batchSource,
                 chainId: batch.chainId,
                 observedAt,
               }));
@@ -3201,7 +3326,7 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
               changeType: "new_published_quote",
               observedAt,
               firstObservedAt: observedAt,
-              sourceUrl: quoteConfig.source?.url || source,
+              sourceUrl: quoteConfig.source?.url || batchSource,
             }))));
           } catch (error) {
             await appendAudit(auditFile, fsImpl, { ...auditBase, delivery: { status: "feature_activation_failed", baselineCommitted: false, error: error?.message || String(error) } });
@@ -3220,9 +3345,9 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
           delivery: { status: "checkpoint_committed", baselineCommitted: true },
         });
       }
-      if (changes && meaningful(changes)) {
+      for (const eventKey of emittedEventKeys) {
         await appendAudit(auditFile, fsImpl, {
-          eventKey: emittedEventKey,
+          eventKey,
           type: "platform_capability_update",
           platform: platform.id,
           observedAt,
