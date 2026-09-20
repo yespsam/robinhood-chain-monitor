@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0f0e" />
-    <title>GMGN // Paper Terminal</title>
+    <title>yesp atm｜模拟盘</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
@@ -14,15 +14,15 @@
         <div class="brand-lockup">
           <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
           <div>
-            <div class="brand-name">gmgn<span class="brand-slash">//</span>paper</div>
-            <div class="brand-caption">local trading terminal</div>
+            <div class="brand-name">yesp atm</div>
+            <div class="brand-caption">本地交易终端</div>
           </div>
         </div>
         <div class="topbar-controls">
           <button class="chain-select" id="chainButton" type="button" aria-label="选择行情链">
             <span class="chain-dot"></span><span id="chainLabel">BSC</span><span class="chevron">⌄</span>
           </button>
-          <div class="data-status"><span class="status-pulse"></span><span id="streamLabel">GMGN FEED · LOADING</span></div>
+          <div class="data-status"><span class="status-pulse"></span><span id="streamLabel">GMGN 行情 · 加载中</span></div>
           <div class="topbar-clock" id="clock">--:--:--</div>
           <button class="icon-button" id="pauseButton" type="button" aria-label="暂停行情">Ⅱ</button>
         </div>
@@ -30,25 +30,25 @@
 
       <div class="safety-strip">
         <span class="safety-lock">▣</span>
-        <span>SIMULATION ONLY</span>
+        <span>仅模拟盘</span>
         <span class="safety-copy" id="safetyCopy">GMGN 真实只读行情 · 不连接钱包 · 不签名 · 不广播</span>
         <span class="safety-spacer"></span>
         <span class="latency-label">RTT <strong id="latency">--</strong> ms</span>
-        <span class="source-label" id="sourceLabel">paper-100 status bridge: checking</span>
+        <span class="source-label" id="sourceLabel">paper-100 状态同步中</span>
       </div>
 
       <main class="terminal-grid">
         <aside class="watch-pane pane">
           <div class="pane-heading">
-            <div><span class="eyebrow">MARKETS</span><h2>Watchlist</h2></div>
-            <button class="mini-button active" id="filterButton" type="button">GMGN 1M</button>
+            <div><span class="eyebrow">市场</span><h2>自选列表</h2></div>
+            <button class="mini-button active" id="filterButton" type="button">GMGN 1分钟</button>
           </div>
           <label class="search-field" for="tokenSearch">
-            <span>⌕</span><input id="tokenSearch" type="search" placeholder="Search token or CA" autocomplete="off" />
+            <span>⌕</span><input id="tokenSearch" type="search" placeholder="搜索代币或合约地址" autocomplete="off" />
             <kbd>/</kbd>
           </label>
           <div class="watchlist" id="watchlist" aria-live="polite"></div>
-          <div class="watch-footer"><span class="live-dot"></span><span id="watchCount">0 assets</span><span>·</span><span>GMGN snapshot 20s</span></div>
+          <div class="watch-footer"><span class="live-dot"></span><span id="watchCount">0 个资产</span><span>·</span><span>GMGN 快照 · 60秒更新</span></div>
         </aside>
 
         <section class="market-pane pane">
@@ -56,28 +56,28 @@
             <div class="selected-token">
               <div class="token-avatar" id="tokenAvatar">?</div>
               <div>
-                <div class="token-title-row"><h1 id="tokenName">WAITING FOR GMGN</h1><span class="chain-tag" id="tokenChain">BSC</span><button class="copy-button" id="copyButton" type="button" aria-label="复制合约地址">▣</button></div>
-                <div class="token-meta"><span id="tokenAddress">—</span><span class="verified-badge">✓ read-only</span><span id="tokenAge">—</span></div>
+                <div class="token-title-row"><h1 id="tokenName">等待 GMGN 行情</h1><span class="chain-tag" id="tokenChain">BSC</span><button class="copy-button" id="copyButton" type="button" aria-label="复制合约地址">▣</button></div>
+                <div class="token-meta"><span id="tokenAddress">—</span><span class="verified-badge">✓ 只读数据</span><span id="tokenAge">—</span></div>
               </div>
             </div>
             <div class="market-price-block"><div class="market-price" id="tokenPrice">—</div><div class="market-change" id="tokenChange">—</div></div>
           </div>
 
           <div class="metric-strip">
-            <div class="metric"><span>MARKET CAP</span><strong id="metricMcap">—</strong></div>
-            <div class="metric"><span>LIQUIDITY</span><strong id="metricLiquidity">—</strong></div>
-            <div class="metric"><span>24H VOLUME</span><strong id="metricVolume">—</strong></div>
-            <div class="metric"><span>HOLDERS</span><strong id="metricHolders">—</strong></div>
-            <div class="metric risk-metric"><span>RISK GATE</span><strong id="metricRisk"><i class="risk-dot"></i> WAITING</strong></div>
+            <div class="metric"><span>市值</span><strong id="metricMcap">—</strong></div>
+            <div class="metric"><span>流动性</span><strong id="metricLiquidity">—</strong></div>
+            <div class="metric"><span>24小时成交额</span><strong id="metricVolume">—</strong></div>
+            <div class="metric"><span>持有人</span><strong id="metricHolders">—</strong></div>
+            <div class="metric risk-metric"><span>风险门</span><strong id="metricRisk"><i class="risk-dot"></i> 等待中</strong></div>
           </div>
 
           <div class="chart-toolbar">
             <div class="chart-tabs" role="tablist" aria-label="图表类型">
-              <button class="chart-tab active" type="button" data-tab="price">Price</button>
-              <button class="chart-tab" type="button" data-tab="trades">Trades</button>
-              <button class="chart-tab" type="button" data-tab="holders">Holders</button>
+              <button class="chart-tab active" type="button" data-tab="price">价格</button>
+              <button class="chart-tab" type="button" data-tab="trades">成交</button>
+              <button class="chart-tab" type="button" data-tab="holders">持有人</button>
             </div>
-            <div class="timeframes"><button type="button" class="active" data-resolution="1m">1m</button><button type="button" data-resolution="5m">5m</button><button type="button" data-resolution="15m">15m</button><button type="button" data-resolution="1h">1h</button><button type="button" data-resolution="4h">4h</button></div>
+            <div class="timeframes"><button type="button" class="active" data-resolution="1m">1分</button><button type="button" data-resolution="5m">5分</button><button type="button" data-resolution="15m">15分</button><button type="button" data-resolution="1h">1小时</button><button type="button" data-resolution="4h">4小时</button></div>
           </div>
           <div class="chart-wrap">
             <div class="chart-grid-lines"><span></span><span></span><span></span><span></span></div>
@@ -88,36 +88,36 @@
               <circle class="chart-cursor" id="chartCursor" cx="0" cy="0" r="4" />
             </svg>
             <div class="chart-y-labels"><span id="chartTop">$0.0241</span><span id="chartMid">$0.0219</span><span id="chartBottom">$0.0197</span></div>
-            <div class="chart-x-labels"><span>09:00</span><span>09:15</span><span>09:30</span><span>09:45</span><span>NOW</span></div>
+            <div class="chart-x-labels"><span>09:00</span><span>09:15</span><span>09:30</span><span>09:45</span><span>当前</span></div>
             <div class="chart-crosshair" id="crosshair"><span></span></div>
           </div>
-          <div class="chart-legend"><span><i class="legend-line"></i>price</span><span><i class="legend-green"></i>GMGN OHLCV</span><span class="chart-note" id="chartNote">等待 GMGN 真实 K 线</span></div>
+          <div class="chart-legend"><span><i class="legend-line"></i>价格</span><span><i class="legend-green"></i>GMGN 开高低收/成交量</span><span class="chart-note" id="chartNote">等待 GMGN 真实 K 线</span></div>
 
-          <div class="activity-heading"><div><span class="eyebrow">GMGN SNAPSHOT</span><h2>Market ranking</h2></div><span class="activity-live"><i></i> read-only</span></div>
-          <div class="trade-table-head"><span>TIME</span><span>MOVE</span><span>PRICE</span><span>VOL USD</span><span>SMART / HOLDERS</span></div>
+          <div class="activity-heading"><div><span class="eyebrow">GMGN 快照</span><h2>市场排行</h2></div><span class="activity-live"><i></i> 只读</span></div>
+          <div class="trade-table-head"><span>时间</span><span>涨跌</span><span>价格</span><span>成交额</span><span>聪明钱 / 持有人</span></div>
           <div class="trade-stream" id="tradeStream" aria-live="polite"></div>
         </section>
 
         <aside class="order-pane pane">
-          <div class="order-heading"><div><span class="eyebrow">PAPER ACCOUNT</span><h2>Simulate trade</h2></div><button class="reset-link" id="resetPaper" type="button">reset</button></div>
-          <div class="paper-balance"><div><span>AVAILABLE</span><strong id="paperCash">$100.00</strong></div><div class="pnl-block"><span>REALIZED PNL</span><strong id="paperPnl">$0.00</strong></div></div>
-          <div class="order-tabs"><button class="order-tab buy active" type="button" data-side="buy">BUY</button><button class="order-tab sell" type="button" data-side="sell">SELL</button></div>
+          <div class="order-heading"><div><span class="eyebrow">纸上账户</span><h2>模拟交易</h2></div><button class="reset-link" id="resetPaper" type="button">重置</button></div>
+          <div class="paper-balance"><div><span>可用余额</span><strong id="paperCash">$100.00</strong></div><div class="pnl-block"><span>已实现盈亏</span><strong id="paperPnl">$0.00</strong></div></div>
+          <div class="order-tabs"><button class="order-tab buy active" type="button" data-side="buy">买入</button><button class="order-tab sell" type="button" data-side="sell">卖出</button></div>
           <div class="order-form">
-            <div class="form-row token-row"><span class="form-label">TOKEN</span><span class="order-token"><span class="tiny-avatar" id="orderAvatar">?</span><strong id="orderToken">—</strong><span class="muted">BSC</span></span></div>
-            <div class="form-label amount-label"><span>AMOUNT</span><span class="muted">USD</span></div>
-            <div class="amount-input-wrap"><span>$</span><input id="amountInput" inputmode="decimal" value="10.00" aria-label="模拟交易金额" /><button id="maxButton" type="button">MAX</button></div>
+            <div class="form-row token-row"><span class="form-label">代币</span><span class="order-token"><span class="tiny-avatar" id="orderAvatar">?</span><strong id="orderToken">—</strong><span class="muted">BSC</span></span></div>
+            <div class="form-label amount-label"><span>金额</span><span class="muted">USD</span></div>
+            <div class="amount-input-wrap"><span>$</span><input id="amountInput" inputmode="decimal" value="10.00" aria-label="模拟交易金额" /><button id="maxButton" type="button">最大</button></div>
             <div class="preset-row"><button type="button" data-amount="10">$10</button><button type="button" data-amount="25">$25</button><button type="button" data-amount="50">$50</button><button type="button" data-amount="100">$100</button></div>
-            <div class="form-row form-spread"><span class="form-label">SLIPPAGE</span><span class="slippage-control"><button type="button" class="slippage active" data-slippage="1">1%</button><button type="button" class="slippage" data-slippage="3">3%</button><button type="button" class="slippage" data-slippage="5">5%</button></span></div>
-            <div class="quote-box"><div><span>EST. RECEIVE</span><strong id="estimatedReceive">—</strong></div><div><span>PRICE IMPACT</span><strong id="priceImpact">—</strong></div><div><span>NETWORK FEE</span><strong>$0.20 <em>paper</em></strong></div></div>
-            <button class="simulate-button" id="simulateButton" type="button"><span id="simulateLabel">Simulate buy</span><span>↗</span></button>
+            <div class="form-row form-spread"><span class="form-label">滑点</span><span class="slippage-control"><button type="button" class="slippage active" data-slippage="1">1%</button><button type="button" class="slippage" data-slippage="3">3%</button><button type="button" class="slippage" data-slippage="5">5%</button></span></div>
+            <div class="quote-box"><div><span>预计获得</span><strong id="estimatedReceive">—</strong></div><div><span>价格影响</span><strong id="priceImpact">—</strong></div><div><span>网络费用</span><strong>$0.20 <em>纸上</em></strong></div></div>
+            <button class="simulate-button" id="simulateButton" type="button"><span id="simulateLabel">模拟买入</span><span>↗</span></button>
             <p class="order-disclaimer">仅写入本机浏览器模拟账本，不改变 CLI paper-100 状态；报价来自 GMGN 只读数据，不会调用钱包、签名器或广播交易。</p>
           </div>
-          <div class="positions-heading"><span class="eyebrow">POSITIONS</span><span id="positionCount">0 open</span></div>
-          <div class="positions-list" id="positionsList"><div class="empty-position">No open positions<br /><span>模拟成交后显示在这里</span></div></div>
+          <div class="positions-heading"><span class="eyebrow">持仓</span><span id="positionCount">0 个持仓</span></div>
+          <div class="positions-list" id="positionsList"><div class="empty-position">暂无持仓<br /><span>模拟成交后显示在这里</span></div></div>
         </aside>
       </main>
 
-      <footer class="bottom-status"><span><i class="live-dot"></i> local engine online</span><span>paper-100 status <strong id="paperStateLabel">synced</strong></span><span>browser paper <strong>local</strong></span><span class="footer-spacer"></span><span>GMGN-style paper terminal · v0.1</span></footer>
+      <footer class="bottom-status"><span><i class="live-dot"></i> 本地引擎在线</span><span>paper-100 状态 <strong id="paperStateLabel">已同步</strong></span><span>浏览器纸上账本 <strong>本地</strong></span><span class="footer-spacer"></span><span>yesp atm · 模拟盘 · v0.2</span></footer>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script type="module" src="/app.js"></script>

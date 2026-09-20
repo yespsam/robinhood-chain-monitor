@@ -9,7 +9,9 @@ test('dashboard serves the paper terminal, local paper bridge, and rejects path 
   const base = `http://${address.address}:${address.port}`;
   const page = await fetch(`${base}/`);
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /SIMULATION ONLY/);
+  const pageText = await page.text();
+  assert.match(pageText, /仅模拟盘/);
+  assert.match(pageText, /yesp atm/);
   const css = await fetch(`${base}/styles.css`);
   assert.equal(css.status, 200);
   assert.match(await css.text(), /--lime/);

@@ -7,7 +7,10 @@ export const GMGN_CHAINS = Object.freeze(['sol', 'bsc', 'base', 'eth']);
 export const GMGN_INTERVALS = Object.freeze(['1m', '5m', '1h', '6h', '24h']);
 export const GMGN_RESOLUTIONS = Object.freeze(['30s', '1m', '5m', '15m', '1h', '4h', '1d']);
 const GMGN_ORDER_BY = 'volume';
-const DEFAULT_TTL_MS = 12_000;
+// Keep the read-only feed gentle on the upstream API. A successful snapshot is
+// retained beyond its short refresh window so a transient 429 does not make
+// the dashboard look empty; callers can label that snapshot as stale.
+const DEFAULT_TTL_MS = 30_000;
 const DEFAULT_TIMEOUT_MS = 12_000;
 const MAX_BUFFER = 4 * 1024 * 1024;
 
@@ -163,9 +166,13 @@ export function createReadonlyMarketClient({ runner = null, ttlMs = DEFAULT_TTL_
     const previous = cache.get(key);
     const now = Date.now();
     if (previous && previous.expiresAt > now) return previous.promise;
-    const promise = Promise.resolve().then(load).catch(() => null);
-    cache.set(key, { expiresAt: now + ttlMs, promise });
-    return promise;
+    const entry = { expiresAt: now + ttlMs, promise: null, lastSuccess: previous?.lastSuccess || null };
+    entry.promise = Promise.resolve().then(load).then(result => {
+      if (result?.status === 'ok') entry.lastSuccess = result;
+      return result;
+    }).catch(() => null);
+    cache.set(key, entry);
+    return entry.promise;
   }
 
   async function trending({ chain, interval = '1m', limit = 20 } = {}) {
@@ -179,7 +186,11 @@ export function createReadonlyMarketClient({ runner = null, ttlMs = DEFAULT_TTL_
       if (!tokens.length) return unavailable({ chain, interval });
       return { status: 'ok', source: 'gmgn-cli', chain, interval, orderBy: GMGN_ORDER_BY, observedAt: new Date().toISOString(), tokens };
     });
-    return result || unavailable({ chain, interval });
+    if (result?.status === 'ok') return result;
+    const lastSuccess = cache.get(key)?.lastSuccess;
+    return lastSuccess
+      ? { ...lastSuccess, status: 'stale', stale: true, staleReason: 'gmgn_unavailable', staleAt: new Date().toISOString() }
+      : unavailable({ chain, interval });
   }
 
   async function kline({ chain, address, resolution = '1m', from, to } = {}) {
@@ -195,7 +206,11 @@ export function createReadonlyMarketClient({ runner = null, ttlMs = DEFAULT_TTL_
       if (!candles.length) return unavailable({ chain, address, resolution });
       return { status: 'ok', source: 'gmgn-cli', chain, address, resolution, from: start, to: end, observedAt: new Date().toISOString(), candles };
     });
-    return result || unavailable({ chain, address, resolution });
+    if (result?.status === 'ok') return result;
+    const lastSuccess = cache.get(key)?.lastSuccess;
+    return lastSuccess
+      ? { ...lastSuccess, status: 'stale', stale: true, staleReason: 'gmgn_unavailable', staleAt: new Date().toISOString() }
+      : unavailable({ chain, address, resolution });
   }
 
   return { trending, kline, clearCache: () => cache.clear() };

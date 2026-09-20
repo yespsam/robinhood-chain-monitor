@@ -61,5 +61,5 @@ export function createDashboardServer({ host = '127.0.0.1', port = 4173, market 
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   const port = Number(process.env.DASHBOARD_PORT || 4173); const app = createDashboardServer({ port });
-  app.listen().then(address => console.log(`GMGN-style paper terminal: http://${address.address}:${address.port} (simulation only)`)).catch(error => { console.error(`dashboard failed: ${error.message}`); process.exitCode = 1; });
+  app.listen().then(address => console.log(`yesp atm 模拟盘：http://${address.address}:${address.port}（仅模拟盘）`)).catch(error => { console.error(`dashboard failed: ${error.message}`); process.exitCode = 1; });
 }

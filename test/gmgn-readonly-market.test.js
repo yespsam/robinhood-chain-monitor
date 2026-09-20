@@ -48,6 +48,42 @@ test('readonly market fails closed on malformed or unavailable upstream data', a
   await assert.rejects(() => client.kline({ chain: 'sol', address: 'not valid!', resolution: '1m' }), /invalid address/);
 });
 
+test('readonly market keeps the last real snapshot during a transient upstream failure', async () => {
+  let attempts = 0;
+  const client = createReadonlyMarketClient({ ttlMs: 1, runner: async args => {
+    attempts += 1;
+    if (attempts > 1) throw new Error('temporary upstream failure');
+    if (args[1] === 'kline') return JSON.stringify({ list: [{ time: 1700000000000, open: 1, close: 2, high: 3, low: .5 }] });
+    return JSON.stringify({ data: { rank: [rankItem] } });
+  } });
+  const first = await client.trending({ chain: 'bsc', interval: '1m', limit: 1 });
+  assert.equal(first.status, 'ok');
+  await new Promise(resolve => setTimeout(resolve, 5));
+  const stale = await client.trending({ chain: 'bsc', interval: '1m', limit: 1 });
+  assert.equal(stale.status, 'stale');
+  assert.equal(stale.stale, true);
+  assert.equal(stale.staleReason, 'gmgn_unavailable');
+  assert.equal(stale.tokens[0].address, first.tokens[0].address);
+  assert.equal(stale.observedAt, first.observedAt);
+  assert.ok(stale.staleAt);
+});
+
+test('readonly K-line keeps the last real candles during a transient upstream failure', async () => {
+  let attempts = 0;
+  const client = createReadonlyMarketClient({ ttlMs: 1, runner: async () => {
+    attempts += 1;
+    if (attempts > 1) throw new Error('temporary upstream failure');
+    return JSON.stringify({ list: [{ time: 1700000000000, open: 1, close: 2, high: 3, low: .5 }] });
+  } });
+  const first = await client.kline({ chain: 'bsc', address: '0xabc12345', resolution: '1m', from: 1700000000, to: 1700003600 });
+  assert.equal(first.status, 'ok');
+  await new Promise(resolve => setTimeout(resolve, 5));
+  const stale = await client.kline({ chain: 'bsc', address: '0xabc12345', resolution: '1m', from: 1700000000, to: 1700003600 });
+  assert.equal(stale.status, 'stale');
+  assert.equal(stale.candles[0].close, first.candles[0].close);
+  assert.equal(stale.observedAt, first.observedAt);
+});
+
 test('readonly market accepts only supported read-only chains and resolutions', async () => {
   const client = createReadonlyMarketClient({ runner: async () => JSON.stringify({ data: { rank: [rankItem] } }) });
   await assert.rejects(() => client.trending({ chain: 'polygon', interval: '1m' }), /invalid chain/);
