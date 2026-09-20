@@ -105,8 +105,8 @@ function tick() {
 async function syncPaperBridge() {
   try {
     const response = await fetch('/api/paper-state', { cache: 'no-store' }); if (!response.ok) throw new Error('paper state unavailable'); const data = await response.json();
-    if (data?.status === 'ok') { $('#sourceLabel').textContent = `paper-100 bridge: ${data.updatedAt ? 'synced' : 'ready'}`; $('#paperStateLabel').textContent = 'synced'; }
-  } catch { $('#sourceLabel').textContent = 'paper-100 bridge: local-only'; $('#paperStateLabel').textContent = 'local'; }
+    if (data?.status === 'ok') { $('#sourceLabel').textContent = `paper-100 status bridge: ${data.updatedAt ? 'synced' : 'ready'}`; $('#paperStateLabel').textContent = 'synced'; }
+  } catch { $('#sourceLabel').textContent = 'paper-100 status bridge: local-only'; $('#paperStateLabel').textContent = 'local'; }
 }
 
 function placePaperOrder() {

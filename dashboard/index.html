@@ -34,7 +34,7 @@
         <span class="safety-copy">本地合成行情 · 不连接钱包 · 不签名 · 不广播</span>
         <span class="safety-spacer"></span>
         <span class="latency-label">TICK <strong id="latency">--</strong> ms</span>
-        <span class="source-label" id="sourceLabel">paper-100 bridge: checking</span>
+        <span class="source-label" id="sourceLabel">paper-100 status bridge: checking</span>
       </div>
 
       <main class="terminal-grid">
@@ -110,14 +110,14 @@
             <div class="form-row form-spread"><span class="form-label">SLIPPAGE</span><span class="slippage-control"><button type="button" class="slippage active" data-slippage="1">1%</button><button type="button" class="slippage" data-slippage="3">3%</button><button type="button" class="slippage" data-slippage="5">5%</button></span></div>
             <div class="quote-box"><div><span>EST. RECEIVE</span><strong id="estimatedReceive">457.88 GENIUS</strong></div><div><span>PRICE IMPACT</span><strong id="priceImpact">0.82%</strong></div><div><span>NETWORK FEE</span><strong>$0.20 <em>paper</em></strong></div></div>
             <button class="simulate-button" id="simulateButton" type="button"><span id="simulateLabel">Simulate buy</span><span>↗</span></button>
-            <p class="order-disclaimer">仅写入本机 paper 账本。不会调用 GMGN、钱包或签名器。</p>
+            <p class="order-disclaimer">仅写入本机浏览器模拟账本，不改变 CLI paper-100 状态；不会调用 GMGN、钱包或签名器。</p>
           </div>
           <div class="positions-heading"><span class="eyebrow">POSITIONS</span><span id="positionCount">0 open</span></div>
           <div class="positions-list" id="positionsList"><div class="empty-position">No open positions<br /><span>模拟成交后显示在这里</span></div></div>
         </aside>
       </main>
 
-      <footer class="bottom-status"><span><i class="live-dot"></i> local engine online</span><span>paper state <strong id="paperStateLabel">synced</strong></span><span>feed <strong>synthetic / 1.2s</strong></span><span class="footer-spacer"></span><span>GMGN-style paper terminal · v0.1</span></footer>
+      <footer class="bottom-status"><span><i class="live-dot"></i> local engine online</span><span>paper-100 status <strong id="paperStateLabel">synced</strong></span><span>browser paper <strong>local</strong></span><span class="footer-spacer"></span><span>GMGN-style paper terminal · v0.1</span></footer>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script type="module" src="/app.js"></script>
