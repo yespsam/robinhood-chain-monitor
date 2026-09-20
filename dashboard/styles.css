@@ -102,5 +102,25 @@ body { min-width: 0; }
 .logic-exits { display: flex; justify-content: space-between; gap: 12px; margin: 5px 22px 0; padding: 14px 0; border-top: 1px solid var(--line); color: var(--muted); font: 10px var(--mono); }.logic-exits strong { color: var(--amber); font-weight: 400; text-align: right; }
 .focus-strategy-note { margin: 0 22px; padding: 11px 0 4px; color: var(--dim); font: 9px/1.5 var(--mono); }
 .focus-last-action { margin: 0 22px 20px; padding: 15px 0 0; border-top: 1px solid var(--line); }.focus-last-action span { display: block; color: var(--dim); font: 9px var(--mono); }.focus-last-action strong { display: block; margin-top: 7px; color: var(--lime); font: 12px var(--mono); font-weight: 400; }.focus-last-action small { display: block; margin-top: 5px; color: var(--muted); font: 9px var(--mono); }
+.research-team-panel { margin-top: 16px; }
+.research-team-summary { display: grid; grid-template-columns: 1.35fr .75fr .75fr 1fr; gap: 1px; margin: 0 22px; background: var(--line); }
+.research-team-summary > div { min-width: 0; padding: 15px 16px; background: #0a100c; }
+.research-team-summary span { display: block; color: var(--dim); font: 9px var(--mono); }
+.research-team-summary strong { display: block; margin-top: 8px; color: var(--text); font: 14px var(--mono); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.research-team-summary strong[data-decision="可模拟"] { color: var(--lime); }
+.research-team-summary strong[data-decision="观察"] { color: var(--amber); }
+.research-team-summary strong[data-decision="不买"] { color: var(--red); }
+.research-departments { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 16px 22px 0; background: var(--line); }
+.research-department { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 10px; min-width: 0; padding: 14px 13px; background: #0a100c; }
+.research-department-marker { display: grid; place-items: center; width: 23px; height: 23px; border: 1px solid var(--line); color: var(--muted); font: 9px var(--mono); }
+.research-department[data-status="通过"] .research-department-marker { color: var(--lime); border-color: var(--lime-soft); }
+.research-department[data-status="部分"], .research-department[data-status="观察"] { border-left: 2px solid var(--amber); }
+.research-department[data-status="拦截"] { border-left: 2px solid var(--red); }
+.research-department strong { display: block; color: var(--text); font: 10px var(--mono); }
+.research-department span { display: block; margin-top: 5px; color: var(--muted); font: 9px/1.4 var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.research-department-score { color: var(--dim); font: 9px var(--mono); white-space: nowrap; }
+.research-empty { grid-column: 1 / -1; padding: 20px; color: var(--muted); text-align: center; font: 10px var(--mono); }
+.research-team-brief { margin: 16px 22px 0; padding: 12px 14px; white-space: pre-line; border-left: 2px solid var(--lime-soft); color: var(--muted); font: 10px/1.6 var(--mono); }
+.research-team-note { margin: 12px 22px 20px; color: var(--dim); font: 9px/1.5 var(--mono); }
 .positive { color: var(--lime); }.negative { color: var(--red); }
-@media (max-width: 760px) { .focus-shell { padding: 28px 15px 32px; }.focus-intro { display: block; }.focus-controls { margin-top: 20px; justify-content: space-between; }.focus-grid { grid-template-columns: 1fr; }.focus-panel-heading, .focus-signal-main, .focus-signal-note, .focus-positions-list, .logic-list { padding-left: 16px; padding-right: 16px; }.focus-balance-grid, .focus-signal-metrics { margin-left: 16px; margin-right: 16px; }.logic-exits, .focus-strategy-note, .focus-last-action { margin-left: 16px; margin-right: 16px; }.focus-signal-metrics { grid-template-columns: repeat(2, 1fr); }.focus-position-row { align-items: start; }.focus-position-numbers { flex: 0 0 auto; } }
+@media (max-width: 760px) { .focus-shell { padding: 28px 15px 32px; }.focus-intro { display: block; }.focus-controls { margin-top: 20px; justify-content: space-between; }.focus-grid { grid-template-columns: 1fr; }.focus-panel-heading, .focus-signal-main, .focus-signal-note, .focus-positions-list, .logic-list { padding-left: 16px; padding-right: 16px; }.focus-balance-grid, .focus-signal-metrics, .research-team-summary, .research-departments { margin-left: 16px; margin-right: 16px; }.logic-exits, .focus-strategy-note, .focus-last-action, .research-team-brief, .research-team-note { margin-left: 16px; margin-right: 16px; }.focus-signal-metrics { grid-template-columns: repeat(2, 1fr); }.research-team-summary { grid-template-columns: repeat(2, 1fr); }.research-departments { grid-template-columns: 1fr; }.focus-position-row { align-items: start; }.focus-position-numbers { flex: 0 0 auto; } }

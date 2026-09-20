@@ -54,3 +54,37 @@ test('dashboard exposes read-only GMGN market and kline routes without trade exe
   assert.equal(calls[1][1].resolution, '1m');
   assert.equal(calls[1][1].address, '0xabc12345');
 });
+
+test('dashboard exposes a read-only AI research team report', async t => {
+  const calls = [];
+  const now = new Date().toISOString();
+  const token = {
+    address: '0x1111111111111111111111111111111111111111', symbol: 'ALPHA', chain: 'bsc', price: 1,
+    change: 12, liquidity: 100_000, volume: 150_000, holders: 1_000, smartDegenCount: 5,
+    renownedCount: 2, rugRatio: .05, isHoneypot: false, isWashTrading: false, buyTax: .01,
+    sellTax: .01, creatorClose: true, isOpenSource: true, isRenounced: true, top10HolderRate: .3,
+    buys: 100, sells: 50,
+  };
+  const app = createDashboardServer({
+    host: '127.0.0.1', port: 0,
+    market: {
+      trending: async query => { calls.push(['trending', query]); return { status: 'ok', source: 'gmgn-cli', chain: 'bsc', observedAt: now, tokens: [token] }; },
+      kline: async query => { calls.push(['kline', query]); return { status: 'ok', source: 'gmgn-cli', candles: [{ close: .9 }, { close: 1 }] }; },
+    },
+  });
+  const address = await app.listen();
+  t.after(() => app.close());
+  const base = `http://${address.address}:${address.port}`;
+  const response = await fetch(`${base}/api/research-team?chain=bsc&address=${token.address}`);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.source, 'gmgn-cli');
+  assert.equal(body.report.schema, 'yesp_atm_research_team_v1');
+  assert.equal(body.report.executable, false);
+  assert.equal(body.report.signing, false);
+  assert.equal(body.report.broadcast, false);
+  assert.equal(body.report.token.symbol, 'ALPHA');
+  assert.match(body.brief, /结论：/);
+  assert.equal(calls[0][0], 'trending');
+  assert.equal(calls[1][0], 'kline');
+});

@@ -36,6 +36,7 @@ const state = {
   chart: [],
   positionMarks: new Map(),
   real: { status: 'loading', source: 'gmgn-cli', observedAt: null, latency: null, candleStatus: 'loading' },
+  research: { status: 'loading', source: 'gmgn-cli', observedAt: null, report: null, brief: '' },
   paper: loadPaper(),
   auto: loadAuto(),
 };
@@ -147,7 +148,7 @@ function renderWatchlist() {
   }).join('') || (state.real.status === 'unavailable'
     ? '<div class="empty-position" style="margin:12px">GMGN 真实数据暂不可用<br /><span>未显示合成替代数据</span></div>'
     : '<div class="empty-position" style="margin:12px">等待 GMGN 真实排行…</div>');
-  $$('.watch-item').forEach(button => button.addEventListener('click', () => { state.selectedAddress = button.dataset.token; refreshKline(); renderAll(); }));
+  $$('.watch-item').forEach(button => button.addEventListener('click', () => { state.selectedAddress = button.dataset.token; refreshKline(); refreshResearchTeam(); renderAll(); }));
   $('#watchCount').textContent = `${visible.length} 个资产`;
 }
 
@@ -215,6 +216,46 @@ function renderAuto() {
   const runAt = state.auto.lastRunAt ? `上次运行 ${shortClock(new Date(state.auto.lastRunAt))}` : '尚未运行';
   const reason = state.auto.lastReason ? ` · ${state.auto.lastReason}` : '';
   $('#autoPaperStatus').textContent = `${state.auto.lastAction || '等待最新行情'} · ${runAt}${reason}`;
+}
+
+const RESEARCH_DEPARTMENTS = Object.freeze([
+  ['chain', '链路研究部', '链'],
+  ['narrative', '叙事研究部', '叙'],
+  ['flow', '筹码资金部', '筹'],
+  ['security', '合约安全部', '安'],
+  ['market', '行情结构部', '行'],
+  ['risk', '投委会风控部', '控'],
+]);
+
+function researchDepartmentStatus(status) {
+  return ({ 通过: '通过', 部分: '部分', 观察: '观察', 拦截: '拦截' })[status] || '观察';
+}
+
+function renderResearchTeam() {
+  const panel = $('#researchTeamDepartments');
+  if (!panel) return;
+  const report = state.research.report;
+  const status = state.research.status;
+  const hasReport = report && typeof report === 'object';
+  const conclusion = hasReport ? report.decision || '观察' : '观察';
+  const conclusionNode = $('#researchTeamConclusion');
+  conclusionNode.textContent = conclusion;
+  conclusionNode.dataset.decision = conclusion;
+  $('#researchTeamScore').textContent = hasReport && Number.isFinite(Number(report.opportunityScore)) ? `${Number(report.opportunityScore).toFixed(0)} / 100` : '—';
+  $('#researchTeamConfidence').textContent = hasReport ? `${report.confidence || '低'}${Number.isFinite(Number(report.confidenceScore)) ? ` · ${Number(report.confidenceScore).toFixed(0)}` : ''}` : '—';
+  $('#researchTeamUpdated').textContent = state.research.observedAt ? shortClock(new Date(state.research.observedAt)) : '—';
+  $('#researchTeamStatus').textContent = status === 'ok' ? '6部门 · 新鲜' : status === 'stale' ? '6部门 · 上次快照' : status === 'loading' ? '研究中' : '等待真实数据';
+  panel.innerHTML = hasReport
+    ? RESEARCH_DEPARTMENTS.map(([id, label, marker]) => {
+      const department = report.departments?.[id] || {};
+      const departmentStatus = researchDepartmentStatus(department.status);
+      const score = Number.isFinite(Number(department.score)) && Number.isFinite(Number(department.maxScore)) ? `${Number(department.score).toFixed(0)} / ${Number(department.maxScore).toFixed(0)}` : '—';
+      return `<article class="research-department" data-status="${escapeHtml(departmentStatus)}"><span class="research-department-marker">${escapeHtml(marker)}</span><div><strong>${escapeHtml(label)} · ${escapeHtml(departmentStatus)}</strong><span title="${escapeHtml(department.conclusion || '等待部门结论')}">${escapeHtml(department.conclusion || '等待部门结论')}</span></div><span class="research-department-score">${escapeHtml(score)}</span></article>`;
+    }).join('')
+    : '<div class="research-empty">等待链路、叙事、筹码、安全、行情和总控部门汇总…</div>';
+  $('#researchTeamBrief').textContent = hasReport
+    ? (state.research.brief || `总控：${report.reasons?.[0] || '等待研究证据'}`)
+    : status === 'unavailable' ? 'GMGN 真实数据暂不可用；不显示合成投研结论，也不触发新增模拟。' : '只读取 GMGN 真实快照；没有来源的叙事不会被猜测，未知安全不会被当成安全。';
 }
 
 function renderFocus() {
@@ -400,7 +441,7 @@ function runPaperAutoCycle({ fresh = false, force = false } = {}) {
   savePaper(); saveAuto(); renderAuto();
 }
 
-function renderAll() { renderWatchlist(); renderMarket(); renderTrades(); renderPaper(); renderAuto(); renderFocus(); }
+function renderAll() { renderWatchlist(); renderMarket(); renderTrades(); renderPaper(); renderAuto(); renderFocus(); renderResearchTeam(); }
 
 function rowsFromTokens(tokens, observedAt) {
   const time = observedAt ? shortClock(new Date(observedAt)) : '--:--:--';
@@ -423,6 +464,35 @@ async function refreshKline() {
   updateChart();
 }
 
+async function refreshResearchTeam() {
+  const token = currentToken();
+  if (!token?.address) {
+    state.research = { status: 'unavailable', source: 'gmgn-cli', observedAt: null, report: null, brief: '' };
+    renderResearchTeam();
+    return;
+  }
+  const address = String(token.address);
+  const chain = String(token.chain || state.chain).toLowerCase();
+  state.research.status = 'loading';
+  renderResearchTeam();
+  try {
+    const { data } = await getJson(`/api/research-team?chain=${encodeURIComponent(chain)}&address=${encodeURIComponent(address)}`);
+    // A chain switch or a manual token click can finish while this read-only
+    // request is in flight. Do not paint an older report over the new token.
+    if (currentToken()?.address !== address) return;
+    state.research = {
+      status: data?.status || 'unavailable',
+      source: data?.source || 'gmgn-cli',
+      observedAt: data?.observedAt || null,
+      report: data?.report || null,
+      brief: data?.brief || '',
+    };
+  } catch {
+    if (currentToken()?.address === address) state.research = { status: 'unavailable', source: 'gmgn-cli', observedAt: null, report: null, brief: '' };
+  }
+  renderResearchTeam();
+}
+
 async function refreshRealMarket() {
   if (state.paused) return;
   markRealStatus('loading');
@@ -435,7 +505,7 @@ async function refreshRealMarket() {
     state.trades = rowsFromTokens(state.tokens.slice(0, 8), data.observedAt); state.real.candleStatus = 'loading';
     markRealStatus(data.status, { observedAt: data.observedAt, latency, staleReason: data.staleReason || null });
     await refreshPositionMarks();
-    runPaperAutoCycle({ fresh: data.status === 'ok' }); renderAll(); await refreshKline();
+    runPaperAutoCycle({ fresh: data.status === 'ok' }); renderAll(); await refreshKline(); await refreshResearchTeam();
   } catch {
     if (state.tokens.length) {
       state.real.candleStatus = state.chart.length > 1 ? 'stale' : 'unavailable';
