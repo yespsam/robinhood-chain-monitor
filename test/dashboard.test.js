@@ -16,6 +16,8 @@ test('dashboard serves the paper terminal, local paper bridge, and rejects path 
   assert.match(pageText, /只看持仓和买入逻辑/);
   assert.match(pageText, /买入逻辑/);
   assert.match(pageText, /当前持仓/);
+  assert.match(pageText, /追踪回撤/);
+  assert.match(pageText, /分段回收/);
   const css = await fetch(`${base}/styles.css`);
   assert.equal(css.status, 200);
   assert.match(await css.text(), /--lime/);

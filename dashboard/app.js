@@ -5,7 +5,19 @@ const AUTO_STORAGE_KEY = 'yesp-atm-auto-v1';
 const PAPER_START = 100;
 const CHAINS = ['bsc', 'base', 'eth', 'sol'];
 const REAL_REFRESH_MS = 60_000;
-const AUTO_POLICY = Object.freeze({ entryUsd: 10, maxPositions: 2, stopLoss: -.2, takeProfit: .4, maxHoldMs: 30 * 60_000 });
+const AUTO_POLICY = Object.freeze({
+  entryUsd: 10,
+  maxPositions: 2,
+  stopLoss: -.2,
+  trailActivation: .5,
+  trailingDrawdown: .3,
+  maxHoldMs: 2 * 60 * 60_000,
+  scaleOutLevels: Object.freeze([
+    Object.freeze({ multiple: 2, fraction: .25, label: '2倍' }),
+    Object.freeze({ multiple: 5, fraction: 1 / 3, label: '5倍' }),
+    Object.freeze({ multiple: 10, fraction: .5, label: '10倍' }),
+  ]),
+});
 const INTERVAL_LABELS = Object.freeze({ '1m': '1分钟', '5m': '5分钟', '1h': '1小时', '6h': '6小时', '24h': '24小时' });
 const RESOLUTION_LABELS = Object.freeze({ '30s': '30秒', '1m': '1分', '5m': '5分', '15m': '15分', '1h': '1小时', '4h': '4小时', '1d': '1天' });
 const RISK_LABELS = Object.freeze({ STRONG: '强', WATCH: '观察', BLOCKED: '拦截' });
@@ -22,6 +34,7 @@ const state = {
   tokens: [],
   trades: [],
   chart: [],
+  positionMarks: new Map(),
   real: { status: 'loading', source: 'gmgn-cli', observedAt: null, latency: null, candleStatus: 'loading' },
   paper: loadPaper(),
   auto: loadAuto(),
@@ -46,6 +59,40 @@ function loadAuto() {
 function savePaper() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.paper)); }
 function saveAuto() { localStorage.setItem(AUTO_STORAGE_KEY, JSON.stringify(state.auto)); }
 function currentToken() { return state.tokens.find(token => token.address === state.selectedAddress) || state.tokens[0] || null; }
+function tokenId(token) { return token?.chain && token?.address ? `${String(token.chain).toLowerCase()}:${String(token.address).toLowerCase()}` : String(token?.symbol || ''); }
+function positionSymbol(key, position) { return position?.symbol || (String(key).includes(':') ? String(key).split(':').at(-1) : String(key)); }
+function positionToken(position, key) {
+  if (position?.address) {
+    const exact = state.tokens.find(token => token.address.toLowerCase() === String(position.address).toLowerCase()
+      && (!position.chain || String(token.chain).toLowerCase() === String(position.chain).toLowerCase()));
+    if (exact) return exact;
+  }
+  const symbol = positionSymbol(key, position);
+  return state.tokens.filter(token => token.symbol === symbol).length === 1 ? state.tokens.find(token => token.symbol === symbol) : null;
+}
+function positionEntryForToken(token) {
+  const id = tokenId(token);
+  if (Object.hasOwn(state.paper.positions, id)) return [id, state.paper.positions[id]];
+  if (Object.hasOwn(state.paper.positions, token.symbol)) return [token.symbol, state.paper.positions[token.symbol]];
+  return [id, null];
+}
+function positionForToken(token) { return positionEntryForToken(token)[1]; }
+function migratePaperPositions() {
+  let changed = false;
+  for (const [key, position] of Object.entries(state.paper.positions)) {
+    if (position.chain && position.address) continue;
+    const symbol = positionSymbol(key, position);
+    const matches = state.tokens.filter(token => token.symbol === symbol);
+    if (matches.length !== 1) continue;
+    const token = matches[0], id = tokenId(token);
+    if (id === key || Object.hasOwn(state.paper.positions, id)) continue;
+    state.paper.positions[id] = { ...position, symbol, chain: token.chain, address: token.address };
+    delete state.paper.positions[key];
+    if (state.positionMarks.has(key)) { state.positionMarks.set(id, state.positionMarks.get(key)); state.positionMarks.delete(key); }
+    changed = true;
+  }
+  if (changed) savePaper();
+}
 function number(value, fallback = 0) { const n = Number(value); return Number.isFinite(n) ? n : fallback; }
 function money(value, digits = 2) { return Number.isFinite(Number(value)) ? `$${Number(value).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}` : '—'; }
 function compact(value) { const n = Number(value); if (!Number.isFinite(n)) return '—'; if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`; if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`; if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`; return money(n); }
@@ -186,12 +233,13 @@ function renderFocus() {
 
   const entries = Object.entries(state.paper.positions);
   $('#focusPositionCount').textContent = `${entries.length} 个仓位`;
-  $('#focusPositionsList').innerHTML = entries.length ? entries.map(([symbol, position]) => {
-    const liveToken = state.tokens.find(item => item.symbol === symbol);
+  $('#focusPositionsList').innerHTML = entries.length ? entries.map(([key, position]) => {
+    const symbol = positionSymbol(key, position);
+    const liveToken = positionToken(position, key);
     const quantity = number(position.quantity);
     const livePrice = Number(liveToken?.price);
     const markValue = Number.isFinite(livePrice) && livePrice > 0 ? quantity * livePrice : number(position.markValue, number(position.cost));
-    const pnl = markValue - number(position.cost);
+    const pnl = markValue + number(position.realizedValue) - number(position.entryCost, number(position.cost));
     const pnlClass = pnl >= 0 ? 'positive' : 'negative';
     const mode = position.auto ? '自动策略' : '手动模拟';
     const openedAt = position.openedAt ? shortClock(new Date(position.openedAt)) : '—';
@@ -232,6 +280,61 @@ function autoEligible(token) {
     && number(token.change) >= 0;
 }
 
+async function refreshPositionMarks() {
+  const entries = Object.entries(state.paper.positions).filter(([, position]) => position.auto === true);
+  if (!entries.length) return;
+  const results = await Promise.allSettled(entries.map(async ([key, position]) => {
+    const token = positionToken(position, key);
+    const chain = token?.chain || position.chain;
+    const address = token?.address || position.address;
+    if (!chain || !address) return { key, status: 'unavailable' };
+    try {
+      const { data } = await getJson(`/api/kline?chain=${encodeURIComponent(String(chain).toLowerCase())}&address=${encodeURIComponent(address)}&resolution=1m&hours=1`);
+      const candles = Array.isArray(data?.candles) ? data.candles : [];
+      const price = Number(candles.at(-1)?.close);
+      if (!Number.isFinite(price) || price <= 0) throw new Error('position_mark_unavailable');
+      state.positionMarks.set(key, { price, status: data.status, observedAt: data.observedAt || null });
+      return { key, status: data.status };
+    } catch {
+      state.positionMarks.set(key, { price: null, status: 'unavailable', observedAt: null });
+      return { key, status: 'unavailable' };
+    }
+  }));
+  return results;
+}
+
+function autoReturnRate(position) {
+  const entryCost = number(position.entryCost, number(position.cost));
+  const realizedValue = number(position.realizedValue);
+  const totalValue = number(position.markValue) + realizedValue;
+  return entryCost > 0 ? totalValue / entryCost - 1 : 0;
+}
+
+function closeAutoPosition(symbol, position, reason) {
+  const proceeds = number(position.markValue);
+  const cost = number(position.cost);
+  state.paper.cash += proceeds;
+  state.paper.pnl += proceeds - cost;
+  delete state.paper.positions[symbol];
+  return `自动卖出 ${symbol} · ${reason}`;
+}
+
+function scaleOutAutoPosition(symbol, position, price, level) {
+  if (!Array.isArray(position.scaleOuts)) position.scaleOuts = [];
+  if (position.scaleOuts.includes(level.multiple) || position.quantity <= 0 || position.cost <= 0) return null;
+  const sellQuantity = position.quantity * level.fraction;
+  const proceeds = sellQuantity * price;
+  const costBasis = position.cost * (sellQuantity / position.quantity);
+  position.quantity -= sellQuantity;
+  position.cost -= costBasis;
+  position.markValue = position.quantity * price;
+  position.realizedValue = number(position.realizedValue) + proceeds;
+  position.scaleOuts.push(level.multiple);
+  state.paper.cash += proceeds;
+  state.paper.pnl += proceeds - costBasis;
+  return `自动分段止盈 ${symbol} · ${level.label}回收 ${money(proceeds)}`;
+}
+
 function runPaperAutoCycle({ fresh = false, force = false } = {}) {
   if (!state.auto.enabled) return;
   const now = Date.now(); const previousRun = Date.parse(state.auto.lastRunAt || '');
@@ -242,34 +345,58 @@ function runPaperAutoCycle({ fresh = false, force = false } = {}) {
   if (!fresh) {
     state.auto.lastAction = '等待最新真实行情'; state.auto.lastReason = '旧快照不触发自动模拟'; saveAuto(); renderAuto(); return;
   }
-  const prices = new Map(state.tokens.map(token => [token.symbol, Number(token.price)]));
   const actions = [];
-  for (const [symbol, position] of Object.entries(state.paper.positions)) {
+  let unpricedHoldings = 0;
+  for (const [positionKey, position] of Object.entries(state.paper.positions)) {
     if (position.auto !== true) continue;
-    const price = prices.get(symbol);
-    if (!Number.isFinite(price) || price <= 0) continue;
+    const symbol = positionSymbol(positionKey, position);
+    const heldToken = positionToken(position, positionKey);
+    const independentMark = state.positionMarks.get(positionKey);
+    const snapshotPrice = state.real.status === 'ok' ? Number(heldToken?.price) : NaN;
+    const price = independentMark?.status === 'ok' ? Number(independentMark.price) : snapshotPrice;
+    if (!Number.isFinite(price) || price <= 0) { unpricedHoldings += 1; continue; }
     position.markValue = position.quantity * price;
-    const returnRate = position.cost > 0 ? position.markValue / position.cost - 1 : 0;
+    position.entryCost = number(position.entryCost, number(position.cost));
+    position.realizedValue = number(position.realizedValue);
+    position.scaleOuts = Array.isArray(position.scaleOuts) ? position.scaleOuts : [];
+    position.entryPrice = number(position.entryPrice, position.quantity > 0 ? position.markValue / position.quantity : price);
+    position.highWaterPrice = Math.max(number(position.highWaterPrice, price), price);
+    let returnRate = autoReturnRate(position);
+    for (const level of AUTO_POLICY.scaleOutLevels) {
+      if (position.entryPrice <= 0 || price / position.entryPrice < level.multiple) continue;
+      const action = scaleOutAutoPosition(symbol, position, price, level);
+      if (action) actions.push(action);
+      returnRate = autoReturnRate(position);
+    }
     const age = now - number(position.openedAt, now);
-    const exitReason = returnRate <= AUTO_POLICY.stopLoss ? '触发止损' : returnRate >= AUTO_POLICY.takeProfit ? '触发止盈' : age >= AUTO_POLICY.maxHoldMs ? '到达最长持仓时间' : null;
+    const trailingStop = position.highWaterPrice * (1 - AUTO_POLICY.trailingDrawdown);
+    const exitReason = returnRate <= AUTO_POLICY.stopLoss
+      ? '触发硬止损'
+      : returnRate >= AUTO_POLICY.trailActivation && price <= trailingStop
+        ? '触发追踪止损'
+        : age >= AUTO_POLICY.maxHoldMs ? '到达最长持仓时间' : null;
     if (exitReason) {
-      state.paper.cash += position.markValue; state.paper.pnl += position.markValue - position.cost; delete state.paper.positions[symbol];
-      actions.push(`自动卖出 ${symbol} · ${exitReason}`);
+      actions.push(closeAutoPosition(symbol, position, exitReason));
     }
   }
   const autoPositions = Object.values(state.paper.positions).filter(position => position.auto === true).length;
   if (autoPositions < AUTO_POLICY.maxPositions && state.paper.cash >= AUTO_POLICY.entryUsd) {
-    const candidate = state.tokens.find(token => autoEligible(token) && !state.paper.positions[token.symbol]);
+    const candidate = state.tokens.find(token => autoEligible(token) && !positionForToken(token));
     if (candidate) {
       const quantity = AUTO_POLICY.entryUsd / Number(candidate.price);
       state.paper.cash -= AUTO_POLICY.entryUsd;
-      state.paper.positions[candidate.symbol] = { quantity, cost: AUTO_POLICY.entryUsd, markValue: AUTO_POLICY.entryUsd, auto: true, openedAt: now };
+      state.paper.positions[tokenId(candidate)] = {
+        symbol: candidate.symbol, chain: candidate.chain, address: candidate.address, quantity,
+        cost: AUTO_POLICY.entryUsd, entryCost: AUTO_POLICY.entryUsd, entryPrice: Number(candidate.price), realizedValue: 0,
+        markValue: AUTO_POLICY.entryUsd, highWaterPrice: Number(candidate.price), scaleOuts: [], auto: true, openedAt: now,
+      };
       actions.push(`自动买入 ${candidate.symbol} · ${money(AUTO_POLICY.entryUsd)}`);
     } else state.auto.lastReason = '没有同时满足强信号、流动性和风控条件的代币';
   } else if (autoPositions >= AUTO_POLICY.maxPositions) state.auto.lastReason = '已达到最多 2 个自动仓位';
   else state.auto.lastReason = '纸上余额不足 10 美元';
   state.auto.lastAction = actions.length ? actions.join('；') : '本轮没有交易动作';
   if (actions.length) state.auto.lastReason = '仅写入本机模拟账本';
+  else if (unpricedHoldings) state.auto.lastReason = `${unpricedHoldings} 个持仓暂无独立新鲜估值，不触发假价格退出`;
   savePaper(); saveAuto(); renderAuto();
 }
 
@@ -303,9 +430,12 @@ async function refreshRealMarket() {
     const { data, latency } = await getJson(`/api/market?chain=${encodeURIComponent(state.chain)}&interval=${encodeURIComponent(state.interval)}&limit=20`);
     if (!hasRealData(data?.status) || !Array.isArray(data.tokens)) throw new Error('market unavailable');
     state.tokens = data.tokens.filter(token => token && token.address && Number.isFinite(Number(token.price)));
+    migratePaperPositions();
     if (!state.tokens.some(token => token.address === state.selectedAddress)) state.selectedAddress = state.tokens[0]?.address || null;
     state.trades = rowsFromTokens(state.tokens.slice(0, 8), data.observedAt); state.real.candleStatus = 'loading';
-    markRealStatus(data.status, { observedAt: data.observedAt, latency, staleReason: data.staleReason || null }); runPaperAutoCycle({ fresh: data.status === 'ok' }); renderAll(); await refreshKline();
+    markRealStatus(data.status, { observedAt: data.observedAt, latency, staleReason: data.staleReason || null });
+    await refreshPositionMarks();
+    runPaperAutoCycle({ fresh: data.status === 'ok' }); renderAll(); await refreshKline();
   } catch {
     if (state.tokens.length) {
       state.real.candleStatus = state.chart.length > 1 ? 'stale' : 'unavailable';
@@ -328,15 +458,33 @@ async function syncPaperBridge() {
 function placePaperOrder() {
   const token = currentToken(); if (!token) return toast('当前没有 GMGN 真实行情，暂停模拟下单。'); if (token.risk === 'BLOCKED') return toast(`${token.symbol} 已触发风险拦截，停止模拟下单。`);
   const amount = Number.parseFloat($('#amountInput').value); if (!Number.isFinite(amount) || amount <= 0) return toast('请输入大于 0 的模拟金额。');
-  if (state.side === 'buy') { if (state.paper.positions[token.symbol]?.auto) return toast(`${token.symbol} 正由自动策略持有，请等待自动退出。`); if (amount > state.paper.cash) return toast('纸上账户余额不足。'); state.paper.cash -= amount; const units = amount / token.price; const position = state.paper.positions[token.symbol] || { quantity: 0, cost: 0, markValue: 0, auto: false, openedAt: Date.now() }; position.auto = false; position.quantity += units; position.cost += amount; position.markValue = position.quantity * token.price; state.paper.positions[token.symbol] = position; toast(`模拟买入 · ${money(amount)} ${token.symbol} 已加入纸上账本`); }
-  else { const position = state.paper.positions[token.symbol]; if (!position || position.quantity <= 0) return toast(`纸上账本没有 ${token.symbol} 持仓。`); const sellUnits = Math.min(position.quantity, amount / token.price); const proceeds = sellUnits * token.price; const costBasis = position.cost * (sellUnits / position.quantity); state.paper.cash += proceeds; state.paper.pnl += proceeds - costBasis; position.quantity -= sellUnits; position.cost -= costBasis; position.markValue = position.quantity * token.price; if (position.quantity < .00000001) delete state.paper.positions[token.symbol]; toast(`模拟卖出 · ${money(proceeds)} ${token.symbol} 已从纸上账本扣除`); }
+  const [positionKey, existing] = positionEntryForToken(token);
+  if (state.side === 'buy') {
+    if (existing?.auto) return toast(`${token.symbol} 正由自动策略持有，请等待自动退出。`);
+    if (amount > state.paper.cash) return toast('纸上账户余额不足。');
+    state.paper.cash -= amount;
+    const units = amount / token.price;
+    const position = existing || { symbol: token.symbol, chain: token.chain, address: token.address, quantity: 0, cost: 0, markValue: 0, auto: false, openedAt: Date.now() };
+    position.symbol = token.symbol; position.chain = token.chain; position.address = token.address; position.auto = false;
+    position.entryPrice = (position.quantity * number(position.entryPrice, token.price) + amount) / (position.quantity + units);
+    position.quantity += units; position.cost += amount; position.markValue = position.quantity * token.price;
+    state.paper.positions[positionKey] = position;
+    toast(`模拟买入 · ${money(amount)} ${token.symbol} 已加入纸上账本`);
+  } else {
+    const position = existing;
+    if (!position || position.quantity <= 0) return toast(`纸上账本没有 ${token.symbol} 持仓。`);
+    const sellUnits = Math.min(position.quantity, amount / token.price); const proceeds = sellUnits * token.price; const costBasis = position.cost * (sellUnits / position.quantity);
+    state.paper.cash += proceeds; state.paper.pnl += proceeds - costBasis; position.quantity -= sellUnits; position.cost -= costBasis; position.markValue = position.quantity * token.price;
+    if (position.quantity < .00000001) delete state.paper.positions[positionKey];
+    toast(`模拟卖出 · ${money(proceeds)} ${token.symbol} 已从纸上账本扣除`);
+  }
   savePaper(); renderPaper(); updateQuote();
 }
 
 $$('.order-tab').forEach(button => button.addEventListener('click', () => { state.side = button.dataset.side; $$('.order-tab').forEach(item => item.classList.toggle('active', item === button)); updateQuote(); }));
 $$('[data-amount]').forEach(button => button.addEventListener('click', () => { $('#amountInput').value = button.dataset.amount; updateQuote(); }));
 $$('[data-slippage]').forEach(button => button.addEventListener('click', () => { state.slippage = Number(button.dataset.slippage); $$('[data-slippage]').forEach(item => item.classList.toggle('active', item === button)); updateQuote(); }));
-$('#amountInput').addEventListener('input', updateQuote); $('#maxButton').addEventListener('click', () => { const token = currentToken(); $('#amountInput').value = state.side === 'buy' ? state.paper.cash.toFixed(2) : (token ? state.paper.positions[token.symbol]?.markValue || 0 : 0).toFixed(2); updateQuote(); }); $('#simulateButton').addEventListener('click', placePaperOrder);
+$('#amountInput').addEventListener('input', updateQuote); $('#maxButton').addEventListener('click', () => { const token = currentToken(); $('#amountInput').value = state.side === 'buy' ? state.paper.cash.toFixed(2) : (token ? positionForToken(token)?.markValue || 0 : 0).toFixed(2); updateQuote(); }); $('#simulateButton').addEventListener('click', placePaperOrder);
 $('#tokenSearch').addEventListener('input', renderWatchlist);
 function setAutoEnabled(enabled) {
   state.auto.enabled = enabled;
@@ -349,7 +497,7 @@ function setAutoEnabled(enabled) {
 $('#autoPaperToggle').addEventListener('change', event => setAutoEnabled(event.target.checked));
 $('#focusAutoToggle').addEventListener('change', event => setAutoEnabled(event.target.checked));
 $('#pauseButton').addEventListener('click', () => { state.paused = !state.paused; $('#pauseButton').textContent = state.paused ? '▶' : 'Ⅱ'; $('#pauseButton').classList.toggle('active', state.paused); $('#streamLabel').textContent = state.paused ? 'GMGN 行情 · 已暂停' : hasRealData(state.real.status) ? state.real.status === 'stale' ? 'GMGN 真实行情 · 上次成功快照' : 'GMGN 真实行情' : 'GMGN 行情 · 加载中'; toast(state.paused ? 'GMGN 实时轮询已暂停。' : 'GMGN 实时轮询已恢复。'); if (!state.paused) refreshRealMarket(); });
-$('#resetPaper').addEventListener('click', () => { state.paper = { cash: PAPER_START, pnl: 0, positions: {} }; state.auto.lastAction = '纸上账户已重置'; state.auto.lastReason = '自动模拟仍按开关状态运行'; savePaper(); saveAuto(); renderPaper(); renderAuto(); renderFocus(); toast('纸上账户已重置为 100 美元。'); });
+$('#resetPaper').addEventListener('click', () => { state.paper = { cash: PAPER_START, pnl: 0, positions: {} }; state.positionMarks.clear(); state.auto.lastAction = '纸上账户已重置'; state.auto.lastReason = '自动模拟仍按开关状态运行'; savePaper(); saveAuto(); renderPaper(); renderAuto(); renderFocus(); toast('纸上账户已重置为 100 美元。'); });
 $('#focusResetPaper').addEventListener('click', () => $('#resetPaper').click());
 $('#copyButton').addEventListener('click', async () => { const token = currentToken(); if (!token) return toast('没有可复制的真实合约地址。'); try { await navigator.clipboard.writeText(token.address); toast('GMGN 合约地址已复制。'); } catch { toast('当前浏览器无法使用剪贴板。'); } });
 $$('.chart-tab').forEach(button => button.addEventListener('click', () => { state.tab = button.dataset.tab; $$('.chart-tab').forEach(item => item.classList.toggle('active', item === button)); updateChart(); }));
