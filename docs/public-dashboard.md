@@ -15,7 +15,7 @@
 
 仓库根目录 `netlify.toml`，Node 22；静态目录 `dist-public/`，函数目录 `netlify/functions/`。安装依赖后执行 `npm run build:public`，再 `netlify deploy --build` 验证预览，确认后 `netlify deploy --build --prod`。发布前 `netlify status` 核实选中的站点。
 
-两个函数路由：`GET /api/strategy-state` 公开读取最后快照；`POST /api/publish-state` 必须使用独立 `PUBLIC_PUBLISH_TOKEN`。后者只可写脱敏模拟快照，不能操控本机。数据保存在本站 Netlify Blobs，不跨站共享。凭证只在函数环境和本地 `data/public-publisher.json`（权限 600，Git 忽略）保存。
+两个函数路由：`GET /api/strategy-state` 公开读取最后快照；`POST /api/publish-state` 必须使用独立 `YESP_SNAPSHOT_PUBLISH_TOKEN`。后者只可写脱敏模拟快照，不能操控本机。数据保存在本站 Netlify Blobs，不跨站共享。凭证仅限函数作用域和本地 `data/public-publisher.json`（权限 600，Git 忽略），不使用可能被前端框架导出的 PUBLIC/VITE 前缀。
 
 显式配置命令：`node scripts/configure-public-publisher.js <site-id> <https://site.netlify.app>`。CLI 必须已登录。命令静默导入独立随机凭证，不使用交易/API 密钥。
 
