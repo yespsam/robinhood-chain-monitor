@@ -435,6 +435,10 @@ const retryAfterMilliseconds = (value, current) => {
 };
 
 const due = (health, current) => !health?.nextAttemptAt || (Date.parse(health.nextAttemptAt) || 0) <= current;
+// A transient network failure is not a server-issued rate limit. Keep a
+// bounded recovery probe instead of leaving a recovered network idle for 15m.
+const NETWORK_RECOVERY_MAX_WAIT_MS = 60_000;
+const transientNetworkFailure = (message) => /timed?\s*out|timeout|fetch failed|network|ECONN|ENET|EAI_AGAIN|ENOTFOUND|operation was aborted/iu.test(String(message || ""));
 
 export function createTelegramNewsMonitor(config = {}, dependencies = {}) {
   if (!config.dataDir && !dependencies.stateFile) throw new Error("Telegram news monitor requires config.dataDir or dependencies.stateFile");
@@ -466,6 +470,15 @@ export function createTelegramNewsMonitor(config = {}, dependencies = {}) {
     if (initialized) return;
     try {
       state = normalizeState(JSON.parse(await fsImpl.readFile(stateFile, "utf8")));
+      const health = state.health;
+      const failedAt = Date.parse(health.lastErrorAt || "");
+      const retryAt = Date.parse(health.nextAttemptAt || "");
+      if (health.status === "backoff" && health.lastResponseStatus === null
+        && transientNetworkFailure(health.lastError) && Number.isFinite(failedAt)
+        && Number.isFinite(retryAt) && retryAt > failedAt + NETWORK_RECOVERY_MAX_WAIT_MS) {
+        health.nextAttemptAt = iso(failedAt + NETWORK_RECOVERY_MAX_WAIT_MS);
+        await save();
+      }
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
@@ -538,7 +551,9 @@ export function createTelegramNewsMonitor(config = {}, dependencies = {}) {
 
   const markFailure = (error, current, status = null, retryAfter = null) => {
     state.health.consecutiveFailures = Number(state.health.consecutiveFailures || 0) + 1;
-    const exponential = Math.min(maximumBackoffMs, pollIntervalMs * (2 ** Math.max(0, state.health.consecutiveFailures - 1)));
+    const limit = status === null && transientNetworkFailure(error?.message || error)
+      ? Math.min(maximumBackoffMs, NETWORK_RECOVERY_MAX_WAIT_MS) : maximumBackoffMs;
+    const exponential = Math.min(limit, pollIntervalMs * (2 ** Math.max(0, state.health.consecutiveFailures - 1)));
     const waitMs = Math.max(pollIntervalMs, retryAfter ?? exponential);
     state.health.status = status === 403 || status === 429 ? "rate_limited" : "backoff";
     state.health.lastErrorAt = iso(current);

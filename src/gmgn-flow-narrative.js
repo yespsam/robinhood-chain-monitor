@@ -29,12 +29,26 @@ const sourceConfig = Object.freeze({
   fomoPublishedCallEnabled: true, fomoCallAllowGmgnObservedWallets: true,
 });
 
-/** Pure evidence selection. Matching a ticker never establishes a narrative. */
-export function resolveGmgnFlowNarrative({ chain, tokenAddress, tokenInfo, events = [], nowMs = Date.now() } = {}) {
+// Per-scan lookup only; collection below still validates source, identity,
+// timestamps, conflicts and text. Never cache a freshness decision here.
+export function indexGmgnNarrativeEvents(events = []) {
+  const index = new Map();
+  for (const entry of Array.isArray(events) ? events : []) {
+    const event = entry?.event || entry, slug = chainSlug(event?.chain);
+    const token = slug && address(event?.token, slug);
+    if (!slug || !token) continue;
+    const key = `${slug}:${token}`;
+    if (!index.has(key)) index.set(key, []);
+    index.get(key).push(entry);
+  }
+  return index;
+}
+
+/** Authenticated source collection; source identity is not issuer endorsement. */
+export function collectGmgnFlowNarratives({ chain, tokenAddress, events = [], nowMs = Date.now() } = {}) {
   const slug = chainSlug(chain);
   const token = slug && address(tokenAddress, slug);
-  const fallback = { status: "unverified", text: "未找到可按链和 CA 绑定的叙事出处", sourceUrl: null, sourceAt: null, chain: slug, tokenAddress: token };
-  if (!slug || !token || !Number.isFinite(nowMs)) return fallback;
+  if (!slug || !token || !Number.isFinite(nowMs)) return [];
   const matched = (Array.isArray(events) ? events : []).flatMap((entry) => {
     const event = entry?.event || entry;
     if (event?.type !== "fomo_family_top_call" || !["fomo_x_call", "fomo_published_call"].includes(event?.signalKind)
@@ -43,7 +57,7 @@ export function resolveGmgnFlowNarrative({ chain, tokenAddress, tokenInfo, event
       || !isMonitoringSourceEnabled(sourceConfig, event)) return [];
     const sourceAt = event.publishedAt || event.tweet?.createdAt || event.thesis?.createdAt;
     const published = Date.parse(sourceAt || "");
-    if (!Number.isFinite(published) || published > nowMs + 60_000 || nowMs - published > GMGN_FLOW_NARRATIVE_MAX_AGE_MS) return [];
+    if (!Number.isFinite(published) || published > nowMs) return [];
     const isX = event.signalKind === "fomo_x_call";
     const text = clean(isX ? event.tweet?.text : event.thesis?.text);
     if (!text || clean(event.thesis?.text) !== text || (event.body != null && clean(event.body) !== text)) return [];
@@ -53,9 +67,34 @@ export function resolveGmgnFlowNarrative({ chain, tokenAddress, tokenInfo, event
     if (!isX && !["fomo.family", "api.fomoscan.sh", "prod-api.fomo.family"].includes(url.hostname)) return [];
     // The X source gate binds CA in thesis text; additionally require the
     // authenticated tweet text itself to carry the identical full address.
-    if (isX && !text.toLowerCase().includes(token.toLowerCase())) return [];
-    return [{ status: "sourced", text: excerpt(text), sourceUrl, sourceAt: new Date(published).toISOString(), chain: slug, tokenAddress: token }];
+    if (isX && !(slug === 'sol' ? text.includes(token) : text.toLowerCase().includes(token.toLowerCase()))) return [];
+    url.search = ''; url.hash = '';
+    const author = clean(event.caller?.xProfileId || event.caller?.xUserId || event.tweet?.xUserId);
+    const handle = clean(event.caller?.handle || event.tweet?.handle).toLowerCase();
+    return [{ status: "sourced", text: excerpt(text), sourceText: text.slice(0, 4000), sourceUrl: url.toString(), sourceAt: new Date(published).toISOString(), chain: slug, tokenAddress: token,
+      sourceKind: isX ? 'authenticated_x' : 'authenticated_call', sourceId: isX ? `x:${event.tweet.id}` : `fomo:${clean(event.callId || event.stableId)}`,
+      authorKey: author ? `x-id:${author}` : handle ? `x-handle:${handle}` : null,
+      authorLabel: handle || null, sourceAuthenticated: true }];
   }).sort((a, b) => Date.parse(b.sourceAt) - Date.parse(a.sourceAt));
+  // Replays of one permalink cannot refresh its original age or count as extra evidence.
+  const sources = new Map();
+  for (const item of matched) {
+    const key = item.sourceId || item.sourceUrl;
+    const prior = sources.get(key);
+    const conflict = prior?.contentConflict || prior && prior.sourceText !== item.sourceText;
+    if (!prior || Date.parse(item.sourceAt) < Date.parse(prior.sourceAt)) sources.set(key, { ...item, contentConflict: !!conflict });
+    else if (conflict) sources.set(key, { ...prior, contentConflict: true });
+  }
+  return [...sources.values()].filter(item => nowMs - Date.parse(item.sourceAt) <= GMGN_FLOW_NARRATIVE_MAX_AGE_MS).sort((a, b) => Date.parse(b.sourceAt) - Date.parse(a.sourceAt)).slice(0, 12);
+}
+
+/** Pure evidence selection. Matching a ticker never establishes a narrative. */
+export function resolveGmgnFlowNarrative({ chain, tokenAddress, tokenInfo, events = [], nowMs = Date.now() } = {}) {
+  const slug = chainSlug(chain);
+  const token = slug && address(tokenAddress, slug);
+  const fallback = { status: "unverified", text: "未找到可按链和 CA 绑定的叙事出处", sourceUrl: null, sourceAt: null, chain: slug, tokenAddress: token };
+  if (!slug || !token || !Number.isFinite(nowMs)) return fallback;
+  const matched = collectGmgnFlowNarratives({ chain, tokenAddress, events, nowMs });
   if (matched.length) return matched[0];
   const info = tokenInfo?.data && typeof tokenInfo.data === "object" ? tokenInfo.data : tokenInfo;
   const claims = [info?.chain, info?.chain_id, info?.chainId].filter(value => value != null);

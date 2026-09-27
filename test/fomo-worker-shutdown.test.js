@@ -101,3 +101,10 @@ test("a failed lane still stops every resource and leaves a failing natural exit
   assert.deepEqual(order, ["work-gate", "keep-alive", "buy", "thesis", "x-call", "outbox", "runtime-heartbeat"]);
   assert.equal(processRef.exitCode, 1);
 });
+
+test('Binance read-only worker drains before the outbox and heartbeat', async () => {
+  const order = [];
+  const shutdown = createFomoWorkerShutdown({ binanceFlowMonitor: { stop: async () => { order.push('binance'); } },
+    outbox: { stop: async () => { order.push('outbox'); } }, runtimeHeartbeat: { stop: async () => { order.push('heartbeat'); } }, logger: {} });
+  await shutdown.stop(); assert.deepEqual(order, ['binance', 'outbox', 'heartbeat']);
+});

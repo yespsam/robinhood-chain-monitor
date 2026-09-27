@@ -16,6 +16,7 @@ import { buildBilingualAlertBundle, renderBilingualTelegramText } from "../src/b
 import { geniusAlertNarrative, renderGeniusAlertLines } from "../src/genius-alert.js";
 import { hasGeniusBusinessChanges, isGeniusTechnicalChange, summarizeGeniusEvent } from "../src/genius-summary.js";
 import { assertGeniusChainDeliveryCanonical } from "../src/genius-delivery-verification.js";
+import { geniusNotificationPolicy, GENIUS_NOTIFICATION_POLICY_VERSION } from "../src/genius-notification-policy.js";
 
 const CA = `0x${"1".repeat(40)}`;
 const CURVE = `0x${"2".repeat(40)}`;
@@ -33,7 +34,7 @@ function documentEvent() {
     kind: "manifest_update", sourceId, sourceUrl, observedAt: stamp(),
     eventKey: `genius:${sourceId}:${beforeHash}:${afterHash}`,
     evidence: { sourceUrl, beforeHash, afterHash },
-    changes: [{ field: "TokenFactory.version", before: "4.0.0", after: "4.1.0" }],
+    changes: [{ field: "launchEnabled", before: false, after: true }],
   };
 }
 
@@ -359,6 +360,124 @@ async function setup(t) {
     telegramStrongAlerts: true, monitorScope: "focus3", geniusMonitorEnabled: true,
     alertChineseTranslationEnabled: false, webhookUrl: "" };
 }
+
+function announcement(text) {
+  const e = xEvent(); delete e.token; e.tweet.text = text; return e;
+}
+
+test("Genius observed promotion, media and counters are audit-only, not false news", () => {
+  for (const [text, reason] of [
+    ["pic.twitter.com/coY9QQCuWJ", "genius_media_without_text"],
+    ["🧠 https://pic.x.com/example 👇", "genius_media_without_text"],
+    ["Launch your takeover at https://t.co/example", "genius_promotion_only"],
+    ["Launch your token and start earning creator fees at https://t.co/example", "genius_promotion_only"],
+    ["135,000 shares. https://t.co/example", "genius_counter_only"],
+    ["Approaching 100,000 shares. https://t.co/example", "genius_counter_only"],
+  ]) {
+    const e = announcement(text), original = structuredClone(e);
+    assert.equal(isStrictGeniusEvent(e), true);
+    assert.deepEqual(geniusNotificationPolicy(e), { version: GENIUS_NOTIFICATION_POLICY_VERSION, notify: false, reason });
+    assert.equal(alertDeliveryDisposition(e).deliverImmediately, false);
+    assert.equal(isRelevantAlert(e), true, "valid sources stay admitted to the audit outbox");
+    assert.deepEqual(e, original);
+  }
+});
+
+test("Genius only concrete platform/test updates and corrections notify, not ordinary official posts", () => {
+  for (const text of [
+    "Test token tomorrow. pic.twitter.com/example",
+    "We are not affiliated with this token.", "We did not issue this token.",
+    "You can now pair your deployed tokens with https://x.com/search?q=%24AMCB. Who likes movies?",
+    "Buy any pair directly with BNB. Smart routing is now live.",
+    "Launch fee changed to 2%.", "Launches are paused.", "新测试币，稍后公布地址",
+    "Introducing Genius Alpha.", "pic.twitter.com/example New deployment announced.",
+    "新增跨链路由，手续费调整为 1%。", "API v2 released with a new quote endpoint.",
+  ]) assert.equal(geniusNotificationPolicy(announcement(text)).notify, true, text);
+  for (const text of [
+    `Launch your token at ${CA}`, `Our favorite coin ${CA}`, `pic.twitter.com/example ${CA}`,
+    "GM geniuses!", "Our community is amazing.", "Testing our patience today.",
+    "An unclassified substantive official statement.", "https://genius.fun/docs/integrate",
+    "New trading opportunity, who is buying?", "New launch on Genius, looking good!", "New pair DOGE is live!",
+    "Launch your token at 12:00 UTC tomorrow.", "135,000 shares were sold to fund a buyback.",
+  ]) assert.equal(geniusNotificationPolicy(announcement(text)).notify, false, text);
+  const e = announcement("Launch your token at https://t.co/example"); e.mentionsTesting = true;
+  assert.equal(geniusNotificationPolicy(e).notify, false, "metadata alone is not a platform update");
+  const boundToken = xEvent(); boundToken.tweet.text = "pic.twitter.com/example";
+  assert.equal(geniusNotificationPolicy(boundToken).notify, false, "unbound metadata must not bypass source validation");
+  boundToken.tweet.text = `pic.twitter.com/example ${CA}`;
+  assert.equal(geniusNotificationPolicy(boundToken).notify, false, "a CA alone is not a platform update");
+  assert.equal(geniusNotificationPolicy(chainEvent()).notify, true);
+  assert.equal(geniusNotificationPolicy({ ...e, sourceTrust: "unverified" }).notify, false);
+});
+
+test("Genius navigation-only and metadata-only changes stay silent without hiding mixed fee/address/unknown changes", () => {
+  const e = documentEvent();
+  e.changes = [{ field: "document", before: null, after: "Foundation" }, { field: "document", before: "·", after: "· English" }];
+  assert.equal(geniusNotificationPolicy(e).reason, "genius_navigation_only");
+  for (const change of [
+    { field: "document", before: null, after: `Foundation address: ${CA}` },
+    { field: "launchFee", before: 2, after: 3 },
+    { field: "document", before: "Previously waived fee", after: null },
+    { field: "unknownStructure", before: null, after: {} },
+    { field: "snapshot", before: null, after: { launchEnabled: false } },
+  ]) assert.equal(geniusNotificationPolicy({ ...e, changes: [...e.changes, change] }).notify, true, JSON.stringify(change));
+  const technical = { ...e, changes: [{ field: "release.gitCommit", before: "a".repeat(40), after: "b".repeat(40) }] };
+  assert.equal(geniusNotificationPolicy(technical).reason, "genius_technical_only");
+  assert.equal(geniusNotificationPolicy({ ...technical, changes: [...technical.changes, { field: "owner", before: null, after: CA }] }).notify, true);
+});
+
+test("Genius filtered events persist full raw evidence and never translate or send to either destination", async t => {
+  const config = await setup(t); config.webhookUrl = "https://webhook.example/fixture";
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async () => { calls++; throw new Error("noise must not leave the machine"); });
+  const event = announcement("Launch your takeover at https://t.co/example"), original = structuredClone(event);
+  const result = await sendAlerts(config, event);
+  assert.equal(result.status, "suppressed"); assert.equal(result.terminal, true); assert.equal(result.persisted, true);
+  assert.equal(calls, 0); assert.deepEqual(event, original);
+  const saved = JSON.parse(await fs.readFile(path.join(config.dataDir, "alert-outbox.json"), "utf8")).events[event.eventKey];
+  assert.equal(saved.event.tweet.text, original.tweet.text); assert.equal(saved.event.sourceUrl, original.sourceUrl);
+  assert.equal(saved.renderBundle, undefined); assert.equal(saved.deliveryDisposition.reason, "genius_promotion_only");
+  for (const dest of Object.values(saved.destinations)) assert.equal(dest.status, "disabled");
+  await sendAlerts(config, event); await drainAlertOutbox(config); assert.equal(calls, 0);
+});
+
+test("Genius formerly allowed ordinary posts are silenced on retry without rewriting their persisted render bundle", async t => {
+  const config = await setup(t), event = announcement("Our community is amazing. GM!");
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async () => { calls++; throw new Error("no external calls"); });
+  await sendAlerts(config, event);
+  const filename = path.join(config.dataDir, "alert-outbox.json");
+  const outbox = JSON.parse(await fs.readFile(filename, "utf8")), entry = outbox.events[event.eventKey];
+  const bundle = await buildBilingualAlertBundle(config, entry.event, "");
+  entry.renderBundle = bundle; entry.status = "pending"; entry.suppressedAt = null;
+  entry.deliveryDisposition = { mode: "immediate", deliverImmediately: true, tier: null, reason: "genius_official_watch_only" };
+  entry.destinations.telegram = { status: "failed", attempts: 1, nextAttemptAt: "2000-01-01T00:00:00Z", lastError: "offline" };
+  await fs.writeFile(filename, JSON.stringify(outbox));
+  await drainAlertOutbox(config);
+  const saved = JSON.parse(await fs.readFile(filename, "utf8")).events[event.eventKey];
+  assert.equal(calls, 0); assert.equal(saved.status, "suppressed"); assert.deepEqual(saved.renderBundle, bundle);
+  assert.equal(saved.event.tweet.text, event.tweet.text); assert.equal(saved.destinations.telegram.policyReason, "genius_not_platform_update");
+});
+
+test("Genius filtering preserves delivered receipts while stopping the remaining noisy destination", async t => {
+  const config = await setup(t); config.webhookUrl = "https://webhook.example/fixture";
+  const event = announcement("Launch your takeover at https://t.co/example");
+  t.mock.method(globalThis, "fetch", async () => { assert.fail("noise must not be retried"); });
+  await sendAlerts(config, event);
+  const filename = path.join(config.dataDir, "alert-outbox.json");
+  const outbox = JSON.parse(await fs.readFile(filename, "utf8")), entry = outbox.events[event.eventKey];
+  const receipt = { status: "delivered", attempts: 1, messageId: "retained-fixture", deliveredAt: stamp() };
+  entry.status = "pending"; entry.suppressedAt = null;
+  entry.destinations.telegram = receipt;
+  entry.destinations.webhook = { status: "failed", attempts: 1, nextAttemptAt: "2000-01-01T00:00:00Z" };
+  entry.deliveryDisposition = { mode: "immediate", deliverImmediately: true, reason: "genius_official_watch_only" };
+  await fs.writeFile(filename, JSON.stringify(outbox));
+  await drainAlertOutbox(config);
+  const saved = JSON.parse(await fs.readFile(filename, "utf8")).events[event.eventKey];
+  assert.deepEqual(saved.destinations.telegram, receipt);
+  assert.equal(saved.destinations.webhook.status, "disabled");
+  assert.equal(saved.destinations.webhook.policyReason, "genius_promotion_only");
+});
 
 test("Genius durable delivery deduplicates exact IDs but preserves distinct official announcements", async (t) => {
   const config = await setup(t);

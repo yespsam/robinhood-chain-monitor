@@ -245,6 +245,7 @@ function defaultState() {
     initialized: {},
     cursors: {},
     seenTweets: {},
+    narrativeObservations: {},
     seenTweetContracts: {},
     alertedTokens: {},
     pending: {},
@@ -290,6 +291,7 @@ async function readState(file, fsImpl) {
       initialized: asObject(parsed.initialized),
       cursors: asObject(parsed.cursors),
       seenTweets: asObject(parsed.seenTweets),
+      narrativeObservations: asObject(parsed.narrativeObservations),
       seenTweetContracts: asObject(parsed.seenTweetContracts),
       alertedTokens: asObject(parsed.alertedTokens),
       pending: asObject(parsed.pending),
@@ -322,6 +324,9 @@ export async function atomicWriteFomoXCallState(file, value, fsImpl = fs) {
 }
 
 function pruneState(state, nowMs, maximumAttributionAgeMs, tokenDedupMs, pendingMaxAgeMs) {
+  state.narrativeObservations = Object.fromEntries(Object.entries(state.narrativeObservations || {})
+    .filter(([, event]) => { const at = Date.parse(event.tweet?.createdAt || ''); return at <= nowMs && nowMs - at <= 7 * DAY_MS; })
+    .sort((a, b) => Date.parse(a[1].tweet.createdAt) - Date.parse(b[1].tweet.createdAt)).slice(-2000));
   for (const [key, value] of Object.entries(state.roster || {})) {
     if (nowMs - Number(value?.discoveredAt || 0) > maximumAttributionAgeMs) {
       delete state.roster[key];
@@ -484,6 +489,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
   const sendAlert = dependencies.sendAlertsImpl || sendAlerts;
   const qualifyCall = dependencies.qualifyCallImpl || defaultQualifyFomoThesis;
   const discoverCandidates = dependencies.discoverCandidatesImpl || (() => discoverGmgnBscKolCandidates({
+    dataDir: config.dataDir,
     cliPath: config.fomoCallGmgnCliPath || "gmgn-cli",
     limit: config.fomoCallGmgnDiscoveryLimit || 100,
     timeoutMs: config.fomoCallGmgnDiscoveryTimeoutMs || 30_000,
@@ -1684,7 +1690,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     };
   }
 
-  async function processTweet(candidate, profile, bscActivity, binding, tweet, nowMs) {
+  async function processTweet(candidate, profile, bscActivity, binding, tweet, nowMs, captureNarrative = false) {
     const key = `${candidate.handle}:${tweet.id}`.toLowerCase();
     if (state.seenTweets[key]) return { status: "seen" };
     if (tweet.isReply === true) {
@@ -1704,6 +1710,24 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       return { status: "ignored_stale" };
     }
     const preliminary = classifyMonitoredXText(tweet.text, config);
+    let narrativeVerifiedTweet = null;
+    if (config.paperNarrativeRecallEnabled === true && isCapitalKolCandidate(candidate) && !captureNarrative) {
+      markPending(key, preliminary.token, 'narrative_budget_deferred', nowMs, tweet);
+      return { status: 'pending_error', reason: 'narrative_budget_deferred' };
+    }
+    if (config.paperNarrativeRecallEnabled === true && captureNarrative && isCapitalKolCandidate(candidate)) {
+      try {
+        narrativeVerifiedTweet = await verifyOfficialPost(tweet, candidate.handle);
+        state.narrativeObservations[key] = { type: 'kol_narrative_observation',
+          tweet: { ...narrativeVerifiedTweet, handle: candidate.handle, xUserId: profile.id, authorId: profile.id, isReply: false, isQuote: false },
+          caller: { handle: candidate.handle, xUserId: profile.id, capitalKolSnapshot: candidate.capitalKolSnapshot,
+            capitalKolBinding: state.roster[candidate.handle.toLowerCase()]?.capitalKolBinding },
+          observedAt: new Date(nowMs).toISOString(), simulationOnly: true };
+      } catch (error) {
+        markPending(key, preliminary.token, `narrative_source_verification: ${error.message}`, nowMs, tweet);
+        return { status: 'pending_error', error };
+      }
+    }
     if (!preliminary.relevant) {
       markSeen(key, nowMs);
       return { status: "ignored_text", reason: preliminary.reason };
@@ -1717,7 +1741,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       return { status: "duplicate_token" };
     }
     try {
-      const verifiedTweet = await verifyOfficialPost(tweet, candidate.handle);
+      const verifiedTweet = narrativeVerifiedTweet || await verifyOfficialPost(tweet, candidate.handle);
       const official = classifyMonitoredXText(verifiedTweet.text, config);
       if (!official.relevant || official.token !== preliminary.token || official.signalKind !== preliminary.signalKind) {
         throw new Error("official X text did not preserve the exact statement kind and contract");
@@ -2041,9 +2065,10 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       .sort((left, right) => compareTweetIds(left.id, right.id));
     let delivered = 0;
     let pending = 0;
+    let narrativeChecks = 0;
     for (const tweet of candidates) {
       throwIfCheckCancelled(signal);
-      const result = await processTweet(candidate, profile, bscActivity, stored.walletBinding || null, tweet, nowMs);
+      const result = await processTweet(candidate, profile, bscActivity, stored.walletBinding || null, tweet, nowMs, narrativeChecks++ < 4);
       throwIfCheckCancelled(signal);
       if (result.status === "delivered") delivered += 1;
       if (result.status === "qualification_pending" || result.status === "pending_error") pending += 1;

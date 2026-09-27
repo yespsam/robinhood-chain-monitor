@@ -6045,6 +6045,8 @@ test("Four.Meme activation replays the persisted realtime creation hot index bef
   const safeCode = `0x${"6000".repeat(300)}`;
   let archiveLogCalls = 0;
   const alerts = [];
+  let visitedReplayPaths = [];
+  const candidateMarkVisits = [];
   const provider = {
     async getBlockNumber() { throw new Error("archive head must not be read after a hot-index hit"); },
     async getBlock(blockNumber) {
@@ -6075,6 +6077,16 @@ test("Four.Meme activation replays the persisted realtime creation hot index bef
     provider,
     now: () => clock,
     logger: { error() {}, info() {} },
+    journalStateDeltaVisitImpl: (parts) => visitedReplayPaths.push([...parts]),
+    journalAppendImpl: async (file, frame) => {
+      const operations = JSON.parse(frame).ops.filter(op => op.path[0] !== 'journalRevision');
+      if (operations.length === 1 && operations[0].path.at(-1) === 'replayAttemptedCandidateKeys') {
+        candidateMarkVisits.push(visitedReplayPaths);
+      }
+      visitedReplayPaths = [];
+      const handle = await fs.open(file, 'a', 0o600);
+      try { await handle.writeFile(frame); await handle.sync(); } finally { await handle.close(); }
+    },
     sendAlertsImpl: async (_config, event) => { alerts.push(event); return { status: "delivered" }; },
   });
   t.after(async () => {
@@ -6092,6 +6104,12 @@ test("Four.Meme activation replays the persisted realtime creation hot index bef
   assert.equal(alerts[0].transactionHash, tx2);
   assert.equal(activation.firstTokenTransactionHash, tx2);
   assert.equal(activation.replayAttemptedCandidateKeys.length, 2);
+  assert.equal(candidateMarkVisits.length, 2);
+  for (const visited of candidateMarkVisits) {
+    assert.ok(visited.length > 0);
+    assert.equal(visited.some(parts => ['realtimePendingEntries', 'deferredCreationEvidence', 'seenTransactions'].includes(parts[0])), false,
+      'persisting a replay marker must not traverse unchanged cold transaction branches');
+  }
   assert.ok(activation.hotReplayLastAttemptAt);
   assert.equal(snapshot.officialSources.fourMeme.creationEventHotIndex.length, 2);
   const durable = await readBscLaunchpadDurableState(path.join(dataDir, "bsc-launchpad-state.json"));

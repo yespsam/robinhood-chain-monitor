@@ -6,12 +6,35 @@ import {createGmgnFlowClient} from './gmgn-flow-client.js';
 import {GMGN_FLOW_CHAINS,GMGN_HOT_ONLY_CHAINS,GMGN_FLOW_DEFAULTS,gmgnFlowAddress,gmgnFlowData,gmgnFlowTags,
   parseGmgnFlowTrades,parseGmgnFlowProfile,parseGmgnFlowCandles,gmgnFlowVolume,evaluateGmgnFlowSignal,isGmgnFlowEvent} from './gmgn-flow-signal.js';
 import {resolveGmgnFlowNarrative} from './gmgn-flow-narrative.js';
+import {advanceFeedCoverage} from './gmgn-flow-coverage.js';
+import {mergeGmgnFlowTrade,qualifiesGmgnFlowWallet} from './gmgn-flow-signal.js';
+import {binanceProfileCandidates} from './binance-flow-evidence.js';
 const CHAINS=Object.keys(GMGN_FLOW_CHAINS),MINUTE=60000;
 const iso=n=>new Date(n).toISOString(),plain=v=>v&&typeof v==='object'&&!Array.isArray(v);
 const accepted=r=>['queued','delivered','duplicate','already_queued'].includes(r?.status)||(r?.status==='suppressed'&&isTerminalAlertSuppression(r));
 const emptySource=()=>({status:'initializing',checkedAt:null,lastSuccessAt:null,nextAttemptAt:null,lastError:null,lastErrorCode:null,tradeCount:0,candidateCount:0,feedTruncated:false,coverageGap:null,quarantinedTokens:{}});
 const date=v=>typeof v==='string'&&Number.isFinite(Date.parse(v)),nullableDate=v=>v===null||date(v);
 const errorText=v=>v===null||typeof v==='string';
+export function selectGmgnFlowChain(state,nowMs) {
+  const rotation=CHAINS.map((_,i)=>CHAINS[(state.nextChainIndex+i)%CHAINS.length]);
+  const due=rotation.filter(c=>!(Date.parse(state.chains[c].nextAttemptAt)>nowMs));
+  if(!due.length)return rotation[0];
+  const ranked=due.map(chain=>{
+    const h=state.chains[chain],last=Date.parse(h.lastFeedSuccessAt||h.lastSuccessAt)||0;
+    const spans=Object.values(h.feedCoverage||{}).filter(v=>v.valid&&v.count>=100&&Number.isFinite(v.oldestAt))
+      .map(v=>Math.max(0,v.endAt-v.oldestAt));
+    const target=Math.max(15000,Math.min(90000,...spans.map(v=>v/2)));
+    const attempted=Math.max(last,Date.parse(h.checkedAt)||0);
+    return {chain,age:nowMs-last,attemptAge:nowMs-attempted,target};
+  });
+  // Avoid starving quiet chains, while dense capped feeds get revisited before
+  // their oldest returned record overtakes the previous observation.
+  // Failed sources retain an old last-success timestamp. Fairness must use
+  // attempts, otherwise repeatedly failing chains can monopolize recovery.
+  const overdue=ranked.filter(r=>r.attemptAge>=120000).sort((a,b)=>b.attemptAge-a.attemptAge);
+  if(overdue.length)return overdue[0].chain;
+  return ranked.filter(r=>r.age>=r.target).sort((a,b)=>b.age/b.target-a.age/a.target)[0]?.chain||due[0];
+}
 function sourceShape(h,global=false){return plain(h)&&['initializing','healthy','partial','backoff','unsupported'].includes(h.status)
  && nullableDate(h.checkedAt)&&nullableDate(h.nextAttemptAt)&&errorText(h.lastError)
  && (global||(nullableDate(h.lastSuccessAt)&&Number.isSafeInteger(h.tradeCount)&&h.tradeCount>=0
@@ -30,6 +53,17 @@ export function validateGmgnFlowState(s) {
   for(const chain of CHAINS){const quarantined=s.chains[chain].quarantinedTokens;
     if(quarantined!==undefined&&(!plain(quarantined)||Object.keys(quarantined).length>10000
       ||Object.entries(quarantined).some(([ca,until])=>gmgnFlowAddress(chain,ca)!==ca||!date(until))))throw new Error('GMGN_FLOW_STATE_INVALID');
+    const rebuilding=s.chains[chain].tokenRebuildUntil;
+    if(rebuilding!==undefined&&(!plain(rebuilding)||Object.keys(rebuilding).length>10000
+      ||Object.entries(rebuilding).some(([ca,until])=>gmgnFlowAddress(chain,ca)!==ca||!date(until))))throw new Error('GMGN_FLOW_STATE_INVALID');
+    const coverage=s.chains[chain].feedCoverage;
+    if(coverage!==undefined&&(!plain(coverage)||['smartmoney','kol'].some(kind=>{
+      const v=coverage[kind];return !plain(v)||typeof v.valid!=='boolean'||!Number.isFinite(v.observedAt)
+        ||!Array.isArray(v.keys)||v.keys.length>200||v.keys.some(k=>typeof k!=='string'||k.length>400)
+        ||(v.valid&&(!Number.isFinite(v.startAt)||v.startAt<=0||!Number.isFinite(v.endAt)||v.startAt>v.endAt||v.endAt>v.observedAt));
+    })))throw new Error('GMGN_FLOW_STATE_INVALID');
+    if(s.chains[chain].lastFeedSuccessAt!==undefined&&!date(s.chains[chain].lastFeedSuccessAt))throw new Error('GMGN_FLOW_STATE_INVALID');
+    if(s.chains[chain].profileBatchSize!==undefined&&![1,8].includes(s.chains[chain].profileBatchSize))throw new Error('GMGN_FLOW_STATE_INVALID');
   }
   for(const [c,rows] of Object.entries(s.trades)) if(!CHAINS.includes(c)||rows.some(t=>t.chain!==c
     ||gmgnFlowAddress(c,t.wallet)!==t.wallet||gmgnFlowAddress(c,t.tokenAddress)!==t.tokenAddress
@@ -57,9 +91,10 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
  const logger=dependencies.logger||console,sender=dependencies.sendAlertsImpl||sendAlerts;
  const client=dependencies.client||(enabled?createGmgnFlowClient(config):null);
  const file=path.join(config.dataDir||'data','gmgn-flow-state.json');
- const poll=Math.max(5000,Number(config.gmgnFlowPollIntervalMs)||15000);
+ const adaptive=config.gmgnFlowAdaptiveSchedulingEnabled!==false;
+ const poll=adaptive?5000:Math.max(5000,Number(config.gmgnFlowPollIntervalMs)||15000);
  const cooldown=Math.max(5*MINUTE,Number(config.gmgnFlowTokenCooldownMs)||30*MINUTE);
- let state,loading,active,saving=Promise.resolve(),writeFault=null,stopped=false;
+ let state,loading,active,saving=Promise.resolve(),writeFault=null,stopped=false,profileBudget=8,profilePasses=0;
  async function load() {
   if(state)return;
   if(!loading)loading=(async()=>{
@@ -111,6 +146,7 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
  }
  async function tokenCandidate(chain,tokenAddress,trades,market) {
   if(quarantined(chain,tokenAddress)){state.chains[chain].coverageGap='ambiguous_trade_legs';return;}
+  if(Date.parse(state.chains[chain].tokenRebuildUntil?.[tokenAddress])>now())return;
   const windowEndMs=Math.floor(now()/MINUTE)*MINUTE;
   const rows=trades.filter(t=>t.tokenAddress===tokenAddress&&t.at>=windowEndMs-5*MINUTE&&t.at<windowEndMs);
   if(rows.length>800){state.chains[chain].coverageGap='token_evidence_budget_exceeded';return;}
@@ -124,20 +160,7 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
   const candles=parseGmgnFlowCandles(await request(()=>client.candles(chain,tokenAddress,Math.floor((windowEndMs-21*MINUTE)/1000),Math.floor(windowEndMs/1000))));
   const selected=candles.filter(c=>c.time>=windowEndMs-20*MINUTE&&c.time<windowEndMs),volume=gmgnFlowVolume(selected,windowEndMs);
   if(!volume||volume.volumeUsd<GMGN_FLOW_DEFAULTS.volumeUsd||volume.volumeMultiple<GMGN_FLOW_DEFAULTS.volumeMultiple)return;
-  const needs=wallets.filter(w=>{
-    const p=state.profiles[`${chain}:${w}`];
-    if(Date.parse(p?.nextCheckAt)>now())return false;
-    return !p||['7d','30d'].some(period=>!p[period]||now()-Date.parse(p[period].checkedAt)>30*MINUTE);
-  }).slice(0,8);
-  if(needs.length)for(const period of ['7d','30d']) {
-   const payload=await request(()=>client.stats(chain,needs,period));
-   for(const wallet of needs){const profile=parseGmgnFlowProfile(payload,chain,wallet,period,now());
-    if(profile){state.profiles[`${chain}:${wallet}`]||={};state.profiles[`${chain}:${wallet}`][period]=profile;}
-    else {state.chains[chain].coverageGap='wallet_profile_incomplete';delete state.profiles[`${chain}:${wallet}`]?.[period];}
-   }
-   if(period==='30d')for(const wallet of needs){const p=state.profiles[`${chain}:${wallet}`]||={};p.nextCheckAt=iso(now()+(p['7d']&&p['30d']?30:5)*MINUTE);}
-   await persist();
-  }
+  await enrichProfiles(chain,wallets);
   const profiles=Object.fromEntries(wallets.filter(w=>state.profiles[`${chain}:${w}`]).map(w=>[w,state.profiles[`${chain}:${w}`]]));
   if(wallets.some(w=>['7d','30d'].some(period=>!profiles[w]?.[period]
     ||now()-Date.parse(profiles[w][period].checkedAt)>2*3600000)))state.chains[chain].coverageGap='wallet_profile_incomplete';
@@ -157,14 +180,62 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
   if(!isGmgnFlowEvent(event))throw new Error('GMGN_FLOW_EVENT_INVALID');
   await queue(event);
  }
+ async function enrichProfiles(chain,wallets) {
+  if(profilePasses)return;
+  const h=state.chains[chain];
+  const needs=[...new Set(wallets)].filter(w=>{
+    const p=state.profiles[`${chain}:${w}`];
+    const migrateMissing=h.profileBatchSize===1&&p?.profileReadVersion!==2&&!p?.['7d']&&!p?.['30d'];
+    if(!migrateMissing&&Date.parse(p?.nextCheckAt)>now())return false;
+    return !p||['7d','30d'].some(period=>!p[period]||now()-Date.parse(p[period].checkedAt)>30*MINUTE);
+  }).slice(0,Math.min(profileBudget,h.profileBatchSize||8));
+  profileBudget-=needs.length;
+  if(needs.length)profilePasses++;
+  const notReturned=new Set(),unavailable=new Set();
+  if(needs.length)for(const period of ['7d','30d']) {
+   const payload=await request(()=>client.stats(chain,needs,period));
+   const data=gmgnFlowData(payload),returned=(Array.isArray(data)?data:[data]).map(r=>gmgnFlowAddress(chain,r?.wallet_address));
+   const hasRequested=needs.some(w=>returned.includes(w));
+   if(needs.length>1&&hasRequested&&needs.some(w=>!returned.includes(w)))h.profileBatchSize=1;
+   for(const wallet of needs){
+    const p=state.profiles[`${chain}:${wallet}`]||={};p.profileReadVersion=2;
+    if(!returned.includes(wallet)){
+      (hasRequested?notReturned:unavailable).add(wallet);p.lastProfileIssue=hasRequested?'upstream_wallet_not_returned':'upstream_profile_unavailable';h.coverageGap='wallet_profile_incomplete';continue;
+    }
+    const profile=parseGmgnFlowProfile(payload,chain,wallet,period,now());
+    if(profile){state.profiles[`${chain}:${wallet}`]||={};state.profiles[`${chain}:${wallet}`][period]=profile;}
+    else {h.coverageGap='wallet_profile_incomplete';p.lastProfileIssue='upstream_profile_fields_missing';delete p[period];}
+   }
+   if(period==='30d')for(const wallet of needs){const p=state.profiles[`${chain}:${wallet}`]||={};
+     p.nextCheckAt=iso(now()+(unavailable.has(wallet)?5*MINUTE:notReturned.has(wallet)?15000:(p['7d']&&p['30d']?30:5)*MINUTE));
+     if(!notReturned.has(wallet)&&!unavailable.has(wallet)&&p['7d']&&p['30d'])p.lastProfileIssue=null;
+   }
+   await persist();
+  }
+ }
  async function scan(chain) {
+  profileBudget=8;
+  profilePasses=0;
   const h=state.chains[chain];h.checkedAt=iso(now());h.coverageGap=null;
   h.quarantinedTokens||={};
-  for(const [token,until] of Object.entries(h.quarantinedTokens))if(Date.parse(until)<=now())delete h.quarantinedTokens[token];
-  const smart=await request(()=>client.trades(chain,'smartmoney'));
-  const kol=await request(()=>client.trades(chain,'kol'));
+  h.tokenRebuildUntil||={};
+  for(const [token,until] of Object.entries(h.tokenRebuildUntil))if(Date.parse(until)<=now())delete h.tokenRebuildUntil[token];
+  for(const [token,until] of Object.entries(h.quarantinedTokens))if(Date.parse(until)<=now()){
+    // Trades were deliberately discarded during isolation. Rebuild a full
+    // observation window before this token may become actionable again.
+    h.tokenRebuildUntil[token]=iso(now()+5*MINUTE);delete h.quarantinedTokens[token];
+  }
+  // Coverage starts at actual dispatch, not before a potentially long account
+  // queue/config check. Do not relabel receive time as observation time.
+  let smartStarted=now();
+  const smart=await request(()=>client.trades(chain,'smartmoney',{onRequestStart:at=>{smartStarted=at;}})),smartReceived=now();
+  let kolStarted=now();
+  const kol=await request(()=>client.trades(chain,'kol',{onRequestStart:at=>{kolStarted=at;}})),kolReceived=now();
   const feeds=[smart,kol].map(gmgnFlowData);
   if(feeds.some(feed=>!Array.isArray(feed?.list)))throw new Error('GMGN_TRADE_SCHEMA');
+  const priorCoverage=h.feedCoverage;
+  h.feedCoverage={smartmoney:advanceFeedCoverage(priorCoverage?.smartmoney,feeds[0].list,chain,smartStarted,smartReceived),
+    kol:advanceFeedCoverage(priorCoverage?.kol,feeds[1].list,chain,kolStarted,kolReceived)};
   const byToken=new Map(),byKey=new Map(state.trades[chain].filter(t=>t.at>=now()-20*MINUTE
     &&!quarantined(chain,t.tokenAddress)).map(t=>[t.key,t]));
   for(const row of feeds.flatMap(feed=>feed.list)){
@@ -185,9 +256,8 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
    let incoming;
    try{incoming=parseGmgnFlowTrades({list:rows},chain,now());}
    catch(e){if(e?.message==='GMGN_TRADE_CONFLICT'||e?.code==='GMGN_TRADE_CONFLICT'){quarantine(token);continue;}throw e;}
-   if(incoming.some(trade=>{const old=byKey.get(trade.key);return old&&(old.amountUsd!==trade.amountUsd||old.at!==trade.at);})){
-    quarantine(token);continue;
-   }
+   try {incoming=incoming.map(trade=>mergeGmgnFlowTrade(byKey.get(trade.key),trade));}
+   catch(e){if(e.message!=='GMGN_TRADE_CONFLICT')throw e;quarantine(token);continue;}
    recentIncomingCount+=incoming.filter(trade=>trade.at>=now()-6*MINUTE).length;
    for(const trade of incoming){const old=byKey.get(trade.key);
     byKey.set(trade.key,{...trade,tags:gmgnFlowTags([...(old?.tags||[]),...trade.tags])});
@@ -201,27 +271,52 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
   h.feedTruncated=feeds.some(feed=>feed.list.length>=100);
   if(h.feedTruncated)h.coverageGap='bounded_trade_feed_not_full_chain';
   if(Object.keys(h.quarantinedTokens).length)h.coverageGap='ambiguous_trade_legs';
+  h.lastFeedSuccessAt=iso(Math.min(smartStarted,kolStarted));
   await persist();
   const groups=new Map();
-  for(const t of state.trades[chain])if(t.side==='buy'&&t.at>=now()-6*MINUTE){const group=groups.get(t.tokenAddress)||{fomo:new Set(),buyers:new Set(),usd:0};
-   group.buyers.add(t.wallet);if(t.tags.includes('fomo'))group.fomo.add(t.wallet);group.usd+=t.amountUsd;groups.set(t.tokenAddress,group);}
+  for(const t of state.trades[chain])if(t.side==='buy'&&t.at>=now()-6*MINUTE){const group=groups.get(t.tokenAddress)||{fomo:new Set(),buyers:new Set(),usd:0,count:0};
+   group.buyers.add(t.wallet);if(t.tags.includes('fomo'))group.fomo.add(t.wallet);group.usd+=t.amountUsd;group.count++;groups.set(t.tokenAddress,group);}
+  // Paper lanes do not all require FOMO or a volume alert. Profile promising
+  // observed wallets before the final alert gate, with one bounded batch/scan.
+  const researchGroups=[...groups].filter(([token,g])=>!quarantined(chain,token)&&g.count<=800&&g.buyers.size>=4&&g.usd>=1000)
+    .sort((a,b)=>b[1].buyers.size-a[1].buyers.size||b[1].usd-a[1].usd);
+  let secondaryWallets=[];
+  if(config.binanceFlowMonitorEnabled)try{
+    const secondaryFile=path.join(config.dataDir||'data','binance-flow-state.json'),stat=await fsImpl.stat(secondaryFile);
+    if(stat.isFile()&&stat.size<=24*1024*1024)secondaryWallets=binanceProfileCandidates(JSON.parse(await fsImpl.readFile(secondaryFile,'utf8')),chain,now());
+  }catch{/* Secondary data loss must not stop the primary monitor. */}
+  // Alternate research priority without adding calls, mixing flows, or treating
+  // Binance labels as profitability. Existing profile/rate-limit gates apply.
+  const ownWallets=researchGroups.flatMap(([,g])=>[...g.buyers]);
+  const walletQueue=Math.floor(now()/MINUTE)%2?[...secondaryWallets,...ownWallets]:[...ownWallets,...secondaryWallets];
+  await enrichProfiles(chain,walletQueue);
+  if(researchGroups.some(([,g])=>[...g.buyers].some(w=>['7d','30d'].some(period=>{
+    const p=state.profiles[`${chain}:${w}`]?.[period];return !p||now()-Date.parse(p.checkedAt)>2*3600000;
+  }))))h.coverageGap='wallet_profile_incomplete';
   const candidates=[...groups].filter(([token,g])=>g.fomo.size>=3&&g.buyers.size>=6
     && !quarantined(chain,token)
+    && !(adaptive&&now()-Date.parse(state.episodes[`${chain}:${token}`]?.lastCheckedAt)<MINUTE)
     && !(now()-Date.parse(state.episodes[`${chain}:${token}`]?.lastSentAt)<cooldown))
     .sort((a,b)=>(Date.parse(state.episodes[`${chain}:${a[0]}`]?.lastCheckedAt)||0)-(Date.parse(state.episodes[`${chain}:${b[0]}`]?.lastCheckedAt)||0)||b[1].usd-a[1].usd);
   h.candidateCount=candidates.length;
+  // Candle/metadata research cannot rescue a missing profitable-wallet gate.
+  // Keep scarce requests for feed continuity until this necessary condition
+  // is met; the final evaluator still subtracts sells and checks every gate.
+  const actionableCandidates=candidates.filter(([,g])=>[...g.buyers].filter(w=>
+    qualifiesGmgnFlowWallet(state.profiles[`${chain}:${w}`],chain,w,now())).length>=GMGN_FLOW_DEFAULTS.highProfitCount);
+  if([...groups.values()].some(g=>g.count>800))h.coverageGap='token_evidence_budget_exceeded';
   if((h.discardedThroughAt||0)>=Math.floor(now()/MINUTE)*MINUTE-5*MINUTE)h.coverageGap='local_trade_window_truncated';
-  else if(candidates.length){
+  else if(actionableCandidates.length){
    const rank=gmgnFlowData(await request(()=>client.trending(chain)));
    if(!Array.isArray(rank?.rank))throw new Error('GMGN_MARKET_SCHEMA');
-   for(const [token] of candidates.slice(0,2)){
+   for(const [token] of actionableCandidates.slice(0,2)){
     (state.episodes[`${chain}:${token}`]||={}).lastCheckedAt=iso(now());
     await tokenCandidate(chain,token,state.trades[chain],rank.rank.find(r=>gmgnFlowAddress(chain,r.address)===token));
    }
-   if(candidates.length>2)h.coverageGap='candidate_budget_limited';
+   if(actionableCandidates.length>2)h.coverageGap='candidate_budget_limited';
   }
   if(Object.keys(h.quarantinedTokens).length)h.coverageGap='ambiguous_trade_legs';
-  h.status=h.coverageGap?'partial':'healthy';h.checkedAt=iso(now());h.lastSuccessAt=h.checkedAt;h.nextAttemptAt=iso(now()+poll);
+  h.status=h.coverageGap?'partial':'healthy';h.checkedAt=iso(now());h.lastSuccessAt=h.lastFeedSuccessAt;h.nextAttemptAt=iso(now()+poll);
   h.lastError=null;h.lastErrorCode=null;
  }
  async function hotDiscovery() {
@@ -239,7 +334,7 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
   await heartbeat();
   if(Date.parse(state.health.nextAttemptAt||'')>now())return structuredClone(state.health);
   state.health.lastError=null;state.health.lastErrorCode=null;state.health.nextAttemptAt=null;
-  const chain=CHAINS[state.nextChainIndex];state.nextChainIndex=(state.nextChainIndex+1)%CHAINS.length;
+  const chain=adaptive?selectGmgnFlowChain(state,now()):CHAINS[state.nextChainIndex];state.nextChainIndex=(CHAINS.indexOf(chain)+1)%CHAINS.length;
   try {
    for(const event of [...state.pendingEvents])await queue(event);
    if(Date.parse(state.chains[chain].nextAttemptAt||'')<=now()||!state.chains[chain].nextAttemptAt)await scan(chain);

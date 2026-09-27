@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN" data-public-view="true">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080b0a"><meta name="robots" content="noindex,nofollow">
+  <title>yesp atm｜公开模拟盘</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/brain-desk.css"><link rel="stylesheet" href="/brain-instrument.css">
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <div class="brand-lockup"><div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div><div><div class="brand-name">yesp atm</div><div class="brand-caption">决策大脑 · 公开模拟盘</div></div></div>
+    <nav class="brain-nav" aria-label="看板导航"><a href="#brainDesk">决策大脑</a><a href="#mainPositions">持仓</a><a href="#recentTrades">成交</a><a href="#caDesk">逐币研究</a></nav>
+    <div class="topbar-controls"><span class="chain-label">公开只读</span><div class="data-status"><span class="status-dot"></span><span id="streamLabel" role="status">连接中</span></div></div>
+  </header>
+  <main class="focus-shell">
+    <section class="focus-intro"><div class="focus-title"><span class="eyebrow">真实行情 · 模拟成交 · 只读快照</span><h1>决策与交易记录</h1><p>本机引擎运行，约每 15 秒上传。不是实盘，也不是逐币秒级行情。</p></div></section>
+    <p class="engine-notice" id="syncStatus" role="status">等待公开快照…</p>
+    <section id="brainDesk" class="brain-desk" aria-label="决策大脑"></section>
+    <section class="account-section" aria-label="模拟账户">
+      <div class="section-heading"><h2>模拟资金</h2><span id="accountTime">等待账本</span></div>
+      <div class="account-metrics"><div><span>预计清算权益</span><strong id="equity">—</strong></div><div><span>可用余额</span><strong id="cash">—</strong></div><div><span>已实现净盈亏</span><strong id="pnl">—</strong></div><div><span>胜负记录</span><strong id="winLoss">—</strong></div><div><span>累计模拟成本</span><strong id="costs">—</strong></div></div>
+      <div class="account-notes"><span id="accountNote">等待本机账本</span><span>手续费、滑点与 gas 为模型估算；余额不等于收益。</span></div>
+    </section>
+    <section id="mainPositions" class="positions-section"><div class="section-heading"><h2>当前持仓</h2><span id="positionCount">—</span></div><div id="positions"><p class="focus-empty">等待同步</p></div></section>
+    <section id="recentTrades" class="trades-section">
+      <div class="section-heading"><h2>模拟成交</h2><span id="tradeCount">—</span></div>
+      <div class="trades-scroll"><table><thead><tr><th>代币 / 北京时间</th><th>方向 / 链</th><th>支出或回款 / 成本</th><th>已实现净盈亏</th><th>成交依据</th></tr></thead><tbody id="tradeRows"><tr><td colspan="5">等待账本记录</td></tr></tbody></table></div>
+      <p class="section-note">最多展示最近 500 笔，买卖各计一笔。买入为含成本支出，卖出为扣成本回款；不是链上实际成交。</p>
+    </section>
+    <section id="caDesk" class="ca-desk" aria-labelledby="caDeskTitle">
+      <div class="section-heading"><h2 id="caDeskTitle">逐币判断台</h2><span>公开证据摘要 · 点击不会下单</span></div>
+      <p class="section-note" id="coverageNote">仅展示已扫描候选，不代表全链覆盖。公开版保留核心证据，完整档案在本机。</p>
+      <div class="ca-toolbar"><label class="ca-search">代币 / 合约地址<input data-ca-search type="search" placeholder="输入币名或 CA" autocomplete="off"></label><label>链<select data-ca-chain><option value="">全部链</option><option value="sol">Solana</option><option value="bsc">币安链</option><option value="base">Base</option><option value="eth">以太坊</option><option value="robinhood">Robinhood</option><option value="giwa">GIWA</option></select></label><label>状态<select data-ca-filter><option value="">全部状态</option><option value="holding">持仓管理</option><option value="ready">满足开仓条件</option><option value="confirm">等报价确认</option><option value="watch">观察条件</option><option value="data">数据待补 / 过期</option><option value="blocked">暂不入场</option><option value="paused">新增仓位暂停</option></select></label></div>
+      <p class="ca-summary" data-ca-summary>等待逐币评估…</p>
+      <div class="ca-workspace"><div class="ca-candidates" data-ca-list role="group" aria-label="选择 CA"></div><article id="caInspector" class="ca-inspector" data-ca-detail tabindex="0" aria-label="决策摘要"></article></div>
+    </section>
+    <p id="tradeCountReview" class="section-note">等待百笔复盘状态</p>
+  </main>
+  <footer class="bottom-status"><span>yesp atm · 公开只读</span><span>模拟交易 · 不连接钱包 · 无交易控制接口</span><span>本机离线后保留最后快照</span></footer>
+</div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

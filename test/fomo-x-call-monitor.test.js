@@ -663,6 +663,27 @@ test("reviewed catalog expansion preserves an unchanged person's cursor and sees
   assert.equal(state.roster.alpha.capitalKolSnapshot.catalogHash, expandedCatalog.snapshot.catalogHash);
 });
 
+test('opt-in narrative capture persists exact no-CA KOL text without publishing or treating it as a launch',async t=>{
+  const dataDir=await fixture(t),nowRef={value:Date.parse('2026-09-06T08:00:00Z')};
+  const rowsRef={value:[]},tweetsRef={value:[timelineTweet('200','baseline',nowRef.value-1000)]},alerts=[],requests=[];
+  const catalog=capitalCatalogFixtureDependencies();
+  const options={dataDir,nowRef,rowsRef,tweetsRef,alerts,requests,
+    profileRef:{value:{id:X_ID,screen_name:'alpha',name:'Alpha Capital',followers:0,protected:false}},
+    configOverrides:{fomoXCallEnabled:true,kolLaunchMonitorEnabled:true,kolCapitalRosterEnabled:true,paperNarrativeRecallEnabled:true},
+    extraDependencies:catalog.dependencies};
+  let monitor=createHarness(options);await monitor.check();
+  nowRef.value+=5000;tweetsRef.value=[timelineTweet('201','robotaxi orbital starlight autonomous fleet',nowRef.value-500),...tweetsRef.value];
+  await monitor.check();let state=await monitor.getState();
+  assert.equal(alerts.length,0);const record=state.narrativeObservations['alpha:201'];
+  assert.equal(record.type,'kol_narrative_observation');assert.equal(record.tweet.sourceVerifiedBy,'official_x_oembed');
+  assert.equal(record.tweet.text,'robotaxi orbital starlight autonomous fleet');assert.equal(record.caller.capitalKolBinding.xUserId,X_ID);
+  assert.equal(record.token,undefined);assert.equal(record.tweet.isQuote,false);assert.equal(record.tweet.isReply,false);
+  const checks=requests.filter(x=>x.includes('/oembed?')).length;await monitor.check();
+  assert.equal(requests.filter(x=>x.includes('/oembed?')).length,checks,'replayed post does not refetch or refresh its time');
+  await monitor.stop();monitor=createHarness(options);await monitor.check();state=await monitor.getState();
+  assert.deepEqual(state.narrativeObservations['alpha:201'],record);await monitor.stop();
+});
+
 test("reviewed capital person is quarantined on a pinned numeric X id mismatch", async (t) => {
   const dataDir = await fixture(t);
   const nowRef = { value: Date.parse("2026-09-06T08:10:00.000Z") };

@@ -2,6 +2,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { createGmgnAccountGate } from './gmgn-account-gate.js';
+import { GMGN_READONLY_INTERVAL_MS } from './gmgn-readonly-pacing.js';
 
 export const GMGN_FLOW_FULL_CHAINS = Object.freeze(["sol", "bsc", "base", "eth", "robinhood"]);
 export const GMGN_FLOW_HOT_SEARCH_CHAINS = Object.freeze(["sol", "bsc", "base", "eth", "monad", "megaeth", "hyperevm", "tron"]);
@@ -66,9 +68,11 @@ export function createGmgnFlowClient(config = {}, dependencies = {}) {
   const scheduler = dependencies.scheduler || GLOBAL_SCHEDULER;
   const cliPath = String(config.gmgnFlowCliPath || config.fomoCallGmgnCliPath || "gmgn-cli");
   const dataDir = path.resolve(config.dataDir || "data");
+  const accountGate=dependencies.accountGate || (!dependencies.execFileImpl ? createGmgnAccountGate(dataDir) : null);
+  const cooldownGate=!dependencies.execFileImpl ? createGmgnAccountGate(path.join(dataDir,'gmgn-cooldown-write'),{intervalMs:1}) : null;
   const rateFile = path.join(dataDir, "gmgn-flow-rate-limit.json");
   const legacyFile = path.join(dataDir, "fomo-call-state.json");
-  const interval = boundedNumber(config.gmgnFlowRequestIntervalMs ?? config.requestIntervalMs, 3000, 3000, 60_000);
+  const interval = boundedNumber(config.gmgnFlowRequestIntervalMs ?? config.requestIntervalMs, GMGN_READONLY_INTERVAL_MS, GMGN_READONLY_INTERVAL_MS, 60_000);
   const timeout = boundedNumber(config.gmgnFlowRequestTimeoutMs ?? config.requestTimeoutMs, 15_000, 100, 15_000);
   const jobs = new Set();
   let stopped = false;
@@ -118,6 +122,12 @@ export function createGmgnFlowClient(config = {}, dependencies = {}) {
     const temporary = `${rateFile}.${process.pid}.${randomUUID()}.tmp`;
     let handle;
     try {
+      const existing=await readJson(rateFile,16_384);
+      if(existing!==null) {
+        const previous=timestamp(existing.rateLimitedUntil);
+        if(existing.version!==1||previous===null)throw failure('GMGN_STATE_INVALID','Invalid GMGN cooldown schema');
+        scheduler.rateLimitedUntil=Math.max(scheduler.rateLimitedUntil,previous);
+      }
       await fsImpl.mkdir(dataDir, { recursive: true, mode: 0o700 });
       handle = await fsImpl.open(temporary, "wx", 0o600);
       await handle.writeFile(`${JSON.stringify({ version: 1, rateLimitedUntil: new Date(scheduler.rateLimitedUntil).toISOString(),
@@ -187,7 +197,7 @@ export function createGmgnFlowClient(config = {}, dependencies = {}) {
     });
   }
 
-  function enqueue(args, configuration = false) {
+  function enqueue(args, configuration = false, { priority = 0, onRequestStart } = {}) {
     if (stopped) return Promise.reject(stoppedError());
     const controller = new AbortController();
     const job = { controller, promise: null, execution: null, started: false };
@@ -201,6 +211,7 @@ export function createGmgnFlowClient(config = {}, dependencies = {}) {
       await checkCooldown(signal);
       scheduler.lastStartedAt = Number(now());
       try {
+        onRequestStart?.(Number(now()));
         const result = await runChild(args, signal);
         assertActive(signal);
         if (Buffer.byteLength(result.stdout) > MAX_OUTPUT_BYTES || Buffer.byteLength(result.stderr) > MAX_OUTPUT_BYTES) {
@@ -221,7 +232,11 @@ export function createGmgnFlowClient(config = {}, dependencies = {}) {
       } catch (error) {
         if (signal.aborted || stopped) throw stoppedError();
         const retry = parseGmgnFlowRateLimit(error, Number(now()));
-        if (retry) { await persistCooldown(retry); throw limitedError(retry); }
+        if (retry) {
+          try { await (cooldownGate ? cooldownGate(()=>persistCooldown(retry)) : persistCooldown(retry)); }
+          catch(error) { writeFault=true;throw error; }
+          throw limitedError(scheduler.rateLimitedUntil);
+        }
         if (String(error?.code || "").startsWith("GMGN_")) throw error;
         // Never expose stdout, stderr, command strings, credentials, or provider errors.
         if (error?.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") throw failure("GMGN_RESPONSE_TOO_LARGE", "GMGN CLI output exceeds 4 MiB");
@@ -229,7 +244,7 @@ export function createGmgnFlowClient(config = {}, dependencies = {}) {
         throw failure(configuration ? "GMGN_CONFIG_FAILED" : "GMGN_CLI_FAILED", configuration ? "GMGN CLI configuration check failed" : "GMGN CLI request failed");
       }
     };
-    const execution = scheduler.tail.catch(() => {}).then(work);
+    const execution = scheduler.tail.catch(() => {}).then(() => accountGate && !configuration ? accountGate(work,controller.signal,{priority}) : work());
     job.execution = execution;
     scheduler.tail = execution.catch(() => {});
     job.promise = new Promise((resolve, reject) => {
@@ -247,16 +262,24 @@ export function createGmgnFlowClient(config = {}, dependencies = {}) {
     return configPromise;
   }
 
-  async function request(args) { await checkConfig(); return enqueue([...args, "--raw"]); }
+  async function request(args, options) { await checkConfig(); return enqueue([...args, "--raw"], false, options); }
 
   return {
     checkConfig,
+    platformCalls(chain) {
+      // Platform-call metadata is a discovery hint, not a full X timeline.
+      return request(["market", "signal", "--chain", chainValue(chain, ["sol", "bsc"]), "--signal-type", "13"]);
+    },
     trending(chain) {
       return request(["market", "trending", "--chain", chainValue(chain), "--interval", "5m", "--order-by", "volume", "--limit", "50"]);
     },
-    trades(chain, kind) {
+    trades(chain, kind, { limit = 200, onRequestStart } = {}) {
       if (!["smartmoney", "kol"].includes(kind)) throw failure("GMGN_INVALID_ARGUMENT", "Unsupported GMGN trade kind");
-      return request(["track", kind, "--chain", chainValue(chain), "--limit", "200"]);
+      if (!Number.isSafeInteger(limit) || limit<1 || limit>200) throw failure('GMGN_INVALID_ARGUMENT','Invalid GMGN trade limit');
+      if (onRequestStart !== undefined && typeof onRequestStart !== 'function') throw failure('GMGN_INVALID_ARGUMENT','Invalid request timing callback');
+      // Feed continuity is time-sensitive; profile enrichment is background.
+      // Priority 1 still yields to priority-2 exits and entry confirmations.
+      return request(["track", kind, "--chain", chainValue(chain), "--limit", String(limit)], {priority:1,onRequestStart});
     },
     candles(chain, address, fromSec, toSec) {
       chainValue(chain); addressValue(chain, address);
@@ -279,6 +302,22 @@ export function createGmgnFlowClient(config = {}, dependencies = {}) {
     info(chain, address) {
       chainValue(chain); addressValue(chain, address);
       return request(["token", "info", "--chain", chain, "--address", address]);
+    },
+    topTraders(chain, address, limit = 50) {
+      chainValue(chain); addressValue(chain, address);
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw failure('GMGN_INVALID_ARGUMENT', 'Invalid trader limit');
+      return request(['token', 'traders', '--chain', chain, '--address', address, '--order-by', 'profit', '--direction', 'desc', '--limit', String(limit)]);
+    },
+    activity(chain, wallet, { cursor = null, limit = 100 } = {}) {
+      chainValue(chain); addressValue(chain, wallet);
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100
+        || cursor !== null && (typeof cursor !== 'string' || !cursor || cursor.length > 2048 || /[\x00-\x1f]/.test(cursor))) {
+        throw failure('GMGN_INVALID_ARGUMENT', 'Invalid wallet activity pagination');
+      }
+      // Include transfers and liquidity actions: filtering only buys/sells can
+      // make inventory and completed round trips look falsely attributable.
+      return request(['portfolio', 'activity', '--chain', chain, '--wallet', wallet, '--limit', String(limit),
+        ...(cursor === null ? [] : ['--cursor', cursor])]);
     },
     hotSearches(chains) {
       if (!Array.isArray(chains) || !chains.length || chains.length > GMGN_FLOW_HOT_SEARCH_CHAINS.length) {

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  CZ_CATALOG_EXTENSION,
   CAPITAL_KOL_CATALOG_HASH,
   CAPITAL_KOL_CATALOG_PUBLISHED_AT,
   CAPITAL_KOL_CATALOG_VERSION,
@@ -16,6 +17,19 @@ import {
   verifyCapitalKolCatalogIntegrity,
   verifyCapitalKolEventSnapshot,
 } from "../src/capital-kol-catalog.js";
+
+test('CZ additive manifest pins numeric identity without invalidating historical catalog snapshots',()=>{
+  const cz=findReviewedCapitalKolByHandle('cz_binance');assert.equal(cz.expectedXUserId,'902926941413453824');
+  const snapshot=createCapitalKolEventSnapshot(cz);assert.equal(snapshot.catalogVersion,CZ_CATALOG_EXTENSION.version);
+  assert.equal(snapshot.catalogHash,CZ_CATALOG_EXTENSION.hash);
+  assert.equal(createCapitalKolEventSnapshot('elonmusk').catalogHash,CAPITAL_KOL_CATALOG_HASH);
+  const event={caller:{handle:'cz_binance',xUserId:cz.expectedXUserId,capitalKolSnapshot:snapshot}};
+  assert.equal(verifyCapitalKolEventSnapshot(event).valid,true);
+  assert.equal(verifyCapitalKolEventSnapshot({...event,caller:{...event.caller,xUserId:'44196397'}}).valid,false);
+  const at=Date.parse(CZ_CATALOG_EXTENSION.publishedAt)+1000;
+  assert.equal(bindCapitalKolRuntimeIdentity({subjectType:'person',handle:cz.handle,observedHandle:cz.handle,xUserId:cz.expectedXUserId,
+    profileUrl:'https://x.com/cz_binance',source:'fxtwitter_public_profile',observedAt:new Date(at).toISOString()},{nowMs:at}).monitorEligible,true);
+});
 
 const NOW = Date.parse(CAPITAL_KOL_CATALOG_PUBLISHED_AT) + 47_000;
 const ADDED_HANDLES = [
@@ -58,11 +72,11 @@ function observation(overrides = {}) {
 
 test("reviewed seed covers all broad capital leader categories with pinned X ids", () => {
   const entries = listReviewedCapitalKols();
-  assert.equal(entries.length, 30);
+  assert.equal(entries.length, 31);
   assert.deepEqual(new Set(entries.map((entry) => entry.category)), new Set(CAPITAL_KOL_CATEGORIES));
-  assert.equal(new Set(entries.map((entry) => entry.id)).size, 30);
-  assert.equal(new Set(entries.map((entry) => entry.handle.toLowerCase())).size, 30);
-  assert.equal(new Set(entries.map((entry) => entry.expectedXUserId)).size, 30);
+  assert.equal(new Set(entries.map((entry) => entry.id)).size, 31);
+  assert.equal(new Set(entries.map((entry) => entry.handle.toLowerCase())).size, 31);
+  assert.equal(new Set(entries.map((entry) => entry.expectedXUserId)).size, 31);
   assert.deepEqual(ADDED_HANDLES.filter((handle) => !findReviewedCapitalKolByHandle(handle)), []);
   for (const entry of entries) {
     assert.match(entry.handle, /^[A-Za-z0-9_]{1,15}$/u);
@@ -79,7 +93,7 @@ test("catalog exposes deterministic versioned manifest and integrity result", ()
   const manifest = getCapitalKolCatalogManifest();
   assert.equal(manifest.version, CAPITAL_KOL_CATALOG_VERSION);
   assert.equal(manifest.hash, CAPITAL_KOL_CATALOG_HASH);
-  assert.equal(manifest.count, 30);
+  assert.equal(manifest.count, 31);
   assert.equal(manifest.publishedAt, CAPITAL_KOL_CATALOG_PUBLISHED_AT);
   assert.match(manifest.hash, /^sha256:[a-f0-9]{64}$/u);
   assert.equal(manifest.followersPolicy, "display_only");

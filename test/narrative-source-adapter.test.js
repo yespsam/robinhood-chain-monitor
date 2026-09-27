@@ -7,11 +7,22 @@ import {
   NORMALIZED_NARRATIVE_NEWS_TYPE,
   adaptNarrativeSourceEvent,
   createNarrativeSourceAdapter,
+  readAuthenticatedNarrativeDocument,
 } from "../src/narrative-source-adapter.js";
 
 const PUBLISHED_AT = "2026-09-06T08:00:00.000Z";
 const NVDA_KEY = "eip155:56/erc20:0x02fca66c1d1afb4e2a7884261eb00f63598a7436";
 const AAPL_KEY = "eip155:56/erc20:0x431a3bee82e2ca41e49895cbece5bb0f76a89b7a";
+
+test('authenticated website prose does not require a CA or a pre-reviewed subject; fake hosts stay rejected',()=>{
+  const event={type:'ai_official_update',kind:'xai_news',project:{id:'xai',website:'https://x.ai',twitter:'https://x.com/SpaceXAI'},
+    source:{id:'xai_news',url:'https://r.jina.ai/https://x.ai/news',official:true,trust:'official_verified'},
+    title:'Orbital starlight autonomous robotaxi fleet',url:'https://x.ai/news/orbital-starlight',publishedAt:PUBLISHED_AT};
+  assert.equal(adaptNarrativeSourceEvent(event),null);
+  assert.equal(readAuthenticatedNarrativeDocument(event).authenticated,true);
+  assert.equal(readAuthenticatedNarrativeDocument({...event,url:'https://x.ai.attacker.test/news/orbital-starlight'}),null);
+  assert.equal(readAuthenticatedNarrativeDocument({...event,publishedAt:null}),null);
+});
 
 function normalizedVerifiedNews() {
   const url = "https://news.example.test/releases/nvidia-apple";

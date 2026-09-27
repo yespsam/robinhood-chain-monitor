@@ -31,6 +31,18 @@ export function gmgnFlowTags(tags) {
   if (!Array.isArray(tags)) return [];
   return [...new Set(tags.filter(t=>typeof t === 'string').map(t=>t.trim().toLowerCase()))].sort();
 }
+export function mergeGmgnFlowTrade(prior, next) {
+  if (!prior) return next;
+  if (['chain','hash','wallet','tokenAddress','side','at'].some(k => prior[k] !== next[k])) throw new Error('GMGN_TRADE_CONFLICT');
+  const sameUnits = ['baseAmount','quoteAmount'].every(k => Number.isFinite(prior[k]) && prior[k] > 0 && prior[k] === next[k]);
+  const tinyRounding = Math.abs(prior.amountUsd - next.amountUsd) <= Math.max(prior.amountUsd, next.amountUsd) * 1e-12;
+  if (prior.amountUsd !== next.amountUsd && !tinyRounding && !sameUnits) throw new Error('GMGN_TRADE_CONFLICT');
+  // Identical on-chain units can be re-valued in USD by the provider. Never sum
+  // these duplicates; retain the conservative USD bound for observed net flow.
+  return { ...next, amountUsd: next.side === 'buy' ? Math.min(prior.amountUsd, next.amountUsd) : Math.max(prior.amountUsd, next.amountUsd),
+    usdRevised: prior.usdRevised === true || prior.amountUsd !== next.amountUsd,
+    tags: gmgnFlowTags([...(prior.tags || []), ...(next.tags || [])]) };
+}
 export function parseGmgnFlowTrades(payload, chain, nowMs = Date.now()) {
   const data = gmgnFlowData(payload);
   if (!Array.isArray(data?.list)) throw new Error('GMGN_TRADE_SCHEMA');
@@ -49,9 +61,9 @@ export function parseGmgnFlowTrades(payload, chain, nowMs = Date.now()) {
     // A duplicated feed record must never multiply wallet count or USD volume.
     const key = `${chain}:${hash}:${wallet}:${tokenAddress}:${row.side}`;
     const prior = trades.get(key);
-    if (prior && (prior.amountUsd !== amountUsd || prior.at !== at*1000)) throw new Error('GMGN_TRADE_CONFLICT');
-    trades.set(key,{key,chain,wallet,tokenAddress,hash,side:row.side,amountUsd,at:at*1000,
-      tags:gmgnFlowTags([...(prior?.tags || []),...tags]),symbol:String(row.base_token?.symbol || '').slice(0,40)});
+    trades.set(key,mergeGmgnFlowTrade(prior,{key,chain,wallet,tokenAddress,hash,side:row.side,amountUsd,at:at*1000,
+      baseAmount:numeric(row.base_amount),quoteAmount:numeric(row.quote_amount),
+      tags,symbol:String(row.base_token?.symbol || '').slice(0,40)}));
   }
   return [...trades.values()];
 }
@@ -92,7 +104,16 @@ export function parseGmgnFlowCandles(payload) {
   if (!Array.isArray(data?.list)) throw new Error('GMGN_CANDLE_SCHEMA');
   const candles=new Map();
   for(const row of data.list) {
-    const time=numeric(row.time),volumeUsd=numeric(row.volume);
+    const rawTime=numeric(row.time),time=rawTime!==null&&rawTime<10_000_000_000?rawTime*1000:rawTime;
+    const volume=numeric(row.volume),amount=numeric(row.amount),low=numeric(row.low),high=numeric(row.high);
+    // The published old/new schemas disagree, and live CLI still returns the
+    // old layout. Validate USD/token VWAP against the observed price range.
+    const inRange = v => low>0 && high>=low && v>=low*0.99 && v<=high*1.01;
+    const oldLayout=amount>0&&volume>=0&&inRange(volume/amount);
+    const newLayout=volume>0&&amount>=0&&inRange(amount/volume);
+    const volumeUsd=volume===0&&amount===0?0:oldLayout&&!newLayout?volume:newLayout&&!oldLayout?amount:
+      oldLayout&&newLayout&&volume===amount?amount:null;
+    if(volumeUsd===null)throw new Error('GMGN_CANDLE_UNITS_UNVERIFIED');
     if (!Number.isSafeInteger(time) || time%MINUTE!==0 || volumeUsd===null || volumeUsd<0) throw new Error('GMGN_CANDLE_INVALID');
     if (candles.has(time) && candles.get(time).volumeUsd!==volumeUsd) throw new Error('GMGN_CANDLE_CONFLICT');
     candles.set(time,{time,volumeUsd});

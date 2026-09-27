@@ -462,6 +462,39 @@ test("ETag and Last-Modified are conditional and a 304 advances health without p
   assert.equal(monitor.state().health.lastResponseStatus, 304);
 });
 
+test("network failures keep bounded recovery probes without erasing the persistent news cursor", async (t) => {
+  const stateFile = await temporaryStateFile(t);
+  let current = Date.parse("2026-08-24T08:00:00Z"), requests = 0;
+  const monitor = createTelegramNewsMonitor({ dataDir: path.dirname(stateFile) }, {
+    stateFile, autoStart: false, now: () => current, logger: { error() {} },
+    fetchImpl: async () => { requests++; throw new Error("The operation was aborted due to timeout"); },
+  });
+  for (let i = 0; i < 12; i++) {
+    await monitor.check();
+    const next = Date.parse(monitor.state().health.nextAttemptAt);
+    assert.ok(next - current <= 60_000);
+    assert.ok(next - current >= 4_000);
+    current = next;
+  }
+  assert.equal(requests, 12);
+  await monitor.stop();
+  const saved = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  saved.health.lastErrorAt = new Date(current - 61_000).toISOString();
+  saved.health.nextAttemptAt = new Date(current + 839_000).toISOString();
+  saved.messages["30"] = { digest: "a".repeat(64), sourceOccurredAt: "2026-08-24T06:00:00.000Z", accepted: false };
+  await fs.writeFile(stateFile, JSON.stringify(saved));
+  const resumed = createTelegramNewsMonitor({ dataDir: path.dirname(stateFile) }, {
+    stateFile, autoStart: false, now: () => current,
+    fetchImpl: async () => { requests++; return response(preview(messageCard({ id: 31, textHtml: GOVERNANCE_TEXT }))); },
+    sendAlertsImpl: async () => { assert.fail("a recovery must not replay the baseline as fresh alerts"); },
+  });
+  assert.equal((await resumed.check()).ok, true);
+  assert.equal(requests, 13);
+  assert.equal(resumed.state().health.status, "healthy");
+  assert.equal(resumed.state().messages["30"].digest, "a".repeat(64));
+  await resumed.stop();
+});
+
 test("403 and 429 Retry-After circuits survive restart and prevent premature requests", async (t) => {
   const stateFile = await temporaryStateFile(t);
   let current = Date.parse("2026-08-24T08:00:00Z");

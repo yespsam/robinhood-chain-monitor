@@ -59,6 +59,8 @@ for (const filename of [
   "monitor.err.log",
   "fomo-worker.out.log",
   "fomo-worker.err.log",
+  "dashboard.out.log",
+  "dashboard.err.log",
 ]) {
   await rotateOne(filename);
 }

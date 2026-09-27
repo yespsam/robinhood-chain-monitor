@@ -3,17 +3,27 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readonlyMarket } from '../src/gmgn-readonly-market.js';
+import { promisify } from 'node:util';
+import { gzip } from 'node:zlib';
+import { readonlyMarket, GMGN_CHAINS } from '../src/gmgn-readonly-market.js';
 import { createResearchTeamReport, renderResearchTeamBrief } from '../src/ai-research-team.js';
-import { qualifiesGmgnFlowWallet } from '../src/gmgn-flow-signal.js';
-import { resolveGmgnFlowNarrative } from '../src/gmgn-flow-narrative.js';
+import { gmgnFlowAddress } from '../src/gmgn-flow-signal.js';
+import { buildPaperFlowEvidence, buildPaperNarrativeEvidence, loadPaperEvidence } from '../src/paper-strategy-evidence.js';
+import { createPaperStrategyRuntime } from '../src/paper-strategy-runtime.js';
+import { createGmgnSocialMonitor } from '../src/gmgn-social-monitor.js';
+import { createAlphaCatalogMonitor } from '../src/binance-alpha-catalog.js';
+import { createSquareKeyStore } from '../src/square-key-store.js';
+import { createSquareKeyRoute } from '../src/square-key-route.js';
+import { createSquarePreview } from '../src/square-preview.js';
+import { createWalletLearningMonitor } from '../src/wallet-learning-monitor.js';
+import { loadPaperSession } from '../src/paper-account-session.js';
+import { createTwitterNarrativeMonitor } from '../src/twitter-narrative-monitor.js';
 
 const PROJECT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DASHBOARD = path.join(PROJECT, 'dashboard');
 const PAPER_DIR = process.env.PAPER_100_DATA_DIR || path.resolve(PROJECT, '..', 'robinhood-chain-monitor-paper-100');
-const FLOW_STATE_FILE = path.join(PROJECT, 'data', 'gmgn-flow-state.json');
-const FOMO_OUTBOX_FILE = path.join(PROJECT, 'data', 'fomo-alerts', 'alert-outbox.json');
-const MIME = Object.freeze({ '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8' });
+const MIME = Object.freeze({ '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.webp': 'image/webp' });
+const compressSnapshot = promisify(gzip);
 const safeFile = requestPath => {
   const decoded = decodeURIComponent(requestPath.split('?')[0]);
   const relative = decoded === '/' ? 'index.html' : decoded.replace(/^\/+/, '');
@@ -35,48 +45,22 @@ function json(response, body, status = 200) {
   response.end(JSON.stringify(body));
 }
 
-async function readJsonFile(file, maximumBytes) {
-  try {
-    const stat = await fs.stat(file);
-    if (!Number.isFinite(stat.size) || stat.size > maximumBytes) return null;
-    return JSON.parse(await fs.readFile(file, 'utf8'));
-  } catch { return null; }
-}
-
-async function readFlowEvidence({ chain, address, nowMs = Date.now() } = {}) {
-  const state = await readJsonFile(FLOW_STATE_FILE, 24 * 1024 * 1024);
-  const chainState = state?.chains?.[chain];
-  const stateAt = Date.parse(chainState?.lastSuccessAt || state?.updatedAt || '');
-  const fresh = Number.isFinite(stateAt) && nowMs - stateAt <= 2 * 60_000 && chainState?.status === 'healthy';
-  const rows = Array.isArray(state?.trades?.[chain])
-    ? state.trades[chain].filter(row => String(row?.tokenAddress || '').toLowerCase() === String(address || '').toLowerCase()
-      && Number.isFinite(Number(row?.at)) && Number(row.at) >= nowMs - 5 * 60_000 && row.side === 'buy')
-    : [];
-  const wallets = new Map();
-  for (const row of rows) {
-    const wallet = String(row.wallet || '').toLowerCase();
-    if (!wallet) continue;
-    const item = wallets.get(wallet) || { wallet, buyUsd: 0, tags: new Set() };
-    item.buyUsd += Number(row.amountUsd) || 0;
-    for (const tag of Array.isArray(row.tags) ? row.tags : []) item.tags.add(String(tag).toLowerCase());
-    wallets.set(wallet, item);
+async function strategyJson(request, response, body) {
+  const serialized = JSON.stringify(body);
+  const gzipAccepted = String(request.headers['accept-encoding'] || '').split(',').some(item => {
+    const [encoding, ...parameters] = item.trim().toLowerCase().split(';');
+    return encoding === 'gzip' && !parameters.some(value => /^\s*q\s*=\s*0(?:\.0*)?\s*$/.test(value));
+  });
+  response.setHeader('Vary', 'Accept-Encoding');
+  if (!gzipAccepted || Buffer.byteLength(serialized) < 4096) {
+    response.writeHead(200, { 'Content-Type': MIME['.json'] }); response.end(serialized); return;
   }
-  const buyers = [...wallets.values()].filter(item => item.buyUsd >= 100);
-  const highProfitCount = fresh ? buyers.filter(item => qualifiesGmgnFlowWallet(state?.profiles?.[`${chain}:${item.wallet}`], chain, item.wallet, nowMs)).length : null;
-  const fomoCount = fresh ? buyers.filter(item => item.tags.has('fomo')).length : null;
-  const uniqueBuyerCount = fresh ? buyers.length : null;
-  const netBuyUsd = fresh ? buyers.reduce((sum, item) => sum + item.buyUsd, 0) : null;
-  return {
-    fresh, observedAt: Number.isFinite(stateAt) ? new Date(stateAt).toISOString() : null,
-    highProfitCount, fomoCount, uniqueBuyerCount, netBuyUsd,
-    status: chainState?.status || 'unavailable', coverageGap: chainState?.coverageGap || null,
-  };
-}
-
-async function readNarrativeEvidence({ chain, address, token, nowMs = Date.now() } = {}) {
-  const outbox = await readJsonFile(FOMO_OUTBOX_FILE, 8 * 1024 * 1024);
-  const events = Object.values(outbox?.events || {}).slice(-1000);
-  return resolveGmgnFlowNarrative({ chain, tokenAddress: address, tokenInfo: token, events, nowMs });
+  // Preserve every CA and its evidence; compress repeated evidence rather than
+  // dropping research from the one-second dashboard feed. Async compression
+  // keeps the ledger/exit event loop available.
+  const compressed = await compressSnapshot(serialized, { level: 1 });
+  response.writeHead(200, { 'Content-Type': MIME['.json'], 'Content-Encoding': 'gzip', 'Content-Length': compressed.length });
+  response.end(compressed);
 }
 
 async function researchTeamSnapshot({ market, chain, address } = {}) {
@@ -88,10 +72,10 @@ async function researchTeamSnapshot({ market, chain, address } = {}) {
     marketSnapshot = { status: 'unavailable', source: 'gmgn-cli', chain: requestedChain, tokens: [], observedAt: null };
   }
   const tokens = Array.isArray(marketSnapshot?.tokens) ? marketSnapshot.tokens : [];
-  const normalizedAddress = String(address || '').toLowerCase();
+  const normalizedAddress = gmgnFlowAddress(requestedChain, address);
   const token = (normalizedAddress
-    ? tokens.find(item => String(item?.address || '').toLowerCase() === normalizedAddress)
-    : tokens[0]) || null;
+    ? tokens.find(item => gmgnFlowAddress(requestedChain, item?.address) === normalizedAddress)
+    : address ? null : tokens[0]) || null;
   let candles = [];
   if (token?.address && typeof market.kline === 'function') {
     try {
@@ -100,21 +84,20 @@ async function researchTeamSnapshot({ market, chain, address } = {}) {
       // every browser render.
       const to = Math.floor(Date.now() / 60_000) * 60;
       const kline = await market.kline({ chain: requestedChain, address: token.address, resolution: '1m', from: to - 60 * 60, to });
-      candles = Array.isArray(kline?.candles) ? kline.candles : [];
+      candles = kline?.status === 'ok' && Array.isArray(kline?.candles) ? kline.candles : [];
     } catch { candles = []; }
   }
   const nowMs = Date.now();
-  const flow = token?.address ? await readFlowEvidence({ chain: requestedChain, address: token.address, nowMs }) : {};
-  const narrative = token?.address ? await readNarrativeEvidence({ chain: requestedChain, address: token.address, token, nowMs }) : null;
+  const evidence = await loadPaperEvidence(path.join(PROJECT, 'data'));
+  const flow = token?.address ? buildPaperFlowEvidence({ state: evidence.flowState, chain: requestedChain, address: token.address, nowMs }) : {};
+  const narrative = token?.address ? buildPaperNarrativeEvidence({ chain: requestedChain, address: token.address, token, events: evidence.events, nowMs }) : null;
   const report = createResearchTeamReport({
     chain: requestedChain,
     token: token || { address: address || null },
     candles,
     marketStatus: marketSnapshot?.status || 'unavailable',
     observedAt: marketSnapshot?.observedAt || null,
-    // Narrative sources are deliberately not guessed from ticker/name.  A
-    // future source adapter can pass a CA-bound evidence object here.
-    narrative: narrative || marketSnapshot?.narrative || null,
+    narrative,
     flow,
     nowMs,
   });
@@ -129,11 +112,47 @@ async function researchTeamSnapshot({ market, chain, address } = {}) {
   };
 }
 
-export function createDashboardServer({ host = '127.0.0.1', port = 4173, market = readonlyMarket } = {}) {
+export function createDashboardServer({ host = '127.0.0.1', port = 4173, market = readonlyMarket, strategyRuntime = null, squareKeyStore = createSquareKeyStore({ publicationReceiptFile: path.join(PROJECT, 'data', 'binance-square-test-20260922.json') }) } = {}) {
+  const squareKeyRoute = createSquareKeyRoute(squareKeyStore);
   const server = http.createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store'); response.setHeader('X-Content-Type-Options', 'nosniff');
+    response.setHeader('Referrer-Policy', 'no-referrer');
+    response.setHeader('Content-Security-Policy', "default-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
     try {
-      const url = new URL(request.url || '/', `http://${request.headers.host || '127.0.0.1'}`);
+      const authority = new URL(`http://${request.headers.host || '127.0.0.1'}`);
+      const url = new URL(request.url || '/', authority);
+      if (!['127.0.0.1', 'localhost', '[::1]'].includes(authority.hostname) || url.origin !== authority.origin) { json(response, { error: '仅允许本机访问' }, 403); return; }
+      if (await squareKeyRoute(request, response, url)) return;
+      if (url.pathname === '/api/square-preview') {
+        if (request.method !== 'GET') { json(response, { error: '仅支持本地只读预览' }, 405); return; }
+        if (url.search || (request.headers.origin && request.headers.origin !== url.origin) || (request.headers['sec-fetch-site'] && !['same-origin', 'none'].includes(request.headers['sec-fetch-site']))) { json(response, { error: '仅允许本机同源预览' }, 403); return; }
+        json(response, createSquarePreview(strategyRuntime?.snapshot())); return;
+      }
+      if (url.pathname === '/api/strategy-state') {
+        if (request.method !== 'GET') { json(response, { error: '只读接口' }, 405); return; }
+        await strategyJson(request, response, strategyRuntime?.snapshot() || { status: 'loading', mode: 'paper', execution: false, signing: false, broadcast: false, account: null, strategies: [], lastError: '模拟引擎未启动' }); return;
+      }
+      if (['/api/strategy-control', '/api/paper-cash-reset'].includes(url.pathname)) {
+        if (request.method !== 'POST') { json(response, { error: '仅支持 POST' }, 405); return; }
+        if ((request.headers.origin && request.headers.origin !== url.origin) || (request.headers['sec-fetch-site'] && !['same-origin', 'none'].includes(request.headers['sec-fetch-site']))) { json(response, { error: '不允许跨站修改' }, 403); return; }
+        if (!String(request.headers['content-type'] || '').toLowerCase().startsWith('application/json')) { json(response, { error: '需要 JSON 请求' }, 415); return; }
+        if (!strategyRuntime) { json(response, { error: '模拟引擎未启动' }, 503); return; }
+        let body = '', size = 0;
+        for await (const chunk of request) { size += chunk.length; if (size > 1024) { json(response, { error: '请求过大' }, 413); return; } body += chunk; }
+        let payload;
+        try { payload = JSON.parse(body); } catch { json(response, { error: '无效 JSON' }, 400); return; }
+        if (url.pathname === '/api/paper-cash-reset') {
+          if (payload?.confirm !== 'reset_main_paper_cash_to_100_preserve_history'
+            || typeof payload.operationId !== 'string' || !/^[a-z0-9_-]{8,80}$/.test(payload.operationId)
+            || Object.keys(payload).some(key => !['confirm', 'operationId'].includes(key))) {
+            json(response, { error: '需要明确确认主模拟盘补回 100 U 并保留历史' }, 400); return;
+          }
+          json(response, await strategyRuntime.resetCash(payload.operationId)); return;
+        }
+        if (typeof payload?.enabled !== 'boolean' || Object.keys(payload).some(key => key !== 'enabled')) { json(response, { error: '只接受 enabled 布尔值' }, 400); return; }
+        json(response, await strategyRuntime.setEnabled(payload.enabled)); return;
+      }
+      if (!['GET', 'HEAD'].includes(request.method)) { json(response, { error: '只读接口' }, 405); return; }
       if (url.pathname === '/api/paper-state') { json(response, await readPaperState()); return; }
       if (url.pathname === '/api/market') {
         const chain = (url.searchParams.get('chain') || 'robinhood').toLowerCase();
@@ -146,7 +165,7 @@ export function createDashboardServer({ host = '127.0.0.1', port = 4173, market 
         const chain = (url.searchParams.get('chain') || 'robinhood').toLowerCase();
         const address = url.searchParams.get('address') || '';
         const resolution = (url.searchParams.get('resolution') || '1m').toLowerCase();
-        const now = Math.floor(Date.now() / 1000);
+        const now = Math.floor(Date.now() / 60_000) * 60;
         const hours = Math.min(24 * 7, Math.max(1, Number(url.searchParams.get('hours') || 6)));
         try { json(response, await market.kline({ chain, address, resolution, from: now - hours * 3600, to: now })); } catch { json(response, { status: 'unavailable', source: 'gmgn-cli', reason: 'invalid_request', candles: [] }, 400); }
         return;
@@ -165,10 +184,49 @@ export function createDashboardServer({ host = '127.0.0.1', port = 4173, market 
       const body = await fs.readFile(file); response.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' }); response.end(body);
     } catch (error) { response.writeHead(error.code === 'ENOENT' ? 404 : 500); response.end(error.code === 'ENOENT' ? 'not found' : 'dashboard error'); }
   });
-  return { server, listen: () => new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, () => resolve(server.address())); }), close: () => new Promise(resolve => server.close(() => resolve())) };
+  return { server, listen: () => new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, () => resolve(server.address())); }),
+    close: () => new Promise(resolve => {
+      // Browser requests may outlive their upstream fetch. Bound HTTP draining
+      // only; shutdown still separately awaits strategy/learning ledger writes.
+      const drainTimer = setTimeout(() => server.closeAllConnections(), 5000);
+      drainTimer.unref?.();
+      server.close(() => { clearTimeout(drainTimer); resolve(); });
+    }) };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
-  const port = Number(process.env.DASHBOARD_PORT || 4173); const app = createDashboardServer({ port });
-  app.listen().then(address => console.log(`yesp atm 模拟盘：http://${address.address}:${address.port}（仅模拟盘）`)).catch(error => { console.error(`dashboard failed: ${error.message}`); process.exitCode = 1; });
+  const port = Number(process.env.DASHBOARD_PORT || 4173);
+  const session = await loadPaperSession(path.join(PROJECT, 'data'));
+  const learner = createWalletLearningMonitor({ dataDir: path.join(PROJECT, 'data') });
+  const socialMonitor=process.env.PAPER_GMGN_SOCIAL_MONITOR==='0'?null:createGmgnSocialMonitor({dataDir:path.join(PROJECT,'data')});
+  const alphaMonitor=process.env.PAPER_ALPHA_MONITOR==='0'?null:createAlphaCatalogMonitor({dataDir:path.join(PROJECT,'data')});
+  const twitterNarrativeMonitor=createTwitterNarrativeMonitor({dataDir:path.join(PROJECT,'data')});
+  const chain = session?.chain || process.env.PAPER_STRATEGY_CHAIN || 'robinhood';
+  const confirmedMode = process.env.PAPER_PVP_MODE !== '0' && process.env.PAPER_EXPLORATORY_ENTRIES !== '0';
+  const chains = session?.chains || (process.env.PAPER_STRATEGY_CHAINS ? process.env.PAPER_STRATEGY_CHAINS.split(',').map(value => value.trim()) : [chain, ...GMGN_CHAINS.filter(value => value !== chain)]);
+  const strategyRuntime = createPaperStrategyRuntime({ market: readonlyMarket, dataDir: path.join(PROJECT, 'data'), session, chain, chains,
+    twitterNarrativeSnapshot:twitterNarrativeMonitor.snapshot,
+    allowExploratory: process.env.PAPER_EXPLORATORY_ENTRIES !== '0', compoundEntries: process.env.PAPER_COMPOUNDING !== '0',
+    pvpMode: process.env.PAPER_PVP_MODE !== '0',
+    // The unbounded v1 engineering probe is retired, including stale launch environments.
+    diagnosticMode: false,
+    confirmedMode, fixedEntryUsd: confirmedMode ? 10 : null, evidenceHoldMode: confirmedMode,
+    tradeReviewEvery: 100,
+    higherFrequencyResearch: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0',
+    memeExitMode: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0',
+    recoveryMode: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0' && process.env.PAPER_RECOVERY_MODE !== '0',
+    continuousPaperMode: confirmedMode && process.env.PAPER_CONTINUOUS_MODE !== '0',
+    opportunityMode: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0',
+    thesisExitExperiment: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_EXIT_COMPARISON !== '0',
+    activeEntrySampling: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_EXIT_COMPARISON !== '0' && process.env.PAPER_ACTIVE_ENTRY_SAMPLING !== '0',
+    upsideMode: process.env.PAPER_PVP_MODE === '0' && process.env.PAPER_UPSIDE_MODE !== '0', learningLoader: learner.snapshot });
+  const app = createDashboardServer({ port, strategyRuntime });
+  app.listen().then(async address => {
+    console.log(`yesp atm 模拟盘：http://${address.address}:${address.port}（仅模拟盘）`);
+    try { await strategyRuntime.start(); await socialMonitor?.start(); await alphaMonitor?.start(); twitterNarrativeMonitor.start(); } catch (error) { console.error(`模拟引擎/消息发现启动失败：${error.message}`); }
+    try { await learner.start(); } catch { console.error('钱包学习启动失败，原模拟引擎继续运行；请检查学习账本及锁'); }
+  }).catch(error => { console.error(`dashboard failed: ${error.message}`); process.exitCode = 1; });
+  let closing = false;
+  const shutdown = async () => { if (closing) return; closing = true; await Promise.all([app.close(), strategyRuntime.stop(), learner.stop(),socialMonitor?.stop(),alphaMonitor?.stop(),twitterNarrativeMonitor.stop()]); };
+  process.once('SIGTERM', shutdown); process.once('SIGINT', shutdown);
 }

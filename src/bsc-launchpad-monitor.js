@@ -8,6 +8,7 @@ import { assessLocalTokenSecurity } from "./local-security.js";
 import { sendAlerts } from "./alerts.js";
 import { inferBscLaunchpadAttribution, parseBscScanAttribution, parseDexScreenerTokenPairs } from "./bsc-attribution.js";
 import { isStrictFlapTrackedPoolTokenUpdate } from "./source-controls.js";
+import { createCooperativeTurn } from "./cooperative-turn.js";
 
 export const BSC_CHAIN_ID = 56;
 export const BSC_WBNB = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
@@ -6471,8 +6472,13 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     });
   };
 
+  const yieldStateTurn = createCooperativeTurn();
   const withState = (operation) => {
-    const run = stateLock.catch(() => {}).then(() => {
+    const run = stateLock.catch(() => {}).then(async () => {
+      // Yield before acquiring the next revision, not inside an atomic
+      // state transition. The same promise chain still owns FIFO ordering,
+      // error recovery, durability barriers and shutdown draining.
+      await yieldStateTurn();
       stateRevision += 1;
       return operation(stateRevision);
     });
@@ -8198,21 +8204,33 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     return (activation?.replayAttemptedCandidateKeys || []).includes(fourMemeCreationCandidateKey(candidate));
   }
 
+  const throwIfFourMemeReplayStopped = () => {
+    if (!stopped) return;
+    const error = new Error("Four.Meme activation replay stopped");
+    error.code = "BSC_FOUR_REPLAY_STOPPED";
+    throw error;
+  };
+
   async function markFourMemeReplayCandidateAttempted(activationKey, candidate) {
     return withState(async () => {
       const current = state.officialSources?.fourMeme?.featureActivations?.[activationKey];
       if (!current) return false;
       const key = fourMemeCreationCandidateKey(candidate);
+      if (current.replayAttemptedCandidateKeys?.includes(key)) return true;
       current.replayAttemptedCandidateKeys = [...new Set([
         ...(current.replayAttemptedCandidateKeys || []),
         key,
       ])].slice(-FOUR_MEME_REPLAY_ATTEMPTED_CANDIDATES_MAX);
-      await save();
+      // Only this branch changed. Do not walk the 25k pending transaction
+      // map for each non-matching quote candidate. The existing WAL writer
+      // falls back to a full diff if an untracked mutation is outstanding.
+      await save(state, { dirtyRoots: ["officialSources"] });
       return true;
     });
   }
 
   async function processFourMemeReplayCandidate(activationKey, activation, candidate) {
+    throwIfFourMemeReplayStopped();
     const attempted = await withState(() => {
       const current = state.officialSources?.fourMeme?.featureActivations?.[activationKey];
       return !current || fourMemeReplayCandidateWasAttempted(current, candidate);
@@ -8220,6 +8238,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     if (attempted) return false;
     if (activation.type === "quote_config" && candidate.topic === FOUR_MEME_TOKEN_CREATE_TOPIC) {
       const info = await readFourMemeManagerTokenInfo(candidate.launcher, candidate.token, candidate.blockNumber);
+      throwIfFourMemeReplayStopped();
       if (!info || info.quoteAsset !== String(activation.quoteAddress || "").toLowerCase()) {
         await markFourMemeReplayCandidateAttempted(activationKey, candidate);
         return false;
@@ -8228,6 +8247,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     const existingFlight = inFlightEntries.get(candidate.transactionHash);
     if (existingFlight) await existingFlight.catch(() => {});
     const reserved = await withState(async () => {
+      throwIfFourMemeReplayStopped();
       const current = state.officialSources?.fourMeme?.featureActivations?.[activationKey];
       if (!current || current.active === false || current.firstTokenAlertedAt || current.firstTokenTransactionHash) return false;
       if (state.deferredCreationEvidence?.[candidate.transactionHash]) {
@@ -8263,6 +8283,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
 
   async function replayFourMemeCreationHotIndex(activationKey, activation) {
     const phase = await withState(async () => {
+      throwIfFourMemeReplayStopped();
       const current = state.officialSources?.fourMeme?.featureActivations?.[activationKey];
       if (!current
         || current.active === false
@@ -8282,9 +8303,11 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     });
     if (!phase) return false;
     for (const candidate of phase.candidates) {
+      throwIfFourMemeReplayStopped();
       if (await processFourMemeReplayCandidate(activationKey, activation, candidate)) return true;
     }
     await withState(async () => {
+      throwIfFourMemeReplayStopped();
       const current = state.officialSources?.fourMeme?.featureActivations?.[activationKey];
       if (current && !current.firstTokenAlertedAt && !current.firstTokenTransactionHash) {
         current.hotReplayCompletedAt = iso(now);
@@ -8296,6 +8319,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   }
 
   async function runFourMemeActivationReplay(activationKey) {
+    throwIfFourMemeReplayStopped();
     const activation = await withState(() => {
       const current = state.officialSources?.fourMeme?.featureActivations?.[activationKey];
       if (!shouldReplayFourMemeActivation(current)) return null;
@@ -8304,8 +8328,11 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     if (!activation) return false;
     try {
       if (await replayFourMemeCreationHotIndex(activationKey, activation)) return true;
+      throwIfFourMemeReplayStopped();
       const confirmedHead = Math.max(0, (await provider.getBlockNumber()) - (config.bscConfirmations ?? 2));
+      throwIfFourMemeReplayStopped();
       let nextBlock = await initialFourMemeReplayBlock(activation, confirmedHead);
+      throwIfFourMemeReplayStopped();
       const replayBudgetCeiling = nextBlock + FOUR_MEME_REPLAY_MAX_BLOCKS_PER_RUN - 1;
       let targetHead = Math.min(confirmedHead, replayBudgetCeiling);
       // PublicNode accepts a much wider range when both the emitter and exact
@@ -8323,10 +8350,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       }
       if (fastCandidates?.length) {
         for (const candidate of fastCandidates) {
+          throwIfFourMemeReplayStopped();
           if (await processFourMemeReplayCandidate(activationKey, activation, candidate)) return true;
         }
       }
       await withState(async () => {
+        throwIfFourMemeReplayStopped();
         const current = state.officialSources.fourMeme.featureActivations[activationKey];
         if (!current) return;
         current.replayAlgorithmVersion = 2;
@@ -8337,6 +8366,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       });
 
       while (nextBlock <= targetHead) {
+        throwIfFourMemeReplayStopped();
         const latestActivation = await withState(() => {
           const current = state.officialSources?.fourMeme?.featureActivations?.[activationKey];
           return current ? structuredClone(current) : null;
@@ -8356,12 +8386,14 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           toBlock: hexBlock(to),
           topics: [topics],
         }])));
+        throwIfFourMemeReplayStopped();
         if (results.some((logs) => !Array.isArray(logs))) throw new Error("Four.Meme replay eth_getLogs returned malformed data");
         const candidates = results.flatMap((logs) => logs.map((log) => fourMemeReplayCandidate(log, activation)).filter(Boolean))
           .sort((left, right) => left.blockNumber - right.blockNumber
             || left.transactionIndex - right.transactionIndex
             || left.logIndex - right.logIndex);
         for (const candidate of candidates) {
+          throwIfFourMemeReplayStopped();
           if (await processFourMemeReplayCandidate(activationKey, activation, candidate)) return true;
         }
         const scannedThrough = ranges.at(-1).to;
@@ -8382,7 +8414,9 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           }
         }
       }
+      throwIfFourMemeReplayStopped();
       const finalConfirmedHead = Math.max(0, (await provider.getBlockNumber()) - (config.bscConfirmations ?? 2));
+      throwIfFourMemeReplayStopped();
       if (nextBlock <= finalConfirmedHead) return false;
       const completed = await withState(async () => {
         const current = state.officialSources.fourMeme.featureActivations[activationKey];
@@ -8411,6 +8445,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       });
       return completed;
     } catch (error) {
+      if (stopped || error?.code === "BSC_FOUR_REPLAY_STOPPED") return false;
       await withState(async () => {
         const current = state.officialSources?.fourMeme?.featureActivations?.[activationKey];
         if (current) {
@@ -8434,10 +8469,12 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
   }
 
   async function replayPendingFourMemeActivations(keys = null) {
+    if (stopped) return;
     const requested = Array.isArray(keys)
       ? [...new Set(keys)]
       : await withState(() => Object.keys(state.officialSources?.fourMeme?.featureActivations || {}));
     for (const key of requested) {
+      if (stopped) break;
       try {
         // A newly observed template can deliberately disable historical
         // replay (allowReplay=false).  Treat it as a live-only activation;
@@ -8446,12 +8483,14 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         // microtasks forever, starving timers, WebSocket heads, and the BSC
         // realtime cursor.
         for (let attempt = 0; attempt < 2; attempt += 1) {
+          if (stopped) break;
           const eligible = await withState(() => {
             const activation = state.officialSources?.fourMeme?.featureActivations?.[key];
             return shouldReplayFourMemeActivation(activation);
           });
           if (!eligible) break;
           await replayFourMemeActivation(key);
+          if (stopped) break;
           // One bounded follow-up closes the race where realtime appends a
           // matching creation candidate while an existing replay flight is
           // finalizing. Long archive replays retain their durable cursor and
@@ -8469,6 +8508,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
           if (!hotIndexChanged) break;
         }
       } catch (error) {
+        if (stopped || error?.code === "BSC_FOUR_REPLAY_STOPPED") break;
         logger.error(`[bsc][fourmeme] activation replay ${key}: ${errorSummary(error)}`);
       }
     }

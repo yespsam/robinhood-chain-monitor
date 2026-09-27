@@ -51,6 +51,8 @@
 
 ## 运维
 
+2026-09-23 增加发送前降噪：纯推广、纯媒体、纯计数与导航变化静默留档，实质公告和链上证据仍按原门禁播报。规则、留档行为和历史回放见 [Genius 播报降噪](genius-noise-filter.md)。
+
 ```dotenv
 GENIUS_MONITOR_ENABLED=true
 GENIUS_POLL_INTERVAL_MS=10000

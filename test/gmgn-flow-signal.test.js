@@ -32,7 +32,7 @@ test('trade parser binds chain, side and real time; deduplicates matching feed I
  assert.throws(()=>parseGmgnFlowTrades({code:429},'bsc',now),/UPSTREAM/);
 });
 test('candles use USD volume not token amount and require complete nonzero baseline',()=>{
- const candles=parseGmgnFlowCandles({data:{list:input().candles.map(c=>({time:c.time,volume:String(c.volumeUsd),amount:'900000000'}))}});
+ const candles=parseGmgnFlowCandles({data:{list:input().candles.map(c=>({time:c.time,volume:String(c.volumeUsd),amount:String(c.volumeUsd*10),low:.09,high:.11}))}});
  const v=gmgnFlowVolume(candles,now);assert.equal(v.volumeUsd,50000);assert.equal(v.baselineVolumeUsd,5000);assert.equal(v.volumeMultiple,10);
  assert.equal(gmgnFlowVolume(candles.slice(1),now),null);
  assert.equal(gmgnFlowVolume(candles.map((c,i)=>({...c,volumeUsd:i<15?0:c.volumeUsd})),now),null);

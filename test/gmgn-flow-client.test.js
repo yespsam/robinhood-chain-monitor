@@ -9,6 +9,33 @@ const EVM = "0x1234567890abcdef1234567890abcdef12345678";
 const SOL = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const START = Date.parse("2026-09-19T18:00:00.000Z");
 
+test('trade feeds use research priority and bind coverage to dispatch after queueing, never response time',async t=>{
+  const admissions=[];let fx;
+  fx=await fixture(t,{dependencies:{accountGate:async(work,_signal,options)=>{
+    admissions.push(options.priority);fx.advance(12000);return work();
+  }}});
+  let dispatched;
+  await fx.client.trades('bsc','smartmoney',{onRequestStart:at=>{dispatched=at;}});
+  assert.equal(dispatched,fx.calls.find(c=>c.args[0]==='track').at);
+  assert.ok(dispatched>=START+12000);assert.equal(admissions[0],1);
+  await fx.client.stats('bsc',EVM,'7d');assert.equal(admissions[1],0);
+  assert.throws(()=>fx.client.trades('bsc','kol',{onRequestStart:true}),{code:'GMGN_INVALID_ARGUMENT'});
+});
+
+test('platform call route is read-only and limited to validated chains and type 13', async t=>{
+  const {client,calls}=await fixture(t);await client.platformCalls('sol');
+  assert.deepEqual(calls[1].args,['market','signal','--chain','sol','--signal-type','13','--raw']);
+  for(const chain of ['base','eth','sol;echo bad'])assert.throws(()=>client.platformCalls(chain),{code:'GMGN_INVALID_ARGUMENT'});
+});
+
+test('profit leaderboard route is public, bounded and orders traders by profit without signing', async t => {
+  const { client, calls } = await fixture(t);
+  await client.topTraders('bsc', EVM, 50);
+  assert.deepEqual(calls[1].args, ['token', 'traders', '--chain', 'bsc', '--address', EVM, '--order-by', 'profit', '--direction', 'desc', '--limit', '50', '--raw']);
+  for (const limit of [0, 101, 1.5]) assert.throws(() => client.topTraders('bsc', EVM, limit), { code: 'GMGN_INVALID_ARGUMENT' });
+  assert.throws(() => client.topTraders('sol', EVM), { code: 'GMGN_INVALID_ARGUMENT' });
+});
+
 async function fixture(t, options = {}) {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "gmgn-flow-client-"));
   let current = START;
@@ -49,7 +76,7 @@ test("read-only client builds bounded CLI argv for every route and checks config
     assert.equal(call.opts.shell, false);
     assert.equal(call.opts.maxBuffer, 4 * 1024 * 1024);
     assert.ok(call.opts.timeout <= 15_000);
-    if (index) assert.ok(call.at - calls[index - 1].at >= 3000);
+    if (index) assert.ok(call.at - calls[index - 1].at >= 1200);
   }
 });
 
@@ -78,6 +105,14 @@ test("wallet stats batch is strictly validated, deduplicated and sent as one CLI
   assert.deepEqual(fx.calls[2].args, ["portfolio", "stats", "--chain", "sol", "--wallet", SOL, "--period", "30d", "--raw"]);
 });
 
+test('wallet learning activity is public read-only with bounded pagination arguments', async t => {
+  const { client, calls } = await fixture(t);
+  await client.activity('bsc', EVM, { cursor: 'cursor-value', limit: 100 });
+  assert.deepEqual(calls[1].args, ['portfolio', 'activity', '--chain', 'bsc', '--wallet', EVM, '--limit', '100', '--cursor', 'cursor-value', '--raw']);
+  for (const options of [{ limit: 101 }, { limit: 0 }, { cursor: '\n' }, { cursor: '' }, { cursor: 'x'.repeat(2049) }]) assert.throws(() => client.activity('bsc', EVM, options), { code: 'GMGN_INVALID_ARGUMENT' });
+  assert.equal(calls.length, 2);
+});
+
 test("concurrent routes share one serial process queue and one configuration check", async (t) => {
   let running = 0;
   let maximum = 0;
@@ -99,7 +134,7 @@ test("separate client instances share the account scheduler and retain a three-s
   const other = createGmgnFlowClient(fx.config, fx.dependencies);
   t.after(() => other.stop());
   await Promise.all([fx.client.trending("bsc"), other.trending("eth"), fx.client.trades("sol", "kol")]);
-  for (let i = 1; i < fx.calls.length; i++) assert.ok(fx.calls[i].at - fx.calls[i - 1].at >= 3000);
+  for (let i = 1; i < fx.calls.length; i++) assert.ok(fx.calls[i].at - fx.calls[i - 1].at >= 1200);
   assert.equal(fx.calls[0].opts.timeout, 15_000);
 });
 
@@ -137,6 +172,23 @@ test("successful exit containing a JSON API rate-limit error is not treated as e
     : JSON.stringify({ code: 429, error: "RATE_LIMIT_BANNED", reset_at: (START + 100_000) / 1000 }) }) });
   await assert.rejects(fx.client.trending("sol"), { code: "GMGN_RATE_LIMITED" });
   assert.ok(JSON.parse(await fs.readFile(path.join(fx.dataDir, "gmgn-flow-rate-limit.json"), "utf8")).rateLimitedUntil);
+});
+
+test('a later short 429 cannot overwrite a longer cooldown written by another client',async t=>{
+  let fx;
+  fx=await fixture(t,{execFileImpl:async(_file,args)=>{
+    if(args[0]==='config')return {stdout:'ok'};
+    await fs.writeFile(path.join(fx.dataDir,'gmgn-flow-rate-limit.json'),JSON.stringify({version:1,rateLimitedUntil:new Date(START+600000).toISOString()}));
+    throw {status:429,reset_at:(START+100000)/1000};
+  }});
+  await assert.rejects(fx.client.trending('bsc'),{code:'GMGN_RATE_LIMITED',retryAt:new Date(START+600000).toISOString()});
+  assert.equal(JSON.parse(await fs.readFile(path.join(fx.dataDir,'gmgn-flow-rate-limit.json'),'utf8')).rateLimitedUntil,new Date(START+600000).toISOString());
+});
+
+test('KOL discovery can preserve its smaller result limit through the shared client',async t=>{
+  const {client,calls}=await fixture(t);await client.trades('bsc','kol',{limit:100});
+  assert.equal(calls[1].args[calls[1].args.indexOf('--limit')+1],'100');
+  for(const limit of [0,201,1.5,NaN])assert.throws(()=>client.trades('bsc','kol',{limit}),{code:'GMGN_INVALID_ARGUMENT'});
 });
 
 test("legacy Fomo cooldown is read before request and again after the spacing wait", async (t) => {

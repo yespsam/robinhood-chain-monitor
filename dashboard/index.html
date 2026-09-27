@@ -3,212 +3,85 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0b0f0e" />
-    <title>yesp atm｜模拟盘</title>
+    <meta name="theme-color" content="#080b0a" />
+    <title>yesp atm｜决策大脑</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/brain-desk.css" />
+    <link rel="stylesheet" href="/brain-instrument.css" />
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <div class="brand-lockup">
-          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
-          <div>
-            <div class="brand-name">yesp atm</div>
-            <div class="brand-caption">本地交易终端</div>
-          </div>
-        </div>
-        <div class="topbar-controls">
-          <button class="chain-select" id="chainButton" type="button" aria-label="选择行情链">
-            <span class="chain-dot"></span><span id="chainLabel">Robinhood</span><span class="chevron">⌄</span>
-          </button>
-          <div class="data-status"><span class="status-pulse"></span><span id="streamLabel">GMGN 行情 · 加载中</span></div>
-          <div class="topbar-clock" id="clock">--:--:--</div>
-          <button class="icon-button" id="pauseButton" type="button" aria-label="暂停行情">Ⅱ</button>
-        </div>
+        <div class="brand-lockup"><div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div><div><div class="brand-name">yesp atm</div><div class="brand-caption">决策大脑 · 自动模拟交易</div></div></div>
+        <nav class="brain-nav" aria-label="工作台导航"><a href="#brainDesk">决策大脑</a><a href="#mainPositions">持仓</a><a href="#recentTrades">成交</a><a href="#researchArchive">研究档案</a></nav>
+        <div class="topbar-controls"><span class="chain-label" id="chainLabel">多链模拟</span><div class="data-status" id="streamStatus"><span class="status-dot"></span><span id="streamLabel">策略引擎同步中</span></div><time id="clock">--:--:--</time><a class="settings-link" href="#squareSettings">广场设置</a></div>
       </header>
-
-      <div class="safety-strip">
-        <span class="safety-lock">▣</span>
-        <span>仅模拟盘</span>
-        <span class="safety-copy" id="safetyCopy">Robinhood 重点 · GMGN 真实只读行情 · 不连接钱包 · 不签名 · 不广播</span>
-        <span class="safety-spacer"></span>
-        <span class="latency-label">RTT <strong id="latency">--</strong> ms</span>
-        <span class="source-label" id="sourceLabel">paper-100 状态同步中</span>
-      </div>
-
       <main class="focus-shell" aria-label="自动模拟交易工作台">
         <section class="focus-intro">
-          <div class="focus-title">
-            <span class="eyebrow">自动纸上交易</span>
-            <h1>只看持仓和买入逻辑</h1>
-            <p>实时读取 GMGN 只读行情，所有动作只写入本机模拟账本。</p>
-          </div>
-          <div class="focus-controls">
-            <label class="auto-switch focus-toggle"><input id="focusAutoToggle" type="checkbox" /><span id="focusAutoLabel">自动运行</span></label>
-            <button class="focus-reset" id="focusResetPaper" type="button">重置账户</button>
-          </div>
+          <div class="focus-title"><span class="eyebrow">真实证据 · 实际动作 · 统一模拟账本</span><h1>看见判断如何变成行动</h1><p>正在关注什么，证据是否成立，最终做了什么。</p></div>
+          <div class="focus-controls"><label class="auto-switch"><input id="focusAutoToggle" type="checkbox" disabled /><span id="focusAutoLabel">等待引擎</span></label><small id="controlNote">后台持续监控</small></div>
         </section>
-
-        <section class="focus-grid">
-          <div class="focus-column">
-            <section class="focus-panel balance-panel" aria-label="纸上账户">
-              <div class="focus-panel-heading"><div><span class="eyebrow">纸上账户</span><h2>资金状态</h2></div><span class="focus-sync" id="focusSyncState">本地账本</span></div>
-              <div class="focus-balance-grid">
-                <div><span>可用余额</span><strong id="focusCash">$100.00</strong></div>
-                <div><span>已实现盈亏</span><strong id="focusPnl">+$0.00</strong></div>
-              </div>
-              <div class="focus-account-note">仅模拟盘 · 不连接钱包 · 不签名 · 不广播</div>
-            </section>
-
-            <section class="focus-panel positions-panel" aria-label="当前持仓">
-              <div class="focus-panel-heading"><div><span class="eyebrow">当前持仓</span><h2>你现在持有什么</h2></div><strong class="focus-count" id="focusPositionCount">0 个仓位</strong></div>
-              <div class="focus-positions-list" id="focusPositionsList"><div class="focus-empty">暂无持仓<span>自动买入后会显示在这里</span></div></div>
-            </section>
-          </div>
-
-          <div class="focus-column">
-            <section class="focus-panel signal-panel" aria-label="当前监控信号">
-              <div class="focus-panel-heading"><div><span class="eyebrow">最新信号</span><h2>当前监控对象</h2></div><span class="signal-state" id="focusFreshness">等待行情</span></div>
-              <div class="focus-signal-main">
-                <div class="focus-token-avatar" id="focusTokenAvatar">?</div>
-                <div class="focus-token-copy"><strong id="focusTokenName">等待 Robinhood 行情</strong><span id="focusTokenMeta">Robinhood · —</span></div>
-                <div class="focus-signal-price"><strong id="focusTokenPrice">—</strong><span id="focusTokenChange">—</span></div>
-              </div>
-              <div class="focus-signal-metrics">
-                <div><span>风险</span><strong id="focusRisk">等待</strong></div>
-                <div><span>流动性</span><strong id="focusLiquidity">—</strong></div>
-                <div><span>聪明钱</span><strong id="focusSmartMoney">—</strong></div>
-                <div><span>Rug 比例</span><strong id="focusRug">—</strong></div>
-              </div>
-              <p class="focus-signal-note" id="focusSignalNote">等待最新 Robinhood / GMGN 真实快照。</p>
-            </section>
-
-            <section class="focus-panel logic-panel" aria-label="自动买入逻辑">
-              <div class="focus-panel-heading"><div><span class="eyebrow">自动策略</span><h2>买入逻辑</h2></div><span class="focus-policy-tag">全部满足</span></div>
-              <ol class="logic-list">
-                <li><strong>只用新鲜行情</strong><span>GMGN 1 分钟排行成功刷新，旧快照不触发。</span></li>
-                <li><strong>通过风险门</strong><span>风险必须为“强”，且不判定为洗量。</span></li>
-                <li><strong>有真实资金流</strong><span>流动性至少 $50K，同时至少 3 个聪明钱地址。</span></li>
-                <li><strong>控制仓位</strong><span>每次 $10，最多同时持有 2 个自动仓位。</span></li>
-              </ol>
-              <div class="logic-exits"><span>风险控制</span><strong>硬止损 -20% · 盈利 +50% 后追踪回撤 30% · 最长 2 小时</strong></div>
-              <div class="logic-exits"><span>盈利处理</span><strong>2倍 / 5倍 / 10倍分段回收 · 余仓继续跟随</strong></div>
-              <p class="focus-strategy-note">不承诺 1000 倍；极端上涨时只保留一部分仓位继续追踪，回撤触发才退出。</p>
-              <div class="focus-last-action"><span>最近动作</span><strong id="focusLastAction">等待行情</strong><small id="focusLastReason">仅写入本机模拟账本</small></div>
-            </section>
-          </div>
+        <p class="engine-notice" id="engineNotice" role="status">正在读取统一模拟账本…</p>
+        <section id="brainDesk" class="brain-desk" aria-label="决策大脑实时工作视图"></section>
+        <section class="account-section" aria-label="纸上账户">
+          <div class="section-heading"><h2>资金状态</h2><span id="focusSyncState">等待服务端账本</span></div>
+          <div class="account-metrics"><div><span>预计清算权益</span><strong id="focusEquity">—</strong></div><div><span>可用余额</span><strong id="focusCash">—</strong></div><div><span>已实现净盈亏</span><strong id="focusPnl">—</strong></div><div><span>胜负记录</span><strong id="focusWinLoss">—</strong></div><div><span>累计模拟成本</span><strong id="focusCosts">—</strong></div></div>
+          <div class="account-notes"><span id="accountNote">等待真实行情及统一模拟账本</span><span id="costModel">费用及滑点按模型估算</span></div>
         </section>
-
-        <section class="focus-panel research-team-panel" aria-label="AI 投研团队">
-          <div class="focus-panel-heading">
-            <div><span class="eyebrow">AI 投研团队</span><h2>六部门研究总控</h2></div>
-            <span class="focus-sync" id="researchTeamStatus">等待真实数据</span>
-          </div>
-          <div class="research-team-summary">
-            <div><span>综合结论</span><strong id="researchTeamConclusion">观察</strong></div>
-            <div><span>机会分</span><strong id="researchTeamScore">—</strong></div>
-            <div><span>置信度</span><strong id="researchTeamConfidence">—</strong></div>
-            <div><span>数据时间</span><strong id="researchTeamUpdated">—</strong></div>
-          </div>
-          <div class="research-departments" id="researchTeamDepartments">
-            <div class="research-empty">等待 Robinhood 链路、叙事、筹码、安全、行情和总控部门汇总…</div>
-          </div>
-          <p class="research-team-brief" id="researchTeamBrief">只读取 GMGN 真实快照；没有来源的叙事不会被猜测，未知安全不会被当成安全。</p>
-          <p class="research-team-note">投研团队只生成可解释的纸上研究结论，不连接钱包、不签名、不广播，也不会单独触发自动交易。</p>
+        <section id="mainPositions" class="positions-section" aria-label="当前持仓"><div class="section-heading"><h2>当前持仓</h2><span id="focusPositionCount">等待同步</span></div><div id="focusPositionsList" aria-live="polite"><div class="focus-empty">账本同步中<span>余额和持仓以服务端记录为准。</span></div></div></section>
+        <details id="researchArchive" class="brain-archive"><summary>研究档案 <span>逐币判断、退出对照、策略与学习记录</span></summary>
+        <p class="section-note" id="cadenceNote">等待检查频率和数据时间…</p>
+        <p class="section-note" id="strategyObjective">等待当前策略目标…</p>
+        <details class="research-panel" id="exitComparison"><summary class="section-heading"><h2>量价退出对照 <span class="summary-caption">不按固定盈亏百分比卖出</span></h2><span id="exitComparisonStatus">等待实验启动</span></summary><div class="research-content" id="exitComparisonContent"></div></details>
+        <section id="caDesk" class="ca-desk" aria-labelledby="caDeskTitle">
+          <div class="section-heading"><h2 id="caDeskTitle">逐币判断台</h2><span>逐个 CA · 可核实的决策摘要</span></div>
+          <p class="section-note">看见依据、等待条件与判断变化。仅展示主账户本轮已扫描候选和持仓，不代表全链覆盖；与独立对照账户分开。</p>
+          <div class="ca-toolbar"><label class="ca-search">查找代币 / 完整 CA<input data-ca-search type="search" placeholder="输入币名或合约地址" autocomplete="off" spellcheck="false" /></label><label>链<select data-ca-chain><option value="">全部链</option><option value="robinhood">Robinhood</option><option value="sol">Solana</option><option value="bsc">币安链</option><option value="base">Base</option><option value="eth">以太坊</option></select></label><label>状态<select data-ca-filter><option value="">全部状态</option><option value="holding">持仓管理</option><option value="ready">满足开仓条件</option><option value="confirm">等报价确认</option><option value="watch">观察条件</option><option value="data">数据待补 / 过期</option><option value="blocked">暂不入场</option><option value="paused">新增仓位暂停</option></select></label></div>
+          <p class="ca-summary" data-ca-summary>等待首轮逐币评估…</p>
+          <div class="ca-workspace"><div class="ca-candidates" data-ca-list role="group" aria-label="选择要查看的 CA"></div><article class="ca-inspector" id="caInspector" data-ca-detail aria-label="所选 CA 的决策摘要" tabindex="0"></article></div>
+          <p class="ca-footnote">时间为北京时间。每 1 秒同步本地扫描结果，不新增逐币上游请求；行情实际更新时间单独显示。列表优先显示持仓、条件通过和热点研究，不是盈利排名；点击不会下单。</p>
         </section>
+        <section class="strategies-section" aria-label="当前入场策略"><div class="section-heading"><h2>买入逻辑 · 当前策略</h2><span>买盘证据 · 确认买点 · 动态退出</span></div><div class="strategy-lanes" id="strategyLanes"></div><p class="section-note">退出规则按入场时版本记录，等待策略引擎同步。</p><div class="coverage-list" id="coverageList" aria-label="真实数据状态"></div></section>
+        <p class="section-note" id="narrativeRecallNote" role="status">七天叙事回溯初始化中…</p>
+        <details id="newsWire"><summary>双路消息与新闻快线</summary><div id="newsWireContent"></div></details>
+        <p class="section-note" id="narrativeLearningNote" role="status">起量叙事自动学习初始化中…</p>
+        <div id="tradeCountReview" role="status"><p class="section-note">百笔成交复盘等待初始化。</p></div>
+        <p class="section-note" id="tradeReviewNote" role="status">交易统计初始化中…</p>
+        <p class="section-note" id="traderReasoningNote" role="status">交易决策与成本归因初始化中…</p>
+        </details>
+        <section id="recentTrades" class="trades-section" aria-label="模拟交易记录"><div class="section-heading"><h2>最近成交</h2><span id="tradeCount">等待同步</span></div><div class="trades-scroll"><table><thead><tr><th>代币 / 时间</th><th>方向 / 策略</th><th>总支出或净回款 / 成本</th><th>已实现净盈亏</th><th>成交原因</th></tr></thead><tbody id="tradeRows"><tr><td colspan="5" class="trade-empty">等待成交记录</td></tr></tbody></table></div><p class="section-note">显示最近 10 笔模拟成交。买入显示含成本总支出，卖出显示扣成本净回款；成本为模型估算，成交记录保存在服务端。</p></section>
+        <details class="research-panel" id="researchPanel"><summary class="section-heading"><h2>AI 投研团队 <span class="summary-caption">查看六部门依据</span></h2><span id="researchTeamStatus">展开查看</span></summary><div class="research-content"><div class="research-team-summary"><div><span>综合结论</span><strong id="researchTeamConclusion">观察</strong></div><div><span>机会分</span><strong id="researchTeamScore">—</strong></div><div><span>置信度</span><strong id="researchTeamConfidence">—</strong></div><div><span>数据时间</span><strong id="researchTeamUpdated">—</strong></div></div><div class="research-departments" id="researchTeamDepartments"></div><p class="research-team-brief" id="researchTeamBrief">投研依据随真实证据更新。</p></div></details>
+        <details class="research-panel" id="walletLearning"><summary class="section-heading"><h2>聪明钱习惯学习 <span class="summary-caption">真实记录 · 独立蒸馏对照</span></h2><span id="walletLearningStatus">等待采集</span></summary><div class="research-content" id="walletLearningContent"><p class="section-note">等待真实钱包交易记录。</p></div></details>
+        <details class="research-panel square-settings" id="squareSettings">
+          <summary class="section-heading"><h2>币安广场 <span class="summary-caption">本机密钥设置</span></h2><span id="squareKeyStatus">展开配置</span></summary>
+          <div class="square-content">
+            <p class="square-intro">从备忘录粘贴广场 API 密钥，仅保存到本机。不要填写交易所密钥、私钥或助记词。</p>
+            <form id="squareKeyForm" autocomplete="off">
+              <label for="squareApiKey">广场 API 密钥</label>
+              <div class="square-input-row"><input id="squareApiKey" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="4096" required placeholder="粘贴后保存，不会回显" aria-describedby="squareStorageNote squareKeyFeedback" /><button id="squareKeySave" type="submit" disabled>仅保存到本机</button></div>
+              <label class="square-replace" id="squareReplaceRow" hidden><input id="squareReplace" type="checkbox" />替换本机已保存的广场密钥</label>
+            </form>
+            <p id="squareKeyFeedback" class="square-feedback" role="status" aria-live="polite">正在读取配置状态…</p>
+            <a id="squarePublishedTest" class="settings-link" target="_blank" rel="noopener noreferrer" hidden>查看已发布的测试帖 ↗</a>
+            <p id="squareStorageNote" class="section-note">本机文件保存 · 仅当前系统用户可读写（600）· 不写入浏览器存储或项目仓库。密钥文件未加密。</p>
+            <p class="section-note">自动发布尚未接入。保存密钥不会发帖或开启实盘交易；单次发帖测试结果见上方。</p>
+            <section class="square-preview" aria-label="广场播报预览">
+              <div class="square-preview-heading"><h3>播报预览</h3><button id="squarePreviewRefresh" type="button">刷新预览</button></div>
+              <p id="squarePreviewStatus" class="section-note" role="status">展开后读取真实模拟账本，生成本地草稿。</p>
+              <label class="square-draft-picker" id="squareDraftPicker" hidden>选择模拟买入记录 <select id="squareDraftSelect" aria-label="选择模拟买入记录"></select></label>
+              <pre id="squarePreviewText" class="square-preview-text" hidden></pre>
+              <p class="section-note">预览不会向币安发送内容。确认文案后，再单独测试公开发布。</p>
+            </section>
+          </div>
+        </details>
+        <p class="legacy-archive" id="legacyArchive" hidden></p>
       </main>
-
-      <div class="legacy-runtime" aria-hidden="true">
-      <main class="terminal-grid">
-        <aside class="watch-pane pane">
-          <div class="pane-heading">
-            <div><span class="eyebrow">市场</span><h2>自选列表</h2></div>
-            <button class="mini-button active" id="filterButton" type="button">GMGN 1分钟</button>
-          </div>
-          <label class="search-field" for="tokenSearch">
-            <span>⌕</span><input id="tokenSearch" type="search" placeholder="搜索代币或合约地址" autocomplete="off" />
-            <kbd>/</kbd>
-          </label>
-          <div class="watchlist" id="watchlist" aria-live="polite"></div>
-          <div class="watch-footer"><span class="live-dot"></span><span id="watchCount">0 个资产</span><span>·</span><span>GMGN 快照 · 60秒更新</span></div>
-        </aside>
-
-        <section class="market-pane pane">
-          <div class="market-header">
-            <div class="selected-token">
-              <div class="token-avatar" id="tokenAvatar">?</div>
-              <div>
-                <div class="token-title-row"><h1 id="tokenName">等待 GMGN 行情</h1><span class="chain-tag" id="tokenChain">BSC</span><button class="copy-button" id="copyButton" type="button" aria-label="复制合约地址">▣</button></div>
-                <div class="token-meta"><span id="tokenAddress">—</span><span class="verified-badge">✓ 只读数据</span><span id="tokenAge">—</span></div>
-              </div>
-            </div>
-            <div class="market-price-block"><div class="market-price" id="tokenPrice">—</div><div class="market-change" id="tokenChange">—</div></div>
-          </div>
-
-          <div class="metric-strip">
-            <div class="metric"><span>市值</span><strong id="metricMcap">—</strong></div>
-            <div class="metric"><span>流动性</span><strong id="metricLiquidity">—</strong></div>
-            <div class="metric"><span>24小时成交额</span><strong id="metricVolume">—</strong></div>
-            <div class="metric"><span>持有人</span><strong id="metricHolders">—</strong></div>
-            <div class="metric risk-metric"><span>风险门</span><strong id="metricRisk"><i class="risk-dot"></i> 等待中</strong></div>
-          </div>
-
-          <div class="chart-toolbar">
-            <div class="chart-tabs" role="tablist" aria-label="图表类型">
-              <button class="chart-tab active" type="button" data-tab="price">价格</button>
-              <button class="chart-tab" type="button" data-tab="trades">成交</button>
-              <button class="chart-tab" type="button" data-tab="holders">持有人</button>
-            </div>
-            <div class="timeframes"><button type="button" class="active" data-resolution="1m">1分</button><button type="button" data-resolution="5m">5分</button><button type="button" data-resolution="15m">15分</button><button type="button" data-resolution="1h">1小时</button><button type="button" data-resolution="4h">4小时</button></div>
-          </div>
-          <div class="chart-wrap">
-            <div class="chart-grid-lines"><span></span><span></span><span></span><span></span></div>
-              <svg class="price-chart" viewBox="0 0 900 330" preserveAspectRatio="none" aria-label="GMGN 真实 K 线走势">
-              <defs><linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#b9ff66" stop-opacity=".2" /><stop offset="100%" stop-color="#b9ff66" stop-opacity="0" /></linearGradient></defs>
-              <path class="chart-area" id="chartArea" d="" />
-              <polyline class="chart-line" id="chartLine" points="" />
-              <circle class="chart-cursor" id="chartCursor" cx="0" cy="0" r="4" />
-            </svg>
-            <div class="chart-y-labels"><span id="chartTop">$0.0241</span><span id="chartMid">$0.0219</span><span id="chartBottom">$0.0197</span></div>
-            <div class="chart-x-labels"><span>09:00</span><span>09:15</span><span>09:30</span><span>09:45</span><span>当前</span></div>
-            <div class="chart-crosshair" id="crosshair"><span></span></div>
-          </div>
-          <div class="chart-legend"><span><i class="legend-line"></i>价格</span><span><i class="legend-green"></i>GMGN 开高低收/成交量</span><span class="chart-note" id="chartNote">等待 GMGN 真实 K 线</span></div>
-
-          <div class="activity-heading"><div><span class="eyebrow">GMGN 快照</span><h2>市场排行</h2></div><span class="activity-live"><i></i> 只读</span></div>
-          <div class="trade-table-head"><span>时间</span><span>涨跌</span><span>价格</span><span>成交额</span><span>聪明钱 / 持有人</span></div>
-          <div class="trade-stream" id="tradeStream" aria-live="polite"></div>
-        </section>
-
-        <aside class="order-pane pane">
-          <div class="order-heading"><div><span class="eyebrow">纸上账户</span><h2>模拟交易</h2></div><button class="reset-link" id="resetPaper" type="button">重置</button></div>
-          <div class="paper-balance"><div><span>可用余额</span><strong id="paperCash">$100.00</strong></div><div class="pnl-block"><span>已实现盈亏</span><strong id="paperPnl">$0.00</strong></div></div>
-          <section class="auto-panel" aria-label="自动模拟交易">
-            <div class="auto-heading"><div><span class="eyebrow">自动纸上</span><h3>自动模拟交易</h3></div><label class="auto-switch"><input id="autoPaperToggle" type="checkbox" /><span id="autoPaperLabel">自动运行</span></label></div>
-            <div class="auto-policy">只选强信号 · 单笔 10 美元 · 最多 2 个仓位</div>
-            <div class="auto-status" id="autoPaperStatus">只使用最新 GMGN 只读行情；永不签名或广播。</div>
-          </section>
-          <div class="order-tabs"><button class="order-tab buy active" type="button" data-side="buy">买入</button><button class="order-tab sell" type="button" data-side="sell">卖出</button></div>
-          <div class="order-form">
-            <div class="form-row token-row"><span class="form-label">代币</span><span class="order-token"><span class="tiny-avatar" id="orderAvatar">?</span><strong id="orderToken">—</strong><span class="muted">BSC</span></span></div>
-            <div class="form-label amount-label"><span>金额</span><span class="muted">USD</span></div>
-            <div class="amount-input-wrap"><span>$</span><input id="amountInput" inputmode="decimal" value="10.00" aria-label="模拟交易金额" /><button id="maxButton" type="button">最大</button></div>
-            <div class="preset-row"><button type="button" data-amount="10">$10</button><button type="button" data-amount="25">$25</button><button type="button" data-amount="50">$50</button><button type="button" data-amount="100">$100</button></div>
-            <div class="form-row form-spread"><span class="form-label">滑点</span><span class="slippage-control"><button type="button" class="slippage active" data-slippage="1">1%</button><button type="button" class="slippage" data-slippage="3">3%</button><button type="button" class="slippage" data-slippage="5">5%</button></span></div>
-            <div class="quote-box"><div><span>预计获得</span><strong id="estimatedReceive">—</strong></div><div><span>价格影响</span><strong id="priceImpact">—</strong></div><div><span>网络费用</span><strong>$0.20 <em>纸上</em></strong></div></div>
-            <button class="simulate-button" id="simulateButton" type="button"><span id="simulateLabel">模拟买入</span><span>↗</span></button>
-            <p class="order-disclaimer">仅写入本机浏览器模拟账本，不改变 CLI paper-100 状态；报价来自 GMGN 只读数据，不会调用钱包、签名器或广播交易。</p>
-          </div>
-          <div class="positions-heading"><span class="eyebrow">持仓</span><span id="positionCount">0 个持仓</span></div>
-          <div class="positions-list" id="positionsList"><div class="empty-position">暂无持仓<br /><span>模拟成交后显示在这里</span></div></div>
-        </aside>
-      </main>
-      </div>
-
-      <footer class="bottom-status"><span><i class="live-dot"></i> 本地引擎在线</span><span>paper-100 状态 <strong id="paperStateLabel">已同步</strong></span><span>浏览器纸上账本 <strong>本地</strong></span><span class="footer-spacer"></span><span>yesp atm · 模拟盘 · v0.2</span></footer>
+      <footer class="bottom-status"><span>统一模拟账本 <strong id="paperStateLabel">待同步</strong></span><span>仅模拟盘 · 不连接钱包 · 不签名 · 不广播</span><span>yesp atm</span></footer>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script type="module" src="/app.js"></script>
+    <script type="module" src="/paper-diagnostic.js"></script>
+    <script type="module" src="/square-settings.js"></script>
   </body>
 </html>

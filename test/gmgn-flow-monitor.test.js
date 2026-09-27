@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createGmgnFlowMonitor, validateGmgnFlowState } from "../src/gmgn-flow-monitor.js";
+import { createGmgnFlowMonitor, validateGmgnFlowState,selectGmgnFlowChain } from "../src/gmgn-flow-monitor.js";
 import { GMGN_FLOW_CHAINS, GMGN_HOT_ONLY_CHAINS, isGmgnFlowEvent } from "../src/gmgn-flow-signal.js";
 import { runHealthCheck } from "../deploy/health-check.mjs";
 
@@ -41,6 +41,7 @@ async function fixture(t, options = {}) {
     candles: async () => ({ data: { list: Array.from({ length: 20 }, (_, i) => ({
       time: Math.floor(time / MINUTE) * MINUTE - (20 - i) * MINUTE,
       volume: i < 15 ? 1000 : options.surge === false ? 1000 : 10000,
+      amount: (i < 15 ? 1000 : options.surge === false ? 1000 : 10000) * 10, low: .09, high: .11,
     })) } }),
     stats: async (_chain, wallets) => ({ data: wallets.map(w => rawProfile(w, time, Number.parseInt(w.slice(2), 16) <= (options.profitableCount ?? 5))) }),
     info: async () => ({ data: { chain: "bsc", address: CA, symbol: "TEST", name: "Test project",
@@ -51,7 +52,7 @@ async function fixture(t, options = {}) {
   for (const [name, fn] of Object.entries(defaults)) client[name] = async (...args) => {
     calls.push({ name, args, at: time }); return (options.client?.[name] || fn)(...args);
   };
-  const config = { dataDir, gmgnFlowMonitorEnabled: true, gmgnFlowPollIntervalMs: 5000, ...options.config };
+  const config = { dataDir, gmgnFlowMonitorEnabled: true, gmgnFlowPollIntervalMs: 5000, gmgnFlowAdaptiveSchedulingEnabled:false,...options.config };
   const create = (overrides = {}) => {
     const monitor = createGmgnFlowMonitor(config, { client, autoStart: false, now: () => time, logger: { error() {} },
       narrativeEventsImpl: async () => [], sendAlertsImpl: async (_config, event) => {
@@ -78,10 +79,28 @@ test("GMGN disabled monitor neither loads files nor invokes its client", async (
   await assert.rejects(fs.stat(f.file), { code: "ENOENT" });
 });
 
+test('adaptive scheduling revisits dense feeds before they roll off without starving quiet chains',()=>{
+ const state={nextChainIndex:0,chains:Object.fromEntries(Object.keys(GMGN_FLOW_CHAINS).map(c=>[c,{lastFeedSuccessAt:iso(START-30000),nextAttemptAt:null}]))};
+ state.chains.robinhood.feedCoverage={smartmoney:{valid:true,count:100,oldestAt:START-70000,endAt:START-30000}};
+ assert.equal(selectGmgnFlowChain(state,START),'robinhood');
+ state.chains.eth.lastFeedSuccessAt=iso(START-121000);assert.equal(selectGmgnFlowChain(state,START),'eth');
+ state.chains.eth.nextAttemptAt=iso(START+60000);state.chains.robinhood.nextAttemptAt=iso(START+60000);
+ assert.equal(selectGmgnFlowChain(state,START),'sol');
+});
+
+test('failed chains cannot starve unattempted chains by keeping an older last success', () => {
+ const state={nextChainIndex:0,chains:Object.fromEntries(Object.keys(GMGN_FLOW_CHAINS).map(c=>[c,{lastFeedSuccessAt:iso(START-7_200_000),checkedAt:iso(START-30_000),nextAttemptAt:null}]))};
+ state.chains.sol.lastFeedSuccessAt=iso(START-7_000_000);state.chains.sol.checkedAt=iso(START-7_000_000);
+ state.chains.bsc.lastFeedSuccessAt=iso(START-7_100_000);state.chains.bsc.checkedAt=iso(START-7_100_000);
+ assert.equal(selectGmgnFlowChain(state,START),'bsc');
+ state.chains.bsc.checkedAt=iso(START);
+ assert.equal(selectGmgnFlowChain(state,START),'sol');
+});
+
 test("GMGN polls exactly one full chain per cycle and keeps hot-only chains discovery-only", async (t) => {
   const f = await fixture(t, { buyers: 0 }); const monitor = f.create();
   await f.step(monitor, 5);
-  assert.deepEqual(f.calls.filter(c => c.name === "trades").map(c => c.args),
+  assert.deepEqual(f.calls.filter(c => c.name === "trades").map(c => c.args.slice(0,2)),
     Object.keys(GMGN_FLOW_CHAINS).flatMap(chain => [[chain, "smartmoney"], [chain, "kol"]]));
   assert.deepEqual(f.calls.find(c => c.name === "hotSearches").args[0], GMGN_HOT_ONLY_CHAINS);
   assert.equal(f.calls.some(c => ["stats", "candles", "info"].includes(c.name)), false);
@@ -109,6 +128,34 @@ test("GMGN volume plus verified high-profit and FOMO entrants produces one durab
   assert.deepEqual(f.calls.filter(c => c.name === "stats").map(c => c.args[2]), ["7d", "30d"]);
 });
 
+test('GMGN enriches paper candidates without requiring FOMO or a completed volume alert',async t=>{
+  const f=await fixture(t,{fomoCount:0,buyers:4,surge:false});const monitor=f.create();await f.step(monitor,2);
+  assert.deepEqual(f.calls.filter(c=>c.name==='stats').map(c=>c.args[2]),['7d','30d']);
+  assert.equal(Object.keys(monitor.state().profiles).length,4);assert.equal(f.sent.length,0);
+  assert.equal(f.calls.some(c=>c.name==='candles'),false);
+});
+
+test('unqualified profiles never spend the chart or metadata budget needed by dense feeds',async t=>{
+  const f=await fixture(t,{profitableCount:0});const monitor=f.create();await f.step(monitor,2);
+  assert.equal(f.calls.filter(c=>c.name==='stats').length,2);
+  assert.equal(f.calls.some(c=>['trending','candles','info'].includes(c.name)),false);
+  assert.equal(f.sent.length,0);
+});
+
+test('partial batch stats switches to single-wallet requests without falsely caching omitted wallets',async t=>{
+  let f;
+  f=await fixture(t,{fomoCount:0,buyers:4,client:{stats:async(_chain,wallets)=>({data:rawProfile(wallets[0],f.now())})}});
+  const monitor=f.create();await f.step(monitor,2);
+  let state=monitor.state();assert.equal(state.chains.bsc.profileBatchSize,1);
+  assert.ok(state.profiles[`bsc:${addr(1)}`]['7d']);assert.ok(state.profiles[`bsc:${addr(1)}`]['30d']);
+  assert.equal(state.profiles[`bsc:${addr(2)}`].lastProfileIssue,'upstream_wallet_not_returned');
+  assert.ok(Date.parse(state.profiles[`bsc:${addr(2)}`].nextCheckAt)<=f.now()+15000);
+  await f.step(monitor,5);state=monitor.state();
+  assert.ok(state.profiles[`bsc:${addr(2)}`]['7d']);assert.ok(state.profiles[`bsc:${addr(2)}`]['30d']);
+  assert.ok(f.calls.filter(c=>c.name==='stats').slice(2).every(c=>c.args[1].length===1));
+  assert.equal(validateGmgnFlowState(state),state);
+});
+
 test("GMGN missing any joint condition or net-entry count emits no alert", async (t) => {
   for (const options of [{ surge: false }, { profitableCount: 4 }, { fomoCount: 2 }, { buyers: 5 }, { sell: true }]) {
     const f = await fixture(t, options); const monitor = f.create(); await f.step(monitor, 2);
@@ -120,7 +167,9 @@ test("GMGN known wash-trading or honeypot flags suppress the candidate", async (
   for (const market of [{ is_wash_trading: true }, { is_honeypot: true }, { rug_ratio: 0.4 }]) {
     const f = await fixture(t, { market }); const monitor = f.create(); await f.step(monitor, 2);
     assert.equal(f.sent.length, 0);
-    assert.equal(f.calls.some(c => c.name === "stats"), false);
+    // Wallet performance is reusable evidence, not a buy endorsement. Unsafe
+    // token metadata still prevents chart/token research and any alert.
+    assert.equal(f.calls.some(c => ["candles","info"].includes(c.name)), false);
   }
 });
 
@@ -172,7 +221,21 @@ test("GMGN 429 stops all chain requests until durable global cooldown expires", 
   await monitor.stop(); const restarted = f.create(); await restarted.check();
   assert.equal(f.calls.filter(c => c.name === "trades").length, 1);
   limited = false; f.advance(5 * MINUTE); await restarted.check();
-  assert.deepEqual(f.calls.filter(c => c.name === "trades").slice(1).map(c => c.args), [["bsc", "smartmoney"], ["bsc", "kol"]]);
+  assert.deepEqual(f.calls.filter(c => c.name === "trades").slice(1).map(c => c.args.slice(0,2)), [["bsc", "smartmoney"], ["bsc", "kol"]]);
+});
+
+test('coverage uses actual feed dispatch boundaries after queue waits',async t=>{
+  let f;const dispatches=[];
+  f=await fixture(t,{client:{trades:async(_chain,_kind,{onRequestStart})=>{
+    f.advance(15000);dispatches.push(f.now());onRequestStart(f.now());
+    f.advance(1000);return {data:{list:[]}};
+  }}});
+  const monitor=f.create();await monitor.check();
+  const feed=monitor.state().chains.sol;
+  assert.equal(feed.feedCoverage.smartmoney.endAt,dispatches[0]);
+  assert.equal(feed.feedCoverage.kol.endAt,dispatches[1]);
+  assert.equal(feed.lastFeedSuccessAt,iso(dispatches[0]));
+  assert.equal(feed.feedCoverage.kol.observedAt,dispatches[1]+1000);
 });
 
 test("GMGN single-flight checks share work and stop interrupts the active client without more requests", async (t) => {
@@ -404,8 +467,12 @@ test("GMGN quarantine survives restart and a clean later feed until the six-minu
   assert.equal(restarted.state().chains.bsc.coverageGap, "ambiguous_trade_legs");
   assert.equal(Date.parse(restarted.state().chains.bsc.quarantinedTokens[CA]), deadline);
   f.advance(6 * MINUTE); await f.step(restarted, 5);
-  assert.equal(f.sent.length, 1);
+  assert.equal(f.sent.length, 0, 'isolation discarded observations; expiry alone is not a rebuilt window');
   assert.equal(restarted.state().chains.bsc.quarantinedTokens[CA], undefined);
+  assert.ok(Date.parse(restarted.state().chains.bsc.tokenRebuildUntil[CA])>f.now());
+  await f.step(restarted,25);
+  assert.equal(f.sent.length, 1);
+  assert.equal(restarted.state().chains.bsc.tokenRebuildUntil[CA], undefined);
   assert.equal(restarted.state().chains.bsc.status, "healthy");
 });
 

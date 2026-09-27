@@ -676,8 +676,27 @@ function contentHash(entries) {
   return `sha256:${createHash("sha256").update(JSON.stringify(payload)).digest("hex")}`;
 }
 
-const reviewedEntries = deepFreeze(seedEntries);
-const computedCatalogHash = contentHash(reviewedEntries);
+// Additive review: preserve the original 30-person catalog and all historical
+// snapshots. CZ has his own dated, pinned manifest, not a backdated review.
+export const CZ_CATALOG_EXTENSION = Object.freeze({version:'2026-09-25.cz.1',publishedAt:'2026-09-25T14:35:00.000Z',
+  hash:'sha256:b40c902664c6022423b48958b78eede6357b59c4da6c4446a5bfe346bef4d793'});
+const czEntry = {
+  id:'changpeng-zhao',subjectType:'person',handle:'cz_binance',expectedXUserId:'902926941413453824',
+  canonicalName:'Changpeng Zhao',category:'crypto_exchange',
+  affiliation:{name:'Binance',officialDomains:['binance.com']},
+  eligibility:{status:'reviewed_big_cap_leader',basis:'major_crypto_exchange_executive',evidenceUrl:'https://www.binance.com/zh-TC/about'},
+  background:{zh:'币安联合创始人及前首席执行官；推文可形成关注度催化，不代表其发行或认可同名代币。',
+    en:'Binance co-founder and former CEO; his posts may drive attention, but do not endorse similarly named tokens.'},
+  evidence:[
+    {kind:'x_profile',url:'https://x.com/cz_binance',authority:'subject_controlled',status:'primary_verified',checkedAt:'2026-09-25',supports:['exact_handle']},
+    {kind:'numeric_x_identity',url:'https://api.fxtwitter.com/cz_binance',authority:'public_profile_mirror',status:'corroborated',checkedAt:'2026-09-25',supports:['exact_handle','expected_x_user_id']},
+    {kind:'official_role',url:'https://www.binance.com/zh-TC/about',authority:'official_organization',status:'primary_verified',checkedAt:'2026-09-25',supports:['canonical_name','category','background']},
+  ],review:{status:'reviewed',method:'manual_primary_source_review',reviewedAt:CZ_CATALOG_EXTENSION.publishedAt},
+};
+const reviewedEntries = deepFreeze([...seedEntries,czEntry]);
+const computedCatalogHash = contentHash(seedEntries);
+const computedExtensionHash = `sha256:${createHash('sha256').update(JSON.stringify(stableValue({
+  version:CZ_CATALOG_EXTENSION.version,publishedAt:CZ_CATALOG_EXTENSION.publishedAt,entries:[czEntry]}))).digest('hex')}`;
 
 // This literal is intentionally patched after reviewing the seed. Runtime
 // admission checks it so an accidental catalog edit fails closed.
@@ -766,7 +785,7 @@ export function validateCapitalKolCatalog(entries = reviewedEntries) {
     add(typeof entry?.background?.zh === "string" && entry.background.zh.trim().length >= 12, `${prefix}:invalid_background_zh`);
     add(typeof entry?.background?.en === "string" && entry.background.en.trim().length >= 24, `${prefix}:invalid_background_en`);
     add(entry?.review?.status === "reviewed" && entry?.review?.method === "manual_primary_source_review"
-      && entry?.review?.reviewedAt === CAPITAL_KOL_CATALOG_PUBLISHED_AT, `${prefix}:not_manually_reviewed`);
+      && entry?.review?.reviewedAt === (entry.id==='changpeng-zhao'?CZ_CATALOG_EXTENSION.publishedAt:CAPITAL_KOL_CATALOG_PUBLISHED_AT), `${prefix}:not_manually_reviewed`);
     add(!forbiddenFollowerField(entry), `${prefix}:followers_must_not_be_catalog_identity_data`);
 
     const evidence = Array.isArray(entry?.evidence) ? entry.evidence : [];
@@ -794,7 +813,7 @@ export function validateCapitalKolCatalog(entries = reviewedEntries) {
     for (const item of evidence) {
       add(validEvidenceUrl(item?.url) && HTTPS_URL.test(item.url), `${prefix}:evidence_url_invalid`);
       add(validDate(item?.checkedAt), `${prefix}:evidence_checked_at_invalid`);
-      add(item?.checkedAt === CAPITAL_KOL_CATALOG_PUBLISHED_AT.slice(0, 10), `${prefix}:evidence_not_bound_to_catalog_version_date`);
+      add(item?.checkedAt === entry.review?.reviewedAt?.slice(0, 10), `${prefix}:evidence_not_bound_to_catalog_version_date`);
     }
   }
   return { valid: reasons.length === 0, reasons, hash: contentHash(entries) };
@@ -802,12 +821,13 @@ export function validateCapitalKolCatalog(entries = reviewedEntries) {
 
 export function verifyCapitalKolCatalogIntegrity() {
   const validation = validateCapitalKolCatalog(reviewedEntries);
-  const hashMatches = computedCatalogHash === EXPECTED_CAPITAL_KOL_CATALOG_HASH;
+  const hashMatches = computedCatalogHash === EXPECTED_CAPITAL_KOL_CATALOG_HASH && computedExtensionHash === CZ_CATALOG_EXTENSION.hash;
   return deepFreeze({
     valid: validation.valid && hashMatches,
     reasons: [...validation.reasons, ...(!hashMatches ? ["catalog_hash_mismatch"] : [])],
     expectedHash: EXPECTED_CAPITAL_KOL_CATALOG_HASH,
     actualHash: computedCatalogHash,
+    extensionActualHash:computedExtensionHash,
   });
 }
 
@@ -855,11 +875,13 @@ export function createCapitalKolEventSnapshot(entryOrHandle) {
     : findReviewedCapitalKolByHandle(entryOrHandle?.handle);
   if (!entry || entry.expectedXUserId !== String(entryOrHandle?.expectedXUserId || entry.expectedXUserId)) return null;
   if (!verifyCapitalKolCatalogIntegrity().valid) return null;
+  const manifest=entry.id==='changpeng-zhao'?CZ_CATALOG_EXTENSION:
+    {version:CAPITAL_KOL_CATALOG_VERSION,publishedAt:CAPITAL_KOL_CATALOG_PUBLISHED_AT,hash:CAPITAL_KOL_CATALOG_HASH};
   return deepFreeze({
     schemaVersion: CAPITAL_KOL_CATALOG_SCHEMA_VERSION,
-    catalogVersion: CAPITAL_KOL_CATALOG_VERSION,
-    catalogPublishedAt: CAPITAL_KOL_CATALOG_PUBLISHED_AT,
-    catalogHash: CAPITAL_KOL_CATALOG_HASH,
+    catalogVersion: manifest.version,
+    catalogPublishedAt: manifest.publishedAt,
+    catalogHash: manifest.hash,
     catalogId: entry.id,
     subjectType: entry.subjectType,
     handle: entry.handle,
@@ -917,6 +939,7 @@ export function bindCapitalKolRuntimeIdentity(observation, options = {}) {
   }
   const nowMs = Number.isFinite(Number(options.nowMs)) ? Number(options.nowMs) : Date.now();
   const observedMs = Date.parse(observation?.observedAt || observation?.checkedAt || "");
+  if(entry.id==='changpeng-zhao'&&nowMs<Date.parse(CZ_CATALOG_EXTENSION.publishedAt))return quarantine('catalog_review_not_yet_published',observation);
   const requestedMaximumAgeMs = Number(options.observationMaximumAgeMs);
   const maximumAgeMs = Math.min(DEFAULT_OBSERVATION_MAXIMUM_AGE_MS, Math.max(60_000,
     Number.isFinite(requestedMaximumAgeMs) ? requestedMaximumAgeMs : DEFAULT_OBSERVATION_MAXIMUM_AGE_MS));
@@ -964,9 +987,9 @@ export function verifyCapitalKolEventSnapshot(event) {
   const expected = createCapitalKolEventSnapshot(entry);
   fail(Boolean(expected), "catalog_integrity_failed");
   fail(snapshot.schemaVersion === CAPITAL_KOL_CATALOG_SCHEMA_VERSION, "catalog_schema_version_mismatch");
-  fail(snapshot.catalogVersion === CAPITAL_KOL_CATALOG_VERSION, "catalog_version_mismatch");
-  fail(snapshot.catalogPublishedAt === CAPITAL_KOL_CATALOG_PUBLISHED_AT, "catalog_published_at_mismatch");
-  fail(snapshot.catalogHash === CAPITAL_KOL_CATALOG_HASH, "catalog_hash_mismatch");
+  fail(snapshot.catalogVersion === expected?.catalogVersion, "catalog_version_mismatch");
+  fail(snapshot.catalogPublishedAt === expected?.catalogPublishedAt, "catalog_published_at_mismatch");
+  fail(snapshot.catalogHash === expected?.catalogHash, "catalog_hash_mismatch");
   fail(snapshot.catalogId === entry.id, "catalog_id_mismatch");
   fail(snapshot.subjectType === "person", "subject_type_mismatch");
   fail(cleanHandle(snapshot.handle).toLowerCase() === entry.handle.toLowerCase(), "snapshot_handle_mismatch");
@@ -1003,6 +1026,7 @@ export function getCapitalKolCatalogManifest() {
     publishedAt: CAPITAL_KOL_CATALOG_PUBLISHED_AT,
     hash: CAPITAL_KOL_CATALOG_HASH,
     count: reviewedEntries.length,
+    extensions:[{...CZ_CATALOG_EXTENSION,count:1,handles:['cz_binance']}],
     categories: [...CAPITAL_KOL_CATEGORIES],
     followersPolicy: CAPITAL_KOL_ELIGIBILITY_POLICY.followers,
   });

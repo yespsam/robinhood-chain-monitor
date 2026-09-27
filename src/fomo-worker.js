@@ -4,6 +4,7 @@ import { config } from "./config.js";
 import { sendAlerts, startAlertOutboxWorker } from "./alerts.js";
 import { createFomoCallMonitor } from "./fomo-call-monitor.js";
 import { createGmgnFlowMonitor } from "./gmgn-flow-monitor.js";
+import { createBinanceFlowMonitor } from "./binance-flow-monitor.js";
 import { createFomoThesisMonitor } from "./fomo-thesis-monitor.js";
 import { createFomoXCallMonitor } from "./fomo-x-call-monitor.js";
 import { startRuntimeHeartbeat } from "./runtime-heartbeat.js";
@@ -19,6 +20,7 @@ export function createFomoWorkerShutdown({
   thesisMonitor = null,
   xCallMonitor = null,
   gmgnFlowMonitor = null,
+  binanceFlowMonitor = null,
   outbox = null,
   runtimeHeartbeat = null,
   processRef = process,
@@ -38,6 +40,7 @@ export function createFomoWorkerShutdown({
         ["thesis", thesisMonitor],
         ["x-call", xCallMonitor],
         ["gmgn-flow", gmgnFlowMonitor],
+        ["binance-flow", binanceFlowMonitor],
       ].filter(([, monitor]) => monitor?.stop);
       const monitorResults = await Promise.allSettled(
         monitors.map(([, monitor]) => Promise.resolve().then(() => monitor.stop())),
@@ -115,6 +118,9 @@ function startFomoWorker() {
     ? createGmgnFlowMonitor(config, { sendAlertsImpl: deliverAlert })
     : null;
   if (gmgnFlowMonitor) console.info("[gmgn-flow] cross-chain joint volume / profitable-wallet / FOMO-tag observation enabled");
+  const binanceFlowMonitor = config.gmgnFlowMonitorEnabled && config.binanceFlowMonitorEnabled
+    ? createBinanceFlowMonitor(config) : null;
+  if (binanceFlowMonitor) console.info("[binance-flow] public read-only secondary flow enabled; no wallet authorization");
   const buyMonitor = inferredWalletMonitorEnabled
     ? createFomoCallMonitor(config, { sendAlertsImpl: deliverAlert })
     : null;
@@ -152,6 +158,7 @@ function startFomoWorker() {
     thesisMonitor,
     xCallMonitor,
     gmgnFlowMonitor,
+    binanceFlowMonitor,
     outbox,
     runtimeHeartbeat,
   });

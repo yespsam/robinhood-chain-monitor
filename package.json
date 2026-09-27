@@ -7,7 +7,9 @@
     "start": "node src/index.js",
     "once": "ONCE=true node src/index.js",
     "health": "node scripts/local-health.js",
+    "monitor:giwa": "node src/giwa-worker.js",
     "sync:gmgn": "node scripts/sync-gmgn-baseline.js",
+    "wallet:leaders": "node scripts/collect-profit-leaders.js",
     "import:telegram": "node scripts/import-existing-telegram.js",
     "demo:kol-launch": "node scripts/kol-launch-demo.js",
     "kol:screen": "node scripts/capital-kol-screen.js",
@@ -19,12 +21,15 @@
     "bot:replay": "node scripts/trade-bot.js --demo",
     "bot:status": "node scripts/trade-bot.js --status",
     "dashboard": "node scripts/dashboard-server.js",
+    "build:public": "node scripts/build-public-dashboard.js",
+    "publish:public": "node scripts/publish-public-dashboard.js",
     "test:trade-bot": "node --test test/trade-bot-*.test.js",
     "test:shadow-soak": "node --test test/narrative-shadow-soak-sidecar.test.js",
     "test:telegram": "node scripts/telegram-smoke.js",
     "test": "node --test"
   },
   "dependencies": {
+    "@netlify/blobs": "11.1.1",
     "dotenv": "^16.6.1",
     "ethers": "^6.15.0",
     "ws": "^8.21.0"

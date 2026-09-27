@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { claimsGeniusSource, isGeniusOfficialEvent } from "./genius-source-policy.js";
 import { isGmgnFlowEvent } from "./gmgn-flow-signal.js";
+import { isGiwaEvent } from "./giwa-monitor.js";
 import {
   FOUR_REGISTRY_CAPABILITY_KINDS,
   FOUR_REGISTRY_FIRST_TOKEN_KIND,
@@ -4790,6 +4791,7 @@ export function isFomoMonitorHealthUpdateAllowed(config, source, now = Date.now(
 }
 
 export function isMonitoringSourceEnabled(config, source) {
+  if (source?.type === "giwa_ecosystem_update") return config?.giwaMonitorEnabled === true && isGiwaEvent(source);
   if (source?.type === "gmgn_flow_surge" || source?.source?.id === "gmgn_flow_observed") {
     return config?.gmgnFlowMonitorEnabled === true && isGmgnFlowEvent(source)
       && Date.parse(source.observedAt) <= Date.now() + 30_000;

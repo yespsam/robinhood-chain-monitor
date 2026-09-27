@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveGmgnFlowNarrative, GMGN_FLOW_NARRATIVE_MAX_AGE_MS } from "../src/gmgn-flow-narrative.js";
+import { collectGmgnFlowNarratives, resolveGmgnFlowNarrative, GMGN_FLOW_NARRATIVE_MAX_AGE_MS } from "../src/gmgn-flow-narrative.js";
 
 const CA = `0x${"1".repeat(40)}`, WALLET = `0x${"2".repeat(40)}`;
 function xEvent(at = Date.now(), text = `AI agents for autonomous game worlds. CA ${CA}`) {
@@ -20,6 +20,7 @@ const resolve = (args = {}) => resolveGmgnFlowNarrative({ chain: "bsc", tokenAdd
 
 test("narrative resolver uses latest strictly authenticated exact-CA X source", () => {
   const now = Date.now(), older = xEvent(now - 60_000), latest = xEvent(now, `Updated game world roadmap ${CA}`);
+  older.tweet.id = '1234567889'; older.tweet.url = 'https://x.com/alpha/status/1234567889';
   const result = resolve({ events: [{ event: older }, latest], nowMs: now });
   assert.equal(result.status, "sourced"); assert.equal(result.text, latest.tweet.text);
   assert.equal(result.sourceUrl, latest.tweet.url); assert.equal(result.chain, "bsc"); assert.equal(result.tokenAddress, CA);
@@ -70,4 +71,25 @@ test("Solana CA case, unknown chains and absent descriptions remain fail-closed"
 test("narrative excerpts are bounded and never cut a CA in half", () => {
   const result = resolve({ tokenInfo: { chain: "bsc", address: CA, link: { description: `${"a".repeat(200)} ${CA} ${"b".repeat(300)}` } } });
   assert.ok(result.text.length <= 220); assert.ok(!result.text.includes("0x") || result.text.includes(CA));
+});
+
+test('collector preserves source identity, flags conflicting copies, and cannot re-date an old permalink', () => {
+  const now = Date.now(), original = xEvent(now - 60000), replay = xEvent(now);
+  let rows = collectGmgnFlowNarratives({ chain: 'bsc', tokenAddress: CA, events: [original, replay], nowMs: now });
+  assert.equal(rows.length, 1); assert.equal(rows[0].sourceAt, original.publishedAt);
+  assert.equal(rows[0].authorKey, 'x-id:888888'); assert.equal(rows[0].sourceAuthenticated, true);
+  rows = collectGmgnFlowNarratives({ chain: 'bsc', tokenAddress: CA, events: [original, xEvent(now, `The launch is cancelled ${CA}`)], nowMs: now });
+  assert.equal(rows[0].contentConflict, true);
+  rows = collectGmgnFlowNarratives({ chain: 'bsc', tokenAddress: CA, events: [xEvent(now - GMGN_FLOW_NARRATIVE_MAX_AGE_MS - 1), replay], nowMs: now });
+  assert.equal(rows.length, 0);
+});
+
+test('different authenticated Fomo call IDs sharing a profile URL remain distinct posts', () => {
+  const now = Date.now(), stamp = new Date(now).toISOString();
+  const make = (id, text) => ({ ...xEvent(now), signalKind: 'fomo_published_call', callId: id, stableId: id,
+    source: { id: 'fomo_family_official_thesis', trust: 'official_authenticated_api' },
+    thesis: { text, createdAt: stamp }, body: text, fomoUrl: 'https://fomo.family/profile/alpha' });
+  const rows = collectGmgnFlowNarratives({ chain: 'bsc', tokenAddress: CA, nowMs: now,
+    events: [make('call-1', 'The game agent product released a public roadmap.'), make('call-2', 'The game agent product has launched public testing.')] });
+  assert.equal(rows.length, 2); assert.ok(rows.every(row => !row.contentConflict));
 });

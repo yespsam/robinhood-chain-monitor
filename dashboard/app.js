@@ -1,590 +1,376 @@
+import { renderStrategyDetails } from './strategy-details.js';
+import { renderTradeCountReview } from './trade-count-review.js';
+import { renderNewsWire } from './news-wire.js';
+import { createCaDesk } from './ca-desk.js';
+import { createBrainDesk } from './brain-desk.js';
+import { renderExitComparison } from './exit-comparison.js';
+import { revealHashSection } from './navigation.js';
+import { renderWalletLearning } from './wallet-learning.js';
+import { marketCoverageStatus, flowCoverageStatus, tradingDataHealth } from './coverage-status.js';
+const openSectionAnchor = () => revealHashSection(document, location.hash);
+window.addEventListener('hashchange', openSectionAnchor);
+openSectionAnchor();
 const $ = selector => document.querySelector(selector);
-const $$ = selector => [...document.querySelectorAll(selector)];
+const caDesk = createCaDesk($('#caDesk'));
+const brainDesk = createBrainDesk($('#brainDesk'),{onSelectCa:key=>caDesk.select?.(key)});
 const STORAGE_KEY = 'gmgn-paper-terminal-v1';
-const AUTO_STORAGE_KEY = 'yesp-atm-auto-v1';
-const PAPER_START = 100;
-// Robinhood is the primary research lane. Other GMGN market lanes remain
-// available through the same read-only cycle control.
-const CHAINS = ['robinhood', 'bsc', 'base', 'eth', 'sol'];
-const CHAIN_LABELS = Object.freeze({ robinhood: 'Robinhood', bsc: 'BSC', base: 'Base', eth: 'Ethereum', sol: 'Solana' });
-const REAL_REFRESH_MS = 60_000;
-const AUTO_POLICY = Object.freeze({
-  entryUsd: 10,
-  maxPositions: 2,
-  stopLoss: -.2,
-  trailActivation: .5,
-  trailingDrawdown: .3,
-  maxHoldMs: 2 * 60 * 60_000,
-  scaleOutLevels: Object.freeze([
-    Object.freeze({ multiple: 2, fraction: .25, label: '2倍' }),
-    Object.freeze({ multiple: 5, fraction: 1 / 3, label: '5倍' }),
-    Object.freeze({ multiple: 10, fraction: .5, label: '10倍' }),
-  ]),
-});
-const INTERVAL_LABELS = Object.freeze({ '1m': '1分钟', '5m': '5分钟', '1h': '1小时', '6h': '6小时', '24h': '24小时' });
-const RESOLUTION_LABELS = Object.freeze({ '30s': '30秒', '1m': '1分', '5m': '5分', '15m': '15分', '1h': '1小时', '4h': '4小时', '1d': '1天' });
-const RISK_LABELS = Object.freeze({ STRONG: '强', WATCH: '观察', BLOCKED: '拦截' });
-
-const state = {
-  selectedAddress: null,
-  chain: 'robinhood',
-  interval: '1m',
-  resolution: '1m',
-  side: 'buy',
-  slippage: 1,
-  paused: false,
-  tab: 'price',
-  tokens: [],
-  trades: [],
-  chart: [],
-  positionMarks: new Map(),
-  real: { status: 'loading', source: 'gmgn-cli', observedAt: null, latency: null, candleStatus: 'loading' },
-  research: { status: 'loading', source: 'gmgn-cli', observedAt: null, report: null, brief: '' },
-  paper: loadPaper(),
-  auto: loadAuto(),
+const STRATEGY_LABELS = Object.freeze({ internal: '内盘早期', smart_money: '聪明钱跟踪', narrative_pvp: '外盘叙事 PVP', launch_sniper: '新币狙击' });
+const chainName = chain => ({ robinhood: 'Robinhood', sol: 'Solana', bsc: '币安链', base: 'Base', eth: '以太坊' })[chain] || '未知链';
+const DEPARTMENTS = [['chain', '链路研究'], ['narrative', '叙事研究'], ['flow', '筹码资金'], ['security', '合约安全'], ['market', '行情结构'], ['risk', '投委会']];
+const STATUS_LABELS = { ok: '新鲜', healthy: '新鲜', fresh: '新鲜', stale: '上次快照', loading: '同步中', error: '暂不可用', unavailable: '暂不可用', partial: '部分覆盖', ready: '满足条件', eligible: '满足条件', buy: '满足条件', enter: '满足条件', observe: '观察', watch: '观察', blocked: '暂不入场', no_buy: '暂不入场', paused: '暂停开仓', missing: '缺少数据', unknown: '未知', degraded: '部分覆盖', complete: '完整覆盖' };
+const REASON_LABELS = {
+  ambiguous_trade_legs: '交易方向证据冲突', feed_truncated: '资金流水被截断', incomplete_coverage: '资金流覆盖不完整', coverage_incomplete: '资金流覆盖不完整', no_activity: '暂无可核实资金流', stale_flow: '资金流快照已过期', flow_stale: '资金流快照已过期', stale_market: '行情快照已过期', market_stale: '行情快照已过期', missing_flow: '缺少资金流证据', no_flow: '缺少资金流证据', no_data: '暂无数据', missing_narrative: '缺少已核实叙事', narrative_unverified: '叙事尚未核实', insufficient_liquidity: '流动性未达条件', liquidity_low: '流动性未达条件', risk_blocked: '合约检查未通过', unknown_security: '合约安全信息不完整', security_unknown: '合约安全信息不完整', stop_loss: '触发止损', trailing_stop: '触发追踪止盈', take_profit: '分段止盈', max_hold: '达到持仓时限', max_hold_time: '达到持仓时限', insufficient_cash: '可用余额不足', max_positions: '已达持仓上限', already_held: '已持有该代币', cooldown: '等待交易冷却', rate_limited: '上游接口限流', unavailable: '数据暂不可用', unsupported: '数据源尚未覆盖', disabled: '已暂停新增仓位', pending: '等待下一轮研究', no_candidates: '暂无满足条件的对象', fetch_failed: '数据读取失败', timeout: '数据请求超时', rpc_unavailable: '链上数据暂不可用', smart_money_missing: '缺少聪明钱证据', not_graduated: '尚未完成内盘', not_internal: '不在内盘阶段', stale: '快照已过期', honey_pot: '卖出能力检查未通过', honeypot: '卖出能力检查未通过', wash_trading: '疑似刷量', high_concentration: '筹码集中度过高', holder_count_low: '持有人数量不足', not_run: '等待首次采集', market_unavailable: '行情暂不可用', trenches_unavailable: '内盘数据暂不可用', flow_unavailable: '资金流暂不可用', scale_out: '分段止盈', time_exit: '达到持仓时限', hard_stop: '触发止损', stale_quote: '报价已过期', partial_coverage: '部分覆盖', feed_missing: '缺少资金流数据', non_actionable: '尚未满足入场条件', no_fresh_quote: '缺少新鲜报价', cap_reached: '已达仓位上限', capital_reserved: '可用资金已预留', duplicate_token: '该代币已有持仓', risk_exit: '触发退出条件', data_stale: '数据已过期', mark_missing: '估值缺少报价', liquidity_exit: '流动性退出', newly_created: '新创建代币', graduated: '已完成内盘', new_creation: '新创建代币'
 };
 
-function loadPaper() {
+const state = { snapshot: null, status: 'loading', fetching: false, controlling: false, research: null, researchToken: null, researchBusy: false, researchError: false };
+Object.assign(REASON_LABELS, { bounded_trade_feed_not_full_chain: '公开交易页有条数上限，非全链资金流', token_quarantined: '该币交易证据冲突，暂时隔离', ambiguous_trade_legs: '同笔交易金额、时间或方向不一致', feed_window_unverified: '等待新版来源流覆盖校验', feed_window_warming_or_gap: '近五分钟来源流尚未接齐，持续补采中', feed_record_invalid: '上游交易记录字段不完整', gmgn_unavailable: 'GMGN 数据暂不可用' });
+Object.assign(REASON_LABELS, { binance_flow_stale: '币安逐笔数据尚未更新', binance_no_verified_feed: '币安该类逐笔暂无可验证记录', binance_window_warming_or_gap: '币安连续五分钟窗口采集中', binance_token_record_unverified: '该币含未识别交易类型或冲突记录', binance_record_invalid: '币安逐笔字段校验未通过', binance_response_invalid: '币安回包格式待核对', binance_rate_limited: '币安数据限频冷却中', binance_access_unavailable: '币安数据接口暂不可访问', binance_fetch_failed: '币安数据请求失败', binance_http_failed: '币安数据接口异常', binance_response_too_large: '币安回包超过采集上限' });
+REASON_LABELS.token_window_rebuilding = '该币隔离已解除，正在重建五分钟流水';
+const finite = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+const num = (value, fallback = 0) => finite(value) ? Number(value) : fallback;
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const money = value => finite(value) ? `${Number(value) < 0 ? '−' : ''}$${Math.abs(Number(value)).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
+const signedMoney = value => finite(value) ? `${Number(value) > 0 ? '+' : ''}${money(value)}` : '—';
+const shortAddress = value => typeof value === 'string' && value.length > 12 ? `${value.slice(0, 6)}…${value.slice(-4)}` : value || '—';
+const strategyLabel = id => STRATEGY_LABELS[id] || '历史策略';
+const recordLabel = row => row.entryEvidence?.opportunity?.label || (row.strategyLabel && ['聪明钱动量','内盘启动','外盘放量突破','外盘回踩再启动','外盘趋势延续','叙事 OG 回流','Alpha 刚上新快线','Alpha 上新后跟随','监控事件快线'].includes(row.strategyLabel)) ? row.entryEvidence?.opportunity?.label || row.strategyLabel
+  : row.entryEvidence?.narrativeRecall || row.strategyLabel === 'OG 回流狙击' ? 'OG 回流狙击'
+  : (row.entryEvidence?.exitPolicy?.version || row.exitEvidence?.exitPolicyVersion) === 'evidence_hold_v1' ? '确认型 PVP · 按证据持仓'
+  : row.entryEvidence?.confirmedPolicy || row.exitEvidence?.exitPolicyVersion === 'confirmed_pvp_exit_v2' ? '确认型 PVP'
+  : row.entryEvidence?.diagnostic || row.exitEvidence?.diagnosticVersion ? '诊断试仓' : strategyLabel(row.strategyId);
+const statusLabel = value => STATUS_LABELS[value] || humanText(value || '等待数据');
+const clock = value => { const date = value ? new Date(value) : new Date(); return Number.isFinite(date.getTime()) ? date.toLocaleTimeString('zh-CN', { hour12: false }) : '—'; };
+const dateTime = value => { const date = new Date(value); return value && Number.isFinite(date.getTime()) ? date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) : '—'; };
+
+function humanText(value) {
+  if (Array.isArray(value)) return value.map(humanText).filter(Boolean).join('；');
+  if (value && typeof value === 'object') return humanText(value.message || value.reason || value.label || value.code || '证据待补全');
+  let text = String(value ?? '');
+  for (const [code, label] of Object.entries(REASON_LABELS).sort((a, b) => b[0].length - a[0].length)) text = text.replaceAll(code, label);
+  if (/^[a-z_\s:0-9.-]+$/i.test(text) && /[a-z]/i.test(text)) return '证据待补全';
+  return text.replace(/\b[a-z]+(?:_[a-z0-9]+)+\b/g, '证据待补全').replaceAll('缺少：缺少', '缺少：');
+}
+
+function paintMoney(selector, value, signed = false) {
+  const node = $(selector);
+  node.textContent = signed ? signedMoney(value) : money(value);
+  node.classList.toggle('positive', signed && finite(value) && Number(value) > 0);
+  node.classList.toggle('negative', signed && finite(value) && Number(value) < 0);
+}
+
+function toast(message) {
+  $('#toast').textContent = message;
+  $('#toast').classList.add('show');
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => $('#toast').classList.remove('show'), 3500);
+}
+
+function archiveSummary() {
   try {
     const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-    if (raw && Number.isFinite(raw.cash) && raw.cash >= 0 && raw.cash <= PAPER_START) return { cash: raw.cash, pnl: raw.pnl || 0, positions: raw.positions || {} };
-  } catch { /* local-only fallback */ }
-  return { cash: PAPER_START, pnl: 0, positions: {} };
+    if (!raw || typeof raw !== 'object') return;
+    const positions = raw.positions && typeof raw.positions === 'object' ? Object.keys(raw.positions).length : 0;
+    $('#legacyArchive').hidden = false;
+    $('#legacyArchive').textContent = `旧浏览器账本已保留为只读存档：余额 ${money(raw.cash)} · ${positions} 个旧仓位。存档未计入当前账户。`;
+  } catch { /* An unreadable archive stays untouched. */ }
 }
 
-function loadAuto() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(AUTO_STORAGE_KEY) || 'null');
-    if (raw && typeof raw.enabled === 'boolean') return { enabled: raw.enabled, lastRunAt: raw.lastRunAt || null, lastAction: raw.lastAction || '等待最新行情', lastReason: raw.lastReason || '' };
-  } catch { /* local-only fallback */ }
-  return { enabled: true, lastRunAt: null, lastAction: '已开启，等待最新行情', lastReason: '' };
+function renderStatus() {
+  const data = state.snapshot;
+  const recent = data?.updatedAt && Date.now() - Date.parse(data.updatedAt) >= 0 && Date.now() - Date.parse(data.updatedAt) <= 120000;
+  const connected = state.status === 'ok' && data?.status === 'ok' && recent;
+  const dataHealth = tradingDataHealth(data);
+  $('#streamLabel').textContent = connected ? dataHealth.label : state.status === 'loading' ? '策略引擎同步中' : data ? '连接异常 · 显示上次账本' : '策略引擎暂不可用';
+  $('#streamStatus').dataset.status = connected && dataHealth.status === 'ok' ? 'ok' : 'stale';
+  $('#focusSyncState').textContent = data?.updatedAt ? `更新于 ${clock(data.updatedAt)}` : '等待服务端账本';
+  $('#paperStateLabel').textContent = connected ? '已同步' : '待同步';
+  $('#chainLabel').textContent = data?.chains?.length > 1 ? `${data.chains.length} 链模拟 · 共用本金` : chainName(data?.chain || 'robinhood');
+  $('#focusAutoToggle').checked = data?.enabled === true;
+  $('#focusAutoToggle').disabled = !connected || state.controlling;
+  const continuous = data?.operatingPolicy?.continuous === true;
+  $('#focusAutoLabel').textContent = state.controlling ? '正在更新' : data ? data.enabled ? data.entryGuard?.allowed === false ? '开仓受阻 · 查看原因' : continuous ? '全天候模拟已开启' : '自动开仓已开启' : '已暂停新增仓位' : '等待引擎';
+  $('#controlNote').textContent = data?.enabled === false ? '止损、止盈和监控继续运行' : continuous ? '不按亏损、次数或固定冷却停机；满足买点且余额足够时交易。电脑与网络需保持运行。' : data?.entryMode === 'paper_diagnostic_entry_v1' ? '主账户诊断试仓已开启 · 后台持续监控' : data?.entryMode === 'standard_and_exploratory' ? '小额探索试仓已开启 · 后台持续监控' : '后台持续监控，页面关闭后仍运行';
+  const cadence = data?.cadence;
+  const flowAt = Date.parse(data?.coverage?.flow?.observedAt || '');
+  const age = Number.isFinite(flowAt) ? `${Math.max(0, Math.round((Date.now() - flowAt) / 1000))} 秒前` : '未知';
+  const timing = cadence?.lastQuoteTiming;
+  const quoteTiming = timing ? ` · 最近报价排队 ${(timing.queueMs / 1000).toFixed(1)} 秒 / 请求 ${(timing.requestMs / 1000).toFixed(1)} 秒（${clock(timing.observedAt)}）` : ' · 报价耗时待采集';
+  const exits = data?.exitMonitor;
+  const exitNote = exits ? ` · 独立退出检查 ${exits.intervalMs / 1000} 秒（最近 ${clock(exits.lastCheckedAt)}）${exits.staleQuotes ? ` · ${exits.staleQuotes} 个持仓报价失效，等待新价` : ''}` : ' · 退出检查初始化中';
+  const queueNote = cadence?.sharedReadonlyPolicy?.plan === 'plus'
+    ? 'GMGN Plus 调度 · 最多并发 3 个，预留 1 个持仓名额 · 最小派发间隔 350 毫秒（不是每币刷新间隔）'
+    : cadence?.quotePriorityScope === 'shared_account_queue' ? '共享账号跨进程排队，持仓报价优先，后台等待逐步提权' : '本进程持仓报价优先';
+  const sourceAges = (cadence?.marketSourceAges || []).map(source => `${chainName(source.chain)} ${finite(source.ageMs) ? Math.ceil(source.ageMs / 1000) + '秒' : '未取得'}`).join(' / ');
+  $('#cadenceNote').textContent = cadence ? `页面同步 1 秒 · 全部候选扫描目标 ${cadence.evaluationIntervalMs / 1000} 秒 · 实测间隔 ${finite(cadence.actualTickGapMs) ? (cadence.actualTickGapMs / 1000).toFixed(1) : '—'} 秒${cadence.evaluationOverrunMs > 0 ? `（本轮超时 ${(cadence.evaluationOverrunMs / 1000).toFixed(1)} 秒，不堆叠任务）` : ''}${exitNote}${quoteTiming}${sourceAges ? ` · 各链行情年龄：${sourceAges}` : ''} · ${queueNote} · 资金流窗口截至 ${age} · 扫描频率不等于上游价格更新频率` : '等待检查频率和数据时间…';
+  const guard = data?.entryGuard;
+  $('#engineNotice').hidden = connected && dataHealth.status === 'ok' && !data?.lastError && !exits?.lastError && guard?.allowed !== false;
+  $('#engineNotice').textContent = exits?.lastError ? `退出管理异常：${humanText(exits.lastError)}` : data?.lastError ? `本轮数据异常：${humanText(data.lastError)}。请以各策略的数据状态为准。` : guard?.allowed === false ? `新仓风控：${guard.reasons.join('；')}。监控和已有仓位退出继续；旧亏损账本不重置。` : connected ? dataHealth.summary : state.status === 'loading' ? '正在读取统一模拟账本…' : '暂时无法取得引擎状态。已显示的数据可能过期，正在重新连接。';
 }
 
-function savePaper() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.paper)); }
-function saveAuto() { localStorage.setItem(AUTO_STORAGE_KEY, JSON.stringify(state.auto)); }
-function currentToken() { return state.tokens.find(token => token.address === state.selectedAddress) || state.tokens[0] || null; }
-function tokenId(token) { return token?.chain && token?.address ? `${String(token.chain).toLowerCase()}:${String(token.address).toLowerCase()}` : String(token?.symbol || ''); }
-function positionSymbol(key, position) { return position?.symbol || (String(key).includes(':') ? String(key).split(':').at(-1) : String(key)); }
-function positionToken(position, key) {
-  if (position?.address) {
-    const exact = state.tokens.find(token => token.address.toLowerCase() === String(position.address).toLowerCase()
-      && (!position.chain || String(token.chain).toLowerCase() === String(position.chain).toLowerCase()));
-    if (exact) return exact;
+function renderAccount() {
+  const account = state.snapshot?.account;
+  const stats = account?.stats || {};
+  paintMoney('#focusCash', account?.cash);
+  paintMoney('#focusPnl', account?.realizedPnl, true);
+  paintMoney('#focusEquity', stats.netLiquidationValue ?? stats.equity);
+  $('#focusWinLoss').textContent = finite(stats.wins) && finite(stats.losses) ? `${num(stats.wins)} 胜 / ${num(stats.losses)} 负` : '—';
+  const costs = Array.isArray(account?.trades) ? account.trades.reduce((sum, trade) => sum + num(trade.costsUsd), 0) : null;
+  paintMoney('#focusCosts', stats.totalCostsUsd ?? costs);
+  $('#costModel').textContent = state.snapshot?.costModel || '费用及滑点按模型估算';
+  const stale = num(stats.stalePositions);
+  const session = state.snapshot?.session;
+  const history = session ? `${session.label} · ${session.id} · 历史账户单独保留：余额 ${money(session.legacy.cash)} / 净盈亏 ${signedMoney(session.legacy.realizedPnl)} / ${session.legacy.tradeCount} 笔；不合并成绩、不自动补款` : '与旧浏览器账本独立';
+  const sizing = state.snapshot?.positionSizing;
+  const sizeNote = sizing?.mode === 'cash_fraction_cap' ? ' · 后续按可用余额 10%、最高 10 U 试仓，浮盈不计入投入' : sizing?.fixedEntryUsd === 10 ? ' · 后续每笔固定 10 U（含买入成本），不足 10 U 不下单' : sizing?.mode === 'cash_fraction' ? ' · 按可用余额滚仓，浮盈不计入投入' : '';
+  const fundingNote = account?.cashAdjustments?.length ? ` · 手动虚拟资金调整 ${signedMoney(account.cashAdjustments.reduce((sum, item) => sum + item.amountUsd, 0))}（不计盈利，旧亏损保留）` : '';
+  $('#accountNote').textContent = account ? `初始虚拟资金 ${money(account.initialCash)}${fundingNote} · ${history}${sizeNote}${stale ? ` · ${stale} 个仓位估值待刷新` : ''}` : '等待真实行情及统一模拟账本';
+}
+
+function renderPositions() {
+  const account = state.snapshot?.account;
+  const entries = Object.entries(account?.positions || {});
+  const lastTrade = account?.trades?.at(-1);
+  const experimental = state.snapshot?.exitComparison;
+  const experimentNote = experimental ? `<span>独立对照持仓：原退出 ${num(experimental.control?.positions?.length)} 个 / 量价退出 ${num(experimental.dynamic?.positions?.length)} 个，不计入主账户。<a href="#exitComparison">查看对照持仓、买入依据与成交</a></span>` : '';
+  const activityNote = (lastTrade ? `<span>主账户已有 ${num(account.stats?.entries)} 次买入；最近成交：${escapeHtml(dateTime(lastTrade.atMs))} ${escapeHtml(lastTrade.symbol || '未知')} ${lastTrade.side === 'buy' ? '买入' : '卖出'}。<a href="#recentTrades">查看成交记录</a></span>` : '') + experimentNote;
+  const expanded = new Set([...document.querySelectorAll('.holding-detail[open]')].map(node => node.closest('.holding')?.dataset.position));
+  $('#focusPositionCount').textContent = account ? `${entries.length} 个仓位` : '等待同步';
+  $('#focusPositionsList').innerHTML = entries.length ? entries.map(([key, position]) => {
+    const fresh = ['ok', 'fresh'].includes(position.markStatus) && Date.now() - Date.parse(position.markAt) <= 120000;
+    const symbol = `${chainName(position.chain)} · ${position.symbol || shortAddress(position.address)}`;
+    const unrealized = position.pnl;
+    let reasons = humanText(position.entryLogic || (position.entryReasons?.length ? position.entryReasons : '入场依据未记录'));
+    const proof = position.entryEvidence || {};
+    const evidenceText = proof.flow ? `入场时：核实盈利地址 ${num(proof.flow.highProfitCount)} 个，净买家 ${num(proof.flow.uniqueBuyerCount)} 个，已观察净流入 ${money(proof.flow.netBuyUsd)}。${proof.narrativeText ? `叙事：${proof.narrativeText}` : ''}` : '';
+    if (evidenceText) reasons += ` ${evidenceText}`;
+    const research = renderStrategyDetails(proof.entryPlan, proof.narrativeAssessment, position);
+    return `<article class="holding" data-position="${escapeHtml(key)}"><div class="holding-heading"><div class="holding-identity"><span class="token-letter">${escapeHtml(String(symbol).slice(0, 1))}</span><div><strong>${escapeHtml(symbol)}</strong><span>${escapeHtml(recordLabel(position))} · ${escapeHtml(shortAddress(position.address))}</span></div></div><div class="holding-value"><strong>${money(position.markValue)}</strong><span class="${num(unrealized) >= 0 ? 'positive' : 'negative'}">${signedMoney(unrealized)} <small>浮盈亏</small></span></div></div><p class="holding-reason"><span>买入逻辑</span>${escapeHtml(reasons)}</p><details class="holding-detail"${expanded.has(key) ? ' open' : ''}><summary>查看叙事、买卖点与仓位 <span>${fresh ? '估值已更新' : '估值待刷新'}</span></summary><dl><div><dt>当前数量</dt><dd>${finite(position.quantity) ? num(position.quantity).toLocaleString('zh-CN', { maximumFractionDigits: 5 }) : '—'}</dd></div><div><dt>剩余成本</dt><dd>${money(position.costBasisUsd ?? position.cost)}</dd></div><div><dt>买入时间</dt><dd>${dateTime(position.openedAt)}</dd></div><div><dt>估值时间</dt><dd>${dateTime(position.markAt)}</dd></div></dl>${research}<p>${escapeHtml(humanText(position.exitLogic || '按所属策略的止损、追踪止盈和持仓时限退出'))}</p><p class="contract-address">${escapeHtml(position.chain || '')} · ${escapeHtml(position.address || '合约地址未记录')}</p></details></article>`;
+  }).join('') : `<div class="focus-empty">${account ? '当前没有持仓' : '账本同步中'}${activityNote}<span>${account ? state.snapshot?.enabled === false || state.snapshot?.entryGuard?.allowed === false ? '新仓已暂停，监控与信号评估继续。' : '满足策略条件后自动模拟买入，入场依据会显示在这里。' : '余额和持仓以服务端记录为准。'}</span></div>`;
+}
+
+function renderStrategies() {
+  const multi = ['multi_setup_v1','multi_setup_v2'].includes(state.snapshot?.opportunityMode);
+  const reviewed = state.snapshot?.opportunityMode === 'multi_setup_v2';
+  const strategies = multi ? state.snapshot.opportunityRoutes || [] : state.snapshot?.strategies || [];
+  const upside = state.snapshot?.exitPolicy?.mode === 'upside';
+  const pvp = state.snapshot?.exitPolicy?.mode === 'pvp';
+  const evidenceHold = state.snapshot?.exitPolicy?.version === 'evidence_hold_v1';
+  const confirmed = state.snapshot?.entryMode === 'confirmed_pvp_v2';
+  const continuous = state.snapshot?.operatingPolicy?.continuous === true;
+  const recall = state.snapshot?.narrativeRecall;
+  const newsNode=$('#newsWireContent');
+  if(newsNode){
+    const expanded=new Set([...newsNode.querySelectorAll('details[data-narrative-case][open]')].map(d=>d.dataset.narrativeCase));
+    newsNode.innerHTML=renderNewsWire(state.snapshot?.newsWire,state.snapshot?.narrativeDesk,expanded);
   }
-  const symbol = positionSymbol(key, position);
-  return state.tokens.filter(token => token.symbol === symbol).length === 1 ? state.tokens.find(token => token.symbol === symbol) : null;
-}
-function positionEntryForToken(token) {
-  const id = tokenId(token);
-  if (Object.hasOwn(state.paper.positions, id)) return [id, state.paper.positions[id]];
-  if (Object.hasOwn(state.paper.positions, token.symbol)) return [token.symbol, state.paper.positions[token.symbol]];
-  return [id, null];
-}
-function positionForToken(token) { return positionEntryForToken(token)[1]; }
-function migratePaperPositions() {
-  let changed = false;
-  for (const [key, position] of Object.entries(state.paper.positions)) {
-    if (position.chain && position.address) continue;
-    const symbol = positionSymbol(key, position);
-    const matches = state.tokens.filter(token => token.symbol === symbol);
-    if (matches.length !== 1) continue;
-    const token = matches[0], id = tokenId(token);
-    if (id === key || Object.hasOwn(state.paper.positions, id)) continue;
-    state.paper.positions[id] = { ...position, symbol, chain: token.chain, address: token.address };
-    delete state.paper.positions[key];
-    if (state.positionMarks.has(key)) { state.positionMarks.set(id, state.positionMarks.get(key)); state.positionMarks.delete(key); }
-    changed = true;
+  const recallNode = $('#narrativeRecallNote');
+  const review = state.snapshot?.entryGuard?.lossReview;
+  const batchNode = $('#tradeCountReview');
+  if (batchNode) batchNode.innerHTML = renderTradeCountReview(state.snapshot?.tradeCountReview);
+  const reviewNode = $('#tradeReviewNote');
+  if (reviewNode) reviewNode.textContent = review ? `即时交易统计（非 AI 复盘）· 连亏不暂停；已完成 ${num(review.completedRounds)} 个完整仓位，当前连续 ${num(review.consecutiveNonWinningRounds)} 次未盈利。${review.recent?.at(-1) ? `${review.recent.at(-1).symbol}：${review.recent.at(-1).findings.join('；')}。` : '等待真实平仓结果。'}${continuous ? '全天候模拟：日亏损、总亏损及次数只记录；止损、真实数据与余额检查保持。' : '止损、仓位、日亏损和总亏损保护保持。'}` : '交易统计初始化中…';
+  const trader = state.snapshot?.entryGuard?.traderReview;
+  const traderNode = $('#traderReasoningNote');
+  if (traderNode) {
+    const s = trader?.overall;
+    const current = trader?.cohorts?.filter(c => c.reasoningVersion === 'evidence_first_v1' && (!multi || c.opportunityVersion === state.snapshot.opportunityMode) && (state.snapshot?.mainExitPolicy ? c.exitVersion===state.snapshot.mainExitPolicy.version : !evidenceHold || ['evidence_hold_v1','structure_hold_v2'].includes(c.exitVersion)) && (!continuous || c.accountPolicyVersion === 'continuous_paper_v1')) || [];
+    traderNode.textContent = s ? `交易决策四问 · 为什么现在买 / 哪里判错 / 成本后是否值得 / 凭什么继续持有。完整平仓 ${num(s.closedRounds)} 笔，平均净收益 ${finite(s.averageNetUsd) ? signedMoney(s.averageNetUsd) : '待采样'}；价格亏损 ${num(s.priceLosses)} 笔，费用转亏 ${num(s.costOnlyLosses)} 笔。${continuous ? '全天候模拟版本' : evidenceHold ? '按证据持仓版本' : '新决策版本'}已平仓 ${current.reduce((n,c) => n + num(c.closedRounds), 0)} 笔，旧成交不混作新版成绩。按链与规则版本复核，未验证净期望；连亏不暂停。` : '交易决策与成本归因初始化中…';
   }
-  if (changed) savePaper();
-}
-function number(value, fallback = 0) { const n = Number(value); return Number.isFinite(n) ? n : fallback; }
-function money(value, digits = 2) { return Number.isFinite(Number(value)) ? `$${Number(value).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}` : '—'; }
-function compact(value) { const n = Number(value); if (!Number.isFinite(n)) return '—'; if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`; if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`; if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`; return money(n); }
-function tokenPrice(token) {
-  if (!token || !Number.isFinite(Number(token.price))) return '—';
-  const price = Number(token.price);
-  if (price < .001) return `$${price.toFixed(8)}`;
-  if (price < 1) return `$${price.toFixed(6)}`;
-  return `$${price.toFixed(2)}`;
-}
-function shortClock(date = new Date()) { return date.toLocaleTimeString('en-GB', { hour12: false }); }
-function formatAddress(address) { return typeof address === 'string' && address.length > 12 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address || '—'; }
-function intervalLabel(interval) { return INTERVAL_LABELS[interval] || interval; }
-function resolutionLabel(resolution) { return RESOLUTION_LABELS[resolution] || resolution; }
-function chainLabel(chain) { const key = String(chain || '').toLowerCase(); return CHAIN_LABELS[key] || String(chain || '').toUpperCase(); }
-function riskLabel(risk) { return RISK_LABELS[risk] || '观察'; }
-function hasRealData(status) { return status === 'ok' || status === 'stale'; }
-function ageLabel(timestamp) {
-  const seconds = Math.max(0, Math.floor(Date.now() / 1000 - number(timestamp)));
-  if (!timestamp || seconds <= 0) return '—';
-  if (seconds < 3600) return `${Math.max(1, Math.floor(seconds / 60))}m`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
-  return `${Math.floor(seconds / 86400)}d`;
-}
-function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]); }
-function toast(message) { const node = $('#toast'); node.textContent = message; node.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => node.classList.remove('show'), 3000); }
-
-function markRealStatus(status, extra = {}) {
-  state.real = { ...state.real, status, ...extra };
-  const ok = status === 'ok';
-  const stale = status === 'stale';
-  const hasData = ok || stale;
-  $('#streamLabel').textContent = ok ? 'GMGN 真实行情' : stale ? 'GMGN 真实行情 · 上次成功快照' : status === 'loading' ? 'GMGN 行情 · 加载中' : 'GMGN 行情 · 暂不可用';
-  $('#safetyCopy').textContent = ok ? 'GMGN 真实只读行情 · 不连接钱包 · 不签名 · 不广播' : stale ? 'GMGN 真实行情 · 上次成功快照 · 等待刷新 · 不连接钱包' : 'GMGN 真实行情暂不可用 · 未显示合成替代数据 · 不连接钱包';
-  $('#sourceLabel').textContent = hasData
-    ? `GMGN CLI · 只读 · ${chainLabel(state.chain)}/${intervalLabel(state.interval)} · ${state.real.observedAt ? shortClock(new Date(state.real.observedAt)) : '—'}`
-    : status === 'loading' ? 'GMGN CLI · 连接中' : 'GMGN CLI · 暂不可用';
-  $('#latency').textContent = Number.isFinite(state.real.latency) ? String(state.real.latency) : '--';
-  $('#paperStateLabel').textContent = hasData ? '已同步' : '本地';
-}
-
-function renderWatchlist() {
-  const query = $('#tokenSearch').value.trim().toLowerCase();
-  const visible = state.tokens.filter(token => !query || `${token.symbol} ${token.name} ${token.chain} ${token.address}`.toLowerCase().includes(query));
-  $('#watchlist').innerHTML = visible.map(token => {
-    const positive = number(token.change) >= 0;
-    const risk = token.risk || 'WATCH';
-    return `<button class="watch-item ${token.address === state.selectedAddress ? 'active' : ''}" data-token="${escapeHtml(token.address)}" type="button">
-      <span class="watch-avatar" style="color:var(--lime);background:rgba(185,255,102,.08)">${escapeHtml(token.symbol.slice(0, 1))}</span>
-      <span><span class="watch-symbol">${escapeHtml(token.symbol)}</span><span class="watch-chain">${escapeHtml(chainLabel(token.chain))} · ${escapeHtml(riskLabel(risk))}</span></span>
-      <span><span class="watch-price">${tokenPrice(token)}</span><span class="watch-change ${positive ? 'positive' : 'negative'}">${positive ? '+' : ''}${number(token.change).toFixed(2)}%</span></span>
-    </button>`;
-  }).join('') || (state.real.status === 'unavailable'
-    ? '<div class="empty-position" style="margin:12px">GMGN 真实数据暂不可用<br /><span>未显示合成替代数据</span></div>'
-    : '<div class="empty-position" style="margin:12px">等待 GMGN 真实排行…</div>');
-  $$('.watch-item').forEach(button => button.addEventListener('click', () => { state.selectedAddress = button.dataset.token; refreshKline(); refreshResearchTeam(); renderAll(); }));
-  $('#watchCount').textContent = `${visible.length} 个资产`;
-}
-
-function renderMarket() {
-  const token = currentToken();
-  if (!token) {
-    $('#tokenAvatar').textContent = '?'; $('#tokenAvatar').style.color = 'var(--muted)'; $('#tokenAvatar').style.background = '#18221c';
-    $('#tokenName').textContent = '暂无实时代币'; $('#tokenChain').textContent = chainLabel(state.chain); $('#tokenAddress').textContent = '—'; $('#tokenAge').textContent = '—';
-    $('#tokenPrice').textContent = '—'; $('#tokenChange').textContent = '—'; $('#tokenChange').className = 'market-change';
-    ['#metricMcap', '#metricLiquidity', '#metricVolume', '#metricHolders'].forEach(selector => { $(selector).textContent = '—'; });
-    $('#metricRisk').innerHTML = '<i class="risk-dot"></i> 等待中'; $('#orderAvatar').textContent = '?'; $('#orderToken').textContent = '—';
-    $('#simulateButton').disabled = true; updateChart(); updateQuote(); return;
+  const learner = state.snapshot?.narrativeLearning;
+  const learningNote = $('#narrativeLearningNote');
+  if (learningNote) {
+    const latest = learner?.recentSamples?.[0];
+    const theme = learner?.themes?.[0];
+    learningNote.textContent = learner?.error || (learner ? `起量叙事自动学习 · 基线 ${num(learner.baselineReadyTokens)} / 当前观察 ${num(learner.observedTokens)} 个币；当前留存 ${num(learner.sampleCount)} 次起量，${num(learner.verifiedNarrativeSamples)} 次已核实叙事、${num(learner.linkedNarrativeSamples)} 次仅链接关联、${num(learner.narrativePending)} 次叙事待核实。市值≥100万美元、1分钟成交额≥1万美元且≥历史基线3倍；复查5分钟 / 1小时 / 24小时。24小时有效样本 ${num(learner.completed24h)}，缺失 ${num(learner.missed24h)}；涨跌都保留，不自动放宽买入规则。${latest ? ` 最近：${latest.symbol || shortAddress(latest.address)}，起量 ${num(latest.volumeMultiple).toFixed(1)} 倍；${latest.narratives?.[0] ? `${latest.narratives[0].binding === 'verified_ca' ? 'CA 已核实' : '关联待核实'}文案：${latest.narratives[0].text.slice(0,140)}` : '尚未找到可靠原文关联'}。` : '等待同口径基线和真实起量事件。'}${theme ? ` 角度「${theme.terms.slice(0,5).join('、')}」：24小时上涨 ${num(theme.positive)} / 下跌 ${num(theme.negative)}，先冲后回落 ${num(theme.observedPumpThenFade)}；${theme.status}。` : ''}` : '起量叙事自动学习初始化中；不是模型训练完成或已验证盈利。');
+    const retention = learner?.retention;
+    if (!learner?.error && retention) learningNote.textContent += ` 留存保护：待完成24小时观察 ${num(retention.pending24h)} / ${num(retention.pendingLimit)}，已结案 ${num(retention.resolved24h)} / ${num(retention.resolvedLimit)}；满额跳过新波次 ${num(retention.capacitySkippedEpisodes)}，已结案按时间淘汰 ${num(retention.evictedResolvedEpisodes)}。未到期案例不被新样本挤掉；遗漏不算亏损，未按涨跌筛选。`;
   }
-  $('#simulateButton').disabled = false;
-  $('#tokenAvatar').textContent = token.symbol.slice(0, 1); $('#tokenAvatar').style.color = 'var(--lime)'; $('#tokenAvatar').style.background = 'rgba(185,255,102,.08)';
-  $('#tokenName').textContent = token.symbol; $('#tokenChain').textContent = chainLabel(token.chain); $('#tokenAddress').textContent = formatAddress(token.address); $('#tokenAge').textContent = ageLabel(token.creationTimestamp || token.openTimestamp);
-  $('#tokenPrice').textContent = tokenPrice(token); const change = $('#tokenChange'); change.textContent = `${number(token.change) >= 0 ? '+' : ''}${number(token.change).toFixed(2)}%`; change.className = `market-change ${number(token.change) >= 0 ? 'positive' : 'negative'}`;
-  $('#metricMcap').textContent = compact(token.marketCap); $('#metricLiquidity').textContent = compact(token.liquidity); $('#metricVolume').textContent = compact(token.volume); $('#metricHolders').textContent = token.holders == null ? '—' : Number(token.holders).toLocaleString('en-US');
-  const riskColor = token.risk === 'BLOCKED' ? 'var(--red)' : token.risk === 'STRONG' ? 'var(--lime)' : 'var(--amber)'; $('#metricRisk').innerHTML = `<i class="risk-dot" style="background:${riskColor}"></i> ${escapeHtml(riskLabel(token.risk))}`;
-  $('#orderAvatar').textContent = token.symbol.slice(0, 1); $('#orderAvatar').style.color = 'var(--lime)'; $('#orderAvatar').style.background = 'rgba(185,255,102,.08)'; $('#orderToken').textContent = token.symbol; $('#orderToken').nextElementSibling.textContent = chainLabel(token.chain);
-  updateChart(); updateQuote();
+  if (recallNode) recallNode.textContent = recall?.error || (recall ? `七天叙事回溯 · 已核实文案 ${num(recall.sourceCount)} 条 / 精确 CA 绑定 ${num(recall.knownTokens)} 个。仅覆盖已采集样本，不是完整七天；大 KOL / 官方网站文案高重合后，优先查历史 OG。${recall.matches?.length ? recall.matches.map(m=>`${m.summary} 历史市值参考空间 ${finite(m.referenceRoom) ? m.referenceRoom.toFixed(2)+' 倍（非预测）' : '未知'}；${m.ready ? '叙事条件通过，仍需新买盘、报价与账户检查' : m.reasons.join('；')}`).join(' ') : '当前没有可进入交易检查的回流事件，继续采集。'}` : '七天叙事回溯初始化中；无 CA 不等于无叙事，也不等于已找到可买代币。');
+  $('#strategyObjective').textContent = state.snapshot?.entryMode === 'paper_diagnostic_entry_v1' ? '主账户诊断试仓 · K 线形态、盈亏比、聪明钱人数与辅助风控只记录，不拦截。按余额 2% 试单，5% 止损；45 秒无成本后盈利则撤。真实参考价＋模拟成本，不是实盘。' : pvp ? '短线 PVP · 45 秒后仍无成本后盈利则撤；主仓最长 3 分钟，确认继续走强才留最多 20% 尾仓，开仓后最多 20 分钟。' : upside ? '大行情优先 · 小仓试错，亏损及时退出；3 / 10 / 30 倍各兑现原仓 20%，留 40% 跟随趋势。倍数是条件规则，不是收益预测。' : '按结构目标与倍数档分段退出。';
+  if (confirmed) $('#strategyObjective').textContent = `确认型 PVP v2 · 新增双地址买盘＋三次独立报价，全路径检查深跌反抽。往返模型成本≤5%、${state.snapshot?.positionSizing?.fixedEntryUsd === 10 ? '固定单笔 10 U（含买入成本）' : '单笔至少 $1'}；${continuous ? '全天候模拟：无开仓次数、固定冷却或持仓个数上限，不因日亏损或总亏损停机；保留买点、真实数据、余额检查和止损。' : '每小时最多6次、每日最多24次；连亏复盘、不设连亏冷静期，日亏损和总亏损保护保持。'}新参数尚未验证盈利。`;
+  if (multi) $('#strategyObjective').textContent = '多路机会模拟 · 内盘启动 / 聪明钱动量 / 外盘突破 / 回踩再启动 / 趋势延续 / 叙事 OG 回流。外盘量价策略不强制聪明钱标签，使用已收盘 K 线＋新鲜独立报价；按行情持仓，没有固定到期卖出。每笔 10 U，往返模型成本≤5%；持续研究但不保证每时每刻成交，不能覆盖或获利于所有代币。';
+  const exitNote = $('#strategyLanes').nextElementSibling;
+  if (reviewed) {
+    const r=state.snapshot.researchPipeline,c=state.snapshot.reviewComparison;
+    $('#strategyObjective').textContent='多路机会 v2 · 全链发现、分链热点快研究；普通量价入口检查结构和成本，事件快线按各自规则入场。每笔 10 U，无固定持仓时限，旧仓沿用入场版本。'
+      +` 当前热点 ${r?.hotCandidates?.length||0} 个 / 研究候选 ${r?.discoveryCandidates||0} 个。`
+      +(c?` 前向对照：新版 ${c.main.entries} 次买入、${c.main.closedRounds} 笔平仓（${signedMoney(c.main.newRoundPnl)}）；旧入口对照 ${c.control.entries} 次买入、${c.control.closedRounds} 笔平仓（${signedMoney(c.control.newRoundPnl)}）。同起点、同数据池、同费用，独立模拟账本，未验证盈利。`:' 前向对照初始化中。');
+  }
+  if(state.snapshot?.mainExitPolicy)$('#strategyObjective').textContent+=' 后续主盘新仓已切换「叙事＋资金行为退出」，取消固定价格、倍数和时间触发；旧仓和独立对照规则不变。';
+  if(state.snapshot?.mainEntryPolicy)$('#strategyObjective').textContent+=` ${state.snapshot.mainEntryPolicy.text}`;
+  if(state.snapshot?.recovery)$('#strategyObjective').textContent=`恢复期 · ${state.snapshot.enabled?'新开仓已手动启用':'新开仓暂停；持仓退出和监控继续'}。${state.snapshot.recovery.entryText} ${state.snapshot.recovery.exitText} 当前主仓新鲜报价 ${state.snapshot.cadence?.mainFreshQuotes??0}/${state.snapshot.cadence?.mainQuoteTargets??0}；本地每秒检查不代表每币每秒收到新行情。`;
+  if (exitNote?.classList.contains('section-note')) exitNote.textContent = state.snapshot?.mainExitPolicy ? state.snapshot.mainExitPolicy.text : reviewed
+    ? '外盘新仓：真实结构＋波动缓冲止损；连续两根入场后收盘线确认买入依据失效则退出。历史结构参考位且扣成本盈利时兑现 20%，2 / 3 倍各兑现 30%，留 20% 尾仓；保护线只上调。资金流路线沿用证据持有。报价缺失不虚构成交；GMGN 单边 1% 费用参考，滑点与 gas 为估算。'
+    : evidenceHold
+    ? '秒级检查，不按分钟强制卖出。新仓无 120 秒停滞、5 分钟主仓或 20 分钟尾仓到期；初始止损 6%，价格上涨 15% 后启动成本保护和峰值回撤 12% 退出，完整资金流连续反向确认也退出。2 / 3 倍分别兑现原仓 50% / 30%，尾仓按证据持有。缺报价不虚构成交，缺资金流不宣称趋势有效；旧仓按原规则，成绩按版本区分。'
+    : confirmed
+    ? '秒级检查价格；初始止损 6%。120 秒价格仍未走强才退出，不按 45 秒机械支付往返费用；主仓最长 5 分钟，强势尾仓最长 20 分钟。旧仓按原规则，新旧成绩不混称新版收益。'
+    : pvp
+    ? '结构参考位不减仓；2 / 3 倍兑现原仓 50% / 30%。1.15 倍起保护剩余本金与成本，峰值回撤 12% 退出。只用新鲜报价模拟成交，旧仓保留入场规则；不为凑笔数交易。'
+    : upside
+    ? '不在小幅结构目标减仓；曾达 2 倍启动剩余本金保护，3 / 10 / 30 倍起峰值回撤线分别为 45% / 35% / 25%。强势仓延长、弱势仓到期退出，最长 7 天。旧仓沿用入场时规则。'
+    : '新版先在结构目标分段回收 20%，2 / 5 / 10 倍再回收 30% / 30% / 10%；启动保护后止损线只收紧，尾仓继续追踪回撤。';
+  const expanded = new Set([...document.querySelectorAll('.lane-detail[open]')].map(node => node.dataset.strategy));
+  $('#strategyLanes').innerHTML = (multi ? strategies.map(p=>[p.id,p.label]) : Object.entries(STRATEGY_LABELS).filter(([id]) => !confirmed || id === 'smart_money')).map(([id, legacyLabel], index) => {
+    const label = multi ? legacyLabel : evidenceHold ? '确认型 PVP · 按证据持仓' : confirmed ? '确认型 PVP v2' : legacyLabel;
+    const lane = strategies.find(item => item.id === id);
+    const ready = lane && (['eligible', 'ready', 'buy', 'enter', '可模拟', '可入场'].includes(lane.decision) || num(lane.eligibleCount) > 0);
+    const decision = lane ? statusLabel(lane.decision) : '等待数据';
+    const duration = lane?.exitPolicy?.version === 'evidence_hold_v1' ? '按行情，无固定时限' : finite(lane?.maxHoldMs) ? num(lane.maxHoldMs) < 3600000 ? `${Math.round(num(lane.maxHoldMs) / 60000)} 分钟` : `${(num(lane.maxHoldMs) / 3600000).toLocaleString('zh-CN', { maximumFractionDigits: 1 })} 小时` : '—';
+    const stop = lane?.memeExitPolicy ? '不设固定百分比（非最大亏损保证）' : finite(lane?.stopLoss) ? `${Math.round(Math.abs(num(lane.stopLoss)) * 100)}%` : '—';
+    let reason = lane ? humanText(lane.reasons?.length ? lane.reasons : ready ? '满足研究条件，等待仓位及余额检查' : '等待完整入场证据') : '等待引擎提供研究结论';
+    const flow = lane?.flowEvidence;
+    if (flow) reason += flow.coverageGap ? `。资金流：${humanText(flow.coverageGap)}`
+      : `。已观察净买入 ${money(flow.netBuyUsd)}，盈利达标 ${finite(flow.highProfitCount) ? num(flow.highProfitCount) : '未知'} 个地址；画像完整 ${finite(flow.profileCheckedCount) ? num(flow.profileCheckedCount) : '未知'} / ${finite(flow.uniqueBuyerCount) ? num(flow.uniqueBuyerCount) : '未知'}`;
+    if (flow?.providerLabel) reason += `。来源：${flow.providerLabel}${flow.fomoSupported === false ? '（本源不提供 FOMO 标签）' : ''}`;
+    const stats = lane?.stats || state.snapshot?.account?.stats?.byStrategy?.[id] || lane;
+    const probe = !confirmed && lane?.exploratoryEnabled ? lane.exploratory : null;
+    const auditPolicyText = state.snapshot?.entryMode === 'paper_diagnostic_entry_v1' ? '诊断模式：策略与辅助风险只记录；不标为审计通过' : state.snapshot?.auxiliaryAuditPolicy === 'pvp_aux_audit_v1' ? '基础交易检查保留，缺少辅助评分可小额试仓' : '安全与量价检查照常';
+    const description = multi ? lane?.description || '等待具体入场条件' : confirmed ? '近 90 秒至少两个净买家、净买入 $300；五分钟净流入至少 $500。常规需一个聪明钱标签；已核实的 OG 回流催化可替代标签要求，仍需双地址新买盘和连续报价。标签不代表核实盈利。' : probe ? `探索：${num(probe.minBuyers)} 个真实净买家、至少 ${num(probe.minSmartMoney)} 个聪明钱标签或核实盈利地址，净流入 ≥ ${money(probe.minNetBuy)}；不要求盈利画像人数达标，${auditPolicyText}。` : lane?.description || '等待具体入场条件';
+    const sizing = state.snapshot?.positionSizing;
+    const roll = sizing?.mode === 'cash_fraction', standardRate = sizing?.standardRates?.[id];
+    const previewBudget = rate => Math.floor((num(sizing?.cashBasis) * num(rate) + 1e-9) * 100) / 100;
+    const budget = sizing?.mode === 'cash_fraction_cap' ? `可用余额 ${num(sizing.entryFraction) * 100}%、最高 ${num(sizing.maxEntryUsd)} U（本轮≤${money(Math.min(num(sizing.maxEntryUsd),previewBudget(sizing.entryFraction)))}）；另受流动性、信号与成本限制` : sizing?.fixedEntryUsd === 10 ? '固定单笔 10 U（含买入成本）；余额或流动性额度不足则不下单' : confirmed ? `余额 ${num(sizing?.exploratoryRate ?? .02) * 100}%（≤${money(previewBudget(sizing?.exploratoryRate ?? .02))}），不足 $1 不下单` : roll ? `${probe ? `探索 ${num(sizing.exploratoryRate) * 100}%（≤${money(previewBudget(sizing.exploratoryRate))}） / ` : ''}标准 ${num(standardRate) * 100}%（≤${money(previewBudget(standardRate))}）`
+      : probe ? `探索 ${money(probe.entryUsd)} / 标准 ${money(lane.entryUsd)}` : `单笔 ${money(lane?.entryUsd)}`;
+    const details = renderStrategyDetails(lane?.entryPlan, lane?.narrativeAssessment, null, lane?.traderDecision);
+    const legacyLogic = lane?.traderDecision ? '' : `<p>${escapeHtml(lane?.entryLogic || '等待入场依据')}</p>`;
+    return `<article class="strategy-lane"><div class="lane-heading"><span class="lane-index">0${index + 1}</span><h3>${label}</h3><span class="lane-decision ${ready ? 'positive' : ''}">${escapeHtml(decision)}</span></div><p class="lane-description">${escapeHtml(humanText(description))}</p><div class="lane-policy"><span>${escapeHtml(budget)}</span><span>止损上限 ${stop}</span><span>初始时限 ${duration}</span></div><p class="lane-reason">${escapeHtml(reason)}</p><details class="lane-detail" data-strategy="${id}"${expanded.has(id) ? ' open' : ''}><summary>查看叙事与买卖点依据</summary>${legacyLogic}${details}<p>${escapeHtml(lane?.exitLogic || '等待退出计划')}</p></details><div class="lane-foot"><span>${lane ? `观察 ${num(lane.observedCount)} · 满足 ${num(lane.eligibleCount)}` : '尚未采集'}</span>${lane?.candidate ? `<span>候选 ${escapeHtml(lane.candidate.symbol || shortAddress(lane.candidate.address))}</span>` : ''}${finite(stats?.realizedPnl) ? `<span class="${num(stats.realizedPnl) >= 0 ? 'positive' : 'negative'}">净盈亏 ${signedMoney(stats.realizedPnl)}</span>` : ''}</div></article>`;
+  }).join('');
 }
 
-function updateChart() {
-  const points = state.tab === 'price' ? state.chart.filter(value => Number.isFinite(Number(value))).map(Number) : [];
-  const safePoints = points.length > 1 ? points : [0, 0]; const min = Math.min(...safePoints); const max = Math.max(...safePoints); const range = max - min || Math.max(Math.abs(max) * .02, .00000001); const width = 900; const height = 330;
-  const coords = safePoints.map((value, index) => `${(index / (safePoints.length - 1)) * width},${height - ((value - (min - range * .1)) / (range * 1.2)) * height}`).join(' ');
-  $('#chartLine').setAttribute('points', coords); $('#chartArea').setAttribute('d', `M 0 ${height} L ${coords.replaceAll(' ', ' L ')} L ${width} ${height} Z`);
-  const last = safePoints.at(-1); const y = height - ((last - (min - range * .1)) / (range * 1.2)) * height; $('#chartCursor').setAttribute('cx', width); $('#chartCursor').setAttribute('cy', y);
-  const token = currentToken(); const base = token?.price; $('#chartTop').textContent = Number.isFinite(base) ? tokenPrice({ price: base * 1.1 }) : '—'; $('#chartMid').textContent = Number.isFinite(base) ? tokenPrice({ price: base }) : '—'; $('#chartBottom').textContent = Number.isFinite(base) ? tokenPrice({ price: base * .9 }) : '—';
-  const candleNote = state.real.candleStatus === 'ok'
-    ? `GMGN K线 ${resolutionLabel(state.resolution)} · ${state.real.observedAt ? shortClock(new Date(state.real.observedAt)) : '采集时间'}`
-    : state.real.candleStatus === 'stale'
-      ? `GMGN K线 · 上次成功快照 · ${state.real.observedAt ? shortClock(new Date(state.real.observedAt)) : '采集时间'}`
-      : hasRealData(state.real.status) ? 'GMGN 排行快照 · K线暂不可用' : '等待 GMGN 真实 K 线';
-  $('#chartNote').textContent = state.tab === 'price' ? candleNote : `GMGN ${state.tab === 'trades' ? '成交' : '持有人'}聚合数据暂不可用 · 不使用合成序列`;
+function renderCoverage() {
+  const coverage = state.snapshot?.coverage || {};
+  const confirmed = state.snapshot?.entryMode === 'confirmed_pvp_v2';
+  if (state.snapshot?.chains?.length > 1 && state.snapshot.chainCoverage) {
+    $('#coverageList').innerHTML = state.snapshot.chains.map(chain => {
+      const feed = state.snapshot.chainCoverage[chain] || {};
+      const now = Date.now(), external = marketCoverageStatus(feed.market, now), internal = marketCoverageStatus(feed.trenches, now);
+      const flow = flowCoverageStatus(feed.flow, now);
+      const summary = `候选 ${num(feed.candidates)} · 资金流发现 ${num(feed.flowDiscovered)} · 待补查 ${num(feed.researchPending)} · 达标 ${num(feed.eligible)}`;
+      const diagnostic = state.snapshot?.entryMode === 'paper_diagnostic_entry_v1';
+      const funnel = feed.funnel ? `<span>逐关剩余：新鲜行情 ${num(feed.funnel.marketFresh)} → ${state.snapshot?.opportunityMode ? '路线信号达标' : '资金流达标'} ${num(feed.funnel.flowReady)} → ${diagnostic ? '成交模型可用' : '基础检查通过'} ${num(feed.funnel.safetyReady)} → ${confirmed ? '连续报价确认' : diagnostic ? '形态免筛选' : 'K 线齐全'} ${num(feed.funnel.chartReady)} → 新鲜报价 ${num(feed.funnel.quoteFresh)} → 可开仓 ${num(feed.funnel.eligible)}</span>` : '';
+      return `<div class="coverage-item"><span class="coverage-dot ${external.fresh && internal.fresh && flow.fresh ? 'fresh' : ''}"></span><div><strong>${escapeHtml(chainName(chain))} · ${escapeHtml(summary)}</strong><span>外盘：${external.label} · 内盘：${internal.label}</span><span>资金流：${escapeHtml(flow.label || humanText(feed.flow?.coverageGap || '等待采集'))}${feed.flow?.providerLabel ? ` · ${escapeHtml(feed.flow.providerLabel)}` : ''}</span>${funnel}</div><time>${feed.flow?.observedAt ? clock(feed.flow.observedAt) : '—'}</time></div>`;
+    }).join('');
+    return;
+  }
+  $('#coverageList').innerHTML = [['market', '外盘行情'], ['trenches', '内盘 / 新发'], ['flow', '聪明钱资金流']].map(([key, label]) => {
+    const feed = coverage[key];
+    const live = key === 'flow' ? flowCoverageStatus(feed) : marketCoverageStatus(feed);
+    const good = live.fresh;
+    const gap = feed?.coverageGap ? humanText(feed.coverageGap) : key === 'flow' && feed?.complete === false ? '证据覆盖不完整' : null;
+    const providers = key === 'flow' && Array.isArray(feed?.sources) ? `<span>${feed.sources.map(source => escapeHtml(`${source.label}：${flowCoverageStatus(source).label || humanText(source.coverageGap || '等待采集')}`)).join(' · ')}</span>` : '';
+    return `<div class="coverage-item"><span class="coverage-dot ${good ? 'fresh' : ''}"></span><div><strong>${label}${key === 'flow' && feed?.providerLabel ? ` · ${escapeHtml(feed.providerLabel)}` : ''}</strong><span>${escapeHtml(live.label || gap || '等待采集')}${finite(feed?.count) ? ` · ${num(feed.count)} 个对象` : ''}</span>${providers}</div><time>${feed?.observedAt ? clock(feed.observedAt) : '—'}</time></div>`;
+  }).join('');
 }
 
 function renderTrades() {
-  $('#tradeStream').innerHTML = state.trades.slice(0, 8).map(row => `<div class="trade-row"><span class="trade-time">${escapeHtml(row.time)}</span><span class="trade-type ${row.type === '上涨' ? 'buy' : 'sell'}">${row.type}</span><span class="trade-price">${escapeHtml(row.price)}</span><span class="trade-size">${escapeHtml(row.size)}</span><span class="trade-wallet">${escapeHtml(row.wallet)}</span></div>`).join('') || '<div class="empty-position" style="margin-top:8px">等待 GMGN 排行快照…</div>';
-}
-
-function updateQuote() {
-  const token = currentToken(); const amount = Math.max(0, Number.parseFloat($('#amountInput').value) || 0); const price = token?.price; const receive = Number.isFinite(price) && price > 0 ? amount / price * (1 - state.slippage / 10000) : 0;
-  $('#estimatedReceive').textContent = token && Number.isFinite(price) ? `${receive < 1 ? receive.toFixed(8) : receive.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${token.symbol}` : '—'; $('#priceImpact').textContent = token ? `${Math.max(.12, amount / 1200).toFixed(2)}%` : '—';
-  $('#simulateLabel').textContent = state.side === 'buy' ? '模拟买入' : '模拟卖出'; $('#simulateButton').classList.toggle('sell-mode', state.side === 'sell');
-}
-
-function renderPaper() {
-  $('#paperCash').textContent = money(state.paper.cash); $('#paperPnl').textContent = `${state.paper.pnl >= 0 ? '+' : ''}${money(state.paper.pnl)}`; $('#paperPnl').style.color = state.paper.pnl >= 0 ? 'var(--lime)' : 'var(--red)';
-  const entries = Object.entries(state.paper.positions); $('#positionCount').textContent = `${entries.length} 个持仓`;
-  $('#positionsList').innerHTML = entries.length ? entries.map(([symbol, position]) => `<div class="position-row"><div><strong>${escapeHtml(symbol)}</strong><small>${position.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} 份额 · ${money(position.cost)} · ${position.auto ? '自动' : '手动'}</small></div><div class="position-pnl">${money(position.markValue - position.cost)}<small>纸上盈亏</small></div></div>`).join('') : '<div class="empty-position">暂无持仓<br /><span>模拟成交后显示在这里</span></div>';
-  renderFocus();
-}
-
-function renderAuto() {
-  const toggle = $('#autoPaperToggle');
-  if (!toggle) return;
-  toggle.checked = state.auto.enabled;
-  $('#autoPaperLabel').textContent = state.auto.enabled ? '自动运行' : '已暂停';
-  const focusToggle = $('#focusAutoToggle');
-  if (focusToggle) focusToggle.checked = state.auto.enabled;
-  const focusLabel = $('#focusAutoLabel');
-  if (focusLabel) focusLabel.textContent = state.auto.enabled ? '自动运行' : '已暂停';
-  const runAt = state.auto.lastRunAt ? `上次运行 ${shortClock(new Date(state.auto.lastRunAt))}` : '尚未运行';
-  const reason = state.auto.lastReason ? ` · ${state.auto.lastReason}` : '';
-  $('#autoPaperStatus').textContent = `${state.auto.lastAction || '等待最新行情'} · ${runAt}${reason}`;
-}
-
-const RESEARCH_DEPARTMENTS = Object.freeze([
-  ['chain', '链路研究部', '链'],
-  ['narrative', '叙事研究部', '叙'],
-  ['flow', '筹码资金部', '筹'],
-  ['security', '合约安全部', '安'],
-  ['market', '行情结构部', '行'],
-  ['risk', '投委会风控部', '控'],
-]);
-
-function researchDepartmentStatus(status) {
-  return ({ 通过: '通过', 部分: '部分', 观察: '观察', 拦截: '拦截' })[status] || '观察';
+  const trades = state.snapshot?.account?.trades;
+  const rows = Array.isArray(trades) ? [...trades].sort((a, b) => num(b.atMs) - num(a.atMs)).slice(0, 10) : [];
+  $('#tradeCount').textContent = Array.isArray(trades) ? `共 ${trades.length} 笔` : '等待同步';
+  $('#tradeRows').innerHTML = rows.length ? rows.map(row => {
+    const buy = row.side === 'buy';
+    const sideLabel = buy ? '买入' : row.side === 'writeoff' ? '计提损失' : '卖出';
+    const pnl = row.realizedPnl;
+    return `<tr><td><strong>${escapeHtml(row.symbol || shortAddress(row.address))}</strong><small>${dateTime(row.atMs)}</small></td><td><span class="${buy ? 'positive' : ''}">${sideLabel}</span><small>${escapeHtml(recordLabel(row))}</small></td><td>${money(buy ? Math.abs(num(row.netUsd)) : row.netUsd)}<small>${buy ? '总支出，含成本' : '净回款，已扣成本'} ${money(row.costsUsd)}</small></td><td class="${!buy && num(pnl) < 0 ? 'negative' : !buy && num(pnl) > 0 ? 'positive' : ''}">${buy ? '—' : signedMoney(pnl)}<small>${buy ? '见对应卖出结果' : '已计成本'}</small></td><td class="trade-reason">${escapeHtml(humanText(row.reason || '策略执行'))}</td></tr>`;
+  }).join('') : '<tr><td colspan="5" class="trade-empty">暂无成交记录 · 实际模拟买卖后记录时间、成本和触发原因</td></tr>';
 }
 
 function renderResearchTeam() {
-  const panel = $('#researchTeamDepartments');
-  if (!panel) return;
-  const report = state.research.report;
-  const status = state.research.status;
-  const hasReport = report && typeof report === 'object';
-  const conclusion = hasReport ? report.decision || '观察' : '观察';
-  const conclusionNode = $('#researchTeamConclusion');
-  conclusionNode.textContent = conclusion;
-  conclusionNode.dataset.decision = conclusion;
-  $('#researchTeamScore').textContent = hasReport && Number.isFinite(Number(report.opportunityScore)) ? `${Number(report.opportunityScore).toFixed(0)} / 100` : '—';
-  $('#researchTeamConfidence').textContent = hasReport ? `${report.confidence || '低'}${Number.isFinite(Number(report.confidenceScore)) ? ` · ${Number(report.confidenceScore).toFixed(0)}` : ''}` : '—';
-  $('#researchTeamUpdated').textContent = state.research.observedAt ? shortClock(new Date(state.research.observedAt)) : '—';
-  const focusTag = String(report?.chain || state.chain).toLowerCase() === 'robinhood' ? 'Robinhood重点 · ' : '';
-  $('#researchTeamStatus').textContent = status === 'ok' ? `${focusTag}6部门 · 新鲜` : status === 'stale' ? `${focusTag}6部门 · 上次快照` : status === 'loading' ? `${focusTag}研究中` : '等待真实数据';
-  panel.innerHTML = hasReport
-    ? RESEARCH_DEPARTMENTS.map(([id, label, marker]) => {
-      const department = report.departments?.[id] || {};
-      const departmentStatus = researchDepartmentStatus(department.status);
-      const score = Number.isFinite(Number(department.score)) && Number.isFinite(Number(department.maxScore)) ? `${Number(department.score).toFixed(0)} / ${Number(department.maxScore).toFixed(0)}` : '—';
-      return `<article class="research-department" data-status="${escapeHtml(departmentStatus)}"><span class="research-department-marker">${escapeHtml(marker)}</span><div><strong>${escapeHtml(label)} · ${escapeHtml(departmentStatus)}</strong><span title="${escapeHtml(department.conclusion || '等待部门结论')}">${escapeHtml(department.conclusion || '等待部门结论')}</span></div><span class="research-department-score">${escapeHtml(score)}</span></article>`;
-    }).join('')
-    : '<div class="research-empty">等待链路、叙事、筹码、安全、行情和总控部门汇总…</div>';
-  $('#researchTeamBrief').textContent = hasReport
-    ? (state.research.brief || `总控：${report.reasons?.[0] || '等待研究证据'}`)
-    : status === 'unavailable' ? 'GMGN 真实数据暂不可用；不显示合成投研结论，也不触发新增模拟。' : '只读取 GMGN 真实快照；没有来源的叙事不会被猜测，未知安全不会被当成安全。';
+  const data = state.research;
+  const report = data?.report;
+  $('#researchTeamStatus').textContent = state.researchBusy ? '研究中' : state.researchError ? report ? '上次投研快照' : '数据暂不可用' : report ? `${state.researchToken?.symbol || ''} · ${statusLabel(data.status)}` : '展开查看';
+  $('#researchTeamConclusion').textContent = humanText(report?.decision || '观察');
+  $('#researchTeamScore').textContent = finite(report?.opportunityScore) ? `${num(report.opportunityScore)} / 100` : '—';
+  $('#researchTeamConfidence').textContent = report?.confidence || '—';
+  $('#researchTeamUpdated').textContent = data?.observedAt ? clock(data.observedAt) : '—';
+  $('#researchTeamDepartments').innerHTML = report ? DEPARTMENTS.map(([id, label]) => {
+    const department = report.departments?.[id] || {};
+    return `<div class="research-department"><div><strong>${label}</strong><span>${escapeHtml(statusLabel(department.status || '观察'))}</span></div><p>${escapeHtml(humanText(department.conclusion || '暂无结论'))}</p></div>`;
+  }).join('') : '<p class="research-empty">等待具体代币的链路、叙事、筹码、安全、行情和总控结论。</p>';
+  $('#researchTeamBrief').textContent = humanText(data?.brief || (state.researchError ? '暂时无法获得投研数据，请稍后再试。' : '投研依据随真实证据更新。'));
 }
 
-function renderFocus() {
-  const token = currentToken();
-  const focusCash = $('#focusCash');
-  if (!focusCash) return;
-  focusCash.textContent = money(state.paper.cash);
-  const focusPnl = $('#focusPnl');
-  focusPnl.textContent = `${state.paper.pnl >= 0 ? '+' : ''}${money(state.paper.pnl)}`;
-  focusPnl.style.color = state.paper.pnl >= 0 ? 'var(--lime)' : 'var(--red)';
-  $('#focusSyncState').textContent = $('#paperStateLabel')?.textContent === '已同步' ? '已同步' : '本地账本';
-  $('#focusAutoToggle').checked = state.auto.enabled;
-  $('#focusAutoLabel').textContent = state.auto.enabled ? '自动运行' : '已暂停';
-  $('#focusLastAction').textContent = state.auto.lastAction || '等待行情';
-  $('#focusLastReason').textContent = state.auto.lastReason || '只写入本机模拟账本';
-
-  const entries = Object.entries(state.paper.positions);
-  $('#focusPositionCount').textContent = `${entries.length} 个仓位`;
-  $('#focusPositionsList').innerHTML = entries.length ? entries.map(([key, position]) => {
-    const symbol = positionSymbol(key, position);
-    const liveToken = positionToken(position, key);
-    const quantity = number(position.quantity);
-    const livePrice = Number(liveToken?.price);
-    const markValue = Number.isFinite(livePrice) && livePrice > 0 ? quantity * livePrice : number(position.markValue, number(position.cost));
-    const pnl = markValue + number(position.realizedValue) - number(position.entryCost, number(position.cost));
-    const pnlClass = pnl >= 0 ? 'positive' : 'negative';
-    const mode = position.auto ? '自动策略' : '手动模拟';
-    const openedAt = position.openedAt ? shortClock(new Date(position.openedAt)) : '—';
-    return `<article class="focus-position-row"><div class="focus-position-main"><span class="focus-position-avatar">${escapeHtml(symbol.slice(0, 1))}</span><div><strong>${escapeHtml(symbol)}</strong><span>${mode} · ${openedAt}</span></div></div><div class="focus-position-numbers"><strong>${money(markValue)}</strong><span class="${pnlClass}">${pnl >= 0 ? '+' : ''}${money(pnl)} · ${quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} 份</span></div></article>`;
-  }).join('') : '<div class="focus-empty">暂无持仓<span>自动买入后会显示在这里</span></div>';
-
-  const freshness = state.real.status === 'ok' ? '实时' : state.real.status === 'stale' ? '上次快照' : state.real.status === 'loading' ? '连接中' : '不可用';
-  $('#focusFreshness').textContent = freshness;
-  $('#focusFreshness').className = `signal-state ${state.real.status === 'ok' ? 'fresh' : state.real.status === 'stale' ? 'stale' : ''}`;
-  if (!token) {
-    $('#focusTokenAvatar').textContent = '?'; $('#focusTokenName').textContent = '等待 GMGN 行情'; $('#focusTokenMeta').textContent = `${chainLabel(state.chain)} · —`;
-    $('#focusTokenPrice').textContent = '—'; $('#focusTokenChange').textContent = '—'; $('#focusRisk').textContent = '等待'; $('#focusLiquidity').textContent = '—'; $('#focusSmartMoney').textContent = '—'; $('#focusRug').textContent = '—';
-    $('#focusSignalNote').textContent = '等待最新 GMGN 真实快照。';
-    return;
-  }
-  const change = number(token.change);
-  $('#focusTokenAvatar').textContent = token.symbol.slice(0, 1);
-  $('#focusTokenName').textContent = token.symbol;
-  $('#focusTokenMeta').textContent = `${chainLabel(token.chain)} · ${formatAddress(token.address)}`;
-  $('#focusTokenPrice').textContent = tokenPrice(token);
-  const focusChange = $('#focusTokenChange'); focusChange.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`; focusChange.className = change >= 0 ? 'positive' : 'negative';
-  $('#focusRisk').textContent = riskLabel(token.risk);
-  $('#focusRisk').className = token.risk === 'STRONG' ? 'positive' : token.risk === 'BLOCKED' ? 'negative' : 'warning';
-  $('#focusLiquidity').textContent = compact(token.liquidity);
-  $('#focusSmartMoney').textContent = token.smartDegenCount == null ? '—' : `${token.smartDegenCount} 个`;
-  $('#focusRug').textContent = Number.isFinite(Number(token.rugRatio)) ? `${(Number(token.rugRatio) * 100).toFixed(1)}%` : '—';
-  const qualifies = state.real.status === 'ok' && autoEligible(token);
-  $('#focusSignalNote').textContent = qualifies ? '当前对象满足自动筛选条件，下一周期可进入。' : state.real.status !== 'ok' ? '行情不是最新成功快照，不触发自动买入。' : '当前对象未满足全部买入条件，自动策略会继续观察。';
+function renderResearchArchive() {
+  renderStrategies(); renderCoverage();
+  $('#exitComparisonContent').innerHTML = renderExitComparison(state.snapshot?.exitComparison,state.snapshot?.mainExitPolicy,state.snapshot?.recovery);
+  $('#exitComparisonStatus').textContent = state.snapshot?.exitComparison ? '独立运行 · 尚未验证盈利' : '等待实验启动';
+  $('#walletLearningContent').innerHTML = renderWalletLearning(state.snapshot?.learning, state.snapshot?.learningComparison);
+  $('#walletLearningStatus').textContent = state.snapshot?.learning?.lastError ? '采集待恢复' : state.snapshot?.learningComparison?.student ? '向前模拟对照中' : '真实样本学习中';
 }
 
-function autoEligible(token) {
-  return token?.risk === 'STRONG'
-    && Number.isFinite(Number(token.price)) && Number(token.price) > 0
-    && Number.isFinite(Number(token.liquidity)) && Number(token.liquidity) >= 50_000
-    && Number.isFinite(Number(token.smartDegenCount)) && Number(token.smartDegenCount) >= 3
-    && Number.isFinite(Number(token.rugRatio)) && Number(token.rugRatio) < .2
-    && token.isWashTrading !== true
-    && number(token.change) >= 0;
+function renderAll() {
+  renderStatus(); renderAccount(); renderPositions(); renderTrades();
+  const visible=$('#researchArchive').open;
+  // Continue recording CA changes; do not rebuild hundreds of hidden DOM rows.
+  caDesk.update(state.snapshot, state.status === 'ok', visible);
+  brainDesk.update(state.snapshot, state.status === 'ok');
+  if(visible)renderResearchArchive();
 }
+$('#researchArchive').addEventListener('toggle',()=>{
+  if($('#researchArchive').open){renderResearchArchive();caDesk.update(state.snapshot,state.status==='ok');}
+});
 
-async function refreshPositionMarks() {
-  const entries = Object.entries(state.paper.positions).filter(([, position]) => position.auto === true);
-  if (!entries.length) return;
-  const results = await Promise.allSettled(entries.map(async ([key, position]) => {
-    const token = positionToken(position, key);
-    const chain = token?.chain || position.chain;
-    const address = token?.address || position.address;
-    if (!chain || !address) return { key, status: 'unavailable' };
-    try {
-      const { data } = await getJson(`/api/kline?chain=${encodeURIComponent(String(chain).toLowerCase())}&address=${encodeURIComponent(address)}&resolution=1m&hours=1`);
-      const candles = Array.isArray(data?.candles) ? data.candles : [];
-      const price = Number(candles.at(-1)?.close);
-      if (!Number.isFinite(price) || price <= 0) throw new Error('position_mark_unavailable');
-      state.positionMarks.set(key, { price, status: data.status, observedAt: data.observedAt || null });
-      return { key, status: data.status };
-    } catch {
-      state.positionMarks.set(key, { price: null, status: 'unavailable', observedAt: null });
-      return { key, status: 'unavailable' };
-    }
-  }));
-  return results;
-}
-
-function autoReturnRate(position) {
-  const entryCost = number(position.entryCost, number(position.cost));
-  const realizedValue = number(position.realizedValue);
-  const totalValue = number(position.markValue) + realizedValue;
-  return entryCost > 0 ? totalValue / entryCost - 1 : 0;
-}
-
-function closeAutoPosition(symbol, position, reason) {
-  const proceeds = number(position.markValue);
-  const cost = number(position.cost);
-  state.paper.cash += proceeds;
-  state.paper.pnl += proceeds - cost;
-  delete state.paper.positions[symbol];
-  return `自动卖出 ${symbol} · ${reason}`;
-}
-
-function scaleOutAutoPosition(symbol, position, price, level) {
-  if (!Array.isArray(position.scaleOuts)) position.scaleOuts = [];
-  if (position.scaleOuts.includes(level.multiple) || position.quantity <= 0 || position.cost <= 0) return null;
-  const sellQuantity = position.quantity * level.fraction;
-  const proceeds = sellQuantity * price;
-  const costBasis = position.cost * (sellQuantity / position.quantity);
-  position.quantity -= sellQuantity;
-  position.cost -= costBasis;
-  position.markValue = position.quantity * price;
-  position.realizedValue = number(position.realizedValue) + proceeds;
-  position.scaleOuts.push(level.multiple);
-  state.paper.cash += proceeds;
-  state.paper.pnl += proceeds - costBasis;
-  return `自动分段止盈 ${symbol} · ${level.label}回收 ${money(proceeds)}`;
-}
-
-function runPaperAutoCycle({ fresh = false, force = false } = {}) {
-  if (!state.auto.enabled) return;
-  const now = Date.now(); const previousRun = Date.parse(state.auto.lastRunAt || '');
-  if (!force && Number.isFinite(previousRun) && now - previousRun < REAL_REFRESH_MS) {
-    state.auto.lastAction = '等待下一个自动周期'; state.auto.lastReason = '自动周期为 60 秒'; saveAuto(); renderAuto(); return;
-  }
-  state.auto.lastRunAt = new Date(now).toISOString();
-  if (!fresh) {
-    state.auto.lastAction = '等待最新真实行情'; state.auto.lastReason = '旧快照不触发自动模拟'; saveAuto(); renderAuto(); return;
-  }
-  const actions = [];
-  let unpricedHoldings = 0;
-  for (const [positionKey, position] of Object.entries(state.paper.positions)) {
-    if (position.auto !== true) continue;
-    const symbol = positionSymbol(positionKey, position);
-    const heldToken = positionToken(position, positionKey);
-    const independentMark = state.positionMarks.get(positionKey);
-    const snapshotPrice = state.real.status === 'ok' ? Number(heldToken?.price) : NaN;
-    const price = independentMark?.status === 'ok' ? Number(independentMark.price) : snapshotPrice;
-    if (!Number.isFinite(price) || price <= 0) { unpricedHoldings += 1; continue; }
-    position.markValue = position.quantity * price;
-    position.entryCost = number(position.entryCost, number(position.cost));
-    position.realizedValue = number(position.realizedValue);
-    position.scaleOuts = Array.isArray(position.scaleOuts) ? position.scaleOuts : [];
-    position.entryPrice = number(position.entryPrice, position.quantity > 0 ? position.markValue / position.quantity : price);
-    position.highWaterPrice = Math.max(number(position.highWaterPrice, price), price);
-    let returnRate = autoReturnRate(position);
-    for (const level of AUTO_POLICY.scaleOutLevels) {
-      if (position.entryPrice <= 0 || price / position.entryPrice < level.multiple) continue;
-      const action = scaleOutAutoPosition(symbol, position, price, level);
-      if (action) actions.push(action);
-      returnRate = autoReturnRate(position);
-    }
-    const age = now - number(position.openedAt, now);
-    const trailingStop = position.highWaterPrice * (1 - AUTO_POLICY.trailingDrawdown);
-    const exitReason = returnRate <= AUTO_POLICY.stopLoss
-      ? '触发硬止损'
-      : returnRate >= AUTO_POLICY.trailActivation && price <= trailingStop
-        ? '触发追踪止损'
-        : age >= AUTO_POLICY.maxHoldMs ? '到达最长持仓时间' : null;
-    if (exitReason) {
-      actions.push(closeAutoPosition(symbol, position, exitReason));
-    }
-  }
-  const autoPositions = Object.values(state.paper.positions).filter(position => position.auto === true).length;
-  if (autoPositions < AUTO_POLICY.maxPositions && state.paper.cash >= AUTO_POLICY.entryUsd) {
-    const candidate = state.tokens.find(token => autoEligible(token) && !positionForToken(token));
-    if (candidate) {
-      const quantity = AUTO_POLICY.entryUsd / Number(candidate.price);
-      state.paper.cash -= AUTO_POLICY.entryUsd;
-      state.paper.positions[tokenId(candidate)] = {
-        symbol: candidate.symbol, chain: candidate.chain, address: candidate.address, quantity,
-        cost: AUTO_POLICY.entryUsd, entryCost: AUTO_POLICY.entryUsd, entryPrice: Number(candidate.price), realizedValue: 0,
-        markValue: AUTO_POLICY.entryUsd, highWaterPrice: Number(candidate.price), scaleOuts: [], auto: true, openedAt: now,
-      };
-      actions.push(`自动买入 ${candidate.symbol} · ${money(AUTO_POLICY.entryUsd)}`);
-    } else state.auto.lastReason = '没有同时满足强信号、流动性和风控条件的代币';
-  } else if (autoPositions >= AUTO_POLICY.maxPositions) state.auto.lastReason = '已达到最多 2 个自动仓位';
-  else state.auto.lastReason = '纸上余额不足 10 美元';
-  state.auto.lastAction = actions.length ? actions.join('；') : '本轮没有交易动作';
-  if (actions.length) state.auto.lastReason = '仅写入本机模拟账本';
-  else if (unpricedHoldings) state.auto.lastReason = `${unpricedHoldings} 个持仓暂无独立新鲜估值，不触发假价格退出`;
-  savePaper(); saveAuto(); renderAuto();
-}
-
-function renderAll() { renderWatchlist(); renderMarket(); renderTrades(); renderPaper(); renderAuto(); renderFocus(); renderResearchTeam(); }
-
-function rowsFromTokens(tokens, observedAt) {
-  const time = observedAt ? shortClock(new Date(observedAt)) : '--:--:--';
-  return tokens.map(token => ({ time, type: number(token.change) >= 0 ? '上涨' : '下跌', price: tokenPrice(token), size: compact(token.volume), wallet: `${token.smartDegenCount ?? '—'} 聪明钱 / ${token.holders ?? '—'} 持有人` }));
-}
-
-async function getJson(url) {
-  const started = performance.now(); const response = await fetch(url, { cache: 'no-store' }); const data = await response.json(); if (!response.ok) throw new Error('request failed'); return { data, latency: Math.round(performance.now() - started) };
-}
-
-async function refreshKline() {
-  const token = currentToken(); if (!token) { state.chart = []; state.real.candleStatus = 'unavailable'; updateChart(); return; }
-  const previousChart = state.chart;
-  state.real.candleStatus = 'loading';
+async function requestJson(url, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.method ? 15000 : 12000);
   try {
-    const { data } = await getJson(`/api/kline?chain=${encodeURIComponent(String(token.chain).toLowerCase())}&address=${encodeURIComponent(token.address)}&resolution=${encodeURIComponent(state.resolution)}&hours=6`);
-    if (!hasRealData(data?.status) || !Array.isArray(data.candles)) throw new Error('kline unavailable');
-    state.chart = data.candles.map(candle => Number(candle.close)).filter(Number.isFinite); state.real.candleStatus = state.chart.length > 1 ? data.status === 'stale' ? 'stale' : 'ok' : 'unavailable';
-  } catch { state.chart = previousChart.length > 1 ? previousChart : []; state.real.candleStatus = state.chart.length > 1 ? 'stale' : 'unavailable'; }
-  updateChart();
+    const response = await fetch(url, { cache: 'no-store', ...options, signal: controller.signal });
+    const data = await response.json();
+    if (!response.ok) throw new Error('request_failed');
+    return data;
+  } finally { clearTimeout(timer); }
+}
+
+async function refreshStrategyState() {
+  if (state.fetching) return;
+  state.fetching = true;
+  try {
+    const data = await requestJson('/api/strategy-state');
+    if (!data || data.mode !== 'paper' || !['ok', 'loading', 'error'].includes(data.status)) throw new Error('invalid_state');
+    state.snapshot = data;
+    state.status = data.status;
+  } catch { state.status = 'error'; }
+  finally { state.fetching = false; renderAll(); }
+}
+
+async function setEnabled(enabled) {
+  state.controlling = true;
+  renderStatus();
+  try {
+    const result = await requestJson('/api/strategy-control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) });
+    if (result?.status === 'error' || result?.ok === false) throw new Error('control_failed');
+    await refreshStrategyState();
+    toast(enabled ? '已恢复自动开仓。' : '已暂停新增仓位，持仓止损、止盈和监控继续运行。');
+  } catch { toast('开关更新失败，请稍后重试。'); }
+  finally { state.controlling = false; renderStatus(); }
 }
 
 async function refreshResearchTeam() {
-  const token = currentToken();
-  if (!token?.address) {
-    state.research = { status: 'unavailable', source: 'gmgn-cli', observedAt: null, report: null, brief: '' };
-    renderResearchTeam();
-    return;
-  }
-  const address = String(token.address);
-  const chain = String(token.chain || state.chain).toLowerCase();
-  state.research.status = 'loading';
+  if (!$('#researchPanel').open || state.researchBusy) return;
+  state.researchBusy = true;
+  state.researchError = false;
   renderResearchTeam();
   try {
-    const { data } = await getJson(`/api/research-team?chain=${encodeURIComponent(chain)}&address=${encodeURIComponent(address)}`);
-    // A chain switch or a manual token click can finish while this read-only
-    // request is in flight. Do not paint an older report over the new token.
-    if (currentToken()?.address !== address) return;
-    state.research = {
-      status: data?.status || 'unavailable',
-      source: data?.source || 'gmgn-cli',
-      observedAt: data?.observedAt || null,
-      report: data?.report || null,
-      brief: data?.brief || '',
-    };
-  } catch {
-    if (currentToken()?.address === address) state.research = { status: 'unavailable', source: 'gmgn-cli', observedAt: null, report: null, brief: '' };
-  }
-  renderResearchTeam();
-}
-
-async function refreshRealMarket() {
-  if (state.paused) return;
-  markRealStatus('loading');
-  try {
-    const { data, latency } = await getJson(`/api/market?chain=${encodeURIComponent(state.chain)}&interval=${encodeURIComponent(state.interval)}&limit=20`);
-    if (!hasRealData(data?.status) || !Array.isArray(data.tokens)) throw new Error('market unavailable');
-    state.tokens = data.tokens.filter(token => token && token.address && Number.isFinite(Number(token.price)));
-    migratePaperPositions();
-    if (!state.tokens.some(token => token.address === state.selectedAddress)) state.selectedAddress = state.tokens[0]?.address || null;
-    state.trades = rowsFromTokens(state.tokens.slice(0, 8), data.observedAt); state.real.candleStatus = 'loading';
-    markRealStatus(data.status, { observedAt: data.observedAt, latency, staleReason: data.staleReason || null });
-    await refreshPositionMarks();
-    runPaperAutoCycle({ fresh: data.status === 'ok' }); renderAll(); await refreshKline(); await refreshResearchTeam();
-  } catch {
-    if (state.tokens.length) {
-      state.real.candleStatus = state.chart.length > 1 ? 'stale' : 'unavailable';
-      markRealStatus('stale', { staleReason: 'dashboard_fetch_failed' });
-      renderAll();
-    } else {
-      state.tokens = []; state.selectedAddress = null; state.trades = []; state.chart = []; state.real.candleStatus = 'unavailable'; markRealStatus('unavailable'); renderAll();
+    let token = Object.values(state.snapshot?.account?.positions || {})[0] || state.snapshot?.strategies?.find(lane => lane.candidate)?.candidate;
+    if (!token?.address) {
+      const market = await requestJson('/api/market?chain=robinhood&interval=1m&limit=20');
+      token = market.tokens?.[0];
     }
-  }
+    if (!token?.address) throw new Error('no_research_target');
+    const data = await requestJson(`/api/research-team?chain=${encodeURIComponent(token.chain || 'robinhood')}&address=${encodeURIComponent(token.address)}`);
+    state.researchToken = token;
+    state.research = data;
+  } catch { state.researchError = true; }
+  finally { state.researchBusy = false; renderResearchTeam(); }
 }
 
-async function syncPaperBridge() {
-  try {
-    const response = await fetch('/api/paper-state', { cache: 'no-store' }); if (!response.ok) throw new Error('paper state unavailable'); const data = await response.json();
-    $('#paperStateLabel').textContent = data?.status === 'ok' ? '已同步' : '本地';
-    if ($('#focusSyncState')) $('#focusSyncState').textContent = data?.status === 'ok' ? '已同步' : '本地账本';
-  } catch { $('#paperStateLabel').textContent = '本地'; if ($('#focusSyncState')) $('#focusSyncState').textContent = '本地账本'; }
-}
-
-function placePaperOrder() {
-  const token = currentToken(); if (!token) return toast('当前没有 GMGN 真实行情，暂停模拟下单。'); if (token.risk === 'BLOCKED') return toast(`${token.symbol} 已触发风险拦截，停止模拟下单。`);
-  const amount = Number.parseFloat($('#amountInput').value); if (!Number.isFinite(amount) || amount <= 0) return toast('请输入大于 0 的模拟金额。');
-  const [positionKey, existing] = positionEntryForToken(token);
-  if (state.side === 'buy') {
-    if (existing?.auto) return toast(`${token.symbol} 正由自动策略持有，请等待自动退出。`);
-    if (amount > state.paper.cash) return toast('纸上账户余额不足。');
-    state.paper.cash -= amount;
-    const units = amount / token.price;
-    const position = existing || { symbol: token.symbol, chain: token.chain, address: token.address, quantity: 0, cost: 0, markValue: 0, auto: false, openedAt: Date.now() };
-    position.symbol = token.symbol; position.chain = token.chain; position.address = token.address; position.auto = false;
-    position.entryPrice = (position.quantity * number(position.entryPrice, token.price) + amount) / (position.quantity + units);
-    position.quantity += units; position.cost += amount; position.markValue = position.quantity * token.price;
-    state.paper.positions[positionKey] = position;
-    toast(`模拟买入 · ${money(amount)} ${token.symbol} 已加入纸上账本`);
-  } else {
-    const position = existing;
-    if (!position || position.quantity <= 0) return toast(`纸上账本没有 ${token.symbol} 持仓。`);
-    const sellUnits = Math.min(position.quantity, amount / token.price); const proceeds = sellUnits * token.price; const costBasis = position.cost * (sellUnits / position.quantity);
-    state.paper.cash += proceeds; state.paper.pnl += proceeds - costBasis; position.quantity -= sellUnits; position.cost -= costBasis; position.markValue = position.quantity * token.price;
-    if (position.quantity < .00000001) delete state.paper.positions[positionKey];
-    toast(`模拟卖出 · ${money(proceeds)} ${token.symbol} 已从纸上账本扣除`);
-  }
-  savePaper(); renderPaper(); updateQuote();
-}
-
-$$('.order-tab').forEach(button => button.addEventListener('click', () => { state.side = button.dataset.side; $$('.order-tab').forEach(item => item.classList.toggle('active', item === button)); updateQuote(); }));
-$$('[data-amount]').forEach(button => button.addEventListener('click', () => { $('#amountInput').value = button.dataset.amount; updateQuote(); }));
-$$('[data-slippage]').forEach(button => button.addEventListener('click', () => { state.slippage = Number(button.dataset.slippage); $$('[data-slippage]').forEach(item => item.classList.toggle('active', item === button)); updateQuote(); }));
-$('#amountInput').addEventListener('input', updateQuote); $('#maxButton').addEventListener('click', () => { const token = currentToken(); $('#amountInput').value = state.side === 'buy' ? state.paper.cash.toFixed(2) : (token ? positionForToken(token)?.markValue || 0 : 0).toFixed(2); updateQuote(); }); $('#simulateButton').addEventListener('click', placePaperOrder);
-$('#tokenSearch').addEventListener('input', renderWatchlist);
-function setAutoEnabled(enabled) {
-  state.auto.enabled = enabled;
-  state.auto.lastAction = state.auto.enabled ? '已开启，等待最新行情' : '自动模拟已暂停';
-  state.auto.lastReason = state.auto.enabled ? '只使用最新 GMGN 真实快照' : '不会再自动买卖';
-  saveAuto(); renderAuto(); toast(state.auto.enabled ? '自动模拟交易已开启。' : '自动模拟交易已暂停。');
-  if (state.auto.enabled && state.real.status === 'ok') { runPaperAutoCycle({ fresh: true, force: true }); renderPaper(); updateQuote(); }
-  renderFocus();
-}
-$('#autoPaperToggle').addEventListener('change', event => setAutoEnabled(event.target.checked));
-$('#focusAutoToggle').addEventListener('change', event => setAutoEnabled(event.target.checked));
-$('#pauseButton').addEventListener('click', () => { state.paused = !state.paused; $('#pauseButton').textContent = state.paused ? '▶' : 'Ⅱ'; $('#pauseButton').classList.toggle('active', state.paused); $('#streamLabel').textContent = state.paused ? 'GMGN 行情 · 已暂停' : hasRealData(state.real.status) ? state.real.status === 'stale' ? 'GMGN 真实行情 · 上次成功快照' : 'GMGN 真实行情' : 'GMGN 行情 · 加载中'; toast(state.paused ? 'GMGN 实时轮询已暂停。' : 'GMGN 实时轮询已恢复。'); if (!state.paused) refreshRealMarket(); });
-$('#resetPaper').addEventListener('click', () => { state.paper = { cash: PAPER_START, pnl: 0, positions: {} }; state.positionMarks.clear(); state.auto.lastAction = '纸上账户已重置'; state.auto.lastReason = '自动模拟仍按开关状态运行'; savePaper(); saveAuto(); renderPaper(); renderAuto(); renderFocus(); toast('纸上账户已重置为 100 美元。'); });
-$('#focusResetPaper').addEventListener('click', () => $('#resetPaper').click());
-$('#copyButton').addEventListener('click', async () => { const token = currentToken(); if (!token) return toast('没有可复制的真实合约地址。'); try { await navigator.clipboard.writeText(token.address); toast('GMGN 合约地址已复制。'); } catch { toast('当前浏览器无法使用剪贴板。'); } });
-$$('.chart-tab').forEach(button => button.addEventListener('click', () => { state.tab = button.dataset.tab; $$('.chart-tab').forEach(item => item.classList.toggle('active', item === button)); updateChart(); }));
-$('#chainButton').addEventListener('click', () => { state.chain = CHAINS[(CHAINS.indexOf(state.chain) + 1) % CHAINS.length]; state.selectedAddress = null; $('#chainLabel').textContent = chainLabel(state.chain); toast(`链筛选：${chainLabel(state.chain)} · GMGN 只读`); refreshRealMarket(); });
-$('#filterButton').addEventListener('click', () => { const intervals = ['1m', '5m', '1h', '6h', '24h']; state.interval = intervals[(intervals.indexOf(state.interval) + 1) % intervals.length]; $('#filterButton').textContent = `GMGN ${intervalLabel(state.interval)}`; toast(`GMGN 排行窗口：${intervalLabel(state.interval)}`); refreshRealMarket(); });
-$$('.timeframes button').forEach(button => button.addEventListener('click', () => { const resolution = button.dataset.resolution; if (!resolution) return; state.resolution = resolution; $$('.timeframes button').forEach(item => item.classList.toggle('active', item === button)); refreshKline(); }));
-$('#crosshair').addEventListener('mousemove', event => { const bounds = event.currentTarget.parentElement.getBoundingClientRect(); event.currentTarget.style.left = `${event.clientX - bounds.left}px`; });
-document.addEventListener('keydown', event => { if (event.key === '/' && document.activeElement !== $('#tokenSearch')) { event.preventDefault(); $('#tokenSearch').focus(); } });
-
-renderAll(); $('#clock').textContent = shortClock(); markRealStatus('loading');
-setInterval(() => { $('#clock').textContent = shortClock(); }, 1000);
-setInterval(refreshRealMarket, REAL_REFRESH_MS);
-setInterval(syncPaperBridge, 10_000);
-syncPaperBridge();
-refreshRealMarket();
+$('#focusAutoToggle').addEventListener('change', event => setEnabled(event.target.checked));
+$('#researchPanel').addEventListener('toggle', () => { if ($('#researchPanel').open) refreshResearchTeam(); });
+archiveSummary();
+renderAll();
+renderResearchTeam();
+$('#clock').textContent = clock();
+setInterval(() => { $('#clock').textContent = clock(); }, 1000);
+setInterval(refreshStrategyState, 1000);
+setInterval(refreshResearchTeam, 60000);
+refreshStrategyState();

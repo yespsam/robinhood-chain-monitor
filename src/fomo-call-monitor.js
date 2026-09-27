@@ -559,13 +559,11 @@ export async function discoverGmgnBscKolCandidates(options = {}) {
   const cliPath = String(options.cliPath || "gmgn-cli");
   const limit = Math.max(1, Math.min(100, Number(options.limit || 100)));
   const timeout = Math.max(5_000, Number(options.timeoutMs || 30_000));
-  const { stdout } = await execFileAsync(cliPath, ["track", "kol", "--chain", "bsc", "--limit", String(limit), "--raw"], {
-    encoding: "utf8",
-    timeout,
-    maxBuffer: 20 * 1024 * 1024,
-    windowsHide: true,
-  });
-  return parseGmgnBscKolCandidates(JSON.parse(stdout));
+  // This discovery path is also used by the X monitor; it must not bypass the
+  // account's Plus admission queue or durable 429 cooldown.
+  const client=createGmgnFlowClient({dataDir:options.dataDir,gmgnFlowCliPath:cliPath,requestTimeoutMs:timeout});
+  try {return parseGmgnBscKolCandidates(await client.trades('bsc','kol',{limit}));}
+  finally {await client.stop();}
 }
 
 export function parseGmgnBscSmartMoneyBuys(payload, options = {}) {
@@ -2586,6 +2584,7 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     const candidates = gmgnSharedClient
       ? parseGmgnBscKolCandidates(await gmgnSharedClient.trades("bsc", "kol"))
       : await discoverGmgnBscKolCandidates({
+      dataDir: config.dataDir,
       cliPath: config.fomoCallGmgnCliPath || "gmgn-cli",
       limit: config.fomoCallGmgnDiscoveryLimit || 100,
       timeoutMs: config.fomoCallGmgnDiscoveryTimeoutMs || 30_000,

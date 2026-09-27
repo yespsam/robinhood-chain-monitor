@@ -45,10 +45,12 @@ import {
 } from "./kol-token-launch-alert.js";
 import { deriveNewPoolContext } from "./new-pool-context.js";
 import { isGeniusHistorical, isGeniusOfficialEvent } from "./genius-source-policy.js";
+import { geniusNotificationPolicy } from "./genius-notification-policy.js";
 import { renderGeniusAlertLines } from "./genius-alert.js";
 import { assertGeniusChainDeliveryCanonical } from "./genius-delivery-verification.js";
 import { isGmgnFlowEvent } from "./gmgn-flow-signal.js";
 import { renderGmgnFlowAlertLines } from "./gmgn-flow-alert.js";
+import { isGiwaEvent } from "./giwa-monitor.js";
 
 const OFFICIAL_TOKEN_COOLDOWN_MS = 6 * 60 * 60 * 1_000;
 const DEFAULT_FRESHNESS_REALTIME_MAX_AGE_MS = 10 * 60 * 1_000;
@@ -463,6 +465,7 @@ function nonNegativeLimit(config, name, fallback) {
 }
 
 function freshnessSource(event) {
+  if (event?.type === "giwa_ecosystem_update") return { scope: "giwa", basis: "observedAt_snapshot_change", value: event.observedAt };
   if (event?.type === "gmgn_flow_surge") return { scope: "gmgn_flow", basis: "sourceOccurredAt", value: event.sourceOccurredAt };
   if (event?.type === "genius_fun_update") {
     const historical = isGeniusHistorical(event);
@@ -626,6 +629,7 @@ function freshnessSource(event) {
 }
 
 function freshnessLimits(config, scope) {
+  if (scope === "giwa") return { realtimeMaxAgeMs: 600_000, telegramMaxAgeMs: 7_200_000 };
   if (scope === "gmgn_flow") return { realtimeMaxAgeMs: 600_000, telegramMaxAgeMs: 900_000 };
   if (scope === "pon_delayed_recovery") {
     return {
@@ -1268,6 +1272,7 @@ function ponFunKindLabel(kind) {
 }
 
 const compact = (event) => {
+  if (event?.type === "giwa_ecosystem_update") return isGiwaEvent(event) ? event.renderedZh : "GIWA 更新校验失败";
   if (event?.type === "gmgn_flow_surge") return renderGmgnFlowAlertLines(event, "zh").join("\n");
   if (event?.type === "genius_fun_update") return renderGeniusAlertLines(event, "zh").join("\n");
   if (isKolSelfLaunchEvent(event)) {
@@ -1980,6 +1985,7 @@ function isRelevantBinanceGithubUpdate(event) {
 }
 
 export function isStrongAlert(event) {
+  if (event?.type === "giwa_ecosystem_update") return false;
   if (event?.type === "gmgn_flow_surge") return false;
   if (event?.type === "genius_fun_update") return isGeniusOfficialEvent(event) && !isGeniusHistorical(event) && event.strong === true;
   if (isKolSelfLaunchEvent(event)) return false;
@@ -2136,6 +2142,8 @@ function absoluteTweetUrl(tweet = {}) {
 }
 
 export function telegramButtons(event) {
+  if (event?.type === "giwa_ecosystem_update") return { inline_keyboard: isGiwaEvent(event)
+    ? [[{ text: "查看更新来源", url: event.sourceUrl }]] : [] };
   if (event?.type === "gmgn_flow_surge") {
     if (!isGmgnFlowEvent(event)) return { inline_keyboard: [] };
     return { inline_keyboard: [
@@ -4635,11 +4643,19 @@ function isRealtimeExactPonT2(event, priority) {
  * relevance gates, but only these explicit lanes are allowed to fan out now.
  */
 export function alertDeliveryDisposition(event = {}) {
+  if (event.type === "giwa_ecosystem_update" && isGiwaEvent(event) && effectiveFreshnessDecision(event) !== "suppress") {
+    return Object.freeze({ mode: "immediate", deliverImmediately: true, tier: null, reason: "giwa_public_source_watch_only" });
+  }
   if (event.type === "gmgn_flow_surge" && isGmgnFlowEvent(event) && effectiveFreshnessDecision(event) !== "suppress") {
     return Object.freeze({ mode: "immediate", deliverImmediately: true, tier: null, reason: "gmgn_flow_watch_only" });
   }
-  if (event.type === "genius_fun_update" && isGeniusOfficialEvent(event) && effectiveFreshnessDecision(event) !== "suppress") {
-    return Object.freeze({ mode: "immediate", deliverImmediately: true, tier: null, reason: "genius_official_watch_only" });
+  if (event.type === "genius_fun_update" && isGeniusOfficialEvent(event)) {
+    const notification = geniusNotificationPolicy(event);
+    if (!notification.notify) return Object.freeze({ mode: "audit_only", deliverImmediately: false,
+      tier: null, reason: notification.reason, filterVersion: notification.version });
+    if (effectiveFreshnessDecision(event) !== "suppress") {
+      return Object.freeze({ mode: "immediate", deliverImmediately: true, tier: null, reason: "genius_official_watch_only", filterVersion: notification.version });
+    }
   }
   if (event.type === "fomo_monitor_health_update") {
     return Object.freeze({ mode: "immediate", deliverImmediately: true, tier: null, reason: "fomo_health_realtime" });
@@ -5708,6 +5724,12 @@ async function claimAlertDestinations(config, eventId, force = false) {
     if (!entry) return { event: null, destinations: [], destinationRetries: {}, createdAt: null, claimedAt: null, renderBundle: null, tradingPriority: null };
     const now = alertPipelineNow(config);
     if (!["delivered", "suppressed"].includes(entry.status)) {
+      // Also enforce current Genius filtering immediately before a direct retry;
+      // old persisted render bundles are evidence, not permission to fan out.
+      if (entry.event?.type === "genius_fun_update" && isGeniusOfficialEvent(entry.event)) {
+        entry.deliveryDisposition = alertDeliveryDisposition(entry.event);
+        disablePolicySuppressedDestinations(entry.destinations || {}, entry.deliveryDisposition, new Date(now).toISOString());
+      }
       disableExpiredTelegramDelivery(config, entry, now);
       entry.status = outboxEntryStatus(entry.destinations);
       if (entry.status === "suppressed") entry.suppressedAt ||= new Date(now).toISOString();
@@ -6486,6 +6508,7 @@ function isStructurallyRelevantFomoConvergence(event) {
 }
 
 export function isRelevantAlert(event) {
+  if (event?.type === "giwa_ecosystem_update") return isGiwaEvent(event);
   if (event?.type === "gmgn_flow_surge") return isGmgnFlowEvent(event);
   if (event?.type === "genius_fun_update") return isGeniusOfficialEvent(event);
   if (isKolSelfLaunchEvent(event)) return verifyKolTokenLaunchEvent(event).valid;
@@ -6650,7 +6673,7 @@ export async function sendAlerts(config, event) {
   // explicitly share their monitor clock without trusting event.observedAt as
   // a way around the stale-news gate.
   const preparedEvent = withAlertFreshness(config, withFocusNovelty(config, event), pipelineStartedAtMs);
-  const queuedEvent = ["fomo_monitor_health_update", "genius_fun_update", "gmgn_flow_surge"].includes(preparedEvent.type)
+  const queuedEvent = ["fomo_monitor_health_update", "genius_fun_update", "gmgn_flow_surge", "giwa_ecosystem_update"].includes(preparedEvent.type)
     ? preparedEvent
     : withTradingPriority(preparedEvent, { nowMs: pipelineStartedAtMs });
   if (effectiveFreshnessDecision(queuedEvent) !== "suppress" && await isRepeatedOfficialToken(config, queuedEvent)) {

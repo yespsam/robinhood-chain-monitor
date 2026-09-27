@@ -633,6 +633,24 @@ export function adaptNarrativeSourceEvent(rawEvent, { chainId = null } = {}) {
   });
 }
 
+// Authenticate the original document without requiring a CA or reviewed asset
+// match. This establishes provenance only, never a token recommendation.
+export function readAuthenticatedNarrativeDocument(event) {
+  if (!event || typeof event !== 'object') return null;
+  const evidence = event.narrativeEvidence || event.narrative || {};
+  const lane = eventLane(event), urls = contentUrlClaims(event, evidence, lane);
+  const publication = publicationClaims(event, evidence, lane), trust = trustResult(event, evidence);
+  const kind = sourceKindResult(event, evidence, lane);
+  const authentic = authenticAiEvent(event, urls.url) || authenticBinanceEvent(event, urls.url)
+    || authenticUniswapEvent(event, urls.url) || authenticTwitterEvent(event) || authenticGithubEvent(event);
+  if (!authentic || !urls.valid || !publication.valid || !trust.valid || trust.negative.length || !kind.valid) return null;
+  const headline = firstHeadline(event.title, event.headline, event.tweet?.text, event.summary);
+  const text = subjectText(event, evidence, headline);
+  if (!text || event.tweet?.isQuote === true || event.tweet?.textTruncated === true) return null;
+  return { id: urls.url, url: urls.url, text: text.slice(0, 4000), at: Date.parse(publication.publishedAt),
+    kind: kind.sourceKind, author: event.tweet?.handle || event.project?.id || '', authenticated: true };
+}
+
 export function createNarrativeSourceAdapter({ chainId = null } = {}) {
   if (chainId !== null && (!Number.isSafeInteger(chainId) || chainId <= 0)) {
     throw new TypeError("narrative source adapter chainId must be a positive safe integer");
