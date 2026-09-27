@@ -7,6 +7,7 @@ import { createPublicSnapshot } from '../src/public-dashboard-state.js';
 import { publicApi } from '../src/public-dashboard-api.js';
 import { buildPublicDashboard } from '../scripts/build-public-dashboard.js';
 import { publishSnapshot } from '../scripts/publish-public-dashboard.js';
+import { publisherPlist } from '../scripts/install-public-publisher.js';
 
 const now = Date.now(), flags = { mode: 'paper', execution: false, signing: false, broadcast: false };
 const sample = () => ({ ...flags, status: 'ok', enabled: true, updatedAt: new Date(now).toISOString(), apiKey: 'PRIVATE_SENTINEL',
@@ -77,4 +78,12 @@ test('publisher only uploads projected state to a fixed receiver and never follo
   assert.equal(requests[1].options.redirect, 'error');
   assert.equal(requests[1].options.body.includes('PRIVATE_SENTINEL'), false);
   await assert.rejects(publishSnapshot({ url: 'http://example.com', token: 'x'.repeat(48) }));
+});
+
+test('publisher launch agent is isolated, escapes paths and contains no credentials', () => {
+  const xml = publisherPlist('/Users/example/Research & Reports', '/opt/homebrew/bin/node');
+  assert.match(xml, /Research &amp; Reports/);
+  assert.match(xml, /scripts\/publish-public-dashboard\.js/);
+  assert.match(xml, /<key>KeepAlive<\/key><true\/>/);
+  assert.doesNotMatch(xml, /TOKEN|secret|dashboard-server|gmgn|strategy-control/);
 });
