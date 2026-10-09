@@ -20,7 +20,6 @@ jobs:
     env:
       # Tests must never load a developer's real configuration or durable state.
       DOTENV_CONFIG_PATH: /dev/null
-      DATA_DIR: ${{ runner.temp }}/yesp-test-data
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,6 +33,8 @@ jobs:
       - name: Check whitespace
         run: git show --format= --check HEAD
       - name: Test
+        env:
+          DATA_DIR: ${{ runner.temp }}/yesp-test-data
         run: npm test -- --test-concurrency=2
       - name: Build allowlisted public assets
         run: npm run build:public
