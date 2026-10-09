@@ -66,7 +66,7 @@ GENIUS_LOG_RPC_URLS=https://rpc.48.club,https://rpc-bnb.blockmachine.io
 
 状态文件为 `data/genius-state.json`，权限仅当前用户读写。`npm run health` 的 `lanes.genius` 分别展示运行、来源和覆盖情况，历史未补齐、X 连续性缺口、待核实事件及公共 RPC 限流都不会被当成完整覆盖。
 
-本次代码与环境备份目录：`/Users/qohfq/Documents/Playground/genius-monitor-20260918.p2toog/`。其中环境备份含私人配置，权限仅当前用户可读写，不应分享。隔离预检状态位于该目录 `preflight/`，不属于生产游标，也未发送 Telegram 测试消息。
+本次代码与环境备份目录（相对项目根目录）：`../genius-monitor-20260918.p2toog/`。其中环境备份含私人配置，权限仅当前用户可读写，不应分享或上传 GitHub。隔离预检状态位于该目录 `preflight/`，不属于生产游标，也未发送 Telegram 测试消息。
 
 ## 验收记录（2026-09-18）
 

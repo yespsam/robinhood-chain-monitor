@@ -17,6 +17,168 @@ const iso = value => new Date(value).toISOString();
 const token = { chain: 'robinhood', address: CA, symbol: 'OFFLINE_FIXTURE', price: 1, marketStage: 'internal', liquidity: 60000, volume1h: 10000, isHoneypot: false, isWashTrading: false, rugRatio: .01, top10HolderRate: .15, devTeamHoldRate: .02, bundlerRate: .01, buyTax: 0, sellTax: 0, launchpad: 'fixture', creationTimestamp: NOW - 600000 };
 const candles = breakoutCandles;
 
+test('BSC scan overlay rejects other-chain cached/event candidates without rewriting session universe',async t=>{
+  const dataDir=await directory(t),chains=['robinhood','bsc','base'],calls=[];
+  await fs.writeFile(path.join(dataDir,'trading-scan-scope.json'),JSON.stringify({version:1,chains:['bsc']}));
+  const feed={trending:async q=>{calls.push(['market',q.chain]);return {status:'ok',observedAt:iso(NOW),tokens:chains.map(chain=>({...token,chain}))};},
+    trenches:async q=>{calls.push(['trenches',q.chain]);return {status:'ok',observedAt:iso(NOW),tokens:chains.map(chain=>({...token,chain}))};},
+    details:async q=>{calls.push(['detail',q.chain]);return {status:'unavailable'};},
+    quote:async q=>{calls.push(['quote',q.chain]);return {status:'unavailable'};},
+    kline:async q=>{calls.push(['chart',q.chain]);return {status:'unavailable',candles:[]};}};
+  const runtime=createPaperStrategyRuntime({dataDir,market:feed,chains,now:()=>NOW,
+    evidenceLoader:()=>multiSources(chains),allowExploratory:true,pvpMode:true,confirmedMode:true,evidenceHoldMode:true,
+    continuousPaperMode:true,opportunityMode:true,memeExitMode:true});
+  try {
+    for(let i=0;i<6;i++)await runtime.runOnce();await runtime.refreshDetails();
+    const s=runtime.snapshot();assert.deepEqual(s.scanScope.scanChains,['bsc']);assert.deepEqual(s.chains,chains);
+    assert.equal(s.cadence.marketChains,1);assert.ok(s.evaluations.length>0);
+    assert.ok(s.evaluations.every(e=>e.token.chain==='bsc'));assert.ok(calls.every(c=>c[1]==='bsc'));
+    assert.equal(s.chainCoverage.base.scanning,false);assert.equal(s.chainCoverage.bsc.scanning,true);
+    const stored=JSON.parse(await fs.readFile(runtime.stateFile,'utf8'));assert.deepEqual(stored.chains,chains);
+    assert.equal(s.execution,false);assert.equal(s.signing,false);assert.equal(s.broadcast,false);
+  }finally{await runtime.stop();}
+});
+
+test('BSC three-list discovery overlay retains a pre-existing Robinhood holding and its independent exit quotes',async t=>{
+  const dataDir=await directory(t),chains=['robinhood','bsc'];let clock=NOW;
+  const initial=createPaperStrategyRuntime({dataDir,chains,market:market(()=>clock),now:()=>clock,evidenceLoader:()=>sources(clock)});
+  await initial.runOnce();const before=initial.snapshot();await initial.stop();
+  assert.ok(Object.keys(before.account.positions).length>0);
+  await fs.writeFile(path.join(dataDir,'trading-scan-scope.json'),JSON.stringify({version:1,chains:['bsc']}));
+  const calls=[];
+  const runtime=createPaperStrategyRuntime({dataDir,chains,discoveryMode:'gmgn_three_lists_v1',market:{...market(()=>clock),quote:async q=>{
+    calls.push(q);return {chain:q.chain,address:q.address,price:.5,status:'ok',observedAt:iso(clock)};
+  }},now:()=>clock,evidenceLoader:()=>sources(clock)});
+  try {
+    clock+=1000;await runtime.fastOnce();await runtime.refreshQuote();
+    const after=runtime.snapshot();assert.ok(calls.some(c=>c.chain==='robinhood'));
+    assert.deepEqual(after.scanScope.retainedExitChains,['robinhood']);
+    assert.deepEqual(after.account.trades,JSON.parse(JSON.stringify(before.account.trades)));
+    assert.equal(Object.keys(after.account.positions).length,Object.keys(before.account.positions).length);
+    assert.ok(after.evaluations.every(e=>e.token.chain==='bsc'));
+    await runtime.exitOnce();assert.equal(Object.keys(runtime.snapshot().account.positions).length,0);
+    assert.equal(runtime.snapshot().account.trades.at(-1).side,'sell');
+    assert.equal(runtime.snapshot().account.trades.at(-1).chain,'robinhood');
+  }finally{await runtime.stop();}
+});
+
+test('new wallet buy reaches priority detail/chart research but cannot force a paper fill',async t=>{
+  const evidence=multiSources(['bsc']);
+  evidence.flowState.profiles={};
+  evidence.flowState.trades.bsc=evidence.flowState.trades.bsc.slice(0,1).map(r=>({...r,at:NOW-20000}));
+  const current={...token,chain:'bsc',marketStage:'external'},calls=[];
+  const feed={trending:async()=>({status:'ok',observedAt:iso(NOW-40000),tokens:[current]}),
+    trenches:async()=>({status:'ok',observedAt:iso(NOW),tokens:[]}),
+    quote:async()=>{calls.push('quote');return {status:'unavailable'};},
+    kline:async q=>{calls.push(['chart',q.purpose]);return {...current,resolution:'1m',status:'unavailable',candles:[]};},
+    details:async q=>{calls.push(['detail',q.researchPriority]);return {status:'unavailable'};}};
+  const r=createPaperStrategyRuntime({dataDir:await directory(t),market:feed,chain:'bsc',chains:['bsc'],now:()=>NOW,
+    evidenceLoader:()=>evidence,allowExploratory:true,pvpMode:true,confirmedMode:true,evidenceHoldMode:true,
+    continuousPaperMode:true,opportunityMode:true,memeExitMode:true});
+  try{
+    await r.runOnce();await r.refreshDetails();
+    const s=r.snapshot();assert.equal(s.cadence.walletBuyPriority.triggers.length,1);
+    assert.equal(s.cadence.walletBuyPriority.triggers[0].buyAt,iso(NOW-20000));
+    assert.equal(s.researchPipeline.lastChartDispatch.lane,'wallet');
+    assert.ok(calls.some(c=>Array.isArray(c)&&c[0]==='detail'&&c[1]===3));
+    assert.equal(s.account.trades.length,0,'priority is not permission and no quote was invented');
+    assert.ok(!calls.includes('quote'));
+    await r.fastOnce();await r.refreshDetails();
+    assert.equal(calls.filter(c=>c[0]==='chart').length,1,'repeat snapshots retain chart backoff');
+    assert.equal(calls.filter(c=>c[0]==='detail').length,1,'repeat snapshots do not storm details');
+  }finally{await r.stop();}
+});
+
+test('Plus auxiliary reads have two bounded distinct seats and minute rediscovery yields its fresh 30s budget',async t=>{
+  const dataDir=await directory(t);await fs.writeFile(path.join(dataDir,'gmgn-readonly-plan.json'),JSON.stringify({version:1,plan:'plus'}));
+  let clock=NOW;const calls=[],pending=[];
+  const feed={quote:async()=>({status:'unavailable'}),trending:q=>{
+    calls.push(q.interval);return q.interval==='1m'?Promise.resolve({status:'ok',observedAt:iso(clock),tokens:[]}):new Promise(resolve=>pending.push(resolve));
+  },trenches:()=>{calls.push('trenches');return new Promise(resolve=>pending.push(resolve));}};
+  const r=createPaperStrategyRuntime({dataDir,market:feed,now:()=>clock,evidenceLoader:()=>({}),
+    higherFrequencyResearch:true,confirmedMode:true,opportunityMode:true,continuousPaperMode:true,memeExitMode:true,
+    allowExploratory:true,pvpMode:true,evidenceHoldMode:true});
+  const turn=()=>new Promise(resolve=>setImmediate(resolve));
+  try {
+    await r.setEnabled(false);await r.refreshMarket({background:true});await turn();
+    assert.deepEqual(calls,['1m','trenches','1h']);
+    for(let n=0;n<5;n++){clock+=1000;await r.refreshMarket({background:true});}
+    assert.equal(calls.length,3,'fresh minute feed does not monopolize the shared quota');
+    pending[1]({status:'ok',observedAt:iso(clock),tokens:[]});await turn();
+    assert.equal(calls.length,3,'a stuck auxiliary cannot be duplicated');
+    clock=NOW+30000;await r.refreshMarket({background:true});assert.equal(calls.at(-1),'1m');
+    await fs.writeFile(path.join(dataDir,'gmgn-readonly-plan.json'),JSON.stringify({version:1,plan:'free'}));
+    clock=NOW+61000;await r.refreshMarket({background:true});await turn();
+    assert.equal(pending.length,2,'downgrade waits for pending auxiliary work');
+    let stopped=false;const stopping=r.stop().then(()=>{stopped=true;});await turn();assert.equal(stopped,false);
+    pending[0]({status:'unavailable'});await stopping;assert.equal(stopped,true);
+  }finally{pending.forEach(resolve=>resolve({status:'unavailable'}));await r.stop();}
+});
+
+test('auxiliary feeds drain due work without waiting for another minute response and stay single-flight',async t=>{
+  const calls=[],releases=[];
+  const feed={...market(),quote:async()=>({status:'unavailable'}),trending:q=>{
+    calls.push(q.interval);return q.interval==='1m'?Promise.resolve({status:'ok',observedAt:iso(NOW),tokens:[]}):
+      new Promise(resolve=>releases.push(resolve));},trenches:()=>{calls.push('trenches');return new Promise(resolve=>releases.push(resolve));}};
+  const runtime=createPaperStrategyRuntime({dataDir:await directory(t),market:feed,now:()=>NOW,
+    evidenceLoader:()=>({}),higherFrequencyResearch:true,confirmedMode:true,opportunityMode:true,
+    allowExploratory:true,pvpMode:true,evidenceHoldMode:true});
+  const turn=()=>new Promise(resolve=>setImmediate(resolve));
+  try{
+    await runtime.setEnabled(false);await runtime.refreshMarket({background:true});await turn();
+    assert.deepEqual(calls,['1m','trenches']);
+    releases[0]({status:'ok',observedAt:iso(NOW),tokens:[]});await turn();
+    assert.deepEqual(calls,['1m','trenches','1h'],'no intervening minute response is needed');
+    await runtime.refreshMarket({background:true});await turn();assert.equal(releases.length,2);
+    releases[1]({status:'ok',observedAt:iso(NOW),tokens:[]});await turn();
+    assert.equal(releases.length,2,'per-feed attempt pacing prevents a tight retry loop');
+  }finally{releases.forEach(resolve=>resolve({status:'unavailable'}));await runtime.stop();}
+});
+
+test('hour-ranking-only candidates refresh before market expiry without borrowing minute feed timestamps',async t=>{
+  let clock=NOW,failHour=false;const calls=[];
+  const feed={...market(()=>clock),quote:async()=>({status:'unavailable'}),
+    trending:async q=>{calls.push({...q,at:clock});return q.interval==='1h'&&failHour?{status:'unavailable'}:
+      {status:'ok',observedAt:iso(clock),tokens:q.interval==='1h'?[token]:[]};},
+    trenches:async q=>{calls.push({...q,interval:'trenches',at:clock});return {status:'ok',observedAt:iso(clock),tokens:[]};}};
+  const runtime=createPaperStrategyRuntime({dataDir:await directory(t),market:feed,now:()=>clock,
+    evidenceLoader:()=>({}),higherFrequencyResearch:true,confirmedMode:true,opportunityMode:true,
+    allowExploratory:true,pvpMode:true,evidenceHoldMode:true});
+  const pump=async()=>{for(let i=0;i<3;i++){
+    await runtime.refreshMarket({background:true});await new Promise(resolve=>setImmediate(resolve));
+  }await runtime.fastOnce();};
+  try{
+    await runtime.setEnabled(false);await pump();
+    assert.equal(calls.filter(c=>c.interval==='1h').length,1);
+    clock+=61000;await pump();
+    assert.equal(calls.filter(c=>c.interval==='1h').length,2,'1h volume window still refreshes inside the 120s data TTL');
+    assert.ok(calls.filter(c=>c.interval!=='1m').every(c=>c.purpose==='scan'));
+    assert.ok(runtime.snapshot().evaluations.every(r=>r.evidence.marketFresh));
+    const observed=iso(clock);failHour=true;clock+=61000;await pump();
+    const source=runtime.snapshot().cadence.marketAuxiliarySourceAges.find(s=>s.source==='ranking_1h');
+    assert.equal(source.status,'stale');assert.equal(source.observedAt,observed);
+    assert.ok(runtime.snapshot().evaluations.every(r=>!r.evidence.marketFresh));
+    assert.equal(runtime.snapshot().account.trades.length,0);assert.equal(runtime.snapshot().execution,false);
+  }finally{await runtime.stop();}
+});
+
+test('semantic research dispatch does not block scans or alter paper eligibility and ledger actions',async t=>{
+  let observed=0,stopped=false;
+  const jevResearch={observe:rows=>{observed+=rows.length;return new Promise(()=>{});},hint:()=>({adjustment:20,canExecute:false}),
+    snapshot:()=>({status:'in_flight',researchOnly:true,canExecute:false}),stop:async()=>{stopped=true;}};
+  const base={market:market(),now:()=>NOW,evidenceLoader:()=>({})};
+  const control=createPaperStrategyRuntime({...base,dataDir:await directory(t)});
+  const treated=createPaperStrategyRuntime({...base,dataDir:await directory(t),jevResearch});
+  try{
+    await control.runOnce();await treated.runOnce();
+    assert.ok(observed>0);assert.equal(treated.snapshot().jevResearch.status,'in_flight');
+    assert.equal(treated.snapshot().account.trades.length,control.snapshot().account.trades.length);
+    assert.deepEqual(treated.snapshot().evaluations,control.snapshot().evaluations);
+    assert.equal(treated.snapshot().execution,false);
+  }finally{await control.stop();await treated.stop();}
+  assert.equal(stopped,true);
+});
+
 test('fresh GMGN call seeds off-ranking research but never fabricates a price, narrative or trade',async t=>{
   let clock=NOW,requests=0;
   const call=normalizePlatformCall({id:'wire-test',signal_type:13,token_address:CA,trigger_at:(NOW-1000)/1000,
@@ -40,18 +202,18 @@ test('fresh GMGN call seeds off-ranking research but never fabricates a price, n
   }finally{await runtime.stop();}
 });
 
-test('verified leaderboard profiles enrich real feed wallets only, without synthetic buy events or changing the cached source', async t => {
+for (const profileSource of ['verifiedLeaderboardProfiles', 'verifiedProfiles']) test(`${profileSource} enriches real feed wallets only, without synthetic buy events or changing the cached source`, async t => {
   const dataDir = await directory(t), evidence = sources(), profiles = structuredClone(evidence.flowState.profiles);
   evidence.flowState.profiles = {}; let ready = false;
   const runtime = createPaperStrategyRuntime({ dataDir, market: market(), now: () => NOW, evidenceLoader: () => evidence,
-    learningLoader: () => ({ verifiedLeaderboardProfiles: ready ? profiles : {} }) });
+    learningLoader: () => ({ [profileSource]: ready ? profiles : {} }) });
   try {
     await runtime.runOnce(); assert.equal(runtime.snapshot().account.trades.length, 0);
     ready = true; await runtime.runOnce(); assert.equal(runtime.snapshot().account.trades.length, 1);
     assert.deepEqual(evidence.flowState.profiles, {});
   } finally { await runtime.stop(); }
   const empty = createPaperStrategyRuntime({ dataDir: await directory(t), market: market(), now: () => NOW, evidenceLoader: () => ({ flowState: { ...evidence.flowState, trades: {} } }),
-    learningLoader: () => ({ verifiedLeaderboardProfiles: profiles }) });
+    learningLoader: () => ({ [profileSource]: profiles }) });
   try { await empty.runOnce(); assert.equal(empty.snapshot().account.trades.length, 0); } finally { await empty.stop(); }
 });
 function multiSources(chains, at = NOW) {
@@ -99,6 +261,37 @@ test('one-second background scans publish minute feeds without waiting for auxil
     release({ status: 'unavailable', tokens: [] }); await stopping;
     assert.equal(closed, true);
   } finally { release({ status: 'unavailable', tokens: [] }); await runtime.stop(); }
+});
+
+test('Plus market lanes isolate a stuck chain, cap pending calls and drain them on shutdown', async t => {
+  const dataDir=await directory(t),calls=[],pending=[];
+  await fs.writeFile(path.join(dataDir,'gmgn-readonly-plan.json'),JSON.stringify({version:1,plan:'plus'}));
+  const chains=['robinhood','bsc','base'];
+  const feed={...market(),trending:query=>new Promise(resolve=>{calls.push(query.chain);pending.push(resolve);}),
+    trenches:async()=>({status:'unavailable',tokens:[]}),quote:async()=>({status:'unavailable'})};
+  const runtime=createPaperStrategyRuntime({dataDir,market:feed,chains,now:()=>NOW,
+    evidenceLoader:()=>({}),higherFrequencyResearch:true,confirmedMode:true,opportunityMode:true,
+    allowExploratory:true,pvpMode:true,evidenceHoldMode:true});
+  const finish=async()=>{await new Promise(resolve=>setImmediate(resolve));};
+  try {
+    await runtime.setEnabled(false);
+    const first=runtime.refreshMarket({background:true});await finish();
+    const second=runtime.refreshMarket({background:true});await finish();
+    await runtime.refreshMarket({background:true});
+    assert.deepEqual(calls,['robinhood','bsc']);
+    pending[1]({status:'ok',observedAt:iso(NOW),tokens:[{...token,chain:'bsc'}]});await second;
+    const third=runtime.refreshMarket({background:true});await finish();
+    assert.deepEqual(calls,['robinhood','bsc','base'],'slow Robinhood cannot hold the other chains');
+    await runtime.fastOnce();
+    assert.equal(runtime.snapshot().chainCoverage.bsc.market.observedAt,iso(NOW));
+    assert.equal(runtime.snapshot().cadence.marketRefreshInFlight.length,2);
+    await fs.writeFile(path.join(dataDir,'gmgn-readonly-plan.json'),JSON.stringify({version:1,plan:'free'}));
+    await runtime.refreshMarket({background:true});assert.equal(calls.length,3,'downgrade adds no work');
+    let closed=false;const stopping=runtime.stop().then(()=>{closed=true;});await finish();assert.equal(closed,false);
+    pending[0]({status:'unavailable'});pending[2]({status:'unavailable'});
+    await Promise.all([first,third,stopping]);assert.equal(closed,true);
+    assert.equal(runtime.snapshot().account.trades.length,0);
+  } finally {pending.forEach(resolve=>resolve({status:'unavailable'}));await runtime.stop();}
 });
 
 test('all configured chains rotate fairly, share one balance and global position cap, and preserve the old ledger', async t => {
@@ -1214,6 +1407,39 @@ test('recovery quote arrival evaluates only its CA before a fresh quote expires,
   });
 });
 
+test('fresh quotes interrupt pure broad-scan work without losing a fill to the later broad ledger write',async t=>{
+  let clock=NOW,price=1,busy=false,released=false,release,filledBeforeScanEnd=false,scanEnded=false;
+  const pending=new Promise(resolve=>{release=resolve;});
+  const noise=Array.from({length:50},(_,i)=>({...token,address:`0x${(i+100).toString(16).padStart(40,'0')}`,liquidity:0}));
+  const feed={...market(()=>clock),trending:async()=>({status:'ok',observedAt:iso(clock),tokens:[token,...noise]}),
+    kline:async()=>({status:'unavailable'}),quote:async({chain,address})=>busy?pending:{chain,address,price,status:'ok',observedAt:iso(clock)}};
+  const r=createPaperStrategyRuntime({dataDir:await directory(t),market:feed,now:()=>clock,intervalMs:60000,marketIntervalMs:60000,
+    allowExploratory:true,pvpMode:true,confirmedMode:true,evidenceHoldMode:true,continuousPaperMode:true,opportunityMode:true,memeExitMode:true,recoveryMode:true,
+    evidenceLoader:()=>sources(clock),evaluate:input=>{
+      if(busy&&input.token.address!==CA) {
+        clock+=100;
+        if(!released){released=true;release({chain:token.chain,address:CA,price,status:'ok',observedAt:iso(clock-1000)});}
+      }
+      const rows=evaluatePaperStrategies(input);
+      if(busy&&input.token.address===CA&&rows.some(r=>r.decision==='可模拟'))filledBeforeScanEnd=!scanEnded;
+      return rows;
+    }});
+  try {
+    await r.runOnce();await r.fastOnce();await r.refreshQuote();await r.fastOnce();
+    clock+=6000;price=1.006;await r.refreshQuote();await r.fastOnce();
+    await r.start();await r.fastOnce();
+    clock+=10400;price=1.01;busy=true;
+    const quote=r.refreshQuote();await r.fastOnce();scanEnded=true;await quote;
+    for(let n=0;n<100&&!r.snapshot().cadence?.lastCandidateEvaluation;n++)await new Promise(resolve=>setTimeout(resolve,10));
+    const s=r.snapshot();
+    assert.ok(s.cadence.cooperativeQuoteEvaluations>=1,JSON.stringify(s.cadence.lastCandidateEvaluation));
+    assert.equal(filledBeforeScanEnd,true);
+    assert.equal(s.account.trades.filter(t=>t.side==='buy').length,1);
+    assert.ok(s.cadence.lastCandidateEvaluation.quoteAgeAtDecisionMs<=5000);
+    assert.equal(JSON.parse(await fs.readFile(r.stateFile,'utf8')).account.trades.filter(t=>t.side==='buy').length,1);
+  }finally{busy=false;release({status:'unavailable'});await r.stop();}
+});
+
 test('confirmed runtime gathers independent quotes, persists v2, isolates controls and restores its new exit', async t => {
   const dataDir = await directory(t); let clock = NOW, price = 1, chartCalls = 0;
   const feed = { ...market(() => clock), kline: async () => { chartCalls++; return { status: 'unavailable' }; },
@@ -1297,6 +1523,29 @@ test('no-CA KOL recall researches an off-ranking historical OG and records the p
     assert.equal(state.account.trades[0].entryEvidence.narrativeFresh,false,'inferred recall never becomes a direct CA endorsement');
     await r.fastOnce();assert.equal(r.snapshot().account.trades.length,1);
     const stored=JSON.parse(await fs.readFile(r.stateFile,'utf8'));assert.equal(stored.narrativeMemory.assets[`robinhood:${CA}`].activity.length>0,true);
+  }finally{await r.stop();}
+});
+
+test('event-first casebook persists without a surge, survives controls/restart, and isolates corrupt memory',async t=>{
+  const dataDir=await directory(t);let clock=RECALL_NOW;
+  const feed={...market(()=>clock),quote:async()=>({status:'unavailable'}),trending:async()=>({status:'ok',observedAt:iso(clock),tokens:[{...token,name:'Mooncake',symbol:'MOONCAKE',marketCap:5000}]}),
+    trenches:async()=>({status:'ok',observedAt:iso(clock),tokens:[]})};
+  const options={dataDir,market:feed,now:()=>clock,confirmedMode:true,pvpMode:true,allowExploratory:true,compoundEntries:true,
+    evidenceLoader:()=>({events:[kolEvent('Mooncake cat mascot',RECALL_NOW-1000)]})};
+  let r=createPaperStrategyRuntime(options);
+  try{
+    await r.setEnabled(false);await r.runOnce();
+    const a=r.snapshot().narrativeAcademy;assert.equal(a.caseCount,1);assert.equal(a.candidateObservations,1);
+    assert.equal(r.snapshot().narrativeLearning.sampleCount,0);assert.equal(r.snapshot().account.cash,100);
+    await r.exitOnce();await r.setEnabled(true);await r.setEnabled(false);
+    const stored=JSON.parse(await fs.readFile(r.stateFile,'utf8'));assert.equal(stored.narrativeAcademyMemory.cases.length,1);
+    await r.stop();clock+=300000;r=createPaperStrategyRuntime(options);await r.runOnce();
+    assert.equal(r.snapshot().narrativeAcademy.caseCount,1);assert.equal(r.snapshot().narrativeAcademy.outcomes['5m'].observed,1);
+    assert.equal(r.snapshot().account.trades.length,0);assert.equal(r.snapshot().execution,false);
+    await r.stop();const bad=JSON.parse(await fs.readFile(r.stateFile,'utf8'));bad.narrativeAcademyMemory={version:'corrupt'};
+    await fs.writeFile(r.stateFile,JSON.stringify(bad));r=createPaperStrategyRuntime(options);await r.runOnce();await r.exitOnce();
+    assert.match(r.snapshot().narrativeAcademy.error,/异常/);assert.equal(r.snapshot().account.cash,100);
+    assert.deepEqual(JSON.parse(await fs.readFile(r.stateFile,'utf8')).narrativeAcademyMemory,{version:'corrupt'});
   }finally{await r.stop();}
 });
 

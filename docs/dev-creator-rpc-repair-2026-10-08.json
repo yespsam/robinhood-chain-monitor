@@ -1,0 +1,1687 @@
+{
+  "schema": "dev_creator_research_rpc_repair_v1",
+  "asOf": "2026-10-08T06:48:01.671Z",
+  "scope": {
+    "chain": "bsc",
+    "mode": "paper_research_only",
+    "realTrading": false,
+    "signing": false,
+    "broadcast": false,
+    "autoDevEntryEnabled": false,
+    "teacherListChanged": false,
+    "strategyThresholdsChanged": false,
+    "providerInfoNotOwnershipProof": true
+  },
+  "requestAccounting": {
+    "businessRequests": 11,
+    "createdTokensRequests": 8,
+    "tokenInfoRequests": 2,
+    "activityRequests": 1,
+    "validRetainedResponses": 9,
+    "discardedCaptures": 2,
+    "discardReason": "Two large created-token outputs were truncated by the tool transport. Even though the truncated concatenation could parse as JSON, it mixed wallet sections: it was rejected entirely, and both were re-read into bounded per-wallet summaries. Discarded outputs are not evidence.",
+    "directResearchRpcRequests": 0,
+    "gmgnGate": "src/gmgn-flow-client.js, default priority 0, config --check first",
+    "noNewLongRunningCollector": true
+  },
+  "sources": {
+    "seed": "timestamped local binance-state backups and public GMGN creator history",
+    "seedLimit": "Historical seed snapshots are from 2026-08-06 and 2026-08-18, not current discovery. Current hot-list token reverse lookup was separately added.",
+    "currentTokenReverseLookups": [
+      {
+        "chain": "bsc",
+        "requestedAddress": "0x36f59961babd03a3448d7d9d017207e2bbcc7777",
+        "returnedAddress": "0x36f59961babd03a3448d7d9d017207e2bbcc7777",
+        "checkedAt": "2026-10-08T06:45:44.361Z",
+        "identityMatched": true,
+        "symbol": "屌丝",
+        "creator": "0x2956834ff2dc654eea42ce3a19eb30ee9db44940",
+        "createdAt": "2026-10-07T10:39:48.000Z",
+        "liquidity": "23774.134293601273",
+        "marketCap": 57521.397,
+        "volume5m": "701.76725284",
+        "volume1h": "8508.42611678",
+        "volume24h": "722420.61254549",
+        "creatorTokenStatus": "creator_close",
+        "source": "gmgn-cli token info --chain bsc; existing shared account gate priority 0"
+      },
+      {
+        "chain": "bsc",
+        "requestedAddress": "0xc5127b2338dbe220d188d6fbaa4b526f9f877777",
+        "returnedAddress": "0xc5127b2338dbe220d188d6fbaa4b526f9f877777",
+        "checkedAt": "2026-10-08T06:45:47.154Z",
+        "identityMatched": true,
+        "symbol": "UU",
+        "creator": "0x7c85eaea2098ae2619555f609b1b2e3101292587",
+        "createdAt": "2026-10-08T05:42:28.000Z",
+        "liquidity": "24309.05360437199",
+        "marketCap": 65228.522,
+        "volume5m": "6896.71725181",
+        "volume1h": "724715.4315757",
+        "volume24h": "738367.064003762",
+        "creatorTokenStatus": "creator_hold",
+        "source": "gmgn-cli token info --chain bsc; existing shared account gate priority 0"
+      }
+    ],
+    "excludedFactory": {
+      "address": "0x90497450f2a706f1951b5bdda52b4e5d16f34c06",
+      "reason": "Flap VaultPortal factory from local verified launchpad configuration; do not treat 102 factory-associated tokens as a personal Dev record."
+    }
+  },
+  "candidates": [
+    {
+      "wallet": "0x7eaf232fff53499fd3ead3c93924671b149e4837",
+      "checkedAt": "2026-10-08T06:33:10.962Z",
+      "identityMatched": true,
+      "inner": 3531,
+      "open": 98,
+      "ratio": "0.027",
+      "lastCreated": 1789706618,
+      "returned": 101,
+      "unique": 101,
+      "allBsc": true,
+      "listedOpen": 8,
+      "listedAth100k": 4,
+      "listedAth1m": 1,
+      "listedCurrent100k": 0,
+      "best": {
+        "creator": "0x7eaf232fff53499fd3ead3c93924671b149e4837",
+        "ath_token": "0x4217eec7821728748db86588dab9362d02ff4444",
+        "ath_mc": "51109375",
+        "token_symbol": "AIJudge",
+        "token_logo": "https://gmgn.ai/external-res/22f8cf4f6c1caf1488ec78ce4044fe5c_v2.webp",
+        "token_name": "Ai Judge Companion"
+      },
+      "recent": [
+        {
+          "ca": "0x973f59f26ba0ee4fc4aa5d7eef17fc67a1693375",
+          "symbol": "BS",
+          "chain": "bsc",
+          "created": 1789706618,
+          "open": true,
+          "mc": "4145.4311328988732969999",
+          "ath": "178271.75",
+          "liquidity": "6620.609980849623",
+          "holders": 51,
+          "swaps1h": 0,
+          "platform": "geniusfun"
+        },
+        {
+          "ca": "0x8612b7247afa664b51a9755bc052c165e25effff",
+          "symbol": "FUNFI",
+          "chain": "bsc",
+          "created": 1789391048,
+          "open": false,
+          "mc": "3257.4145",
+          "ath": "11288.852",
+          "liquidity": "0",
+          "holders": 1,
+          "swaps1h": 0,
+          "platform": "fourmeme"
+        },
+        {
+          "ca": "0x76da63dcce87975f88d7c81d5bd3e86cc7d4ffff",
+          "symbol": "Liquititty",
+          "chain": "bsc",
+          "created": 1789390649,
+          "open": false,
+          "mc": "3668.4575",
+          "ath": "6716.9589",
+          "liquidity": "0",
+          "holders": 1,
+          "swaps1h": 0,
+          "platform": "fourmeme"
+        },
+        {
+          "ca": "0x3ededb1cc6402a360f648057ed0cd5abc5bdffff",
+          "symbol": "PEOPLE",
+          "chain": "bsc",
+          "created": 1788847295,
+          "open": false,
+          "mc": "4944.3294",
+          "ath": "21152.682",
+          "liquidity": "0.1061",
+          "holders": 2,
+          "swaps1h": 0,
+          "platform": "openfour"
+        },
+        {
+          "ca": "0xc9e0c07e3464b104c81f86ea5109593d91d7ffff",
+          "symbol": "STOCKMEME",
+          "chain": "bsc",
+          "created": 1788843112,
+          "open": false,
+          "mc": "3586.5808",
+          "ath": "46171.177",
+          "liquidity": "0",
+          "holders": 2,
+          "swaps1h": 0,
+          "platform": "openfour"
+        },
+        {
+          "ca": "0xe7cf3fc362851ff5e53bb8041fe31356d57dffff",
+          "symbol": "A",
+          "chain": "bsc",
+          "created": 1788842743,
+          "open": false,
+          "mc": "13217.671",
+          "ath": "33979.892",
+          "liquidity": "0",
+          "holders": 1,
+          "swaps1h": 0,
+          "platform": "openfour"
+        }
+      ],
+      "top": [
+        {
+          "ca": "0x4217eec7821728748db86588dab9362d02ff4444",
+          "symbol": "AIJudge",
+          "chain": "bsc",
+          "created": 1762056787,
+          "open": true,
+          "mc": "3355.3656",
+          "ath": "51109375",
+          "liquidity": "6287.440947993591",
+          "holders": 410,
+          "swaps1h": 0,
+          "platform": "fourmeme"
+        },
+        {
+          "ca": "0x111b013224b9e35625d61a21ccab204cb90f7777",
+          "symbol": "DOGE-1",
+          "chain": "bsc",
+          "created": 1788730175,
+          "open": true,
+          "mc": "9921.5935",
+          "ath": "358598.57",
+          "liquidity": "11127.361738414567",
+          "holders": 311,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0x973f59f26ba0ee4fc4aa5d7eef17fc67a1693375",
+          "symbol": "BS",
+          "chain": "bsc",
+          "created": 1789706618,
+          "open": true,
+          "mc": "4145.4311328988732969999",
+          "ath": "178271.75",
+          "liquidity": "6620.609980849623",
+          "holders": 51,
+          "swaps1h": 0,
+          "platform": "geniusfun"
+        },
+        {
+          "ca": "0x5fc358c7274c55fa76bed8072542118105ef7777",
+          "symbol": "PAPERCLIPS",
+          "chain": "bsc",
+          "created": 1787691156,
+          "open": true,
+          "mc": "2608.4619",
+          "ath": "104755.19",
+          "liquidity": "5179.990690758449",
+          "holders": 30,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0xbd7700a6523560c20eb07ab953d0f2c2ece47777",
+          "symbol": "HOT",
+          "chain": "bsc",
+          "created": 1788367689,
+          "open": true,
+          "mc": "2453.9652",
+          "ath": "91184.099",
+          "liquidity": "4860.365320325314",
+          "holders": 6,
+          "swaps1h": 0,
+          "platform": "flap"
+        }
+      ],
+      "failures": [
+        {
+          "ca": "0x973f59f26ba0ee4fc4aa5d7eef17fc67a1693375",
+          "symbol": "BS",
+          "chain": "bsc",
+          "created": 1789706618,
+          "open": true,
+          "mc": "4145.4311328988732969999",
+          "ath": "178271.75",
+          "liquidity": "6620.609980849623",
+          "holders": 51,
+          "swaps1h": 0,
+          "platform": "geniusfun"
+        },
+        {
+          "ca": "0x111b013224b9e35625d61a21ccab204cb90f7777",
+          "symbol": "DOGE-1",
+          "chain": "bsc",
+          "created": 1788730175,
+          "open": true,
+          "mc": "9921.5935",
+          "ath": "358598.57",
+          "liquidity": "11127.361738414567",
+          "holders": 311,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0xb0f0b7f4d099efab0c104cd352b6224dfe6d7777",
+          "symbol": "BLUECHIP",
+          "chain": "bsc",
+          "created": 1788727835,
+          "open": true,
+          "mc": "2065.7088",
+          "ath": "84961.508",
+          "liquidity": "4041.3121647698745",
+          "holders": 10,
+          "swaps1h": 0,
+          "platform": "flap"
+        }
+      ],
+      "chain": "bsc",
+      "status": "research_only_not_qualified",
+      "gmgnWalletUrl": "https://gmgn.ai/bsc/address/0x7eaf232fff53499fd3ead3c93924671b149e4837",
+      "coverageNotes": [
+        "GMGN aggregate inner/open counts and returned list are different scopes. Each list returned 101 distinct CA rows, not complete creator history.",
+        "ATH is retrospective, not executable entry/exit return; no launch-sniper win rate inferred.",
+        "Provider liquidity is not taken as verified internal-curve depth; a displayed zero is not alone proof that the curve has no quote reserves.",
+        "No independent launch receipt or inventory reconciliation completed in this request for this Dev."
+      ]
+    },
+    {
+      "wallet": "0x1ef832120aa68c650e84df4769c5d9616d914014",
+      "checkedAt": "2026-10-08T06:33:21.451Z",
+      "identityMatched": true,
+      "inner": 14275,
+      "open": 78,
+      "ratio": "0.005",
+      "lastCreated": 1791128498,
+      "returned": 101,
+      "unique": 101,
+      "allBsc": true,
+      "listedOpen": 1,
+      "listedAth100k": 1,
+      "listedAth1m": 1,
+      "listedCurrent100k": 0,
+      "best": {
+        "creator": "0x1ef832120aa68c650e84df4769c5d9616d914014",
+        "ath_token": "0xec5f042e89058bae7bb4d622350cb45814bf7777",
+        "ath_mc": "4067668.3",
+        "token_symbol": "CD",
+        "token_logo": "https://gmgn.ai/external-res/10c24db90fa535203c87a8e7ce7f484a_v2.webp",
+        "token_name": "Chaince Digital "
+      },
+      "recent": [
+        {
+          "ca": "0xa31c73085da0030e921957ec7e36be2f62a17777",
+          "symbol": "依伊",
+          "chain": "bsc",
+          "created": 1791128498,
+          "open": false,
+          "mc": "3299.4872",
+          "ath": "3849.5608",
+          "liquidity": "0",
+          "holders": 1,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0x3a4ae24595fa7c2fb09b9b3fcdbdfafd6e4e7777",
+          "symbol": "CROCS",
+          "chain": "bsc",
+          "created": 1791119272,
+          "open": false,
+          "mc": "4255.9081",
+          "ath": "5586.3369",
+          "liquidity": "0",
+          "holders": 1,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0x12796136aa351f3fa450a6f5671207d518ba7777",
+          "symbol": "2",
+          "chain": "bsc",
+          "created": 1791118690,
+          "open": false,
+          "mc": "4255.0181",
+          "ath": "4396.8924",
+          "liquidity": "0",
+          "holders": 1,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0x785bccc733950b012c2ac792ff476ef01fa57777",
+          "symbol": "8",
+          "chain": "bsc",
+          "created": 1791118460,
+          "open": false,
+          "mc": "4254.3387",
+          "ath": "4705.7978",
+          "liquidity": "0",
+          "holders": 1,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0xd941c050142f56d1fd1ec47b2b37aa6acc9e7777",
+          "symbol": "躺赢猫",
+          "chain": "bsc",
+          "created": 1791118355,
+          "open": false,
+          "mc": "4254.5755",
+          "ath": "4396.0572",
+          "liquidity": "0",
+          "holders": 1,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0x52417085b8dc1a4f0715fa1471bb7632d7567777",
+          "symbol": "躺赢狗",
+          "chain": "bsc",
+          "created": 1791118219,
+          "open": false,
+          "mc": "4259.4213",
+          "ath": "5048.7327",
+          "liquidity": "0",
+          "holders": 1,
+          "swaps1h": 0,
+          "platform": "flap"
+        }
+      ],
+      "top": [
+        {
+          "ca": "0xec5f042e89058bae7bb4d622350cb45814bf7777",
+          "symbol": "CD",
+          "chain": "bsc",
+          "created": 1788508640,
+          "open": true,
+          "mc": "9067.3787",
+          "ath": "4067668.3",
+          "liquidity": "11142.803562125951",
+          "holders": 2451,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0xb8788ff72160ce1af974171e52d501f6903a7777",
+          "symbol": "躺平人生",
+          "chain": "bsc",
+          "created": 1791096504,
+          "open": false,
+          "mc": "4152.2634",
+          "ath": "28147.531",
+          "liquidity": "18.7289",
+          "holders": 12,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0xbe363b6383ab3be6052f27efdb30fff9b0ee7777",
+          "symbol": "JACKET",
+          "chain": "bsc",
+          "created": 1791116050,
+          "open": false,
+          "mc": "4260.6272",
+          "ath": "25807.658",
+          "liquidity": "0.3116",
+          "holders": 5,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0x6fcc827957f27e34a518b21791099628bbb47777",
+          "symbol": "김현식",
+          "chain": "bsc",
+          "created": 1791008719,
+          "open": false,
+          "mc": "3955.8966",
+          "ath": "23912.545",
+          "liquidity": "10.2934",
+          "holders": 9,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0xe48e79aba81911fdec13af0173d08c45bc057777",
+          "symbol": "캐시덕",
+          "chain": "bsc",
+          "created": 1791001248,
+          "open": false,
+          "mc": "4327.8499",
+          "ath": "20941.081",
+          "liquidity": "0",
+          "holders": 5,
+          "swaps1h": 0,
+          "platform": "flap"
+        }
+      ],
+      "failures": [
+        {
+          "ca": "0xec5f042e89058bae7bb4d622350cb45814bf7777",
+          "symbol": "CD",
+          "chain": "bsc",
+          "created": 1788508640,
+          "open": true,
+          "mc": "9067.3787",
+          "ath": "4067668.3",
+          "liquidity": "11142.803562125951",
+          "holders": 2451,
+          "swaps1h": 0,
+          "platform": "flap"
+        }
+      ],
+      "chain": "bsc",
+      "status": "research_only_not_qualified",
+      "gmgnWalletUrl": "https://gmgn.ai/bsc/address/0x1ef832120aa68c650e84df4769c5d9616d914014",
+      "coverageNotes": [
+        "GMGN aggregate inner/open counts and returned list are different scopes. Each list returned 101 distinct CA rows, not complete creator history.",
+        "ATH is retrospective, not executable entry/exit return; no launch-sniper win rate inferred.",
+        "Provider liquidity is not taken as verified internal-curve depth; a displayed zero is not alone proof that the curve has no quote reserves.",
+        "No independent launch receipt or inventory reconciliation completed in this request for this Dev."
+      ]
+    },
+    {
+      "wallet": "0xa088516e79df5392fd7801757b6f37ab196e5899",
+      "checkedAt": "2026-10-08T06:33:33.043Z",
+      "identityMatched": true,
+      "inner": 1681,
+      "open": 28,
+      "ratio": "0.016",
+      "lastCreated": 1787223404,
+      "returned": 101,
+      "unique": 101,
+      "allBsc": true,
+      "listedOpen": 1,
+      "listedAth100k": 1,
+      "listedAth1m": 1,
+      "listedCurrent100k": 0,
+      "best": {
+        "creator": "0xa088516e79df5392fd7801757b6f37ab196e5899",
+        "ath_token": "0x6f24a22bee0b15b1c8f5d7e217127ae05df87777",
+        "ath_mc": "1217800.7",
+        "token_symbol": "MEME",
+        "token_logo": "https://gmgn.ai/external-res/66e141299705dbc86160c9b42ddfdc65_v2.webp",
+        "token_name": "Roundhill Meme Stock"
+      },
+      "recent": [
+        {
+          "ca": "0x9716750a6c55100428d47e370362681609967777",
+          "symbol": "TIME FLIES",
+          "chain": "bsc",
+          "created": 1789491817,
+          "open": false,
+          "mc": "3587.695",
+          "ath": "4904.2066",
+          "liquidity": "0",
+          "holders": 1,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0x79def894c67a55b648a9d1e28a7d0c5849967777",
+          "symbol": "HTC",
+          "chain": "bsc",
+          "created": 1789485127,
+          "open": false,
+          "mc": "4076.3733",
+          "ath": "4504.6527",
+          "liquidity": "0",
+          "holders": 1,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0x546460521092c98abdfc33eadc2225674fc87777",
+          "symbol": "BRUCELANLAN",
+          "chain": "bsc",
+          "created": 1789483583,
+          "open": false,
+          "mc": "3625.3777",
+          "ath": "",
+          "liquidity": "0.8509896605647007",
+          "holders": 2,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0x24759bb9fe7c81a0cbceab52a0fa8007796b7777",
+          "symbol": "养砖头",
+          "chain": "bsc",
+          "created": 1789482867,
+          "open": false,
+          "mc": "3592.8909",
+          "ath": "4762.4362",
+          "liquidity": "0",
+          "holders": 1,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0xea81b07ae2fbf78b33c54eeef3aa515f15977777",
+          "symbol": "Space Flies",
+          "chain": "bsc",
+          "created": 1789481146,
+          "open": false,
+          "mc": "4499.8204",
+          "ath": "5558.2349",
+          "liquidity": "0.0001",
+          "holders": 2,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0x33380d346b685e8413755c3d6d2523e209e67777",
+          "symbol": "战狗",
+          "chain": "bsc",
+          "created": 1789480278,
+          "open": false,
+          "mc": "3391.983",
+          "ath": "3900.495",
+          "liquidity": "0",
+          "holders": 1,
+          "swaps1h": 0,
+          "platform": "flap"
+        }
+      ],
+      "top": [
+        {
+          "ca": "0x6f24a22bee0b15b1c8f5d7e217127ae05df87777",
+          "symbol": "MEME",
+          "chain": "bsc",
+          "created": 1788600134,
+          "open": true,
+          "mc": "4303.9553",
+          "ath": "1217800.7",
+          "liquidity": "6984.384992926236",
+          "holders": 826,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0xbfecc61d4bb18a40d823383ca328c03057f67777",
+          "symbol": "AMOB",
+          "chain": "bsc",
+          "created": 1789466556,
+          "open": false,
+          "mc": "3241.3279",
+          "ath": "20426.317",
+          "liquidity": "0",
+          "holders": 1,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0x87c46378ace365b9f82c2f0c100624be78bbffff",
+          "symbol": "咪咪",
+          "chain": "bsc",
+          "created": 1789464223,
+          "open": false,
+          "mc": "4009.0983",
+          "ath": "17954.837",
+          "liquidity": "0.2767",
+          "holders": 3,
+          "swaps1h": 0,
+          "platform": "openfour"
+        },
+        {
+          "ca": "0x03e14db98cad555b5ffa660326c1839b8b867777",
+          "symbol": "utility",
+          "chain": "bsc",
+          "created": 1789472677,
+          "open": false,
+          "mc": "4401.9159",
+          "ath": "14586.15",
+          "liquidity": "0.2855",
+          "holders": 3,
+          "swaps1h": 0,
+          "platform": "flap"
+        },
+        {
+          "ca": "0x9230fe342698e89011763dc6557ff7bb9c2d7777",
+          "symbol": "无头苍蝇",
+          "chain": "bsc",
+          "created": 1789452637,
+          "open": false,
+          "mc": "3821.1158",
+          "ath": "13812.977",
+          "liquidity": "145.3576",
+          "holders": 10,
+          "swaps1h": 0,
+          "platform": "flap"
+        }
+      ],
+      "failures": [
+        {
+          "ca": "0x6f24a22bee0b15b1c8f5d7e217127ae05df87777",
+          "symbol": "MEME",
+          "chain": "bsc",
+          "created": 1788600134,
+          "open": true,
+          "mc": "4303.9553",
+          "ath": "1217800.7",
+          "liquidity": "6984.384992926236",
+          "holders": 826,
+          "swaps1h": 0,
+          "platform": "flap"
+        }
+      ],
+      "chain": "bsc",
+      "status": "research_only_not_qualified",
+      "gmgnWalletUrl": "https://gmgn.ai/bsc/address/0xa088516e79df5392fd7801757b6f37ab196e5899",
+      "coverageNotes": [
+        "GMGN aggregate inner/open counts and returned list are different scopes. Each list returned 101 distinct CA rows, not complete creator history.",
+        "ATH is retrospective, not executable entry/exit return; no launch-sniper win rate inferred.",
+        "Provider liquidity is not taken as verified internal-curve depth; a displayed zero is not alone proof that the curve has no quote reserves.",
+        "No independent launch receipt or inventory reconciliation completed in this request for this Dev."
+      ],
+      "providerIssue": "last_create_timestamp is earlier than newer returned token creation timestamps; freshness/coverage unresolved"
+    },
+    {
+      "wallet": "0xec6f2d05c0f2e7081cf827460e91a17feb702458",
+      "checkedAt": "2026-10-08T06:33:36.905Z",
+      "identityMatched": true,
+      "inner": 4650,
+      "open": 81,
+      "ratio": "0.017",
+      "lastCreated": 1791439880,
+      "returned": 101,
+      "unique": 101,
+      "allBsc": true,
+      "listedOpen": 7,
+      "listedAth100k": 3,
+      "listedAth1m": 1,
+      "listedCurrent100k": 0,
+      "best": {
+        "creator": "0xec6f2d05c0f2e7081cf827460e91a17feb702458",
+        "ath_token": "0x8554d38b95e4f7ca11d391008627df30b2b07777",
+        "ath_mc": "3498553.8",
+        "token_symbol": "PIZZA",
+        "token_logo": "https://gmgn.ai/external-res/280fc74afbd3442368f1f970887a22a4_v2.webp",
+        "token_name": "PIZZA"
+      },
+      "recent": [
+        {
+          "ca": "0x3b665ccdeb0e53c7bcb6fdbbf700a2474cb27777",
+          "symbol": "urmom",
+          "chain": "bsc",
+          "created": 1791439880,
+          "open": false,
+          "mc": "3466.0409",
+          "ath": "4754.2641",
+          "liquidity": "0",
+          "holders": 1,
+          "swaps1h": 12,
+          "platform": "flap"
+        },
+        {
+          "ca": "0x80ca4bac2c72652fb134a1887ed1b4d555ea7777",
+          "symbol": "UPONLY",
+          "chain": "bsc",
+          "created": 1791439161,
+          "open": false,
+          "mc": "3466.0409",
+          "ath": "5274.0196",
+          "liquidity": "0",
+          "holders": 1,
+          "swaps1h": 12,
+          "platform": "flap"
+        },
+        {
+          "ca": "0x838e3715dd561715e977af88998f5cfb89e87777",
+          "symbol": "UMA",
+          "chain": "bsc",
+          "created": 1791438748,
+          "open": false,
+          "mc": "5767.1489",
+          "ath": "22898.482",
+          "liquidity": "2214.2678",
+          "holders": 31,
+          "swaps1h": 618,
+          "platform": "flap"
+        },
+        {
+          "ca": "0xfaebb8cbf298ef702c99733060c2a55c83727777",
+          "symbol": "Uno",
+          "chain": "bsc",
+          "created": 1791438616,
+          "open": false,
+          "mc": "3466.0409",
+          "ath": "7202.13",
+          "liquidity": "0",
+          "holders": 1,
+          "swaps1h": 54,
+          "platform": "flap"
+        },
+        {
+          "ca": "0x65c0c50c7f57d668f3758b7374f96d00b6607777",
+          "symbol": "Umi",
+          "chain": "bsc",
+          "created": 1791438493,
+          "open": false,
+          "mc": "3466.0409",
+          "ath": "7204.391",
+          "liquidity": "0",
+          "holders": 1,
+          "swaps1h": 35,
+          "platform": "flap"
+        },
+        {
+          "ca": "0x05c08b92f86cc026f211ab8acbca6550b2bf7777",
+          "symbol": "Uny",
+          "chain": "bsc",
+          "created": 1791438288,
+          "open": true,
+          "mc": "5207.3872",
+          "ath": "37813.508",
+          "liquidity": "6608.783198707662",
+          "holders": 54,
+          "swaps1h": 1012,
+          "platform": "flap"
+        }
+      ],
+      "top": [
+        {
+          "ca": "0x8554d38b95e4f7ca11d391008627df30b2b07777",
+          "symbol": "PIZZA",
+          "chain": "bsc",
+          "created": 1785644875,
+          "open": true,
+          "mc": "43626.106",
+          "ath": "3498553.8",
+          "liquidity": "31341.688443933723",
+          "holders": 4162,
+          "swaps1h": 3,
+          "platform": "flap"
+        },
+        {
+          "ca": "0xf0ef322332d654334d173673af147f2dbca1ffff",
+          "symbol": "Four",
+          "chain": "bsc",
+          "created": 1791338971,
+          "open": true,
+          "mc": "7207.1428",
+          "ath": "135089.14",
+          "liquidity": "8077.243678503467",
+          "holders": 279,
+          "swaps1h": 26,
+          "platform": "fourmeme"
+        },
+        {
+          "ca": "0x3a44322f4b84c5da986fb4f54ecb84add48d7777",
+          "symbol": "CRAZYCOIN",
+          "chain": "bsc",
+          "created": 1791384170,
+          "open": true,
+          "mc": "5431.3836",
+          "ath": "127451.91",
+          "liquidity": "7402.003915258905",
+          "holders": 290,
+          "swaps1h": 8,
+          "platform": "flap"
+        },
+        {
+          "ca": "0x01724e3688736be22e426e1fd1311fcd68a27777",
+          "symbol": "CRAZYTOKEN",
+          "chain": "bsc",
+          "created": 1791384337,
+          "open": true,
+          "mc": "4812.1832",
+          "ath": "76042.857",
+          "liquidity": "6965.522425448174",
+          "holders": 312,
+          "swaps1h": 4,
+          "platform": "flap"
+        },
+        {
+          "ca": "0xbc9a4a5a09a74dc03cd7f3c80e105244dd817777",
+          "symbol": "实事",
+          "chain": "bsc",
+          "created": 1791266818,
+          "open": true,
+          "mc": "3316.3023",
+          "ath": "46574.232",
+          "liquidity": "5325.107353071631",
+          "holders": 71,
+          "swaps1h": 0,
+          "platform": "flap"
+        }
+      ],
+      "failures": [
+        {
+          "ca": "0x01724e3688736be22e426e1fd1311fcd68a27777",
+          "symbol": "CRAZYTOKEN",
+          "chain": "bsc",
+          "created": 1791384337,
+          "open": true,
+          "mc": "4812.1832",
+          "ath": "76042.857",
+          "liquidity": "6965.522425448174",
+          "holders": 312,
+          "swaps1h": 4,
+          "platform": "flap"
+        },
+        {
+          "ca": "0x3a44322f4b84c5da986fb4f54ecb84add48d7777",
+          "symbol": "CRAZYCOIN",
+          "chain": "bsc",
+          "created": 1791384170,
+          "open": true,
+          "mc": "5431.3836",
+          "ath": "127451.91",
+          "liquidity": "7402.003915258905",
+          "holders": 290,
+          "swaps1h": 8,
+          "platform": "flap"
+        },
+        {
+          "ca": "0xf0ef322332d654334d173673af147f2dbca1ffff",
+          "symbol": "Four",
+          "chain": "bsc",
+          "created": 1791338971,
+          "open": true,
+          "mc": "7207.1428",
+          "ath": "135089.14",
+          "liquidity": "8077.243678503467",
+          "holders": 279,
+          "swaps1h": 26,
+          "platform": "fourmeme"
+        }
+      ],
+      "chain": "bsc",
+      "status": "research_only_not_qualified",
+      "gmgnWalletUrl": "https://gmgn.ai/bsc/address/0xec6f2d05c0f2e7081cf827460e91a17feb702458",
+      "coverageNotes": [
+        "GMGN aggregate inner/open counts and returned list are different scopes. Each list returned 101 distinct CA rows, not complete creator history.",
+        "ATH is retrospective, not executable entry/exit return; no launch-sniper win rate inferred.",
+        "Provider liquidity is not taken as verified internal-curve depth; a displayed zero is not alone proof that the curve has no quote reserves.",
+        "No independent launch receipt or inventory reconciliation completed in this request for this Dev."
+      ]
+    },
+    {
+      "wallet": "0x2956834ff2dc654eea42ce3a19eb30ee9db44940",
+      "checkedAt": "2026-10-08T06:47:50.793Z",
+      "identityMatched": true,
+      "inner": 679,
+      "open": 19,
+      "ratio": "0.027",
+      "lastCreated": 1791439924,
+      "returned": 101,
+      "unique": 101,
+      "allBsc": true,
+      "listedOpen": 3,
+      "listedAth100k": 2,
+      "listedAth1m": 1,
+      "listedCurrent100k": 0,
+      "best": {
+        "creator": "0x2956834ff2dc654eea42ce3a19eb30ee9db44940",
+        "ath_token": "0x32eeb9ac275f84b05a0467abde66172387873c04",
+        "ath_mc": "1274930.3",
+        "token_symbol": "DEGENIUS",
+        "token_logo": "https://gmgn.ai/external-res/fc817f4cedfb0c6edc4f303726b0cf0d_v2.webp",
+        "token_name": "Degenius"
+      },
+      "recent": [
+        {
+          "address": "0x11a40219b9cd58da1a6d98a56f199496ea987777",
+          "symbol": "马蹄",
+          "chain": "bsc",
+          "createdAt": 1791439924,
+          "migrated": false,
+          "marketCap": "3466.0409",
+          "athMarketCap": "6433.7686",
+          "liquidity": "0",
+          "holders": 1,
+          "volume1h": "3282.071700425"
+        },
+        {
+          "address": "0x14084a14d7fa768df47f52fd87a4a40eba827777",
+          "symbol": "3QU",
+          "chain": "bsc",
+          "createdAt": 1791439029,
+          "migrated": false,
+          "marketCap": "4454.4595",
+          "athMarketCap": "5528.6721",
+          "liquidity": "610.3246",
+          "holders": 2,
+          "volume1h": "1950.6480887"
+        },
+        {
+          "address": "0xfb264e1f1376b0b62a54963ae9a8c31ee34d7777",
+          "symbol": "UI",
+          "chain": "bsc",
+          "createdAt": 1791438505,
+          "migrated": false,
+          "marketCap": "4178.0968",
+          "athMarketCap": "5811.0169",
+          "liquidity": "575.5506",
+          "holders": 2,
+          "volume1h": "2247.76146237"
+        },
+        {
+          "address": "0xb42498457a23a8f2f5601ac35e284b6194c57777",
+          "symbol": "盘古",
+          "chain": "bsc",
+          "createdAt": 1791384539,
+          "migrated": false,
+          "marketCap": "4278.1464",
+          "athMarketCap": "8152.481",
+          "liquidity": "37.1097",
+          "holders": 4,
+          "volume1h": "0"
+        },
+        {
+          "address": "0x0d23488c80af14ddf89d07e741733099a4c17777",
+          "symbol": "中国大妈",
+          "chain": "bsc",
+          "createdAt": 1791384342,
+          "migrated": false,
+          "marketCap": "4931.9394",
+          "athMarketCap": "7225.6392",
+          "liquidity": "11.1772",
+          "holders": 3,
+          "volume1h": "0"
+        },
+        {
+          "address": "0x7f3c0f9ef119e2865e990e87f48f7f3ff8e47777",
+          "symbol": "SECZ",
+          "chain": "bsc",
+          "createdAt": 1791383039,
+          "migrated": false,
+          "marketCap": "3561.5663",
+          "athMarketCap": "4423.3402",
+          "liquidity": "0",
+          "holders": 1,
+          "volume1h": "0"
+        }
+      ],
+      "top": [
+        {
+          "address": "0x32eeb9ac275f84b05a0467abde66172387873c04",
+          "symbol": "DEGENIUS",
+          "chain": "bsc",
+          "createdAt": 1789722827,
+          "migrated": true,
+          "marketCap": "3331.95840554333157416994",
+          "athMarketCap": "1274930.3",
+          "liquidity": "5904.294027178256",
+          "holders": 83,
+          "volume1h": "0"
+        },
+        {
+          "address": "0x36f59961babd03a3448d7d9d017207e2bbcc7777",
+          "symbol": "屌丝",
+          "chain": "bsc",
+          "createdAt": 1791369588,
+          "migrated": true,
+          "marketCap": "57745.417",
+          "athMarketCap": "239182.48",
+          "liquidity": "23808.276444379924",
+          "holders": 408,
+          "volume1h": "8423.36297962"
+        },
+        {
+          "address": "0xfaf87cfd1e7b7b1acffb844488a82f01a9857777",
+          "symbol": "摩托",
+          "chain": "bsc",
+          "createdAt": 1791288972,
+          "migrated": true,
+          "marketCap": "3113.7239",
+          "athMarketCap": "55977.181",
+          "liquidity": "5392.726805424722",
+          "holders": 50,
+          "volume1h": "0"
+        },
+        {
+          "address": "0xdc9962d5342ac28d0a50e14b5ffc1131a3e37777",
+          "symbol": "币安一家",
+          "chain": "bsc",
+          "createdAt": 1791305505,
+          "migrated": false,
+          "marketCap": "3933.3831",
+          "athMarketCap": "25555.665",
+          "liquidity": "90.063",
+          "holders": 13,
+          "volume1h": "0"
+        },
+        {
+          "address": "0x36d2c00a2be2e224643feb8762e2248265277777",
+          "symbol": "疲劳哥",
+          "chain": "bsc",
+          "createdAt": 1791256612,
+          "migrated": false,
+          "marketCap": "3371.3099",
+          "athMarketCap": "23245.886",
+          "liquidity": "11.4471",
+          "holders": 13,
+          "volume1h": "0"
+        },
+        {
+          "address": "0x5adfc3c126cf51ec4fd7da2c974791a59f277777",
+          "symbol": "栗工",
+          "chain": "bsc",
+          "createdAt": 1791262753,
+          "migrated": false,
+          "marketCap": "3514.3718",
+          "athMarketCap": "19318.885",
+          "liquidity": "303.546",
+          "holders": 8,
+          "volume1h": "0"
+        },
+        {
+          "address": "0xe74f2235dea83d32e1c9f1d77c9bf091bdb97777",
+          "symbol": "K线人生",
+          "chain": "bsc",
+          "createdAt": 1791296501,
+          "migrated": false,
+          "marketCap": "3500.7825",
+          "athMarketCap": "15616.247",
+          "liquidity": "160.8578",
+          "holders": 16,
+          "volume1h": "0"
+        },
+        {
+          "address": "0x4ed80dc0ada8b9aa422c4622deb788b5dc5c7777",
+          "symbol": "四公主",
+          "chain": "bsc",
+          "createdAt": 1791294445,
+          "migrated": false,
+          "marketCap": "4001.211",
+          "athMarketCap": "14307.78",
+          "liquidity": "0.6234",
+          "holders": 5,
+          "volume1h": "0"
+        }
+      ],
+      "failures": [
+        {
+          "address": "0xdc9962d5342ac28d0a50e14b5ffc1131a3e37777",
+          "symbol": "币安一家",
+          "chain": "bsc",
+          "createdAt": 1791305505,
+          "migrated": false,
+          "marketCap": "3933.3831",
+          "athMarketCap": "25555.665",
+          "liquidity": "90.063",
+          "holders": 13,
+          "volume1h": "0"
+        },
+        {
+          "address": "0xe74f2235dea83d32e1c9f1d77c9bf091bdb97777",
+          "symbol": "K线人生",
+          "chain": "bsc",
+          "createdAt": 1791296501,
+          "migrated": false,
+          "marketCap": "3500.7825",
+          "athMarketCap": "15616.247",
+          "liquidity": "160.8578",
+          "holders": 16,
+          "volume1h": "0"
+        },
+        {
+          "address": "0xfaf87cfd1e7b7b1acffb844488a82f01a9857777",
+          "symbol": "摩托",
+          "chain": "bsc",
+          "createdAt": 1791288972,
+          "migrated": true,
+          "marketCap": "3113.7239",
+          "athMarketCap": "55977.181",
+          "liquidity": "5392.726805424722",
+          "holders": 50,
+          "volume1h": "0"
+        }
+      ],
+      "chain": "bsc",
+      "status": "research_only_not_qualified",
+      "gmgnWalletUrl": "https://gmgn.ai/bsc/address/0x2956834ff2dc654eea42ce3a19eb30ee9db44940",
+      "coverageNotes": [
+        "GMGN aggregate inner/open counts and returned list are different scopes. Each list returned 101 distinct CA rows, not complete creator history.",
+        "ATH is retrospective, not executable entry/exit return; no launch-sniper win rate inferred.",
+        "Provider liquidity is not taken as verified internal-curve depth; a displayed zero is not alone proof that the curve has no quote reserves.",
+        "No independent launch receipt or inventory reconciliation completed in this request for this Dev."
+      ]
+    },
+    {
+      "wallet": "0x7c85eaea2098ae2619555f609b1b2e3101292587",
+      "checkedAt": "2026-10-08T06:48:01.671Z",
+      "identityMatched": true,
+      "inner": 2363,
+      "open": 36,
+      "ratio": "0.015",
+      "lastCreated": 1791440514,
+      "returned": 101,
+      "unique": 101,
+      "allBsc": true,
+      "listedOpen": 2,
+      "listedAth100k": 2,
+      "listedAth1m": 0,
+      "listedCurrent100k": 1,
+      "best": {
+        "creator": "0x7c85eaea2098ae2619555f609b1b2e3101292587",
+        "ath_token": "0xbd824d3f83c31ab38132bfc76654897c73157777",
+        "ath_mc": "673755.57",
+        "token_symbol": "MJ",
+        "token_logo": "https://gmgn.ai/external-res/52bac0c753ff4856e5688ad67a927639_v2.webp",
+        "token_name": "Michael Jensen"
+      },
+      "recent": [
+        {
+          "address": "0xa3ac5bcfb850d1d0aa7f58ec18065b70910b7777",
+          "symbol": "YOU",
+          "chain": "bsc",
+          "createdAt": 1791440514,
+          "migrated": false,
+          "marketCap": "3466.0409",
+          "athMarketCap": "4097.0483",
+          "liquidity": "0",
+          "holders": 1,
+          "volume1h": "1506.3463229"
+        },
+        {
+          "address": "0x6dbc5b0e056d23300d527685e5932afcc4837777",
+          "symbol": "阳光彩虹小白马",
+          "chain": "bsc",
+          "createdAt": 1791440129,
+          "migrated": false,
+          "marketCap": "3466.0409",
+          "athMarketCap": "3664.619",
+          "liquidity": "0",
+          "holders": 1,
+          "volume1h": "439.80521517"
+        },
+        {
+          "address": "0x6a6a64369e5975feeddc82d556f1bc94668b7777",
+          "symbol": "FKU",
+          "chain": "bsc",
+          "createdAt": 1791439874,
+          "migrated": false,
+          "marketCap": "3466.0409",
+          "athMarketCap": "4094.8389",
+          "liquidity": "0",
+          "holders": 1,
+          "volume1h": "674.74903522"
+        },
+        {
+          "address": "0x5ab3b9e539621a251eb96ea417138c368ce07777",
+          "symbol": "US",
+          "chain": "bsc",
+          "createdAt": 1791439499,
+          "migrated": false,
+          "marketCap": "3466.0409",
+          "athMarketCap": "4001.46",
+          "liquidity": "0",
+          "holders": 1,
+          "volume1h": "659.67316236"
+        },
+        {
+          "address": "0x4b4675f5874031f7d8270a5cacb6b8e0b8c97777",
+          "symbol": "UPPO",
+          "chain": "bsc",
+          "createdAt": 1791439428,
+          "migrated": false,
+          "marketCap": "3797.4581",
+          "athMarketCap": "4001.46",
+          "liquidity": "234.741",
+          "holders": 2,
+          "volume1h": "542.23334276"
+        },
+        {
+          "address": "0x40b05370766728e5ca4d72eb50c4bfb7a2d37777",
+          "symbol": "UP",
+          "chain": "bsc",
+          "createdAt": 1791439148,
+          "migrated": false,
+          "marketCap": "5133.7146",
+          "athMarketCap": "19781.922",
+          "liquidity": "1649.9943",
+          "holders": 37,
+          "volume1h": "46260.046827305"
+        }
+      ],
+      "top": [
+        {
+          "address": "0xbd824d3f83c31ab38132bfc76654897c73157777",
+          "symbol": "MJ",
+          "chain": "bsc",
+          "createdAt": 1791187756,
+          "migrated": true,
+          "marketCap": "186842.96",
+          "athMarketCap": "673755.57",
+          "liquidity": "45435.83650686952",
+          "holders": 2084,
+          "volume1h": "12056.52562344"
+        },
+        {
+          "address": "0xc5127b2338dbe220d188d6fbaa4b526f9f877777",
+          "symbol": "UU",
+          "chain": "bsc",
+          "createdAt": 1791438148,
+          "migrated": true,
+          "marketCap": "65878.683",
+          "athMarketCap": "255210.3",
+          "liquidity": "24510.253271773803",
+          "holders": 671,
+          "volume1h": "699527.34989562"
+        },
+        {
+          "address": "0xe2e00fc29c953c63ff80633963422f6028847777",
+          "symbol": "凌云志",
+          "chain": "bsc",
+          "createdAt": 1791343145,
+          "migrated": false,
+          "marketCap": "5054.6476",
+          "athMarketCap": "28943.352",
+          "liquidity": "1654.9934",
+          "holders": 51,
+          "volume1h": "74.41802254"
+        },
+        {
+          "address": "0x40b05370766728e5ca4d72eb50c4bfb7a2d37777",
+          "symbol": "UP",
+          "chain": "bsc",
+          "createdAt": 1791439148,
+          "migrated": false,
+          "marketCap": "5133.7146",
+          "athMarketCap": "19781.922",
+          "liquidity": "1649.9943",
+          "holders": 37,
+          "volume1h": "46260.046827305"
+        },
+        {
+          "address": "0x5ad75cf1ac323159871935be8afd7230b6eb7777",
+          "symbol": "Ice boy",
+          "chain": "bsc",
+          "createdAt": 1791348758,
+          "migrated": false,
+          "marketCap": "4284.9574",
+          "athMarketCap": "18686.653",
+          "liquidity": "577.1685",
+          "holders": 16,
+          "volume1h": "19.73993764"
+        },
+        {
+          "address": "0xa8c16d166867f8a89eca53ef4d0d252817b47777",
+          "symbol": "TITS",
+          "chain": "bsc",
+          "createdAt": 1791349132,
+          "migrated": false,
+          "marketCap": "5319.0286",
+          "athMarketCap": "15184.133",
+          "liquidity": "80.2884",
+          "holders": 9,
+          "volume1h": "0"
+        },
+        {
+          "address": "0x6ade072425caeb252beee00c9fc039f3fd597777",
+          "symbol": "奇门九宫学堂",
+          "chain": "bsc",
+          "createdAt": 1791434901,
+          "migrated": false,
+          "marketCap": "4386.6324",
+          "athMarketCap": "12090.109",
+          "liquidity": "133.1277",
+          "holders": 6,
+          "volume1h": "13.31064541"
+        },
+        {
+          "address": "0x5ced0a422510266b2314001e0e26a2c133a57777",
+          "symbol": "粉红人生",
+          "chain": "bsc",
+          "createdAt": 1791355842,
+          "migrated": false,
+          "marketCap": "4416.3616",
+          "athMarketCap": "10173.918",
+          "liquidity": "25.8361",
+          "holders": 5,
+          "volume1h": "0"
+        }
+      ],
+      "failures": [
+        {
+          "address": "0x5ad75cf1ac323159871935be8afd7230b6eb7777",
+          "symbol": "Ice boy",
+          "chain": "bsc",
+          "createdAt": 1791348758,
+          "migrated": false,
+          "marketCap": "4284.9574",
+          "athMarketCap": "18686.653",
+          "liquidity": "577.1685",
+          "holders": 16,
+          "volume1h": "19.73993764"
+        }
+      ],
+      "chain": "bsc",
+      "status": "research_only_not_qualified",
+      "gmgnWalletUrl": "https://gmgn.ai/bsc/address/0x7c85eaea2098ae2619555f609b1b2e3101292587",
+      "coverageNotes": [
+        "GMGN aggregate inner/open counts and returned list are different scopes. Each list returned 101 distinct CA rows, not complete creator history.",
+        "ATH is retrospective, not executable entry/exit return; no launch-sniper win rate inferred.",
+        "Provider liquidity is not taken as verified internal-curve depth; a displayed zero is not alone proof that the curve has no quote reserves.",
+        "No independent launch receipt or inventory reconciliation completed in this request for this Dev."
+      ]
+    }
+  ],
+  "recentActivity": {
+    "wallet": "0xec6f2d05c0f2e7081cf827460e91a17feb702458",
+    "checkedAt": "2026-10-08T06:34:35.244Z",
+    "rows": 20,
+    "identitiesMatch": true,
+    "hasNext": true,
+    "window": [
+      1791438616,
+      1791440039
+    ],
+    "tokens": [
+      {
+        "ca": "0x52cb2da8c1df5bb9d80cd47c2e03d73da76c7777",
+        "symbol": "悠米",
+        "rows": 5,
+        "launch": null,
+        "firstBuy": {
+          "time": 1791439855,
+          "hash": "0x8a01ef50abd2768f7112cbfdc2d7e4e5d2a66d6512e843773e9e4802bfcc5fe7",
+          "usd": "124.28626134608174"
+        },
+        "firstSell": {
+          "time": 1791439933,
+          "hash": "0x8e1ad135a17237d55c4415d84262f504b01018a4277bb4cd6f6ca97749d98ba3",
+          "usd": "82.53801462934757"
+        },
+        "sells": 3,
+        "transfers": 0,
+        "uniqueTransactions": 5,
+        "firstSellDelay": null
+      },
+      {
+        "ca": "0x3b665ccdeb0e53c7bcb6fdbbf700a2474cb27777",
+        "symbol": "urmom",
+        "rows": 3,
+        "launch": {
+          "time": 1791439880,
+          "hash": "0x50c3620fb089d357bc4432a78c1856f036e357b304375bfaf669e1ff0109c815",
+          "usd": ""
+        },
+        "firstBuy": {
+          "time": 1791439880,
+          "hash": "0x56094f37a8bbfe5b91d005f7312ff768a776c0e8a7fb9d66c6e288fe41efd8aa",
+          "usd": "72.71895754608978"
+        },
+        "firstSell": {
+          "time": 1791439948,
+          "hash": "0x0f660d4781a65e13b337a1f796a40661cd9125d456aecbbeb8ed5a29505fd641",
+          "usd": "84.21668124188108"
+        },
+        "sells": 1,
+        "transfers": 0,
+        "uniqueTransactions": 3,
+        "firstSellDelay": 68
+      },
+      {
+        "ca": "0xabffa443547b34ab6c3b3173d26e233900527777",
+        "symbol": "TRUMAN",
+        "rows": 2,
+        "launch": null,
+        "firstBuy": {
+          "time": 1791439840,
+          "hash": "0xa546b0a943bd859a0ed1b68f05005d4822875533c17dcc401dea70ecc0e53bb0",
+          "usd": "9.20321284095675"
+        },
+        "firstSell": null,
+        "sells": 0,
+        "transfers": 0,
+        "uniqueTransactions": 2,
+        "firstSellDelay": null
+      },
+      {
+        "ca": "0x80ca4bac2c72652fb134a1887ed1b4d555ea7777",
+        "symbol": "UPONLY",
+        "rows": 3,
+        "launch": {
+          "time": 1791439161,
+          "hash": "0xdbdf486acf6aa0725bfec6f80386ce62708c9d72fcf2e5970db9e04ae78d6b27",
+          "usd": ""
+        },
+        "firstBuy": {
+          "time": 1791439161,
+          "hash": "0x9f9fb25654592b5d50520cbc9812df37b5a59534e550cdc2564ed24ad0eb8cb0",
+          "usd": "116.0189832131851"
+        },
+        "firstSell": {
+          "time": 1791439239,
+          "hash": "0xe367bb1633dd1d76439c8cc87dc001751d7d6d918dc8154b18a2aefa8836df6d",
+          "usd": "132.00880593100493"
+        },
+        "sells": 1,
+        "transfers": 0,
+        "uniqueTransactions": 3,
+        "firstSellDelay": 78
+      },
+      {
+        "ca": "0xa4cf0aa662d249fb66e56c1a4b844bdd530e7777",
+        "symbol": "忘情牛肉面",
+        "rows": 1,
+        "launch": null,
+        "firstBuy": null,
+        "firstSell": {
+          "time": 1791438880,
+          "hash": "0x2ec703c6d089fa848ce9486dcce58dc9c875751b8f543966922f911104917245",
+          "usd": "9.067877434289763"
+        },
+        "sells": 1,
+        "transfers": 0,
+        "uniqueTransactions": 1,
+        "firstSellDelay": null
+      },
+      {
+        "ca": "0x838e3715dd561715e977af88998f5cfb89e87777",
+        "symbol": "UMA",
+        "rows": 3,
+        "launch": {
+          "time": 1791438748,
+          "hash": "0x184ffe74f588ac11f374c84ab5cfb27a100b579c2035540d8ad0d0513a34180c",
+          "usd": ""
+        },
+        "firstBuy": {
+          "time": 1791438748,
+          "hash": "0xe2477aeaab36bb101fb8d2df514f8ac40757d908b26ba4bcfdc762faaaa890a3",
+          "usd": "131.3679657064524"
+        },
+        "firstSell": {
+          "time": 1791438762,
+          "hash": "0x3c3c43943d6adc82f92b7e6016b99eff26260d490a1e072652c82ae68f4b9835",
+          "usd": "370.83480819157495"
+        },
+        "sells": 1,
+        "transfers": 0,
+        "uniqueTransactions": 3,
+        "firstSellDelay": 14
+      },
+      {
+        "ca": "0xfaebb8cbf298ef702c99733060c2a55c83727777",
+        "symbol": "Uno",
+        "rows": 3,
+        "launch": null,
+        "firstBuy": {
+          "time": 1791438616,
+          "hash": "0xa51ce3823a0ab2c08bdd990a4346728acae638c0ec5eaa32931e530b2dc95f3f",
+          "usd": "121.20721612515281"
+        },
+        "firstSell": {
+          "time": 1791438623,
+          "hash": "0x2bdaca88e33485b23320ecc7b53f9598c537e2107152c079680988c90492c474",
+          "usd": "46.70479382899848"
+        },
+        "sells": 2,
+        "transfers": 0,
+        "uniqueTransactions": 3,
+        "firstSellDelay": null
+      }
+    ]
+  },
+  "conclusions": [
+    "优先观察 0x7c85...2587：同一创建者对应 MJ、UU；GMGN 汇总 2363 内盘/36 已开盘，约1.5%为平台开盘比例，不是热币命中率、跟随胜率或盈利概率。",
+    "次级观察 0x2956...4940：同一创建者对应 DEGENIUS、屌丝；679 内盘/19 已开盘，约2.7%平台开盘比例。多数近期创建并无同等行情，不能整钱包无差别跟买。",
+    "0xec6f...2458 有 PIZZA、Four、CRAZYCOIN 等历史冲高，但 4650 内盘/81 已开盘；样本 UMA 的创建到首卖仅14秒，单靠发过热门币不足以授予开盘狙击许可。",
+    "20条活动页未覆盖完整库存和生命周期，未计算跟随盈亏；缺成本/转账/后页不视作零。",
+    "两个当前热币创建者仅经过 GMGN CA→creator 与 creator history→CA 双向身份核对，尚未独立验交易收据。未称为已确认操盘者、合格教师或稳盈 Dev。"
+  ],
+  "nextValidation": {
+    "type": "proposal_not_implemented",
+    "steps": [
+      "针对优先候选按未来新CA记录创建、首次发现、首次可成交报价和Dev首次卖出的时间，不能用事后ATH挑赢家。",
+      "独立核验launch receipt，并纳入未开盘、亏损和短窗口样本；按链+CA区分同名币。",
+      "用真实收到信号后的报价加费用/滑点/Gas模型做独立模拟评估，再决定是否增加Dev路线。"
+    ],
+    "unresolved": "当前10秒采集节拍与90秒连续爆量证据路径不等同于开盘秒级Dev狙击；这次不通过删除安全证据门槛冒充提速。"
+  },
+  "rpcRepair": {
+    "status": "code_deployed_provider_reliability_not_resolved",
+    "changes": [
+      "Four/Flap same-block metadata and quote calls use bounded <=8-item batches, through unchanged shared background coordinator; no concurrency increase.",
+      "Four 11→7, Flap native 12→8, Flap converted quote asset 15→8 HTTP requests in fixture tests; semantic RPC item counts and bidirectional/raw-proof checks unchanged.",
+      "Round deadline checked before and after RPC, after coordinator lease release and before final proof output; failure does not grant a proof.",
+      "Queue capacity contention is not treated as an upstream failure. Real network errors cool down; HTTP/JSON-RPC rate limits share cooldown.",
+      "getNetwork and callBatch aliases map to eth_chainId/eth_call cooldowns; numeric and HTTP-date Retry-After are not cut short at five minutes.",
+      "Four target seats rotate fairly after 240s only when replacements wait; held priority, 90s continuous evidence and RPC budgets remain. Evicted evidence is removed rather than spliced into re-entry."
+    ],
+    "testVerification": {
+      "command": "node --test test/paper-internal-depth.test.js test/paper-onchain-runtime.test.js test/paper-strategy-runtime.test.js test/gmgn-flow-client.test.js test/bsc-inner-trade-monitor.test.js test/bsc-inner-trade-events.test.js test/rpc-host-coordinator.test.js test/rpc-retry-after.test.js test/paper-onchain-entry.test.js test/paper-onchain-exit.test.js test/paper-launch-entry.test.js test/paper-collective-signal.test.js test/paper-entry-policy.test.js test/narrative-bsc-json-rpc-reader.test.js test/rpc-state-read-budget.test.js test/pon-rpc-provider.test.js",
+      "tests": 360,
+      "pass": 360,
+      "fail": 0,
+      "durationMs": 12954.2965,
+      "mockedNetwork": true
+    },
+    "deployment": {
+      "at": "2026-10-08T06:50:09.531Z",
+      "oldDashboardPid": 4144,
+      "newDashboardPid": 14695,
+      "mechanism": "SIGTERM graceful shutdown; existing launchd KeepAlive restarts dashboard only",
+      "observed": {
+        "checkedAt": "2026-10-08T06:52:12.056Z",
+        "mode": "paper",
+        "enabled": true,
+        "execution": false,
+        "signing": false,
+        "broadcast": false,
+        "depth": {
+          "enabled": true,
+          "transportVersion": "bounded_same_block_depth_batches_v1",
+          "running": false,
+          "last": null
+        },
+        "coverage": {
+          "status": "collecting",
+          "lastSuccessAt": "2026-10-08T06:51:40.875Z",
+          "lastCoveredAt": null,
+          "lastError": {
+            "code": "RPC_COORDINATOR_UNAVAILABLE",
+            "reason": "shared RPC coordinator: capacity wait deadline",
+            "at": "2026-10-08T06:52:01.861Z"
+          },
+          "lastRound": {
+            "startedAt": "2026-10-08T06:51:57.586Z",
+            "physicalRequests": 7,
+            "rpcItems": 16,
+            "logs": 0,
+            "selected": 4,
+            "host": "bsc-rpc.publicnode.com",
+            "confirmationDepth": 8,
+            "callBatches": 2,
+            "callBatchItems": 11,
+            "reportedHead": 126399124,
+            "headBlock": 126399116,
+            "headAt": "2026-10-08T06:51:57.000Z",
+            "headAgeMs": 2760,
+            "finishedAt": "2026-10-08T06:52:01.861Z",
+            "durationMs": 4275
+          },
+          "totals": {
+            "rounds": 11,
+            "physicalRequests": 83,
+            "rpcItems": 173,
+            "logs": 294,
+            "gaps": 0,
+            "reorgs": 0,
+            "maxCoveredMs": 0,
+            "coveredRounds": 0
+          }
+        },
+        "workers": [
+          {
+            "worker": "main",
+            "pid": 45914,
+            "startedAt": "2026-10-07T08:17:26.957Z",
+            "updatedAt": "2026-10-08T06:51:48.072Z"
+          },
+          {
+            "worker": "fomo",
+            "pid": 49145,
+            "startedAt": "2026-10-07T08:28:43.162Z",
+            "updatedAt": "2026-10-08T06:51:50.082Z"
+          },
+          {
+            "worker": "bsc",
+            "pid": 49121,
+            "startedAt": "2026-10-07T08:28:34.425Z",
+            "updatedAt": "2026-10-08T06:52:06.745Z"
+          }
+        ],
+        "ledgers": [
+          {
+            "file": "data/yesp-atm-confirmed-pvp-v2-20260923.json",
+            "sha256": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36",
+            "tradesSha256": "128117e1904b57ee56eea835b5d6c89635565f042b2a7917f41dcf235f9cf55b",
+            "cash": 34.750610196510834,
+            "tradeCount": 174,
+            "openPositions": 0,
+            "realizedPnl": -140.98786205345183,
+            "enabled": false
+          },
+          {
+            "file": "data/yesp-atm-confirmed-pvp-v2-estimated-20260928.json",
+            "sha256": "3b02afc750babd78ab159853eeba86f770b648c5e0b2a21808301032f50bcef2",
+            "tradesSha256": "76ecfdf6a83d866edea85762c0524436fa31a1fb19f90faf2b68854ef18567ae",
+            "cash": 88.61603269444774,
+            "tradeCount": 236,
+            "openPositions": 0,
+            "realizedPnl": -111.05244079415168,
+            "enabled": true
+          }
+        ]
+      },
+      "assertions": {
+        "depthTransportVersionLoaded": true,
+        "paperOnly": true,
+        "otherWorkerPidsUnchanged": true,
+        "originalLedgerFileUnchanged": true,
+        "estimatedHistoricalTradesUnchanged": true,
+        "cashUnchanged": true
+      },
+      "note": "运行时间/缓存会正常更新；未手工写账本、补款或强制造成交。其他worker心跳只能证明检查时活跃，不代表全天无中断。"
+    },
+    "remaining": [
+      "Post-deployment public RPC_TIMEOUT and RPC_COORDINATOR_UNAVAILABLE were observed. Some chain reads succeeded, but 90-second continuous coverage was not yet achieved at the recorded check.",
+      "Depth transport version is loaded; no production depth probe was triggered in the verification window, so fixture request reduction is not a measured production latency claim.",
+      "10-second polling, confirmation depth 8 and burst 90-second evidence are not a one-second Dev sniper. No safety thresholds removed.",
+      "Next infrastructure choice: provision/authorize a dedicated BSC HTTP/WSS endpoint, isolate realtime Dev launch observation from bulk scanning, and measure detection→quote→paper fill latency and failure coverage before enabling such a route. No endpoint subscription purchased or secret inspected."
+    ]
+  },
+  "modifiedFiles": [
+    "src/gmgn-flow-client.js",
+    "test/gmgn-flow-client.test.js",
+    "src/paper-internal-depth.js",
+    "test/paper-internal-depth.test.js",
+    "src/paper-strategy-runtime.js",
+    "src/bsc-inner-trade-monitor.js",
+    "test/bsc-inner-trade-monitor.test.js",
+    "src/rpc-host-coordinator.js",
+    "test/rpc-host-coordinator.test.js",
+    "src/rpc-retry-after.js",
+    "test/rpc-retry-after.test.js"
+  ]
+}

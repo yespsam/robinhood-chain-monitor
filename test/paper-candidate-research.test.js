@@ -1,9 +1,46 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mergePaperCandidateSnapshots, planPaperCandidateResearch, canPrefetchPaperFlow, readyForPaperQuote } from '../src/paper-candidate-research.js';
+import { mergePaperCandidateSnapshots, planPaperCandidateResearch, canPrefetchPaperFlow, readyForPaperQuote, researchReadyForQuote } from '../src/paper-candidate-research.js';
 import { EXPLORATORY_FLOW } from '../src/paper-entry-policy.js';
 
 const NOW = Date.parse('2026-09-22T09:00:00Z'), ca = `0x${'a'.repeat(40)}`;
+test('verified catalyst detail gaps get priority without promoting unknown tags or renewing timestamps',()=>{
+  const row={decision:'观察',reasons:['等待结构'],missing:['可卖出检测','新鲜且足够的 K 线'],
+    evidence:{lossRepair:{catalystReady:true,reentry:{ready:true}}}};
+  const before=structuredClone(row),at=new Date(NOW).toISOString();
+  assert.equal(planPaperCandidateResearch([row],at,NOW).priority,3);
+  assert.deepEqual(row,before);
+  row.evidence.lossRepair.catalystReady=false;
+  assert.notEqual(planPaperCandidateResearch([row],at,NOW).priority,3);
+  row.evidence.lossRepair.catalystReady=true;row.evidence.lossRepair.reentry.ready=false;
+  assert.notEqual(planPaperCandidateResearch([row],at,NOW).priority,3);
+  row.evidence.lossRepair.reentry.ready=true;row.missing=['新鲜且足够的 K 线'];
+  assert.equal(planPaperCandidateResearch([row],at,NOW).needed,false,'a detail request cannot fill a chart gap');
+  assert.equal(planPaperCandidateResearch([row],at,NOW+60000).priority,3,'refresh real market fields before they expire');
+});
+test('repair quote focus cannot be monopolized by a route with no catalyst or failed reentry',()=>{
+  const route={basis:'flow',signalReady:true,decision:'观察',missing:['连续新鲜报价确认'],reasons:[]};
+  const row={...route,evidence:{opportunityRoutes:[route],lossRepair:{catalystReady:false,reentry:{ready:true}}}};
+  for(const fn of [readyForPaperQuote,researchReadyForQuote]) {
+    assert.equal(fn(row),false);
+    assert.equal(fn({...row,evidence:{...row.evidence,lossRepair:{catalystReady:true,reentry:{ready:false}}}}),false);
+    assert.equal(fn({...row,evidence:{...row.evidence,lossRepair:{catalystReady:true,reentry:{ready:true}}}}),true,
+      'a genuine catalyst may still collect quotes while its structure is pending');
+  }
+});
+
+test('external structure quote research uses its own admission, never a blocked route with borrowed eligibility',()=>{
+  const repair={entryPathAllowed:true,catalystReady:false,reentry:{ready:true}};
+  const route={basis:'ohlcv',signalReady:true,pattern:{ready:true},decision:'观察',missing:['连续新鲜报价确认'],reasons:[],lossRepair:repair};
+  const row={...route,evidence:{lossRepair:repair,opportunityRoutes:[route]}};
+  for(const fn of [readyForPaperQuote,researchReadyForQuote]) {
+    assert.equal(fn(row),true);
+    const bad=structuredClone(row);bad.evidence.opportunityRoutes[0].lossRepair.entryPathAllowed=false;
+    assert.equal(fn(bad),false);
+    const failed=structuredClone(row);failed.evidence.lossRepair.reentry.ready=false;
+    assert.equal(fn(failed),false);
+  }
+});
 test('a quote-ready route cannot be hidden by the selected summary route',()=>{
   const route={basis:'ohlcv',pattern:{ready:true},decision:'观察',reasons:[],missing:['连续新鲜报价确认']};
   const result={decision:'观察',reasons:['等待两个净买家'],missing:['完整且新鲜的买入资金流'],evidence:{opportunityRoutes:[route]}};
@@ -11,6 +48,14 @@ test('a quote-ready route cannot be hidden by the selected summary route',()=>{
   for(const patch of [{missing:['两分钟内的真实行情']},{reasons:['预计往返成本超过 5%']},{decision:'不买'},{pattern:{ready:false}}]) {
     assert.equal(readyForPaperQuote({...result,evidence:{opportunityRoutes:[{...route,...patch}]}}),false);
   }
+});
+test('quote warmup admits signalled candidates without granting entry permission',()=>{
+  const base={decision:'观察',missing:['五秒内的独立报价','连续新鲜报价确认','恢复期绑定此 CA 的入场证据'],reasons:['预计往返成本超过 5%'],evidence:{safety:{missing:[],blocked:[]},opportunityRoutes:[{basis:'flow',signalReady:true}]}};
+  assert.equal(researchReadyForQuote(base),true);
+  assert.equal(researchReadyForQuote({...base,decision:'不买'}),false);
+  assert.equal(researchReadyForQuote({...base,missing:[...base.missing,'真实流动性']}),false);
+  assert.equal(researchReadyForQuote({...base,evidence:{...base.evidence,safety:{missing:[],blocked:['可卖出检测未通过']}}}),false);
+  assert.equal(researchReadyForQuote({...base,evidence:{...base.evidence,opportunityRoutes:[{basis:'ohlcv',signalReady:false,pattern:{ready:true}}]}}),false);
 });
 test('prefetch is limited to genuine complete or rebuilding active flows, never conflict or unknown data', () => {
   const flow = { fresh: true, complete: false, coverageGap: 'binance_window_warming_or_gap', uniqueBuyerCount: 1, highProfitCount: 0, smartMoneyCount: 1, netBuyUsd: 200 };
@@ -72,6 +117,6 @@ test('research plans distinguish a missing safety field, near-entry refresh and 
   assert.equal(planPaperCandidateResearch([...near, unrelated], snapshot(0).observedAt, NOW).needed, false);
   assert.equal(planPaperCandidateResearch(near,snapshot(61000).observedAt,NOW).needed,false,'missing chart is not near-entry');
   assert.deepEqual(planPaperCandidateResearch([{decision:'观察',reasons:[],missing:['五秒内的独立报价']}], snapshot(61000).observedAt, NOW), {
-    needed: true, priority: 2, refreshAfterMs: 30000, reason: '接近开仓，优先刷新候选行情' });
+    needed: true, priority: 2, refreshAfterMs: 30000, requestedFields: [], reason: '接近开仓，优先刷新候选行情' });
   assert.equal(planPaperCandidateResearch([{ decision: '不买', reasons: ['禁止卖出'], missing: [] }], null, NOW).needed, false);
 });

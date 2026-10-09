@@ -1296,6 +1296,51 @@ test("T0/T1 cards are local deterministic compact bilingual bundles and never wa
   assert.equal(translationCalls, 0);
 });
 
+test("official T2 news notifies only when important, while ordinary notices and T3 noise stay audit-only", () => {
+  const now = new Date().toISOString();
+  const important = copy(fixtures.marscoin);
+  important.title = "Binance introduces a new account service feature";
+  important.signal = { scope: "exchange", category: "产品更新", labels: ["产品能力更新"], strong: true };
+  important.strong = true;
+  important.publishedAt = now;
+  important.observedAt = now;
+  important.freshness = { decision: "realtime" };
+  delete important.launchAt;
+  const ranked = withTradingPriority(important);
+  assert.equal(ranked.tradingPriority.tier, "T2", "important news needs no exact trade target to notify");
+  assert.equal(ranked.tradingPriority.plan.automaticExecution, false);
+  assert.deepEqual(alertDeliveryDisposition(ranked), {
+    mode: "immediate", deliverImmediately: true, tier: "T2", reason: "official_news_watch_only",
+  });
+
+  const ordinary = withTradingPriority({
+    ...important,
+    title: "Binance Publishes an Ordinary Service Notice",
+    signal: { scope: "exchange", category: "普通公告", labels: ["普通官方公告"], strong: false },
+    strong: false,
+  });
+  assert.equal(isRelevantAlert(ordinary), true, "source relevance is distinct from notification importance");
+  assert.equal(ordinary.tradingPriority.tier, "T2");
+  assert.equal(alertDeliveryDisposition(ordinary).reason, "t2_default_audit");
+  assert.equal(alertDeliveryDisposition(ordinary).deliverImmediately, false);
+
+  const campaign = withTradingPriority({
+    ...important,
+    title: "Binance Alpha Trading Campaign: Trade ABC and Share Rewards",
+    signal: { scope: "exchange", category: "活动公告", labels: ["活动/奖励公告"], strong: false },
+  });
+  assert.equal(campaign.tradingPriority.tier, "T3");
+  assert.equal(alertDeliveryDisposition(campaign).reason, "t3_default_audit");
+  assert.equal(alertDeliveryDisposition(campaign).deliverImmediately, false, "a stale strong flag cannot promote T3 noise");
+
+  for (const invalid of [
+    { ...ranked, source: { ...ranked.source, url: "https://binance.com.evil.example/notice" } },
+    { ...ranked, freshness: { decision: "unassessed" } },
+    { ...ranked, freshness: { decision: "suppress" } },
+    { ...ranked, freshness: { decision: "realtime", deliveryDecision: "suppress" } },
+  ]) assert.equal(alertDeliveryDisposition(invalid).deliverImmediately, false);
+});
+
 test("outbox drain migrates old active priority and delivers only T0/T1 plus health", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "trading-priority-outbox-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -1428,8 +1473,10 @@ test("outbox drain migrates old active priority and delivers only T0/T1 plus hea
   assert.equal(persisted.events.t2.event.tradingPriority.version, TRADING_PRIORITY_VERSION);
   assert.equal(persisted.events.t2.event.tradingPriority.tier, "T2", "old v1 T1 is recomputed instead of trusted");
   assert.equal(persisted.events.t2.status, "suppressed");
+  assert.equal(persisted.events.t2.deliveryDisposition.reason, "t2_default_audit");
   assert.equal(persisted.events.t2.destinations.webhook.disabledReason, "policy_suppressed");
   assert.equal(persisted.events.t3.status, "suppressed");
+  assert.equal(persisted.events.t3.deliveryDisposition.reason, "t3_default_audit");
   assert.equal(legacyTradingPriority({ strong: true }).tier, "T1");
   assert.equal(legacyTradingPriority({ strong: false }).tier, "T2");
   assert.equal(withTradingPriority({ strong: true }, { legacy: true }).tradingPriority.tier, "T1");

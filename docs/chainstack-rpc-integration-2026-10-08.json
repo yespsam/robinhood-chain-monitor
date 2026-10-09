@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "verifiedAt": "2026-10-08T08:03:14.319Z",
+  "status": "rpc_integrated_paper_pipeline_still_has_queue_backpressure",
+  "scope": "只读 BSC HTTP/WSS 接入；不改变买卖策略、仓位、账本或旧积压开关",
+  "node": {
+    "host": "bsc-mainnet.core.chainstack.com",
+    "chainId": 56,
+    "network": "BSC Mainnet",
+    "name": "bsc-monitor-primary",
+    "billing": {
+      "plan": "Growth monthly",
+      "listedMonthlyUsd": 49,
+      "firstInvoicePaidUsd": 24.5,
+      "periodStart": "2026-10-08",
+      "periodEnd": "2026-11-08",
+      "includedRequestUnits": 20000000,
+      "extraUsageEnabled": false,
+      "note": "购买和建节点由用户操作；RU 不等于 HTTP 请求数，未承诺现有负载一定不耗尽月额度。"
+    }
+  },
+  "configuration": {
+    "privateFile": "data/private-bsc-rpc.json",
+    "permission": "0600",
+    "gitIgnored": true,
+    "globalConfigUnchanged": true,
+    "consumers": [
+      "BSC scan monitor private config clone: HTTP standard/realtime/archive/classification/replay pools and WSS",
+      "paper runtime inner-trade monitor",
+      "paper runtime internal-depth probe"
+    ],
+    "unchangedConsumers": "主 TG、GMGN/X 及其他未审查消费者不继承付费 URL；独立 Four/Flap 双源证明地址保持原样。",
+    "priority": "可用的付费端点优先；共享容量、冷却、熔断和公共回退仍然有效，不提高并发。",
+    "security": [
+      "固定 BSC Chainstack 主机、协议、路径；拒绝任意主机、重定向和跨源响应",
+      "私密配置拒绝符号链接、错误属主、弱权限和覆盖写入",
+      "RPC 公开错误边界丢弃原始 request/info/cause，保留经校验的调度字段",
+      "URL 与裸访问 token 脱敏；不输出完整端点"
+    ]
+  },
+  "boundedLiveProbe": {
+    "at": "2026-10-08T07:50:12.466Z",
+    "httpPhysicalRequests": 5,
+    "http": [
+      { "method": "eth_chainId", "durationMs": 947, "chainId": 56 },
+      { "method": "eth_blockNumber", "durationMs": 867, "head": 126406889 },
+      { "method": "eth_getBlockByNumber", "batchItems": 3, "durationMs": 261 },
+      { "method": "eth_getLogs", "scopedBlockCount": 4, "durationMs": 201, "logs": 0 },
+      { "method": "eth_call", "target": "pinned price oracle", "durationMs": 203, "resultBytes": 160 }
+    ],
+    "websocket": { "chainId": 56, "newHeads": 3, "firstHeadMs": 1353, "durationMs": 1885, "unsubscribed": true },
+    "limitation": "单次有限探针，不是长期 SLA、交易入场延迟或盈利证明。"
+  },
+  "tests": {
+    "innerDepthCoordinatorDashboard": { "passed": 159, "failed": 0 },
+    "scanWiringMonitorWorker": { "passed": 336, "failed": 0 },
+    "totalPassed": 495,
+    "fixtureRepair": "修正旧 history-backoff 测试：首个失败后停止整个串行批次，不再假定一轮会发出 5 个失败请求。只改夹具，保留 5 秒退避和 live/history 互斥断言；单独重跑通过。",
+    "safetyReview": "局部注入、错误脱敏、禁止重定向、数字型 Retry-After 脱敏均复核通过；相关 20 项离线测试再次通过。"
+  },
+  "deployment": {
+    "dashboard": { "oldPid": 14695, "newPid": 34951, "requestedAt": "2026-10-08T08:00:44.650Z", "readyAt": "2026-10-08T08:00:48.166Z", "method": "launchd SIGTERM graceful replacement" },
+    "bscChild": { "oldPid": 49121, "newPid": 35274, "requestedAt": "2026-10-08T08:01:27.796Z", "startedAt": "2026-10-08T08:01:38.923Z", "oldExitCode": 0, "method": "SIGTERM then existing parent supervision" },
+    "preservedPids": { "main": 45914, "gmgnXWorkerInternallyNamedFomo": 49145 },
+    "noDuplicateLongRunningCollectors": true
+  },
+  "observations": {
+    "paidInnerRead": {
+      "at": "2026-10-08T08:01:07.331Z",
+      "host": "bsc-mainnet.core.chainstack.com",
+      "physicalRequests": 7,
+      "rpcItems": 16,
+      "rawLogs": 4,
+      "durationMs": 3342,
+      "status": "warming_up"
+    },
+    "scanWebsocket": {
+      "status": "healthy",
+      "connectedAt": "2026-10-08T08:01:59.008Z",
+      "lastHeadAt": "2026-10-08T08:02:18.321Z",
+      "activeSubscriptions": ["heads", "protocol"]
+    },
+    "scanTail": {
+      "at": "2026-10-08T08:02:16.160Z",
+      "filters": 5,
+      "completedFilters": 5,
+      "failedFilters": 0,
+      "queryMs": 642,
+      "outcome": "commit rejected by existing queue admission",
+      "activeRetainedQueue": 39992,
+      "totalCapacity": 40000,
+      "liveSlotsAvailable": 8,
+      "newEntriesInBatch": 9,
+      "livePending": 0,
+      "historyPending": 39992,
+      "pausedPreCutoverEntries": 33889,
+      "interpretation": "读取成功不等于候选已入队。批次需要 9 个位置、总容量只剩 8 个；老化后还会受历史入队门槛影响。没有删除旧证据、扩大容量、放开历史扫描或改写游标。"
+    },
+    "innerLatest": {
+      "at": "2026-10-08T08:03:14.319Z",
+      "status": "collecting",
+      "lastSuccessAt": "2026-10-08T08:03:05.182Z",
+      "latestHost": "bsc-rpc.publicnode.com",
+      "rounds": 14,
+      "physicalRequests": 100,
+      "rpcItems": 234,
+      "rawLogs": 1201,
+      "coveredRounds": 0,
+      "lastCoveredAt": null,
+      "lastError": null,
+      "note": "共享容量繁忙时公共回退正常；原始日志不等于独立目标买卖、合格信号或已完成 90 秒证据窗口。"
+    },
+    "depth": "已注入并启用；截至检查时未自然触发独立深度检查，不强行下单或虚构深度成功。",
+    "dashboard": { "status": "ok", "lastError": null }
+  },
+  "preservation": {
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "cash": 88.61603269444774,
+    "realizedPnl": -111.05244079415168,
+    "trades": 236,
+    "positions": 0,
+    "tradeHashBeforeAndAfter": "76ecfdf6a83d866edea85762c0524436fa31a1fb19f90faf2b68854ef18567ae",
+    "legacyLedgerHashBeforeAndAfter": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36",
+    "fomoPlatformSourcesEnabled": false,
+    "liveOnlyFromBlock": 125126748,
+    "sourceAndScanPolicyFilesUnchanged": true
+  },
+  "credentialAudit": {
+    "strategyStateContainsToken": false,
+    "logsContainToken": false,
+    "logScope": "monitor.out/err 各最后 1 MiB；dashboard.out/err 当前完整短文件。不是全盘或无限历史扫描。"
+  },
+  "nextPriority": "单独修复实时候选入队与历史存量占用的容量隔离，并做保留全部证据、不提高无界内存、不断言虚假覆盖的回归；本次未实施队列政策变更。",
+  "conclusion": "付费 RPC 接入已完成并获运行验证；整个选标到成交链路仍未证明顺畅或盈利。"
+}

@@ -1,5 +1,7 @@
 import "dotenv/config";
 import path from "node:path";
+import { loadMonitorSourcePolicy, monitorSourceOverrides } from "./monitor-source-policy.js";
+export { applyPrivateBscRpcConfig } from "./bsc-private-rpc.js";
 
 const integer = (name, fallback) => {
   const value = Number(process.env[name] ?? fallback);
@@ -33,6 +35,15 @@ const robinhoodRpcUrl = process.env.RPC_URL || "https://rpc.mainnet.chain.robinh
 
 export const config = {
   monitorScope: String(process.env.MONITOR_SCOPE || "all").trim().toLowerCase(),
+  bscQueueIsolationEnabled: !/^false$/i.test(process.env.BSC_QUEUE_ISOLATION_ENABLED || "true"),
+  bscObjectProofIsolationEnabled: !/^false$/i.test(process.env.BSC_OBJECT_PROOF_ISOLATION_ENABLED || "true"),
+  bscReplayIsolationEnabled: !/^false$/i.test(process.env.BSC_REPLAY_ISOLATION_ENABLED || "true"),
+  bscReceiptProofCacheEnabled: !/^false$/i.test(process.env.BSC_RECEIPT_PROOF_CACHE_ENABLED || "true"),
+  bscIndependentDrainBatchSize: integer("BSC_INDEPENDENT_DRAIN_BATCH_SIZE", 4),
+  bscStateReadBudgetMs: integer("BSC_STATE_READ_BUDGET_MS", 10000),
+  bscStateReadMaxAttempts: integer("BSC_STATE_READ_MAX_ATTEMPTS", 2),
+  bscSharedRpcEnabled: !/^false$/i.test(process.env.BSC_SHARED_RPC_ENABLED || "true"),
+  bscWorkerEnabled: !/^false$/i.test(process.env.BSC_WORKER_ENABLED || "true"),
   rpcUrl: robinhoodRpcUrl,
   chainId: integer("CHAIN_ID", 4663),
   confirmations: integer("CONFIRMATIONS", 2),
@@ -203,23 +214,29 @@ export const config = {
   // quote pool is still observed before it appears in the board's top items.
   flapQuoteMonitorEnabled,
   flapQuotePollIntervalMs: integer("FLAP_QUOTE_POLL_INTERVAL_MS", 3_000),
+  flapQuoteCatchUpIntervalMs: integer("FLAP_QUOTE_CATCH_UP_INTERVAL_MS", 30_000),
   flapQuoteConfirmations: integer("FLAP_QUOTE_CONFIRMATIONS", 3),
-  flapQuoteEventChunkSize: integer("FLAP_QUOTE_EVENT_CHUNK_SIZE", 4_096),
-  flapQuoteMaxBlocksPerCycle: integer("FLAP_QUOTE_MAX_BLOCKS_PER_CYCLE", 4_096),
-  flapQuoteLogMaxBlockSpan: integer("FLAP_QUOTE_LOG_MAX_BLOCK_SPAN", 4_096),
-  flapQuoteLogConcurrency: integer("FLAP_QUOTE_LOG_CONCURRENCY", 1),
+  flapQuoteEventChunkSize: integer("FLAP_QUOTE_EVENT_CHUNK_SIZE", 20_000),
+  flapQuoteMaxBlocksPerCycle: integer("FLAP_QUOTE_MAX_BLOCKS_PER_CYCLE", 100_000),
+  flapQuoteLogMaxBlockSpan: integer("FLAP_QUOTE_LOG_MAX_BLOCK_SPAN", 10_000),
+  flapQuoteLogConcurrency: integer("FLAP_QUOTE_LOG_CONCURRENCY", 2),
+  flapQuoteLogRequestIntervalMs: integer("FLAP_QUOTE_LOG_REQUEST_INTERVAL_MS", 1_000),
+  flapQuoteLogRpcTimeoutMs: integer("FLAP_QUOTE_LOG_RPC_TIMEOUT_MS", 20_000),
   flapQuoteBackoffBaseMs: integer("FLAP_QUOTE_BACKOFF_BASE_MS", 3_000),
   flapQuoteBackoffMaxMs: integer("FLAP_QUOTE_BACKOFF_MAX_MS", 300_000),
   flapQuoteLogRpcUrls: parseDistinctRpcOrigins(
     "FLAP_QUOTE_LOG_RPC_URLS",
     process.env.FLAP_QUOTE_LOG_RPC_URLS,
-    "https://rpc-bnb.blockmachine.io,https://rpc.48.club",
+    "https://bsc.rpc.sentio.xyz,https://public-bsc.nownodes.io",
     { required: flapQuoteMonitorEnabled },
   ),
   flapQuoteStateRpcUrls: parseDistinctRpcOrigins(
     "FLAP_QUOTE_STATE_RPC_URLS",
     process.env.FLAP_QUOTE_STATE_RPC_URLS,
-    "https://rpc-bnb.blockmachine.io,https://bsc-mainnet.public.blastapi.io",
+    // NodeReal's shared public endpoint is published in ChainList's BSC
+    // catalog; this is not a personal key. Both readers reproduced the fixed
+    // block identity, implementation hash and EIP-1898 quote configuration.
+    "https://bsc.rpc.sentio.xyz,https://bsc-mainnet.nodereal.io/v1/64a9df0874fb4a93b9d0a3849de012d3",
     { required: flapQuoteMonitorEnabled },
   ),
   // Four.Meme's public REST inventory can be unavailable by geography. Keep
@@ -229,18 +246,22 @@ export const config = {
   fourRegistryPollIntervalMs: integer("FOUR_REGISTRY_POLL_INTERVAL_MS", 5_000),
   fourRegistryCatchUpIntervalMs: integer("FOUR_REGISTRY_CATCH_UP_INTERVAL_MS", 5_000),
   fourRegistryConfirmations: integer("FOUR_REGISTRY_CONFIRMATIONS", 3),
-  fourRegistryLogChunkSize: integer("FOUR_REGISTRY_LOG_CHUNK_SIZE", 4_096),
+  fourRegistryLogChunkSize: integer("FOUR_REGISTRY_LOG_CHUNK_SIZE", 10_000),
   fourRegistryReorgLookbackBlocks: integer("FOUR_REGISTRY_REORG_LOOKBACK_BLOCKS", 64),
   fourRegistryLogRpcUrls: parseDistinctRpcOrigins(
     "FOUR_REGISTRY_LOG_RPC_URLS",
     process.env.FOUR_REGISTRY_LOG_RPC_URLS,
-    "https://rpc-bnb.blockmachine.io,https://rpc.48.club",
+    // Both fixed log readers reproduced a non-empty 10k-block range. The
+    // former 48.club reader only supports 5k, Blockmachine repeatedly 429s.
+    "https://public-bsc.nownodes.io,https://bsc.rpc.sentio.xyz",
     { required: fourRegistryMonitorEnabled },
   ),
   fourRegistryStateRpcUrls: parseDistinctRpcOrigins(
     "FOUR_REGISTRY_STATE_RPC_URLS",
     process.env.FOUR_REGISTRY_STATE_RPC_URLS,
-    "https://rpc-bnb.blockmachine.io,https://bsc-mainnet.public.blastapi.io",
+    // This NodeReal endpoint is the shared public endpoint also used by
+    // Flap above, not a personal key. Sentio's two roles share one budget.
+    "https://bsc.rpc.sentio.xyz,https://bsc-mainnet.nodereal.io/v1/64a9df0874fb4a93b9d0a3849de012d3",
     { required: fourRegistryMonitorEnabled },
   ),
   ponsMonitorEnabled: !/^false$/i.test(process.env.PONS_MONITOR_ENABLED || "true"),
@@ -292,7 +313,10 @@ export const config = {
   fomoCallEnabled: !/^false$/i.test(process.env.FOMO_CALL_ENABLED || "true"),
   fomoCallStandalone: !/^false$/i.test(process.env.FOMO_CALL_STANDALONE || "true"),
   gmgnFlowMonitorEnabled: /^true$/i.test(process.env.GMGN_FLOW_MONITOR_ENABLED || "false"),
+  gmgnFlowResearchDecoupled: !/^false$/i.test(process.env.GMGN_FLOW_RESEARCH_DECOUPLED || "true"),
+  gmgnFlowParallelFeedReads: !/^false$/i.test(process.env.GMGN_FLOW_PARALLEL_FEED_READS || "true"),
   binanceFlowMonitorEnabled: !/^false$/i.test(process.env.BINANCE_FLOW_MONITOR_ENABLED || "true"),
+  binanceFlowFocusSchedulingEnabled: !/^false$/i.test(process.env.BINANCE_FLOW_FOCUS_SCHEDULING_ENABLED || "true"),
   gmgnFlowCliPath: process.env.GMGN_FLOW_CLI_PATH || process.env.FOMO_CALL_GMGN_CLI_PATH || "gmgn-cli",
   gmgnFlowPollIntervalMs: integer("GMGN_FLOW_POLL_INTERVAL_MS", 15_000),
   gmgnFlowRequestIntervalMs: integer("GMGN_FLOW_REQUEST_INTERVAL_MS", 1_200),
@@ -430,6 +454,7 @@ export const config = {
   fomoCallBaseRpcUrl: process.env.FOMO_CALL_BASE_RPC_URL || "https://mainnet.base.org",
   fomoCallSolanaRpcUrl: process.env.FOMO_CALL_SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com",
   bscMonitorEnabled: !/^false$/i.test(process.env.BSC_MONITOR_ENABLED || "true"),
+  bscPreferredRpcHosts: [],
   bscRpcUrl: process.env.BSC_RPC_URL || "https://bsc-dataseed-public.bnbchain.org",
   bscRpcUrls: (process.env.BSC_RPC_URLS || [
     "https://bsc-rpc.publicnode.com",
@@ -441,11 +466,10 @@ export const config = {
     "https://bsc-dataseed.bnbchain.org",
     "https://bsc.rpc.blxrbdn.com",
   ].join(",")).split(",").map((value) => value.trim()).filter(Boolean),
-  // Keep blxrbdn first for historical transaction/receipt reads. The log
-  // router independently prefers 48.club for exact ranges; using separate
-  // object/log priorities prevents an old creation backlog from delaying
-  // fresh launch detection.
-  bscArchiveRpcUrls: (process.env.BSC_ARCHIVE_RPC_URLS || "https://bsc.rpc.blxrbdn.com,https://rpc.48.club,https://bsc-mainnet.public.blastapi.io,https://bsc.blockrazor.xyz").split(",").map((value) => value.trim()).filter(Boolean),
+  // Sentio reproduced historical code, receipts and logs (including known
+  // positive Flap events); the older public endpoints lack historical state.
+  // Keep the realtime pool separate and retain ordered archive fallbacks.
+  bscArchiveRpcUrls: (process.env.BSC_ARCHIVE_RPC_URLS || "https://bsc.rpc.sentio.xyz,https://bsc-mainnet.nodereal.io/v1/64a9df0874fb4a93b9d0a3849de012d3,https://bsc.rpc.blxrbdn.com,https://rpc.48.club,https://bsc-mainnet.public.blastapi.io,https://bsc.blockrazor.xyz").split(",").map((value) => value.trim()).filter(Boolean),
   bscArchiveConcurrency: integer("BSC_ARCHIVE_CONCURRENCY", 12),
   bscRpcConcurrency: integer("BSC_RPC_CONCURRENCY", 12),
   bscRpcRequestTimeoutMs: integer("BSC_RPC_REQUEST_TIMEOUT_MS", 7_000),
@@ -529,3 +553,5 @@ export const config = {
       .filter(Boolean),
   ),
 };
+
+Object.assign(config, monitorSourceOverrides(loadMonitorSourcePolicy(config.dataDir)));

@@ -3,6 +3,7 @@ import { opportunityChart } from './paper-opportunity-policy.js';
 import { ema } from './paper-opportunity-review.js';
 import { assessPaperNarrative } from './paper-strategy-analysis.js';
 import { gmgnFlowAddress } from './gmgn-flow-signal.js';
+import { validEntryBoundThesis } from './paper-loss-repair.js';
 
 export const THESIS_EXIT_VERSION = 'volume_structure_exit_v1';
 export const THESIS_EXIT_POLICY = Object.freeze({ version: THESIS_EXIT_VERSION, mode: 'paper_exit_comparison',
@@ -54,11 +55,14 @@ export function assessThesisExit(position, mark, nowMs, { referenceLevel = null,
   const chart = source?.ready && key(source) === key(position) ? opportunityChart(source.rows, 'ok', observed) : null;
   if (!chart?.ready || chart.rows.length < 24) return { ...result, status: 'unavailable', reason: '持仓收盘线不足或过期；等待真实量价证据，不据此认定趋势仍有效' };
   const rows = chart.rows, last = rows.at(-1), previous = rows.at(-2), third = rows.at(-3);
-  const closedAfterEntry = bar => bar.time + 60000 > opened;
+  // Forward repair lots require whole post-entry bars; preserve legacy replay.
+  const closedAfterEntry = bar => position.tradeThesis||position.collectiveThesis ? bar.time >= opened : bar.time + 60000 > opened;
   if (!closedAfterEntry(previous)) return { ...result, status: 'warming', reason: '等待入场后两根独立收盘线；取消固定价格止损的实验此时仍暴露于亏损' };
   const original = position.entryEvidence?.opportunity;
+  if(position.tradeThesis&&!validEntryBoundThesis(position.tradeThesis,position))return {...result,status:'unavailable',reason:'入场绑定结构证据异常，不回退成通用均线退出'};
+  const frozen=position.tradeThesis;
   const anchor = positive(referenceLevel) ? referenceLevel
-    : original?.basis === 'ohlcv' && positive(original.pattern?.reclaimPrice) ? original.pattern.reclaimPrice : null;
+    : frozen ? frozen.anchor : original?.basis === 'ohlcv' && positive(original.pattern?.reclaimPrice) ? original.pattern.reclaimPrice : null;
   const levels = [ema(rows, 21), ema(rows.slice(0, -1), 21), ema(rows.slice(0, -2), 21)];
   const fast = ema(rows, 8), below = (bar, i) => bar.close < (anchor || levels[i]);
   const trendBroken = !!anchor || fast < levels[0];
@@ -78,7 +82,7 @@ export function assessThesisExit(position, mark, nowMs, { referenceLevel = null,
   return { ...result, status: heavyBreak || threeBelow || distribution ? 'invalidated' : 'observing',
     exit: heavyBreak || threeBelow || distribution, reason,
     structure: { closedAt: last.time + 60000, referenceLevel: anchor || levels[0],
-      levelKind: positive(referenceLevel) ? referenceKind : anchor ? '入场时真实结构收复位' : '当前二十一期指数均线',
+      levelKind: positive(referenceLevel) ? referenceKind : frozen ? frozen.kind : anchor ? '入场时真实结构收复位' : '当前二十一期指数均线',
       close: last.close, ema8: fast, ema21: levels[0], relativeVolume, previousVolume, upperWick,
       twoBelow, threeBelow, heavyBreak, distribution } };
 }

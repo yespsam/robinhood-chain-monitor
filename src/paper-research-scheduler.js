@@ -1,8 +1,18 @@
 import { CONFIRMED_PAPER_POLICY } from './paper-confirmed-policy.js';
-import { MAIN_STRUCTURE_MAX_COST_RATE } from './paper-cost-policy.js';
+import { walletBuyResearchHint } from './paper-wallet-priority.js';
+import { compareConfirmedCandidates } from './paper-trader-reasoning.js';
+import { marketLeaderHint, compareMarketLeaders, hotWatchEligible, HOT_WATCH_MS } from './paper-hot-research.js';
 const key=t=>`${t.chain}:${t.address}`;
 const stamp=v=>typeof v==='number'?(v<1e10?v*1000:v):Date.parse(v||'');
-export const RESEARCH_SCHEDULER_VERSION='main_execution_priority_v16';
+export const RESEARCH_SCHEDULER_VERSION='research_evidence_shortlist_v24';
+
+// Actual catalysts and independently admitted external patterns can receive
+// the main seat. Legacy/control price-only rows cannot borrow that admission.
+const repairResearchPriority=r=>Number(r.input.memeExitMode===true && r.decisions.some(d=>
+  d.decision!=='不买' && (d.evidence?.lossRepair?.catalystReady===true
+    || d.evidence?.lossRepair?.entryPath==='external_structure'&&d.evidence.lossRepair.entryPathAllowed===true
+      && d.evidence.opportunity?.pattern?.ready===true)
+    && d.evidence.lossRepair.reentry?.ready===true && !d.evidence?.safety?.blocked?.length));
 
 // A scheduling hint, never trading evidence. A disappearing candidate releases
 // focus, and candidate churn cannot postpone the mandatory discovery interval.
@@ -15,6 +25,9 @@ export function advanceEntryFocus(current, candidate, nowMs, {windowMs=20000}={}
 }
 
 export function chartRefreshDue(chart,nowMs,{active=false}={}) {
+  // No upstream sample was attempted when admission timed out. Keep a short,
+  // bounded retry gap rather than treating it as a 60s market-data failure.
+  if(chart&&['GMGN_QUEUE_EXPIRED','GMGN_REQUEST_BUSY'].includes(chart.reasonCode))return nowMs-chart.fetchedAt>=5000;
   if(!chart || nowMs-chart.fetchedAt>=60000)return true;
   // Keep a hot setup's next closed bar in the bounded queue BEFORE its old
   // evidence expires. A request boundary advances only with a real response;
@@ -29,16 +42,18 @@ export function chartRefreshDue(chart,nowMs,{active=false}={}) {
 
 export function canPrioritizeResearch(row) {
   const evidence=row.decisions[0]?.evidence, cost=evidence?.costAssumptions?.estimatedRoundTripCostRate;
-  // A main external candidate needs candles to assess net structural space.
-  // Do not exclude it using the legacy 5% cap before that evidence exists.
-  // Extreme costs and known safety failures still yield their scarce hot seat.
-  const maximum=row.input.memeExitMode===true ? MAIN_STRUCTURE_MAX_COST_RATE : CONFIRMED_PAPER_POLICY.maxCostRate;
+  // One bounded main-research seat per chain is not an order. A fee model must
+  // not erase a whole chain before its candles can even be inspected.
+  if (row.input.memeExitMode === true) return !evidence?.safety?.blocked?.length;
+  // Legacy comparison books retain their original economic admission policy.
+  const maximum=CONFIRMED_PAPER_POLICY.maxCostRate;
   return !evidence?.safety?.blocked?.length && !(Number.isFinite(cost) && cost>maximum);
 }
 
-// Five rotating chain seats, not hundreds of nominally "near-entry" tokens.
+// Bounded rotating shortlist (one per chain by default, opt-in up to three).
 // Selection uses currently observed fields only, not future performance.
-export function planHotResearch(rows, chains, charts, nowMs, previous=[]) {
+export function planHotResearch(rows, chains, charts, nowMs, previous=[], narrativePriority=()=>0, {perChainLimit=1,maintainLeader=false,watchSince=null}={}) {
+  if(!Number.isInteger(perChainLimit)||perChainLimit<1||perChainLimit>3)throw new TypeError('invalid bounded hot shortlist');
   const old=new Set(previous), score=r=>{
     const routes=r.decisions.flatMap(d=>d.evidence?.opportunityRoutes||[]);
     const ready=routes.some(s=>s.basis==='ohlcv' && s.signalReady);
@@ -48,31 +63,77 @@ export function planHotResearch(rows, chains, charts, nowMs, previous=[]) {
     const checked=c?.status==='ok' && !chartRefreshDue(c,nowMs,{active:true}) && routes.some(s=>s.pattern && !s.pattern.missing);
     const news=r.input.newsResearch,newsAt=stamp(news?.sourceAt);
     const newsFresh=news?.researchOnly===true&&Number.isFinite(newsAt)&&newsAt<=nowMs&&nowMs-newsAt<=120000;
-    return (ready?100:checked?-40:0)+(r.input.narrativeRecall?50:0)+(newsFresh?35:0)+(r.input.flow?.pulse?.recentBuyerCount||0)*2
+    const adjustment=narrativePriority(r.decisions[0],nowMs);
+    const bounded=Number.isFinite(adjustment)?Math.max(-20,Math.min(20,adjustment)):0;
+    // Negative semantics can reduce NEWS credit only, never erase independent
+    // price/flow evidence, a holding exit, a discovery slot or a CA safety gate.
+    const newsScore=Math.max(0,(newsFresh?35:0)+bounded);
+    const currentFlow=r.input.flow?.fresh===true && r.input.flow?.complete===true && !r.input.flow?.coverageGap;
+    const proofScore=r.decisions.some(d=>d.evidence?.lossRepair?.group==='event_narrative')?60
+      : currentFlow && r.input.flow?.highProfitCount>0 ? 50 : 0;
+    return (ready?100:checked?-40:0)+proofScore+(r.input.narrativeRecall?50:0)+newsScore+(r.input.flow?.pulse?.recentBuyerCount||0)*2
       +Math.min(20,movement*100)+Math.min(10,Math.log10(Math.max(1,t.volume||t.volume1h||t.volume24h||1)))
       +(old.has(key(t))?3:0);
   };
   const hot=[];
+  const rank=r=>r.decisions.some(d=>d.evidence?.lossRepair?.catalystReady===true)
+    && repairResearchPriority(r) ? 3 : walletBuyResearchHint(r.input,nowMs) ? 2 : repairResearchPriority(r);
   for(const chain of chains) {
     const eligible=rows.filter(r=>r.input.token.chain===chain && canPrioritizeResearch(r));
     // A new main hotspot must reach its first bounded chart attempt before
     // momentary score churn replaces it. Success AND failure populate the cache,
     // releasing this reservation. Disappearing/unsafe candidates release it too.
     // Existing exit/focus priority, chain rotation and discovery slots are unchanged.
-    const firstAttempt=eligible.find(r=>r.input.memeExitMode===true && old.has(key(r.input.token)) && !charts.has(key(r.input.token)));
-    const best=firstAttempt || eligible.sort((a,b)=>score(b)-score(a)||key(a.input.token).localeCompare(key(b.input.token)))[0];
-    if(best)hot.push(best);
+    const ranked=eligible.sort((a,b)=>rank(b)-rank(a)||score(b)-score(a)||key(a.input.token).localeCompare(key(b.input.token)));
+    const firstAttempt=ranked.filter(r=>r.input.memeExitMode===true && old.has(key(r.input.token)) && !charts.has(key(r.input.token)));
+    // Verified catalysts and new buys may replace an unstarted ordinary
+    // discovery, but never cancel in-flight work or borrow permission to trade.
+    // A first attempt cannot pin a price-only row ahead of a higher-ranked
+    // verified catalyst. Same-tier reservations survive harmless score churn.
+    const reserved=firstAttempt.filter(r=>rank(r)>=rank(ranked[0]));
+    const selected=new Map();
+    // One persistent market-leader seat within the existing three-seat cap.
+    // A completed non-setup must not erase a still-active top-volume token.
+    const leaders=eligible.filter(r=>marketLeaderHint(r,nowMs));
+    // In focused mode keep one still-qualified market leader across refreshes,
+    // not a new CA merely because its cache is older. Leaving the top five,
+    // delisting, stale evidence or a hard block releases this seat immediately.
+    const retained=maintainLeader?leaders.filter(r=>old.has(key(r.input.token))).sort((a,b)=>compareMarketLeaders(a,b,nowMs))[0]:null;
+    const leader=perChainLimit>1?(retained||leaders.sort((a,b)=>
+      (maintainLeader?0:(charts.get(key(a.input.token))?.fetchedAt||0)-(charts.get(key(b.input.token))?.fetchedAt||0))
+      ||compareMarketLeaders(a,b,nowMs))[0]):null;
+    const catalysts=ranked.filter(r=>rank(r)===3);
+    const watched=watchSince?eligible.filter(r=>{
+      const since=watchSince.get(key(r.input.token));
+      return old.has(key(r.input.token)) && hotWatchEligible(r,nowMs)
+        && Number.isFinite(since)&&since<=nowMs&&nowMs-since<HOT_WATCH_MS;
+    }).slice(0,2):[];
+    const walletPriority=watchSince?ranked.filter(r=>rank(r)===2):[];
+    const preferred=maintainLeader?[...catalysts.slice(0,1),...(leader?[leader]:[]),...catalysts,...walletPriority,...watched]
+      :[...catalysts,...(leader?[leader]:[]),...walletPriority,...watched];
+    for(const r of [...preferred,...reserved,...ranked])
+      if(!selected.has(key(r.input.token)))selected.set(key(r.input.token),r);
+    hot.push(...[...selected.values()].slice(0,perChainLimit));
   }
   return hot;
 }
 
-export function selectQuoteTarget(targets, quotes, attempts, nowMs) {
+export function selectQuoteTarget(targets, quotes, attempts, nowMs, { quoteProgress = new Map() } = {}) {
   const age=t=>{
     const q=quotes.get(key(t)),at=stamp(q?.observedAt);
     return q?.status==='ok' && q.chain===t.chain && q.address===t.address && Number.isFinite(q.price) && q.price>0
       && Number.isFinite(at) && at<=nowMs ? nowMs-at : Infinity;
   };
   const oldest=rows=>rows.toSorted((a,b)=>(attempts.get(key(a))??-Infinity)-(attempts.get(key(b))??-Infinity))[0];
+  // In the confirmed paper lane, a token with a partial fresh sample set is already
+  // paying for a confirmation window. Finish that bounded sequence before
+  // rotating to a never-started candidate; otherwise churn can leave every
+  // candidate perpetually at historyCount=1/2 and make fills impossible.
+  const partial=oldest(targets.filter(t=>{
+    const count=Number(quoteProgress.get(key(t))?.length||0);
+    return count>0 && count<CONFIRMED_PAPER_POLICY.quoteCount;
+  }));
+  if(partial)return partial;
   // Reserve roughly half the 15-second exit freshness window for network work.
   // Below this deadline use least-recently-attempted fairness, rather than a
   // 3-second urgency threshold that monopolized every slot after a slow request.
@@ -81,7 +142,7 @@ export function selectQuoteTarget(targets, quotes, attempts, nowMs) {
     ||oldest(targets);
 }
 
-export function selectResearchChart({holdings,hot,broad,charts,nowMs,dispatch,chains,lastHotChain=null,focus=null,pendingKeys=new Set()}) {
+export function selectResearchChart({holdings,hot,broad,charts,nowMs,dispatch,chains,lastHotChain=null,focus=null,researchFocus=null,pendingKeys=new Set()}) {
   const oldest=(rows,active=false)=>rows.filter(t=>!pendingKeys.has(key(t)) && chartRefreshDue(charts.get(key(t)),nowMs,{active}))
     .sort((a,b)=>(charts.get(key(a))?.fetchedAt||0)-(charts.get(key(b))?.fetchedAt||0))[0];
   const needsChart=p=>p.requiresStructureChart || p.pvpPolicy?.version==='structure_hold_v2';
@@ -107,6 +168,25 @@ export function selectResearchChart({holdings,hot,broad,charts,nowMs,dispatch,ch
     }
   };
   if(dispatch%3===2) {const t=fairCold();if(t)return t;}
+  // Some verified event routes need an exit chart even outside the external
+  // shortlist. Research can collect it in normal capacity, without acquiring
+  // confirmation priority or suppressing the one-in-three discovery turn.
+  if(researchFocus&&researchFocus.requiresStructureChart!==false){
+    const t=oldest([researchFocus],true);
+    if(t)return {...t,purpose:'candidate',researchLane:'hot',researchOnly:true};
+  }
+  const leaders=hot.filter(r=>marketLeaderHint(r,nowMs)).sort((a,b)=>compareMarketLeaders(a,b,nowMs));
+  const leader=oldest(leaders.map(r=>r.input.token),true);
+  if(leader)return {...leader,purpose:'candidate',researchLane:'hot'};
+  // One of three chart dispatches may jump directly to a fresh wallet buy.
+  // Holding exits, an admitted quote focus, cold discovery and chain rotation
+  // keep their capacity. The existing cache/backoff and pending-key gates apply.
+  if(dispatch%3===0) {
+    const buying=hot.filter(r=>walletBuyResearchHint(r.input,nowMs));
+    const target=oldest(buying.map(r=>r.input.token),true);
+    if(target)return {...target,purpose:'candidate',researchLane:'wallet',
+      walletTrigger:walletBuyResearchHint(buying.find(r=>key(r.input.token)===key(target)).input,nowMs)};
+  }
   // Unseen caches all have age zero: sorting by cache time across chains lets
   // endless new names on the first chain monopolize every hot request.
   const start=(chains.indexOf(lastHotChain)+1)%chains.length;
@@ -117,12 +197,14 @@ export function selectResearchChart({holdings,hot,broad,charts,nowMs,dispatch,ch
   return fairCold()||(comparison?{...comparison,purpose:'comparison',researchLane:'holding'}:undefined);
 }
 
-export function quoteCandidatePool(rows,{mainFirst=false}={}) {
+export function quoteCandidatePool(rows,{mainFirst=false,catalystFirst=false}={}) {
   const usable=rows.filter(r=>!r.input.opportunityAccount?.positions?.[key(r.input.token)]);
   const main=mainFirst?usable.filter(r=>r.candidateBook==='main'):[];
   const pool=main.length?main:usable,unique=new Map();
   for(const r of pool)if(!unique.has(key(r.input.token)))unique.set(key(r.input.token),r);
-  return [...unique.values()];
+  const result=[...unique.values()];
+  const decision=r=>r.decisions?.[0]||{token:r.input.token,evidence:{}};
+  return catalystFirst?result.sort((a,b)=>compareConfirmedCandidates(decision(a),decision(b))):result;
 }
 
 export function selectQuoteCandidate(rows,current,nowMs,{windowMs=20000,mainFirst=false}={}) {

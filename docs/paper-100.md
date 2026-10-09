@@ -13,7 +13,7 @@ node scripts/paper-100.js --status
 
 默认输入为项目 `data/alert-outbox.json` 和 `data/fomo-alerts/alert-outbox.json`。可用 `--main-outbox`、`--fomo-outbox`，或显式环境变量 `PAPER_100_MAIN_OUTBOX`、`PAPER_100_FOMO_OUTBOX` 修改；脚本不加载整个监控 `.env`。
 
-默认输出目录：`/Users/qohfq/Documents/Playground/robinhood-chain-monitor-paper-100`。账户及观察记录位于 `paper-100-state.json`，文件权限 `0600`，原子替换并执行 fsync。`--data-dir` 或 `PAPER_100_DATA_DIR` 可指定其他隔离目录。输出不能包含或位于生产数据/输入文件目录，路径不能经由符号链接。
+默认输出目录：项目相邻的 `../robinhood-chain-monitor-paper-100`。账户及观察记录位于 `paper-100-state.json`，文件权限 `0600`，原子替换并执行 fsync。`--data-dir` 或 `PAPER_100_DATA_DIR` 可指定其他隔离目录。输出不能包含或位于生产数据/输入文件目录，路径不能经由符号链接。
 
 ## 固定实验规则
 

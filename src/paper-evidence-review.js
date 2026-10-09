@@ -5,13 +5,14 @@ export const EVIDENCE_REVIEW_VERSION = 'entry_evidence_review_v1';
 const stamp = value => typeof value === 'number' ? value : Date.parse(value || '');
 const count = value => Number.isSafeInteger(value) && value >= 0;
 const labels = {
+  onchain_pool: '链上新底池前三 CA（非推文背书）',
   official_catalog: '官方目录对应 CA', direct_ca: '原文明确对应 CA（非背书）',
   community_link: '社区题材关联（非作者认领）', project_link: '项目引用原帖，关系待核实',
   name_only: '仅名称相符', unverified: '未记录可核实关联',
   verified_profit: '入场记录有核实盈利地址', tagged_only: '有标签买家，盈利未核实',
   other_buyers: '其他可见净买地址', no_buyers: '可见样本无净买地址', unknown: '证据缺失 / 不完整'
 };
-const narrativeKinds = new Set(['official_catalog','direct_ca','community_link','project_link','name_only']);
+const narrativeKinds = new Set(['onchain_pool','official_catalog','direct_ca','community_link','project_link','name_only']);
 
 export function classifyEntryEvidence(entry) {
   const e = entry?.entryEvidence || {}, t = e.narrativeThesis, d = e.flowDiagnostics || {}, f = e.flow || {};
@@ -26,9 +27,16 @@ export function classifyEntryEvidence(entry) {
     && t.sources?.some(s => s.url === t.event.sourceUrl && s.binding === t.relationship.kind
       && Number.isFinite(stamp(s.at)) && stamp(s.at) <= at)) narrative = t.relationship.kind;
   const flowAt = stamp(d.observedAt || (d.provider === e.memeExitContext?.provider ? e.memeExitContext?.observedAt : null));
-  const usable = e.flowFresh === true && d.complete === true && !d.coverageGap && !d.sourceIssue
+  const scoped=d.tokenEvidence;
+  const scopedHealthy=scoped?.version==='ca_flow_window_v1'&&d.provider==='gmgn'
+    &&scoped.scope==='gmgn_public_smartmoney_kol_5m'&&scoped.chain===entry?.chain
+    &&!!ca&&gmgnFlowAddress(scoped.chain,scoped.address)===ca&&scoped.status==='healthy'
+    &&scoped.complete===true&&stamp(scoped.observedAt)===flowAt;
+  // Never reclassify old trades: only newly frozen per-CA window proofs can
+  // separate a global warning from this token. Legacy evidence stays strict.
+  const sourceHealthy=scoped ? scopedHealthy : !d.sourceIssue&&(!d.sourceStatus||['healthy','ok'].includes(d.sourceStatus));
+  const usable = e.flowFresh === true && d.complete === true && !d.coverageGap && sourceHealthy
     && Number.isFinite(flowAt) && flowAt <= at && at - flowAt <= 120000
-    && (!d.sourceStatus || ['healthy', 'ok'].includes(d.sourceStatus))
     && count(f.uniqueBuyerCount) && count(f.smartMoneyCount) && count(f.highProfitCount)
     && f.smartMoneyCount <= f.uniqueBuyerCount && f.highProfitCount <= f.uniqueBuyerCount;
   let wallet = 'unknown';

@@ -1,4 +1,5 @@
 import test from "node:test";
+import { encodeFlapQuoteConfigurationLog } from "../src/flap-quote-generation.js";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import { createHash } from "node:crypto";
@@ -32,6 +33,7 @@ import {
   bscRealtimeProcessLimit,
   bscDeepRpcPriority,
   buildBscOutstandingCausalHeads,
+  hasBscOutstandingCausalKey,
   commitBscDecision,
   compactBscNearHeadRecoveryGaps,
   compactFocus3LiveCoverageState,
@@ -39,11 +41,13 @@ import {
   createRpcPool,
   evaluateBscObservation,
   findTokenCorrelatedEmitters,
+  fourMemeCandidateActivations,
   hasBscLaunchArgumentEvidence,
   isErc20MintLog,
   isBscArchiveStateUnavailable,
   isExcludedFourMemeTemplate,
   isOfficialFourMemeClassicTokenRecord,
+  isBscPressureDrainCandidate,
   matchKnownOfficialFastMode,
   matchFlapFeatureActivation,
   modeComponentNovelty,
@@ -656,8 +660,8 @@ test("BSC keyed-only causal heads match the legacy full-backlog oracle", () => {
     const normalized = [...new Set((Array.isArray(values) ? values : [])
       .map((value) => String(value || ""))
       .filter((value) => /^(?:feature|first3):[^\s]{1,480}$/.test(value)))].sort();
-    if (normalized.length > 64) {
-      const error = new Error(`BSC causal barrier capacity ${normalized.length}>64`);
+    if (normalized.length > 128) {
+      const error = new Error(`BSC causal barrier capacity ${normalized.length}>128`);
       error.code = "BSC_CAUSAL_BARRIER_CAPACITY";
       throw error;
     }
@@ -772,6 +776,12 @@ test("BSC keyed-only causal heads match the legacy full-backlog oracle", () => {
     "an unkeyed raw queue representative remains excluded from the pre-WAL causal handoff");
   assert.equal(actual.get("feature:delta").transactionHash, tieLow);
   assert.equal(actual.get("feature:raw").transactionHash, rawOnly);
+  for (const causalKey of [...actual.keys(), "feature:absent", "first3:alpha"]) {
+    assert.equal(hasBscOutstandingCausalKey({ ...input, causalKey }), actual.has(causalKey), causalKey);
+  }
+  assert.equal(hasBscOutstandingCausalKey({
+    causalKey: "feature:alpha", realtimePendingEntries: { [seen]: realtimePendingEntries[seen] }, seenTransactions,
+  }), false, "already-seen work cannot keep replay blocked");
 });
 
 test("BSC keyed-only causal heads retain conflict and capacity fail-close semantics", () => {
@@ -792,13 +802,13 @@ test("BSC keyed-only causal heads retain conflict and capacity fail-close semant
     deferredCreationEvidence: { [hash]: { ...base, flapQuoteFirstThreeReplayGenerationKey: "two" } },
   }), new RegExp(`BSC causal key conflict for ${hash} flapQuoteFirstThreeReplayGenerationKey`));
 
-  const first = Array.from({ length: 32 }, (_, index) => `feature:left-${index}`);
-  const second = Array.from({ length: 33 }, (_, index) => `first3:right-${index}`);
+  const first = Array.from({ length: 64 }, (_, index) => `feature:left-${index}`);
+  const second = Array.from({ length: 65 }, (_, index) => `first3:right-${index}`);
   assert.throws(() => buildBscOutstandingCausalHeads({
     realtimePendingEntries: { [hash]: { ...base, causalBarrierKeys: first } },
     deferredCreationEvidence: { [hash]: { ...base, causalBarrierKeys: second } },
   }), (error) => error?.code === "BSC_CAUSAL_BARRIER_CAPACITY"
-    && /BSC causal barrier capacity 65>64/.test(error.message));
+    && /BSC causal barrier capacity 129>128/.test(error.message));
 
   const rawQueue = new Map([["invalid", {
     ...base,
@@ -809,6 +819,94 @@ test("BSC keyed-only causal heads retain conflict and capacity fail-close semant
     (error) => error?.code === "BSC_CAUSAL_BARRIER_CAPACITY",
     "raw evidence validates its own barrier capacity before hash filtering");
 });
+
+for (const count of [68, 128]) {
+  test(`BSC causal heads preserve all ${count} legitimate barriers and earliest predecessor ordering`, () => {
+    const hash = `0x${"a1".repeat(32)}`;
+    const laterHash = `0x${"a2".repeat(32)}`;
+    const keys = Array.from({ length: count }, (_, index) => `feature:pending-${String(index).padStart(3, "0")}`);
+    const base = { transactionHash: hash, blockNumber: 20, transactionIndex: 1, logIndex: 0 };
+    const input = {
+      realtimePendingEntries: { [hash]: { ...base, causalBarrierKeys: keys.slice(0, count / 2) } },
+      deferredCreationEvidence: { [hash]: { ...base, blockNumber: 10, causalBarrierKeys: keys.slice(count / 2) } },
+      rawQueue: new Map([[laterHash, { ...base, transactionHash: laterHash, blockNumber: 30, causalBarrierKeys: keys }]]),
+    };
+    const original = structuredClone(input);
+    const heads = buildBscOutstandingCausalHeads(input);
+    assert.equal(heads.size, count, "no conservative dependency may be truncated to admit work");
+    for (const key of keys) {
+      assert.equal(heads.get(key).transactionHash, hash);
+      assert.equal(heads.get(key).blockNumber, 10);
+      assert.deepEqual(heads.get(key).causalBarrierKeys, keys);
+      assert.equal(hasBscOutstandingCausalKey({ ...input, causalKey: key }), true);
+    }
+    assert.deepEqual(input, original, "merging representatives must not rewrite the retained evidence");
+  });
+}
+
+test("BSC 68-key pending evidence survives WAL replay and a compacted snapshot restart without truncation", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-expanded-causal-wal-"));
+  const hash = `0x${"b1".repeat(32)}`;
+  const keys = Array.from({ length: 68 }, (_, index) => `feature:pending-${String(index).padStart(3, "0")}`);
+  const record = { transactionHash: hash, blockNumber: 101, transactionIndex: 0, logIndex: 0,
+    reasons: ["http_tail"], causalBarrierKeys: keys };
+  const stateFile = await seedModernBscJournal(dataDir);
+  const original = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  assert.equal(original.realtimePendingEntries[hash], undefined);
+  await fs.writeFile(`${stateFile}.wal`, testBscWalFrame(original.journalRevision + 1, [
+    { op: "set", path: ["realtimePendingEntries", hash], value: record },
+  ]));
+  const createMonitor = () => createBscLaunchpadMonitor({ dataDir, monitorScope: "focus3" }, {
+    autoStart: false, externalAttribution: false, provider: { destroy() {} },
+    logger: { error() {}, info() {} }, ...disabledJournalTimerDependencies(),
+  });
+  let monitor = createMonitor();
+  t.after(async () => { await monitor.stop().catch(() => {}); await fs.rm(dataDir, { recursive: true, force: true }); });
+  for (let restart = 0; restart < 2; restart++) {
+    const snapshot = await monitor.getState();
+    assert.deepEqual(snapshot.realtimePendingEntries[hash].causalBarrierKeys, keys);
+    assert.equal(snapshot.seenTransactions[hash], undefined);
+    assert.equal(snapshot.lastFinalizedBlock, 100);
+    const heads = buildBscOutstandingCausalHeads({ realtimePendingEntries: snapshot.realtimePendingEntries });
+    assert.equal(heads.size, 68);
+    for (const key of keys) assert.equal(heads.get(key).transactionHash, hash);
+    if (restart === 0) {
+      await monitor.stop();
+      const compacted = JSON.parse(await fs.readFile(stateFile, "utf8"));
+      assert.deepEqual(compacted.realtimePendingEntries[hash].causalBarrierKeys, keys);
+      monitor = createMonitor();
+    }
+  }
+});
+
+for (const source of ["snapshot", "WAL"]) {
+  test(`BSC 129-key ${source} evidence fails closed beyond the expanded bounded capacity`, async (t) => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-expanded-causal-invalid-"));
+    const hash = `0x${"b2".repeat(32)}`;
+    const record = { transactionHash: hash, blockNumber: 101, transactionIndex: 0, logIndex: 0,
+      reasons: ["http_tail"], causalBarrierKeys: Array.from({ length: 129 }, (_, index) => `feature:pending-${String(index).padStart(3, "0")}`) };
+    const stateFile = await seedModernBscJournal(dataDir, snapshot => {
+      if (source === "snapshot") snapshot.realtimePendingEntries[hash] = record;
+    });
+    if (source === "WAL") {
+      const snapshot = JSON.parse(await fs.readFile(stateFile, "utf8"));
+      await fs.writeFile(`${stateFile}.wal`, testBscWalFrame(snapshot.journalRevision + 1, [
+        { op: "set", path: ["realtimePendingEntries", hash], value: record },
+      ]));
+    }
+    const originalSnapshot = await fs.readFile(stateFile, "utf8");
+    const originalWal = await fs.readFile(`${stateFile}.wal`, "utf8");
+    const monitor = createBscLaunchpadMonitor({ dataDir, monitorScope: "focus3" }, {
+      autoStart: false, provider: { destroy() {} }, logger: { error() {}, info() {} },
+      ...disabledJournalTimerDependencies(),
+    });
+    t.after(async () => { await monitor.stop().catch(() => {}); await fs.rm(dataDir, { recursive: true, force: true }); });
+    await assert.rejects(() => monitor.getState(), error => error.code === "BSC_CAUSAL_BARRIER_CAPACITY"
+      && /129>128/.test(error.message));
+    assert.equal(await fs.readFile(stateFile, "utf8"), originalSnapshot);
+    assert.equal(await fs.readFile(`${stateFile}.wal`, "utf8"), originalWal);
+  });
+}
 
 test("near-head BSC candidates outrank an old durable realtime backlog", () => {
   const entry = (transactionHash, blockNumber) => ({
@@ -2346,6 +2444,78 @@ test("standard RPC pool enforces its configured total concurrency", async () => 
   pool.destroy();
 });
 
+test("mixed RPC methods and pool aliases share one physical host budget", async () => {
+  const registry = new Map();
+  let active = 0, peak = 0, calls = 0;
+  const read = async () => {
+    calls++; active++; peak = Math.max(peak, active);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    active--; return "0x";
+  };
+  const dependencies = { hostCircuitRegistry: registry,
+    providerFactory: () => ({ getCode: read, getTransactionReceipt: read, getBlockNumber: read,
+      send: async () => { await read(); return []; } }) };
+  const first = createRpcPool(["https://mixed-rpc.test/a"], [], 4, dependencies);
+  const second = createRpcPool(["https://mixed-rpc.test/b"], [], 4, dependencies);
+  try {
+    await Promise.all(Array.from({length: 12}, (_, i) => i % 3 === 0
+      ? first.send("eth_getLogs", [{}]) : i % 3 === 1
+        ? second.getTransactionReceipt(`0x${i}`) : first.getBlockNumber()));
+    assert.equal(calls, 12);
+    assert.equal(peak, 2, "receipt/head calls cannot bypass a shared log-host slot");
+  } finally { first.destroy(); second.destroy(); }
+});
+
+test("pinned proof pools share capacity but never borrow another source identity", async () => {
+  const registry=new Map(),calls=[];
+  const dependencies={hostCircuitRegistry:registry,providerFactory:url=>({async send(){
+    calls.push(url);if(url.includes('first-proof'))throw Object.assign(new Error('HTTP 429'),{status:429});
+    return '0x38';
+  }})};
+  const first=createRpcPool(['https://first-proof.test'],[],2,dependencies);
+  const second=createRpcPool(['https://second-proof.test'],[],2,dependencies);
+  try {
+    await assert.rejects(()=>first.send('eth_chainId',[]),/429/);
+    assert.deepEqual(calls,['https://first-proof.test'],'no cross-origin fallback can impersonate the missing second proof');
+    assert.equal(await second.send('eth_chainId',[]),'0x38');
+  } finally {first.destroy();second.destroy();}
+});
+
+test("legacy ethers decoding failure does not block raw transaction verification on the same host", async () => {
+  for (const archive of [false, true]) {
+    const pool = createRpcPool(["https://legacy-proof.test/a"], archive ? ["https://legacy-proof.test/b"] : [], 2, {
+      providerFactory: () => ({
+        async getTransaction() { throw Object.assign(new Error('invalid value for value.chainId (invalid BigNumberish string: empty string)'), {code:"BAD_DATA"}); },
+        async send(method) { assert.equal(method, "eth_getTransactionByHash"); return {chainId:"",type:"0x0"}; },
+      }),
+    });
+    try {
+      for (let i = 0; i < 2; i++) {
+        await assert.rejects(() => archive ? pool.getHistoricalTransaction("0x1") : pool.getTransaction("0x1"), /chainId.*empty string/);
+        assert.deepEqual(await pool.send("eth_getTransactionByHash", ["0x1"]), {chainId:"",type:"0x0"});
+      }
+    } finally { pool.destroy(); }
+  }
+});
+
+test("queued non-log reads honor a rate limit opened by another RPC pool", async () => {
+  const registry = new Map(), pending = [];
+  let calls = 0;
+  const dependencies = { hostCircuitRegistry: registry,
+    providerFactory: () => ({ getBlockNumber: () => { calls++; return new Promise((resolve,reject) => pending.push({resolve,reject})); } }) };
+  const first = createRpcPool(["https://mixed-rate.test/a"], [], 4, dependencies);
+  const second = createRpcPool(["https://mixed-rate.test/b"], [], 4, dependencies);
+  const results = Promise.allSettled([first.getBlockNumber(), second.getBlockNumber(), second.getBlockNumber()]);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(calls, 2);
+  pending[0].reject(Object.assign(new Error("HTTP 429"), {status:429}));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(calls, 2, "queued method must recheck the host circuit before dispatch");
+  pending[1].resolve(123);
+  assert.deepEqual((await results).map(r => r.status), ["rejected","fulfilled","rejected"]);
+  first.destroy(); second.destroy();
+});
+
 test("standard RPC cooldown fails closed instead of retrying every cooling provider", async () => {
   let calls = 0;
   const pool = createRpcPool(["https://first.test", "https://second.test"], [], 1, {
@@ -2690,6 +2860,7 @@ test("mixed archive 429 and standard method failure retain an independent host c
       firstError = error;
       return error.rpcFailureScope === "method"
         && error.rpcOperation === "getCode"
+        && error.retryAfterMs === 1_000
         && error.rpcHostRetryAfterMs === 12_000;
     },
   );
@@ -2705,6 +2876,101 @@ test("mixed archive 429 and standard method failure retain an independent host c
   assert.deepEqual(calls, ["archive", "standard"],
     "the aggregate host evidence prevents a physical archive probe while its 429 is active");
   pool.destroy();
+});
+
+test("BSC alternative RPC pools retry the earliest host without bypassing the longer 429", async () => {
+  let clock = 10_000;
+  const calls = [];
+  let recovered = false;
+  const pool = createRpcPool(["https://short.test"], ["https://long.test"], 1, {
+    now: () => clock,
+    hostCircuitRegistry: new Map(),
+    providerFactory: (_url, { kind }) => ({
+      async getCode() {
+        calls.push(kind);
+        if (recovered) return "0x6000";
+        const error = new Error("HTTP 429");
+        error.status = 429;
+        error.retryAfterMs = kind === "archive" ? 240_000 : 5_000;
+        throw error;
+      },
+    }),
+  });
+  try {
+    await assert.rejects(() => pool.getCode(`0x${"1".repeat(40)}`, 100), (error) =>
+      error.rpcFailureScope === "host" && error.retryAfterMs === 5_000
+        && error.rpcHostRetryAfterMs === 240_000);
+    clock += 5_001;
+    recovered = true;
+    assert.equal(await pool.getCode(`0x${"1".repeat(40)}`, 100), "0x6000");
+    assert.deepEqual(calls, ["archive", "standard", "standard"]);
+  } finally { pool.destroy(); }
+});
+
+test("one failed BSC half-open probe does not hide another ready host", async () => {
+  const registry = new Map(["a.test", "b.test"].map(host => [host, {
+    host, globalUntil: 0, globalFailures: 1, globalGeneration: 1, methods: new Map(),
+  }]));
+  const calls = [];
+  const pool = createRpcPool(["https://a.test", "https://b.test"], [], 1, {
+    now: () => 10_000,
+    hostCircuitRegistry: registry,
+    providerFactory: (url) => ({
+      async getCode() {
+        calls.push(url);
+        if (url.includes("a.test")) {
+          const error = new Error("HTTP 429");
+          error.status = 429;
+          throw error;
+        }
+        return "0x6000";
+      },
+    }),
+  });
+  try {
+    await assert.rejects(() => pool.getCode(`0x${"1".repeat(40)}`), error =>
+      error.rpcFailureScope === "method" && error.retryAfterMs === 1);
+    assert.equal(await pool.getCode(`0x${"1".repeat(40)}`), "0x6000");
+    assert.deepEqual(calls, ["https://a.test", "https://b.test"]);
+  } finally { pool.destroy(); }
+});
+
+test("BSC archive state fallback prefers a state-capable reader to object-only RPCs", async () => {
+  const calls = [];
+  const pool = createRpcPool([], ["https://bsc.rpc.sentio.xyz", "https://bsc.rpc.blxrbdn.com", "https://bsc-mainnet.nodereal.io/test"], 1, {
+    hostCircuitRegistry: new Map(),
+    providerFactory: url => ({ async getCode() {
+      const host = new URL(url).hostname; calls.push(host);
+      if (host === "bsc.rpc.sentio.xyz") { const error = new Error("HTTP 429"); error.status = 429; throw error; }
+      assert.equal(host, "bsc-mainnet.nodereal.io"); return "0x6000";
+    } }),
+  });
+  try {
+    assert.equal(await pool.getCode(`0x${"1".repeat(40)}`, 100), "0x6000");
+    assert.deepEqual(calls, ["bsc.rpc.sentio.xyz", "bsc-mainnet.nodereal.io"]);
+  } finally { pool.destroy(); }
+});
+
+test("BSC latest state fails over to archive-capable readers without changing block tags", async () => {
+  const calls = [];
+  const pool = createRpcPool(["https://standard.test"], ["https://archive.test"], 1, {
+    hostCircuitRegistry: new Map(),
+    providerFactory: (_url, { kind }) => Object.fromEntries(["getCode", "getStorage", "call"].map(method => [method, async (...args) => {
+      calls.push({ kind, method, args });
+      if (kind === "standard") { const e = new Error("403 forbidden"); e.status = 403; throw e; }
+      return "0x6000";
+    }])),
+  });
+  try {
+    const address = `0x${"1".repeat(40)}`;
+    assert.equal(await pool.getCode(address), "0x6000");
+    assert.equal(await pool.getStorage(address, "0x0", "latest"), "0x6000");
+    assert.equal(await pool.call({ to: address, data: "0x12345678" }), "0x6000");
+    for (let i = 0; i < calls.length; i += 2) {
+      assert.equal(calls[i].kind, "standard"); assert.equal(calls[i + 1].kind, "archive");
+      assert.deepEqual(calls[i].args, calls[i + 1].args);
+    }
+  } finally { pool.destroy(); }
 });
 
 test("a host-global 429 permits only one cross-method half-open probe", async () => {
@@ -3035,6 +3301,32 @@ test("historical getLogs keeps PublicNode disabled and uses archive 48.club firs
   assert.deepEqual(calls, ["archive:rpc.48.club"]);
   assert.equal(calls.some((call) => call.includes("publicnode")), false);
   pool.destroy();
+});
+
+test('indexed archive handles historical state and bounded logs before state-limited fallbacks',async()=>{
+ const calls=[];
+ const pool=createRpcPool(['https://standard.test'],['https://bsc.rpc.blxrbdn.com','https://bsc.rpc.sentio.xyz'],4,{
+  providerFactory:(url)=>({
+   async getCode(){calls.push([new URL(url).host,'code']);return '0x1234';},
+   async send(){calls.push([new URL(url).host,'logs']);return [];},
+  }),
+ });
+ await pool.getCode('0x1111111111111111111111111111111111111111',119678948);
+ await pool.send('eth_getLogs',[{fromBlock:'0x1',toBlock:'0x2710'}]);
+ await pool.send('eth_getLogs',[{fromBlock:'0x1',toBlock:'0x2711'}]);
+ assert.deepEqual(calls,[['bsc.rpc.sentio.xyz','code'],['bsc.rpc.sentio.xyz','logs'],['bsc.rpc.blxrbdn.com','logs']]);
+ pool.destroy();
+});
+
+test('public indexed archive shares two physical slots across state and log methods',async()=>{
+ const registry=new Map();let active=0,maxActive=0;
+ const pending=[];
+ const response=async(value)=>{active++;maxActive=Math.max(maxActive,active);await new Promise(resolve=>pending.push(resolve));active--;return value;};
+ const options={hostCircuitRegistry:registry,providerFactory:()=>({getCode:()=>response('0x1234'),send:()=>response([])})};
+ const pools=Array.from({length:2},()=>createRpcPool(['https://standard.test'],['https://bsc.rpc.sentio.xyz'],4,options));
+ const jobs=[pools[0].getCode('0x1111111111111111111111111111111111111111',100),pools[1].getCode('0x1111111111111111111111111111111111111111',101),pools[1].send('eth_getLogs',[{fromBlock:'0x1',toBlock:'0x2'}])];
+ for(let i=0;i<6;i++){await new Promise(resolve=>setImmediate(resolve));while(pending.length)pending.shift()();}
+ await Promise.all(jobs);assert.equal(maxActive,2);pools.forEach(p=>p.destroy());
 });
 
 test("eth_getLogs routes wider ranges only to providers that support them", async () => {
@@ -3594,6 +3886,17 @@ test("Four.Meme keeps an unsafe activation token silent and alerts the next toke
   assert.equal(decision.kind, "new_mode");
   assert.equal(decision.featureFirstToken, true);
   assert.equal(decision.novelty.quoteSymbol, "SPCXB");
+});
+
+test("Four.Meme excludes impossible historical template research before token API reads", () => {
+  const firstObservedAt = "2026-09-30T15:00:00Z";
+  const entries = [["quote:a", { active: true, allowReplay: true, firstObservedAt }],
+    ["template:b", { active: true, allowReplay: false, firstObservedAt }]];
+  assert.deepEqual(fourMemeCandidateActivations(entries, "2026-09-04T00:00:00Z"), []);
+  assert.deepEqual(fourMemeCandidateActivations(entries, "2026-09-30T14:45:00Z").map(([key]) => key), ["quote:a"]);
+  assert.equal(fourMemeCandidateActivations(entries, "2026-09-30T15:00:01Z").length, 2);
+  assert.deepEqual(fourMemeCandidateActivations(entries, "2026-09-30T15:00:01Z", "template:b").map(([key]) => key), ["template:b"]);
+  assert.deepEqual(fourMemeCandidateActivations(entries, "invalid"), []);
 });
 
 test("Four.Meme replay never attributes a historical token outside the activation lookback", () => {
@@ -5578,6 +5881,41 @@ test("stop before unified deep work preserves an admitted Flap replay for restar
   activation = Object.values(resumed.officialSources.flap.featureActivations)[0];
   assert.equal(activation.firstTokenTransactionHash, transactionHash);
   assert.equal(alerts.length, 1);
+});
+
+test("isolated Four.Meme replay scans one range per sweep and resumes after restart", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-four-bounded-replay-"));
+  const clock = Date.parse("2026-10-01T12:00:00Z");
+  const ranges = [];
+  const replayProvider = {
+    getNetwork: async () => ({ chainId: 56n }), getBlockNumber: async () => 1000,
+    getBlock: async () => ({ timestamp: clock / 1000 }),
+    send: async (_method, [filter]) => { ranges.push(filter); return []; }, destroy() {},
+  };
+  const config = { dataDir, monitorScope: "focus3", bscReplayIsolationEnabled: true, bscConfirmations: 0 };
+  const dependencies = { autoStart: false, externalAttribution: false, now: () => clock,
+    provider: { getBlockNumber: () => assert.fail("primary pool used"), destroy() {} },
+    fetchImpl: async () => { throw new Error("official source disabled in fixture"); },
+    replayProvider, logger: { error() {}, info() {} }, ...disabledJournalTimerDependencies(),
+  };
+  let monitor = createBscLaunchpadMonitor(config, dependencies);
+  t.after(async () => { await monitor.stop(); await fs.rm(dataDir, { recursive: true, force: true }); });
+  const record = { quoteConfig: { symbol: "SPCXB", address: "0xbe9d156892e55e7154bcd3cb0fea677f9d3103e1", status: "PUBLISH" },
+    observedAt: new Date(clock).toISOString() };
+  await monitor.registerFourMemeFeatureActivations([record]);
+  await monitor.awaitIdle();
+  assert.equal(ranges.length, 1);
+  const first = Object.values((await monitor.getState()).officialSources.fourMeme.featureActivations)[0];
+  assert.equal(first.replayCompletedAt ?? null, null);
+  assert.equal(first.replayNextBlock, Number.parseInt(ranges[0].toBlock, 16) + 1);
+  await monitor.stop();
+  monitor = createBscLaunchpadMonitor(config, dependencies);
+  // Official polling retries already-durable activations even if its HTTP
+  // sources fail; duplicate registration alone intentionally does not.
+  await monitor.checkOfficialSources();
+  await monitor.awaitIdle();
+  assert.equal(ranges.length, 2);
+  assert.equal(Number.parseInt(ranges[1].fromBlock, 16), first.replayNextBlock);
 });
 
 test("a background Four.Meme activation replay returns after the durable handoff and remains single-flight", async (t) => {
@@ -8506,6 +8844,7 @@ test("one failed focus3 shard leaves the near-head cursor and candidate WAL unco
   }));
   let clock = 0;
   let failScopedShard = true;
+  let failedShardRequests = 0;
   let receiptFallbackCalls = 0;
   let blockFallbackCalls = 0;
   const provider = {
@@ -8517,6 +8856,7 @@ test("one failed focus3 shard leaves the near-head cursor and candidate WAL unco
       assert.equal(method, "eth_getLogs");
       if (!request.address) return [creationLog];
       if (failScopedShard) {
+        failedShardRequests += 1;
         const error = new Error("HTTP 429 on one exact upgrade shard");
         error.code = "SERVER_ERROR";
         error.status = 429;
@@ -8547,6 +8887,7 @@ test("one failed focus3 shard leaves the near-head cursor and candidate WAL unco
   });
 
   await assert.rejects(() => monitor.scanNearHeadRecovery(), /429/);
+  assert.equal(failedShardRequests, 1, "a failed range must not request its remaining upgrade shards");
   let snapshot = await monitor.getState();
   assert.equal(snapshot.nearHeadRecoveryGaps[0].nextBlock, 90);
   assert.equal(snapshot.realtimePendingEntries[transactionHash], undefined);
@@ -9948,7 +10289,7 @@ test("focus3 background deep RPC preserves feature and first-three causal order 
   })}`);
 });
 
-test("focus3 mixed archive 429 and method failure share one durable deep RPC gate across both lanes", async (t) => {
+for (const outageScope of ["host", "mixed"]) test(`focus3 ${outageScope} RPC outage only gates the affected work`, async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-deep-rpc-host-cooldown-"));
   const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
   let clock = Date.parse("2026-08-24T14:00:00.000Z");
@@ -10050,7 +10391,7 @@ test("focus3 mixed archive 429 and method failure share one durable deep RPC gat
         async getCode() {
           codeCalls.push(context.kind);
           if (!mixedFailure) return "0x6000";
-          if (context.kind === "archive") {
+          if (context.kind === "archive" || outageScope === "host") {
             const error = new Error("HTTP 429 archive host rate limited");
             error.status = 429;
             error.retryAfterMs = 12_000;
@@ -10092,7 +10433,9 @@ test("focus3 mixed archive 429 and method failure share one durable deep RPC gat
   }, {
     autoStart: false,
     externalAttribution: false,
-    provider,
+    // Startup identity and live-tail are independent of this deep RPC outage.
+    provider: { ...provider, getNetwork: async () => ({ chainId: 56n }) },
+    realtimeProvider: { ...provider, getBlockNumber: async () => head, send: async () => [] },
     WebSocketImpl: IdleWebSocket,
     fetchImpl,
     now: () => clock,
@@ -10118,6 +10461,20 @@ test("focus3 mixed archive 429 and method failure share one durable deep RPC gat
   assert.deepEqual(codeCalls, ["archive", "standard"],
     "the official-upgrade wrapper observes one archive 429 plus one standard method failure");
   let snapshot = await monitor.getState();
+  if (outageScope === "mixed") {
+    assert.notEqual(snapshot._health.backgroundDeepRpc?.rpcFailureScope, "host",
+      "one archive 429 cannot impose a global deep-queue gate");
+    assert.equal(snapshot.realtimePendingEntries[queueHash], undefined);
+    assert.ok(snapshot.deferredCreationEvidence[queueHash], "the failed proof stays durable, not seen or approved");
+    assert.equal(snapshot.seenTransactions[queueHash], undefined);
+    clock += 750;
+    await monitor.retryDeferredCreationEvidence();
+    assert.deepEqual(deepCalls, [queueHash, deferredHash],
+      "another independent transaction reaches receipt proof while archive code is cooling");
+    assert.deepEqual(codeCalls, ["archive", "standard"], "neither physical cooldown is bypassed");
+    assert.notEqual((await monitor.getState())._health.backgroundDeepRpc?.rpcFailureScope, "host");
+    return;
+  }
   const retryAt = Date.parse(snapshot._health.backgroundDeepRpc.nextRetryAt);
   assert.equal(snapshot._health.backgroundDeepRpc.rpcFailureScope, "host");
   assert.equal(snapshot.transactionFailures[queueHash], undefined,
@@ -10157,6 +10514,15 @@ test("focus3 mixed archive 429 and method failure share one durable deep RPC gat
     timer.cancelled = true;
     timer.callback();
   }
+  // Once every host was limited, concurrent transaction/receipt requests may
+  // share a single half-open lease. Honour that additional probe deadline.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const health = (await monitor.getState())._health.backgroundDeepRpc;
+    if (health.status === "healthy") break;
+    clock = Math.max(clock + 1_001, Date.parse(health.nextRetryAt || 0) + 1);
+    await monitor.processRealtimeQueue();
+  }
   await waitUntil(async () => deepCalls.length >= 2
     && (await monitor.getState())._health.backgroundDeepRpc.status === "healthy", 5_000);
   assert.equal(deepCalls[1], queueHash, "the retry timer wakes the realtime lane without waiting for the 60s head poll");
@@ -10165,7 +10531,8 @@ test("focus3 mixed archive 429 and method failure share one durable deep RPC gat
   assert.equal(snapshot._health.backgroundDeepRpc.nextRetryAt, null);
   clock += 750;
   await monitor.retryDeferredCreationEvidence();
-  assert.deepEqual(deepCalls, [queueHash, queueHash, deferredHash]);
+  assert.ok(deepCalls.filter((hash) => hash === queueHash).length >= 2);
+  assert.equal(deepCalls.at(-1), deferredHash);
   snapshot = await monitor.getState();
   assert.equal(snapshot.deferredCreationEvidence[deferredHash], undefined);
 });
@@ -10974,12 +11341,19 @@ test("near-head handoff capacity is all-or-none and cannot advance a partially p
   assert.equal(durable.nearHeadRecoveryGaps[0].nextBlock, 90);
 });
 
-async function createBscPendingCapacityHarness(t, { historySlots = null, failTail = false, historyLogs = [] } = {}) {
+async function createBscPendingCapacityHarness(t, {
+  historySlots = null, failTail = false, historyLogs = [], tailLogs = null,
+  queueLimits = null, queueIsolation = false, pendingEntries = null, deferredEntries = {},
+  initialHead = null, getTransactionImpl = null, startMonitor = true,
+  journalAppendImpl = null, onExactHotStateSaveImpl = null,
+} = {}) {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-pending-capacity-recovery-"));
   let clock = Date.parse("2026-09-17T07:00:00.000Z");
   const transactionHashes = ["81", "82", "83"].map((prefix) => `0x${prefix.repeat(32)}`);
-  const pending = Object.fromEntries(transactionHashes.map((transactionHash, index) => [transactionHash, {
+  let head = initialHead ?? (failTail || tailLogs ? 105 : 102);
+  let currentTailLogs = tailLogs;
+  const pending = pendingEntries ?? Object.fromEntries(transactionHashes.map((transactionHash, index) => [transactionHash, {
     transactionHash,
     blockNumber: 40 + index,
     transactionIndex: 0,
@@ -10993,6 +11367,7 @@ async function createBscPendingCapacityHarness(t, { historySlots = null, failTai
     lastFinalizedBlock: 50,
     realtimeTailNextBlock: 101,
     realtimePendingEntries: pending,
+    deferredCreationEvidence: deferredEntries,
     launchers: {},
     hooks: {},
     seenTransactions: {},
@@ -11010,7 +11385,7 @@ async function createBscPendingCapacityHarness(t, { historySlots = null, failTai
   let transactionCalls = 0;
   const provider = {
     async getNetwork() { return { chainId: 56n }; },
-    async getBlockNumber() { return failTail ? 105 : 102; },
+    async getBlockNumber() { return head; },
     async send(method, [request]) {
       assert.equal(method, "eth_getLogs");
       historyRanges.push([Number.parseInt(request.fromBlock, 16), Number.parseInt(request.toBlock, 16)]);
@@ -11020,29 +11395,35 @@ async function createBscPendingCapacityHarness(t, { historySlots = null, failTai
     },
     async getTransaction(transactionHash) {
       transactionCalls += 1;
+      if (getTransactionImpl) return getTransactionImpl(transactionHash);
       return { hash: transactionHash, to: null, from: "0x1111111111111111111111111111111111111111", data: "0x" };
     },
     async getTransactionReceipt(transactionHash) { return { transactionHash, status: 0, logs: [] }; },
     destroy() {},
   };
   class IdleWebSocket { addEventListener() {} close() {} }
-  const monitor = createBscLaunchpadMonitor({
+  const config = {
     dataDir,
     monitorScope: "focus3",
     bscMonitorEnabled: true,
     bscWsUrl: "wss://example.invalid",
     bscRpcUrl: "https://example.invalid",
     bscConfirmations: 2,
+    ...(queueIsolation ? { bscQueueIsolationEnabled: true, bscRealtimeTailLookbackBlocks: 4, bscRealtimeTailMaxLagBlocks: 10 } : {}),
     bscRecoveryLogBatchSize: 10,
     bscHttpHeadPollIntervalMs: 60_000,
     bscOfficialPollIntervalMs: 60_000,
-  }, {
+  };
+  const dependencies = {
     autoStart: false,
     externalAttribution: false,
     provider,
     realtimeProvider: {
       ...provider,
-      async send() {
+      async send(_method, [request]) {
+        if (currentTailLogs) return Array.isArray(request.topics?.[0]) && request.topics[0].includes(FLAP_TOKEN_CREATED_TOPIC)
+          ? currentTailLogs.filter(log => Number(log.blockNumber) >= Number.parseInt(request.fromBlock, 16)
+            && Number(log.blockNumber) <= Number.parseInt(request.toBlock, 16)) : [];
         const error = new Error("eth_getLogs failed on every BSC RPC: providers cooling down");
         error.retryAfterMs = 60_000;
         throw error;
@@ -11050,6 +11431,9 @@ async function createBscPendingCapacityHarness(t, { historySlots = null, failTai
     },
     WebSocketImpl: IdleWebSocket,
     realtimePendingMaxEntries: 3,
+    ...(queueLimits ? { queueLimits } : {}),
+    ...(journalAppendImpl ? { journalAppendImpl } : {}),
+    ...(onExactHotStateSaveImpl ? { onExactHotStateSaveImpl } : {}),
     realtimeTailMinIntervalMsForTesting: 0,
     now: () => clock,
     fetchImpl: async () => ({ ok: false, status: 403, headers: { get() { return null; } }, text: async () => "forbidden" }),
@@ -11058,21 +11442,483 @@ async function createBscPendingCapacityHarness(t, { historySlots = null, failTai
     sendAlertsImpl: async () => assert.fail("capacity recovery cannot invent an alert"),
     logger: { error() {}, info() {} },
     ...disabledJournalTimerDependencies(),
-  });
+  };
+  const monitor = createBscLaunchpadMonitor(config, dependencies);
+  const reopenedMonitors = [];
+  const recoveryDirs = [];
   t.after(async () => {
     t.mock.timers.reset();
     await monitor.stop();
+    for (const reopened of reopenedMonitors) await reopened.stop();
+    for (const directory of recoveryDirs) await fs.rm(directory, { recursive: true, force: true });
     await fs.rm(dataDir, { recursive: true, force: true });
   });
-  await monitor.start();
+  if (startMonitor) await monitor.start();
   return {
     monitor,
     dataDir,
     transactionHashes,
     historyRanges,
     transactionCalls: () => transactionCalls,
-    advance() { clock += 751; },
+    advance(ms = 751) { clock += ms; },
+    setHead(value) { head = value; },
+    setTailLogs(logs) { currentTailLogs = logs; },
+    async reopenFromWal() {
+      // Each caller awaited its business WAL barrier. Drain the state lock;
+      // awaitIdle() uses a real 1ms timeout and cannot run under mock timers.
+      await monitor.getState();
+      const directory = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-pending-capacity-restart-"));
+      recoveryDirs.push(directory);
+      for (const filename of ["bsc-launchpad-state.json", "bsc-launchpad-state.json.wal"]) {
+        await fs.copyFile(path.join(dataDir, filename), path.join(directory, filename));
+      }
+      const reopened = createBscLaunchpadMonitor({ ...config, dataDir: directory }, dependencies);
+      reopenedMonitors.push(reopened);
+      return reopened;
+    },
   };
+}
+
+for (const scenario of [
+  { name: "old ordinary", age: 86_400 },
+  { name: "fresh ordinary", age: 1 },
+  { name: "pressure drain ordinary", age: 86_400, scheduler: true },
+  { name: "fresh active template", age: 1, activationAge: 2, requiresProof: true },
+  { name: "explicit replay", age: 86_400, reason: "fourmeme_feature_replay", requiresProof: true },
+  { name: "active template", age: 86_400, activationAge: 90_000, requiresProof: true },
+]) test(`${scenario.name} Four.Meme receipt retains its correct proof requirements`, async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-ordinary-four-drain-"));
+  const clock = Date.parse("2026-09-30T15:00:00Z");
+  const hash = `0x${"a1".repeat(32)}`, blockHash = `0x${"a2".repeat(32)}`;
+  const manager = "0x5c952063c7fc8610ffdb798152d69f0b9550762b", token = `0x${"1".repeat(40)}`, creator = `0x${"2".repeat(40)}`;
+  const iface = new Interface(["event TokenCreate(address creator,address token,uint256 requestId,string name,string symbol,uint256 totalSupply,uint256 raisedAmount,uint256 reservedAmount)"]);
+  const encoded = iface.encodeEventLog(iface.getEvent("TokenCreate"), [creator, token, 1n, "Historical", "OLD", 100n, 0n, 0n]);
+  const log = { address: manager, ...encoded, transactionHash: hash, blockHash, blockNumber: 100, transactionIndex: 0, logIndex: 0 };
+  const record = { transactionHash: hash, blockHash, blockNumber: 100, transactionIndex: 0, logIndex: 0,
+    reasons: [scenario.reason || "http_tail"], candidateTokens: [token], verifiedNewContracts: [token], hasProtocolTrigger: true };
+  if (scenario.scheduler) record.causalReceiptClassificationDigest = createHash("sha256")
+    .update(JSON.stringify([hash, blockHash, 100, 0, 0, null, null, []])).digest("hex");
+  await fs.writeFile(path.join(dataDir, "bsc-launchpad-state.json"), JSON.stringify({
+    version: 6, initializedAt: new Date(clock - 60_000).toISOString(), lastFinalizedBlock: 99, realtimeTailNextBlock: 5000,
+    realtimePendingEntries: { [hash]: record },
+    launchers: {}, hooks: {}, seenTransactions: {}, coverageGaps: [],
+    officialSources: { fourMeme: { featureActivations: { future: {
+      key: "future", type: "template", verificationLane: "official_token_api", active: true,
+      firstObservedAt: new Date(clock - (scenario.activationAge || 0) * 1000).toISOString(), allowReplay: false, templateId: "future-template",
+    } } } },
+  }));
+  let profiles = 0, external = 0;
+  const provider = {
+    async getNetwork() { return { chainId: 56n }; }, async getBlockNumber() { return 5002; },
+    async send() { return []; },
+    async getTransaction() { return { hash, blockNumber: 100, blockHash, index: 0, to: manager, from: creator, data: "0x12345678" }; },
+    async getTransactionReceipt() { return { hash, transactionHash: hash, blockNumber: 100, blockHash, index: 0, status: 1, logs: [log] }; },
+    async getBlock() { return { number: 100, hash: blockHash, timestamp: Math.floor(clock / 1000) - scenario.age, transactions: [hash] }; },
+    async getCode() { profiles++; throw new Error("profile should not be queried"); },
+    async call() { profiles++; throw new Error("token info should not be queried"); }, destroy() {},
+  };
+  class IdleWebSocket { addEventListener() {} close() {} }
+  const monitor = createBscLaunchpadMonitor({ dataDir, monitorScope: "focus3", bscMonitorEnabled: scenario.scheduler,
+    bscWsUrl: "wss://example.invalid", bscRpcUrl: "https://example.invalid" }, {
+    autoStart: false, externalAttribution: false, provider, initialHeadForTesting: 5002, now: () => clock,
+    WebSocketImpl: IdleWebSocket, ...(scenario.scheduler ? { realtimePendingMaxEntries: 1 } : {}),
+    backgroundSetTimeoutImpl: () => ({ unref() {} }), backgroundClearTimeoutImpl() {},
+    fetchImpl: async (url) => {
+      // start() also launches the independent official catalog poll.
+      if (!(scenario.scheduler && url.startsWith("https://four.meme/meme-api/v1/public/"))) external++;
+      throw new Error("unrelated API must not be queried");
+    },
+    sendAlertsImpl: async () => assert.fail("ordinary historical token must never be promoted or published"),
+    logger: { error() {}, info() {} }, ...disabledJournalTimerDependencies(),
+  });
+  t.after(async () => { await monitor.stop(); await fs.rm(dataDir, { recursive: true, force: true }); });
+  await monitor.getState();
+  if (scenario.scheduler) { await monitor.start(); external = 0; }
+  await monitor.processRealtimeQueue();
+  const snapshot = await monitor.getState();
+  if (scenario.requiresProof) {
+    assert.equal(snapshot.seenTransactions[hash], undefined, "failed required proof cannot silently complete a candidate");
+    assert.ok(profiles + external > 0, "required full inspection was still attempted");
+    assert.equal(snapshot._health.queuePressure?.historicalOrdinaryCompleted || 0, 0);
+    return;
+  }
+  assert.equal(snapshot.seenTransactions[hash], 100, JSON.stringify({ failures: snapshot.transactionFailures, deferred: snapshot.deferredCreationEvidence, queue: snapshot._health.realtimeQueue, profiles, external }));
+  assert.equal(snapshot.realtimePendingEntries[hash], undefined);
+  assert.equal(snapshot._health.queuePressure.historicalOrdinaryCompleted, scenario.age > 900 ? 1 : 0);
+  assert.equal(snapshot._health.queuePressure.ordinaryDiscoveryCompleted, 1);
+  assert.equal(profiles, 0); assert.equal(external, 0);
+  assert.ok(snapshot.officialSources.fourMeme.creationEventHotIndex.some(item => item.transactionHash === hash), "exact receipt evidence remains indexed");
+  if (scenario.scheduler) assert.equal(snapshot._health.backgroundDeepWork.workClass, "drain");
+});
+
+test("BSC pressure drain excludes causal, unclassified and protocol-mutation work", () => {
+  const ordinary = { reasons: new Set(["known_launch"]), verifiedNewContracts: new Set([`0x${"1".repeat(40)}`]), causalReceiptClassificationDigest: "a".repeat(64) };
+  assert.equal(isBscPressureDrainCandidate(ordinary), true);
+  for (const patch of [
+    { causalReceiptClassificationDigest: null }, { verifiedNewContracts: [] },
+    { causalBarrierKeys: ["feature:test"] }, { featureActivationReplayKey: "test" },
+    { flapQuoteFirstThreeReplayGenerationKey: "test" }, { upgradeEmitters: ["x"] },
+    { lifecycleEmitters: new Set(["x"]) }, { hookPools: new Map([["x", {}]]) },
+    { reasons: ["fourmeme_feature_replay"] },
+  ]) assert.equal(isBscPressureDrainCandidate({ ...ordinary, ...patch }), false, JSON.stringify(patch));
+});
+
+test("BSC diagnostic WAL reader never truncates an in-progress append", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-readonly-wal-"));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const file = path.join(dir, "bsc-launchpad-state.json");
+  await fs.writeFile(file, JSON.stringify({ version: 6, journalRevision: 0 }));
+  const partial = '{"revision":1,"ops":[';
+  await fs.writeFile(`${file}.wal`, partial, { mode: 0o640 });
+  const modeBefore = (await fs.stat(`${file}.wal`)).mode;
+  const snapshot = await readBscLaunchpadDurableState(file);
+  assert.equal(snapshot.journalRevision, 0);
+  assert.equal(await fs.readFile(`${file}.wal`, "utf8"), partial);
+  assert.equal((await fs.stat(`${file}.wal`)).mode, modeBefore);
+});
+
+test("continuous BSC receipt classification cannot starve final processing at queue pressure", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-classification-drain-"));
+  let clock = Date.parse("2026-09-30T15:00:00Z");
+  const head = 5000;
+  const plainHash = `0x${"aa".repeat(32)}`;
+  const hashes = Array.from({ length: 12 }, (_, i) => `0x${(i + 1).toString(16).padStart(64, '0')}`);
+  const blockHash = n => `0x${n.toString(16).padStart(64, '0')}`;
+  const pending = Object.fromEntries([plainHash, ...hashes].map((hash, i) => [hash, {
+    transactionHash: hash, blockNumber: 40 + i, blockHash: blockHash(40 + i), transactionIndex: 0, logIndex: 0,
+    reasons: ["http_tail"], upgradeEmitters: [`0x${"1".repeat(40)}`],
+    causalBarrierKeys: i === 0 ? [] : [`feature:quote:0x${"2".repeat(40)}`],
+  }]));
+  await fs.writeFile(path.join(dataDir, "bsc-launchpad-state.json"), JSON.stringify({
+    version: 6, initializedAt: new Date(clock).toISOString(), lastFinalizedBlock: head - 2,
+    realtimeTailNextBlock: head - 1, realtimePendingEntries: pending,
+    launchers: {}, hooks: {}, seenTransactions: {}, coverageGaps: [], nearHeadRecoveryGaps: [],
+  }));
+  const calls = [];
+  const provider = {
+    async getNetwork() { return { chainId: 56n }; }, async getBlockNumber() { return head; },
+    async getTransaction(hash) {
+      calls.push(hash); const p = pending[hash];
+      return { hash, blockNumber: p.blockNumber, blockHash: p.blockHash, index: 0, to: null, from: `0x${"3".repeat(40)}`, data: "0x" };
+    },
+    async getTransactionReceipt(hash) { const p = pending[hash]; return { hash, transactionHash: hash, blockNumber: p.blockNumber, blockHash: p.blockHash, index: 0, status: 1, logs: [] }; },
+    async getBlock(n) { const p = Object.values(pending).find(x => x.blockNumber === n); return { number: n, hash: p.blockHash, timestamp: Math.floor(clock / 1000) - 3600, transactions: [p.transactionHash] }; },
+    async send() { return []; }, destroy() {},
+  };
+  class IdleWebSocket { addEventListener() {} close() {} }
+  const monitor = createBscLaunchpadMonitor({
+    dataDir, monitorScope: "focus3", bscMonitorEnabled: true, bscWsUrl: "wss://example.invalid", bscRpcUrl: "https://example.invalid",
+    bscConfirmations: 2, bscHttpHeadPollIntervalMs: 60_000, bscOfficialPollIntervalMs: 60_000, bscDeferredRetryIntervalMs: 60_000,
+  }, {
+    autoStart: false, externalAttribution: false, provider, realtimeProvider: provider, WebSocketImpl: IdleWebSocket,
+    now: () => clock, realtimePendingMaxEntries: 13, realtimeTailMinIntervalMsForTesting: 0, causalClassificationEnabled: false,
+    fetchImpl: async () => ({ ok: false, status: 403, headers: { get() { return null; } }, text: async () => "forbidden" }),
+    backgroundSetTimeoutImpl: () => ({ unref() {} }), backgroundClearTimeoutImpl() {},
+    logger: { error() {}, info() {} }, sendAlertsImpl: async () => assert.fail("classification must not publish"),
+    ...disabledJournalTimerDependencies(),
+  });
+  t.after(async () => { t.mock.timers.reset(); await monitor.stop(); await fs.rm(dataDir, { recursive: true, force: true }); });
+  await monitor.start();
+  await monitor.scanRealtimeTail();
+  await monitor.scanRealtimeTail();
+  for (let i = 0; i < 3; i++) { await monitor.processRealtimeQueue(); clock += 751; }
+  const snapshot = await monitor.getState();
+  assert.equal(calls.indexOf(plainHash), 8, "after two classification batches, final processing must receive a slot");
+  assert.equal(snapshot.seenTransactions[plainHash], 40);
+  assert.equal(snapshot._health.queuePressure.completed, 1, "classifications are not counted as completed candidates");
+  assert.equal(Object.keys(snapshot.realtimePendingEntries).length, 12);
+  assert.ok(hashes.every(hash => snapshot.realtimePendingEntries[hash]), "classified evidence is still retained");
+});
+
+test("BSC live reserve admits a complete tail range while historical backlog is paused, durably and without eviction", async (t) => {
+  const iface = new Interface(["event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)"]);
+  const hash = `0x${"91".repeat(32)}`;
+  const encoded = iface.encodeEventLog(iface.getEvent("TokenCreated"), [1n, `0x${"a".repeat(40)}`, 1n, `0x${"b".repeat(40)}`, "New", "NEW", "ipfs://test"]);
+  const tailLogs = [{ address: "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0", ...encoded, transactionHash: hash,
+    blockHash: `0x${"92".repeat(32)}`, blockNumber: 101, transactionIndex: 0, logIndex: 0 }];
+  const harness = await createBscPendingCapacityHarness(t, { tailLogs, queueLimits: {
+    pendingMax: 3, liveReserve: 1, historyHigh: 2, historyLow: 1, totalHigh: 6, totalLow: 4, totalMax: 8,
+  } });
+  await harness.monitor.scanRealtimeTail();
+  let snapshot = await harness.monitor.getState();
+  assert.equal(snapshot.realtimeTailNextBlock, 104);
+  assert.equal(Object.keys(snapshot.realtimePendingEntries).length, 4);
+  for (const oldHash of harness.transactionHashes) assert.ok(snapshot.realtimePendingEntries[oldHash]);
+  assert.ok(snapshot.realtimePendingEntries[hash]);
+  assert.equal(snapshot._health.queuePressure.historyPaused, true);
+  assert.equal(snapshot._health.queuePressure.liveAdmitted, 1);
+  await harness.monitor.advanceCoverage();
+  assert.deepEqual(harness.historyRanges, [], "backfill performs no extra log reads at high water");
+  snapshot = await readBscLaunchpadDurableState(path.join(harness.dataDir, "bsc-launchpad-state.json"));
+  assert.equal(snapshot.realtimeTailNextBlock, 104);
+  assert.equal(Object.keys(snapshot.realtimePendingEntries).length, 4);
+  assert.equal(snapshot.lastFinalizedBlock, 50, "live progress is not historical coverage");
+});
+
+test("isolated tail commits a whole batch despite a saturated legacy queue and retains old evidence", async (t) => {
+  const iface = new Interface(["event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)"]);
+  const tailLogs = ["91", "92"].map((prefix, index) => ({
+    address: "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0",
+    ...iface.encodeEventLog(iface.getEvent("TokenCreated"), [1n, `0x${"a".repeat(40)}`, BigInt(index), `0x${String(index+1).repeat(40)}`, "New", "NEW", "ipfs://test"]),
+    transactionHash: `0x${prefix.repeat(32)}`, blockHash: `0x${"93".repeat(32)}`,
+    blockNumber: 101, transactionIndex: index, logIndex: index,
+  }));
+  const harness = await createBscPendingCapacityHarness(t, { tailLogs, queueIsolation: true,
+    queueLimits: {pendingMax:2,liveReserve:2,historyHigh:2,historyLow:1,totalHigh:6,totalLow:4,totalMax:8} });
+  await harness.monitor.scanRealtimeTail();
+  const snapshot = await readBscLaunchpadDurableState(path.join(harness.dataDir, "bsc-launchpad-state.json"));
+  assert.equal(snapshot.realtimeTailNextBlock,104);
+  assert.equal(Object.keys(snapshot.realtimePendingEntries).length,5);
+  for (const hash of harness.transactionHashes) assert.ok(snapshot.realtimePendingEntries[hash]);
+  assert.equal(snapshot._health.queuePressure.livePending,2);
+  assert.equal(snapshot._health.queuePressure.historyPending,3);
+  assert.equal(snapshot._health.queuePressure.liveSlotsAvailable,0);
+  assert.equal(snapshot.lastFinalizedBlock,50);
+});
+
+function bscReservedCapacityTailLog(prefix, blockNumber = 101, index = 0) {
+  const iface = new Interface(["event TokenCreated(uint256 ts,address creator,uint256 nonce,address token,string name,string symbol,string meta)"]);
+  return {
+    address: "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0",
+    ...iface.encodeEventLog(iface.getEvent("TokenCreated"), [1n, `0x${"a".repeat(40)}`,
+      BigInt(index), `0x${(index + 1).toString(16).padStart(40, "0")}`, "Reserved", "LIVE", "ipfs://test"]),
+    transactionHash: `0x${prefix.repeat(32)}`,
+    blockHash: `0x${"94".repeat(32)}`,
+    blockNumber, transactionIndex: index, logIndex: index,
+  };
+}
+
+const bscReservedCapacityLimits = {
+  pendingMax: 2, liveReserve: 1, historyHigh: 2, historyLow: 1,
+  totalHigh: 3, totalLow: 2, totalMax: 3,
+};
+
+test("BSC durable live reserve v2 admits beyond a full base pool without relabeling or evicting old evidence", async (t) => {
+  const logs = [bscReservedCapacityTailLog("91"), bscReservedCapacityTailLog("92", 101, 1)];
+  const harness = await createBscPendingCapacityHarness(t, {
+    tailLogs: logs, queueIsolation: true,
+    queueLimits: { ...bscReservedCapacityLimits, pendingMax: 1, liveReserve: 2 },
+  });
+  const before = await harness.monitor.getState();
+  await harness.monitor.scanRealtimeTail();
+  const snapshot = await readBscLaunchpadDurableState(path.join(harness.dataDir, "bsc-launchpad-state.json"));
+  assert.equal(snapshot.realtimeTailNextBlock, 104);
+  assert.equal(Object.keys(snapshot.realtimePendingEntries).length, 5);
+  for (const hash of harness.transactionHashes) {
+    assert.deepEqual(snapshot.realtimePendingEntries[hash], before.realtimePendingEntries[hash]);
+    assert.equal(snapshot.realtimePendingEntries[hash].queueCapacityLane, undefined);
+    assert.equal(snapshot.seenTransactions[hash], undefined);
+  }
+  for (const log of logs) assert.equal(snapshot.realtimePendingEntries[log.transactionHash].queueCapacityLane, "live");
+  assert.equal(snapshot._health.queuePressure.isolation, "durable_live_reserve_v2");
+  assert.equal(snapshot._health.queuePressure.historyRetained, 3);
+  assert.equal(snapshot._health.queuePressure.liveReservedPending, 2);
+  assert.equal(snapshot._health.queuePressure.liveReservedDeferred, 0);
+  assert.equal(snapshot._health.queuePressure.physicalHardLimit, 5);
+  assert.equal(snapshot._health.queuePressure.liveSlotsAvailable, 0);
+  assert.equal(snapshot.lastFinalizedBlock, 50);
+  assert.equal(snapshot._health.queuePressure.completed, 0);
+});
+
+test("BSC durable live reserve v2 retains aged reservations and atomically refuses a full-pool tail batch", async (t) => {
+  const first = bscReservedCapacityTailLog("91");
+  const harness = await createBscPendingCapacityHarness(t, {
+    tailLogs: [first], queueIsolation: true, queueLimits: bscReservedCapacityLimits,
+  });
+  await harness.monitor.scanRealtimeTail();
+  const before = await harness.monitor.getState();
+  harness.setHead(111);
+  harness.setTailLogs([bscReservedCapacityTailLog("92", 104), bscReservedCapacityTailLog("93", 104, 1)]);
+  harness.advance();
+  await harness.monitor.checkHttpHead();
+  const aged = await harness.monitor.getState();
+  assert.equal(aged._health.queuePressure.livePending, 0, "the original observation has left the real block-age window");
+  assert.equal(aged._health.queuePressure.liveReservedPending, 1, "aging is not a completion and does not release its reservation");
+  assert.equal(aged._health.queuePressure.liveSlotsAvailable, 0);
+  await assert.rejects(() => harness.monitor.scanRealtimeTail(), error => error.code === "BSC_REALTIME_PENDING_CAPACITY");
+  const snapshot = await readBscLaunchpadDurableState(path.join(harness.dataDir, "bsc-launchpad-state.json"));
+  assert.equal(snapshot.realtimeTailNextBlock, before.realtimeTailNextBlock);
+  assert.deepEqual(snapshot.realtimePendingEntries, before.realtimePendingEntries);
+  assert.equal(snapshot.realtimePendingEntries[first.transactionHash].queueCapacityLane, "live");
+  assert.equal(snapshot.lastFinalizedBlock, 50);
+});
+
+test("BSC durable live reserve v2 preserves pending and deferred ownership through WAL replay and snapshot restart", async (t) => {
+  const log = bscReservedCapacityTailLog("91");
+  const harness = await createBscPendingCapacityHarness(t, {
+    tailLogs: [log], queueIsolation: true, queueLimits: bscReservedCapacityLimits,
+    getTransactionImpl(hash) {
+      if (hash === log.transactionHash) {
+        const error = new Error("eth_getTransactionByHash timed out after 1000ms");
+        error.code = "TIMEOUT";
+        error.rpcFailureScope = "method";
+        error.rpcOperation = "eth_getTransactionByHash";
+        throw error;
+      }
+      return { hash, to: null, from: `0x${"1".repeat(40)}`, data: "0x" };
+    },
+  });
+  await harness.monitor.scanRealtimeTail();
+  const uncompacted = JSON.parse(await fs.readFile(path.join(harness.dataDir, "bsc-launchpad-state.json"), "utf8"));
+  assert.equal(uncompacted.realtimePendingEntries[log.transactionHash], undefined,
+    "the pending reservation is recovered from WAL, not an already-replaced snapshot");
+  const wal = await fs.readFile(path.join(harness.dataDir, "bsc-launchpad-state.json.wal"), "utf8");
+  assert.match(wal, /"queueCapacityLane":"live"/);
+  let reopened = await harness.reopenFromWal();
+  let snapshot = await reopened.getState();
+  assert.equal(snapshot.realtimePendingEntries[log.transactionHash].queueCapacityLane, "live");
+  await harness.monitor.processRealtimeQueue();
+  snapshot = await harness.monitor.getState();
+  assert.equal(snapshot.realtimePendingEntries[log.transactionHash], undefined);
+  assert.equal(snapshot.deferredCreationEvidence[log.transactionHash]?.queueCapacityLane, "live");
+  assert.equal(snapshot._health.queuePressure.liveReservedPending, 1);
+  assert.equal(snapshot._health.queuePressure.liveReservedDeferred, 1);
+  assert.equal(snapshot._health.queuePressure.liveSlotsAvailable, 0);
+  assert.equal(snapshot._health.queuePressure.completed, 0);
+  reopened = await harness.reopenFromWal();
+  snapshot = await reopened.getState();
+  assert.equal(snapshot.deferredCreationEvidence[log.transactionHash]?.queueCapacityLane, "live");
+  assert.equal(snapshot.seenTransactions[log.transactionHash], undefined);
+  assert.equal(snapshot.realtimeTailNextBlock, 104);
+  t.mock.timers.reset();
+  await harness.monitor.stop();
+  reopened = await harness.reopenFromWal();
+  snapshot = await reopened.getState();
+  assert.equal(snapshot.deferredCreationEvidence[log.transactionHash]?.queueCapacityLane, "live");
+  assert.equal(snapshot.lastFinalizedBlock, 50);
+});
+
+test("BSC durable live reserve v2 duplicate near-head handoff cannot relabel base work into the reserved pool", async (t) => {
+  const log = bscReservedCapacityTailLog("81");
+  const harness = await createBscPendingCapacityHarness(t, {
+    tailLogs: [log], queueIsolation: true, queueLimits: bscReservedCapacityLimits,
+  });
+  await harness.monitor.scanRealtimeTail();
+  const snapshot = await readBscLaunchpadDurableState(path.join(harness.dataDir, "bsc-launchpad-state.json"));
+  assert.equal(snapshot.realtimePendingEntries[log.transactionHash].queueCapacityLane, undefined);
+  assert.equal(Object.keys(snapshot.realtimePendingEntries).length, 3);
+  assert.equal(snapshot._health.queuePressure.liveReservedPending, 0);
+  assert.equal(snapshot._health.queuePressure.liveSlotsAvailable, 1);
+  assert.equal(snapshot._health.queuePressure.historyRetained, 3);
+  assert.equal(snapshot.realtimeTailNextBlock, 104);
+});
+
+test("BSC durable live reserve v2 never schedules a runtime reservation whose admission WAL failed", async (t) => {
+  const log = bscReservedCapacityTailLog("91");
+  let failAdmission = true;
+  const proofCalls = [];
+  t.after(() => { failAdmission = false; });
+  const harness = await createBscPendingCapacityHarness(t, {
+    tailLogs: [log], queueIsolation: true, queueLimits: bscReservedCapacityLimits,
+    async journalAppendImpl(file, frame) {
+      if (failAdmission && JSON.parse(frame).ops.some(operation =>
+        operation.path[0] === "realtimePendingEntries" && operation.path[1] === log.transactionHash)) {
+        throw new Error("simulated live admission fsync failure");
+      }
+      const handle = await fs.open(file, "a", 0o600);
+      try { await handle.writeFile(frame); await handle.sync(); }
+      finally { await handle.close(); }
+    },
+    getTransactionImpl(hash) {
+      proofCalls.push(hash);
+      return { hash, to: null, from: `0x${"1".repeat(40)}`, data: "0x" };
+    },
+  });
+  await assert.rejects(() => harness.monitor.scanRealtimeTail(), /simulated live admission fsync failure/);
+  const runtime = await harness.monitor.getState();
+  assert.equal(runtime.realtimePendingEntries[log.transactionHash]?.queueCapacityLane, "live",
+    "the regression exercises a failed save that left its mutation in live memory");
+  let durable = await readBscLaunchpadDurableState(path.join(harness.dataDir, "bsc-launchpad-state.json"));
+  assert.equal(durable.realtimePendingEntries[log.transactionHash], undefined);
+  assert.equal(durable.realtimeTailNextBlock, 101);
+  await harness.monitor.processRealtimeQueue();
+  assert.ok(proofCalls.length > 0, "background processing was eligible to inspect already-durable base work");
+  assert.equal(proofCalls.includes(log.transactionHash), false,
+    "an in-memory live tag is not a durable handoff and cannot authorize a proof read");
+  durable = await readBscLaunchpadDurableState(path.join(harness.dataDir, "bsc-launchpad-state.json"));
+  assert.equal(durable.realtimePendingEntries[log.transactionHash], undefined);
+  assert.equal(durable.seenTransactions[log.transactionHash], undefined);
+  failAdmission = false;
+});
+
+test("BSC durable live reserve v2 holds a completed slot until its deletion WAL commits", async (t) => {
+  const first = bscReservedCapacityTailLog("91");
+  const next = bscReservedCapacityTailLog("92", 104);
+  let gateDeletion = false;
+  let releaseDeletion;
+  let signalDeletion;
+  let signalRefusal;
+  const deletionGate = new Promise(resolve => { releaseDeletion = resolve; });
+  const deletionStarted = new Promise(resolve => { signalDeletion = resolve; });
+  const refusalSaveQueued = new Promise(resolve => { signalRefusal = resolve; });
+  t.after(() => { releaseDeletion(); });
+  const harness = await createBscPendingCapacityHarness(t, {
+    tailLogs: [first], queueIsolation: true, queueLimits: bscReservedCapacityLimits,
+    async journalAppendImpl(file, frame) {
+      if (gateDeletion && JSON.parse(frame).ops.some(operation => operation.op === "delete"
+        && operation.path[0] === "realtimePendingEntries" && operation.path[1] === first.transactionHash)) {
+        signalDeletion();
+        await deletionGate;
+      }
+      const handle = await fs.open(file, "a", 0o600);
+      try { await handle.writeFile(frame); await handle.sync(); }
+      finally { await handle.close(); }
+    },
+    onExactHotStateSaveImpl(paths) {
+      if (gateDeletion && paths.length === 0) signalRefusal();
+    },
+  });
+  await harness.monitor.scanRealtimeTail();
+  harness.setHead(106);
+  harness.setTailLogs([next]);
+  await harness.monitor.checkHttpHead();
+  gateDeletion = true;
+  const completion = harness.monitor.processRealtimeQueue();
+  await deletionStarted;
+  const runtime = await harness.monitor.getState();
+  assert.equal(runtime.realtimePendingEntries[first.transactionHash], undefined);
+  assert.equal(runtime._health.queuePressure.liveReleasesAwaitingDurability, 1);
+  assert.equal(runtime._health.queuePressure.liveReservedPending, 1);
+  assert.equal(runtime._health.queuePressure.liveSlotsAvailable, 0);
+  let durable = await readBscLaunchpadDurableState(path.join(harness.dataDir, "bsc-launchpad-state.json"));
+  assert.equal(durable.realtimePendingEntries[first.transactionHash]?.queueCapacityLane, "live");
+  const attemptedAdmission = harness.monitor.scanRealtimeTail();
+  const refusedAdmission = assert.rejects(() => attemptedAdmission,
+    error => error.code === "BSC_REALTIME_PENDING_CAPACITY");
+  await refusalSaveQueued;
+  releaseDeletion();
+  await Promise.all([completion, refusedAdmission]);
+  durable = await readBscLaunchpadDurableState(path.join(harness.dataDir, "bsc-launchpad-state.json"));
+  assert.equal(durable.realtimePendingEntries[first.transactionHash], undefined);
+  assert.equal(durable.seenTransactions[first.transactionHash], 101);
+  assert.equal(durable.realtimePendingEntries[next.transactionHash], undefined);
+  assert.equal(durable.realtimeTailNextBlock, 104, "the overlapping refused handoff never moved its cursor");
+  harness.advance(1_001);
+  await harness.monitor.scanRealtimeTail();
+  durable = await readBscLaunchpadDurableState(path.join(harness.dataDir, "bsc-launchpad-state.json"));
+  assert.equal(durable.realtimePendingEntries[next.transactionHash]?.queueCapacityLane, "live");
+  assert.equal(durable.realtimeTailNextBlock, 105);
+  assert.equal(durable._health.queuePressure.liveReleasesAwaitingDurability, 0);
+  assert.equal(durable._health.queuePressure.liveReservedPending, 1);
+});
+
+for (const root of ["realtimePendingEntries", "deferredCreationEvidence"]) {
+  test(`BSC durable live reserve v2 rejects malformed ${root} snapshot lane metadata`, async (t) => {
+    const hash = `0x${"91".repeat(32)}`;
+    const record = { transactionHash: hash, blockNumber: 101, transactionIndex: 0, logIndex: 0,
+      reasons: ["http_tail"], queueCapacityLane: "history-borrowing-live" };
+    const harness = await createBscPendingCapacityHarness(t, {
+      queueIsolation: true, queueLimits: bscReservedCapacityLimits, startMonitor: false,
+      pendingEntries: root === "realtimePendingEntries" ? { [hash]: record } : {},
+      deferredEntries: root === "deferredCreationEvidence" ? { [hash]: record } : {},
+    });
+    const filename = path.join(harness.dataDir, "bsc-launchpad-state.json");
+    const original = await fs.readFile(filename, "utf8");
+    await assert.rejects(() => harness.monitor.getState(), /queueCapacityLane|capacity lane|queue lane/i);
+    assert.equal(await fs.readFile(filename, "utf8"), original, "invalid metadata is not normalized into newly available slots");
+    assert.equal(harness.transactionCalls(), 0);
+  });
 }
 
 test("full durable pending queue keeps draining after a log RPC error replaces tail capacity telemetry", async (t) => {
@@ -11151,16 +11997,18 @@ test("historical capacity recovery retains its entire failed batch and atomicall
   await monitor.scanRealtimeTail();
   await monitor.scanRealtimeTail();
   await monitor.advanceCoverage();
+  assert.deepEqual(harness.historyRanges, [], "high water pauses history before another range read");
+  await monitor.processRealtimeQueue();
+  await monitor.advanceCoverage();
   let snapshot = await monitor.getState();
   assert.equal(snapshot._health.rpc.backpressureReason, "realtime_pending_capacity");
   assert.equal(snapshot._health.rpc.newEntryCount, 2);
-  assert.equal(snapshot._health.rpc.pendingEntryCount, 3);
+  assert.equal(snapshot._health.rpc.pendingEntryCount, 2);
   assert.equal(snapshot.lastFinalizedBlock, 50);
-  assert.equal(Object.keys(snapshot.realtimePendingEntries).length, 3);
+  assert.equal(Object.keys(snapshot.realtimePendingEntries).length, 2);
   assert.ok(logs.every((log) => !snapshot.realtimePendingEntries[log.transactionHash]),
     "the failed range cannot partially enter the durable queue");
   const failedRangeCalls = harness.historyRanges.length;
-  await monitor.processRealtimeQueue();
   await monitor.advanceCoverage();
   assert.equal(harness.historyRanges.length, failedRangeCalls,
     "the known two-candidate range does not restart after only one slot is released");
@@ -11883,7 +12731,6 @@ test("history backoff leaves live repair runnable while a slow history request e
   const nearRanges = new Set();
   let failFirstHistoryWave = true;
   let firstHistoryFailureScheduled = false;
-  let firstHistoryFilterFailures = 0;
   let slowHistoryStarted = false;
   const provider = {
     async getNetwork() { return { chainId: 56n }; },
@@ -11916,8 +12763,10 @@ test("history backoff leaves live repair runnable while a slow history request e
           firstHistoryFailureScheduled = true;
           timeline.push("history:failed");
         }
-        firstHistoryFilterFailures += 1;
-        if (firstHistoryFilterFailures >= 5) queueMicrotask(() => { failFirstHistoryWave = false; });
+        // The serial focus3 batch now stops dispatching filters on its first
+        // failure. Fail one batch, not five individual requests across five
+        // cooldowns, before exercising the slow retry ownership assertion.
+        queueMicrotask(() => { failFirstHistoryWave = false; });
         const error = new Error("history host temporarily unavailable");
         error.code = "SERVER_ERROR";
         error.retryAfterMs = 250;
@@ -14397,6 +15246,110 @@ test("BSC atomic state replacement tightens an existing state file to owner-only
   await monitor.stop();
 });
 
+test("BSC read-only state retries snapshot rotation with both an empty and a newer WAL", async (t) => {
+  for (const withNewFrame of [false, true]) await t.test(String(withNewFrame), async t => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-read-rotation-"));
+    t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+    const stateFile = await seedModernBscJournal(dataDir);
+    let reads = 0;
+    const fsImpl = new Proxy(fs, { get(target, property) {
+      if (property === "readFile") return async (file, ...args) => {
+        const result = await fs.readFile(file, ...args);
+        if (file === stateFile && ++reads === 1) {
+          const updated = { ...JSON.parse(result), journalRevision: 1, lastFinalizedBlock: 111 };
+          await fs.writeFile(`${stateFile}.replacement`, JSON.stringify(updated));
+          await fs.rename(`${stateFile}.replacement`, stateFile);
+          await fs.writeFile(`${stateFile}.wal`, withNewFrame
+            ? testBscWalFrame(2, [{ op: "set", path: ["lastFinalizedBlock"], value: 112 }]) : "");
+        }
+        return result;
+      };
+      return target[property];
+    } });
+    const result = await readBscLaunchpadDurableState(stateFile, { fsImpl });
+    assert.equal(result.lastFinalizedBlock, withNewFrame ? 112 : 111);
+    assert.equal(result.journalRevision, withNewFrame ? 2 : 1);
+    assert.equal(reads, 2, "empty-WAL races must retry too, not silently return an old snapshot");
+  });
+});
+
+test("BSC read-only state keeps stable WAL corruption fail-closed and never truncates a torn tail", async t => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-read-stable-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const stateFile = await seedModernBscJournal(dataDir);
+  const walFile = `${stateFile}.wal`;
+  const gap = testBscWalFrame(2, [{ op: "set", path: ["lastFinalizedBlock"], value: 112 }]);
+  await fs.writeFile(walFile, gap);
+  await assert.rejects(() => readBscLaunchpadDurableState(stateFile), /revision gap/);
+  assert.equal(await fs.readFile(walFile, "utf8"), gap);
+  const torn = testBscWalFrame(1, [{ op: "set", path: ["lastFinalizedBlock"], value: 111 }]) + '{"torn":';
+  await fs.writeFile(walFile, torn);
+  assert.equal((await readBscLaunchpadDurableState(stateFile)).lastFinalizedBlock, 111);
+  assert.equal(await fs.readFile(walFile, "utf8"), torn);
+});
+
+test("BSC read-only state bounds retries during continuous snapshot replacement", async t => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-read-bounded-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const stateFile = await seedModernBscJournal(dataDir);
+  let reads = 0;
+  const fsImpl = new Proxy(fs, { get(target, property) {
+    if (property === "readFile") return async (file, ...args) => {
+      const result = await fs.readFile(file, ...args);
+      if (file === stateFile) {
+        await fs.writeFile(`${stateFile}.replacement`, JSON.stringify({ ...JSON.parse(result), journalRevision: ++reads }));
+        await fs.rename(`${stateFile}.replacement`, stateFile);
+      }
+      return result;
+    };
+    return target[property];
+  } });
+  await assert.rejects(() => readBscLaunchpadDurableState(stateFile, { fsImpl }), { code: "BSC_STATE_READ_UNSTABLE" });
+  assert.equal(reads, 3);
+});
+
+test("BSC compaction reuses detached cold branches while queued live mutations wait for the IO barrier", async t => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-compact-detached-"));
+  const stateFile = await seedModernBscJournal(dataDir, snapshot => {
+    snapshot.coldArchive = { records: Array.from({ length: 2000 }, (_, i) => ({ i, text: "x".repeat(256) })) };
+  });
+  let clock = Date.parse("2026-10-07T08:00:00Z");
+  let callback;
+  let release, signal;
+  const gate = new Promise(resolve => { release = resolve; });
+  const entered = new Promise(resolve => { signal = resolve; });
+  let pause = true, coldBranch;
+  const first = observation({ transactionHash: `0x${"a1".repeat(32)}`, blockNumber: 101 });
+  const second = observation({ transactionHash: `0x${"b2".repeat(32)}`, blockNumber: 102 });
+  let monitor;
+  t.after(async () => { release(); await monitor?.stop(); await fs.rm(dataDir, { recursive: true, force: true }); });
+  monitor = createBscLaunchpadMonitor({ dataDir }, {
+    autoStart: false, provider: { destroy() {} }, logger: { error() {}, info() {} }, now: () => clock,
+    journalSetTimeoutImpl: fn => { callback = fn; return { unref() {} }; }, journalClearTimeoutImpl() {},
+    journalCompactSnapshotImpl: async (file, snapshot) => {
+      if (coldBranch) assert.equal(snapshot.coldArchive, coldBranch, "no redundant deep clone of unchanged durable cold state");
+      coldBranch = snapshot.coldArchive;
+      if (pause) {
+        pause = false; signal(); await gate;
+        assert.equal(snapshot.seenTransactions[second.transactionHash], undefined, "live mutation must not leak into locked durable snapshot");
+      }
+      await fs.writeFile(file, JSON.stringify(snapshot));
+    },
+  });
+  await monitor.getState();
+  await monitor.observe(first);
+  clock += 30_000; callback(); await entered;
+  let resolved = false;
+  const queued = monitor.observe(second).then(() => { resolved = true; });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(resolved, false);
+  release(); await queued; await monitor.awaitIdle();
+  const read = await readBscLaunchpadDurableState(stateFile);
+  assert.equal(read.seenTransactions[first.transactionHash], 101);
+  assert.equal(read.seenTransactions[second.transactionHash], 102);
+  await monitor.stop();
+});
+
 test("BSC snapshot WAL migrates legacy JSON, replays one atomic delta, and truncates only a torn tail", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-wal-replay-"));
   const stateFile = path.join(dataDir, "bsc-launchpad-state.json");
@@ -16524,6 +17477,53 @@ function flapQuoteLifecycleProvider(head = 120) {
   };
 }
 
+test("Flap material configuration generations supersede, restore exactly, and survive restart", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-flap-configuration-generation-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const config = { dataDir, bscConfirmations: 0 };
+  const deps = { autoStart: false, provider: flapQuoteLifecycleProvider(),
+    logger: { error() {}, info() {} }, ...disabledJournalTimerDependencies() };
+  let monitor = createBscLaunchpadMonitor(config, deps);
+  t.after(() => monitor.stop());
+  const initial = flapQuoteLifecycleRecord();
+  const initialAck = await monitor.registerFlapQuotePoolLifecycle(initial);
+  const before = { enabled: true, enabledRaw: 1, defaultCurve: 32, alternativeCurve: 32,
+    nativeToQuoteSwapType: 7, dexId: 0 };
+  const update = { ...flapQuoteLifecycleRecord({ transactionHash: `0x${"a2".repeat(32)}`,
+    blockNumber: 101, blockHash: `0x${"b2".repeat(32)}`, logIndex: 3 }),
+    action: "reconfigured", proofType: "verified_configuration_change",
+    previousConfiguration: before, configuration: { ...before, defaultCurve: 33 } };
+  update.configurationLog = encodeFlapQuoteConfigurationLog(update.quoteAddress, update.configuration);
+  for (const bad of [ { ...update, configuration: { ...before } },
+    { ...update, previousConfiguration: { ...before, enabled: false, enabledRaw: 0 } } ]) {
+    await assert.rejects(() => monitor.registerFlapQuotePoolLifecycle(bad), /unverified Flap quote/);
+  }
+  const ack = await monitor.registerFlapQuotePoolLifecycle(update);
+  assert.equal(ack.status, "reconfigured");
+  assert.equal((await monitor.registerFlapQuotePoolLifecycle(update)).status, "duplicate");
+  let state = (await monitor.getState()).officialSources.flap.quotePoolFirstThree;
+  assert.equal(state.activeByQuote[update.quoteAddress], ack.generationKey);
+  assert.equal(state.windows[initialAck.generationKey].status, "superseded");
+  assert.equal(state.windows[ack.generationKey].targetCount, 3);
+  await monitor.stop();
+  monitor = createBscLaunchpadMonitor(config, deps);
+  state = (await monitor.getState()).officialSources.flap.quotePoolFirstThree;
+  assert.equal(state.activeByQuote[update.quoteAddress], ack.generationKey);
+  const revert = { ...update, action: "reverted", proofType: "verified_configuration_change_orphaned",
+    targetActivationEventKey: initial.activationEventKey };
+  delete revert.previousConfiguration;
+  delete revert.configuration;
+  delete revert.configurationLog;
+  assert.equal((await monitor.registerFlapQuotePoolLifecycle(revert)).status, "reverted");
+  assert.equal((await monitor.registerFlapQuotePoolLifecycle(revert)).status, "duplicate");
+  state = (await monitor.getState()).officialSources.flap.quotePoolFirstThree;
+  assert.equal(state.activeByQuote[update.quoteAddress], initialAck.generationKey);
+  assert.equal(state.windows[ack.generationKey].status, "reverted");
+  await monitor.stop();
+  monitor = createBscLaunchpadMonitor(config, deps);
+  assert.equal((await monitor.getState()).officialSources.flap.quotePoolFirstThree.activeByQuote[update.quoteAddress], initialAck.generationKey);
+});
+
 test("Flap direct quote lifecycle is durable, case-preserving, reorg-safe, and exactly restorable", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-flap-first-three-lifecycle-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -16855,7 +17855,9 @@ async function createFlapQuoteFirstThreeHarness(t, {
     },
     async getTransaction(hash) { return hash === transactionHash ? transaction : null; },
     async getTransactionReceipt(hash) { return hash === transactionHash ? receipt : null; },
-    async getBlock(number) { return Number(number) === blockNumber ? block : null; },
+    async getBlock(number) { return Number(number) === blockNumber ? block
+      : Number(number) === activationBlockNumber ? {number:activationBlockNumber,hash:activationBlockHash,
+        timestamp:Math.floor(blockTimestampMs/1000)-60} : null; },
     async getCode() { return `0x${"6000".repeat(400)}`; },
     async getStorage() { return "0x"; },
     async call() { throw new Error("safety RPC unavailable"); },
@@ -16925,6 +17927,275 @@ async function createFlapQuoteFirstThreeHarness(t, {
     setClock(value) { clock = value; },
   };
 }
+
+test("live cutover pauses old first-three windows unchanged and keeps new windows eligible", async (t) => {
+  for (const fromBlock of [100, 102]) {
+    const h = await createFlapQuoteFirstThreeHarness(t);
+    Object.assign(h.config, { monitorScope: "focus3", bscReplayIsolationEnabled: true });
+    const policy = { version: 1, mode: "live_only", fromBlock, activatedAt: "2026-08-24T12:00:00.000Z" };
+    await fs.writeFile(path.join(h.dataDir, "bsc-scan-policy.json"), JSON.stringify(policy));
+    h.setArchiveVisible(false);
+    h.setHead(110);
+    let reads = 0;
+    const replayProvider = { ...h.dependencies.provider,
+      getNetwork: async () => ({ chainId: 56n }),
+      getBlock: async number => { reads++; return number === 100 ? { number, hash: h.activation.blockHash } : h.dependencies.provider.getBlock(number); },
+    };
+    let monitor = h.createMonitor({ replayProvider });
+    await monitor.registerFlapQuotePoolLifecycle(h.activation);
+    const before = await monitor.getState();
+    await monitor.replayFlapQuotePoolFirstThree();
+    const after = await monitor.getState();
+    if (fromBlock === 102) {
+      assert.equal(reads, 0);
+      assert.equal(h.archiveRequests.length, 0);
+      assert.deepEqual(after.officialSources.flap.quotePoolFirstThree.windows, before.officialSources.flap.quotePoolFirstThree.windows);
+      await monitor.stop();
+      // Missing control file on restart must not reopen the retained window.
+      await fs.unlink(path.join(h.dataDir, "bsc-scan-policy.json"));
+      monitor = h.createMonitor({ replayProvider });
+      await monitor.replayFlapQuotePoolFirstThree();
+      assert.equal(reads, 0);
+      assert.deepEqual((await monitor.getState())._health.liveScanPolicy, policy);
+    } else {
+      assert.ok(h.archiveRequests.length > 0);
+      assert.ok(h.archiveRequests.every(request => Number.parseInt(request.fromBlock, 16) >= fromBlock));
+    }
+    assert.equal(h.alerts.length, 0);
+    await monitor.stop();
+  }
+});
+
+test("fresh Flap first-three proof bypasses a held maintenance replay without releasing it or changing rank", async (t) => {
+  const h=await createFlapQuoteFirstThreeHarness(t,{delayedMs:0});
+  Object.assign(h.config,{monitorScope:'focus3',bscReplayIsolationEnabled:true});
+  let entered=false,release;
+  const gate=new Promise(resolve=>{release=resolve;});
+  const replayProvider={...h.dependencies.provider,getNetwork:async()=>({chainId:56}),
+    getBlockNumber:async()=>{entered=true;await gate;return 101;},send:async()=>[]};
+  const freshFlapProvider={...h.dependencies.provider,getNetwork:async()=>({chainId:56})};
+  const monitor=h.createMonitor({replayProvider,freshFlapProvider});
+  t.after(async()=>{release();await monitor.stop();});
+  await monitor.registerFlapQuotePoolLifecycle(flapQuoteLifecycleRecord({quoteAddress:'0x'+'9'.repeat(40),
+    blockHash:h.activation.blockHash,
+    occurredAt:new Date(h.blockTimestampMs-600000).toISOString()}));
+  await waitUntil(()=>entered);
+  const ack=await monitor.registerFlapQuotePoolLifecycle(h.activation);
+  await waitUntil(()=>h.alerts.length===3);
+  const window=(await monitor.getState()).officialSources.flap.quotePoolFirstThree.windows[ack.generationKey];
+  assert.deepEqual(window.slots.map(s=>s.ordinal),[1,2,3]);
+  assert.deepEqual(window.slots.map(s=>s.tokenAddress),h.tokens.slice(0,3));
+  assert.ok(h.archiveRequests.every(r=>Number.parseInt(r.fromBlock,16)>=100));
+  assert.equal(window.slots[0].reservedAt,new Date(h.blockTimestampMs).toISOString());
+  release();await monitor.awaitIdle();
+});
+
+test("fresh Flap proof rejects a wrong-chain lane before reading logs", async (t) => {
+  const h=await createFlapQuoteFirstThreeHarness(t,{delayedMs:0});
+  Object.assign(h.config,{monitorScope:'focus3',bscReplayIsolationEnabled:true});
+  const monitor=h.createMonitor({freshFlapProvider:{getNetwork:async()=>({chainId:1}),
+    send:async()=>assert.fail('wrong-chain logs read')}});
+  t.after(()=>monitor.stop());
+  const ack=await monitor.registerFlapQuotePoolLifecycle(h.activation);
+  await monitor.awaitIdle();
+  assert.equal(h.alerts.length,0);assert.equal(h.archiveRequests.length,0);
+  const window=(await monitor.getState()).officialSources.flap.quotePoolFirstThree.windows[ack.generationKey];
+  assert.equal(window.slots.length,0);assert.equal(window.archiveReplayNextBlock,undefined);
+  assert.ok(h.errors.some(e=>e.includes('chain mismatch')));
+});
+
+test("isolated first-three replay joins concurrent sweeps, bounds ranges, and resumes the durable cursor", async (t) => {
+  const h = await createFlapQuoteFirstThreeHarness(t);
+  Object.assign(h.config, { monitorScope: "focus3", bscReplayIsolationEnabled: true });
+  h.setArchiveVisible(false);
+  h.setHead(110);
+  let hold = false, release, entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  const replayProvider = { ...h.dependencies.provider, getNetwork: async () => ({ chainId: 56n }),
+    send: async (...args) => {
+      if (hold) { entered(); await new Promise(resolve => { release = resolve; }); }
+      return h.dependencies.provider.send(...args);
+    },
+  };
+  const primary = { ...h.dependencies.provider,
+    send: async () => assert.fail("maintenance logs leaked onto primary pool"),
+    getBlockNumber: async () => assert.fail("maintenance head leaked onto primary pool"),
+  };
+  let monitor = h.createMonitor({ provider: primary, replayProvider });
+  t.after(async () => { release?.(); await monitor.stop(); });
+  const ack = await monitor.registerFlapQuotePoolLifecycle(h.activation);
+  await monitor.awaitIdle();
+  let window = (await monitor.getState()).officialSources.flap.quotePoolFirstThree.windows[ack.generationKey];
+  assert.equal(window.archiveReplayNextBlock, 102);
+  assert.equal(window.replayCompletedAt ?? null, null);
+  assert.equal(h.archiveRequests.length, 1);
+  hold = true;
+  const a = monitor.replayFlapQuotePoolFirstThree();
+  await started;
+  const b = monitor.replayFlapQuotePoolFirstThree();
+  assert.equal(a, b, "the complete sweep, including canonical rechecks, is single-flight");
+  release();
+  await Promise.all([a, b]);
+  await monitor.awaitIdle();
+  assert.equal(h.archiveRequests.length, 2);
+  window = (await monitor.getState()).officialSources.flap.quotePoolFirstThree.windows[ack.generationKey];
+  assert.equal(window.archiveReplayNextBlock, 104);
+  await monitor.stop();
+  hold = false;
+  monitor = h.createMonitor({ provider: primary, replayProvider });
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  assert.equal(h.archiveRequests.at(-1).fromBlock, "0x68");
+  assert.equal(h.archiveRequests.at(-1).toBlock, "0x69");
+  window = (await monitor.getState()).officialSources.flap.quotePoolFirstThree.windows[ack.generationKey];
+  assert.equal(window.archiveReplayNextBlock, 106);
+  assert.equal(window.replayCompletedAt ?? null, null);
+});
+
+test("isolated first-three log failure retains the range and retries only after backoff", async (t) => {
+  const h = await createFlapQuoteFirstThreeHarness(t);
+  Object.assign(h.config, { monitorScope: "focus3", bscReplayIsolationEnabled: true });
+  h.setArchiveVisible(false);
+  h.setHead(110);
+  let attempts = 0;
+  const replayProvider = { ...h.dependencies.provider, getNetwork: async () => ({ chainId: 56n }),
+    send: async (...args) => { if (++attempts === 1) throw new Error("fixture log outage"); return h.dependencies.provider.send(...args); },
+  };
+  const monitor = h.createMonitor({ replayProvider });
+  t.after(() => monitor.stop());
+  const ack = await monitor.registerFlapQuotePoolLifecycle(h.activation);
+  await monitor.awaitIdle();
+  let window = (await monitor.getState()).officialSources.flap.quotePoolFirstThree.windows[ack.generationKey];
+  assert.equal(window.archiveReplayNextBlock, 100);
+  assert.equal(window.replayStatus, "error");
+  await monitor.replayFlapQuotePoolFirstThree();
+  assert.equal(attempts, 1);
+  h.setClock(h.blockTimestampMs + 60 * 60_000);
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  window = (await monitor.getState()).officialSources.flap.quotePoolFirstThree.windows[ack.generationKey];
+  assert.equal(window.archiveReplayNextBlock, 102);
+  assert.equal(attempts, 2);
+});
+
+test("isolated completed first-three windows still revalidate canonical blocks", async (t) => {
+  const h = await createFlapQuoteFirstThreeHarness(t);
+  Object.assign(h.config, { monitorScope: "focus3", bscReplayIsolationEnabled: true });
+  let canonicalReads = 0, unavailable = false;
+  const replayProvider = { ...h.dependencies.provider, getNetwork: async () => ({ chainId: 56n }),
+    getBlock: async n => { canonicalReads++; return unavailable ? null : h.dependencies.provider.getBlock(n); },
+  };
+  const monitor = h.createMonitor({ replayProvider });
+  t.after(() => monitor.stop());
+  const ack = await monitor.registerFlapQuotePoolLifecycle(h.activation);
+  await monitor.awaitIdle();
+  const before = (await monitor.getState()).officialSources.flap.quotePoolFirstThree.windows[ack.generationKey];
+  assert.equal(before.slots.length, 3);
+  const initialReads = canonicalReads;
+  unavailable = true;
+  await assert.rejects(monitor.replayFlapQuotePoolFirstThree(), /canonical block proof unavailable/);
+  assert.equal(canonicalReads, initialReads + 1);
+  const after = (await monitor.getState()).officialSources.flap.quotePoolFirstThree.windows[ack.generationKey];
+  assert.deepEqual(after.slots, before.slots, "unavailable proof cannot silently replace or invalidate accepted slots");
+  assert.equal(h.alerts.length, 3);
+  unavailable = false;
+  h.setClock(h.blockTimestampMs + 60 * 60_000);
+  h.reorgBlock(`0x${"ab".repeat(32)}`);
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  const reconciled = (await monitor.getState()).officialSources.flap.quotePoolFirstThree.windows[ack.generationKey];
+  assert.equal(reconciled.canonicalReorgCount, 1);
+  assert.ok(reconciled.slots.every(slot => slot.blockHash === `0x${"ab".repeat(32)}`));
+  assert.equal(reconciled.slots.length, 3);
+});
+
+test("Flap canonical paper ownership revokes reorged slots before replay and stays exact across restart", async (t) => {
+  const h = await createFlapQuoteFirstThreeHarness(t);
+  let archiveFailed = false;
+  let monitor = h.createMonitor({ provider: { ...h.dependencies.provider,
+    send: async (...args) => {
+      if (archiveFailed) throw new Error("fixture archive temporarily unavailable");
+      return h.dependencies.provider.send(...args);
+    },
+  } });
+  t.after(() => monitor.stop());
+  const ack = await monitor.registerFlapQuotePoolLifecycle(h.activation);
+  await monitor.awaitIdle();
+  const projectionFile = path.join(h.dataDir, "paper-flap-canonical-state.json");
+  const readProjection = async () => JSON.parse(await fs.readFile(projectionFile, "utf8"));
+  const initial = await readProjection();
+  assert.equal(initial.status, "ready");
+  assert.equal(initial.windows[ack.generationKey].slots.length, 3);
+  assert.ok(initial.windows[ack.generationKey].slots.every(slot => /^[0-9a-f]{64}$/.test(slot.proofDigest)));
+  const originalKeys = initial.windows[ack.generationKey].slots.map(slot => slot.eventKey);
+  archiveFailed = true;
+  h.reorgBlock(`0x${"ab".repeat(32)}`);
+  h.setClock(h.blockTimestampMs + 60 * 60_000);
+  await monitor.replayFlapQuotePoolFirstThree().catch(error => {
+    assert.match(error.message, /fixture archive temporarily unavailable/);
+  });
+  await monitor.awaitIdle();
+  const revoked = await readProjection();
+  assert.deepEqual(revoked.windows[ack.generationKey].slots, []);
+  assert.ok(originalKeys.every(key => !JSON.stringify(revoked).includes(key)));
+  await monitor.stop();
+  archiveFailed = false;
+  h.setClock(h.blockTimestampMs + 120 * 60_000);
+  monitor = h.createMonitor();
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  const replacement = await readProjection();
+  assert.equal(replacement.windows[ack.generationKey].slots.length, 3);
+  assert.ok(replacement.windows[ack.generationKey].slots.every(slot => slot.blockHash === `0x${"ab".repeat(32)}`));
+  assert.equal(h.alerts.length, 6);
+  await monitor.stop();
+  monitor = h.createMonitor();
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  assert.deepEqual((await readProjection()).windows, replacement.windows);
+  assert.equal(h.alerts.length, 6, "restart cannot duplicate the same canonical three slots");
+});
+
+test("Flap canonical projection stays revoked when its authoritative lifecycle save fails", async (t) => {
+  const h = await createFlapQuoteFirstThreeHarness(t);
+  let rejectPrimary = false;
+  const monitor = h.createMonitor({ atomicWriteImpl: async (file, snapshot) => {
+    if (rejectPrimary) throw new Error("fixture authoritative save failed");
+    await fs.writeFile(file, JSON.stringify(snapshot));
+  } });
+  t.after(async () => { rejectPrimary = false; await monitor.stop(); });
+  const ack = await monitor.registerFlapQuotePoolLifecycle(h.activation);
+  await monitor.awaitIdle();
+  const projectionFile = path.join(h.dataDir, "paper-flap-canonical-state.json");
+  const readProjection = async () => JSON.parse(await fs.readFile(projectionFile, "utf8"));
+  assert.equal((await readProjection()).windows[ack.generationKey].slots.length, 3);
+  rejectPrimary = true;
+  await assert.rejects(monitor.registerFlapQuotePoolLifecycle(flapQuoteLifecycleRecord({
+    action: "disabled", quoteAddress: h.quoteAddress, blockNumber: 102,
+    transactionHash: `0x${"f1".repeat(32)}`, blockHash: `0x${"f2".repeat(32)}`,
+  })), /fixture authoritative save failed/);
+  const revoked = await readProjection();
+  assert.equal(revoked.status, "updating");
+  assert.deepEqual(revoked.windows, {});
+  const durable = JSON.parse(await fs.readFile(path.join(h.dataDir, "bsc-launchpad-state.json"), "utf8"));
+  assert.equal(durable.officialSources.flap.quotePoolFirstThree.windows[ack.generationKey].active, true,
+    "the new lifecycle was not falsely claimed durable");
+});
+
+test("Flap first-three refuses an orphaned activation before any TokenCreated replay or alert", async (t) => {
+  const h=await createFlapQuoteFirstThreeHarness(t,{delayedMs:0});
+  const provider={...h.dependencies.provider,getBlock:async n=>Number(n)===h.activation.blockNumber
+    ? {number:n,hash:`0x${'fe'.repeat(32)}`} : h.dependencies.provider.getBlock(n)};
+  const monitor=h.createMonitor({provider,replayProvider:provider});
+  t.after(()=>monitor.stop());
+  const ack=await monitor.registerFlapQuotePoolLifecycle(h.activation);
+  await monitor.awaitIdle();
+  await assert.rejects(monitor.replayFlapQuotePoolFirstThree(),/activation block is orphaned/);
+  const window=(await monitor.getState()).officialSources.flap.quotePoolFirstThree.windows[ack.generationKey];
+  assert.equal(window.slots.length,0);
+  assert.equal(h.alerts.length,0);
+  assert.equal(h.archiveRequests.length,0,'no stale activation creates a token scanning window');
+});
 
 test("Flap first-three ignores non-V2/V3 factory logs before reserving an ordinal", async (t) => {
   const harness = await createFlapQuoteFirstThreeHarness(t, {
@@ -17007,6 +18278,184 @@ test("Flap retries a reserved third ordinal until delivery is durably accepted",
   await monitor.stop();
 });
 
+test("Flap persisted terminal policy suppression resolves its canonical ordinal without claiming delivery", async (t) => {
+  const harness = await createFlapQuoteFirstThreeHarness(t, {
+    alertResult: async (event) => ({ status: "suppressed", reason: "policy_suppressed",
+      terminal: true, disposition: "terminal", persisted: true, eventId: event.eventKey }),
+  });
+  harness.config.monitorScope = "focus3";
+  const stateFile = path.join(harness.dataDir, "bsc-launchpad-state.json");
+  const policy = { version: 1, mode: "live_only", fromBlock: 100,
+    activatedAt: new Date(harness.blockTimestampMs).toISOString() };
+  const pausedPending = { transactionHash: `0x${"61".repeat(32)}`, blockNumber: 40,
+    transactionIndex: 0, logIndex: 0, reasons: ["http_tail"] };
+  const pausedDeferred = { transactionHash: `0x${"62".repeat(32)}`, blockNumber: 41,
+    transactionIndex: 0, logIndex: 0, reasons: ["http_tail"], attempts: 7,
+    nextAttemptAt: new Date(harness.blockTimestampMs + 60_000).toISOString() };
+  await fs.writeFile(path.join(harness.dataDir, "bsc-scan-policy.json"), JSON.stringify(policy));
+  await fs.writeFile(stateFile, JSON.stringify({ version: 6,
+    initializedAt: new Date(harness.blockTimestampMs).toISOString(), lastFinalizedBlock: 39,
+    realtimePendingEntries: { [pausedPending.transactionHash]: pausedPending },
+    deferredCreationEvidence: { [pausedDeferred.transactionHash]: pausedDeferred },
+    launchers: {}, hooks: {}, seenTransactions: {}, coverageGaps: [] }));
+  let monitor = harness.createMonitor();
+  t.after(() => monitor.stop());
+  const initial = await monitor.getState();
+  const ack = await monitor.registerFlapQuotePoolLifecycle(harness.activation);
+  await monitor.awaitIdle();
+  let snapshot = await readBscLaunchpadDurableState(stateFile);
+  let window = snapshot.officialSources.flap.quotePoolFirstThree.windows[ack.generationKey];
+  assert.deepEqual(window.slots.map(slot => slot.tokenAddress), harness.tokens.slice(0, 3));
+  assert.deepEqual(window.slots.map(slot => slot.ordinal), [1, 2, 3]);
+  assert.ok(window.trackingCompletedAt, "all three policy decisions crossed the durable boundary");
+  assert.equal(snapshot.realtimePendingEntries[harness.transactionHash], undefined);
+  assert.equal(snapshot.deferredCreationEvidence[harness.transactionHash], undefined);
+  assert.ok(snapshot.seenTransactions[harness.transactionHash], "the settled predecessor no longer wedges its causal group");
+  assert.deepEqual(snapshot.realtimePendingEntries[pausedPending.transactionHash],
+    initial.realtimePendingEntries[pausedPending.transactionHash], "paused historical evidence is unchanged");
+  assert.deepEqual(snapshot.deferredCreationEvidence[pausedDeferred.transactionHash],
+    initial.deferredCreationEvidence[pausedDeferred.transactionHash]);
+  assert.deepEqual((await monitor.getState())._health.liveScanPolicy, policy);
+  assert.equal(snapshot.lastFinalizedBlock, 39, "settlement is not historical coverage");
+  for (const slot of window.slots) {
+    assert.equal(slot.deliveryStatus, "suppressed");
+    assert.equal(slot.deliveryAcceptedAt, null, "suppression is not a fabricated send receipt");
+    assert.ok(slot.deliverySuppressedAt);
+    assert.deepEqual(slot.deliverySuppression, {
+      version: 1, reason: "policy_suppressed", persisted: true, terminal: true,
+    });
+    assert.equal(slot.deliveryEventId, slot.eventKey);
+    assert.equal(slot.event.autoTradeEligible, false);
+    assert.equal(slot.event.automaticExecution, false);
+    assert.ok(isStrictFlapTrackedPoolTokenUpdate(slot.event), "canonical CA/proof remains unchanged");
+  }
+  assert.equal(harness.alerts.length, 3, "the fourth CA cannot replace a suppressed ordinal");
+  const slots = structuredClone(window.slots);
+  await monitor.stop();
+  monitor = harness.createMonitor();
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  snapshot = await monitor.getState();
+  window = snapshot.officialSources.flap.quotePoolFirstThree.windows[ack.generationKey];
+  assert.deepEqual(window.slots, slots);
+  assert.equal(harness.alerts.length, 3, "restart cannot resend a persisted no-send decision");
+  harness.reorgBlock(`0x${"95".repeat(32)}`);
+  harness.setClock(harness.blockTimestampMs + 60 * 60_000);
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  window = (await monitor.getState()).officialSources.flap.quotePoolFirstThree.windows[ack.generationKey];
+  assert.equal(window.slots.length, 3);
+  assert.ok(window.slots.every(slot => slot.blockHash === `0x${"95".repeat(32)}`));
+  assert.ok(window.slots.every(slot => slot.canonicalRevision === undefined),
+    "an undelivered orphan needs fresh canonical proof, not a fabricated replacement receipt");
+});
+
+test("Flap policy suppression without an explicit persistent terminal decision stays pending", async (t) => {
+  const valid = { status: "suppressed", reason: "policy_suppressed",
+    terminal: true, disposition: "terminal", persisted: true };
+  const cases = [
+    ["not persisted", { ...valid, persisted: false }],
+    ["terminal false", { ...valid, terminal: false }],
+    ["retry disposition", { ...valid, disposition: "retry" }],
+    ["implicit terminal", { ...valid, terminal: undefined, disposition: undefined }],
+    ["source disabled", { ...valid, reason: "monitoring_source_disabled" }],
+    ["unknown reason", { ...valid, reason: "unknown_policy" }],
+    ["missing outbox id", { ...valid, eventId: "" }],
+  ];
+  for (const [label, result] of cases) await t.test(label, async (child) => {
+    const harness = await createFlapQuoteFirstThreeHarness(child, {
+      alertResult: async event => ({ eventId: event.eventKey, ...result }),
+    });
+    let monitor = harness.createMonitor();
+    child.after(() => monitor.stop());
+    const ack = await monitor.registerFlapQuotePoolLifecycle(harness.activation);
+    await monitor.awaitIdle();
+    let snapshot = await monitor.getState();
+    let window = snapshot.officialSources.flap.quotePoolFirstThree.windows[ack.generationKey];
+    assert.equal(window.slots.length, 1);
+    assert.equal(window.slots[0].deliveryStatus, "pending");
+    assert.equal(window.slots[0].deliveryAcceptedAt, null);
+    assert.equal(window.slots[0].deliverySuppressedAt, undefined);
+    assert.equal(window.trackingCompletedAt ?? null, null);
+    assert.equal(snapshot.seenTransactions[harness.transactionHash], undefined);
+    assert.ok(snapshot.realtimePendingEntries[harness.transactionHash]);
+    await monitor.stop();
+    monitor = harness.createMonitor();
+    snapshot = await monitor.getState();
+    window = snapshot.officialSources.flap.quotePoolFirstThree.windows[ack.generationKey];
+    assert.equal(window.slots[0].deliveryStatus, "pending", "restart preserves the unresolved decision");
+  });
+});
+
+test("Flap terminal policy suppression cannot release a causal predecessor when its WAL append fails", async (t) => {
+  let failSuppression = true;
+  const harness = await createFlapQuoteFirstThreeHarness(t, {
+    alertResult: async event => ({ status: "suppressed", reason: "policy_suppressed",
+      terminal: true, persisted: true, eventId: event.eventKey }),
+  });
+  const monitor = harness.createMonitor({ async journalAppendImpl(file, frame) {
+    if (failSuppression && frame.includes('"deliverySuppressedAt"')) {
+      throw new Error("fixture policy suppression fsync failed");
+    }
+    const handle = await fs.open(file, "a", 0o600);
+    try { await handle.writeFile(frame); await handle.sync(); }
+    finally { await handle.close(); }
+  } });
+  t.after(async () => { failSuppression = false; await monitor.stop(); });
+  const ack = await monitor.registerFlapQuotePoolLifecycle(harness.activation);
+  await monitor.awaitIdle();
+  let snapshot = await monitor.getState();
+  let window = snapshot.officialSources.flap.quotePoolFirstThree.windows[ack.generationKey];
+  assert.equal(window.slots.length, 1);
+  assert.equal(window.slots[0].deliveryStatus, "pending", "failed decision is rolled back in memory");
+  assert.equal(window.slots[0].deliverySuppressedAt, undefined);
+  assert.equal(window.trackingCompletedAt ?? null, null);
+  assert.ok(snapshot.realtimePendingEntries[harness.transactionHash]);
+  assert.equal(snapshot.seenTransactions[harness.transactionHash], undefined);
+  snapshot = await readBscLaunchpadDurableState(path.join(harness.dataDir, "bsc-launchpad-state.json"));
+  assert.equal(snapshot.officialSources.flap.quotePoolFirstThree.windows[ack.generationKey].slots[0].deliveryStatus, "pending");
+  failSuppression = false;
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  snapshot = await readBscLaunchpadDurableState(path.join(harness.dataDir, "bsc-launchpad-state.json"));
+  window = snapshot.officialSources.flap.quotePoolFirstThree.windows[ack.generationKey];
+  assert.ok(window.trackingCompletedAt);
+  assert.ok(window.slots.every(slot => slot.deliverySuppressedAt && slot.deliveryAcceptedAt === null));
+  assert.equal(snapshot.realtimePendingEntries[harness.transactionHash], undefined);
+  assert.deepEqual(harness.alerts.map(event => event.featureTokenOrdinal), [1, 1, 2, 3]);
+});
+
+test("Flap persisted policy suppression metadata is fail-closed on restart", async (t) => {
+  const harness = await createFlapQuoteFirstThreeHarness(t, {
+    alertResult: async event => ({ status: "suppressed", reason: "policy_suppressed",
+      terminal: true, persisted: true, eventId: event.eventKey }),
+  });
+  const monitor = harness.createMonitor();
+  const ack = await monitor.registerFlapQuotePoolLifecycle(harness.activation);
+  await monitor.awaitIdle();
+  await monitor.stop();
+  const stateFile = path.join(harness.dataDir, "bsc-launchpad-state.json");
+  const durable = await readBscLaunchpadDurableState(stateFile);
+  const mutations = [
+    ["unpersisted", slot => { slot.deliverySuppression.persisted = false; }],
+    ["retryable", slot => { slot.deliverySuppression.terminal = false; }],
+    ["reason", slot => { slot.deliverySuppression.reason = "monitoring_source_disabled"; }],
+    ["timestamp", slot => { slot.deliverySuppressedAt = null; }],
+    ["outbox identity", slot => { delete slot.deliveryEventId; }],
+    ["false receipt", slot => { slot.deliveryAcceptedAt = slot.deliverySuppressedAt; }],
+    ["extra evidence", slot => { slot.deliverySuppression.trusted = true; }],
+  ];
+  for (const [label, mutate] of mutations) {
+    const changed = structuredClone(durable);
+    mutate(changed.officialSources.flap.quotePoolFirstThree.windows[ack.generationKey].slots[0]);
+    await fs.writeFile(stateFile, JSON.stringify(changed));
+    await fs.writeFile(`${stateFile}.wal`, "");
+    const restarted = harness.createMonitor();
+    await assert.rejects(() => restarted.getState(), /invalid durable Flap first-three/, label);
+    await restarted.stop().catch(() => {});
+  }
+});
+
 test("Flap v7 state rejects tampered pending event and slot invariants on restart", async (t) => {
   const harness = await createFlapQuoteFirstThreeHarness(t);
   const monitor = harness.createMonitor();
@@ -17043,6 +18492,84 @@ test("Flap v7 state rejects tampered pending event and slot invariants on restar
     await assert.rejects(() => restarted.getState(), /invalid durable Flap first-three/, label);
     await restarted.stop().catch(() => {});
   }
+});
+
+test("Flap configuration updates emit exactly three canonical CAs with bound before/after proof", async (t) => {
+  const harness = await createFlapQuoteFirstThreeHarness(t);
+  const configurationInterface = new Interface([
+    "function getQuoteTokenConfiguration(address quoteToken) view returns ((uint8 enabled,uint8 defaultCurve,uint8 alternativeCurve,uint8 nativeToQuoteSwapType,uint8 dexId) config)",
+  ]);
+  const configurationReads = [];
+  harness.dependencies.provider.call = async (request) => {
+    if (request.to !== harness.portal) throw new Error("safety RPC unavailable");
+    configurationReads.push(request.blockTag);
+    return configurationInterface.encodeFunctionResult("getQuoteTokenConfiguration", [[1, 33, 32, 7, 0]]);
+  };
+  let monitor = harness.createMonitor();
+  t.after(() => monitor.stop());
+  const before = { enabled: true, enabledRaw: 1, defaultCurve: 32, alternativeCurve: 32,
+    nativeToQuoteSwapType: 7, dexId: 0 };
+  const update = { ...harness.activation, action: "reconfigured",
+    proofType: "verified_configuration_change", previousConfiguration: before,
+    configuration: { ...before, defaultCurve: 33 } };
+  update.configurationLog = encodeFlapQuoteConfigurationLog(update.quoteAddress, update.configuration);
+  const ack = await monitor.registerFlapQuotePoolLifecycle(update);
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  assert.equal(harness.alerts.length, 3, JSON.stringify(harness.errors));
+  assert.ok(configurationReads.length > 0);
+  assert.ok(configurationReads.every((tag) => tag === harness.blockNumber));
+  assert.deepEqual(harness.alerts.map((event) => event.featureTokenOrdinal), [1, 2, 3]);
+  assert.deepEqual(harness.alerts.map((event) => event.tokens[0].token), harness.tokens.slice(0, 3));
+  for (const event of harness.alerts) {
+    assert.equal(event.mode.componentMode, "Flap Brk.B 新配置");
+    assert.equal(event.featureActivationProof.type, "verified_configuration_change");
+    assert.equal(isStrictFlapTrackedPoolTokenUpdate(event), true);
+    const forged = structuredClone(event);
+    forged.featureActivationProof.after.defaultCurve = 99;
+    assert.equal(isStrictFlapTrackedPoolTokenUpdate(forged), false, "after cannot diverge from the verified raw log");
+    forged.featureActivationProof.after = forged.featureActivationProof.before;
+    assert.equal(isStrictFlapTrackedPoolTokenUpdate(forged), false);
+    forged.featureActivationProof.after = event.featureActivationProof.after;
+    forged.featureActivationProof.blockHash = `0x${"ee".repeat(32)}`;
+    assert.equal(isStrictFlapTrackedPoolTokenUpdate(forged), false);
+  }
+  await monitor.stop();
+  monitor = harness.createMonitor();
+  const state = (await monitor.getState()).officialSources.flap.quotePoolFirstThree;
+  assert.equal(state.windows[ack.generationKey].slots.length, 3);
+  assert.equal((await monitor.registerFlapQuotePoolLifecycle(update)).status, "duplicate");
+  await monitor.replayFlapQuotePoolFirstThree();
+  await monitor.awaitIdle();
+  assert.equal(harness.alerts.length, 3);
+});
+
+test("Flap configuration replay cannot attribute tokens to an unavailable or later configuration", async (t) => {
+  for (const mismatch of [false, true]) await t.test(mismatch ? "later configuration" : "archive unavailable", async (st) => {
+    const h = await createFlapQuoteFirstThreeHarness(st);
+    if (mismatch) {
+      const abi = new Interface([
+        "function getQuoteTokenConfiguration(address quoteToken) view returns ((uint8 enabled,uint8 defaultCurve,uint8 alternativeCurve,uint8 nativeToQuoteSwapType,uint8 dexId) config)",
+      ]);
+      h.dependencies.provider.call = async ({to}) => {
+        if (to !== h.portal) throw new Error("safety unavailable");
+        return abi.encodeFunctionResult("getQuoteTokenConfiguration", [[1, 34, 32, 7, 0]]);
+      };
+    }
+    const monitor = h.createMonitor();
+    st.after(() => monitor.stop());
+    const before = { enabled: true, enabledRaw: 1, defaultCurve: 32, alternativeCurve: 32,
+      nativeToQuoteSwapType: 7, dexId: 0 };
+    const ack = await monitor.registerFlapQuotePoolLifecycle({ ...h.activation, action: "reconfigured",
+      proofType: "verified_configuration_change", previousConfiguration: before,
+      configuration: { ...before, defaultCurve: 33 },
+      configurationLog: encodeFlapQuoteConfigurationLog(h.activation.quoteAddress, { ...before, defaultCurve: 33 }) });
+    await assert.rejects(() => monitor.replayFlapQuotePoolFirstThree(),
+      mismatch ? /active configuration/ : /safety RPC unavailable/);
+    await monitor.awaitIdle();
+    assert.equal(h.alerts.length, 0);
+    assert.equal((await monitor.getState()).officialSources.flap.quotePoolFirstThree.windows[ack.generationKey].slots.length, 0);
+  });
 });
 
 test("Flap archive replay emits the first three distinct CAs in canonical order and survives restart exactly once", async (t) => {
@@ -17117,7 +18644,7 @@ test("Flap archive replay emits the first three distinct CAs in canonical order 
     quoteSymbol: "UQ",
     transactionHash: `0x${"83".repeat(32)}`,
     blockNumber: 100,
-    blockHash: `0x${"84".repeat(32)}`,
+    blockHash: harness.activation.blockHash,
     transactionIndex: 1,
     logIndex: 2,
     occurredAt: new Date(harness.blockTimestampMs - 30_000).toISOString(),
@@ -17431,6 +18958,8 @@ test("Flap restored first-three processing keeps a disabled-period durable prede
     action: "restored",
     targetActivationEventKey: activation.activationEventKey,
   });
+  blocks.set(activation.blockNumber,{number:activation.blockNumber,hash:activation.blockHash,
+    timestamp:Date.parse(activation.occurredAt)/1000});
   let monitor = createBscLaunchpadMonitor(config, dependencies);
   t.after(async () => {
     await monitor?.stop();

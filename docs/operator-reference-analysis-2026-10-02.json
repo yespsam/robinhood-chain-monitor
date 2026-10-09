@@ -1,0 +1,1147 @@
+{
+  "validated": true,
+  "summary": [
+    {
+      "chain": "bsc",
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "rawRows": 40,
+      "uniqueTokens": 12,
+      "first": "2026-09-22T08:29:16.000Z",
+      "last": "2026-10-02T10:31:18.000Z",
+      "hasOlderPages": true,
+      "knownTransfersExcluded": 0,
+      "matchedSells": 17,
+      "copyableMatchedSells": 13,
+      "tooFastSells": 4,
+      "excludedTokens": 4,
+      "medianHoldSeconds": 181.00000000000003,
+      "partialSells": 10,
+      "cycles": [
+        {
+          "ca": "0xa161a9cc32e7f2a70e3aa29267503e78506c7777",
+          "symbol": "HI",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 14,
+          "buyUsd": 155.43884122556585,
+          "sellUsd": 75.349414509599,
+          "tradeAmountDifferenceUsd": -80.08942671596685
+        },
+        {
+          "ca": "0x90d42f789f620cc39fb175dd429f079d90347777",
+          "symbol": "PairLab",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 39,
+          "buyUsd": 200.80254485050617,
+          "sellUsd": 189.3614775147945,
+          "tradeAmountDifferenceUsd": -11.441067335711665
+        },
+        {
+          "ca": "0x24c5dd9dd26f49413b92cc05f979918503097777",
+          "symbol": "bee",
+          "buys": 3,
+          "sells": 2,
+          "spanSeconds": 481,
+          "buyUsd": 333.9295299636278,
+          "sellUsd": 524.9098144313813,
+          "tradeAmountDifferenceUsd": 190.9802844677535
+        },
+        {
+          "ca": "0xb97882f8def851612e3644f475836051bed57777",
+          "symbol": "bee",
+          "buys": 2,
+          "sells": 1,
+          "spanSeconds": 8,
+          "buyUsd": 346.7662414276713,
+          "sellUsd": 327.7740654490948,
+          "tradeAmountDifferenceUsd": -18.992175978576483
+        },
+        {
+          "ca": "0x4b4daf725bfe16f59249522faac053f1cbd47777",
+          "symbol": "ARENA",
+          "buys": 4,
+          "sells": 1,
+          "spanSeconds": 64,
+          "buyUsd": 312.92011086517795,
+          "sellUsd": 144.45554121845075,
+          "tradeAmountDifferenceUsd": -168.4645696467272
+        },
+        {
+          "ca": "0x8f975149f5a9d26ea0f2f04f80960d8423d67777",
+          "symbol": "众筹币",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 3,
+          "buyUsd": 168.76332678348993,
+          "sellUsd": 140.57334403381057,
+          "tradeAmountDifferenceUsd": -28.18998274967936
+        }
+      ]
+    },
+    {
+      "chain": "bsc",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "rawRows": 40,
+      "uniqueTokens": 12,
+      "first": "2026-09-22T08:29:16.000Z",
+      "last": "2026-10-02T10:31:18.000Z",
+      "hasOlderPages": true,
+      "knownTransfersExcluded": 0,
+      "matchedSells": 17,
+      "copyableMatchedSells": 13,
+      "tooFastSells": 4,
+      "excludedTokens": 4,
+      "medianHoldSeconds": 181,
+      "partialSells": 10,
+      "cycles": [
+        {
+          "ca": "0xa161a9cc32e7f2a70e3aa29267503e78506c7777",
+          "symbol": "HI",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 14,
+          "buyUsd": 219.97621865005917,
+          "sellUsd": 101.0367393042445,
+          "tradeAmountDifferenceUsd": -118.93947934581466
+        },
+        {
+          "ca": "0x90d42f789f620cc39fb175dd429f079d90347777",
+          "symbol": "PairLab",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 39,
+          "buyUsd": 163.88256714949384,
+          "sellUsd": 140.54801248174778,
+          "tradeAmountDifferenceUsd": -23.334554667746062
+        },
+        {
+          "ca": "0x24c5dd9dd26f49413b92cc05f979918503097777",
+          "symbol": "bee",
+          "buys": 3,
+          "sells": 2,
+          "spanSeconds": 481,
+          "buyUsd": 342.6611584583722,
+          "sellUsd": 486.0950409121307,
+          "tradeAmountDifferenceUsd": 143.43388245375849
+        },
+        {
+          "ca": "0xb97882f8def851612e3644f475836051bed57777",
+          "symbol": "bee",
+          "buys": 2,
+          "sells": 1,
+          "spanSeconds": 8,
+          "buyUsd": 255.34053217032877,
+          "sellUsd": 211.3825222011495,
+          "tradeAmountDifferenceUsd": -43.95800996917927
+        },
+        {
+          "ca": "0x4b4daf725bfe16f59249522faac053f1cbd47777",
+          "symbol": "ARENA",
+          "buys": 4,
+          "sells": 1,
+          "spanSeconds": 64,
+          "buyUsd": 287.12847233482205,
+          "sellUsd": 131.69388554199264,
+          "tradeAmountDifferenceUsd": -155.4345867928294
+        },
+        {
+          "ca": "0x8f975149f5a9d26ea0f2f04f80960d8423d67777",
+          "symbol": "众筹币",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 3,
+          "buyUsd": 203.11764922466554,
+          "sellUsd": 157.9903593223531,
+          "tradeAmountDifferenceUsd": -45.12728990231244
+        }
+      ]
+    },
+    {
+      "chain": "bsc",
+      "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+      "rawRows": 8,
+      "uniqueTokens": 1,
+      "first": "2026-10-02T09:17:34.000Z",
+      "last": "2026-10-02T09:26:17.000Z",
+      "hasOlderPages": false,
+      "knownTransfersExcluded": 0,
+      "matchedSells": 3,
+      "copyableMatchedSells": 3,
+      "tooFastSells": 0,
+      "excludedTokens": 0,
+      "medianHoldSeconds": 519.0000000000001,
+      "partialSells": 3,
+      "cycles": []
+    },
+    {
+      "chain": "sol",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "rawRows": 40,
+      "uniqueTokens": 18,
+      "first": "2026-10-02T08:06:02.000Z",
+      "last": "2026-10-02T10:43:25.000Z",
+      "hasOlderPages": true,
+      "knownTransfersExcluded": 1,
+      "matchedSells": 18,
+      "copyableMatchedSells": 14,
+      "tooFastSells": 4,
+      "excludedTokens": 1,
+      "medianHoldSeconds": 76,
+      "partialSells": 0,
+      "cycles": [
+        {
+          "ca": "4M14Rz6tgH29i5UQJko7UcJe9oV11zW8AvJz5oX3gkij",
+          "symbol": "NOTHING",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 78,
+          "buyUsd": 155.4037704813,
+          "sellUsd": 94.11095578478,
+          "tradeAmountDifferenceUsd": -61.29281469652
+        },
+        {
+          "ca": "88PK5yGPCGpqLhMEaLuXRQwD17xcqR1vKFfrMg8LxKCC",
+          "symbol": "ARTCOIN",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 7,
+          "buyUsd": 59.48799989184,
+          "sellUsd": 61.42193328159,
+          "tradeAmountDifferenceUsd": 1.9339333897500026
+        },
+        {
+          "ca": "GJy34KECPs9zxrZciABTw9dvwJ1ZSdLg3RZh1zjzgT9o",
+          "symbol": "SAM",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 8,
+          "buyUsd": 155.5283499146,
+          "sellUsd": 127.18606227456,
+          "tradeAmountDifferenceUsd": -28.34228764004
+        },
+        {
+          "ca": "DoiCv1cNjSgsi6JWxRGKjsmQJrSUULchmxpV4JNXUXo4",
+          "symbol": "SAM",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 76,
+          "buyUsd": 152.78684856383,
+          "sellUsd": 124.40204420076,
+          "tradeAmountDifferenceUsd": -28.384804363070003
+        },
+        {
+          "ca": "GZXWAFabMMhY8zqVBtGgrxhb1EQQnvsMepf8GoLGX3TP",
+          "symbol": "TETRIS",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 41,
+          "buyUsd": 146.88730648896,
+          "sellUsd": 174.0388494642,
+          "tradeAmountDifferenceUsd": 27.151542975240005
+        },
+        {
+          "ca": "3Z18mQS4HbEL9bFBfYM7LV9aYm4UoHikVPqmQ5zgxBs7",
+          "symbol": "ROGUE",
+          "buys": 2,
+          "sells": 2,
+          "spanSeconds": 588,
+          "buyUsd": 720.8458442319701,
+          "sellUsd": 667.28429378369,
+          "tradeAmountDifferenceUsd": -53.56155044828006
+        },
+        {
+          "ca": "CR6SSZk2KjmuV27Wv4i5p72tuRAmhK3vaKQA8WdTUT18",
+          "symbol": "DOOMSCROLL",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 101,
+          "buyUsd": 168.53029396397,
+          "sellUsd": 150.73999086965,
+          "tradeAmountDifferenceUsd": -17.790303094319995
+        },
+        {
+          "ca": "G1mLKwEhRwb4Li6eKU15TUrbC2WXA8UvkuwhsW7CkYR7",
+          "symbol": "Onboard",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 62,
+          "buyUsd": 164.80584409948,
+          "sellUsd": 160.9509289164,
+          "tradeAmountDifferenceUsd": -3.85491518308001
+        },
+        {
+          "ca": "7xD6fE1yv7yXe95xXo5UEaxur1iLEANrLvEXrvNNK1jq",
+          "symbol": "RICH",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 30,
+          "buyUsd": 122.52497283125,
+          "sellUsd": 121.87077502028,
+          "tradeAmountDifferenceUsd": -0.6541978109699897
+        },
+        {
+          "ca": "4ghFqXZdLnakD591oFKhA2tD9q7pSfhBWfkVRs125GGL",
+          "symbol": "SATOSHI",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 163,
+          "buyUsd": 628.45640543928,
+          "sellUsd": 296.06925226164,
+          "tradeAmountDifferenceUsd": -332.3871531776401
+        },
+        {
+          "ca": "GwZkrTLb7JpJwrv5T7gSPiEsMJcqhv93CoebqJVnV1rs",
+          "symbol": "HIM",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 120,
+          "buyUsd": 155.76425798717,
+          "sellUsd": 152.73511003392,
+          "tradeAmountDifferenceUsd": -3.0291479532500034
+        },
+        {
+          "ca": "5wBy5RdjRzdKdkdcyZ3fhBUhrEd9HS8PREkomhdZX2s2",
+          "symbol": "FLY",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 61,
+          "buyUsd": 184.17459322205,
+          "sellUsd": 117.7330140668,
+          "tradeAmountDifferenceUsd": -66.44157915525
+        },
+        {
+          "ca": "ASBL1QAgKnYcdHSEPZ8YUxrobeX3RD6uXvavDvS3YBoM",
+          "symbol": "LAB",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 287,
+          "buyUsd": 146.48124833437,
+          "sellUsd": 235.1094600455,
+          "tradeAmountDifferenceUsd": 88.62821171112998
+        },
+        {
+          "ca": "ZgLNUL5DkmZifwqG5Jgxe6tCksRWBGLig45DzNyJ4i2",
+          "symbol": "011011010",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 236,
+          "buyUsd": 167.6820200675,
+          "sellUsd": 138.46213548784,
+          "tradeAmountDifferenceUsd": -29.219884579660004
+        },
+        {
+          "ca": "H22T8m1UD6nd2NXFraBL9hUAhXpkHG5UAdeYgKvR8ZVn",
+          "symbol": "DINO",
+          "buys": 2,
+          "sells": 1,
+          "spanSeconds": 284,
+          "buyUsd": 149.15511096196002,
+          "sellUsd": 120.12542084675,
+          "tradeAmountDifferenceUsd": -29.029690115210016
+        },
+        {
+          "ca": "jbrhv3ykqq4bGmCD5XyPSMQcDzj9Ypc17eJ7FoDZuFG",
+          "symbol": "--.--.",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 225,
+          "buyUsd": 162.572635614,
+          "sellUsd": 156.53371696466,
+          "tradeAmountDifferenceUsd": -6.038918649340019
+        },
+        {
+          "ca": "8erkSBgG3ht5VBRxxzUBZv6xXjwAP2wEQ1XPeChAS4y",
+          "symbol": "Chungus",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 20,
+          "buyUsd": 151.423640019,
+          "sellUsd": 77.27818743554,
+          "tradeAmountDifferenceUsd": -74.14545258346
+        }
+      ]
+    },
+    {
+      "chain": "sol",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "rawRows": 40,
+      "uniqueTokens": 13,
+      "first": "2026-10-02T08:28:46.000Z",
+      "last": "2026-10-02T10:43:25.000Z",
+      "hasOlderPages": true,
+      "knownTransfersExcluded": 1,
+      "matchedSells": 14,
+      "copyableMatchedSells": 12,
+      "tooFastSells": 2,
+      "excludedTokens": 2,
+      "medianHoldSeconds": 76,
+      "partialSells": 2,
+      "cycles": [
+        {
+          "ca": "4M14Rz6tgH29i5UQJko7UcJe9oV11zW8AvJz5oX3gkij",
+          "symbol": "NOTHING",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 78,
+          "buyUsd": 165.2443818861,
+          "sellUsd": 90.2846476683,
+          "tradeAmountDifferenceUsd": -74.9597342178
+        },
+        {
+          "ca": "GJy34KECPs9zxrZciABTw9dvwJ1ZSdLg3RZh1zjzgT9o",
+          "symbol": "SAM",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 8,
+          "buyUsd": 158.3134906396,
+          "sellUsd": 128.74602379776,
+          "tradeAmountDifferenceUsd": -29.56746684184
+        },
+        {
+          "ca": "DoiCv1cNjSgsi6JWxRGKjsmQJrSUULchmxpV4JNXUXo4",
+          "symbol": "SAM",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 76,
+          "buyUsd": 173.71844289605,
+          "sellUsd": 127.74855109104,
+          "tradeAmountDifferenceUsd": -45.96989180500999
+        },
+        {
+          "ca": "GZXWAFabMMhY8zqVBtGgrxhb1EQQnvsMepf8GoLGX3TP",
+          "symbol": "TETRIS",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 41,
+          "buyUsd": 157.1784770064,
+          "sellUsd": 174.07533795155,
+          "tradeAmountDifferenceUsd": 16.896860945150024
+        },
+        {
+          "ca": "3Z18mQS4HbEL9bFBfYM7LV9aYm4UoHikVPqmQ5zgxBs7",
+          "symbol": "ROGUE",
+          "buys": 2,
+          "sells": 4,
+          "spanSeconds": 588,
+          "buyUsd": 637.00384191325,
+          "sellUsd": 908.60857408332,
+          "tradeAmountDifferenceUsd": 271.60473217007006
+        },
+        {
+          "ca": "CR6SSZk2KjmuV27Wv4i5p72tuRAmhK3vaKQA8WdTUT18",
+          "symbol": "DOOMSCROLL",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 101,
+          "buyUsd": 147.40301971422,
+          "sellUsd": 124.19230048785,
+          "tradeAmountDifferenceUsd": -23.21071922636999
+        },
+        {
+          "ca": "G1mLKwEhRwb4Li6eKU15TUrbC2WXA8UvkuwhsW7CkYR7",
+          "symbol": "Onboard",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 62,
+          "buyUsd": 148.36473207044,
+          "sellUsd": 137.1479958324,
+          "tradeAmountDifferenceUsd": -11.21673623804
+        },
+        {
+          "ca": "7xD6fE1yv7yXe95xXo5UEaxur1iLEANrLvEXrvNNK1jq",
+          "symbol": "RICH",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 31,
+          "buyUsd": 114.90523706005,
+          "sellUsd": 103.23061915179,
+          "tradeAmountDifferenceUsd": -11.674617908260004
+        },
+        {
+          "ca": "4ghFqXZdLnakD591oFKhA2tD9q7pSfhBWfkVRs125GGL",
+          "symbol": "SATOSHI",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 163,
+          "buyUsd": 572.70198585974,
+          "sellUsd": 315.26786390266,
+          "tradeAmountDifferenceUsd": -257.43412195708004
+        },
+        {
+          "ca": "GwZkrTLb7JpJwrv5T7gSPiEsMJcqhv93CoebqJVnV1rs",
+          "symbol": "HIM",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 120,
+          "buyUsd": 153.33642905616,
+          "sellUsd": 185.00647457556,
+          "tradeAmountDifferenceUsd": 31.67004551939999
+        },
+        {
+          "ca": "5wBy5RdjRzdKdkdcyZ3fhBUhrEd9HS8PREkomhdZX2s2",
+          "symbol": "FLY",
+          "buys": 1,
+          "sells": 1,
+          "spanSeconds": 61,
+          "buyUsd": 205.68641394325,
+          "sellUsd": 143.00328500128,
+          "tradeAmountDifferenceUsd": -62.68312894196998
+        }
+      ]
+    }
+  ],
+  "paired": [
+    {
+      "a": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "b": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "leftRows": 40,
+      "rightRows": 40,
+      "matched": 40,
+      "tokens": 12,
+      "matches": [
+        {
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "symbol": "PairLab",
+          "timestamp": 1790937078,
+          "side": "sell",
+          "leftHash": "0x706f6d229209e48023215af140db1c168b07ab49e4ff31fa60d8d9986ff80045",
+          "rightHash": "0xb3547c0aac9fbd227d0ffad01b4936e9ca1ae5bec3510127ef43b4048b0f166e"
+        },
+        {
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "symbol": "PairLab",
+          "timestamp": 1790935459,
+          "side": "sell",
+          "leftHash": "0x72258a2854565512e1aae736a7e550b348acdc35fca6984fd573dd14b88caefd",
+          "rightHash": "0xe00666690dd7e03aed0ca3fc017c86047341c50890af223e966fe39a6aed9ad2"
+        },
+        {
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "symbol": "PairLab",
+          "timestamp": 1790933263,
+          "side": "sell",
+          "leftHash": "0x17d34e77d89583058a4c866f57fa41f817bb1d375c48e151ef74672a1aa0de9d",
+          "rightHash": "0x69f1785263e656d2572cd6c2c6c2fb998877ffdfc177800acb82dca6bb5f9f90"
+        },
+        {
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "symbol": "PairLab",
+          "timestamp": 1790933107,
+          "side": "sell",
+          "leftHash": "0xe8de65e7fbc09100e4292ed811246b4407f29781e467f6a070d3b852ebfbda66",
+          "rightHash": "0x081247889dd0662729ab14c07a83073d5e3bb99aa356334844494f78041280c3"
+        },
+        {
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "symbol": "PairLab",
+          "timestamp": 1790933106,
+          "side": "sell",
+          "leftHash": "0x54ea77e128121dd1871ad07eeb11758e74897c82fcb270212b1abc85e44807a0",
+          "rightHash": "0xe2eb7b749d0604472287132df7763121a676f1d7cc9d4fe02d574fd4e7b2886f"
+        },
+        {
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "symbol": "PairLab",
+          "timestamp": 1790932951,
+          "side": "sell",
+          "leftHash": "0x517e20b8293376b80f007451d645b7574a876e02bc9bc4d48a25b3bfcc82705b",
+          "rightHash": "0x04b7b1e461c560789313c9e7c561665a64caa22d209f2b6587da2136a068cf64"
+        },
+        {
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "symbol": "PairLab",
+          "timestamp": 1790932686,
+          "side": "sell",
+          "leftHash": "0xb2d6c9457082b4ffd65572666974f0e7e36f231d21278b2d4485736fc30c12ff",
+          "rightHash": "0xf2fb530c98551eece8a50ad4260f63c8086cc7270593188e79cea79363cf5d9e"
+        },
+        {
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "symbol": "PairLab",
+          "timestamp": 1790932684,
+          "side": "sell",
+          "leftHash": "0x1f233cef19b97ac78e1e03a566075135ad86f1b5ae762585e03c304999ea203e",
+          "rightHash": "0x3d58035f695dbc52b0fab614c644734bb464267a02d3bee4e721208a78e812e7"
+        },
+        {
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "symbol": "PairLab",
+          "timestamp": 1790932635,
+          "side": "sell",
+          "leftHash": "0xe0f4595182d446f56cf39ae207120a3a228b116a2d727c8207fb84160c998ace",
+          "rightHash": "0xdee5c8605ee8b64ff185afe540246a99f6fdde19d6292406a7f471627595ed23"
+        },
+        {
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "symbol": "PairLab",
+          "timestamp": 1790932505,
+          "side": "buy",
+          "leftHash": "0xb073221348cf86a8af2f565a8b28329e13f053dc0c01baf32b460642103c0981",
+          "rightHash": "0x2dea160a3f2d378a39ba50983a4b285f2e5bf0105327875bb653f657c4d67c2f"
+        },
+        {
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "symbol": "PairLab",
+          "timestamp": 1790932414,
+          "side": "sell",
+          "leftHash": "0xe86ff441732f6c0ef9517d5b6e99b7b084b2eb14f7a645ac50ecaf68749d4fbf",
+          "rightHash": "0x78ab51a054270c1d399f31f6bddaa1e8148a42e8b4ebcd3b9447029004f49c1b"
+        },
+        {
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "symbol": "PairLab",
+          "timestamp": 1790932392,
+          "side": "buy",
+          "leftHash": "0x8e0cbee599ea54f4ca4d44aefa31eb3870c96b2d66335bc1201ad2c757258d67",
+          "rightHash": "0xb457dfffc90adbd6841838728de26b410f90730a8a5fc045b239fdbbc0f6469c"
+        },
+        {
+          "ca": "0xa161a9cc32e7f2a70e3aa29267503e78506c7777",
+          "symbol": "HI",
+          "timestamp": 1790849902,
+          "side": "sell",
+          "leftHash": "0x4f7d5c2a76595c73a63d49a21265d36ada9a8bd9d036733cd293b1502aecd782",
+          "rightHash": "0x34e63da833fa7dac76322345d13df2c66f1bc69288b5e79136642e877522a0e6"
+        },
+        {
+          "ca": "0xa161a9cc32e7f2a70e3aa29267503e78506c7777",
+          "symbol": "HI",
+          "timestamp": 1790849888,
+          "side": "buy",
+          "leftHash": "0xca6ffe3a964019cc4b3e4bdcc27cb998ffa2d98d12e8772e9d2216e1f14d6006",
+          "rightHash": "0xec791506745bfda600493189f0b36cd595e4fd2eff79dc4f18aca56ffc9fe87a"
+        },
+        {
+          "ca": "0x90d42f789f620cc39fb175dd429f079d90347777",
+          "symbol": "PairLab",
+          "timestamp": 1790845922,
+          "side": "sell",
+          "leftHash": "0xdf8900dc911f9d15f2adf3e7a7c68783f2216a576b4497f4663d75d1869fbaff",
+          "rightHash": "0x8e02953905253315753a6e63895a9cdf786290578ada712f452ca4ab32b18e2d"
+        },
+        {
+          "ca": "0x90d42f789f620cc39fb175dd429f079d90347777",
+          "symbol": "PairLab",
+          "timestamp": 1790845883,
+          "side": "buy",
+          "leftHash": "0x035d0fcfefca5eb9871434688e4d96e7fb187df84b7658eb0a7ae383e8006251",
+          "rightHash": "0xda41b71611445c680ccb2c4b82f8b43e7f0fc4cc31b090eeb1f7e7049c77173b"
+        },
+        {
+          "ca": "0x24c5dd9dd26f49413b92cc05f979918503097777",
+          "symbol": "bee",
+          "timestamp": 1790686733,
+          "side": "sell",
+          "leftHash": "0xa94ed17ea814ee7b27e39486d5780645cd262c72b64eb74c009c7e23769d7633",
+          "rightHash": "0xc4b0d3a75c956c1f197063e9e486f66be47e54328326fcfe28238ac113f31913"
+        },
+        {
+          "ca": "0x24c5dd9dd26f49413b92cc05f979918503097777",
+          "symbol": "bee",
+          "timestamp": 1790686571,
+          "side": "buy",
+          "leftHash": "0x922da1093c2d070a96f45ae043b45811f89b92e34c7ae516e218f67b4a15e198",
+          "rightHash": "0x963b35f8a0c5fdef7ca277b84029d87a4d910320413588a165fc6b525fc12442"
+        },
+        {
+          "ca": "0x24c5dd9dd26f49413b92cc05f979918503097777",
+          "symbol": "bee",
+          "timestamp": 1790686563,
+          "side": "buy",
+          "leftHash": "0x235a7c83d6034ac5b7c8dcd434a07add82a7ba2d863c62946a8c6ae511a96fa5",
+          "rightHash": "0x834e732b0d13d0fd4033b9c5c38b59707cce056048142c494a1b952a880fb4d5"
+        },
+        {
+          "ca": "0x24c5dd9dd26f49413b92cc05f979918503097777",
+          "symbol": "bee",
+          "timestamp": 1790686464,
+          "side": "sell",
+          "leftHash": "0xdec7fa4c68f651e68c7fd99ccf7589f087ad997307797db76a0b78192e1f730f",
+          "rightHash": "0x2a812407dedddae90228019784ae3275f3dd21ea306a994ff3743c9cbf48ef6d"
+        },
+        {
+          "ca": "0x24c5dd9dd26f49413b92cc05f979918503097777",
+          "symbol": "bee",
+          "timestamp": 1790686252,
+          "side": "buy",
+          "leftHash": "0x7d255e9e2d848619e0633746cdbc2550224dd6951ca2bb7ba9d51441f4f2b9c0",
+          "rightHash": "0xf411cb5082895b82bdf3301f7864b788d17ee74d55dcb25b522b1d9ac412d923"
+        },
+        {
+          "ca": "0xb97882f8def851612e3644f475836051bed57777",
+          "symbol": "bee",
+          "timestamp": 1790685864,
+          "side": "sell",
+          "leftHash": "0x3ad052f03cb0e0b3ebb2b8e979bcfb982f13d17975300210608b8c98562338ae",
+          "rightHash": "0x63b7a39c4abc47e0a14e4f29a58281de98386296c6827a82b48969904905a906"
+        },
+        {
+          "ca": "0xb97882f8def851612e3644f475836051bed57777",
+          "symbol": "bee",
+          "timestamp": 1790685862,
+          "side": "buy",
+          "leftHash": "0x96b6092cf5f43ec9a1e359ea2213cc1b47f98cb39355ab6e45142d30b43f5fa7",
+          "rightHash": "0xba98248ceb70cf8b6d2e762fa48bc45c20d27889e8fc936436f6a0b2db3f1cd9"
+        },
+        {
+          "ca": "0xb97882f8def851612e3644f475836051bed57777",
+          "symbol": "bee",
+          "timestamp": 1790685856,
+          "side": "buy",
+          "leftHash": "0x44645bb804cad538b77cf3ed55939969ff10de586d68571ed7d61f9ce30ba6b4",
+          "rightHash": "0xffd3c76a9d3afa6f9f68bc34547e5b1b99c75bf400d1e2ea585ade6d1928df48"
+        },
+        {
+          "ca": "0xe56d61faaea345ef8e1f8a3698665e10d9cb7777",
+          "symbol": "巾卫填海",
+          "timestamp": 1790396165,
+          "side": "sell",
+          "leftHash": "0xbb109c422c1d1c6c04730c31803d975f12d9a5391751ff25d51a8b91e03137a1",
+          "rightHash": "0xb38cb62896994f08e8d4adcb956b5e7a51ff0755a77a246b5eb8b6fefbb98a35"
+        },
+        {
+          "ca": "0x0b2ff17381cb3338345f0f0a6630bea289dc7777",
+          "symbol": "巾卫填海",
+          "timestamp": 1790396163,
+          "side": "sell",
+          "leftHash": "0xe0789a6987fb77cb92d55a145f1ca53dd43388f8aebd5251fda39de432aeba3b",
+          "rightHash": "0x370b4fd6108cf93841c224048690b68d98292d9b28e5b419312fe15fff775f42"
+        },
+        {
+          "ca": "0x4b4daf725bfe16f59249522faac053f1cbd47777",
+          "symbol": "ARENA",
+          "timestamp": 1790175130,
+          "side": "sell",
+          "leftHash": "0xfa7ecad4658cfbb6d6f4a462c5b1411aafc9292610856e8937f586a22efe4845",
+          "rightHash": "0xad97456cdfbc31d2eae57dc81372243de92d66892ac71888721420ed3b81746e"
+        },
+        {
+          "ca": "0x4b4daf725bfe16f59249522faac053f1cbd47777",
+          "symbol": "ARENA",
+          "timestamp": 1790175071,
+          "side": "buy",
+          "leftHash": "0x717e632c56a7504807d585b958a833aca391869cfadae31a76cac20c50a4508b",
+          "rightHash": "0xdc7339a69e9990c75f11f9ab4ed4be8ca921c380254e5fea542cc7a4bc1ce171"
+        },
+        {
+          "ca": "0x4b4daf725bfe16f59249522faac053f1cbd47777",
+          "symbol": "ARENA",
+          "timestamp": 1790175070,
+          "side": "buy",
+          "leftHash": "0xf2a56f6a058cc7b32afd54bd87a76bf46f7873854eedaed2d8c752ed65bdf029",
+          "rightHash": "0x7788d62587e7baced2ca9fdb270eb6e6ce8b6d7887ff96eef8a2b9ce9cee6b2b"
+        },
+        {
+          "ca": "0x4b4daf725bfe16f59249522faac053f1cbd47777",
+          "symbol": "ARENA",
+          "timestamp": 1790175070,
+          "side": "buy",
+          "leftHash": "0xc11dac99468ac389bd76a3349ddcfd1bfe74b221e3d751fa1de96a4f8a0474c8",
+          "rightHash": "0xee971a797627ee973b9c7b7b497b02df850874e45337c07cb2bd4c055df7a733"
+        },
+        {
+          "ca": "0x4b4daf725bfe16f59249522faac053f1cbd47777",
+          "symbol": "ARENA",
+          "timestamp": 1790175066,
+          "side": "buy",
+          "leftHash": "0xfe1a9d2a47a1b94e03e632cbb0a5af1bf73a3cf716048095758e7d308309ea60",
+          "rightHash": "0xdef5f89fb6be13bbaf17b1b85d193fe1bc306d253226c3cc06e845b161e66df4"
+        },
+        {
+          "ca": "0x8f975149f5a9d26ea0f2f04f80960d8423d67777",
+          "symbol": "众筹币",
+          "timestamp": 1790174734,
+          "side": "sell",
+          "leftHash": "0xd3fa6d1ac8290d8e7f1fdf64d2b7b5ee1f8d2da76d2af2f6eb31f2d7deb227ac",
+          "rightHash": "0xed7b7e1311f1d4083eac4d62083f3a418c5f141c6b337c1619e5a9cd40b91c0e"
+        },
+        {
+          "ca": "0x8f975149f5a9d26ea0f2f04f80960d8423d67777",
+          "symbol": "众筹币",
+          "timestamp": 1790174731,
+          "side": "buy",
+          "leftHash": "0x8747e934b92a9c14d47b04e76734b410de17facdb3a69ca6e0df1e3c14bc88c4",
+          "rightHash": "0xcfbd71b0d67557a2541340101bfd60397bcc146ddd49a2fa49daca928f137d86"
+        },
+        {
+          "ca": "0x7c8d5502b544ddaf8852fc46d1174e34876d545c",
+          "symbol": "BNC4",
+          "timestamp": 1790072777,
+          "side": "sell",
+          "leftHash": "0x2306c95e3f6abe793993e2da56eed0d84e513afc8a389eed280a9ac743ad237c",
+          "rightHash": "0x347b151eb11b8f5a8eb782ad831e3fe844d5ab7c23e6f6ce1b6186a2f44903b7"
+        },
+        {
+          "ca": "0xa5b977667117877d06e0e74bd6d85cf7e241ffff",
+          "symbol": "4cat",
+          "timestamp": 1790066021,
+          "side": "sell",
+          "leftHash": "0x5b061e5661f07fcb997cc4c694577407cb4b92168174151d657f08b1c8085985",
+          "rightHash": "0x213898ab4948fa0e76a51ccffafff274220fd4b9dc5de1fe96e8a735bef26349"
+        },
+        {
+          "ca": "0x44830bf21c46ceecc02e407603b6bf3774f37777",
+          "symbol": "PISSCAT",
+          "timestamp": 1790065876,
+          "side": "buy",
+          "leftHash": "0xa73bf642faa1fd6a17428e4a169d24e9a61b18d05949e50d4d86a46355ed44cf",
+          "rightHash": "0x50021f869fb3ff29cf06d567e852bdc9e13ddd485e3d1bfbc7291f57647146cb"
+        },
+        {
+          "ca": "0xa5b977667117877d06e0e74bd6d85cf7e241ffff",
+          "symbol": "4cat",
+          "timestamp": 1790065858,
+          "side": "buy",
+          "leftHash": "0x1a2b6c928e99792ce9217fa7f3a8615910717b1368000a4047ca4b265da92805",
+          "rightHash": "0x2e602830689b788f2d52706fd3c699f47e7034b3f10f2c3d040128ccd50a078f"
+        },
+        {
+          "ca": "0xa5b977667117877d06e0e74bd6d85cf7e241ffff",
+          "symbol": "4cat",
+          "timestamp": 1790065856,
+          "side": "buy",
+          "leftHash": "0xc55adeb6867514bdadb8068c8182bdaf045900a8dbb605cd20aee16cad565ff4",
+          "rightHash": "0xd9f532935828e4fbb636024b1661a490485afee15f5b6d202ea33e2652af4531"
+        },
+        {
+          "ca": "0xa5b977667117877d06e0e74bd6d85cf7e241ffff",
+          "symbol": "4cat",
+          "timestamp": 1790065813,
+          "side": "buy",
+          "leftHash": "0xb53acd4d53f4825c2c3283fa2152621bbd72420b2a0fcd05b3742c7807f6c472",
+          "rightHash": "0x914bf7feb98b6987b0b7a147ad4b2e2917e3ff8b0cdfa88bf612e0459d63574c"
+        },
+        {
+          "ca": "0xa5b977667117877d06e0e74bd6d85cf7e241ffff",
+          "symbol": "4cat",
+          "timestamp": 1790065756,
+          "side": "buy",
+          "leftHash": "0xc11451a351217c1604901570f0499a927602b32f9a7c70187e414c6b72da5bca",
+          "rightHash": "0xdedc3d2d9516a5b687ff54f72d2028ebd8b7907d7b55aa109ea1e876cf75cbe7"
+        }
+      ]
+    },
+    {
+      "a": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "b": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "leftRows": 40,
+      "rightRows": 40,
+      "matched": 23,
+      "tokens": 12,
+      "matches": [
+        {
+          "ca": "4M14Rz6tgH29i5UQJko7UcJe9oV11zW8AvJz5oX3gkij",
+          "symbol": "NOTHING",
+          "timestamp": 1790937805,
+          "side": "sell",
+          "leftHash": "4v9i9SCVcFauHDFiGu3w8p5iQVCm99yxkeCTxZKb8ixZAfe7SCYhSDWoUYvkbFgDAxFVm7714Ryp4C9E9eDEJVuS",
+          "rightHash": "4ZEV1JkJSBTLjzVThPwXc5QhrD1EqwTrtdXHE9u25nJDpQ1sHEiFjQuPBRfwx8m3pUcELbZh9UjTwf5CcTwsXSqD"
+        },
+        {
+          "ca": "4M14Rz6tgH29i5UQJko7UcJe9oV11zW8AvJz5oX3gkij",
+          "symbol": "NOTHING",
+          "timestamp": 1790937727,
+          "side": "buy",
+          "leftHash": "5AeSndRh5Q3pXkaXkkWiJuhaxzRMepcooNNu5wFP1HbFGDbwqs55rjrHZ8jKMQFNKUyYobnsrxmYvbgjTRQ6LouS",
+          "rightHash": "43Yv4BTVgQswjXGKp2XosQ9EvFbktw77wNerZTLjWrrq5CCMBHSBKXaqe3GdQU1Jh2df1AQ7UA5qvv6SZKyLSFVS"
+        },
+        {
+          "ca": "EFvdLptvhf8nG9rzzgtuVMguHvSKjLH5Gmt1bZp77kVA",
+          "symbol": "SAM",
+          "timestamp": 1790934972,
+          "side": "buy",
+          "leftHash": "4P9RG7YEBsLXrMCAqHbdFVo6STvADjcncDESy1a9GzHDq49YBmPTNtZe9oMwYtn6j5KFJMjJ4j9P4LF8uxbAkMXi",
+          "rightHash": "3iGMs1snjvxy9Yw8oa5ctKWbVXkkZYCMo4G7HkqSZHZdjpTHbSYk7gKKEtvFNnEMkKyoTnrEzLtaTB6wRdTeXXW"
+        },
+        {
+          "ca": "GJy34KECPs9zxrZciABTw9dvwJ1ZSdLg3RZh1zjzgT9o",
+          "symbol": "SAM",
+          "timestamp": 1790934823,
+          "side": "sell",
+          "leftHash": "2pPf5frnCc1nxWHzNH27DztcU3hhdDVpgNzBDC8aCjy2yeeb9Ei4XQndSpdWgHL5VXy1urwkEevEDej7APnBgWYQ",
+          "rightHash": "nuWhPjJZbSXwp1uUgxwJcnvjB35HP15xZkBi9dtXV4F9pQ7HxpxpvXKvAifptCfbyr6WHCkzsDej1vYdWWir5XP"
+        },
+        {
+          "ca": "GJy34KECPs9zxrZciABTw9dvwJ1ZSdLg3RZh1zjzgT9o",
+          "symbol": "SAM",
+          "timestamp": 1790934815,
+          "side": "buy",
+          "leftHash": "2GBSmCzL6NZa34MJEMxc8gnuFYSvAg68zntPBcMyHrJkFvPB9G8S3xN2hykB1sZTH7MLpkBB3d7Nm67Nr7w86Pm4",
+          "rightHash": "xsZ3QDnGjc2PNpQWPWd19nWj9794XG2XzbmiVaDoEh1E2yrT9bfyfWQz2LXrf84kHzREKc6JtkczyfmzAvmhMV6"
+        },
+        {
+          "ca": "DoiCv1cNjSgsi6JWxRGKjsmQJrSUULchmxpV4JNXUXo4",
+          "symbol": "SAM",
+          "timestamp": 1790934741,
+          "side": "sell",
+          "leftHash": "4x8JagzAqR4yaSWrCeLvUqmD6NdUuZhXSSjprt1bnVrWJHeXzNDWYScMsQV8rKcFwgmLQXEe494m49QegrY3fGpW",
+          "rightHash": "2wPyiax4Ldy7NQiouQaBuBZKL9KUqac3xXMKMCYMdmAShpqzdyywYxf5b6EbncPuadcSfekwF2s3hqTGYhcDGP3A"
+        },
+        {
+          "ca": "DoiCv1cNjSgsi6JWxRGKjsmQJrSUULchmxpV4JNXUXo4",
+          "symbol": "SAM",
+          "timestamp": 1790934665,
+          "side": "buy",
+          "leftHash": "38YqVhg848CirBaEukHccRQDVBVHiditPerqidV5ciVN8VKsLs6QGBzDP7YFJmt9TMcRPDEGUn5t2s1ZN3uB4dBM",
+          "rightHash": "3DtL9b9PoEbg6xrMBYtHE1643jGoF6PigHhiGHjNiVssKRRfawHT4sfoE45ZYvWi1cxi91n97ScCSnxoeTFVNLaT"
+        },
+        {
+          "ca": "GZXWAFabMMhY8zqVBtGgrxhb1EQQnvsMepf8GoLGX3TP",
+          "symbol": "TETRIS",
+          "timestamp": 1790934028,
+          "side": "sell",
+          "leftHash": "6uo13udKH89WvBE5Scenr3DDiRyJhhimTbHHXVEYa6mgRDgiYbBFRy8gkqWS9Unnb4PRE7pnP9cxfBnzRZjNu2K",
+          "rightHash": "9ZLn7mrTkDUpokWpoZN3rJrtoBvVe6RFrQSEWSgjCNNPkQLDsxyc3J4pmM2uiwfWUHvRX8QtA53rXkWNHuUDrCQ"
+        },
+        {
+          "ca": "GZXWAFabMMhY8zqVBtGgrxhb1EQQnvsMepf8GoLGX3TP",
+          "symbol": "TETRIS",
+          "timestamp": 1790933987,
+          "side": "buy",
+          "leftHash": "2LvTiBGMXcD4KuLA9yZgoY9hmnPv5pZrvR9dkXXDz7N4yFBkUbyBoJa3AK2WXtHff8YH3us228NayagbLs1JZF5K",
+          "rightHash": "5rAQTGzZGZfFAB4gM5ThCUVxtzZsh7vKmrhpbBCB42uhns5vfMmXMYzEqK6i42NygH4TFepxcAV1gHToxUZPXjbQ"
+        },
+        {
+          "ca": "3Z18mQS4HbEL9bFBfYM7LV9aYm4UoHikVPqmQ5zgxBs7",
+          "symbol": "ROGUE",
+          "timestamp": 1790933692,
+          "side": "sell",
+          "leftHash": "2s7KYhBS4bYBfhzqCRkK4yy8a2FyKKFUWujmMdvJ7Rwy8dBadtjPiwX7k8WqH6mznBP2miQX6gL3zJprvETSn6b6",
+          "rightHash": "65cgjcueENvmkgBiL8Hd3xgJrsrrKN259u2RWR1HHJjwHFGiVAGLTKrk3zPfYkb8WZyZrzkKgRFA97EkR97NysYo"
+        },
+        {
+          "ca": "3Z18mQS4HbEL9bFBfYM7LV9aYm4UoHikVPqmQ5zgxBs7",
+          "symbol": "ROGUE",
+          "timestamp": 1790933676,
+          "side": "buy",
+          "leftHash": "4ZajJpEarFwX1FvsgyX2MECZAFXVBYroyVymGq9LqxkpGmZhCKkWvosnZFoEG6th5kWWCk9JXgyjD12otALmZG3X",
+          "rightHash": "23n77R8a1FjWqLznodpBpWNQJn6MMokr7SBTQ6wR2aXPj5KUR7tfaWdQzn3YWqxKJNR3T3rLyv1U9mZGfyiHWCQR"
+        },
+        {
+          "ca": "3Z18mQS4HbEL9bFBfYM7LV9aYm4UoHikVPqmQ5zgxBs7",
+          "symbol": "ROGUE",
+          "timestamp": 1790933104,
+          "side": "buy",
+          "leftHash": "3VFzKS7u3monzVKVsXAWfA32GbwcTAeu23Nshpnv3SbkLGaVFN9FaPgKi96GGy18Ugvo2FXFQT3CJjNguWCP9q7n",
+          "rightHash": "rcBR9UKkWbMWee2yNHo9pHv56BCkBcFQFNDGtWkqPCWMuzvFPRbw21eFegJJ3ugQE89SC4CPnHURNmUW7PXBua9"
+        },
+        {
+          "ca": "CR6SSZk2KjmuV27Wv4i5p72tuRAmhK3vaKQA8WdTUT18",
+          "symbol": "DOOMSCROLL",
+          "timestamp": 1790933037,
+          "side": "sell",
+          "leftHash": "4j8fubkeXgEp1wDt91s32eoV1FWbUC22AVk49yBVmUQgvyHYuTkFYoTYxHfc4rNACJvaFH5RiiQFm8VZVco9JZDk",
+          "rightHash": "2NdS5qnM3XchMdEJqkomLhytzvbZaDcPNgph8wwmbgByKoG4BDfGdLcW4e19fHsqkf1xu5i55WVfeEihE5eJTwWY"
+        },
+        {
+          "ca": "CR6SSZk2KjmuV27Wv4i5p72tuRAmhK3vaKQA8WdTUT18",
+          "symbol": "DOOMSCROLL",
+          "timestamp": 1790932936,
+          "side": "buy",
+          "leftHash": "5XFaCW2ZkPfHZmEPHRgT6y4WLSLKsAWTUqVtKCNV1SPxiGnswGzHxoCSNp6b2bLBXWWcYakuaCokEp2Z9spsw69T",
+          "rightHash": "XvRdUdR2rRNxfx4VfzcLekfe4BhfoLcPKuxV81jqTxazLAtVqAaQoEpjor9hBLg3aEVFqN2kbs2N9Q5vszAxubu"
+        },
+        {
+          "ca": "G1mLKwEhRwb4Li6eKU15TUrbC2WXA8UvkuwhsW7CkYR7",
+          "symbol": "Onboard",
+          "timestamp": 1790932065,
+          "side": "sell",
+          "leftHash": "4FGxj8Tb6MqEzDFZ618C1qTjHifqeHBAuSe2WpSanaNqLTkzyor5bmF8WFN5zX1DXTnW1abegFSafkem94pLxADk",
+          "rightHash": "2XaaD8jHixyCiaEjxyYBqNNbizEWgt4GGYneN2RR7VVwYvKf1E6hSDZogAM8gfd4uZrUGFFnj3Tz6LvmFGWg4wRr"
+        },
+        {
+          "ca": "G1mLKwEhRwb4Li6eKU15TUrbC2WXA8UvkuwhsW7CkYR7",
+          "symbol": "Onboard",
+          "timestamp": 1790932003,
+          "side": "buy",
+          "leftHash": "3QDXFhFqzSgDLLakwdYRGvuFDCuTU6SNxozBFfBkwntQVhn67kj99qa53DdGbeuRRZi2R1nD5bHv9A1E51u5NV1B",
+          "rightHash": "2V9SFZmgXnQQQThPLxoHJhvtAojHFJ8JU2BcXQXmQHHwSZs6QnkMnzK4Rg9GmX3uZDrxTBZLgUC5JJsduUGeBTFy"
+        },
+        {
+          "ca": "7xD6fE1yv7yXe95xXo5UEaxur1iLEANrLvEXrvNNK1jq",
+          "symbol": "RICH",
+          "timestamp": 1790931196,
+          "side": "buy",
+          "leftHash": "rCab5V1t8qCbG9LSVt3dwYPyFwDjLRuXXex2mMvJWhE6mRhFDCG6RQH5FExxVULUeSdWr3ZeSJEoe3X4xQjRvW7",
+          "rightHash": "4BwFTmJrTirgMvrHocVAUB7qnnkxbYmzhGdbY8sR9p1wGgzcvid8q1dZoHjTguhzgqjLbX7QomHcgUknrxzTK7JB"
+        },
+        {
+          "ca": "4ghFqXZdLnakD591oFKhA2tD9q7pSfhBWfkVRs125GGL",
+          "symbol": "SATOSHI",
+          "timestamp": 1790930635,
+          "side": "sell",
+          "leftHash": "nP6zYCJeWircewD1zfWaQ7d6AbtDsBnddqqvxxNprdgaUtq6mWePmi1bZi11ZiVVf8hdQ3MLDmNC73jGwL6yL7F",
+          "rightHash": "3XH4X9kjnaba2HmR1zokrGPo5Pu8APCMV88UKSNk9dFNoywLKicodbboYbu1q3WhkhRmhPm6PdUKAC3VVf6qfxHP"
+        },
+        {
+          "ca": "4ghFqXZdLnakD591oFKhA2tD9q7pSfhBWfkVRs125GGL",
+          "symbol": "SATOSHI",
+          "timestamp": 1790930472,
+          "side": "buy",
+          "leftHash": "21xXB8SaVEiXFqoi2ExuYXaMEViev2hwX6hUS4mbxS96xvJFjnQSkCQhYdnbFyTKeQfBdQmWpc2KLFd8zcN7GA3x",
+          "rightHash": "ufFLEA2bqutDS5DMoDbhkJYJACH13r7GANx1PbErSg5jEMNzXM8jArUTV8thyvqv69o5mJhDEjWoMtYoTjsyjsk"
+        },
+        {
+          "ca": "GwZkrTLb7JpJwrv5T7gSPiEsMJcqhv93CoebqJVnV1rs",
+          "symbol": "HIM",
+          "timestamp": 1790930431,
+          "side": "sell",
+          "leftHash": "d7ARvhtJv8rAzHeG13rJQint7AUEJxRv8meqReXsZ5D8JhA212qYGoqtUsLBoDyh35FRt6AiQGgRhtput64FLYG",
+          "rightHash": "3dMP3xEkQmtSxSyPUA1rYHGUKe3aJQFPdDBh3adRUgbsMBCmjH3HbwuwLmqvNW2gQ4TdV9N2Ac1nAZGFYVRjdjQk"
+        },
+        {
+          "ca": "GwZkrTLb7JpJwrv5T7gSPiEsMJcqhv93CoebqJVnV1rs",
+          "symbol": "HIM",
+          "timestamp": 1790930311,
+          "side": "buy",
+          "leftHash": "5QktWcX4cuVCMK8hjTBq52Hotjo8dKgpy7TPzXC4BGPAwSTiDnVno7nSfSqcATKw6r8hDfFWt2NxZGBL8mzrNFGn",
+          "rightHash": "bJNT3z1M3WmMgMSEoYCtpTSRZ6cKomN4jb7usvmdqGAiztmNjCaPxnC3jvaTNtLdRW53qmR778XogKYYEiw3Ay9"
+        },
+        {
+          "ca": "5wBy5RdjRzdKdkdcyZ3fhBUhrEd9HS8PREkomhdZX2s2",
+          "symbol": "FLY",
+          "timestamp": 1790930076,
+          "side": "sell",
+          "leftHash": "4KUMLGKHnLvtjTbD7S2fKJcsiK8XBAhFNJyFpu56pJGPB2B7HWb1QUJur6w5U1V7G92KPVvoUsmuiUsBfM9zCAGK",
+          "rightHash": "421eazS1xNM8thV2P9RGZ36MEbNKFFBcvqpb7jH7ADetFTY6HzEpS7UFCfagsPJtje5TxpwevatWyo8x5Bcw4Ht9"
+        },
+        {
+          "ca": "5wBy5RdjRzdKdkdcyZ3fhBUhrEd9HS8PREkomhdZX2s2",
+          "symbol": "FLY",
+          "timestamp": 1790930015,
+          "side": "buy",
+          "leftHash": "65L1fzEH9XztEf1gBoQBhqKMSm5RH8MdhXuHwv7JGZwhWLNvPTYra4iLuAwhENy1vuLUBoHXPeGgboVVTakemi9V",
+          "rightHash": "55yFfqF7LoWXJNSWejw3pdAjCLC7ABMrGksyTdNGiNRTpmzAafAwUTkQqB5ETyGCBEm6kTuz6VQ1u8YR8PYboQPT"
+        }
+      ]
+    }
+  ],
+  "stats": [
+    {
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "chain": "bsc",
+      "period": "7d",
+      "receivedAt": 1790937947796,
+      "realizedProfitUsd": 801.4010260899605,
+      "winrate": 0.375,
+      "tags": [
+        "gmgn"
+      ]
+    },
+    {
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "chain": "bsc",
+      "period": "30d",
+      "receivedAt": 1790937959081,
+      "realizedProfitUsd": 174.53442987427303,
+      "winrate": 0.3333333333333333,
+      "tags": [
+        "gmgn"
+      ]
+    },
+    {
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "chain": "bsc",
+      "period": "7d",
+      "receivedAt": 1790937963971,
+      "realizedProfitUsd": 623.4448425259951,
+      "winrate": 0.25,
+      "tags": [
+        "gmgn"
+      ]
+    },
+    {
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "chain": "bsc",
+      "period": "30d",
+      "receivedAt": 1790937972148,
+      "realizedProfitUsd": -91.57470982634007,
+      "winrate": 0.2777777777777778,
+      "tags": [
+        "gmgn"
+      ]
+    },
+    {
+      "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+      "chain": "bsc",
+      "period": "7d",
+      "receivedAt": 1790937979129,
+      "realizedProfitUsd": 244.3281558976557,
+      "winrate": 1,
+      "tags": [
+        "fresh_wallet",
+        "gmgn"
+      ]
+    },
+    {
+      "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+      "chain": "bsc",
+      "period": "30d",
+      "receivedAt": 1790937982072,
+      "realizedProfitUsd": 244.3281558976557,
+      "winrate": 1,
+      "tags": [
+        "fresh_wallet",
+        "gmgn"
+      ]
+    },
+    {
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "chain": "sol",
+      "period": "7d",
+      "receivedAt": 1790937991256,
+      "realizedProfitUsd": 4478.669818434345,
+      "winrate": 0.3132530120481928,
+      "tags": [
+        "padre",
+        "arbitrager",
+        "axiom"
+      ]
+    },
+    {
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "chain": "sol",
+      "period": "30d",
+      "receivedAt": 1790938000006,
+      "realizedProfitUsd": 8967.518617266345,
+      "winrate": 0.305019305019305,
+      "tags": [
+        "padre",
+        "arbitrager",
+        "axiom"
+      ]
+    },
+    {
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "chain": "sol",
+      "period": "7d",
+      "receivedAt": 1790938008639,
+      "realizedProfitUsd": 11565.405841348924,
+      "winrate": 0.36428571428571427,
+      "tags": [
+        "arbitrager",
+        "axiom"
+      ]
+    },
+    {
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "chain": "sol",
+      "period": "30d",
+      "receivedAt": 1790938014499,
+      "realizedProfitUsd": 18018.14338915484,
+      "winrate": 0.35362997658079626,
+      "tags": [
+        "arbitrager",
+        "axiom"
+      ]
+    }
+  ],
+  "coverage": {
+    "activityRows": 168,
+    "wallets": 5,
+    "stats": 10,
+    "requests": 19
+  },
+  "runtimeLearningChanged": false
+}

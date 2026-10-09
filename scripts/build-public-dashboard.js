@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const publicAssets = [
-  'styles.css', 'brain-desk.css', 'brain-instrument.css', 'brain-desk.js', 'ca-desk.js',
+  'styles.css', 'brain-desk.css', 'brain-instrument.css', 'brain-desk.js', 'entry-status.js', 'ca-desk.js',
   'strategy-details.js', 'narrative-thesis.js', 'favicon.svg', 'generated-designs/neural-core-v2.png',
 ];
 export async function buildPublicDashboard(destination = path.join(project, 'dist-public')) {

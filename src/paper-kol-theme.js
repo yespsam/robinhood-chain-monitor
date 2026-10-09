@@ -1,5 +1,6 @@
 // Explainable lexical hypotheses, not claimed endorsements or general AI
 // semantic understanding. Market metadata supplies the CA; a KOL post does not.
+import {narrativeNameMatch} from './narrative-name-match.js';
 export const KOL_THEME_VERSION='kol_theme_hypothesis_v1';
 export const KOL_THEME_TTL_MS=3600000;
 const clean=s=>String(s||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
@@ -17,11 +18,11 @@ export function kolThemeCandidates(doc,candidates,nowMs){
   if(!doc?.authenticated||!['reviewed_big_kol','official_x'].includes(doc.kind)||!Number.isFinite(doc.at)
     ||doc.at>nowMs||nowMs-doc.at>KOL_THEME_TTL_MS||/0x[\da-fA-F]{40}\b|\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/.test(doc.text||'')
     ||/\b(?:scam|rugged|honeypot|fake|avoid|not affiliated|do not buy|don't buy|sold|selling|dump|exit)\b|骗局|假冒|诈骗|辟谣|不要买|别买|清仓|卖出|止损|未发行|无关|不是官方/iu.test(doc.text||''))return [];
-  const text=themes(doc.text),postId=linkedPostId(doc.url),seen=new Set(),rows=[];
+  const postId=linkedPostId(doc.url),seen=new Set(),rows=[];
   for(const item of candidates){
     const t=item.token||item,k=`${t.chain}:${t.address}`,at=Date.parse(item.observedAt);
     if(seen.has(k)||!t.address||item.marketStatus!=='ok'||!Number.isFinite(at)||at>nowMs||nowMs-at>120000)continue;
-    const terms=[...new Set([t.name,t.symbol].map(themes))].filter(s=>s.length>=4&&!generic.has(s)&&text.includes(s));
+    const terms=[...new Set([t.name,t.symbol].filter(s=>typeof s==='string'&&themes(s).length>=4&&!generic.has(themes(s))&&narrativeNameMatch(doc.text,s)).map(themes))];
     if(!terms.length)continue;seen.add(k);
     const links=[t.twitterUsername,t.website,t.raw?.twitter,t.raw?.twitter_username,t.raw?.link?.twitter_username,t.raw?.link?.website];
     const linked=!!postId&&links.some(url=>linkedPostId(url)===postId);

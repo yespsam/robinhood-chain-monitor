@@ -24,6 +24,19 @@ const build=(documents=[anchor,doc()],candidates=[item()])=>buildTwitterEventCan
 const newest=r=>r.reports.find(d=>d.sourceId==='x:2');
 const wire=(docs=[anchor,doc()],candidates=[item()])=>buildPaperNewsWire({twitterDocuments:docs,candidates,nowMs:NOW});
 const modes={allowExploratory:true,pvpMode:true,confirmedMode:true,evidenceHoldMode:true,continuousPaperMode:true,opportunityMode:true,memeExitMode:true,recoveryMode:true};
+test('an exact project post discovers image/short-text narratives without a name match, but not endorsement',()=>{
+  const post=doc('2',NOW-1000,'Look at this 🐶');
+  const linked=item({...token,name:'Different dog',symbol:'DOGGO',narrativeTags:[],twitterUsername:post.url});
+  const c=newest(build([post],[linked])).candidates[0];
+  assert.equal(c.binding,'project_permalink');assert.equal(c.selected,true);
+  assert.deepEqual(c.matchedNames,[]);assert.equal(c.authorEndorsement,false);
+  assert.equal(wire([post],[linked]).paperSignals[0].source,'twitter_narrative_event');
+  assert.equal(newest(build([post],[item({...linked.token,twitterUsername:'https://x.com/beffjezos'})])).candidateCount,0);
+  assert.equal(newest(build([post],[{...linked,observedAt:iso(NOW-120001)}])).candidates[0].selected,false);
+  const ambiguous=newest(build([post],[linked,item({...linked.token,address:OTHER})]));
+  assert.ok(ambiguous.candidates.every(c=>!c.selected));
+  assert.equal(wire([{...post,text:'Do not buy, fake token'}],[linked]).paperSignals.length,0);
+});
 function input(){return {...modes,token,nowMs:NOW,marketStatus:'ok',observedAt:iso(NOW),priceObservedAt:iso(NOW),requireFastQuote:true,
   compoundingCash:100,monitorSignal:wire().paperSignals[0],flow:{chain:'bsc',address:CA,provider:'gmgn',status:'healthy',fresh:true,complete:true,
     observedAt:iso(NOW),netBuyUsd:600,uniqueBuyerCount:2,smartMoneyCount:2,

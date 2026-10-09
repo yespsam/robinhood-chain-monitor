@@ -19,6 +19,7 @@ function project(value, schema) {
 const identity = fields('chain address symbol name');
 const flow = fields('uniqueBuyerCount highProfitCount fomoCount netBuyUsd buyerCount sellerCount');
 const pattern = fields('closedAt close reason ready volumeMultiple');
+const poolProof={...fields('version platform quoteAddress quoteSymbol generationKey ordinal poolAddress createdAt'),creationOrder:[true]};
 const opportunity = { ...fields('id label version basis signalReady decision'), pattern, reasons: [true], missing: [true] };
 const thesis = {
   ...fields('method conclusion'),
@@ -30,6 +31,7 @@ const thesis = {
 const evidence = {
   ...fields('version paperEligible marketFresh priceFresh priceObservedAt marketObservedAt flowFresh narrativeText narrativeFresh marketStage'),
   flow, opportunity, opportunityRoutes: [opportunity], narrativeThesis: thesis,
+  newLaunch: {...fields('version chain address marketStage creationTimestamp sourceId sourceAt requiresChart decisionTargetMs'),pool:poolProof},
   exitPolicy: fields('version entryQuoteMaxAgeMs exitQuoteMaxAgeMs'),
   flowDiagnostics: fields('scope complete'), safety: { metrics: fields('top10HolderRate') },
   confirmedPolicy: { ...fields('version'), pulse: fields('windowMs recentBuyerCount recentNetBuyUsd') },
@@ -41,23 +43,48 @@ const position = {
   ...identity, ...fields('quantity price entryPrice markPrice markValue markStatus markAt pnl cost costBasisUsd openedAt entryLogic exitLogic activeStopPrice'),
   entryReasons: [true], entryEvidence: evidence,
   memeExitPolicy: fields('version'), pvpPolicy: fields('version'),
-  exitStatus: fields('holdReason'), thesisStatus: { narrative: fields('summary'), flow: fields('summary'), operator: fields('summary') },
+  exitStatus: fields('holdReason evidenceGapExitEnabled'), thesisStatus: { narrative: fields('summary'), flow: fields('summary'), operator: fields('summary') },
 };
 const task = { ...identity, ...fields('key at status startedAt finishedAt fetchedAt receivedAt sourceStatus ready reason') };
 const schema = {
   ...fields('status mode execution signing broadcast enabled updatedAt costModel'),
   session: fields('id label'), entryGuard: { ...fields('allowed'), reasons: [true] },
+  lossGuards: {...fields('version enforced threshold baselineTradeCount fundingId startedAt capitalUsd realizedPnlUsd dailyRealizedPnlUsd lossLimitUsd triggered newEntriesStop'),reasons:[true]},
   account: { ...fields('mode execution signing broadcast initialCash cash realizedPnl updatedAt'),
     stats: fields('entries exits wins losses realizedPnl equity netLiquidationValue unrealizedPnl openPositions stalePositions totalCostsUsd'),
-    cashAdjustments: [fields('amountUsd atMs reason')] },
+    cashAdjustments: [fields('amountUsd at cashBefore cashAfter tradeCount')] },
   evaluations: [{ ...fields('strategyId label decision entryLogic exitLogic observedAt'), reasons: [true], missing: [true],
     token: { ...identity, ...fields('price marketCap liquidity observedAt') }, evidence }],
   opportunityRoutes: [{ ...fields('id label description') }],
-  cadence: { ...fields('actualTickGapMs lastTickDurationMs lastTickAt tickCount lastMarketRefreshAt'),
-    lastQuoteTiming: fields('queueMs'), quoteInFlight: [task], marketSourceAges: [fields('chain ageMs status observedAt')] },
+  newLaunchPolicy: fields('version mode decisionTargetMs maxTokenAgeMs maxEventAgeMs quoteMaxAgeMs requiresChart quoteCount note'),
+  poolFirstThreePolicy:{...fields('version mode maxUniqueCA maxEventAgeMs requiresChart orderBasis coverageNote'),supportedSources:[true]},
+  algorithmSignals:{...fields('version enabled sourceStatus sourceObservedAt retained filled note'),
+    depthProbe:{...fields('enabled running'),last:{...identity,...fields('status reason observedAt durationMs')}},
+    internalBurstPolicy:{...fields('version mode chain internalOnly windowMs baselineMs minBaselineUsd minBaselineTrades minVolumeUsd minAcceleration minNetUsd minGroups minWalletNetUsd minBuyShare maxGroupBuyShare maxSourceAgeMs quoteMaxAgeMs internalRequiresChart note')},
+    innerWalletPolicy:{...fields('version mode chain minGroups minWalletNetUsd minNetUsd maxSourceAgeMs maxBuyAgeMs quoteMaxAgeMs internalOnly profileBeforeBuy note')},
+    policy:{...fields('version mode chain minGroups minWalletNetUsd minNetUsd maxSourceAgeMs maxBuyAgeMs quoteMaxAgeMs internalRequiresChart externalRequiresChart'),windowsMs:[true]},
+    checks:[{...identity,...fields('signalId sourceAt status reason groupCount windowMs netBuyUsd')}],
+    records:[{...identity,...fields('id source sourceAt firstDetectedAt evaluatedAt decision status filledAt detectionToFillMs sourceToFillMs'),missing:[true],reasons:[true]}]},
+  scanScope:{...fields('version newsMonitoring effectiveOnRestart'),scanChains:[true],managementChains:[true],retainedExitChains:[true]},
+  discoveryScope:{...fields('version refreshTargetMs uniqueCandidates otherSources holdings note'),
+    feeds:[fields('chain list label status observedAt count reasonCode')]},
+  cadence: { ...fields('runtimePathVersion actualTickGapMs lastTickDurationMs fullCycleMs lastTickAt tickCount lastMarketRefreshAt'),
+    phaseTiming: fields('newsWireMs narrativeRecallMs narrativeLearningMs casebookMs ledgerWriteMs'),
+    researchReads: { ...fields('version reads joinedReads isolatedReads inFlight inFlightReads'),
+      lastRead: fields('startedAt durationMs evidenceMs learningMs evidenceFailed learningFailed') },
+    lastQuoteTiming: fields('queueMs'), quoteInFlight: [task], marketSourceAges: [fields('chain ageMs status observedAt')],
+    lastCandidateEvaluation: {...identity,...fields('at entryLane decisionTargetMs decisionTargetMet sourceToDecisionMs receivedToDecisionMs evaluationMs quoteAgeAtDecisionMs newFills decision')} },
   researchPipeline: { ...fields('detailsSucceeded detailsRequested chartRequestsPending'), lastDetail: task, lastChartDispatch: task,
+    focusedReadBudget: fields('version exploratoryConcurrency exploratoryActive lastKind chartDeferrals detailDeferrals chartTurnDeferrals chartTurnReserved detailBackoffCandidates note'),
+    entryDiagnostics:{...fields('version detected verifiedCatalyst quoteResearchReady quoteScheduled eligible note'),blockers:[fields('code label count')]},
     hotCandidates: [task], pending: [task], stageSnapshot: [fields('chain status')], chartDiagnostics: [task], entryFocus: fields('active until key') },
-  newsWire: fields('updatedAt ownDocumentCount gmgnSignalCount fullTwitterConnected'),
+  newsWire: {...fields('updatedAt ownDocumentCount gmgnSignalCount fullTwitterConnected'),poolFirstThree:{
+    ...fields('version updatedAt verifiedEvents uniqueEvents expiredOnArrivalEvents conflictingAssets disabledAssets readySignals coverageNote lastVerifiedEventAt'),
+    latency:fields('sampleCount p50Ms p95Ms basis'),
+    rejectionReasons:fields('invalid_proof canonical_revision delayed_recovery invalid_timestamp expired conflicting_asset disabled_asset already_consumed'),
+    diagnostics:[fields('chain address quoteAddress ordinal sourceAt verifiedAt verificationLagMs expiredOnArrival status reason')],
+    sourceHealth:fields('status checkedAt lastSuccessAt lastErrorCode note'),
+    candidates:[{...identity,...poolProof,sourceUrl:url}]}},
   narrativeDesk: fields('updatedAt withSources communityLinked directCa'),
   learning: { ...fields('updatedAt walletCount'), roles: fields('teacher') },
   exitMonitor: fields('lastCheckedAt'),

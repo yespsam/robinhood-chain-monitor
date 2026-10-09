@@ -1,0 +1,184 @@
+{
+  "version": 1,
+  "mode": "readonly_research",
+  "group": "sol",
+  "report": "docs/operator-reference-followups/2026-10-04-2007-sol-deferred.md",
+  "evidence": "docs/operator-reference-followups/2026-10-04-2007-sol-deferred.json",
+  "question": "能否通过本地已采集数据补齐 Solana D/E 已保存游标与旧检查点之间的历史分页缺口？队列忙碌时不新增网络请求。",
+  "startedAt": "2026-10-04T12:07:47.507Z",
+  "triggeredAt": "2026-10-04T12:07:47.507Z",
+  "completedAt": "2026-10-04T12:11:40.000Z",
+  "configChecked": null,
+  "gmgnConfigChecks": 0,
+  "gmgnBusinessRequests": 0,
+  "gmgnBusinessDispatched": 0,
+  "gmgnSucceeded": 0,
+  "gmgnFailed": 0,
+  "rpcRequests": 0,
+  "newRows": 0,
+  "uniqueCa": 0,
+  "oneToOnePairs": 0,
+  "newAddresses": 0,
+  "status": "deferred_shared_queue_busy",
+  "summary": "本轮无新增证据，保留上轮结论。共享账户有实时监控及扫描请求等候，研究主动让路；本地地址库未匹配 D/E，旧分页缺口未补齐。保留两地址交易检查点和游标，下一轮轮换 BSC。",
+  "priority": 0,
+  "client": "src/gmgn-flow-client.js",
+  "networkDeferred": true,
+  "reason": "existing_shared_queue_work",
+  "queueSnapshot": {
+    "checkedAt": "2026-10-04T12:11:05.784Z",
+    "tickets": [
+      {
+        "pid": 47431,
+        "queuedAt": 1791115864129,
+        "expiresAt": 1791115894129,
+        "priority": 1
+      },
+      {
+        "pid": 47431,
+        "queuedAt": 1791115863710,
+        "expiresAt": 1791115893710,
+        "priority": 0
+      },
+      {
+        "pid": 47431,
+        "queuedAt": 1791115863096,
+        "expiresAt": 1791115893096,
+        "priority": 0
+      },
+      {
+        "pid": 34741,
+        "queuedAt": 1791115859981,
+        "expiresAt": 1791115889981,
+        "priority": 0
+      },
+      {
+        "pid": 34739,
+        "queuedAt": 1791115859639,
+        "expiresAt": 1791115889639,
+        "priority": 0
+      }
+    ],
+    "notA429": true,
+    "cooldownUntil": "2026-09-21T17:41:38.000Z"
+  },
+  "localLookup": {
+    "source": "data/wallet-address-library.sqlite",
+    "access": "sqlite3 -readonly",
+    "filter": "chain=sol AND wallet IN (D,E)",
+    "matchedAddresses": 0,
+    "matchedEvents": 0,
+    "notProofOfNoWalletActivity": true
+  },
+  "preservedCheckpoints": [
+    {
+      "id": "D",
+      "chain": "sol",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "lastTrade": {
+        "at": "2026-10-04T03:27:59.000Z",
+        "hash": "2bfAF6JMTsKgmTGUSUYqZ5ZAqYLugDotWnrW7u7bpJNdP33PjywBt1eedPTn1pNv2UYPmG39f4DKf67HvqpVq89N",
+        "ca": "AZwtTLzLtfYf4XbgHEP6LPHRKQFkvx3iPGWPLZU9tXDz",
+        "side": "sell"
+      },
+      "lastActivityCheckAt": "2026-10-04T03:55:06.556Z",
+      "paginationGap": {
+        "oldCheckpoint": {
+          "at": "2026-10-02T13:04:31.000Z",
+          "hash": "3hXzutKGxfQcqWCtvtUNeGLYD3uqBWdwy4rGsQkBgGgzC6yuf6Z7MD25AH7L7zjwDGxZr8ZJmtwCBXk6nNF29Ewp",
+          "ca": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+          "side": "sell"
+        },
+        "oldestCollectedAt": "2026-10-04T00:10:02.000Z",
+        "resumeCursor": "NDUzMDkwNzE4MDEzMDIwMDg6MDo6",
+        "observedAt": "2026-10-04T03:55:06.556Z",
+        "report": "docs/operator-reference-followups/2026-10-04-1153-sol-activity.md"
+      }
+    },
+    {
+      "id": "E",
+      "chain": "sol",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "lastTrade": {
+        "at": "2026-10-04T03:27:59.000Z",
+        "hash": "3eGurwBTEcERdGqcrmBnCaFJsGiNpaZcZu23xAtk1UWfXrRqEsorW929Gp7jWeAd58Fuuxzahs7y37Hastr1vTy6",
+        "ca": "AZwtTLzLtfYf4XbgHEP6LPHRKQFkvx3iPGWPLZU9tXDz",
+        "side": "sell"
+      },
+      "lastActivityCheckAt": "2026-10-04T03:55:24.643Z",
+      "paginationGap": {
+        "oldCheckpoint": {
+          "at": "2026-10-02T13:04:31.000Z",
+          "hash": "f5adiPfpCY3nTX5ugh8Ryor3bX6gJEUzpZgHesGhxLKEXst3wriNbvGWgvUT6CHG1J4dmfwTKDTeL1JxjppTgAV",
+          "ca": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+          "side": "sell"
+        },
+        "oldestCollectedAt": "2026-10-03T17:43:29.000Z",
+        "resumeCursor": "NDUzMDA0MTkzMDA5NjUwMDg6MDo6",
+        "observedAt": "2026-10-04T03:55:24.643Z",
+        "report": "docs/operator-reference-followups/2026-10-04-1153-sol-activity.md"
+      }
+    }
+  ],
+  "baseline": [
+    {
+      "path": "docs/operator-clusters-2026-10-02.json",
+      "sha256": "1b952275a0986a2dc10e1f80eb0e7a27f0e498cd2f1585ca92a3d4f5b58e1d55",
+      "expected": "1b952275a0986a2dc10e1f80eb0e7a27f0e498cd2f1585ca92a3d4f5b58e1d55",
+      "unchanged": true
+    },
+    {
+      "path": "docs/operator-reference-learning-2026-10-02.json",
+      "sha256": "3cde872e2325e011281a9d5174514a5359ca1f47749e1f335ed3728dbbd2d4ad",
+      "expected": "3cde872e2325e011281a9d5174514a5359ca1f47749e1f335ed3728dbbd2d4ad",
+      "unchanged": true
+    },
+    {
+      "path": "docs/operator-reference-analysis-2026-10-02.json",
+      "sha256": "3b82c386681b98e22db5455f4ffd3a9c5c034f8fe30161946079cabd202b2e04",
+      "expected": "3b82c386681b98e22db5455f4ffd3a9c5c034f8fe30161946079cabd202b2e04",
+      "unchanged": true
+    }
+  ],
+  "heartbeatSnapshot": {
+    "checkedAt": "2026-10-04T12:11:05.784Z",
+    "main": {
+      "pid": 17133,
+      "updatedAt": "2026-10-04T12:10:39.507Z",
+      "sequence": 3419
+    },
+    "fomo": {
+      "pid": 47431,
+      "updatedAt": "2026-10-04T12:10:51.259Z",
+      "sequence": 2324
+    },
+    "bsc": {
+      "pid": 17135,
+      "updatedAt": "2026-10-04T12:10:51.638Z",
+      "sequence": 3345
+    },
+    "continuousCoverageVerified": false
+  },
+  "protectedFiles": [
+    {
+      "path": "data/yesp-atm-confirmed-pvp-v2-20260923.json",
+      "sha256": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36",
+      "matchesPreviousCheckpoint": true
+    }
+  ],
+  "profilesRefreshed": false,
+  "netPnl": null,
+  "currentUnrealizedPnl": null,
+  "dayReview": {
+    "dueAt": "2026-10-05T07:07:57Z",
+    "due": false,
+    "checkpointUnchanged": true
+  },
+  "limitations": [
+    "这是共享队列忙碌后的主动让路，不是新发生的 429 或 API 请求失败。未发 GMGN 业务请求，故本轮不运行 config --check。",
+    "没有补页，不能断言 D/E 两轮之间无交易；旧分页缺口及最新页之后的活动均未覆盖。",
+    "本轮没有新地址行为证据，不新增同步配对、不重算收益、不把缺失浮盈计为零。",
+    "现时心跳不能证明整段期间持续在线，也不能证明每条 TG 消息均已送达。",
+    "D/E 仍是待验证研究参考；旧 Tabula 反例不能证明同控、叙事或可复制盈利。"
+  ]
+}

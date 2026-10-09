@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { Interface, keccak256, toUtf8Bytes } from "ethers";
+import { Interface, Signature, Transaction, keccak256, toUtf8Bytes } from "ethers";
 
 export const FOUR_REGISTRY_CHAIN_ID = 56;
 export const FOUR_REGISTRY_ADDRESS = "0x912cef0c3ae9ab6eb3ec87cab69371cfb317ab94";
@@ -10,7 +10,9 @@ export const FOUR_CORE_ADDRESS = "0xebe7b6c1089d9f72ad07f34e36d898e44e5e27f3";
 // exact-block Registry reads through an unrelated contract.
 export const FOUR_REGISTRY_MULTICALL3_ADDRESS = "0xca11bde05977b3631167028862be2a173976ca11";
 export const FOUR_REGISTRY_MULTICALL3_CODE_HASH = "0xd5c15df687b16f2ff992fc8d767b4216323184a2bbc6ee2f9c398c318e770891";
-export const FOUR_REGISTRY_STATE_VERSION = 11;
+export const FOUR_REGISTRY_STATE_VERSION = 12;
+export const FOUR_REGISTRY_TRACKED_TOKEN_VERSION = 1;
+export const FOUR_REGISTRY_TRACKED_TOKEN_TARGET = 3;
 export const FOUR_REGISTRY_EVENT_SCHEMA_VERSION = 1;
 export const FOUR_REGISTRY_DEFAULT_CONFIRMATIONS = 3;
 export const FOUR_REGISTRY_SOURCE_ID = "fourmeme_openfour_registry";
@@ -361,6 +363,7 @@ function emptyState() {
     presetAuditCursor: 0,
     presetAuditProofs: {},
     pendingConfirmations: {},
+    mechanismTracking: emptyMechanismTracking(),
     outbox: [],
     processedEvents: {},
     processedEventKeys: [],
@@ -412,7 +415,7 @@ function baseEventKeyFor(eventType, kind, transactionHash, eventLogIndex) {
 }
 
 function parseCapabilityOwnerKey(value) {
-  return /^four-registry:56:(0x[a-f0-9]{64}):(0|[1-9]\d*):(added|activated|create_enabled)(?::canonical-revision:(0x[a-f0-9]{64}):([1-9]\d*))?$/u
+  return /^four-registry:56:(0x[a-f0-9]{64}):(0|[1-9]\d*):(added|activated|create_enabled|updated|module_upserted|token_impl_upserted)(?::canonical-revision:(0x[a-f0-9]{64}):([1-9]\d*))?$/u
     .exec(String(value || ""));
 }
 
@@ -836,8 +839,8 @@ function canonicalOwnersAtPosition(durableState, transactionHash, eventLogIndex)
       || left.processedEvent.blockHash.localeCompare(right.processedEvent.blockHash));
 }
 
-function normalizeCheckpoint(raw) {
-  if (!hasExactKeys(raw, ["blockNumber", "blockHash", "presets", "pendingConfirmations"])
+function normalizeCheckpoint(raw, mechanismOwner) {
+  if (!hasExactKeys(raw, ["blockNumber", "blockHash", "presets", "pendingConfirmations", "mechanismTracking"])
     || !raw.presets || typeof raw.presets !== "object" || Array.isArray(raw.presets)) {
     throw fourError("FOUR_REGISTRY_STATE_INVALID", "checkpoint is invalid");
   }
@@ -881,6 +884,7 @@ function normalizeCheckpoint(raw) {
     blockHash: checkpointBlockHash,
     presets,
     pendingConfirmations,
+    mechanismTracking: validateMechanismCheckpoint(raw.mechanismTracking, mechanismOwner, checkpointBlockNumber),
   };
 }
 
@@ -899,6 +903,16 @@ function normalizePresetAuditProof(raw, expectedId, expectedFingerprint) {
 }
 
 function normalizeState(raw) {
+  // Upgrade only the known closed v11 schema. Existing mechanisms become a
+  // silent consumed baseline, never three newly available historical entries.
+  if (raw?.version === 11 && hasExactKeys(raw, Object.keys(emptyState()).filter((key) => key !== "mechanismTracking"))) {
+    const tracking = seedMechanismTracking(raw.presets);
+    // Old retained checkpoints carry no post-upgrade token-order authority.
+    for (const checkpoint of raw.checkpoints) Object.assign(tracking.generations, seedMechanismTracking(checkpoint.presets).generations);
+    raw = { ...clone(raw), version: FOUR_REGISTRY_STATE_VERSION, mechanismTracking: tracking,
+      checkpoints: raw.checkpoints.map((checkpoint) => ({ ...checkpoint,
+        mechanismTracking: mechanismCheckpoint(tracking) })) };
+  }
   if (!hasExactKeys(raw, Object.keys(emptyState()))) {
     throw fourError("FOUR_REGISTRY_STATE_INVALID", "state root does not satisfy the closed schema");
   }
@@ -1080,7 +1094,7 @@ function normalizeState(raw) {
   if (!Array.isArray(raw.checkpoints) || raw.checkpoints.length === 0 || raw.checkpoints.length > MAX_CHECKPOINTS) {
     throw fourError("FOUR_REGISTRY_STATE_INVALID", "state checkpoints are invalid");
   }
-  const checkpoints = raw.checkpoints.map(normalizeCheckpoint);
+  const checkpoints = raw.checkpoints.map((checkpoint) => normalizeCheckpoint(checkpoint, raw.mechanismTracking));
   for (let index = 1; index < checkpoints.length; index += 1) {
     if (checkpoints[index - 1].blockNumber >= checkpoints[index].blockNumber) {
       throw fourError("FOUR_REGISTRY_STATE_INVALID", "state checkpoints are not strictly ordered");
@@ -1110,6 +1124,10 @@ function normalizeState(raw) {
   }
   const lastCheckpoint = checkpoints.at(-1);
   const cursor = normalizeCursor(raw.cursor);
+  const mechanismTracking = normalizeMechanismTracking(raw.mechanismTracking, cursor.anchorBlock);
+  if (!exactData(mechanismCheckpoint(mechanismTracking), lastCheckpoint.mechanismTracking)) {
+    throw fourError("FOUR_REGISTRY_TRACKING_INVALID", "latest checkpoint does not bind mechanism/order history");
+  }
   if (lastCheckpoint.blockNumber !== cursor.anchorBlock || lastCheckpoint.blockHash !== cursor.anchorBlockHash) {
     throw fourError("FOUR_REGISTRY_STATE_INVALID", "latest checkpoint does not bind the state cursor");
   }
@@ -1168,6 +1186,7 @@ function normalizeState(raw) {
     presetAuditCursor,
     presetAuditProofs,
     pendingConfirmations,
+    mechanismTracking,
     outbox,
     processedEvents,
     processedEventKeys: [...raw.processedEventKeys],
@@ -1287,10 +1306,58 @@ function exactBlock(provider, blockNumber) {
     : provider.getBlock(blockNumber);
 }
 
-function exactTransaction(provider, transactionHash) {
-  return typeof provider.getHistoricalTransaction === "function"
-    ? provider.getHistoricalTransaction(transactionHash)
-    : provider.getTransaction(transactionHash);
+export function restoreFourLegacyTransaction(raw, transactionHash) {
+  // Some public BSC RPCs serialize pre-EIP-155 transactions with chainId="".
+  // Recover only that exact representation defect, never assume chain 56.
+  // v=27/28 means an unprotected legacy signature (chainId 0); canonical BSC
+  // inclusion still requires the independent network/block/receipt proofs.
+  if (!raw || raw.chainId !== "" || raw.type !== "0x0") {
+    throw fourError("FOUR_REGISTRY_TRANSACTION_INVALID", "unsupported malformed transaction representation");
+  }
+  try {
+    for (const field of ["nonce", "gas", "gasPrice", "value", "v", "blockNumber", "transactionIndex"]) {
+      if (typeof raw[field] !== "string" || !/^0x(?:0|[1-9a-f][a-f0-9]*)$/iu.test(raw[field])) {
+        throw new Error(`invalid transaction ${field}`);
+      }
+    }
+    if (typeof raw.input !== "string" || !/^0x(?:[a-f0-9]{2})*$/iu.test(raw.input)) throw new Error("invalid transaction input");
+    const signature = Signature.from({ r: raw.r, s: raw.s, v: BigInt(raw.v) });
+    const chainId = Signature.getChainId(BigInt(raw.v));
+    if (chainId !== 0n && chainId !== BigInt(FOUR_REGISTRY_CHAIN_ID)) throw new Error("signature belongs to another chain");
+    const transaction = Transaction.from({
+      type: 0, chainId, nonce: integer(raw.nonce, "transaction.nonce"),
+      gasLimit: raw.gas, gasPrice: raw.gasPrice, value: raw.value,
+      to: raw.to === null ? null : address(raw.to, "transaction.to"),
+      data: raw.input, signature,
+    });
+    const expectedHash = hash32(transactionHash, "requested transaction hash");
+    if (transaction.hash?.toLowerCase() !== expectedHash
+      || hash32(raw.hash, "transaction.hash") !== expectedHash
+      || transaction.from?.toLowerCase() !== address(raw.from, "transaction.from")) {
+      throw new Error("signed transaction hash or sender mismatch");
+    }
+    return { ...raw, chainId: `0x${chainId.toString(16)}`,
+      blockHash: hash32(raw.blockHash, "transaction.blockHash"),
+      blockNumber: integer(raw.blockNumber, "transaction.blockNumber"),
+      index: integer(raw.transactionIndex, "transaction.transactionIndex") };
+  } catch (error) {
+    throw fourError("FOUR_REGISTRY_TRANSACTION_INVALID", `legacy signed transaction verification failed: ${error.message}`, error);
+  }
+}
+
+async function exactTransaction(provider, transactionHash) {
+  try {
+    return await (typeof provider.getHistoricalTransaction === "function"
+      ? provider.getHistoricalTransaction(transactionHash)
+      : provider.getTransaction(transactionHash));
+  } catch (error) {
+    // Do not turn rate limits, null transactions, or other format errors into
+    // an extra read. The same pinned source and its RPC budget remain in use.
+    if (typeof provider.send !== "function" || !/chainId/i.test(error?.message || "")
+      || !/empty string/i.test(error?.message || "")) throw error;
+    const raw = await provider.send("eth_getTransactionByHash", [transactionHash]);
+    return restoreFourLegacyTransaction(raw, transactionHash);
+  }
 }
 
 function exactTransactionReceipt(provider, transactionHash) {
@@ -2000,6 +2067,230 @@ function exactData(left, right) {
   return exactData(leftKeys, rightKeys) && leftKeys.every((key) => exactData(left[key], right[key]));
 }
 
+// This is discovery/order evidence, never a safety verdict or execution grant.
+// Governance toggles and cosmetic text do not create another three-token slot.
+const MECHANISM_PRESET_FIELDS = Object.freeze([
+  "id", "version", "validator", "tokenModuleId", "vaultModuleId", "curveModuleId",
+  "tradeModuleId", "migrateModuleId", "tokenImplId", "customDataId",
+]);
+const MODULE_PRESET_FIELDS = Object.freeze([
+  "tokenModuleId", "vaultModuleId", "curveModuleId", "tradeModuleId", "migrateModuleId", "customDataId",
+]);
+const TRACKING_RECORD_KEYS = ["generationKey", "presetId", "preset", "revisionEvents", "activationEvent", "presetBinding", "suppressed", "tokens"];
+const TRACKED_EVENT_KEYS = ["featureTrackedToken", "featureTokenOrdinal", "featureTokenTarget", "featureTokenProof"];
+
+function emptyMechanismTracking() {
+  return { version: 1, revisions: {}, generations: {}, active: {} };
+}
+
+function mechanismPreset(preset) {
+  return Object.fromEntries(MECHANISM_PRESET_FIELDS.map((key) => [key, preset[key]]));
+}
+
+function revisionIdentity(event) {
+  return `${event.subject.type}:${event.subject.id}`;
+}
+
+function revisionBindsPreset(event, preset) {
+  if (event.kind === "four_registry_module_upserted") {
+    const field = MODULE_PRESET_FIELDS[event.module.kind];
+    return Boolean(field && preset[field] === event.module.moduleKey);
+  }
+  return event.kind === "four_registry_token_impl_upserted"
+    && preset.tokenImplId === event.tokenImplementation.tokenImplId;
+}
+
+function presetReferencesRevision(event, preset) {
+  return event.kind === "four_registry_module_upserted"
+    ? MODULE_PRESET_FIELDS.some((field) => preset[field] === event.module.moduleKey)
+    : event.kind === "four_registry_token_impl_upserted" && preset.tokenImplId === event.tokenImplementation.tokenImplId;
+}
+
+function mechanismRevisionMaterial(event) {
+  if (event.kind === "four_registry_module_upserted") {
+    const { active, ...module } = event.module;
+    return { key: revisionIdentity(event), module };
+  }
+  return { key: revisionIdentity(event), tokenImplementation: event.tokenImplementation };
+}
+
+function mechanismGenerationKey(preset, revisionEvents) {
+  const hash = keccak256(toUtf8Bytes(JSON.stringify({
+    preset: mechanismPreset(preset),
+    revisions: revisionEvents.map(mechanismRevisionMaterial),
+  }))).toLowerCase();
+  return `fourmeme:openfour:preset:${preset.id}:mechanism:${hash}`;
+}
+
+function seedMechanismTracking(presets) {
+  const tracking = emptyMechanismTracking();
+  for (const preset of Object.values(presets)) {
+    const generationKey = mechanismGenerationKey(preset, []);
+    tracking.generations[generationKey] = {
+      generationKey, presetId: preset.id, preset: clone(preset), revisionEvents: [],
+      activationEvent: null, presetBinding: null, suppressed: true, tokens: [],
+    };
+  }
+  return tracking;
+}
+
+function trackingToken(evidence, token) {
+  return { token, evidence: clone(evidence) };
+}
+
+function validTrackingToken(value, presetId) {
+  if (!hasExactKeys(value, ["token", "evidence"])) return false;
+  const evidence = value.evidence;
+  const decoded = parseTokenCreatedLog(evidence?.canonicalLog, {});
+  return decoded.presetId === presetId && decoded.token === value.token
+    && exactEvidence({ ...evidence, evidence, url: evidence.explorerUrl,
+      sourceOccurredAt: evidence.blockTimestamp }, "canonical_token_created_after_capability", "TokenCreated");
+}
+
+function validMechanismRecord(record, expectedKey) {
+  if (!hasExactKeys(record, TRACKING_RECORD_KEYS)
+    || record.generationKey !== expectedKey
+    || typeof record.suppressed !== "boolean"
+    || !Array.isArray(record.revisionEvents) || record.revisionEvents.length > 7
+    || !Array.isArray(record.tokens) || record.tokens.length > FOUR_REGISTRY_TRACKED_TOKEN_TARGET) return false;
+  const preset = exactPreset(record.preset, record.presetId);
+  if (!preset || preset.id !== record.presetId) return false;
+  const revisionKeys = record.revisionEvents.map(revisionIdentity);
+  if (new Set(revisionKeys).size !== revisionKeys.length
+    || !exactData(revisionKeys, [...revisionKeys].sort())
+    || record.revisionEvents.some((event) => !isFourRegistryProtocolCapabilityEvent(event) || !revisionBindsPreset(event, preset))
+    || mechanismGenerationKey(preset, record.revisionEvents) !== expectedKey) return false;
+  if (record.suppressed) return record.activationEvent === null && record.presetBinding === null && record.tokens.length === 0;
+  const activation = record.activationEvent, binding = record.presetBinding;
+  if (!isFourRegistryCapabilityEvent(activation)
+    || !preset.canCreate
+    || !hasExactKeys(binding, ["scope", "blockNumber", "blockHash", "preset"])
+    || binding.blockNumber !== activation.blockNumber || binding.blockHash !== activation.blockHash
+    || !exactData(binding.preset, preset)) return false;
+  if (FOUR_REGISTRY_PRESET_CAPABILITY_KINDS.includes(activation.kind)) {
+    if (activation.presetId !== preset.id || activation.snapshotScope !== PRESET_DIRECT_SNAPSHOT_SCOPE
+      || binding.scope !== "canonical_single_preset_event"
+      || !exactData(activation.currentPreset, preset)) return false;
+  } else if (!revisionBindsPreset(activation, preset)
+    || binding.scope !== "canonical_preset_unchanged_within_event_block"
+    || !record.revisionEvents.some((event) => exactData(event, activation))) return false;
+  if (record.revisionEvents.some((event) => comparePosition(event, activation) > 0)) return false;
+  let previous = activation;
+  const seen = new Set();
+  for (const token of record.tokens) {
+    if (!validTrackingToken(token, preset.id) || seen.has(token.token)
+      || comparePosition(token.evidence, previous) <= 0) return false;
+    seen.add(token.token);
+    previous = token.evidence;
+  }
+  return true;
+}
+
+function normalizeMechanismTracking(raw, checkpointBlock = null) {
+  if (!hasExactKeys(raw, ["version", "revisions", "generations", "active"]) || raw.version !== 1
+    || [raw.revisions, raw.generations, raw.active].some((value) => !value || typeof value !== "object" || Array.isArray(value))
+    || Object.keys(raw.generations).length > 2_000) throw fourError("FOUR_REGISTRY_TRACKING_INVALID", "mechanism tracking schema/capacity is invalid");
+  for (const [key, event] of Object.entries(raw.revisions)) {
+    if (!isFourRegistryProtocolCapabilityEvent(event) || !["module", "token-impl"].includes(event.subject.type)
+      || revisionIdentity(event) !== key || checkpointBlock !== null && event.blockNumber > checkpointBlock) {
+      throw fourError("FOUR_REGISTRY_TRACKING_INVALID", "mechanism revision lacks canonical Registry evidence");
+    }
+  }
+  for (const [key, record] of Object.entries(raw.generations)) {
+    if (!validMechanismRecord(record, key)
+      || checkpointBlock !== null && [record.activationEvent, ...record.tokens.map((token) => token.evidence)]
+        .filter(Boolean).some((event) => event.blockNumber > checkpointBlock)) {
+      throw fourError("FOUR_REGISTRY_TRACKING_INVALID", "mechanism generation/order proof is invalid");
+    }
+  }
+  for (const [presetId, key] of Object.entries(raw.active)) {
+    if (raw.generations[key]?.presetId !== presetId || raw.generations[key].suppressed) {
+      throw fourError("FOUR_REGISTRY_TRACKING_INVALID", "active mechanism does not bind its generation");
+    }
+  }
+  return clone(raw);
+}
+
+function mechanismCheckpoint(tracking) {
+  return { version: 2, revisions: clone(tracking.revisions),
+    generationCounts: Object.fromEntries(Object.entries(tracking.generations).map(([key, record]) => [key, record.tokens.length])),
+    active: clone(tracking.active) };
+}
+
+function restoreMechanismCheckpoint(snapshot, owner) {
+  if (!hasExactKeys(snapshot, ["version", "revisions", "generationCounts", "active"]) || snapshot.version !== 2
+    || !snapshot.generationCounts || typeof snapshot.generationCounts !== "object" || Array.isArray(snapshot.generationCounts)) {
+    throw fourError("FOUR_REGISTRY_TRACKING_INVALID", "compact mechanism checkpoint is invalid");
+  }
+  const generations = {};
+  for (const [key, count] of Object.entries(snapshot.generationCounts)) {
+    const record = owner.generations[key];
+    if (!record || !Number.isSafeInteger(count) || count < 0 || count > record.tokens.length) {
+      throw fourError("FOUR_REGISTRY_TRACKING_INVALID", "checkpoint lost immutable generation/order proof");
+    }
+    generations[key] = { ...clone(record), tokens: clone(record.tokens.slice(0, count)) };
+  }
+  return { version: 1, revisions: clone(snapshot.revisions), generations, active: clone(snapshot.active) };
+}
+
+function validateMechanismCheckpoint(snapshot, owner, checkpointBlock) {
+  normalizeMechanismTracking(restoreMechanismCheckpoint(snapshot, owner), checkpointBlock);
+  return clone(snapshot);
+}
+
+function activateMechanism(tracking, preset, activationEvent, scope) {
+  if (!preset.canCreate) { delete tracking.active[preset.id]; return; }
+  const revisionEvents = Object.values(tracking.revisions).filter((event) => presetReferencesRevision(event, preset))
+    .sort((left, right) => revisionIdentity(left).localeCompare(revisionIdentity(right)));
+  if (revisionEvents.some((event) => !revisionBindsPreset(event, preset)
+    || event.module && (!event.module.active || !event.module.implementationCodePresent || !event.module.beaconCodePresent)
+    || event.tokenImplementation && !event.tokenImplementation.implementationCodePresent)) {
+    delete tracking.active[preset.id];
+    return;
+  }
+  const generationKey = mechanismGenerationKey(preset, revisionEvents);
+  const existing = tracking.generations[generationKey];
+  if (existing) {
+    if (existing.suppressed || existing.tokens.length >= FOUR_REGISTRY_TRACKED_TOKEN_TARGET) delete tracking.active[preset.id];
+    else tracking.active[preset.id] = generationKey;
+    return;
+  }
+  if (Object.keys(tracking.generations).length >= 2_000) throw fourError("FOUR_REGISTRY_TRACKING_FULL", "mechanism history is full; refusing to erase consumed slots");
+  const record = { generationKey, presetId: preset.id, preset: clone(preset), revisionEvents: clone(revisionEvents),
+    activationEvent: clone(activationEvent), presetBinding: { scope, blockNumber: activationEvent.blockNumber,
+      blockHash: activationEvent.blockHash, preset: clone(preset) }, suppressed: false, tokens: [] };
+  if (!validMechanismRecord(record, generationKey)) throw fourError("FOUR_REGISTRY_TRACKING_INVALID", "new mechanism activation proof is invalid");
+  tracking.generations[generationKey] = record;
+  tracking.active[preset.id] = generationKey;
+}
+
+function trackedTokenProof(record) {
+  return { version: FOUR_REGISTRY_TRACKED_TOKEN_VERSION, target: FOUR_REGISTRY_TRACKED_TOKEN_TARGET,
+    generationKey: record.generationKey, activationEvent: clone(record.activationEvent),
+    presetBinding: clone(record.presetBinding), revisionEvents: clone(record.revisionEvents),
+    ordering: "canonical_block_transaction_log_unique_ca", priorTokens: clone(record.tokens),
+    contiguousFromBlock: record.activationEvent.blockNumber };
+}
+
+function validTrackedTokenProof(event) {
+  const proof = event.featureTokenProof;
+  if (!hasExactKeys(proof, ["version", "target", "generationKey", "activationEvent", "presetBinding", "revisionEvents", "ordering", "priorTokens", "contiguousFromBlock"])
+    || proof.version !== FOUR_REGISTRY_TRACKED_TOKEN_VERSION || proof.target !== FOUR_REGISTRY_TRACKED_TOKEN_TARGET
+    || proof.ordering !== "canonical_block_transaction_log_unique_ca"
+    || !Array.isArray(proof.priorTokens) || proof.priorTokens.length >= FOUR_REGISTRY_TRACKED_TOKEN_TARGET
+    || event.featureTrackedToken !== true || event.featureTokenTarget !== FOUR_REGISTRY_TRACKED_TOKEN_TARGET
+    || event.featureTokenOrdinal !== proof.priorTokens.length + 1
+    || event.featureGenerationKey !== proof.generationKey
+    || proof.contiguousFromBlock !== proof.activationEvent?.blockNumber
+    || event.capabilityEventKey !== proof.activationEvent?.eventKey
+    || event.lifecycleKey !== `fourmeme:openfour:preset:${event.presetId}:generation:${proof.activationEvent?.transactionHash}:${proof.activationEvent?.logIndex}`
+    || !exactData(mechanismPreset(event.preset), mechanismPreset(proof.presetBinding?.preset || {}))) return false;
+  return validMechanismRecord({ generationKey: proof.generationKey, presetId: event.presetId,
+    preset: proof.presetBinding.preset, revisionEvents: proof.revisionEvents, activationEvent: proof.activationEvent,
+    presetBinding: proof.presetBinding, suppressed: false,
+    tokens: [...proof.priorTokens, trackingToken(event.evidence, event.token.address)] }, proof.generationKey);
+}
+
 const PRESET_KEYS = Object.freeze([
   "id", "name", "description", "version", "textProof", "active", "createEnabled", "validator",
   "tokenModuleId", "vaultModuleId", "curveModuleId", "tradeModuleId", "migrateModuleId",
@@ -2526,8 +2817,10 @@ function exactTokenPayload(value) {
 
 export function isFourRegistryFirstTokenEvent(value) {
   try {
+    const tracked = TRACKED_EVENT_KEYS.some((key) => Object.hasOwn(value || {}, key));
     const rootKeys = [
       ...FIRST_TOKEN_EVENT_KEYS,
+      ...(tracked ? TRACKED_EVENT_KEYS : []),
       ...(value?.delayedRecovery ? ["delayedRecovery"] : []),
       ...(value?.canonicalRevision ? ["canonicalRevision"] : []),
       ...(value?.canonicalRestoration ? ["canonicalRestoration"] : []),
@@ -2573,9 +2866,9 @@ export function isFourRegistryFirstTokenEvent(value) {
       && exactData(value.subject, { type: "preset", id: presetId })
       && value.featurePlatform === "fourmeme"
       && value.featureActivationKey === value.lifecycleKey
-      && value.featureGenerationKey === value.lifecycleKey
-      && value.featureFirstToken === true
-      && value.officialFirstToken === true
+      && (tracked ? validTrackedTokenProof(value) : value.featureGenerationKey === value.lifecycleKey)
+      && value.featureFirstToken === (!tracked || value.featureTokenOrdinal === 1)
+      && value.officialFirstToken === (!tracked || value.featureTokenOrdinal === 1)
       && hasExactKeys(value.mode, ["selector", "presetId", "name", "version", "active", "createEnabled"])
       && exactData(value.mode, expectedMode)
       && Array.isArray(value.tokens) && value.tokens.length === 1 && exactData(value.tokens[0], value.token)
@@ -2599,6 +2892,25 @@ export function isFourRegistryFirstTokenEvent(value) {
       && exactDeliveryRecovery(value, "T2")
       && hash32(value.payloadDigest, "event.payloadDigest") === eventPayloadDigest(value);
   } catch { return false; }
+}
+
+export function isFourRegistryTrackedTokenEvent(value) {
+  return value?.featureTrackedToken === true && isFourRegistryFirstTokenEvent(value);
+}
+
+export function fourRegistryEventSupersedesTrackedToken(capability, tokenEvent) {
+  if (!isFourRegistryCapabilityEvent(capability) || !isFourRegistryTrackedTokenEvent(tokenEvent)
+    || comparePosition(capability, tokenEvent) <= 0) return false;
+  const preset = tokenEvent.featureTokenProof.presetBinding.preset;
+  if (FOUR_REGISTRY_PRESET_CAPABILITY_KINDS.includes(capability.kind)) {
+    return capability.presetId === preset.id && (!capability.currentPreset.canCreate
+      || !exactData(mechanismPreset(capability.currentPreset), mechanismPreset(preset)));
+  }
+  if (!presetReferencesRevision(capability, preset)) return false;
+  if (!revisionBindsPreset(capability, preset)) return true; // Known key, unrecognised/inconsistent kind: observe only.
+  const previous = tokenEvent.featureTokenProof.revisionEvents.find(event => revisionIdentity(event) === revisionIdentity(capability));
+  return capability.module?.active === false || !previous
+    || !exactData(mechanismRevisionMaterial(previous), mechanismRevisionMaterial(capability));
 }
 
 function deliveryRecoveryFields(blockTimestamp, observedAt, coverageProof, freshTier) {
@@ -2659,6 +2971,9 @@ function eventPayloadDigest(value) {
       preset: value.preset,
       presetSnapshotScope: value.presetSnapshotScope,
       token: value.token,
+      ...(value.featureTrackedToken === true ? { tracked: Object.fromEntries([
+        ...TRACKED_EVENT_KEYS, "featureGenerationKey", "featureFirstToken", "officialFirstToken",
+      ].map((key) => [key, value[key]])) } : {}),
       coordinates,
       canonicalRevision,
       canonicalRestoration,
@@ -2947,7 +3262,7 @@ function tokenPayloadFromCreated(created) {
   };
 }
 
-function confirmationEvent(created, pending, preset, presetSnapshotScope, observedAt, confirmations, coverageProof) {
+function confirmationEvent(created, pending, preset, presetSnapshotScope, observedAt, confirmations, coverageProof, mechanism = null) {
   const eventKey = `four-registry:${FOUR_REGISTRY_CHAIN_ID}:${created.proof.transactionHash}:${created.proof.logIndex}:token-confirmation`;
   const evidence = sourceProof({ ...created.proof, eventName: "TokenCreated" }, { number: created.proof.blockNumber, hash: created.proof.blockHash }, "canonical_token_created_after_capability");
   evidence.confirmationsApplied = confirmations;
@@ -2968,9 +3283,11 @@ function confirmationEvent(created, pending, preset, presetSnapshotScope, observ
     automaticExecution: false,
     featurePlatform: "fourmeme",
     featureActivationKey: pending.lifecycleKey,
-    featureGenerationKey: pending.lifecycleKey,
-    featureFirstToken: true,
-    officialFirstToken: true,
+    featureGenerationKey: mechanism?.generationKey || pending.lifecycleKey,
+    featureFirstToken: !mechanism || mechanism.tokens.length === 0,
+    officialFirstToken: !mechanism || mechanism.tokens.length === 0,
+    ...(mechanism ? { featureTrackedToken: true, featureTokenOrdinal: mechanism.tokens.length + 1,
+      featureTokenTarget: FOUR_REGISTRY_TRACKED_TOKEN_TARGET, featureTokenProof: trackedTokenProof(mechanism) } : {}),
     chainId: FOUR_REGISTRY_CHAIN_ID,
     chain: { id: FOUR_REGISTRY_CHAIN_ID, chainId: FOUR_REGISTRY_CHAIN_ID, name: "BNB Chain", environment: "mainnet" },
     platform: {
@@ -3269,6 +3586,25 @@ function rateLimitFailure(error) {
     queue.push(candidate.message, candidate.cause, candidate.error, candidate.info?.error);
   }
   return false;
+}
+
+function rpcRetryAfterMs(error) {
+  const seen = new Set();
+  const queue = [error];
+  let delay = 0;
+  while (queue.length > 0) {
+    const candidate = queue.shift();
+    if (!candidate || typeof candidate !== "object" || seen.has(candidate)) continue;
+    seen.add(candidate);
+    // These hosts are prerequisites, not alternative pools. Keep the longest
+    // declared cooldown, including evidence wrapped by the Registry reader.
+    for (const value of [candidate.retryAfterMs, candidate.rpcHostRetryAfterMs]) {
+      if (Number.isFinite(Number(value)) && Number(value) > 0) delay = Math.max(delay, Math.ceil(Number(value)));
+    }
+    queue.push(candidate.cause, candidate.error, candidate.info?.error,
+      ...(Array.isArray(candidate.errors) ? candidate.errors : []));
+  }
+  return delay;
 }
 
 function emptyRpcCounter() {
@@ -3575,7 +3911,9 @@ async function queryConsensusLogs(providers, filter, label, expectedToBlockHash)
     return agreed;
   }
   catch (error) {
-    if (filter.fromBlock < filter.toBlock && logRangeLimitError(error)) {
+    // A provider quota is not a range-size limit. Splitting a 429 would
+    // multiply calls against the same physical host during its cooldown.
+    if (filter.fromBlock < filter.toBlock && !rateLimitFailure(error) && logRangeLimitError(error)) {
       const midpoint = Math.floor((filter.fromBlock + filter.toBlock) / 2);
       const [leftEnd, rightEnd] = await Promise.all([
         consensusBlockAt(providers, midpoint, `${label} limited split range end`),
@@ -3628,6 +3966,7 @@ async function fetchCanonicalEvents(
   toBlock,
   toBlockHash,
   pendingPresetIds,
+  knownPresets = {},
 ) {
   if (fromBlock > toBlock) return { registryEvents: [], tokenEvents: [] };
   let registryLogs;
@@ -3682,6 +4021,11 @@ async function fetchCanonicalEvents(
   const candidatePresetIds = new Set([
     ...pendingPresetIds.map((id) => uintString(id, "pending presetId")),
     ...registryEvents.filter((event) => event.presetId !== undefined).map((event) => event.presetId),
+    ...registryEvents.flatMap((event) => {
+      const kind = PROTOCOL_CAPABILITY_BY_EVENT[event.eventName]?.kind;
+      const revision = { kind, module: event.record, tokenImplementation: event.record };
+      return kind ? Object.values(knownPresets).filter((preset) => revisionBindsPreset(revision, preset)).map((preset) => preset.id) : [];
+    }),
   ]);
   const tokenEvents = [];
   for (const log of tokenLogs) {
@@ -3797,6 +4141,23 @@ async function verifyDurableOutboxEntryOnProvider(entry, provider) {
     const parsed = parseTokenCreatedLog(receiptLog, proof);
     if (parsed.presetId !== event.presetId || !exactData(tokenPayloadFromCreated(parsed), event.token)) {
       throw fourError("FOUR_REGISTRY_OUTBOX_PROOF_MISMATCH", `durable first-token ${entry.eventKey} no longer matches its receipt payload`);
+    }
+    if (event.featureTrackedToken === true) {
+      const tracked = event.featureTokenProof;
+      const activation = tracked.activationEvent;
+      const proofs = [activation, ...tracked.revisionEvents]
+        .filter((item, index, all) => all.findIndex(other => other.eventKey === item.eventKey && other.blockHash === item.blockHash) === index);
+      for (const capability of proofs) await verifyDurableOutboxEntryOnProvider({ eventKey: capability.eventKey, event: capability }, provider);
+      const bindingSnapshot = await readFourRegistryPreset(provider, event.presetId, tracked.presetBinding.blockNumber);
+      if (!exactData(bindingSnapshot, tracked.presetBinding.preset)) {
+        throw fourError("FOUR_REGISTRY_OUTBOX_PROOF_MISMATCH", "tracked-token activation lost its exact preset binding");
+      }
+      for (const prior of tracked.priorTokens) {
+        const priorCreated = parseTokenCreatedLog(prior.evidence.canonicalLog, {});
+        await verifyDurableOutboxEntryOnProvider({ eventKey: `${prior.evidence.transactionHash}:${prior.evidence.logIndex}`,
+          event: { ...prior.evidence, type: FOUR_REGISTRY_FIRST_TOKEN_EVENT_TYPE, presetId: event.presetId,
+            token: tokenPayloadFromCreated(priorCreated), evidence: prior.evidence } }, provider);
+      }
     }
   } else {
     const parsed = parseRegistryLog(receiptLog, proof);
@@ -3950,6 +4311,7 @@ function appendCheckpoint(candidate, block, presets) {
     blockHash: block.hash,
     presets: clone(presets),
     pendingConfirmations: clone(candidate.pendingConfirmations),
+    mechanismTracking: mechanismCheckpoint(candidate.mechanismTracking),
   });
   if (candidate.checkpoints.length > MAX_CHECKPOINTS) {
     const baseline = candidate.checkpoints.find((checkpoint) => checkpoint.blockNumber === candidate.baselineBlock);
@@ -4015,7 +4377,7 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
     1,
   );
   const scanChunkSize = Math.max(1, Math.min(10_000, integer(
-    config.fourRegistryLogChunkSize ?? 4_096,
+    config.fourRegistryLogChunkSize ?? 10_000,
     "fourRegistryLogChunkSize",
   )));
   const reorgLookbackBlocks = Math.max(1, Math.min(10_000, integer(
@@ -4037,6 +4399,7 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
   let activeCheck = null;
   let timer = null;
   let stopped = false;
+  let consecutiveFailures = 0;
   const runtimeIdentityCache = new WeakMap();
   runtimeIdentityCache.expectedMulticall3CodeHash = dependencies.multicall3CodeHashForTesting === undefined
     ? FOUR_REGISTRY_MULTICALL3_CODE_HASH
@@ -4264,8 +4627,10 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
         blockHash: recoverySnapshot.identity.block.hash,
         presets: recoverySnapshot.inventory,
         pendingConfirmations: {},
+        mechanismTracking: mechanismCheckpoint(seedMechanismTracking(recoverySnapshot.inventory)),
       };
       safeCheckpoint = clone(baselineCheckpoint);
+      safeCheckpoint.recoveryMechanismOwner = seedMechanismTracking(recoverySnapshot.inventory);
     }
 
     if (!baselineCheckpoint) {
@@ -4463,6 +4828,8 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
       anchorBlockHash: safeCheckpoint.blockHash,
     };
     recovered.presets = clone(safeCheckpoint.presets);
+    recovered.mechanismTracking = restoreMechanismCheckpoint(safeCheckpoint.mechanismTracking,
+      safeCheckpoint.recoveryMechanismOwner || state.mechanismTracking);
     recovered.presetAuditCursor = 0;
     recovered.presetAuditProofs = Object.fromEntries(Object.entries(safeCheckpoint.presets).map(([id, preset]) => [id, {
       presetId: id,
@@ -4487,6 +4854,7 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
         blockHash: safeCheckpoint.blockHash,
         presets: clone(safeCheckpoint.presets),
         pendingConfirmations: clone(safeCheckpoint.pendingConfirmations),
+        mechanismTracking: clone(safeCheckpoint.mechanismTracking),
       }];
     recovered.tokenBackfillSuppressedThroughBlock = state.baselineBlock;
     recovered.reorgRecoveries.push({
@@ -4548,6 +4916,7 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
         initialized: true,
         cursor: { nextBlock: scanNumber + 1, anchorBlock: scanNumber, anchorBlockHash: finalizedBlock.hash },
         presets: inventory,
+        mechanismTracking: seedMechanismTracking(inventory),
         presetAuditCursor: 0,
         presetAuditProofs: Object.fromEntries(Object.entries(inventory).map(([id, preset]) => [id, {
           presetId: id,
@@ -4560,6 +4929,7 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
           blockHash: finalizedBlock.hash,
           presets: clone(inventory),
           pendingConfirmations: {},
+          mechanismTracking: mechanismCheckpoint(seedMechanismTracking(inventory)),
         }],
         tokenBackfillSuppressedThroughBlock: scanNumber,
         baselineBlock: scanNumber,
@@ -4615,7 +4985,8 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
       state.cursor.nextBlock,
       scanNumber,
       finalizedBlock.hash,
-      Object.keys(state.pendingConfirmations),
+      [...new Set([...Object.keys(state.pendingConfirmations), ...Object.keys(state.mechanismTracking.active)])],
+      state.presets,
     );
     const { registryEvents, tokenEvents } = canonicalEvents;
     const presetIds = Object.keys(scanEndInventory);
@@ -4652,9 +5023,9 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
         );
       }
     }
-    // Freshness begins only after every asynchronous canonical/log/state proof
-    // needed to construct this batch has completed.
-    const observedAt = iso(clock());
+    // Observation starts after range proofs. Exact module/preset attribution
+    // below advances this clock again after its additional asynchronous reads.
+    let observedAt = iso(Math.max(Number(clock()), Date.parse(state.updatedAt || "") || 0));
     const nextState = clone(state);
     const discovered = [];
     const protocolCapabilityEvents = [];
@@ -4696,6 +5067,13 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
       const event = resolution.event;
       restoreCanonicalOwner(nextState, resolution);
       if (!resolution.previouslyDelivered && !knownEventKey(nextState, event.eventKey)) discovered.push(event);
+      if (snapshotScope === PRESET_DIRECT_SNAPSHOT_SCOPE) {
+        activateMechanism(nextState.mechanismTracking, current, event, "canonical_single_preset_event");
+      } else {
+        // A block-end tuple shared by several writes cannot identify which
+        // transaction introduced its modules. Keep the alert, withhold entry.
+        delete nextState.mechanismTracking.active[current.id];
+      }
       const becameCreatable = current.canCreate && (!previous || !previous.canCreate);
       if (becameCreatable) {
         nextState.pendingConfirmations[current.id] = {
@@ -4719,6 +5097,20 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
       || (left.type === "registry" ? -1 : 1));
     for (const item of timeline) {
       if (item.type === "registry" && Object.hasOwn(PROTOCOL_CAPABILITY_BY_EVENT, item.event.eventName)) {
+        const revision = { kind: PROTOCOL_CAPABILITY_BY_EVENT[item.event.eventName].kind,
+          module: item.event.record, tokenImplementation: item.event.record };
+        const bindingVerified = new Set();
+        for (const preset of Object.values(workingPresets).filter((preset) => presetReferencesRevision(revision, preset))) {
+          const cacheKey = `${item.event.proof.blockNumber}:${preset.id}`;
+          if (!preset.canCreate || !revisionBindsPreset(revision, preset) || presetEventGroups.has(cacheKey)) continue;
+          const snapshot = await consensusPresetAt(stateVerificationProviders, preset.id,
+            item.event.proof.blockNumber, item.event.proof.blockHash);
+          if (!exactData(snapshot, preset)) {
+            throw fourError("FOUR_REGISTRY_TRACKING_BINDING_UNKNOWN", "module update cannot be attributed to the event-block preset");
+          }
+          bindingVerified.add(preset.id);
+        }
+        observedAt = iso(Math.max(Number(clock()), Date.parse(observedAt)));
         const baseEvent = protocolCapabilityEvent(
           item.event,
           observedAt,
@@ -4729,6 +5121,16 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
         const event = resolution.event;
         restoreCanonicalOwner(nextState, resolution);
         if (!resolution.previouslyDelivered && !knownEventKey(nextState, event.eventKey)) protocolCapabilityEvents.push(event);
+        if (["module", "token-impl"].includes(event.subject.type)) {
+          nextState.mechanismTracking.revisions[revisionIdentity(event)] = clone(event);
+          for (const preset of Object.values(workingPresets).filter((preset) => presetReferencesRevision(event, preset))) {
+            if (!bindingVerified.has(preset.id)) {
+              delete nextState.mechanismTracking.active[preset.id];
+              continue;
+            }
+            activateMechanism(nextState.mechanismTracking, preset, event, "canonical_preset_unchanged_within_event_block");
+          }
+        }
         continue;
       }
       if (item.type === "registry") {
@@ -4779,9 +5181,15 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
       const indexedCreated = item.event;
       const pending = nextState.pendingConfirmations[indexedCreated.presetId];
       const currentPreset = workingPresets[indexedCreated.presetId];
-      if (!pending
+      const generationKey = nextState.mechanismTracking.active[indexedCreated.presetId];
+      const mechanism = generationKey ? nextState.mechanismTracking.generations[generationKey] : null;
+      const trackingEligible = mechanism && !mechanism.suppressed && mechanism.tokens.length < FOUR_REGISTRY_TRACKED_TOKEN_TARGET
+        && !mechanism.tokens.some((token) => token.token === indexedCreated.token)
+        && comparePosition(indexedCreated.proof, mechanism.activationEvent) > 0
+        && exactData(mechanismPreset(currentPreset || {}), mechanismPreset(mechanism.preset));
+      if ((!pending && !trackingEligible)
         || !currentPreset?.canCreate
-        || comparePosition(indexedCreated.proof, pending.armedAt) <= 0
+        || (!trackingEligible && comparePosition(indexedCreated.proof, pending.armedAt) <= 0)
         || (nextState.tokenBackfillSuppressedThroughBlock !== null
           && indexedCreated.proof.blockNumber <= nextState.tokenBackfillSuppressedThroughBlock)) continue;
       const created = parseTokenCreatedLog(indexedCreated.log, indexedCreated.proof);
@@ -4792,17 +5200,23 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
       }
       const baseEvent = confirmationEvent(
         created,
-        pending,
+        trackingEligible ? { capabilityEventKey: mechanism.activationEvent.eventKey,
+          lifecycleKey: `fourmeme:openfour:preset:${created.presetId}:generation:${mechanism.activationEvent.transactionHash}:${mechanism.activationEvent.logIndex}` } : pending,
         currentPreset,
         workingPresetSnapshotScopes[created.presetId] || PRESET_DIRECT_SNAPSHOT_SCOPE,
         observedAt,
         confirmations,
         coverageProofFor(created.proof),
+        trackingEligible ? mechanism : null,
       );
       const resolution = resolveCanonicalReinclusion(baseEvent, nextState);
       const event = resolution.event;
       restoreCanonicalOwner(nextState, resolution);
       if (!resolution.previouslyDelivered && !knownEventKey(nextState, event.eventKey)) confirmationEvents.push(event);
+      if (trackingEligible) {
+        mechanism.tokens.push(trackingToken(event.evidence, created.token));
+        if (mechanism.tokens.length === FOUR_REGISTRY_TRACKED_TOKEN_TARGET) delete nextState.mechanismTracking.active[created.presetId];
+      }
       delete nextState.pendingConfirmations[created.presetId];
     }
 
@@ -4881,11 +5295,24 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
   async function check() {
     if (stopped) return { status: "stopped", events: [] };
     if (activeCheck) return activeCheck;
-    activeCheck = checkOnce().catch((error) => {
+    activeCheck = checkOnce().then((result) => {
+      consecutiveFailures = 0;
+      return result;
+    }).catch((error) => {
+      consecutiveFailures += 1;
+      const retryAfterMs = Math.max(
+        rpcRetryAfterMs(error),
+        rateLimitFailure(error) ? 60_000 : 0,
+        Math.min(60_000, pollIntervalMs * (2 ** Math.min(consecutiveFailures - 1, 6))),
+      );
       logger.error?.(`[four-registry] ${error.code || "FOUR_REGISTRY_FAILED"}: ${error.message}`);
-      return { status: "degraded", errorCode: error.code || "FOUR_REGISTRY_FAILED", error: error.message, events: [] };
+      return { status: "degraded", errorCode: error.code || "FOUR_REGISTRY_FAILED", error: error.message, retryAfterMs, events: [] };
     }).finally(() => { activeCheck = null; });
     return activeCheck;
+  }
+
+  function nextDelay(result) {
+    return Math.max(result?.hasMore === true ? catchUpIntervalMs : pollIntervalMs, result?.retryAfterMs || 0);
   }
 
   function schedule(delayMs = pollIntervalMs) {
@@ -4893,7 +5320,7 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
     timer = setTimer(async () => {
       timer = null;
       const result = await check();
-      schedule(result?.hasMore === true ? catchUpIntervalMs : pollIntervalMs);
+      schedule(nextDelay(result));
     }, delayMs);
     timer.unref?.();
   }
@@ -4901,7 +5328,7 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
   async function start() {
     if (stopped) throw new Error("Four Registry monitor was stopped");
     const result = await check();
-    schedule(result?.hasMore === true ? catchUpIntervalMs : pollIntervalMs);
+    schedule(nextDelay(result));
     return result;
   }
 

@@ -4,6 +4,7 @@ import { traderDecision } from './paper-trader-reasoning.js';
 import { reviewStructurePattern, structureEconomics, OPPORTUNITY_REVIEW_VERSION, MEME_STRUCTURE_ENTRY_VERSION } from './paper-opportunity-review.js';
 import {alphaPaperEntry} from './paper-alpha-entry.js';
 import {monitoredPaperEntry} from './paper-monitor-entry.js';
+import {collectivePaperEntry} from './paper-collective-entry.js';
 
 export const OPPORTUNITY_VERSION = 'multi_setup_v2';
 export const OPPORTUNITY_ROUTES = Object.freeze([
@@ -180,7 +181,8 @@ export function multiOpportunityEntry(base, options) {
     }
     return row;
   });
-  for(const [signal,entry] of [[options.monitorSignal,monitoredPaperEntry],[options.alphaSignal,alphaPaperEntry]])if(evidenceExit && signal){
+  for(const [signal,entry] of [[options.monitorSignal,monitoredPaperEntry],[options.alphaSignal,alphaPaperEntry],
+    [options.lossRepairMode&&options.collectiveSignal,collectivePaperEntry]])if(evidenceExit && signal){
     const row=entry(base,options);
     if(options.opportunityAccount&&row.decision==='可模拟'){
       const gate=confirmedAccountGate(options.opportunityAccount,nowMs,row.token,null,null,
@@ -194,10 +196,14 @@ export function multiOpportunityEntry(base, options) {
   // independent OHLCV setup (nor may the OHLCV result validate the event).
   const checkedRoutes=options.finalizeRoute?routes.map(options.finalizeRoute):routes;
   const ordered = checkedRoutes.toSorted((a,b) => Number(b.decision==='可模拟')-Number(a.decision==='可模拟')
+    || Number(b.evidence.lossRepair?.entryPathAllowed===true)-Number(a.evidence.lossRepair?.entryPathAllowed===true)
     || (a.missing.length+a.reasons.length)-(b.missing.length+b.reasons.length));
   const result = ordered[0];
   result.evidence.opportunityRoutes = checkedRoutes.map(r=>({ ...r.evidence.opportunity,
     decision:r.decision,missing:r.missing,reasons:r.reasons,score:r.score,
+    ...(r.evidence.lossRepair?{lossRepair:{catalystReady:r.evidence.lossRepair.catalystReady,
+      entryPathAllowed:r.evidence.lossRepair.entryPathAllowed,entryPath:r.evidence.lossRepair.entryPath,
+      reentry:{ready:r.evidence.lossRepair.reentry.ready}}}:{}),
     ...(r.evidence.recoveryCheck?{recoveryCheck:r.evidence.recoveryCheck}:{}) }));
   if(options.finalizeRoute)result.evidence.routeSelectionVersion='recovery_per_route_v1';
   if (result.decision==='可模拟'||result.evidence.traderDecision) result.evidence.traderDecision=traderDecision(result,nowMs);

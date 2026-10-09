@@ -1,8 +1,20 @@
 # Robinhood Chain 发射台与合约部署监控
 
+## 当前维护基线（2026-10-09）
+
+本项目提供发射台结构更新监控、只读证据研究和本地模拟交易，不是实盘交易执行器。仓库名称沿用 Robinhood Chain；现有 BSC 扫链、Four/Flap 新机制监控、GMGN/X 与模拟盘使用各自的状态和准入规则。下方带日期的章节保留历史功能背景，部署时以当前源码、配置模板及持久策略为准。
+
+- **BSC 付费 RPC 优先，仍受共享门控约束。** 已审核消费者按需加载本地 Chainstack 配置；普通、实时、归档和因果读取可优先使用付费节点，固定双源证明读取仍保留独立来源，不能把同一付费节点当作两份证明。共享协调器按物理主机跨进程限流，不因付费而扩大并发。
+- **Four / Flap 每次已核实的新模板或新底池机制更新，只评估链上最早三个不同 CA。** 顺序为区块、交易序号、日志序号；不按热门榜名次选币，不以第四个替补失败的前三个，不靠重启或重复配置刷新名额。只产生模拟候选，仍须通过身份、安全、可卖性、有效深度、费用、报价新鲜度及现金/仓位检查。详见 [首三 CA 接线与限制](docs/four-flap-launch-generation-2026-10-09.md)。
+- **FOMO 平台来源保持关闭，GMGN 与公开 X 通道保留原设置。** `fomo-worker` 是共用进程名称，不代表 FOMO 平台恢复；迁移时必须保留来源策略，不能为关平台而关闭整条共享 worker。
+- **正常 BSC 扫链与已暂停的旧积压隔离。** `live_only` 边界、历史 pending/deferred、覆盖缺口及快照/WAL 必须保留；正常扫链不代表已恢复历史回放或已完成全部覆盖。
+- **仍有吞吐限制。** [最近部署记录](docs/four-flap-launch-generation-2026-10-09.md#最后验收仍未恢复正常实时覆盖)仍报告实时保留队列高水位和 `shared RPC coordinator: capacity wait deadline`。这是本地共享槽位排队超时，不能直接等同于服务商 429，也不表示付费节点未接入。功能接线、进程在线或测试通过均不保证所有首三机会及时捕获、全部模拟成交或盈利。
+
+本次代码发布、配置保全及验证边界见 [维护发布说明](docs/maintenance-release-2026-10-09.md)。Git 仅用于代码、测试和脱敏文档；`.env`、`data/`、账本、队列、凭证和私有 RPC 完整 URL 不得提交，即使目标仓库是私有仓库。
+
 ## yesp atm 四策略服务端模拟盘（2026-09-21）
 
-页面现在由统一服务端账本驱动，新增内盘抢先、聪明钱跟踪、外盘叙事 PVP、新币狙击四类实验策略。当前重点 Robinhood。每笔保存入场/退出依据及成本；关闭浏览器不会停止后台进程内评估。旧浏览器账户只读保留，旧 `paper:100` CLI 通道仍独立运行，均不与新账户合并。
+页面由统一服务端账本驱动，提供内盘抢先、聪明钱跟踪、外盘叙事 PVP、新币狙击四类实验策略。该版本最初以 Robinhood 为重点；后续新机会扫描收敛到 BSC，实际范围由持久策略控制，见 [BSC 单链交易扫描](docs/bsc-only-trading-scan-2026-10-04.md)。每笔保存入场/退出依据及成本；关闭浏览器不会停止后台进程内评估。旧浏览器账户只读保留，旧 `paper:100` CLI 通道仍独立运行，均不与新账户合并。
 
 启动 `npm run dashboard` 后访问 `http://127.0.0.1:4173/`。页面显示当前持仓、四策略条件、数据缺口及最近模拟成交。新账本初始 $100，不代表收到真实资金；新鲜度、资金流或安全证据缺失时不入场。详细门槛、成本假设、退出规则和限制见 [四策略说明](docs/yesp-atm-strategies.md)。
 
@@ -66,7 +78,7 @@ Ubuntu 的 `deploy/health-check.mjs` 仍默认使用 systemd 和 ACTIVE 标记�
 
 ## 当前生产范围（focus3）
 
-当前 `.env` 使用 `MONITOR_SCOPE=focus3`。Telegram 的通用发射台结构性更新只允许以下 3 个核心平台进入告警队列；pon.fun 采用独立、显式启用的官方身份通道，Morph 另有一条只接受 Long 官方身份和 Flap 官方链上入口的窄通道，Binance 以及 X/xAI/Grok 也保留固定官方身份白名单：
+配置模板使用 `MONITOR_SCOPE=focus3`；实际节点须核对其生效配置，不能由模板推断在线状态。该范围下，Telegram 的通用发射台结构性更新只允许以下 3 个核心平台进入告警队列；pon.fun 采用独立、显式启用的官方身份通道，Morph 另有一条只接受 Long 官方身份和 Flap 官方链上入口的窄通道，Binance 以及 X/xAI/Grok 也保留固定官方身份白名单：
 
 - Flap（含官方 `flap-sh` 代码、官网能力和链上新模式）；
 - Four.Meme / OpenFour（含官方配置、模板、平台能力和已认证代码源）；
@@ -99,8 +111,19 @@ Robinhood Chain 的主链循环按 1 秒调度。BSC 与 Morph 同样使用 1 �
 
 ## 快速开始
 
+先安装锁定依赖并检查 Node.js 环境；源码使用 `node:sqlite`，建议采用 Node.js 24。下面的依赖安装不启动监控，但会访问包仓库：
+
 ```bash
-npm install
+node --version
+npm ci
+```
+
+先按 [维护发布说明](docs/maintenance-release-2026-10-09.md)完成隔离验证和配置审核。新部署可从 `.env.example` 创建本机配置；已有部署不得覆盖 `.env` 或 `data/`。模板不包含已批准的本机来源开关、BSC 历史暂停边界、模拟盘扫描范围或付费节点凭证，复制模板不能还原现有运行策略。
+
+只有明确准备启动新节点、完成单活检查和凭证配置后，才执行以下联网命令。`sync:gmgn` 会同步外部基线，`npm start` 会启动监控，并可能按配置投递 Telegram/Webhook；它们不是离线维护测试：
+
+```bash
+# 仅限尚无 .env 的新部署；已有节点跳过此步。
 cp .env.example .env
 npm run sync:gmgn
 npm start
@@ -151,7 +174,7 @@ npm run demo:shadow-lifecycle -- --json
 
 实时扫描优先索引 Uniswap V2/V3 建池，以及当前已启用发射台的稀疏核心事件，再读取命中交易的完整收据并解析铸币。只有进程启动时会跳过超出恢复窗口的旧积压，正常运行期间按 200 区块批次连续追赶、不主动跳块。若需要无遗漏地覆盖未知内部曲线平台，应配置 Alchemy/QuickNode 专用 RPC。
 
-Docker Compose 同时定义主监控进程 `monitor` 与独立 `fomo-worker`，使 `FOMO_CALL_STANDALONE=true` 时的 X/Fomo 扫描不会因主进程跳过 worker 而形成监控盲区。大V发币 lane 仍不会被部署动作自动打开，必须显式设置 `KOL_LAUNCH_MONITOR_ENABLED=true`；默认 `false` 保持只读代码就绪、运行未启用：
+Docker Compose 同时定义主监控进程 `monitor` 与独立 `fomo-worker`，后者承载按配置开启的 GMGN、公开 X 等通道；保留该服务不等于启用 FOMO 平台来源。启动前须迁移并核对本机来源策略和扫描暂停边界。大V发币 lane 仍不会被部署动作自动打开，必须显式设置 `KOL_LAUNCH_MONITOR_ENABLED=true`；默认 `false` 保持只读代码就绪、运行未启用。以下命令会启动服务，只用于已获准的部署：
 
 ```bash
 docker compose up -d --build
@@ -240,7 +263,7 @@ TG 代币提醒采用平台事件去重：已知 Factory 只有首次出现新�
 
 每 5 秒读取 Flap 与 Four.meme 官方开发文档、运行时页面、公告、活动、递归 sitemap、Four.meme `public/config` 和 `@four-meme/four-meme-ai` npm 最新版本，只监控平台级变化，不监控普通代币发行。Four.meme 报价币以官方 API 中 `MEME/BSC/PUBLISH` 条目为准；Flap 看板的 Trending/分页代币卡片不再当成报价币能力；Four.meme 首页的普通代币 `{name,address}` 也不会当成平台合约。Flap/Four.meme 所有通过有效性过滤的平台提醒统一使用红色非静音强提醒，包括新增、参数更新和下线变化。Flap 看板独有的 Vault 分类必须连续成功观测两次才确认，单次出现、消失和重新出现不会反复播报。解析器升级会静默清理旧噪音。
 
-Flap BSC 报价资产另有一条 3 秒最终区块通道，固定校验官方 Portal 的代理代码、实现、版本和事件回执。日志必须由两个不同来源的固定 RPC 对同一区间返回完全一致的结果，任一来源超时、返回空值冲突或链身份不符都会保留游标重试。只有链上前态经两条独立状态源明确为禁用、当前态明确为启用的 `0→1` 变化才称为“新增”；配置刷新和重复启用只写审计。首次启动只建立静默基线，不回放历史资产；网络中断超过实时窗口后，若公共节点已经裁掉前态，系统会降为 T2 报告“恢复后首次确认当前启用”，明确说明 `0→1` 未证、勿追价，而不会伪装成实时上新或卡死游标。
+Flap BSC 报价资产另有一条 3 秒最终区块通道，固定校验官方 Portal 的代理代码、实现、版本和事件回执。日志必须由两个不同来源的固定 RPC 对同一区间返回完全一致的结果，任一来源超时、返回空值冲突或链身份不符都会保留游标重试。只有链上前态经两条独立状态源明确为禁用、当前态明确为启用的 `0→1` 变化才称为“新增”；没有实质变化的配置刷新和重复启用只写审计。已启用报价资产的曲线、路由或 DEX 配置实质变化可在完整证明后建立新的机制代次，不冒充新增报价资产。首次启动只建立静默基线，不回放历史资产；网络中断超过实时窗口后，若公共节点已经裁掉前态，系统会降为 T2 报告“恢复后首次确认当前启用”，明确说明 `0→1` 未证、勿追价，而不会伪装成实时上新或卡死游标。
 
 Flap 官方 X 的报价对预告与链上/看板的正式启用分开建模：预告和上线各最多提醒一次。卡片优先展示报价符号、名称、合约地址、阶段和证据；暂时取不到 metadata 时先保留地址并持久重试，解析成功后补全身份。bStock、ETF 或其他 RWA 报价资产允许作为平台能力更新播报，但会明确提示“报价资产不等于股票所有权、仅监控、不自动交易”，且不会触发首币自动激活。
 
@@ -260,7 +283,7 @@ Long 当前官方应用尚未公布可验证的 Morph Factory/Portal。监控先
 
 ### BSC 新发射台监控
 
-BSC 使用独立 WebSocket 与状态文件 `data/bsc-launchpad-state.json`，不会被 Robinhood RPC 故障阻塞；WebSocket 负责低延迟唤醒，HTTP 区块头每 1 秒对账，官方配置/API 每 5 秒检查。默认等待 2 个区块确认；实时订阅 ERC-20 首次铸造、PancakeSwap V2/V3/Infinity、Uniswap V2/V3/V4 建池，以及已验证发射台的精确创建/升级事件。OpenFourCore、经典 Four.Meme TokenManager 与 Presale TokenManager 使用各自的精确创建 ABI；购买、进度、税费和普通生命周期日志不参与模式指纹。共享 TokenManager 地址只有在 Four.Meme 官方 Token API 同时证明 `BSC + V3` 时才归属 Four.Meme，SpringBoard V9 保持静默。每个确认区块都会用完整回执对账，因此 WS 断线或日志订阅静默失效不会永久漏报。NFT 铸造、LP Token、已有代币增发、普通建池、单项目部署和同一平台的普通发行均保持静默。
+BSC 使用独立 WebSocket 与状态文件 `data/bsc-launchpad-state.json`，不会被 Robinhood RPC 故障阻塞；WebSocket 负责低延迟唤醒，HTTP 区块头每 1 秒对账，官方配置/API 每 5 秒检查。默认等待 2 个区块确认；实时订阅 ERC-20 首次铸造、PancakeSwap V2/V3/Infinity、Uniswap V2/V3/V4 建池，以及已验证发射台的精确创建/升级事件。OpenFourCore、经典 Four.Meme TokenManager 与 Presale TokenManager 使用各自的精确创建 ABI；购买、进度、税费和普通生命周期日志不参与模式指纹。共享 TokenManager 地址只有在 Four.Meme 官方 Token API 同时证明 `BSC + V3` 时才归属 Four.Meme，SpringBoard V9 保持静默。确认区块通过回执核验与补扫恢复覆盖；WS 断线、RPC 证据不可得和队列拥塞仍可能留下明确的待恢复缺口，不能保证永久不漏报。NFT 铸造、LP Token、已有代币增发、普通建池、单项目部署和同一平台的普通发行均保持静默。
 
 已知基线覆盖 Flap、Four.Meme/OpenFour、GraFun、DxSale、TokenFi、HODL.DANCE、MoonSale、Huks.fun、Agent Launch、Flazepad、KarmaFi、Rugspull、Create Token、POO.MEME、BNBpump、MagicMint、CodelessDev 与 XFOUR 候选；FlyPad 保持“官方文档已确认、Factory 待公开”。辅助 Router、Registry、TokenFabric、报价币、测试网地址、迁移器和 DEX Factory 只用于归因或排除。未知 Controller 必须有 2 枚不同新币、2 笔因果创建交易、2 个独立调用者、同一机制结构和本地安全门，才发送一次“新发射台首次确认”；只有普通代币生成能力、没有池/曲线/迁移等发行机制的工厂保持静默。V4/Infinity Hook 还要求两枚安全新币和两个真实池。
 
@@ -268,7 +291,11 @@ BSC 使用独立 WebSocket 与状态文件 `data/bsc-launchpad-state.json`，不
 
 Four.Meme 官方 `public/address`、`token_template/search`、Registry 状态与 Token API 每 5 秒检查；新 TokenManager/OpenFour 根、新发布模板或已发布模板的税费、订阅金额、Vault、曲线等语义机制变化必须连续两次一致后强提醒。新模板或新报价模式确认后会回放激活点附近的精确创建日志，按链上顺序跳过未通过本地权限与交易安全初筛的代币，只为第一枚通过的代币推送一次；普通 V3 发行和重复币保持静默。实时通道会持久保存最近 30 分钟、最多 2,000 条 Four/OpenFour/Presale 精确创建事件，activation 优先从热索引定位首币；热索引缺失时先用 PublicNode 对官方地址与精确 topic 做 2,400 区块定向查询，1.8 秒超时或任何异常都不推进游标并自动退回 10 区块完整回放。Registry 模板要求 `active/createEnabled`，Presale 等不走 Registry 的模板则要求官方 Token API 返回完全相同的 `templateId` 与机制指纹。共享 Manager 的任何匹配还必须由官方 Token API 证明为 `V3+BSC`；官方地址清单新增的 `TokenManagerPresale*` 会自动进入 Presale 精确事件范围。回放以持久游标分段续扫，RPC 暂时缺少归档状态时可用最新状态复核，失败不会错误关闭任务。部署数、点赞数、评论、图片和数组顺序不参与指纹。Rugspull 官方 API 会分页重建 factory→child 图，链上 `RugCreated` 仍是主证据；waifu.fun 只有新机制指纹首次出现且 `createTxHash` 回执确属 Flap 创建事件时才推送，同模式普通代币不再重复。
 
+上述平台通知路径与模拟盘首三 CA 路径分开：后者按每次已核实机制代次的原始创建顺序固定前三名，不能把“第一个通过安全初筛的通知对象”当作“第一个创建的 CA”，也不能用第四名替补。Four 的当前 producer 归属、Flap canonical 索引、重组撤销和 120 秒事件时效均是准入条件；网站消息或尚无完整排序证明的候选保持观察。
+
 FlyPad 使用 `llms.txt` 与 Markdown 页面监控文档目录、AI/匿名发行、Squads、空投、Tokenomics、预售、锁仓等机制语义；新增页面或机制才提醒，普通措辞变化只更新后台基线。
+
+下面是公开端点示例，不是现机付费 RPC 配置。已获授权的本地 Chainstack 配置由 `src/bsc-private-rpc.js` 从运行目录按需读取，并只应用到已审核的消费者副本；不得把带凭证的完整 URL 粘贴到本节或提交 Git。固定双源的 Four/Flap 证明源不被全局替换。
 
 ```env
 BSC_MONITOR_ENABLED=true
@@ -286,13 +313,17 @@ BSC_HTTP_HEAD_POLL_INTERVAL_MS=1000
 BSC_OFFICIAL_POLL_INTERVAL_MS=5000
 ```
 
-### Fomo 平台喊单（Trade Thesis）
+### Fomo 平台喊单（Trade Thesis，当前关闭）
+
+当前维护范围保持 FOMO 平台来源关闭，GMGN 聪明钱与公开 X 保留各自既有设置。来源策略位于运行目录的 `monitor-source-policy.json`，其 `fomoPlatformSourcesEnabled: false` 会禁用平台买入/Thesis 来源及相关事件投递，不会停掉共享 worker。文件缺失会沿用代码默认值，损坏会失败关闭；迁移时必须保留，不要用删除文件来“重置”配置。`.env.example` 的 `FOMO_PUBLISHED_CALL_ENABLED=false` 只是新部署的保守初始值，不替代已有节点的持久来源策略；`GMGN_FLOW_MONITOR_ENABLED=false` 仍须按授权配置，不自动启用 CLI。
+
+以下是保留的实现说明，不是重新启用指令。若以后需要恢复 FOMO 平台，应单独确认来源授权、凭证与准入范围。
 
 Fomo 的钱包买入推断链路已经弃用并默认关闭；系统不会再把 KOL 买币、转账或钱包首仓当作“喊单”。只有 fomo.family 平台实际发布的 Trade Thesis（官方 Feed 的 `thesis_created` / `thesis`）才会进入喊单候选。
 
 数据源优先使用 FomoScan Partner Thesis Feed，并配置人工发放的 `FOMOSCAN_THESIS_TOKEN`；正式 API 地址为 `https://api.fomoscan.sh`。`FOMO_OFFICIAL_BEARER_TOKEN` 只允许用于已取得 FOMO Labs 明确书面授权的开发者接入，普通用户登录会话不得用于自动监控。两者都没有有效凭证时监控会 fail-closed，健康状态明确标记凭证缺失，不发送告警，也绝不回退到钱包买入推断。凭证请只写入本机 `.env`，不要提交到仓库。
 
-当前只接收 BSC Thesis，每 5 秒轮询一次，只处理发布后 2 分钟内的新信号。首次启动会静默建立基线，不回放历史喊单；后续以平台的 `thesisExternalId` 作为稳定去重键，同一 Thesis 只播报一次。Telegram 卡片保留 KOL、原始 Thesis、代币与安全结论，并附 Fomo、X、GMGN 和合约快捷入口。
+启用该保留通道时，只接收 BSC Thesis，每 5 秒轮询一次，只处理发布后 2 分钟内的新信号。首次启动会静默建立基线，不回放历史喊单；后续以平台的 `thesisExternalId` 作为稳定去重键，同一 Thesis 只播报一次。Telegram 卡片保留 KOL、原始 Thesis、代币与安全结论，并附 Fomo、X、GMGN 和合约快捷入口。
 
 ### 大V本人发币声明（监控默认关闭）
 

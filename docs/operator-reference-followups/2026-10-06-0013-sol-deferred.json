@@ -1,0 +1,206 @@
+{
+  "version": 1,
+  "mode": "read_only_incremental_research",
+  "group": "sol",
+  "report": "docs/operator-reference-followups/2026-10-06-0013-sol-deferred.md",
+  "evidence": "docs/operator-reference-followups/2026-10-06-0013-sol-deferred.json",
+  "question": "Solana D/E 已保存分页游标与旧交易检查点之间的缺口，能否由本地已有采集补齐？共享资源忙碌时让路、不重抓头页。",
+  "startedAt": "2026-10-05T16:13:14.323Z",
+  "triggeredAt": "2026-10-05T16:13:14.323Z",
+  "completedAt": "2026-10-05T16:16:40.971Z",
+  "configChecked": null,
+  "gmgnConfigChecks": 0,
+  "gmgnBusinessRequests": 0,
+  "gmgnBusinessDispatched": 0,
+  "gmgnSucceeded": 0,
+  "gmgnFailed": 0,
+  "rpcRequests": 0,
+  "newRows": 0,
+  "uniqueCa": 0,
+  "oneToOnePairs": 0,
+  "newAddresses": 0,
+  "status": "deferred_shared_resources_busy",
+  "summary": "本轮无新增证据，保留上轮结论。Solana D/E 在只读地址库、钱包学习与资金流缓存中无匹配；共享账户有 2 个优先级1活动请求、2 个排队请求，未发新请求。距上次成功活动检查约36小时；原分页缺口和之后活动均未补齐，不能据此判断无交易。下轮 BSC。",
+  "priority": 0,
+  "networkDeferred": true,
+  "client": "src/gmgn-flow-client.js (not invoked)",
+  "queueSnapshot": {
+    "checkedAt": "2026-10-05T16:14:00.129Z",
+    "active": [
+      {
+        "pid": 82697,
+        "priority": 1
+      },
+      {
+        "pid": 47431,
+        "priority": 1
+      }
+    ],
+    "queued": [
+      {
+        "pid": 47431,
+        "priority": 0,
+        "queuedAt": 1791216839617,
+        "expiresAt": 1791216869617
+      },
+      {
+        "pid": 82696,
+        "priority": 0,
+        "queuedAt": 1791216838971,
+        "expiresAt": 1791216868971
+      }
+    ],
+    "cooldownUntil": "2026-09-21T17:41:38.000Z",
+    "cooldownActive": false
+  },
+  "localLookup": {
+    "checkedAt": "2026-10-05T16:14:00.129Z",
+    "database": "data/wallet-address-library.sqlite",
+    "connection": "sqlite3 -readonly; read-only transaction",
+    "matchingAddresses": {
+      "D": 0,
+      "E": 0
+    },
+    "matchingEvents": {
+      "D": 0,
+      "E": 0
+    },
+    "caches": [
+      {
+        "file": "data/wallet-learning-state.json",
+        "updatedAt": "2026-10-05T16:12:10.030Z",
+        "matches": [
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "present": false
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "present": false
+          }
+        ]
+      },
+      {
+        "file": "data/gmgn-flow-state.json",
+        "updatedAt": "2026-10-05T16:13:59.580Z",
+        "matches": [
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "present": false
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "present": false
+          }
+        ]
+      }
+    ]
+  },
+  "preservedCheckpoints": [
+    {
+      "id": "D",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "lastTrade": {
+        "at": "2026-10-04T03:27:59.000Z",
+        "hash": "2bfAF6JMTsKgmTGUSUYqZ5ZAqYLugDotWnrW7u7bpJNdP33PjywBt1eedPTn1pNv2UYPmG39f4DKf67HvqpVq89N",
+        "ca": "AZwtTLzLtfYf4XbgHEP6LPHRKQFkvx3iPGWPLZU9tXDz",
+        "side": "sell"
+      },
+      "lastActivityCheckAt": "2026-10-04T03:55:06.556Z",
+      "profileCheckedAt": "2026-10-02T10:46:40.006Z",
+      "paginationGap": {
+        "oldCheckpoint": {
+          "at": "2026-10-02T13:04:31.000Z",
+          "hash": "3hXzutKGxfQcqWCtvtUNeGLYD3uqBWdwy4rGsQkBgGgzC6yuf6Z7MD25AH7L7zjwDGxZr8ZJmtwCBXk6nNF29Ewp",
+          "ca": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+          "side": "sell"
+        },
+        "oldestCollectedAt": "2026-10-04T00:10:02.000Z",
+        "resumeCursor": "NDUzMDkwNzE4MDEzMDIwMDg6MDo6",
+        "observedAt": "2026-10-04T03:55:06.556Z",
+        "report": "docs/operator-reference-followups/2026-10-04-1153-sol-activity.md"
+      }
+    },
+    {
+      "id": "E",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "lastTrade": {
+        "at": "2026-10-04T03:27:59.000Z",
+        "hash": "3eGurwBTEcERdGqcrmBnCaFJsGiNpaZcZu23xAtk1UWfXrRqEsorW929Gp7jWeAd58Fuuxzahs7y37Hastr1vTy6",
+        "ca": "AZwtTLzLtfYf4XbgHEP6LPHRKQFkvx3iPGWPLZU9tXDz",
+        "side": "sell"
+      },
+      "lastActivityCheckAt": "2026-10-04T03:55:24.643Z",
+      "profileCheckedAt": "2026-10-02T10:46:54.499Z",
+      "paginationGap": {
+        "oldCheckpoint": {
+          "at": "2026-10-02T13:04:31.000Z",
+          "hash": "f5adiPfpCY3nTX5ugh8Ryor3bX6gJEUzpZgHesGhxLKEXst3wriNbvGWgvUT6CHG1J4dmfwTKDTeL1JxjppTgAV",
+          "ca": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+          "side": "sell"
+        },
+        "oldestCollectedAt": "2026-10-03T17:43:29.000Z",
+        "resumeCursor": "NDUzMDA0MTkzMDA5NjUwMDg6MDo6",
+        "observedAt": "2026-10-04T03:55:24.643Z",
+        "report": "docs/operator-reference-followups/2026-10-04-1153-sol-activity.md"
+      }
+    }
+  ],
+  "baseline": [
+    {
+      "path": "docs/operator-clusters-2026-10-02.json",
+      "sha256": "1b952275a0986a2dc10e1f80eb0e7a27f0e498cd2f1585ca92a3d4f5b58e1d55",
+      "actual": "1b952275a0986a2dc10e1f80eb0e7a27f0e498cd2f1585ca92a3d4f5b58e1d55"
+    },
+    {
+      "path": "docs/operator-reference-learning-2026-10-02.json",
+      "sha256": "3cde872e2325e011281a9d5174514a5359ca1f47749e1f335ed3728dbbd2d4ad",
+      "actual": "3cde872e2325e011281a9d5174514a5359ca1f47749e1f335ed3728dbbd2d4ad"
+    },
+    {
+      "path": "docs/operator-reference-analysis-2026-10-02.json",
+      "sha256": "3b82c386681b98e22db5455f4ffd3a9c5c034f8fe30161946079cabd202b2e04",
+      "actual": "3b82c386681b98e22db5455f4ffd3a9c5c034f8fe30161946079cabd202b2e04"
+    }
+  ],
+  "heartbeatSnapshot": [
+    {
+      "name": "main",
+      "pid": 17133,
+      "updatedAt": "2026-10-05T16:13:49.994Z",
+      "sequence": 6785
+    },
+    {
+      "name": "fomo",
+      "pid": 47431,
+      "updatedAt": "2026-10-05T16:13:53.843Z",
+      "sequence": 5689
+    },
+    {
+      "name": "bsc",
+      "pid": 17135,
+      "updatedAt": "2026-10-05T16:13:53.897Z",
+      "sequence": 6635
+    }
+  ],
+  "protectedFiles": {
+    "data/yesp-atm-confirmed-pvp-v2-20260923.json": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36",
+    "data/jev-research-pilot.json": "496acafa6498cd196c45d59c859a634f2ce241137afaadefc669ad665d108f2a"
+  },
+  "profilesRefreshed": false,
+  "netPnl": null,
+  "currentUnrealizedPnl": null,
+  "dayReview": {
+    "reported": true,
+    "skipped": true,
+    "changed": false
+  },
+  "limitations": [
+    "未进行GMGN调用，不报告API失败或429；没有本轮新活动或库存核验。",
+    "保留Solana地址大小写；缺失活动不等于无交易，不重新计算旧同步配对为新增样本。",
+    "已知内部转仓不能当新增买入，关联钱包平台盈亏不可相加。",
+    "没有原文事件或完整库存费用，不推断叙事、动机或净盈利；缺失浮盈保留未知。",
+    "当前心跳不能证明两轮之间持续在线或消息送达。"
+  ],
+  "baselineUnchanged": true
+}

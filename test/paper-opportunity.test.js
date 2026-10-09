@@ -14,6 +14,8 @@ import { normalizePlatformCall, GMGN_SOCIAL_VERSION } from '../src/gmgn-social-m
 import { buildPaperNewsWire } from '../src/paper-news-wire.js';
 import { readyForPaperQuote } from '../src/paper-candidate-research.js';
 import { createReviewComparison } from '../src/paper-review-comparison.js';
+import { ETH_GAS_VERSION } from '../src/paper-eth-gas.js';
+import { gasFixture } from './helpers/paper-gas-fixture.js';
 
 // Offline fixtures only; never imported by the running service.
 const NOW=Date.parse('2026-09-24T03:00:00Z'), CA=`0x${'a'.repeat(40)}`, iso=ms=>new Date(ms).toISOString();
@@ -39,6 +41,113 @@ function input(kind='breakout',now=NOW) {
 }
 const evaluate=i=>evaluatePaperStrategies(i)[0];
 const advance=(a,rows,now=NOW,extra={})=>advancePaperStrategyAccount(a,{...modes,evaluations:rows,nowMs:now,...extra});
+
+function breakoutFlowInput(kind='breakout') {
+  const i={...input(kind),memeExitMode:true,recoveryMode:true};
+  i.token.chain='bsc';i.quoteHistory.forEach(q=>q.chain='bsc');
+  i.flow={chain:'bsc',address:CA,provider:'gmgn',scope:'public_tagged_wallets_not_full_market',
+    status:'healthy',fresh:true,complete:true,observedAt:iso(NOW-11000),netBuyUsd:350,
+    uniqueBuyerCount:0,smartMoneyCount:0,highProfitCount:0,fomoCount:0,wallets:[]};
+  return i;
+}
+
+test('recovered BSC breakout observes fresh scoped net outflow before quote admission and serialized fill',()=>{
+  const good=breakoutFlowInput(),row=evaluate(good);
+  assert.equal(row.decision,'可模拟');assert.equal(row.evidence.opportunity.id,'external_breakout');
+  assert.equal(row.evidence.opportunity.breakoutFlow.version,'bsc_breakout_observed_outflow_v1');
+  const i=structuredClone(good);i.flow.netBuyUsd=-375.21;
+  const bad=evaluate(i),route=bad.evidence.opportunityRoutes.find(r=>r.id==='external_breakout');
+  assert.equal(route.decision,'观察');assert.equal(route.breakoutFlow.blocked,true);
+  assert.equal(route.signalReady,false,'contradictory breakout cannot claim a ready quote-warmup signal');
+  assert.match(route.reasons.join(' '),/已观测净流出/);
+  assert.equal(readyForPaperQuote(bad),false,'outflow does not reserve independent quote capacity');
+  const settings={memeExitMode:true,recoveryMode:true};
+  const account=createPaperStrategyAccount({nowMs:NOW});
+  assert.equal(advance(account,[row],NOW,settings).trades.length,1);
+  const fallback=advance(account,[bad],NOW,settings);
+  assert.ok(fallback.trades.every(t=>t.entryEvidence.opportunity.id!=='external_breakout'),
+    'a different independently qualified route is not the rejected breakout');
+  const forged=structuredClone(row);forged.evidence.recoveryEntry.flow.netBuyUsd=-1;
+  assert.equal(advance(account,[forged],NOW,settings).trades.length,0,'writer recomputes source proof, not the ready flags');
+  assert.equal(account.trades.length,0,'original history remains untouched');
+});
+
+test('breakout outflow filter does not invent selling from unknown, stale, partial, mismatched or zero data',()=>{
+  for(const mutate of [i=>i.flow={},i=>i.flow.netBuyUsd=null,i=>i.flow.netBuyUsd=NaN,i=>i.flow.netBuyUsd='-12',
+    i=>i.flow.netBuyUsd=0,i=>i.flow.netBuyUsd=12,i=>i.flow.complete=false,i=>i.flow.fresh=false,
+    i=>i.flow.status='partial',i=>i.flow.coverageGap='missing_page',i=>i.flow.observedAt=iso(NOW-120001),
+    i=>i.flow.observedAt=iso(NOW+1),i=>i.flow.observedAt=null,i=>i.flow.address=`0x${'b'.repeat(40)}`,
+    i=>i.flow.chain='base',i=>i.flow.provider='unknown',i=>i.flow.scope=null]) {
+    const i=breakoutFlowInput();i.flow.netBuyUsd=-12;mutate(i);
+    const row=evaluate(i),route=row.evidence.opportunityRoutes.find(r=>r.id==='external_breakout');
+    assert.equal(route.breakoutFlow.blocked,false,mutate.toString());
+    assert.equal(route.decision,'可模拟',mutate.toString());
+  }
+  const caseOnly=breakoutFlowInput();caseOnly.flow.address=CA.toUpperCase().replace('0X','0x');caseOnly.flow.netBuyUsd=-12;
+  assert.equal(evaluate(caseOnly).evidence.opportunityRoutes.find(r=>r.id==='external_breakout').breakoutFlow.blocked,true);
+});
+
+test('local wallet proof truncation preserves source aggregate selling without validating a truncated cohort',()=>{
+  const i=breakoutFlowInput();i.flow.netBuyUsd=-10;
+  i.flow.wallets=Array.from({length:201},(_,n)=>({wallet:`0x${n.toString(16).padStart(40,'0')}`}));
+  const row=evaluate(i),route=row.evidence.opportunityRoutes.find(r=>r.id==='external_breakout');
+  assert.equal(route.decision,'观察');assert.equal(route.breakoutFlow.blocked,true);
+  const f=row.evidence.recoveryEntry.flow;
+  assert.equal(f.complete,false);assert.equal(f.coverageGap,'proof_wallets_truncated');assert.equal(f.wallets.length,200);
+  assert.equal(f.preTruncationCoverage.complete,true);
+  const incomplete=structuredClone(i);incomplete.flow.coverageGap='source_page_missing';incomplete.flow.complete=false;
+  assert.equal(evaluate(incomplete).evidence.opportunityRoutes.find(r=>r.id==='external_breakout').breakoutFlow.status,'unknown');
+  const good=breakoutFlowInput();good.flow.wallets=i.flow.wallets;
+  const forged=evaluate(good);forged.evidence.recoveryEntry.flow.netBuyUsd=-10;
+  assert.equal(advance(createPaperStrategyAccount({nowMs:NOW}),[forged],NOW,{memeExitMode:true,recoveryMode:true}).trades.length,0);
+});
+
+test('outflow contradiction is route-local, does not modify other chains or legacy control and cannot bypass safety',()=>{
+  const pullback=breakoutFlowInput('pullback');pullback.flow.netBuyUsd=-300;
+  const p=evaluate(pullback);assert.equal(p.decision,'可模拟');assert.equal(p.evidence.opportunity.id,'external_pullback');
+  assert.equal(p.evidence.recoveryCheck.breakoutFlow.applicable,false,'route check cache must not leak the breakout veto');
+  const b=breakoutFlowInput();b.flow.netBuyUsd=-300;
+  assert.equal(evaluate({...b,recoveryMode:false}).decision,'可模拟','legacy control is unchanged');
+  b.token.chain='base';b.flow.chain='base';b.quoteHistory.forEach(q=>q.chain='base');
+  assert.equal(evaluate(b).decision,'可模拟');
+  for(const mutate of [i=>i.token.isHoneypot=true,i=>i.token.liquidity=0,i=>i.priceObservedAt=iso(NOW-6000),
+    i=>i.token.sellTax=.061,i=>i.candles=[]]) {
+    const i=breakoutFlowInput();mutate(i);assert.notEqual(evaluate(i).decision,'可模拟');
+  }
+});
+
+test('main admits a real pattern despite high Gas, fully charges it and does not relax controls or safety',()=>{
+  const i={...input(),memeExitMode:true,recoveryMode:true,chainGasAccounting:true,gasEstimate:gasFixture('eth',NOW,2)};
+  i.token={...i.token,chain:'eth'};i.quoteHistory=i.quoteHistory.map(q=>({...q,chain:'eth'}));
+  const row=evaluate(i);assert.equal(row.decision,'可模拟',JSON.stringify({missing:row.missing,reasons:row.reasons}));
+  assert.ok(row.evidence.costAssumptions.estimatedRoundTripCostRate>.4);
+  assert.equal(row.evidence.costGate.gasExcludedFromAdmission,true);
+  const account=createPaperStrategyAccount({nowMs:NOW}),settings={memeExitMode:true,recoveryMode:true,chainGasAccounting:true};
+  const next=advance(account,[row],NOW,settings),p=next.positions[`eth:${CA}`];
+  assert.equal(next.trades.length,1);assert.equal(p.costAssumptions.gasUsd,2);
+  assert.ok(p.entryCostsUsd>2);assert.ok(p.quantity*i.token.price<8);assert.equal(next.cash,90);
+  assert.equal(validatePaperStrategyAccount(next),true);
+  assert.equal(advance(account,[row],NOW,{memeExitMode:true,recoveryMode:true}).trades.length,0,'candidate cannot enable the policy');
+  for(const modify of [x=>x.gasEstimate.status='unavailable',x=>x.gasEstimate.chain='base',x=>x.token.isHoneypot=true,x=>x.token.sellTax=.061,
+    x=>x.gasEstimate.observedAt=iso(NOW-90001),x=>{x.gasEstimate.gasUsd=11;x.gasEstimate.samples[0].feeNative=.11;}]) {
+    const bad=structuredClone(i);modify(bad);assert.notEqual(evaluate(bad).decision,'可模拟');
+  }
+});
+
+test('ETH fresh gas evidence reaches evaluation and serialized fill; stale evidence cannot create a new position',()=>{
+  const gas={version:ETH_GAS_VERSION,chain:'eth',status:'ok',observedAt:iso(NOW),blockAt:iso(NOW-1000),priceObservedAt:iso(NOW-60000),
+    gasPriceWei:10000000,nativeUsd:2700,gasUnits:250000,buffer:1.25};
+  const i={...input(),memeExitMode:true,recoveryMode:true,gasEstimate:gas};i.token={...i.token,chain:'eth'};
+  i.quoteHistory=i.quoteHistory.map(q=>({...q,chain:'eth'}));
+  const row=evaluate(i);assert.equal(row.decision,'可模拟',JSON.stringify({reasons:row.reasons,missing:row.missing}));
+  const account=createPaperStrategyAccount({nowMs:NOW});
+  const next=advance(account,[row],NOW,{memeExitMode:true,recoveryMode:true});
+  assert.equal(next.trades.length,1);assert.ok(Math.abs(next.positions[`eth:${CA}`].costAssumptions.gasUsd-.0084375)<1e-12);
+  assert.equal(validatePaperStrategyAccount(next),true);
+  const stale=structuredClone(row);stale.evidence.costAssumptions.gasEstimate.observedAt=iso(NOW-90001);
+  assert.equal(advance(account,[stale],NOW,{memeExitMode:true,recoveryMode:true}).trades.length,0,'fill revalidates the actual gas evidence, not a ready flag');
+  assert.notEqual(evaluate({...i,gasEstimate:{...gas,status:'unavailable'}}).decision,'可模拟');
+});
 
 test('taxed main structure uses net economics at analysis and fill, not the old 5% veto',()=>{
   const i={...input(),memeExitMode:true,recoveryMode:true};
@@ -268,6 +377,26 @@ test('an already-consumed wallet signal cannot hide a new valid external route',
   const row=evaluate(i);assert.equal(row.evidence.opportunity.id,'external_breakout');assert.equal(row.decision,'可模拟');
   const flow=row.evidence.opportunityRoutes.find(r=>r.id==='flow_momentum');assert.equal(flow.decision,'观察');assert.match(flow.reasons.join(' '),/旧资金流/);
   assert.equal(advance(a,[row]).trades.length,3);
+});
+
+test('chain receipt costs flow through runtime quote fills and restart while comparison costs stay separate',async t=>{
+  const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'gas-runtime-test-'));t.after(()=>fs.rm(dataDir,{recursive:true,force:true}));
+  let now=NOW,refreshes=0;
+  const market={trending:async()=>({status:'ok',observedAt:iso(now),tokens:[token]}),trenches:async()=>({status:'ok',observedAt:iso(now),tokens:[]}),
+    kline:async args=>({...args,status:'ok',candles:bars()}),quote:async args=>({...args,status:'ok',price:now===NOW?1.029:1.03,observedAt:iso(now)})};
+  const gasMonitor={refresh:async()=>{refreshes++;},snapshot:chain=>chain?gasFixture(chain,now,2):{base:gasFixture('base',now,2)}};
+  const options={...modes,memeExitMode:true,chainGasAccounting:true,gasMonitor,dataDir,chain:'base',chains:['base'],market,now:()=>now,evidenceLoader:()=>({}),fixedEntryUsd:10};
+  const runtime=createPaperStrategyRuntime(options);
+  try {
+    await runtime.runOnce();await runtime.runOnce();await runtime.refreshQuote();now+=4000;await runtime.refreshQuote();await runtime.runOnce();
+    const s=runtime.snapshot();assert.equal(s.lastError,null);assert.ok(refreshes>0);
+    assert.equal(s.account.trades.length,1,JSON.stringify(s.evaluations.map(r=>({r:r.reasons,m:r.missing}))));
+    assert.equal(s.account.positions[`base:${CA}`].costAssumptions.gasUsd,2);
+    assert.equal(s.cadence.chainGas.base.status,'ok');assert.equal(s.mainEntryPolicy.gasExcludedFromAdmission,true);
+  } finally {await runtime.stop();}
+  const restart=createPaperStrategyRuntime(options);
+  try{await restart.runOnce();const s=restart.snapshot();assert.equal(s.account.trades.length,1);assert.equal(s.account.cash,90);}
+  finally{await restart.stop();}
 });
 
 test('runtime researches external charts without wallets, fetches hourly discovery, buys and restarts without reset',async t=>{

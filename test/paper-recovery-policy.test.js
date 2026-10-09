@@ -76,6 +76,18 @@ test('recovery size shrinks with cash, caps at 10 and validates frozen budget fi
 
 const missing={status:'unavailable',exit:false,reason:'missing',flow:{usable:true,buyerCount:0,sellerCount:0}};
 const gapPosition=()=>({...token(CA),openedAt:iso(NOW),evidenceGapActivatedAt:iso(NOW),evidenceGapPolicy:{...EVIDENCE_GAP_POLICY}});
+test('disabled gap exits still record the outage but cannot sell solely for a five-minute data gap',()=>{
+  const p=gapPosition();let decision;
+  for(let i=0;i<=10;i++) {
+    const at=NOW+1000+i*60000;
+    decision=applyEvidenceGapExit(p,quote(at,CA,.1),missing,at,{allowExit:false});
+    p.evidenceGap=decision.evidenceGap;assert.equal(decision.exit,false);
+  }
+  assert.equal(decision.evidenceGap.observations,11);
+  const html=renderStrategyDetails({},null,{...p,memeExitPolicy:{version:'meme_evidence_exit_v2'},exitStatus:{evidenceGapExitEnabled:false}});
+  assert.match(html,/不会仅因中断满五分钟自动卖出/);
+  assert.doesNotMatch(html,/加已授权的证据中断退出/);
+});
 test('gap exits need five minutes of distinct fresh observations and never invent a fill',()=>{
   const p=gapPosition();let d;
   for(let n=0;n<=5;n++) {

@@ -7,16 +7,18 @@ import {GMGN_FLOW_CHAINS,GMGN_HOT_ONLY_CHAINS,GMGN_FLOW_DEFAULTS,gmgnFlowAddress
   parseGmgnFlowTrades,parseGmgnFlowProfile,parseGmgnFlowCandles,gmgnFlowVolume,evaluateGmgnFlowSignal,isGmgnFlowEvent} from './gmgn-flow-signal.js';
 import {resolveGmgnFlowNarrative} from './gmgn-flow-narrative.js';
 import {advanceFeedCoverage} from './gmgn-flow-coverage.js';
-import {mergeGmgnFlowTrade,qualifiesGmgnFlowWallet} from './gmgn-flow-signal.js';
+import {mergeGmgnFlowTrade,qualifiesGmgnFlowWallet,gmgnFlowWalletQualification,validGmgnReceiptLegs} from './gmgn-flow-signal.js';
 import {binanceProfileCandidates} from './binance-flow-evidence.js';
+import {createEthTradeLegResolver} from './gmgn-eth-trade-legs.js';
+import {tradingScanChains,tradingFlowChains} from './trading-scan-scope.js';
 const CHAINS=Object.keys(GMGN_FLOW_CHAINS),MINUTE=60000;
 const iso=n=>new Date(n).toISOString(),plain=v=>v&&typeof v==='object'&&!Array.isArray(v);
 const accepted=r=>['queued','delivered','duplicate','already_queued'].includes(r?.status)||(r?.status==='suppressed'&&isTerminalAlertSuppression(r));
 const emptySource=()=>({status:'initializing',checkedAt:null,lastSuccessAt:null,nextAttemptAt:null,lastError:null,lastErrorCode:null,tradeCount:0,candidateCount:0,feedTruncated:false,coverageGap:null,quarantinedTokens:{}});
 const date=v=>typeof v==='string'&&Number.isFinite(Date.parse(v)),nullableDate=v=>v===null||date(v);
 const errorText=v=>v===null||typeof v==='string';
-export function selectGmgnFlowChain(state,nowMs) {
-  const rotation=CHAINS.map((_,i)=>CHAINS[(state.nextChainIndex+i)%CHAINS.length]);
+export function selectGmgnFlowChain(state,nowMs,allowedChains=CHAINS) {
+  const rotation=CHAINS.map((_,i)=>CHAINS[(state.nextChainIndex+i)%CHAINS.length]).filter(c=>allowedChains.includes(c));
   const due=rotation.filter(c=>!(Date.parse(state.chains[c].nextAttemptAt)>nowMs));
   if(!due.length)return rotation[0];
   const ranked=due.map(chain=>{
@@ -64,13 +66,15 @@ export function validateGmgnFlowState(s) {
     })))throw new Error('GMGN_FLOW_STATE_INVALID');
     if(s.chains[chain].lastFeedSuccessAt!==undefined&&!date(s.chains[chain].lastFeedSuccessAt))throw new Error('GMGN_FLOW_STATE_INVALID');
     if(s.chains[chain].profileBatchSize!==undefined&&![1,8].includes(s.chains[chain].profileBatchSize))throw new Error('GMGN_FLOW_STATE_INVALID');
+    const research=s.chains[chain].research;
+    if(research!==undefined&&(!sourceShape(research,true)||!nullableDate(research.lastSuccessAt)))throw new Error('GMGN_FLOW_STATE_INVALID');
   }
   for(const [c,rows] of Object.entries(s.trades)) if(!CHAINS.includes(c)||rows.some(t=>t.chain!==c
     ||gmgnFlowAddress(c,t.wallet)!==t.wallet||gmgnFlowAddress(c,t.tokenAddress)!==t.tokenAddress
     ||!Number.isFinite(t.amountUsd)||t.amountUsd<=0||!Number.isSafeInteger(t.at)||!['buy','sell'].includes(t.side)
     ||!Array.isArray(t.tags)||t.tags.some(x=>typeof x!=='string')
     ||!(c==='sol'?/^[1-9A-HJ-NP-Za-km-z]{64,100}$/:/^0x[\da-f]{64}$/).test(t.hash)
-    ||t.key!==`${c}:${t.hash}:${t.wallet}:${t.tokenAddress}:${t.side}`))throw new Error('GMGN_FLOW_TRADE_STATE_INVALID');
+    ||t.key!==`${c}:${t.hash}:${t.wallet}:${t.tokenAddress}:${t.side}`||!validGmgnReceiptLegs(t)))throw new Error('GMGN_FLOW_TRADE_STATE_INVALID');
   for(const [key,p] of Object.entries(s.profiles)) {
     const [chain,wallet]=key.split(':');
     if(!plain(p)||gmgnFlowAddress(chain,wallet)!==wallet||(p.nextCheckAt!==undefined&&!date(p.nextCheckAt)))throw new Error('GMGN_FLOW_STATE_INVALID');
@@ -90,11 +94,22 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
  const enabled=config.gmgnFlowMonitorEnabled===true,now=dependencies.now||Date.now,fsImpl=dependencies.fsImpl||fs;
  const logger=dependencies.logger||console,sender=dependencies.sendAlertsImpl||sendAlerts;
  const client=dependencies.client||(enabled?createGmgnFlowClient(config):null);
+ const legResolver=dependencies.legResolver||(dependencies.client?null:createEthTradeLegResolver({now}));
  const file=path.join(config.dataDir||'data','gmgn-flow-state.json');
+ const scanChains=enabled?tradingScanChains(config.dataDir):[...CHAINS],activeChains=enabled?tradingFlowChains(config.dataDir,scanChains):[...CHAINS];
  const adaptive=config.gmgnFlowAdaptiveSchedulingEnabled!==false;
+ const decoupled=config.gmgnFlowResearchDecoupled===true;
+ const parallelFeeds=config.gmgnFlowParallelFeedReads===true;
  const poll=adaptive?5000:Math.max(5000,Number(config.gmgnFlowPollIntervalMs)||15000);
  const cooldown=Math.max(5*MINUTE,Number(config.gmgnFlowTokenCooldownMs)||30*MINUTE);
  let state,loading,active,saving=Promise.resolve(),writeFault=null,stopped=false,profileBudget=8,profilePasses=0;
+ const researchQueue=new Map();
+ let researchActive=null,researchChainRunning=null,feedChain=null,researchCoalesced=0;
+ const researchHealth=chain=>decoupled?researchSource(chain):state.chains[chain];
+ function researchSource(chain) {
+  return state.chains[chain].research||={status:'initializing',checkedAt:null,lastSuccessAt:null,
+    nextAttemptAt:null,lastError:null,lastErrorCode:null};
+ }
  async function load() {
   if(state)return;
   if(!loading)loading=(async()=>{
@@ -109,6 +124,10 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
  async function persist() {
   if(writeFault)throw writeFault;
   state.updatedAt=iso(now());
+  state.scanScope={scanChains,flowChains:activeChains,retainedExitChains:activeChains.filter(c=>!scanChains.includes(c))};
+  if(decoupled)state.scheduling={version:'split_feed_research_v1',checkedAt:iso(now()),
+    feed:{activeChain:feedChain,reads:parallelFeeds?'account_gated_pair_v1':'serial'},research:{activeChain:researchChainRunning,
+      pendingChains:[...researchQueue.keys()],coalesced:researchCoalesced,maxPendingChains:activeChains.length,concurrency:1}};
   const text=JSON.stringify(state);
   if(Buffer.byteLength(text)>24*1024*1024)throw new Error('GMGN_FLOW_STATE_TOO_LARGE');
   const task=saving.then(async()=>{
@@ -120,9 +139,21 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
   saving=task.catch(e=>{writeFault=e;});await task;
  }
  async function heartbeat() {state.health.checkedAt=iso(now());await persist();}
+ function pruneResearchState() {
+  for(const object of [state.profiles,state.episodes]){
+   const keys=Object.keys(object);for(const key of keys.slice(0,Math.max(0,keys.length-2000)))delete object[key];
+  }
+ }
  const assertActive=()=>{if(stopped)throw new Error('GMGN_FLOW_STOPPED');};
  const quarantined=(chain,token)=>Date.parse(state.chains[chain]?.quarantinedTokens?.[token])>now();
- async function request(fn) {assertActive();await heartbeat();assertActive();const result=await fn();assertActive();await heartbeat();return result;}
+ async function request(fn) {
+  assertActive();await heartbeat();assertActive();
+  // A limit discovered by either lane also stops the next request in the
+  // other lane, including injected clients and work between two feed pages.
+  if(Date.parse(state.health.nextAttemptAt)>now()&&state.health.lastErrorCode==='GMGN_RATE_LIMITED')
+    throw Object.assign(new Error('GMGN account is cooling down'),{code:'GMGN_RATE_LIMITED',retryAt:state.health.nextAttemptAt});
+  const result=await fn();assertActive();await heartbeat();return result;
+ }
  async function queue(event) {
   assertActive();
   if(quarantined(event.chain.slug,event.token.address)){
@@ -145,11 +176,11 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
   }catch{return [];}
  }
  async function tokenCandidate(chain,tokenAddress,trades,market) {
-  if(quarantined(chain,tokenAddress)){state.chains[chain].coverageGap='ambiguous_trade_legs';return;}
+  if(quarantined(chain,tokenAddress)){researchHealth(chain).coverageGap='ambiguous_trade_legs';return;}
   if(Date.parse(state.chains[chain].tokenRebuildUntil?.[tokenAddress])>now())return;
   const windowEndMs=Math.floor(now()/MINUTE)*MINUTE;
   const rows=trades.filter(t=>t.tokenAddress===tokenAddress&&t.at>=windowEndMs-5*MINUTE&&t.at<windowEndMs);
-  if(rows.length>800){state.chains[chain].coverageGap='token_evidence_budget_exceeded';return;}
+  if(rows.length>800){researchHealth(chain).coverageGap='token_evidence_budget_exceeded';return;}
   const wallets=[...new Set(rows.filter(t=>t.side==='buy').map(t=>t.wallet))];
   const fomo=new Set(rows.filter(t=>t.side==='buy'&&t.tags.includes('fomo')).map(t=>t.wallet));
   if(wallets.length<GMGN_FLOW_DEFAULTS.uniqueBuyerCount||fomo.size<GMGN_FLOW_DEFAULTS.fomoCount)return;
@@ -163,14 +194,14 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
   await enrichProfiles(chain,wallets);
   const profiles=Object.fromEntries(wallets.filter(w=>state.profiles[`${chain}:${w}`]).map(w=>[w,state.profiles[`${chain}:${w}`]]));
   if(wallets.some(w=>['7d','30d'].some(period=>!profiles[w]?.[period]
-    ||now()-Date.parse(profiles[w][period].checkedAt)>2*3600000)))state.chains[chain].coverageGap='wallet_profile_incomplete';
+    ||now()-Date.parse(profiles[w][period].checkedAt)>2*3600000)))researchHealth(chain).coverageGap='wallet_profile_incomplete';
   const evidence={version:1,provider:'gmgn-cli',chain,tokenAddress,windowEndMs,candles:selected,trades:rows,profiles};
   if(!evaluateGmgnFlowSignal({...evidence,nowMs:now()}))return;
   let tokenInfo=null;
   try {const raw=gmgnFlowData(await request(()=>client.info(chain,tokenAddress)));
    if(gmgnFlowAddress(chain,raw?.address)!==tokenAddress||(raw.chain&&raw.chain!==chain))throw new Error('GMGN_TOKEN_IDENTITY');
    tokenInfo={...raw,chain,address:tokenAddress};
-  }catch(e){assertActive();state.chains[chain].coverageGap='narrative_metadata_unavailable';if(e.code==='GMGN_RATE_LIMITED')state.health.nextAttemptAt=e.retryAt;}
+  }catch(e){assertActive();if(writeFault||e.code==='GMGN_RATE_LIMITED')throw e;researchHealth(chain).coverageGap='narrative_metadata_unavailable';}
   const observedAt=iso(now()),result=evaluateGmgnFlowSignal({...evidence,nowMs:now()});if(!result)return;
   const narrative=resolveGmgnFlowNarrative({chain,tokenAddress,tokenInfo,events:await narrativeEvents(),nowMs:now()});
   const event={type:'gmgn_flow_surge',platform:'gmgn',chain:GMGN_FLOW_CHAINS[chain],token:{address:tokenAddress,
@@ -200,22 +231,25 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
    for(const wallet of needs){
     const p=state.profiles[`${chain}:${wallet}`]||={};p.profileReadVersion=2;
     if(!returned.includes(wallet)){
-      (hasRequested?notReturned:unavailable).add(wallet);p.lastProfileIssue=hasRequested?'upstream_wallet_not_returned':'upstream_profile_unavailable';h.coverageGap='wallet_profile_incomplete';continue;
+      (hasRequested?notReturned:unavailable).add(wallet);p.lastProfileIssue=hasRequested?'upstream_wallet_not_returned':'upstream_profile_unavailable';researchHealth(chain).coverageGap='wallet_profile_incomplete';continue;
     }
     const profile=parseGmgnFlowProfile(payload,chain,wallet,period,now());
     if(profile){state.profiles[`${chain}:${wallet}`]||={};state.profiles[`${chain}:${wallet}`][period]=profile;}
-    else {h.coverageGap='wallet_profile_incomplete';p.lastProfileIssue='upstream_profile_fields_missing';delete p[period];}
+    else {researchHealth(chain).coverageGap='wallet_profile_incomplete';p.lastProfileIssue='upstream_profile_fields_missing';delete p[period];}
    }
    if(period==='30d')for(const wallet of needs){const p=state.profiles[`${chain}:${wallet}`]||={};
      p.nextCheckAt=iso(now()+(unavailable.has(wallet)?5*MINUTE:notReturned.has(wallet)?15000:(p['7d']&&p['30d']?30:5)*MINUTE));
-     if(!notReturned.has(wallet)&&!unavailable.has(wallet)&&p['7d']&&p['30d'])p.lastProfileIssue=null;
+     if(!notReturned.has(wallet)&&!unavailable.has(wallet)&&p['7d']&&p['30d']) {
+       const review=gmgnFlowWalletQualification(p,chain,wallet,now());
+       p.lastProfileIssue=review.missing.length?'upstream_profile_evidence_incomplete':null;
+       p.qualification={...review,checkedAt:iso(now())};
+     }
    }
    await persist();
   }
  }
  async function scan(chain) {
-  profileBudget=8;
-  profilePasses=0;
+  legResolver?.beginScan();
   const h=state.chains[chain];h.checkedAt=iso(now());h.coverageGap=null;
   h.quarantinedTokens||={};
   h.tokenRebuildUntil||={};
@@ -227,10 +261,39 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
   }
   // Coverage starts at actual dispatch, not before a potentially long account
   // queue/config check. Do not relabel receive time as observation time.
-  let smartStarted=now();
-  const smart=await request(()=>client.trades(chain,'smartmoney',{onRequestStart:at=>{smartStarted=at;}})),smartReceived=now();
-  let kolStarted=now();
-  const kol=await request(()=>client.trades(chain,'kol',{onRequestStart:at=>{kolStarted=at;}})),kolReceived=now();
+  h.feedTiming={};
+  const fetchFeed=async kind=>{
+    const requestedAt=now();let dispatchedAt=null,receivedAt=null;
+    try {
+      const payload=await request(async()=>{
+        const result=await client.trades(chain,kind,{onRequestStart:at=>{dispatchedAt=at;}});
+        receivedAt=now();return result;
+      });
+      h.feedTiming[kind]={requestedAt:iso(requestedAt),dispatchedAt:dispatchedAt===null?null:iso(dispatchedAt),receivedAt:iso(receivedAt),
+        queueWaitMs:dispatchedAt===null?null:Math.max(0,dispatchedAt-requestedAt),
+        responseMs:dispatchedAt===null?null:Math.max(0,receivedAt-dispatchedAt),status:'ok'};
+      return {payload,startedAt:dispatchedAt??requestedAt,receivedAt};
+    }catch(error){
+      h.feedTiming[kind]={requestedAt:iso(requestedAt),dispatchedAt:dispatchedAt===null?null:iso(dispatchedAt),finishedAt:iso(now()),
+        queueWaitMs:dispatchedAt===null?null:Math.max(0,dispatchedAt-requestedAt),status:'failed',code:error.code||'GMGN_FLOW_SOURCE_FAILED'};
+      // Publish a limit immediately, even while the other page is draining.
+      if(error.code==='GMGN_RATE_LIMITED')Object.assign(state.health,{status:'backoff',nextAttemptAt:error.retryAt||iso(now()+MINUTE),
+        lastError:'GMGN account is cooling down',lastErrorCode:error.code});
+      throw error;
+    }
+  };
+  let results;
+  if(parallelFeeds){
+    // Both requests still use priority 1 in the SAME account gate. Do not
+    // claim a complete source until both pages settle; never abandon a page
+    // and start another chain behind a fast failure.
+    const settled=await Promise.allSettled(['smartmoney','kol'].map(fetchFeed));
+    const failed=settled.filter(r=>r.status==='rejected');
+    if(failed.length)throw (failed.find(r=>r.reason.code==='GMGN_RATE_LIMITED')||failed[0]).reason;
+    results=settled.map(r=>r.value);
+  }else results=[await fetchFeed('smartmoney'),await fetchFeed('kol')];
+  const [{payload:smart,startedAt:smartStarted,receivedAt:smartReceived},
+    {payload:kol,startedAt:kolStarted,receivedAt:kolReceived}]=results;
   const feeds=[smart,kol].map(gmgnFlowData);
   if(feeds.some(feed=>!Array.isArray(feed?.list)))throw new Error('GMGN_TRADE_SCHEMA');
   const priorCoverage=h.feedCoverage;
@@ -254,7 +317,7 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
   let recentIncomingCount=0;
   for(const [token,rows] of byToken){
    let incoming;
-   try{incoming=parseGmgnFlowTrades({list:rows},chain,now());}
+   try{incoming=chain==='eth'&&legResolver?await legResolver.parse(rows,chain,now(),byKey):parseGmgnFlowTrades({list:rows},chain,now());}
    catch(e){if(e?.message==='GMGN_TRADE_CONFLICT'||e?.code==='GMGN_TRADE_CONFLICT'){quarantine(token);continue;}throw e;}
    try {incoming=incoming.map(trade=>mergeGmgnFlowTrade(byKey.get(trade.key),trade));}
    catch(e){if(e.message!=='GMGN_TRADE_CONFLICT')throw e;quarantine(token);continue;}
@@ -266,19 +329,84 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
   const ordered=[...byKey.values()].sort((a,b)=>a.at-b.at),discarded=ordered.slice(0,Math.max(0,ordered.length-4000));
   if(discarded.length)h.discardedThroughAt=Math.max(h.discardedThroughAt||0,discarded.at(-1).at);
   state.trades[chain]=ordered.slice(-4000);
+  h.receiptResolvedTrades=state.trades[chain].filter(t=>t.receiptLegs).length;
   h.tradeCount=state.trades[chain].length;
   if(!recentIncomingCount)h.coverageGap='no_recent_trade_observations';
   h.feedTruncated=feeds.some(feed=>feed.list.length>=100);
   if(h.feedTruncated)h.coverageGap='bounded_trade_feed_not_full_chain';
   if(Object.keys(h.quarantinedTokens).length)h.coverageGap='ambiguous_trade_legs';
   h.lastFeedSuccessAt=iso(Math.min(smartStarted,kolStarted));
+  // Commit feed health with the feed, before slow/optional research. Otherwise
+  // a previous profile timeout keeps fresh observations labelled as failed.
+  Object.assign(h,{status:h.coverageGap?'partial':'healthy',checkedAt:iso(now()),
+    lastSuccessAt:h.lastFeedSuccessAt,nextAttemptAt:iso(now()+poll),lastError:null,lastErrorCode:null,
+    ...(!decoupled?{candidateCount:0}:{})});
   await persist();
+  if(decoupled)enqueueResearch(chain);
+  else await performResearch(chain);
+ }
+ async function performResearch(chain) {
+  const h=state.chains[chain];researchSource(chain);
+  if(Date.parse(h.research.nextAttemptAt)>now()){
+   if(!decoupled){h.coverageGap||='research_unavailable';h.status='partial';}return;
+  }
+  profileBudget=8;profilePasses=0;
+  h.research.checkedAt=iso(now());
+  if(decoupled)h.research.coverageGap=null;
+  try {await researchChain(chain);
+   Object.assign(h.research,{status:decoupled&&h.research.coverageGap?'partial':'healthy',lastSuccessAt:iso(now()),nextAttemptAt:null,lastError:null,lastErrorCode:null});
+  }catch(e){
+   if(stopped||writeFault)throw e;
+   const retry=e.retryAt||iso(now()+MINUTE),code=e.code||/^GMGN_[A-Z_]+/.exec(e.message)?.[0]||'GMGN_FLOW_RESEARCH_FAILED';
+   Object.assign(h.research,{status:'backoff',nextAttemptAt:retry,lastError:String(e.message).slice(0,300),lastErrorCode:code});
+   researchHealth(chain).coverageGap||='research_unavailable';
+   logger.error?.(`[gmgn-flow][${chain}][research] ${code}`);
+   // A real account limit still pauses every lane, including after metadata
+   // or profile reads. A research timeout alone must not pause trade feeds.
+   if(e.code==='GMGN_RATE_LIMITED')Object.assign(state.health,{status:'backoff',nextAttemptAt:retry,
+    lastError:h.research.lastError,lastErrorCode:code});
+  }
+  if(!decoupled)h.status=h.coverageGap?'partial':'healthy';
+ }
+ function enqueueResearch(chain) {
+  if(stopped||writeFault||!activeChains.includes(chain))return;
+  if(researchQueue.has(chain))researchCoalesced++;
+  // Queue identities, never a backlog of old evidence. Each job reads the
+  // current trade snapshot when its single background seat becomes available.
+  researchQueue.set(chain,now());pumpResearch();
+ }
+ function pumpResearch() {
+  if(stopped||writeFault||researchActive||Date.parse(state?.health.nextAttemptAt)>now())return;
+  const chain=[...researchQueue.keys()].find(c=>!(Date.parse(researchSource(c).nextAttemptAt)>now()));
+  if(!chain)return;
+  researchQueue.delete(chain);researchChainRunning=chain;
+  researchActive=Promise.resolve().then(async()=>{
+   for(const event of [...state.pendingEvents])await queue(event);
+   await performResearch(chain);
+   if(chain==='robinhood'&&!(Date.parse(state.health.nextAttemptAt)>now()))await hotDiscovery();
+  }).catch(e=>{
+   if(stopped)return;
+   const code=e.code||/^GMGN_[A-Z_]+/.exec(e.message)?.[0]||'GMGN_FLOW_RESEARCH_FAILED';
+   Object.assign(researchSource(chain),{status:'backoff',nextAttemptAt:e.retryAt||iso(now()+MINUTE),lastError:code,lastErrorCode:code});
+   logger.error?.(`[gmgn-flow][research-lane] ${code}`);
+  }).finally(async()=>{
+   researchChainRunning=null;
+   pruneResearchState();
+   if(!writeFault)await persist();
+  }).catch(e=>logger.error?.(`[gmgn-flow][research-save] ${e.code||'GMGN_FLOW_STATE_WRITE_FAILED'}`))
+   .finally(()=>{researchActive=null;pumpResearch();});
+ }
+ async function researchChain(chain) {
+  const h=state.chains[chain],researchStatus=researchHealth(chain);
   const groups=new Map();
   for(const t of state.trades[chain])if(t.side==='buy'&&t.at>=now()-6*MINUTE){const group=groups.get(t.tokenAddress)||{fomo:new Set(),buyers:new Set(),usd:0,count:0};
    group.buyers.add(t.wallet);if(t.tags.includes('fomo'))group.fomo.add(t.wallet);group.usd+=t.amountUsd;group.count++;groups.set(t.tokenAddress,group);}
   // Paper lanes do not all require FOMO or a volume alert. Profile promising
   // observed wallets before the final alert gate, with one bounded batch/scan.
-  const researchGroups=[...groups].filter(([token,g])=>!quarantined(chain,token)&&g.count<=800&&g.buyers.size>=4&&g.usd>=1000)
+  // Match the two-buyer / 500 U research opportunity instead of requiring a
+  // stronger alert before fetching the profitability needed by paper entries.
+  // This expands research only; net-flow, profitability and alert gates remain.
+  const researchGroups=[...groups].filter(([token,g])=>!quarantined(chain,token)&&g.count<=800&&g.buyers.size>=2&&g.usd>=500)
     .sort((a,b)=>b[1].buyers.size-a[1].buyers.size||b[1].usd-a[1].usd);
   let secondaryWallets=[];
   if(config.binanceFlowMonitorEnabled)try{
@@ -290,9 +418,19 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
   const ownWallets=researchGroups.flatMap(([,g])=>[...g.buyers]);
   const walletQueue=Math.floor(now()/MINUTE)%2?[...secondaryWallets,...ownWallets]:[...ownWallets,...secondaryWallets];
   await enrichProfiles(chain,walletQueue);
+  const research={version:'gmgn_wallet_research_v1',checkedAt:iso(now()),scope:'observed_research_buyers_not_all_wallets',
+    observedWallets:0,qualified:0,missingEvidence:0,notQualified:0,reasonCounts:{}};
+  for(const wallet of new Set(walletQueue)) {
+    const review=gmgnFlowWalletQualification(state.profiles[`${chain}:${wallet}`],chain,wallet,now());
+    research.observedWallets++;
+    research[review.qualified?'qualified':review.missing.length?'missingEvidence':'notQualified']++;
+    for(const reason of new Set([...review.missing,...review.failed].map(r=>r.split(':')[1])))
+      research.reasonCounts[reason]=(research.reasonCounts[reason]||0)+1;
+  }
+  h.walletResearch=research;
   if(researchGroups.some(([,g])=>[...g.buyers].some(w=>['7d','30d'].some(period=>{
     const p=state.profiles[`${chain}:${w}`]?.[period];return !p||now()-Date.parse(p.checkedAt)>2*3600000;
-  }))))h.coverageGap='wallet_profile_incomplete';
+  }))))researchStatus.coverageGap='wallet_profile_incomplete';
   const candidates=[...groups].filter(([token,g])=>g.fomo.size>=3&&g.buyers.size>=6
     && !quarantined(chain,token)
     && !(adaptive&&now()-Date.parse(state.episodes[`${chain}:${token}`]?.lastCheckedAt)<MINUTE)
@@ -304,8 +442,8 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
   // is met; the final evaluator still subtracts sells and checks every gate.
   const actionableCandidates=candidates.filter(([,g])=>[...g.buyers].filter(w=>
     qualifiesGmgnFlowWallet(state.profiles[`${chain}:${w}`],chain,w,now())).length>=GMGN_FLOW_DEFAULTS.highProfitCount);
-  if([...groups.values()].some(g=>g.count>800))h.coverageGap='token_evidence_budget_exceeded';
-  if((h.discardedThroughAt||0)>=Math.floor(now()/MINUTE)*MINUTE-5*MINUTE)h.coverageGap='local_trade_window_truncated';
+  if([...groups.values()].some(g=>g.count>800))researchStatus.coverageGap='token_evidence_budget_exceeded';
+  if((h.discardedThroughAt||0)>=Math.floor(now()/MINUTE)*MINUTE-5*MINUTE)researchStatus.coverageGap='local_trade_window_truncated';
   else if(actionableCandidates.length){
    const rank=gmgnFlowData(await request(()=>client.trending(chain)));
    if(!Array.isArray(rank?.rank))throw new Error('GMGN_MARKET_SCHEMA');
@@ -313,13 +451,12 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
     (state.episodes[`${chain}:${token}`]||={}).lastCheckedAt=iso(now());
     await tokenCandidate(chain,token,state.trades[chain],rank.rank.find(r=>gmgnFlowAddress(chain,r.address)===token));
    }
-   if(actionableCandidates.length>2)h.coverageGap='candidate_budget_limited';
+   if(actionableCandidates.length>2)researchStatus.coverageGap='candidate_budget_limited';
   }
-  if(Object.keys(h.quarantinedTokens).length)h.coverageGap='ambiguous_trade_legs';
-  h.status=h.coverageGap?'partial':'healthy';h.checkedAt=iso(now());h.lastSuccessAt=h.lastFeedSuccessAt;h.nextAttemptAt=iso(now()+poll);
-  h.lastError=null;h.lastErrorCode=null;
+  if(Object.keys(h.quarantinedTokens).length)researchStatus.coverageGap='ambiguous_trade_legs';
  }
  async function hotDiscovery() {
+  if(scanChains.length!==CHAINS.length)return;
   const h=state.hotDiscovery;
   if(Date.parse(h.nextAttemptAt||'')>now())return;
   h.checkedAt=iso(now());
@@ -327,18 +464,22 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
    if(!Array.isArray(blocks))throw new Error('GMGN_HOT_SEARCH_SCHEMA');
    h.chains=blocks.filter(b=>GMGN_HOT_ONLY_CHAINS.includes(b.chain)).map(b=>({chain:b.chain,count:Array.isArray(b.tokens)?b.tokens.length:0,mode:'discovery_only'}));
    h.status=h.chains.length===GMGN_HOT_ONLY_CHAINS.length?'healthy':'partial';h.lastError=null;h.nextAttemptAt=iso(now()+5*MINUTE);
-  }catch(e){h.status='backoff';h.lastError=String(e.message).slice(0,200);h.nextAttemptAt=e.retryAt||iso(now()+5*MINUTE);if(e.code==='GMGN_RATE_LIMITED')throw e;}
+  }catch(e){if(stopped||writeFault)throw e;h.status='backoff';h.lastError=String(e.message).slice(0,200);h.nextAttemptAt=e.retryAt||iso(now()+5*MINUTE);
+   if(e.code==='GMGN_RATE_LIMITED')Object.assign(state.health,{status:'backoff',nextAttemptAt:h.nextAttemptAt,lastError:h.lastError,lastErrorCode:e.code});}
  }
  async function run() {
   await load();if(writeFault)throw writeFault;
   await heartbeat();
   if(Date.parse(state.health.nextAttemptAt||'')>now())return structuredClone(state.health);
   state.health.lastError=null;state.health.lastErrorCode=null;state.health.nextAttemptAt=null;
-  const chain=adaptive?selectGmgnFlowChain(state,now()):CHAINS[state.nextChainIndex];state.nextChainIndex=(CHAINS.indexOf(chain)+1)%CHAINS.length;
+  const chain=adaptive?selectGmgnFlowChain(state,now(),activeChains):CHAINS.map((_,i)=>CHAINS[(state.nextChainIndex+i)%CHAINS.length]).find(c=>activeChains.includes(c));
+  if(!chain)return structuredClone(state.health);
+  state.nextChainIndex=(CHAINS.indexOf(chain)+1)%CHAINS.length;
+  feedChain=chain;
   try {
-   for(const event of [...state.pendingEvents])await queue(event);
+   if(!decoupled)for(const event of [...state.pendingEvents])await queue(event);
    if(Date.parse(state.chains[chain].nextAttemptAt||'')<=now()||!state.chains[chain].nextAttemptAt)await scan(chain);
-   if(chain==='robinhood')await hotDiscovery();
+   if(!decoupled&&chain==='robinhood'&&!(Date.parse(state.health.nextAttemptAt)>now()))await hotDiscovery();
   }catch(e){
    if(stopped){await persist();return {status:'stopped'};}
    const retry=e.retryAt||iso(now()+MINUTE),h=state.chains[chain];
@@ -348,12 +489,21 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
    logger.error?.(`[gmgn-flow][${chain}] ${h.lastErrorCode}`);
   }
   if(state.health.status!=='backoff'||!state.health.nextAttemptAt)state.health.status='partial';
-  const prune=(object,limit)=>{const keys=Object.keys(object);for(const k of keys.slice(0,Math.max(0,keys.length-limit)))delete object[k];};
-  prune(state.profiles,2000);prune(state.episodes,2000);
+  // Do not remove a profile object while background enrichment holds it.
+  if(!decoupled||!researchActive)pruneResearchState();
+  if(decoupled){
+   // Durable pending delivery remains in the background even if this scan
+   // failed. It cannot hold feed acquisition behind a slow sender.
+   const pendingChain=state.pendingEvents[0]?.chain?.slug;
+   if(pendingChain&&CHAINS.includes(pendingChain))enqueueResearch(pendingChain);
+   pumpResearch();
+  }
   await heartbeat();return structuredClone(state.health);
  }
- function check(){if(!enabled||stopped)return Promise.resolve({status:stopped?'stopped':'disabled'});if(!active)active=run().finally(()=>{active=null;});return active;}
+ function check(){if(!enabled||stopped)return Promise.resolve({status:stopped?'stopped':'disabled'});
+  if(!active)active=run().finally(async()=>{feedChain=null;if(decoupled&&state&&!writeFault)await persist();}).finally(()=>{active=null;});return active;}
  const timer=enabled&&dependencies.autoStart!==false?setInterval(()=>void check().catch(e=>logger.error?.(`[gmgn-flow] ${e.message}`)),poll):null;
  timer?.unref();if(timer)void check().catch(e=>logger.error?.(`[gmgn-flow] ${e.message}`));
- return {check,state:()=>structuredClone(state),stateFile:file,async stop(){stopped=true;clearInterval(timer);await client?.stop?.();await active;await saving;}};
+ return {check,state:()=>structuredClone(state),stateFile:file,async stop(){stopped=true;clearInterval(timer);researchQueue.clear();
+  await client?.stop?.();await Promise.allSettled([active,researchActive]);await saving;if(writeFault)throw writeFault;}};
 }

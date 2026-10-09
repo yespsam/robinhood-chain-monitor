@@ -7,6 +7,7 @@ import { gunzipSync } from 'node:zlib';
 import { createDashboardServer } from '../scripts/dashboard-server.js';
 import { renderTradeCountReview } from '../dashboard/trade-count-review.js';
 import { renderNewsWire } from '../dashboard/news-wire.js';
+import { entryStatus } from '../dashboard/entry-status.js';
 
 test('recovery lane budget shows current capped cash fraction, not the retired two-percent label',()=>{
   const app=fs.readFileSync(new URL('../dashboard/app.js',import.meta.url),'utf8');
@@ -92,7 +93,7 @@ test('one-second dashboard polling is single-flight and labels true upstream age
   state.snapshot = { mode: 'paper', status: 'ok', updatedAt: new Date().toISOString(), enabled: true,
     cadence: { evaluationIntervalMs: 1000, actualTickGapMs: 1100, evaluationOverrunMs: 100,
       marketSourceAges: [{ chain: 'base', ageMs: 15000 }, { chain: 'bsc', ageMs: null }] } };
-  Object.assign(context, { $: key => nodes[key] ||= { dataset: {} }, tradingDataHealth: () => ({ status: 'ok' }),
+  Object.assign(context, { $: key => nodes[key] ||= { dataset: {} }, entryStatus, tradingDataHealth: () => ({ status: 'ok' }),
     clock: String, chainName: String, humanText: String, finite: n => typeof n === 'number' && Number.isFinite(n) });
   vm.runInNewContext(`${render}\nrenderStatus();`, context);
   assert.match(nodes['#cadenceNote'].textContent, /扫描目标 1 秒.*实测间隔 1.1 秒/);
@@ -101,6 +102,17 @@ test('one-second dashboard polling is single-flight and labels true upstream age
   state.snapshot.cadence.sharedReadonlyPolicy={plan:'plus'};
   context.renderStatus();
   assert.match(nodes['#cadenceNote'].textContent,/GMGN Plus 调度.*预留 1 个持仓名额.*不是每币刷新间隔/);
+  state.snapshot.enabled=false;
+  state.snapshot.lossGuards={enforced:true,triggered:true,newEntriesStop:true,reasons:['本轮亏损达到额度']};
+  state.snapshot.entryGuard={allowed:true};
+  context.renderStatus();
+  assert.equal(nodes['#engineNotice'].hidden,false,'paused accounts remain visible even if candidate guard allows');
+  assert.match(nodes['#engineNotice'].textContent,/亏损预算触发/);
+  assert.match(nodes['#focusAutoLabel'].textContent,/新增仓位已暂停/);
+  assert.equal(nodes['#focusAutoToggle'].disabled,true);
+  state.status='error';context.renderStatus();
+  assert.match(nodes['#focusAutoLabel'].textContent,/待同步/);
+  assert.match(nodes['#engineNotice'].textContent,/上次记录/);
 });
 
 test('large one-second snapshots negotiate lossless gzip without dropping evidence or mutating the ledger', async t => {
@@ -160,6 +172,13 @@ test('evidence-hold strategy card has no fixed duration and accurately retains t
   vm.runInNewContext(`${source}\nrenderStrategies();`, context);
   assert.match(nodes['#strategyObjective'].textContent, /无开仓次数、固定冷却或持仓个数上限/);
   assert.doesNotMatch(nodes['#strategyObjective'].textContent, /每小时最多|每日最多|日亏损和总亏损保护保持/);
+  context.state.snapshot.lossGuards={enforced:true,triggered:true};
+  context.state.snapshot.entryGuard={lossReview:{completedRounds:15},traderReview:{overall:{closedRounds:15}}};
+  vm.runInNewContext(`${source}\nrenderStrategies();`, context);
+  for(const key of ['#strategyObjective','#tradeReviewNote','#traderReasoningNote']){
+    assert.match(nodes[key].textContent,/达到本金 10% 会暂停新仓/);
+    assert.doesNotMatch(nodes[key].textContent,/亏损及次数只记录|不因日亏损或总亏损停机|连亏不暂停/);
+  }
   context.state.snapshot.newsWire={};context.state.snapshot.narrativeDesk={cases:[{chain:'bsc',address:'0x1',symbol:'demo'}]};
   nodes['#newsWireContent'].querySelectorAll=selector=>{assert.equal(selector,'details[data-narrative-case][open]');return [{dataset:{narrativeCase:'bsc:0x1'}}];};
   vm.runInNewContext(`${source}\nrenderStrategies();`,context);
@@ -330,4 +349,25 @@ test('strategy reads never advance the ledger and control rejects cross-site or 
     http.get(`${base}/api/strategy-state`, { headers: { host: 'evil.example' } }, response => { response.resume(); resolve(response.statusCode); }).once('error', reject);
   });
   assert.equal(reboundStatus, 403);
+});
+
+test('repair maintenance exposes an explicit 409 when order-level accounting is unavailable', async t => {
+  const snapshot=()=>({status:'ok',mode:'paper',execution:false,signing:false,broadcast:false,enabled:false});
+  const app=createDashboardServer({port:0,strategyRuntime:{snapshot,setEnabled:async value=>{
+    if(value)throw Object.assign(new Error('不能恢复主盘新仓：订单级路由费用尚未接通'),{code:'PAPER_ORDER_FEES_UNAVAILABLE'});
+    return snapshot();
+  }}});
+  const address=await app.listen();t.after(()=>app.close());const base=`http://${address.address}:${address.port}`;
+  const response=await fetch(`${base}/api/strategy-control`,{method:'POST',headers:{'content-type':'application/json',origin:base},body:JSON.stringify({enabled:true})});
+  assert.equal(response.status,409);const body=await response.json();assert.equal(body.code,'PAPER_ORDER_FEES_UNAVAILABLE');assert.match(body.error,/订单级/);
+  assert.equal((await(await fetch(`${base}/api/strategy-state`)).json()).enabled,false);
+});
+
+test('retained original main is a separate read-only view, never a second writer',async t=>{
+  const main={mode:'paper',enabled:false,account:{cash:34.75}},estimated={mode:'paper',enabled:true,account:{cash:100}};
+  const app=createDashboardServer({port:0,strategyRuntime:{snapshot:()=>estimated},mainPaperSnapshot:async()=>main});
+  const address=await app.listen();t.after(()=>app.close());const base=`http://${address.address}:${address.port}`;
+  assert.deepEqual(await(await fetch(base+'/api/main-paper-state')).json(),main);
+  assert.deepEqual(await(await fetch(base+'/api/strategy-state')).json(),estimated);
+  assert.equal((await fetch(base+'/api/main-paper-state',{method:'POST'})).status,405);
 });

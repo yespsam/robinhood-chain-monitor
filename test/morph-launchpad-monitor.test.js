@@ -248,6 +248,17 @@ test("abortable JSON-RPC timeout closes the underlying HTTP exchange", async (t)
   assert.equal(releasedRequests, 1, "timeout must abort the socket-backed fetch, not only its promise");
 });
 
+test('abortable RPC returns HTTP 429 once with the full server cooldown',async t=>{
+ let calls=0;
+ const provider=createAbortableJsonRpcProvider('https://public-rpc.test',56,{
+  batchMaxCount:1,
+  fetchImpl:async()=>{calls++;return new Response(JSON.stringify({error:{data:{retry_after_ms:75000}}}),{status:429,headers:{'retry-after':'60'}});},
+ });
+ t.after(()=>provider.destroy());
+ await assert.rejects(provider.send('eth_chainId',[]),error=>error.retryAfterMs===75000&&error.status===429);
+ assert.equal(calls,1,'ethers must not retry the physical request inside the monitor cooldown');
+});
+
 test("transaction evidence helper preserves order with six-way bounded concurrency", async () => {
   let active = 0;
   let maximumActive = 0;

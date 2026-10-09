@@ -1,0 +1,204 @@
+{
+  "version": 1,
+  "group": "bsc",
+  "mode": "public_wallet_read_only",
+  "report": "docs/operator-reference-followups/2026-10-06-2018-bsc-deferred.md",
+  "evidence": "docs/operator-reference-followups/2026-10-06-2018-bsc-deferred.json",
+  "question": "C 的 PairLab 活动页和库存再次无净变化；下个 BSC 轮优先低频补 A/B 一页近期活动，按链/CA/钱包/哈希去重并做一对一同步匹配，遇忙碌停止，不重复刷新 C 静态库存。",
+  "startedAt": "2026-10-06T12:18:20.789Z",
+  "triggeredAt": "2026-10-06T12:18:20.789Z",
+  "completedAt": "2026-10-06T12:19:19.835Z",
+  "configChecked": null,
+  "gmgnConfigChecks": 0,
+  "gmgnBusinessRequests": 0,
+  "gmgnBusinessDispatched": 0,
+  "gmgnSucceeded": 0,
+  "gmgnFailed": 0,
+  "rpcRequests": 0,
+  "newRows": 0,
+  "uniqueCa": 0,
+  "oneToOnePairs": 0,
+  "newAddresses": 0,
+  "status": "deferred_shared_resources_busy",
+  "summary": "本轮无新增证据，保留上轮结论。BSC A/B在只读地址库与两份缓存均无匹配；共享账户2个活动请求（含优先级1）及3个排队请求，研究让路，未发GMGN/RPC。距上次成功活动检查约93小时，不能认定钱包无交易。旧交易/分页/画像检查点保留，下轮Solana。",
+  "classification": "观察",
+  "resourceSnapshot": {
+    "checkedAt": "2026-10-06T12:18:34.004Z",
+    "slot": {
+      "version": 1,
+      "startedAt": 1791289112422,
+      "active": [
+        {
+          "token": "e1be61e2-3b53-4fe3-b291-43be8b7d58b2",
+          "pid": 82697,
+          "priority": 1
+        },
+        {
+          "token": "1f5d5ced-89e0-4d33-b9bf-11bc217f338c",
+          "pid": 82696,
+          "priority": 0
+        }
+      ]
+    },
+    "queue": [
+      {
+        "version": 1,
+        "token": "1fe9c653-850e-443b-a471-5d4866776d29",
+        "pid": 47431,
+        "queuedAt": 1791289109892,
+        "expiresAt": 1791289139892,
+        "priority": 0
+      },
+      {
+        "version": 1,
+        "token": "f6937883-45d6-475a-81cd-e4a636e6156a",
+        "pid": 47431,
+        "queuedAt": 1791289112141,
+        "expiresAt": 1791289142141,
+        "priority": 0
+      },
+      {
+        "version": 1,
+        "token": "f96038e6-b555-4857-8ade-878e3fc65c5f",
+        "pid": 82697,
+        "queuedAt": 1791289107996,
+        "expiresAt": 1791289137996,
+        "priority": 0
+      }
+    ],
+    "cooldown": {
+      "version": 1,
+      "rateLimitedUntil": "2026-09-21T17:41:38.000Z",
+      "checkedAt": "2026-09-21T17:41:07.491Z",
+      "reason": "gmgn_cli_rate_limit"
+    }
+  },
+  "localSnapshot": {
+    "checkedAt": "2026-10-06T12:18:49.842Z",
+    "caches": [
+      {
+        "path": "data/wallet-learning-state.json",
+        "updatedAt": "2026-10-06T12:18:38.946Z",
+        "matches": [
+          {
+            "id": "A",
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "found": false
+          },
+          {
+            "id": "B",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "found": false
+          }
+        ]
+      },
+      {
+        "path": "data/gmgn-flow-state.json",
+        "updatedAt": "2026-10-06T12:18:46.190Z",
+        "matches": [
+          {
+            "id": "A",
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "found": false
+          },
+          {
+            "id": "B",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "found": false
+          }
+        ]
+      }
+    ],
+    "sqlite": {
+      "connection": "readonly",
+      "filter": "Exact BSC A/B public wallets",
+      "rows": []
+    },
+    "heartbeats": [
+      {
+        "name": "main",
+        "version": 1,
+        "producer": "main",
+        "pid": 17133,
+        "startedAt": "2026-10-03T07:41:16.954Z",
+        "updatedAt": "2026-10-06T12:18:30.719Z",
+        "sequence": 9194
+      },
+      {
+        "name": "fomo",
+        "version": 1,
+        "producer": "fomo",
+        "pid": 47431,
+        "startedAt": "2026-10-03T16:48:52.895Z",
+        "updatedAt": "2026-10-06T12:18:29.759Z",
+        "sequence": 8097
+      },
+      {
+        "name": "bsc",
+        "version": 1,
+        "producer": "bsc",
+        "pid": 17135,
+        "startedAt": "2026-10-03T07:41:17.608Z",
+        "updatedAt": "2026-10-06T12:18:32.501Z",
+        "sequence": 8989
+      }
+    ],
+    "baseline": [
+      {
+        "path": "docs/operator-clusters-2026-10-02.json",
+        "sha256": "1b952275a0986a2dc10e1f80eb0e7a27f0e498cd2f1585ca92a3d4f5b58e1d55",
+        "actual": "1b952275a0986a2dc10e1f80eb0e7a27f0e498cd2f1585ca92a3d4f5b58e1d55"
+      },
+      {
+        "path": "docs/operator-reference-learning-2026-10-02.json",
+        "sha256": "3cde872e2325e011281a9d5174514a5359ca1f47749e1f335ed3728dbbd2d4ad",
+        "actual": "3cde872e2325e011281a9d5174514a5359ca1f47749e1f335ed3728dbbd2d4ad"
+      },
+      {
+        "path": "docs/operator-reference-analysis-2026-10-02.json",
+        "sha256": "3b82c386681b98e22db5455f4ffd3a9c5c034f8fe30161946079cabd202b2e04",
+        "actual": "3b82c386681b98e22db5455f4ffd3a9c5c034f8fe30161946079cabd202b2e04"
+      }
+    ],
+    "integrity": {
+      "data/yesp-atm-confirmed-pvp-v2-20260923.json": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36",
+      "data/jev-research-pilot.json": "496acafa6498cd196c45d59c859a634f2ce241137afaadefc669ad665d108f2a"
+    }
+  },
+  "coverage": [
+    {
+      "id": "A",
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "lastTrade": {
+        "at": "2026-10-02T11:08:09.000Z",
+        "hash": "0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868",
+        "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+        "side": "sell"
+      },
+      "lastSuccessfulActivityCheckAt": "2026-10-02T15:20:41.897Z",
+      "hoursSinceSuccessfulCheck": 92.977205,
+      "profileCheckedAt": "2026-10-02T10:45:59.081Z",
+      "olderPageRemaining": true
+    },
+    {
+      "id": "B",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "lastTrade": {
+        "at": "2026-10-02T11:08:09.000Z",
+        "hash": "0x276ed1a8787a851f66bf341a62bd62728028d53b19a22ea8a69fa6b3f7857f6d",
+        "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+        "side": "sell"
+      },
+      "lastSuccessfulActivityCheckAt": "2026-10-02T15:20:52.958Z",
+      "hoursSinceSuccessfulCheck": 92.9741325,
+      "profileCheckedAt": "2026-10-02T10:46:12.148Z",
+      "olderPageRemaining": true
+    }
+  ],
+  "dayReview": {
+    "reported": true,
+    "skipped": true
+  },
+  "nextGroup": "sol",
+  "nextQuestion": "从D/E新resumeCursor继续低优先级补旧分页，先接上2026-10-02T13:04:31Z旧检查点；每钱包最多两页，遇忙碌/限流停止。最新头页仍停在10月4日，历史补页不能冒充最新覆盖。Aiden分笔退出和SAW十秒退出尚缺回执、完整费用、转账及动机证据。"
+}

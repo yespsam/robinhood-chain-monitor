@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "completedAt": "2026-10-07T12:55:03Z",
+  "mode": "readonly_public_wallet_verification_and_research_schedule_update",
+  "gmgnBusinessRequests": 0,
+  "rpcRequests": 2,
+  "rpc": {
+    "chain": "bsc",
+    "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+    "source": "https://bsc-dataseed-public.bnbchain.org",
+    "knownTransaction": {
+      "checkedAt": "2026-10-07T12:52:50.275Z",
+      "hash": "0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868",
+      "from": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "to": "0x1de460f363af910f51726def188f9004276bf4bc",
+      "nonceHex": "0x9d",
+      "nonce": 157,
+      "blockNumberHex": "0x777a5be",
+      "blockHash": "0x10b1e2e8300fc2c197d68fb52e6a1343d461c529470a405adcd86f203e59a976"
+    },
+    "currentTransactionCount": {
+      "checkedAt": "2026-10-07T12:53:03.645Z",
+      "blockTag": "latest",
+      "hex": "0xa2",
+      "value": 162
+    },
+    "laterNonceCount": 4,
+    "subsequentNonces": [
+      158,
+      159,
+      160,
+      161
+    ],
+    "typesVerified": false,
+    "interpretation": "Current confirmed account nonce exceeds known transaction nonce+1 by four; account nonce progressed, but exact transaction count/hashes/types/success and whether these were swaps are not verified.",
+    "limitation": "Public latest-state RPC snapshot; no pinned latest block/second-provider confirmation; no claim of four additional buys/sells."
+  },
+  "gmgnReusedEvidence": "docs/operator-reference-followups/2026-10-07-2049-bsc-refresh.json",
+  "publicExplorer": {
+    "url": "https://bscscan.com/address/0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+    "result": "retrieval_error",
+    "evidenceObtained": false
+  },
+  "automation": {
+    "id": "automation",
+    "name": "钱包地址学习播报",
+    "status": "ACTIVE",
+    "heartbeatHours": 4,
+    "updatedPromptVerified": true,
+    "targetThreadUnchanged": true,
+    "notificationAndModelCadenceChanged": false
+  },
+  "policy": {
+    "version": 1,
+    "updatedAt": "2026-10-07T12:55:03Z",
+    "automationId": "automation",
+    "heartbeatHours": 4,
+    "headRefreshTargetHours": 8,
+    "maxWalletsPerRound": 2,
+    "latestHeadBeforeHistorical": true,
+    "sharedDefaultPriority": 0,
+    "boundedAdmissionAttemptPerWallet": 1,
+    "noRetryOnBusyTimeoutOr429": true,
+    "gmgnRequestBudget": 8,
+    "rpcRequestBudget": 2,
+    "pagesPerWalletLimit": 2,
+    "report": "docs/operator-reference-followups/2026-10-07-2052-freshness-policy.md",
+    "notificationAndModelCadenceChanged": false,
+    "fomoPlatformSourcesEnabled": false
+  },
+  "tradeOrMainMonitorChanges": false,
+  "newTradeRows": 0,
+  "newAddresses": 0,
+  "lastNewEvidenceAtMigration": "Not backfilled from check times; left null where previous receipt time of truly new evidence was not tracked."
+}

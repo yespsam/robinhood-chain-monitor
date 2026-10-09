@@ -1,0 +1,203 @@
+{
+  "version": 1,
+  "mode": "read_only_incremental_research",
+  "group": "sol",
+  "report": "docs/operator-reference-followups/2026-10-05-1210-sol-deferred.md",
+  "evidence": "docs/operator-reference-followups/2026-10-05-1210-sol-deferred.json",
+  "question": "本地已采集数据能否连接 Solana D/E 保存游标与旧检查点的分页缺口？共享账户忙碌时保留游标，不追加网络请求。",
+  "startedAt": "2026-10-05T04:10:20.996Z",
+  "triggeredAt": "2026-10-05T04:10:20.996Z",
+  "completedAt": "2026-10-05T04:11:11.521Z",
+  "configChecked": null,
+  "gmgnConfigChecks": 0,
+  "gmgnBusinessRequests": 0,
+  "gmgnBusinessDispatched": 0,
+  "gmgnSucceeded": 0,
+  "gmgnFailed": 0,
+  "rpcRequests": 0,
+  "newRows": 0,
+  "uniqueCa": 0,
+  "oneToOnePairs": 0,
+  "newAddresses": 0,
+  "status": "deferred_shared_resources_busy",
+  "summary": "本轮无新增证据，保留上轮结论。Solana D/E 在只读地址库及钱包学习/资金流缓存中无匹配；共享账户已有 3 个活动请求、2 个排队请求，研究主动让路。距上次成功活动页已超过 24 小时，历史分页和后续活动覆盖仍缺失；不代表无交易。",
+  "priority": 0,
+  "networkDeferred": true,
+  "client": "src/gmgn-flow-client.js (not invoked)",
+  "queueSnapshot": {
+    "checkedAt": "2026-10-05T04:10:46.569Z",
+    "queue": [
+      {
+        "pid": 6573,
+        "priority": 1
+      },
+      {
+        "pid": 6573,
+        "priority": 0
+      }
+    ],
+    "active": [
+      {
+        "pid": 47431,
+        "priority": 0
+      },
+      {
+        "pid": 6573,
+        "priority": 1
+      },
+      {
+        "pid": 6573,
+        "priority": 2
+      }
+    ]
+  },
+  "localLookup": {
+    "checkedAt": "2026-10-05T04:11:11.521Z",
+    "database": "data/wallet-address-library.sqlite",
+    "connection": "sqlite3 -readonly",
+    "matchingAddresses": {
+      "D": 0,
+      "E": 0
+    },
+    "caches": [
+      {
+        "file": "data/wallet-learning-state.json",
+        "updatedAt": "2026-10-05T04:10:37.704Z",
+        "mtime": "2026-10-05T04:10:38.360Z",
+        "matches": [
+          {
+            "id": "D",
+            "occurrences": 0
+          },
+          {
+            "id": "E",
+            "occurrences": 0
+          }
+        ]
+      },
+      {
+        "file": "data/gmgn-flow-state.json",
+        "updatedAt": "2026-10-05T04:11:09.994Z",
+        "mtime": "2026-10-05T04:11:10.082Z",
+        "matches": [
+          {
+            "id": "D",
+            "occurrences": 0
+          },
+          {
+            "id": "E",
+            "occurrences": 0
+          }
+        ]
+      }
+    ]
+  },
+  "preservedCheckpoints": [
+    {
+      "id": "D",
+      "chain": "sol",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "lastTrade": {
+        "at": "2026-10-04T03:27:59.000Z",
+        "hash": "2bfAF6JMTsKgmTGUSUYqZ5ZAqYLugDotWnrW7u7bpJNdP33PjywBt1eedPTn1pNv2UYPmG39f4DKf67HvqpVq89N",
+        "ca": "AZwtTLzLtfYf4XbgHEP6LPHRKQFkvx3iPGWPLZU9tXDz",
+        "side": "sell"
+      },
+      "lastActivityCheckAt": "2026-10-04T03:55:06.556Z",
+      "profileCheckedAt": "2026-10-02T10:46:40.006Z",
+      "paginationGap": {
+        "oldCheckpoint": {
+          "at": "2026-10-02T13:04:31.000Z",
+          "hash": "3hXzutKGxfQcqWCtvtUNeGLYD3uqBWdwy4rGsQkBgGgzC6yuf6Z7MD25AH7L7zjwDGxZr8ZJmtwCBXk6nNF29Ewp",
+          "ca": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+          "side": "sell"
+        },
+        "oldestCollectedAt": "2026-10-04T00:10:02.000Z",
+        "resumeCursor": "NDUzMDkwNzE4MDEzMDIwMDg6MDo6",
+        "observedAt": "2026-10-04T03:55:06.556Z",
+        "report": "docs/operator-reference-followups/2026-10-04-1153-sol-activity.md"
+      }
+    },
+    {
+      "id": "E",
+      "chain": "sol",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "lastTrade": {
+        "at": "2026-10-04T03:27:59.000Z",
+        "hash": "3eGurwBTEcERdGqcrmBnCaFJsGiNpaZcZu23xAtk1UWfXrRqEsorW929Gp7jWeAd58Fuuxzahs7y37Hastr1vTy6",
+        "ca": "AZwtTLzLtfYf4XbgHEP6LPHRKQFkvx3iPGWPLZU9tXDz",
+        "side": "sell"
+      },
+      "lastActivityCheckAt": "2026-10-04T03:55:24.643Z",
+      "profileCheckedAt": "2026-10-02T10:46:54.499Z",
+      "paginationGap": {
+        "oldCheckpoint": {
+          "at": "2026-10-02T13:04:31.000Z",
+          "hash": "f5adiPfpCY3nTX5ugh8Ryor3bX6gJEUzpZgHesGhxLKEXst3wriNbvGWgvUT6CHG1J4dmfwTKDTeL1JxjppTgAV",
+          "ca": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+          "side": "sell"
+        },
+        "oldestCollectedAt": "2026-10-03T17:43:29.000Z",
+        "resumeCursor": "NDUzMDA0MTkzMDA5NjUwMDg6MDo6",
+        "observedAt": "2026-10-04T03:55:24.643Z",
+        "report": "docs/operator-reference-followups/2026-10-04-1153-sol-activity.md"
+      }
+    }
+  ],
+  "baseline": [
+    {
+      "path": "docs/operator-clusters-2026-10-02.json",
+      "sha256": "1b952275a0986a2dc10e1f80eb0e7a27f0e498cd2f1585ca92a3d4f5b58e1d55",
+      "actual": "1b952275a0986a2dc10e1f80eb0e7a27f0e498cd2f1585ca92a3d4f5b58e1d55"
+    },
+    {
+      "path": "docs/operator-reference-learning-2026-10-02.json",
+      "sha256": "3cde872e2325e011281a9d5174514a5359ca1f47749e1f335ed3728dbbd2d4ad",
+      "actual": "3cde872e2325e011281a9d5174514a5359ca1f47749e1f335ed3728dbbd2d4ad"
+    },
+    {
+      "path": "docs/operator-reference-analysis-2026-10-02.json",
+      "sha256": "3b82c386681b98e22db5455f4ffd3a9c5c034f8fe30161946079cabd202b2e04",
+      "actual": "3b82c386681b98e22db5455f4ffd3a9c5c034f8fe30161946079cabd202b2e04"
+    }
+  ],
+  "baselineUnchanged": true,
+  "heartbeatSnapshot": {
+    "main": {
+      "pid": 17133,
+      "updatedAt": "2026-10-05T04:10:46.851Z",
+      "sequence": 5339
+    },
+    "bsc": {
+      "pid": 17135,
+      "updatedAt": "2026-10-05T04:10:59.500Z",
+      "sequence": 5220
+    },
+    "fomo": {
+      "pid": 47431,
+      "updatedAt": "2026-10-05T04:10:44.164Z",
+      "sequence": 4243
+    }
+  },
+  "protectedFiles": {
+    "data/yesp-atm-confirmed-pvp-v2-20260923.json": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36",
+    "data/jev-research-pilot.json": "496acafa6498cd196c45d59c859a634f2ce241137afaadefc669ad665d108f2a"
+  },
+  "profilesRefreshed": false,
+  "netPnl": null,
+  "currentUnrealizedPnl": null,
+  "dayReview": {
+    "eligibleAfter": "2026-10-05T07:07:57Z",
+    "due": false,
+    "checkpoint": "not_created",
+    "changed": false
+  },
+  "limitations": [
+    "本轮无新活动、RPC 回执、同步配对或关联地址；不重复计算旧样本。",
+    "本地无匹配和主动让路不等于钱包没有交易，也不是本轮 API 失败或 429。",
+    "D/E 原历史分页游标均保留；最新成功活动页距本轮超过 24 小时，不能推断当前持仓和行为。",
+    "按 gmgn-portfolio 与 web3-security-trading 技能保留：同秒同路由不证明同控；SAM 内部转仓不算新增买盘，关联钱包平台盈亏不能直接相加。",
+    "Tabula 旧卖出已核验但买入回执、完整费用仍缺；没有新原文事件证据，不由交易结果反推叙事或动机。",
+    "main/BSC/FOMO 心跳仅说明本轮时点更新，不证明四小时连续在线或消息实际送达。"
+  ]
+}

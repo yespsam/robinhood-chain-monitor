@@ -1,9 +1,10 @@
 import { createRequire } from "node:module";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
-const source = process.env.TELEGRAM_CONFIG_SOURCE || "/Users/qohfq/Documents/Playground/yesp-quant-execution/config.js";
+const source = process.env.TELEGRAM_CONFIG_SOURCE || fileURLToPath(new URL("../../yesp-quant-execution/config.js", import.meta.url));
 const existing = require(source);
 const token = String(existing?.telegram?.botToken || "").trim();
 const chatId = String(existing?.telegram?.chatId || "").trim();

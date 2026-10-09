@@ -5,6 +5,7 @@ import {OPPORTUNITY_REVIEW_VERSION} from './paper-opportunity-review.js';
 import {MEME_EXIT_TEXT} from './paper-meme-exit.js';
 import {traderDecision} from './paper-trader-reasoning.js';
 import {monitoredPaperSafety} from './paper-safety-policy.js';
+import {paperCostGate} from './paper-cost-policy.js';
 
 export function confirmAlphaQuotes(history,token,signal,nowMs) {
   const rows=[],times=new Map();
@@ -39,8 +40,8 @@ export function alphaPaperEntry(base,{alphaSignal,sourceSafety,quoteHistory,toke
   if(!(v.liquidity>=20000))reasons.push('流动性低于 $20,000');
   if(!(v.volume.value>0))reasons.push('等待真实成交量');
   const costs=v.costAssumptions;
-  if(!(costs.notionalUsd>0)||!Number.isFinite(costs.estimatedRoundTripCostRate)||costs.estimatedRoundTripCostRate>.05)
-    reasons.push('预计往返成本超过 5%，停止小额磨损');
+  const costGate=paperCostGate(costs);
+  if(costGate.reason)(costGate.needsStructure?missing:reasons).push(costGate.reason);
   if(!(base.entryUsd>=1))reasons.push('可用模拟预算不足');
   const confirmation=valid?confirmAlphaQuotes(quoteHistory,base.token,alphaSignal,nowMs):{ready:false,reason:'连续新鲜报价确认'};
   if(!confirmation.ready)(confirmation.reason==='连续新鲜报价确认'?missing:reasons).push(confirmation.reason);
@@ -53,7 +54,7 @@ export function alphaPaperEntry(base,{alphaSignal,sourceSafety,quoteHistory,toke
   const row={...base,label,decision:safety.blocked.length?'不买':eligible?'可模拟':'观察',
     score:Math.max(0,100-missing.length*10-reasons.length*15),missing:[...new Set(missing)],
     reasons:eligible?[`${label}：官方事件、独立报价和成本检查通过`]:[...new Set(reasons)],entryLogic,exitLogic:MEME_EXIT_TEXT,
-    evidence:{...v,paperEligible:eligible,safety,
+    evidence:{...v,costGate,paperEligible:eligible,safety,
       accountPolicy:paperOperatingPolicy(true),
       entryPlan:{version:STRATEGY_ANALYSIS_VERSION,confirmedPolicyVersion:CONFIRMED_PAPER_VERSION,entryPolicyVersion:ALPHA_ENTRY_VERSION,
         eligible,setup:label,entryZone:{low:base.token.price,high:base.token.price},stopPrice:null,targetPrice:null,

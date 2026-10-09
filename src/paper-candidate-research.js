@@ -52,18 +52,57 @@ export function mergePaperCandidateSnapshots(prior, next, nowMs) {
     researchSources: usable.flatMap(item => item.researchSources || [{ source: item.discoverySource || 'ranking', observedAt: item.observedAt }]) };
 }
 
-const quoteAndChart = new Set(['新鲜且足够的 K 线', '十五秒内的独立报价', '五秒内的独立报价', '连续新鲜报价确认', '触发后两次独立走强报价', '可持续取得的退出量价或地址行为证据']);
+const quoteAndChart = new Set(['新鲜且足够的 K 线', '十五秒内的独立报价', '五秒内的独立报价', '连续新鲜报价确认', '触发后两次独立走强报价', '可持续取得的退出量价或地址行为证据', '等待真实订单曲线深度']);
 const detailFields = new Set(['两分钟内的真实行情', '有效正数价格', '真实流动性', '真实成交量', '已核实内外盘阶段',
   '内外盘来源冲突待核对', '已知发射台', '可信创建时间', '增发权限已撤销', '冻结权限已撤销', '可卖出检测',
   '洗量检测', '撤池风险比', 'Top10 集中度', '开发团队持仓', '打包买入占比', '买入税', '卖出税']);
+// A successful response is not a successful field repair. Back off only
+// requested fields still absent, never market clocks, prices or flow signals.
+const detailFieldReaders = {
+  '可卖出检测': t => flag(t.isHoneypot), '洗量检测': t => flag(t.isWashTrading),
+  '增发权限已撤销': t => flag(t.renouncedMint), '冻结权限已撤销': t => flag(t.renouncedFreezeAccount),
+  '买入税': t => paperTaxRate(t.buyTax), '卖出税': t => paperTaxRate(t.sellTax),
+  '撤池风险比': t => t.rugRatio, 'Top10 集中度': t => t.top10HolderRate,
+  '开发团队持仓': t => t.devTeamHoldRate, '打包买入占比': t => t.bundlerRate,
+  '已核实内外盘阶段': t => knownStage(t.marketStage) ? t.marketStage : null,
+};
+export function missingRequestedDetailFields(token, requested=[]) {
+  return requested.filter(field => detailFieldReaders[field] && !present(detailFieldReaders[field](token)));
+}
 const quoteReasons=new Set(['报价未收复并向上确认，或已偏离结构','独立报价已偏离结构或短时波动超过 3%','报价路径存在深回撤、急拉或未持续走强，不追反抽','上新后报价尚未重新走强']);
 export const onlyPricingMissing = result => result.decision !== '不买' && result.reasons.every(r=>quoteReasons.has(r))
   && result.missing.every(field => quoteAndChart.has(field));
 
-export const readyForPaperQuote = result => (result.evidence?.opportunityRoutes || [result]).some(route => {
+// Quotes can finish a price/structure proof, not create a missing catalyst or
+// overturn a failed reentry thesis. Keep these rows in discovery, not entry focus.
+export const repairAllowsQuoteResearch = result => !result.evidence?.lossRepair
+  || (result.evidence.lossRepair.entryPathAllowed??result.evidence.lossRepair.catalystReady)===true && result.evidence.lossRepair.reentry?.ready===true;
+export const readyForPaperQuote = result => repairAllowsQuoteResearch(result) && (result.evidence?.opportunityRoutes || [result]).some(route => {
   const opportunity=route.evidence?.opportunity || route;
+  if(route.lossRepair&&!repairAllowsQuoteResearch({evidence:{lossRepair:route.lossRepair}}))return false;
   return onlyPricingMissing(route) && (opportunity.basis !== 'ohlcv' || opportunity.pattern?.ready);
 });
+
+// A bounded read-only quote warmup. This is deliberately weaker than
+// readyForPaperQuote: a candidate may still be missing a fresh quote,
+// recovery proof, or a cost confirmation, but it must already have a
+// route-level signal and no hard safety/data omission. Warmup only obtains
+// evidence; it never makes the row trade-eligible.
+const hardQuoteMissing = new Set([
+  '有效链和合约地址', '两分钟内的真实行情', '真实流动性', '真实成交量',
+  '可卖出检测', '洗量检测', '增发权限已撤销', '冻结权限已撤销',
+  '买入税', '卖出税', '内外盘来源冲突待核对', '禁止卖出', '黑名单',
+]);
+export const researchReadyForQuote = result => {
+  if (!result || result.decision === '不买' || result.evidence?.safety?.blocked?.length) return false;
+  if (!repairAllowsQuoteResearch(result)) return false;
+  const routes = Array.isArray(result.evidence?.opportunityRoutes) ? result.evidence.opportunityRoutes : [];
+  const signalled = routes.some(route => route?.signalReady === true
+    && (!route.lossRepair||repairAllowsQuoteResearch({evidence:{lossRepair:route.lossRepair}}))
+    && (['flow','official_event','monitored_event','wallet_signal'].includes(route.basis) || route.pattern?.ready === true));
+  if (!signalled) return false;
+  return !(result.missing || []).some(field => hardQuoteMissing.has(field));
+};
 
 const rebuildingGaps = new Set(['feed_window_warming_or_gap', 'binance_window_warming_or_gap']);
 export const canPrefetchPaperFlow = (flow, policy) => flow?.fresh === true && meetsPaperEntryFlow(flow, policy)
@@ -75,6 +114,7 @@ export const onlyPricingOrFlowWarmupMissing = result => result.decision !== '不
 // while hard-danger candidates cannot consume the near-entry priority lane.
 export function planPaperCandidateResearch(decisions, observedAt, nowMs) {
   const candidates = decisions.filter(row => row.decision !== '不买');
+  const requestedFields = [...new Set(candidates.flatMap(row => row.missing.filter(field => detailFields.has(field))))].sort();
   const near = candidates.some(row => row.reasons.length === 0 && !row.missing.includes('新鲜且足够的 K 线')
     && row.missing.every(field => quoteAndChart.has(field) || field === '两分钟内的真实行情'));
   const ageMs = nowMs - stamp(observedAt);
@@ -82,8 +122,13 @@ export function planPaperCandidateResearch(decisions, observedAt, nowMs) {
   // Token detail requests cannot manufacture a verified narrative or missing
   // wallet history. Those gaps must not keep a fully researched token hot.
   const needsFields = candidates.some(row => row.missing.some(field => detailFields.has(field)));
+  const verified = candidates.some(row => row.evidence?.lossRepair?.catalystReady===true
+    && row.evidence.lossRepair.reentry?.ready===true && !row.evidence?.safety?.blocked?.length);
+  if (verified && (needsFields || !Number.isFinite(ageMs) || ageMs >= 60_000)) return {
+    needed:true,priority:3,refreshAfterMs:30_000,requestedFields,
+    reason:'有效催化或核实盈利钱包：优先补齐当前行情与安全字段，不代表批准买入' };
   return { needed: candidates.length > 0 && (needsFields || near && (!Number.isFinite(ageMs) || ageMs >= 60_000)),
-    priority: near ? 2 : best && best.missing.length <= 5 ? 1 : 0,
+    requestedFields, priority: near ? 2 : best && best.missing.length <= 5 ? 1 : 0,
     refreshAfterMs: near ? 30_000 : 60_000,
     reason: near ? '接近开仓，优先刷新候选行情' : '补齐缺失的行情、阶段或安全字段' };
 }

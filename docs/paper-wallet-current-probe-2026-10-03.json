@@ -1,0 +1,815 @@
+{
+  "version": "paper_current_entry_probe_v1",
+  "paperOnly": true,
+  "ledgerWrites": 0,
+  "scope": "2026-10-03 latest observed inputs, not historical first-pump backtest",
+  "sources": [
+    "GMGN CLI token info/security/kline via shared account gate",
+    "local normalized public wallet feeds"
+  ],
+  "rows": [
+    {
+      "label": "但丁",
+      "chain": "bsc",
+      "address": "0xbe147a143226036c000dc9a0e538d674ce7b7777",
+      "at": "2026-10-03T06:24:45.257Z",
+      "durationMs": 83532,
+      "readOnly": true,
+      "ledgerWrites": 0,
+      "detailStatus": "ok",
+      "detailAt": "2026-10-03T06:24:13.739Z",
+      "price": 0.00064328526,
+      "liquidity": 82647.91288738146,
+      "quotes": [
+        {
+          "status": "ok",
+          "price": 0.00064328526,
+          "at": "2026-10-03T06:24:41.489Z",
+          "receivedAt": "2026-10-03T06:24:45.071Z",
+          "ageMs": 3768
+        },
+        {
+          "status": "ok",
+          "price": 0.00064328526,
+          "at": "2026-10-03T06:24:41.489Z",
+          "receivedAt": "2026-10-03T06:24:45.071Z",
+          "ageMs": 3768
+        }
+      ],
+      "flow": {
+        "provider": "binance_smartmoney",
+        "fresh": true,
+        "complete": true,
+        "observedAt": "2026-10-03T06:24:16.291Z",
+        "buyers": 0,
+        "smart": 0,
+        "verified": 0,
+        "netBuyUsd": 0,
+        "pulse": {
+          "windowMs": 90000,
+          "recentBuyerCount": 0,
+          "recentNetBuyUsd": 0,
+          "lastBuyAt": null
+        }
+      },
+      "rows": [
+        {
+          "decision": "观察",
+          "entryUsd": 9.94,
+          "reasons": [
+            "等待拉升后有效回踩、抬高低点及放量收复",
+            "等待可绑定入场的真实结构失效位，不能用买入前已有弱势作为新退出理由"
+          ],
+          "missing": [
+            "洗量检测",
+            "撤池风险比",
+            "连续新鲜报价确认"
+          ],
+          "safety": {
+            "missing": [
+              "洗量检测",
+              "撤池风险比"
+            ],
+            "blocked": [],
+            "metrics": {
+              "rugRatio": null,
+              "top10HolderRate": 0.1886,
+              "devTeamHoldRate": 0,
+              "bundlerRate": 0.0487,
+              "buyTax": 0.01,
+              "sellTax": 0.01
+            },
+            "taxFilter": {
+              "version": "scan_tax_cap_6pct_v1",
+              "maximumRate": 0.06,
+              "buyTax": 0.01,
+              "sellTax": 0.01,
+              "blocked": false,
+              "reasons": [],
+              "missing": []
+            },
+            "sellabilityFlags": {
+              "canSell": false,
+              "cannotSell": false,
+              "interpretation": "原始辅助标记，未核实为互斥布尔值；非买卖模拟或实际可卖出证明"
+            },
+            "coverage": "使用已接入字段筛选，非完整合约审计；Top10 是集中度代理",
+            "auditMissing": [
+              "洗量检测",
+              "撤池风险比"
+            ],
+            "auditComplete": false,
+            "policyVersion": "strict_fields_v1"
+          },
+          "opportunity": {
+            "version": "multi_setup_v2",
+            "reviewVersion": "opportunity_review_v2",
+            "id": "external_pullback",
+            "label": "外盘回踩再启动",
+            "basis": "ohlcv",
+            "signalId": "bsc:0xbe147a143226036c000dc9a0e538d674ce7b7777:external_pullback:1791008640000",
+            "signalAt": 1791008640000,
+            "pattern": {
+              "closedAt": 1791008640000,
+              "close": 0.00061828318,
+              "volumeUsd": 1766.054793706,
+              "baselineVolumeUsd": 393.3695028,
+              "volumeMultiple": 4.489556971588393,
+              "peak": 0.00081217204,
+              "base": 0.00063048327,
+              "trough": 0.0005001989,
+              "rise": 0.2881738162536809,
+              "pullback": 0.3841219897203061,
+              "ready": false,
+              "support": 0.0006054620726666667,
+              "reason": "等待拉升后有效回踩、抬高低点及放量收复",
+              "reviewVersion": "opportunity_review_v2",
+              "atr": 0.000025642214666666664,
+              "rangeHigh": 0.00079226706,
+              "rangeLow": 0.00056981684,
+              "targetPrice": 0.00081217204,
+              "targetKind": "已观察历史压力位，非保证可达",
+              "reclaimPrice": 0.00066353072
+            },
+            "signalReady": false,
+            "chartWindowPolicy": "contiguous_tail_v1",
+            "chartWindow": {
+              "receivedBars": 61,
+              "closedBars": 60,
+              "lastClosedAtMs": 1791008640000,
+              "firstOpenAtMs": 1791005040000,
+              "windowPolicy": "contiguous_tail_v1",
+              "excludedPrefixBars": 0,
+              "usedBars": 60,
+              "usedFirstOpenAtMs": 1791005040000,
+              "gapBoundary": null,
+              "code": "ready",
+              "issue": null
+            },
+            "entryPolicyVersion": "meme_structure_entry_v1"
+          },
+          "routes": [
+            {
+              "id": "flow_momentum",
+              "decision": "观察",
+              "signalReady": false,
+              "reasons": [
+                "等待两个净买家、至少一个聪明钱标签及 $500 净流入",
+                "预计往返成本超过 5%，停止小额磨损",
+                "缺少有效原文催化或核实盈利钱包；仅标签 / 纯量价保留独立研究，不进主盘"
+              ],
+              "missing": [
+                "洗量检测",
+                "撤池风险比",
+                "九十秒内新增的双地址买盘",
+                "连续新鲜报价确认"
+              ],
+              "pattern": null
+            },
+            {
+              "id": "internal_launch",
+              "decision": "观察",
+              "signalReady": false,
+              "reasons": [
+                "等待内盘两个净买家及 $300 净流入",
+                "等待已核实内盘或临毕业",
+                "预计往返成本超过 5%，停止小额磨损",
+                "缺少有效原文催化或核实盈利钱包；仅标签 / 纯量价保留独立研究，不进主盘"
+              ],
+              "missing": [
+                "洗量检测",
+                "撤池风险比",
+                "九十秒内新增的双地址买盘",
+                "连续新鲜报价确认"
+              ],
+              "pattern": null
+            },
+            {
+              "id": "external_breakout",
+              "decision": "观察",
+              "signalReady": false,
+              "reasons": [
+                "已观察结构空间不足以覆盖往返成本及失效损失，继续观察",
+                "等待收盘放量突破并站稳前 12 根压力位",
+                "等待可绑定入场的真实结构失效位，不能用买入前已有弱势作为新退出理由"
+              ],
+              "missing": [
+                "洗量检测",
+                "撤池风险比",
+                "等待新鲜结构验证扣费后的空间",
+                "连续新鲜报价确认"
+              ],
+              "pattern": {
+                "ready": false,
+                "reason": "等待收盘放量突破并站稳前 12 根压力位",
+                "volumeMultiple": 4.489556971588393,
+                "reclaimPrice": 0.00079226706,
+                "close": 0.00061828318
+              }
+            },
+            {
+              "id": "external_pullback",
+              "decision": "观察",
+              "signalReady": false,
+              "reasons": [
+                "等待拉升后有效回踩、抬高低点及放量收复",
+                "等待可绑定入场的真实结构失效位，不能用买入前已有弱势作为新退出理由"
+              ],
+              "missing": [
+                "洗量检测",
+                "撤池风险比",
+                "连续新鲜报价确认"
+              ],
+              "pattern": {
+                "ready": false,
+                "reason": "等待拉升后有效回踩、抬高低点及放量收复",
+                "volumeMultiple": 4.489556971588393,
+                "reclaimPrice": 0.00066353072,
+                "close": 0.00061828318
+              }
+            },
+            {
+              "id": "external_trend",
+              "decision": "观察",
+              "signalReady": false,
+              "reasons": [
+                "已观察结构空间不足以覆盖往返成本及失效损失，继续观察",
+                "均线差、斜率或放量不足，弱趋势只观察",
+                "等待可绑定入场的真实结构失效位，不能用买入前已有弱势作为新退出理由"
+              ],
+              "missing": [
+                "洗量检测",
+                "撤池风险比",
+                "等待新鲜结构验证扣费后的空间",
+                "连续新鲜报价确认"
+              ],
+              "pattern": {
+                "ready": false,
+                "reason": "均线差、斜率或放量不足，弱趋势只观察",
+                "volumeMultiple": 4.489556971588393,
+                "reclaimPrice": 0.0006752693883864028,
+                "close": 0.00061828318
+              }
+            },
+            {
+              "id": "narrative_recall",
+              "decision": "观察",
+              "signalReady": false,
+              "reasons": [
+                "等待两个净买家、至少一个聪明钱标签及 $500 净流入",
+                "预计往返成本超过 5%，停止小额磨损",
+                "缺少有效原文催化或核实盈利钱包；仅标签 / 纯量价保留独立研究，不进主盘"
+              ],
+              "missing": [
+                "洗量检测",
+                "撤池风险比",
+                "九十秒内新增的双地址买盘",
+                "绑定精确 CA 的新鲜叙事催化",
+                "连续新鲜报价确认"
+              ],
+              "pattern": null
+            }
+          ],
+          "narrative": "没有原文，只能评估资金 / 量价动量"
+        }
+      ]
+    },
+    {
+      "label": "大结果",
+      "chain": "bsc",
+      "address": "0xa74d45ec5d25c36f9664a9df69f60a32ed207777",
+      "at": "2026-10-03T06:24:51.434Z",
+      "durationMs": 89710,
+      "readOnly": true,
+      "ledgerWrites": 0,
+      "detailStatus": "ok",
+      "detailAt": "2026-10-03T06:23:47.506Z",
+      "price": 0.00036527154,
+      "liquidity": 61923.45445418514,
+      "quotes": [
+        {
+          "status": "ok",
+          "price": 0.00035265908,
+          "at": "2026-10-03T06:24:26.728Z",
+          "receivedAt": "2026-10-03T06:24:28.300Z",
+          "ageMs": 24706
+        },
+        {
+          "status": "ok",
+          "price": 0.00036527154,
+          "at": "2026-10-03T06:24:49.032Z",
+          "receivedAt": "2026-10-03T06:24:51.295Z",
+          "ageMs": 2402
+        }
+      ],
+      "flow": {
+        "provider": "binance_smartmoney",
+        "fresh": true,
+        "complete": true,
+        "observedAt": "2026-10-03T06:24:36.297Z",
+        "buyers": 1,
+        "smart": 1,
+        "verified": 0,
+        "netBuyUsd": -1015.881059143936,
+        "pulse": {
+          "windowMs": 90000,
+          "recentBuyerCount": 0,
+          "recentNetBuyUsd": -598.7571246493216,
+          "lastBuyAt": null
+        }
+      },
+      "rows": [
+        {
+          "decision": "观察",
+          "entryUsd": 9.94,
+          "reasons": [
+            "等待拉升后有效回踩、抬高低点及放量收复",
+            "等待可绑定入场的真实结构失效位，不能用买入前已有弱势作为新退出理由"
+          ],
+          "missing": [
+            "洗量检测",
+            "撤池风险比",
+            "连续新鲜报价确认"
+          ],
+          "safety": {
+            "missing": [
+              "洗量检测",
+              "撤池风险比"
+            ],
+            "blocked": [],
+            "metrics": {
+              "rugRatio": null,
+              "top10HolderRate": 0.1604,
+              "devTeamHoldRate": 0,
+              "bundlerRate": 0.2144,
+              "buyTax": 0.01,
+              "sellTax": 0.01
+            },
+            "taxFilter": {
+              "version": "scan_tax_cap_6pct_v1",
+              "maximumRate": 0.06,
+              "buyTax": 0.01,
+              "sellTax": 0.01,
+              "blocked": false,
+              "reasons": [],
+              "missing": []
+            },
+            "sellabilityFlags": {
+              "canSell": false,
+              "cannotSell": false,
+              "interpretation": "原始辅助标记，未核实为互斥布尔值；非买卖模拟或实际可卖出证明"
+            },
+            "coverage": "使用已接入字段筛选，非完整合约审计；Top10 是集中度代理",
+            "auditMissing": [
+              "洗量检测",
+              "撤池风险比"
+            ],
+            "auditComplete": false,
+            "policyVersion": "strict_fields_v1"
+          },
+          "opportunity": {
+            "version": "multi_setup_v2",
+            "reviewVersion": "opportunity_review_v2",
+            "id": "external_pullback",
+            "label": "外盘回踩再启动",
+            "basis": "ohlcv",
+            "signalId": "bsc:0xa74d45ec5d25c36f9664a9df69f60a32ed207777:external_pullback:1791008640000",
+            "signalAt": 1791008640000,
+            "pattern": {
+              "closedAt": 1791008640000,
+              "close": 0.00033470291,
+              "volumeUsd": 9284.5864184,
+              "baselineVolumeUsd": 10155.68396774,
+              "volumeMultiple": 0.9142256147289457,
+              "peak": 0.00082806356,
+              "base": 0.000011452987,
+              "trough": 0.00033131181,
+              "rise": 71.30110014095013,
+              "pullback": 0.5998956770902948,
+              "ready": false,
+              "support": 0.000272900625,
+              "reason": "等待拉升后有效回踩、抬高低点及放量收复",
+              "reviewVersion": "opportunity_review_v2",
+              "atr": 0.00007389673199999997,
+              "rangeHigh": 0.00070228132,
+              "rangeLow": 0.00032196257,
+              "targetPrice": 0.00082806356,
+              "targetKind": "已观察历史压力位，非保证可达",
+              "reclaimPrice": 0.00041399492
+            },
+            "signalReady": false,
+            "chartWindowPolicy": "contiguous_tail_v1",
+            "chartWindow": {
+              "receivedBars": 56,
+              "closedBars": 56,
+              "lastClosedAtMs": 1791008640000,
+              "firstOpenAtMs": 1791005220000,
+              "windowPolicy": "contiguous_tail_v1",
+              "excludedPrefixBars": 1,
+              "usedBars": 55,
+              "usedFirstOpenAtMs": 1791005340000,
+              "gapBoundary": {
+                "index": 1,
+                "openAtMs": 1791005340000,
+                "previousOpenAtMs": 1791005220000,
+                "gapMs": 120000,
+                "missingIntervals": 1
+              },
+              "code": "ready",
+              "issue": null
+            },
+            "entryPolicyVersion": "meme_structure_entry_v1"
+          },
+          "routes": [
+            {
+              "id": "flow_momentum",
+              "decision": "观察",
+              "signalReady": false,
+              "reasons": [
+                "等待两个净买家、至少一个聪明钱标签及 $500 净流入",
+                "预计往返成本超过 5%，停止小额磨损",
+                "缺少有效原文催化或核实盈利钱包；仅标签 / 纯量价保留独立研究，不进主盘"
+              ],
+              "missing": [
+                "洗量检测",
+                "撤池风险比",
+                "九十秒内新增的双地址买盘",
+                "连续新鲜报价确认"
+              ],
+              "pattern": null
+            },
+            {
+              "id": "internal_launch",
+              "decision": "观察",
+              "signalReady": false,
+              "reasons": [
+                "等待内盘两个净买家及 $300 净流入",
+                "等待已核实内盘或临毕业",
+                "预计往返成本超过 5%，停止小额磨损",
+                "缺少有效原文催化或核实盈利钱包；仅标签 / 纯量价保留独立研究，不进主盘"
+              ],
+              "missing": [
+                "洗量检测",
+                "撤池风险比",
+                "九十秒内新增的双地址买盘",
+                "连续新鲜报价确认"
+              ],
+              "pattern": null
+            },
+            {
+              "id": "external_breakout",
+              "decision": "观察",
+              "signalReady": false,
+              "reasons": [
+                "已观察结构空间不足以覆盖往返成本及失效损失，继续观察",
+                "等待收盘放量突破并站稳前 12 根压力位",
+                "等待可绑定入场的真实结构失效位，不能用买入前已有弱势作为新退出理由"
+              ],
+              "missing": [
+                "洗量检测",
+                "撤池风险比",
+                "等待新鲜结构验证扣费后的空间",
+                "连续新鲜报价确认"
+              ],
+              "pattern": {
+                "ready": false,
+                "reason": "等待收盘放量突破并站稳前 12 根压力位",
+                "volumeMultiple": 0.9142256147289457,
+                "reclaimPrice": 0.00064883785,
+                "close": 0.00033470291
+              }
+            },
+            {
+              "id": "external_pullback",
+              "decision": "观察",
+              "signalReady": false,
+              "reasons": [
+                "等待拉升后有效回踩、抬高低点及放量收复",
+                "等待可绑定入场的真实结构失效位，不能用买入前已有弱势作为新退出理由"
+              ],
+              "missing": [
+                "洗量检测",
+                "撤池风险比",
+                "连续新鲜报价确认"
+              ],
+              "pattern": {
+                "ready": false,
+                "reason": "等待拉升后有效回踩、抬高低点及放量收复",
+                "volumeMultiple": 0.9142256147289457,
+                "reclaimPrice": 0.00041399492,
+                "close": 0.00033470291
+              }
+            },
+            {
+              "id": "external_trend",
+              "decision": "观察",
+              "signalReady": false,
+              "reasons": [
+                "已观察结构空间不足以覆盖往返成本及失效损失，继续观察",
+                "均线差、斜率或放量不足，弱趋势只观察",
+                "等待可绑定入场的真实结构失效位，不能用买入前已有弱势作为新退出理由"
+              ],
+              "missing": [
+                "洗量检测",
+                "撤池风险比",
+                "等待新鲜结构验证扣费后的空间",
+                "连续新鲜报价确认"
+              ],
+              "pattern": {
+                "ready": false,
+                "reason": "均线差、斜率或放量不足，弱趋势只观察",
+                "volumeMultiple": 0.9142256147289457,
+                "reclaimPrice": 0.0004155359162858153,
+                "close": 0.00033470291
+              }
+            },
+            {
+              "id": "narrative_recall",
+              "decision": "观察",
+              "signalReady": false,
+              "reasons": [
+                "等待两个净买家、至少一个聪明钱标签及 $500 净流入",
+                "预计往返成本超过 5%，停止小额磨损",
+                "缺少有效原文催化或核实盈利钱包；仅标签 / 纯量价保留独立研究，不进主盘"
+              ],
+              "missing": [
+                "洗量检测",
+                "撤池风险比",
+                "九十秒内新增的双地址买盘",
+                "绑定精确 CA 的新鲜叙事催化",
+                "连续新鲜报价确认"
+              ],
+              "pattern": null
+            }
+          ],
+          "narrative": "没有原文，只能评估资金 / 量价动量"
+        }
+      ]
+    },
+    {
+      "label": "제로",
+      "chain": "bsc",
+      "address": "0x90269edbf32583a47fa283835b5d35d5d83d7777",
+      "at": "2026-10-03T06:24:56.631Z",
+      "durationMs": 94906,
+      "readOnly": true,
+      "ledgerWrites": 0,
+      "detailStatus": "ok",
+      "detailAt": "2026-10-03T06:24:04.618Z",
+      "price": 0.0035779167,
+      "liquidity": 222383.86654523638,
+      "quotes": [
+        {
+          "status": "ok",
+          "price": 0.0035812492,
+          "at": "2026-10-03T06:24:31.259Z",
+          "receivedAt": "2026-10-03T06:24:33.266Z",
+          "ageMs": 25372
+        },
+        {
+          "status": "ok",
+          "price": 0.0035779167,
+          "at": "2026-10-03T06:24:55.321Z",
+          "receivedAt": "2026-10-03T06:24:56.475Z",
+          "ageMs": 1310
+        }
+      ],
+      "flow": {
+        "provider": "binance_smartmoney",
+        "fresh": true,
+        "complete": true,
+        "observedAt": "2026-10-03T06:24:36.297Z",
+        "buyers": 0,
+        "smart": 0,
+        "verified": 0,
+        "netBuyUsd": -170.24000259292745,
+        "pulse": {
+          "windowMs": 90000,
+          "recentBuyerCount": 0,
+          "recentNetBuyUsd": 0,
+          "lastBuyAt": null
+        }
+      },
+      "rows": [
+        {
+          "decision": "观察",
+          "entryUsd": 9.94,
+          "reasons": [
+            "等待拉升后有效回踩、抬高低点及放量收复",
+            "等待可绑定入场的真实结构失效位，不能用买入前已有弱势作为新退出理由"
+          ],
+          "missing": [
+            "洗量检测",
+            "撤池风险比",
+            "连续新鲜报价确认"
+          ],
+          "safety": {
+            "missing": [
+              "洗量检测",
+              "撤池风险比"
+            ],
+            "blocked": [],
+            "metrics": {
+              "rugRatio": null,
+              "top10HolderRate": 0.1442,
+              "devTeamHoldRate": 0,
+              "bundlerRate": 0.0877,
+              "buyTax": 0,
+              "sellTax": 0.01
+            },
+            "taxFilter": {
+              "version": "scan_tax_cap_6pct_v1",
+              "maximumRate": 0.06,
+              "buyTax": 0,
+              "sellTax": 0.01,
+              "blocked": false,
+              "reasons": [],
+              "missing": []
+            },
+            "sellabilityFlags": {
+              "canSell": false,
+              "cannotSell": false,
+              "interpretation": "原始辅助标记，未核实为互斥布尔值；非买卖模拟或实际可卖出证明"
+            },
+            "coverage": "使用已接入字段筛选，非完整合约审计；Top10 是集中度代理",
+            "auditMissing": [
+              "洗量检测",
+              "撤池风险比"
+            ],
+            "auditComplete": false,
+            "policyVersion": "strict_fields_v1"
+          },
+          "opportunity": {
+            "version": "multi_setup_v2",
+            "reviewVersion": "opportunity_review_v2",
+            "id": "external_pullback",
+            "label": "外盘回踩再启动",
+            "basis": "ohlcv",
+            "signalId": "bsc:0x90269edbf32583a47fa283835b5d35d5d83d7777:external_pullback:1791008640000",
+            "signalAt": 1791008640000,
+            "pattern": {
+              "closedAt": 1791008640000,
+              "close": 0.0035956017,
+              "volumeUsd": 3678.019868149,
+              "baselineVolumeUsd": 7096.33484955,
+              "volumeMultiple": 0.5182985225651006,
+              "peak": 0.0050069945,
+              "base": 0.004666636,
+              "trough": 0.002844617,
+              "rise": 0.07293444356920054,
+              "pullback": 0.43187135516126485,
+              "ready": false,
+              "support": 0.003290196375,
+              "reason": "等待拉升后有效回踩、抬高低点及放量收复",
+              "reviewVersion": "opportunity_review_v2",
+              "atr": 0.00023017626,
+              "rangeHigh": 0.0041719498,
+              "rangeLow": 0.002844617,
+              "targetPrice": 0.0050069945,
+              "targetKind": "已观察历史压力位，非保证可达",
+              "reclaimPrice": 0.0038958535
+            },
+            "signalReady": false,
+            "chartWindowPolicy": "contiguous_tail_v1",
+            "chartWindow": {
+              "receivedBars": 61,
+              "closedBars": 60,
+              "lastClosedAtMs": 1791008640000,
+              "firstOpenAtMs": 1791005040000,
+              "windowPolicy": "contiguous_tail_v1",
+              "excludedPrefixBars": 0,
+              "usedBars": 60,
+              "usedFirstOpenAtMs": 1791005040000,
+              "gapBoundary": null,
+              "code": "ready",
+              "issue": null
+            },
+            "entryPolicyVersion": "meme_structure_entry_v1"
+          },
+          "routes": [
+            {
+              "id": "flow_momentum",
+              "decision": "观察",
+              "signalReady": false,
+              "reasons": [
+                "等待两个净买家、至少一个聪明钱标签及 $500 净流入",
+                "预计往返成本超过 5%，停止小额磨损",
+                "缺少有效原文催化或核实盈利钱包；仅标签 / 纯量价保留独立研究，不进主盘"
+              ],
+              "missing": [
+                "洗量检测",
+                "撤池风险比",
+                "九十秒内新增的双地址买盘",
+                "连续新鲜报价确认"
+              ],
+              "pattern": null
+            },
+            {
+              "id": "internal_launch",
+              "decision": "观察",
+              "signalReady": false,
+              "reasons": [
+                "等待内盘两个净买家及 $300 净流入",
+                "等待已核实内盘或临毕业",
+                "预计往返成本超过 5%，停止小额磨损",
+                "缺少有效原文催化或核实盈利钱包；仅标签 / 纯量价保留独立研究，不进主盘"
+              ],
+              "missing": [
+                "洗量检测",
+                "撤池风险比",
+                "九十秒内新增的双地址买盘",
+                "连续新鲜报价确认"
+              ],
+              "pattern": null
+            },
+            {
+              "id": "external_breakout",
+              "decision": "观察",
+              "signalReady": false,
+              "reasons": [
+                "已观察结构空间不足以覆盖往返成本及失效损失，继续观察",
+                "等待收盘放量突破并站稳前 12 根压力位",
+                "等待可绑定入场的真实结构失效位，不能用买入前已有弱势作为新退出理由"
+              ],
+              "missing": [
+                "洗量检测",
+                "撤池风险比",
+                "等待新鲜结构验证扣费后的空间",
+                "连续新鲜报价确认"
+              ],
+              "pattern": {
+                "ready": false,
+                "reason": "等待收盘放量突破并站稳前 12 根压力位",
+                "volumeMultiple": 0.5182985225651006,
+                "reclaimPrice": 0.0038958535,
+                "close": 0.0035956017
+              }
+            },
+            {
+              "id": "external_pullback",
+              "decision": "观察",
+              "signalReady": false,
+              "reasons": [
+                "等待拉升后有效回踩、抬高低点及放量收复",
+                "等待可绑定入场的真实结构失效位，不能用买入前已有弱势作为新退出理由"
+              ],
+              "missing": [
+                "洗量检测",
+                "撤池风险比",
+                "连续新鲜报价确认"
+              ],
+              "pattern": {
+                "ready": false,
+                "reason": "等待拉升后有效回踩、抬高低点及放量收复",
+                "volumeMultiple": 0.5182985225651006,
+                "reclaimPrice": 0.0038958535,
+                "close": 0.0035956017
+              }
+            },
+            {
+              "id": "external_trend",
+              "decision": "观察",
+              "signalReady": false,
+              "reasons": [
+                "已观察结构空间不足以覆盖往返成本及失效损失，继续观察",
+                "均线差、斜率或放量不足，弱趋势只观察"
+              ],
+              "missing": [
+                "洗量检测",
+                "撤池风险比",
+                "等待新鲜结构验证扣费后的空间",
+                "连续新鲜报价确认"
+              ],
+              "pattern": {
+                "ready": false,
+                "reason": "均线差、斜率或放量不足，弱趋势只观察",
+                "volumeMultiple": 0.5182985225651006,
+                "reclaimPrice": 0.003524311694925039,
+                "close": 0.0035956017
+              }
+            },
+            {
+              "id": "narrative_recall",
+              "decision": "观察",
+              "signalReady": false,
+              "reasons": [
+                "等待两个净买家、至少一个聪明钱标签及 $500 净流入",
+                "预计往返成本超过 5%，停止小额磨损",
+                "缺少有效原文催化或核实盈利钱包；仅标签 / 纯量价保留独立研究，不进主盘"
+              ],
+              "missing": [
+                "洗量检测",
+                "撤池风险比",
+                "九十秒内新增的双地址买盘",
+                "绑定精确 CA 的新鲜叙事催化",
+                "连续新鲜报价确认"
+              ],
+              "pattern": null
+            }
+          ],
+          "narrative": "代币关系未确认，仅研究"
+        }
+      ]
+    }
+  ]
+}

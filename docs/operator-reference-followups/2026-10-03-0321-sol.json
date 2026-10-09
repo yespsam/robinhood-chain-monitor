@@ -1,0 +1,1092 @@
+{
+  "version": 1,
+  "startedAt": "2026-10-02T19:21:12.417Z",
+  "group": "sol",
+  "question": "D/E 新增内部转仓及接收方后续卖出是否有直接证据",
+  "configChecked": true,
+  "configChecks": 1,
+  "businessRequests": 2,
+  "rpcRequests": 2,
+  "priority": 0,
+  "pages": [
+    {
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "id": "D",
+      "page": 0,
+      "startedAt": "2026-10-02T19:21:12.599Z",
+      "receivedAt": "2026-10-02T19:21:16.357Z",
+      "rowCount": 20,
+      "identityExplicit": true,
+      "baselineOverlap": 8,
+      "newCount": 12,
+      "next": "NDUyNTc1MzY5MDAxNzEwMDg6MDo6",
+      "latest": {
+        "chain": "sol",
+        "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+        "token": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+        "hash": "3hXzutKGxfQcqWCtvtUNeGLYD3uqBWdwy4rGsQkBgGgzC6yuf6Z7MD25AH7L7zjwDGxZr8ZJmtwCBXk6nNF29Ewp",
+        "at": 1790946271000,
+        "side": "sell",
+        "quantity": 12943611.615459,
+        "usd": 201.34299989854,
+        "price": 0.00001555539565619144,
+        "symbol": "Human"
+      },
+      "oldestAt": 1790934823000
+    },
+    {
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "id": "E",
+      "page": 0,
+      "startedAt": "2026-10-02T19:21:16.358Z",
+      "receivedAt": "2026-10-02T19:21:26.621Z",
+      "rowCount": 20,
+      "identityExplicit": true,
+      "baselineOverlap": 8,
+      "newCount": 12,
+      "next": "NDUyNTc3MjcxMDEwOTgwMjA6MDo6",
+      "latest": {
+        "chain": "sol",
+        "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+        "token": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+        "hash": "f5adiPfpCY3nTX5ugh8Ryor3bX6gJEUzpZgHesGhxLKEXst3wriNbvGWgvUT6CHG1J4dmfwTKDTeL1JxjppTgAV",
+        "at": 1790946271000,
+        "side": "sell",
+        "quantity": 12211959.747402,
+        "usd": 199.79989353722,
+        "price": 0.000016361001646744127,
+        "symbol": "Human"
+      },
+      "oldestAt": 1790935328000
+    }
+  ],
+  "newRows": [
+    {
+      "chain": "sol",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "token": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+      "hash": "3hXzutKGxfQcqWCtvtUNeGLYD3uqBWdwy4rGsQkBgGgzC6yuf6Z7MD25AH7L7zjwDGxZr8ZJmtwCBXk6nNF29Ewp",
+      "at": 1790946271000,
+      "side": "sell",
+      "quantity": 12943611.615459,
+      "usd": 201.34299989854,
+      "price": 0.00001555539565619144,
+      "symbol": "Human",
+      "rawEventType": "sell",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "12943611.615459",
+      "rawCostUsd": "201.34299989854",
+      "rawGasUsd": "0.06207965",
+      "rawDexUsd": "2.5167876862"
+    },
+    {
+      "chain": "sol",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "token": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+      "hash": "ncXG4d3hBcgKcvVQKkg2SAdkwYCx6K6v5SLkiT1qUaTBrsAgSqS95epoGW1hJWKH37HcrBYSUjUQc718AeB9Yku",
+      "at": 1790946195000,
+      "side": "buy",
+      "quantity": 12943611.615459,
+      "usd": 160.06988929239,
+      "price": 0.000012366709852543797,
+      "symbol": "Human",
+      "rawEventType": "buy",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "12943611.615459",
+      "rawCostUsd": "160.06988929239",
+      "rawGasUsd": "0.00184005",
+      "rawDexUsd": "2.00087380476"
+    },
+    {
+      "chain": "sol",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "token": "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8",
+      "hash": "1GwdKiZAx5uCuDjmfuuvGjLaVL2qNoxUMVYrSRPqHUh8TdgBUTGsKfYv2uddasWAMYUb1ZnLKbznALff8sELTxZ",
+      "at": 1790944751000,
+      "side": "sell",
+      "quantity": 1.2601304,
+      "usd": 188.382488,
+      "price": 149.49443962307393,
+      "symbol": "SPCXx",
+      "rawEventType": "sell",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "1.2601304",
+      "rawCostUsd": "188.382488",
+      "rawGasUsd": "0.030883275",
+      "rawDexUsd": "0"
+    },
+    {
+      "chain": "sol",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "token": "6yE4hFwwLzNbUjJCoA99Z12gA3yjaK1KAQTVG32dFtoo",
+      "hash": "1GwdKiZAx5uCuDjmfuuvGjLaVL2qNoxUMVYrSRPqHUh8TdgBUTGsKfYv2uddasWAMYUb1ZnLKbznALff8sELTxZ",
+      "at": 1790944751000,
+      "side": "sell",
+      "quantity": 12968293.81919,
+      "usd": 188.34100547005852,
+      "price": 0.00001452319079872784,
+      "symbol": "Ada",
+      "rawEventType": "sell",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "12968293.81919",
+      "rawCostUsd": "188.34100547005852",
+      "rawGasUsd": "0.030883275",
+      "rawDexUsd": "0"
+    },
+    {
+      "chain": "sol",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "token": "6yE4hFwwLzNbUjJCoA99Z12gA3yjaK1KAQTVG32dFtoo",
+      "hash": "4f6ZG6eRnwWPEAeyi4xxD2yKTvq38L9xqgbGfpFnaGJJ6vF8n8y5yLYuwn4ya4Yid6XPZrF4poE3qhRDLry2RR5r",
+      "at": 1790944677000,
+      "side": "buy",
+      "quantity": 13099286.686051,
+      "usd": 283.06201222275894,
+      "price": 0.00002160896383191517,
+      "symbol": "Ada",
+      "rawEventType": "buy",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "13099286.686051",
+      "rawCostUsd": "283.06201222275894",
+      "rawGasUsd": "0.03094135",
+      "rawDexUsd": "0"
+    },
+    {
+      "chain": "sol",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "token": "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8",
+      "hash": "4f6ZG6eRnwWPEAeyi4xxD2yKTvq38L9xqgbGfpFnaGJJ6vF8n8y5yLYuwn4ya4Yid6XPZrF4poE3qhRDLry2RR5r",
+      "at": 1790944677000,
+      "side": "buy",
+      "quantity": 1.88550619,
+      "usd": 282.11592,
+      "price": 149.62343878595274,
+      "symbol": "SPCXx",
+      "rawEventType": "buy",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "1.88550619",
+      "rawCostUsd": "282.11592",
+      "rawGasUsd": "0.03094135",
+      "rawDexUsd": "0"
+    },
+    {
+      "chain": "sol",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "token": "7dSp25Cu72rY9Co4nw2dfCkTAuaGQwtyCcaqCx8W6iXi",
+      "hash": "3MZucT68iRoSyJoe8zBGNK67Wxsj9c6bpAhASSMvrCFh9Se1LJWznkspcGmbf1m5QoZa8MDmtooAkQmuKAZGYCZu",
+      "at": 1790943251000,
+      "side": "sell",
+      "quantity": 19408215.152988,
+      "usd": 125.15423177156,
+      "price": 0.000006448518361169102,
+      "symbol": "Datacenter",
+      "rawEventType": "sell",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "19408215.152988",
+      "rawCostUsd": "125.15423177156",
+      "rawGasUsd": "0.0018267",
+      "rawDexUsd": "1.56442801588"
+    },
+    {
+      "chain": "sol",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "token": "7dSp25Cu72rY9Co4nw2dfCkTAuaGQwtyCcaqCx8W6iXi",
+      "hash": "3mt1hZNp9f3SAAUQUaHNcWHEaRZQrL8rRM1LDVtbegeciJPQonn9jz4ZWikwhoU9y4RscuGkUfq5EVJpbcP1kz8o",
+      "at": 1790943131000,
+      "side": "buy",
+      "quantity": 19408215.152988,
+      "usd": 144.44951767532,
+      "price": 0.000007442699729814184,
+      "symbol": "Datacenter",
+      "rawEventType": "buy",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "19408215.152988",
+      "rawCostUsd": "144.44951767532",
+      "rawGasUsd": "0.0018282",
+      "rawDexUsd": "1.80561904864"
+    },
+    {
+      "chain": "sol",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "token": "HiZn48GXNbnu7VWfTU8s73iHUXE6z7jnboyNxPMkmLuT",
+      "hash": "4btUsmfjEHd66wNoUEZoBoqsWGCVQRa8FE4X2w6RjswAMgAGHM12LVT3tTb6QZK3BF9dL8suxq1D7M7VNu8dKRtc",
+      "at": 1790941403000,
+      "side": "sell",
+      "quantity": 17404390.86676,
+      "usd": 129.32204918373,
+      "price": 0.000007430426618992997,
+      "symbol": "Ochouso",
+      "rawEventType": "sell",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "17404390.86676",
+      "rawCostUsd": "129.32204918373",
+      "rawGasUsd": "0.06164535",
+      "rawDexUsd": "1.61652564684"
+    },
+    {
+      "chain": "sol",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "token": "HiZn48GXNbnu7VWfTU8s73iHUXE6z7jnboyNxPMkmLuT",
+      "hash": "5jst51uqmpTjmJE2YRUrvUZocGzGfeuZKqo59KuPbmN8nB39FauusGpf46XgsH33fi6qxu6S8zMdzzNjqTBWZ4qe",
+      "at": 1790941378000,
+      "side": "buy",
+      "quantity": 17404390.86676,
+      "usd": 162.09813226893,
+      "price": 0.000009313634329973309,
+      "symbol": "Ochouso",
+      "rawEventType": "buy",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "17404390.86676",
+      "rawCostUsd": "162.09813226893",
+      "rawGasUsd": "0.06164535",
+      "rawDexUsd": "2.02622674644"
+    },
+    {
+      "chain": "sol",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "token": "4Nr4tDX8AMrg88D4Hr5Agp6xoGHwddtpqdPHSpy2QCJk",
+      "hash": "Mkk8FmUjFGwKd2JC4sQ4YK9RzDqMy8QpwSiAbc1Us5c5VUKqWzzSbHiDB18gtHMeXu6RewkVNT2jBprPVbxefKe",
+      "at": 1790939573000,
+      "side": "sell",
+      "quantity": 25941634.326815,
+      "usd": 201.39255255675,
+      "price": 0.000007763294710718347,
+      "symbol": "Kirkinator",
+      "rawEventType": "sell",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "25941634.326815",
+      "rawCostUsd": "201.39255255675",
+      "rawGasUsd": "0.00183375",
+      "rawDexUsd": "2.51740708575"
+    },
+    {
+      "chain": "sol",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "token": "4Nr4tDX8AMrg88D4Hr5Agp6xoGHwddtpqdPHSpy2QCJk",
+      "hash": "2T6VE3WxbpVozm8pAxA4gAcG2ozabLZMrSbY2gKPfw9TFi1WFtApjds5MgjM8Cr9p49BUN6PPa92dVhxbjeVTLNj",
+      "at": 1790939443000,
+      "side": "buy",
+      "quantity": 25941634.326815,
+      "usd": 158.4079780248,
+      "price": 0.000006106322216601864,
+      "symbol": "Kirkinator",
+      "rawEventType": "buy",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "25941634.326815",
+      "rawCostUsd": "158.4079780248",
+      "rawGasUsd": "0.001836",
+      "rawDexUsd": "1.9800998064"
+    },
+    {
+      "chain": "sol",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "token": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+      "hash": "f5adiPfpCY3nTX5ugh8Ryor3bX6gJEUzpZgHesGhxLKEXst3wriNbvGWgvUT6CHG1J4dmfwTKDTeL1JxjppTgAV",
+      "at": 1790946271000,
+      "side": "sell",
+      "quantity": 12211959.747402,
+      "usd": 199.79989353722,
+      "price": 0.000016361001646744127,
+      "symbol": "Human",
+      "rawEventType": "sell",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "12211959.747402",
+      "rawCostUsd": "199.79989353722",
+      "rawGasUsd": "0.06207965",
+      "rawDexUsd": "2.49749886283"
+    },
+    {
+      "chain": "sol",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "token": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+      "hash": "3jUSrBPQhTrS6HA8iQi2LJXviJDpYXdwSie6qpqKUsFCGZ6pEy87LNzSzAQYWULagtix46e6FWjfsrACoCjpgxB2",
+      "at": 1790946195000,
+      "side": "buy",
+      "quantity": 12211959.747402,
+      "usd": 144.51423367851,
+      "price": 0.00001183382820347475,
+      "symbol": "Human",
+      "rawEventType": "buy",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "12211959.747402",
+      "rawCostUsd": "144.51423367851",
+      "rawGasUsd": "0.00184005",
+      "rawDexUsd": "1.80642799305"
+    },
+    {
+      "chain": "sol",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "token": "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8",
+      "hash": "47nKojrpq9mhN6fQqPGhbkh76r53m1MJYJHswA8vYGVYG6W3KUEbfNsc2k5WbnyuWkmGY9mSM3vV87s1koFoKPa8",
+      "at": 1790944751000,
+      "side": "sell",
+      "quantity": 1.22687306,
+      "usd": 183.404999,
+      "price": 149.48979236694626,
+      "symbol": "SPCXx",
+      "rawEventType": "sell",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "1.22687306",
+      "rawCostUsd": "183.404999",
+      "rawGasUsd": "0.030883275",
+      "rawDexUsd": "0"
+    },
+    {
+      "chain": "sol",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "token": "6yE4hFwwLzNbUjJCoA99Z12gA3yjaK1KAQTVG32dFtoo",
+      "hash": "47nKojrpq9mhN6fQqPGhbkh76r53m1MJYJHswA8vYGVYG6W3KUEbfNsc2k5WbnyuWkmGY9mSM3vV87s1koFoKPa8",
+      "at": 1790944751000,
+      "side": "sell",
+      "quantity": 13504958.017404,
+      "usd": 183.37031286962636,
+      "price": 0.00001357799947495756,
+      "symbol": "Ada",
+      "rawEventType": "sell",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "13504958.017404",
+      "rawCostUsd": "183.37031286962636",
+      "rawGasUsd": "0.030883275",
+      "rawDexUsd": "0"
+    },
+    {
+      "chain": "sol",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "token": "6yE4hFwwLzNbUjJCoA99Z12gA3yjaK1KAQTVG32dFtoo",
+      "hash": "5ViZ6w5zzmEa3BEdNrs6BrAhn5sEShEehEGafGmwFds9P1BgbMPfX5y6gyA9Xpd7beXADJCz6NwmA9TB69eHfGdt",
+      "at": 1790944677000,
+      "side": "buy",
+      "quantity": 13641371.734752,
+      "usd": 321.1339230419987,
+      "price": 0.000023541175278136044,
+      "symbol": "Ada",
+      "rawEventType": "buy",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "13641371.734752",
+      "rawCostUsd": "321.1339230419987",
+      "rawGasUsd": "0.03094135",
+      "rawDexUsd": "0"
+    },
+    {
+      "chain": "sol",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "token": "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8",
+      "hash": "5ViZ6w5zzmEa3BEdNrs6BrAhn5sEShEehEGafGmwFds9P1BgbMPfX5y6gyA9Xpd7beXADJCz6NwmA9TB69eHfGdt",
+      "at": 1790944677000,
+      "side": "buy",
+      "quantity": 2.13910724,
+      "usd": 320.076688,
+      "price": 149.630968478233,
+      "symbol": "SPCXx",
+      "rawEventType": "buy",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "2.13910724",
+      "rawCostUsd": "320.076688",
+      "rawGasUsd": "0.03094135",
+      "rawDexUsd": "0"
+    },
+    {
+      "chain": "sol",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "token": "7dSp25Cu72rY9Co4nw2dfCkTAuaGQwtyCcaqCx8W6iXi",
+      "hash": "471AnsM4r9h4grdqsv6kYqqvPqbTrW3uAkofgdDJXsspqXtwp7RHBsTKeXv7oihxNDVyBWKEneLyn2yuB6adcfco",
+      "at": 1790943251000,
+      "side": "sell",
+      "quantity": 24145254.113537,
+      "usd": 164.79264266036,
+      "price": 0.000006825053150630227,
+      "symbol": "Datacenter",
+      "rawEventType": "sell",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "24145254.113537",
+      "rawCostUsd": "164.79264266036",
+      "rawGasUsd": "0.0018267",
+      "rawDexUsd": "2.0599080911"
+    },
+    {
+      "chain": "sol",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "token": "7dSp25Cu72rY9Co4nw2dfCkTAuaGQwtyCcaqCx8W6iXi",
+      "hash": "pHjNgPfbcUXNKzqgtGEcW2FyYvrYWgLKSLKF3NGEZM3JbdzvAbHar9eM4PnjvxGHyFz6Va4HMjskmKe9LFnyLwP",
+      "at": 1790943131000,
+      "side": "buy",
+      "quantity": 24145254.113537,
+      "usd": 169.40683652332,
+      "price": 0.000007016154633400286,
+      "symbol": "Datacenter",
+      "rawEventType": "buy",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "24145254.113537",
+      "rawCostUsd": "169.40683652332",
+      "rawGasUsd": "0.0018282",
+      "rawDexUsd": "2.11758553424"
+    },
+    {
+      "chain": "sol",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "token": "HiZn48GXNbnu7VWfTU8s73iHUXE6z7jnboyNxPMkmLuT",
+      "hash": "iqa3P5ayV46JQoo4JW2xn6HYTZftNCrSgTKecQhS3QLDaHHqTnshMjdVApoJgCywZ15HFGZ3W6tFzVZwanNM3TK",
+      "at": 1790941403000,
+      "side": "sell",
+      "quantity": 16594714.652974,
+      "usd": 129.27805002879,
+      "price": 0.000007790314731661445,
+      "symbol": "Ochouso",
+      "rawEventType": "sell",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "16594714.652974",
+      "rawCostUsd": "129.27805002879",
+      "rawGasUsd": "0.06164535",
+      "rawDexUsd": "1.61597572149"
+    },
+    {
+      "chain": "sol",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "token": "HiZn48GXNbnu7VWfTU8s73iHUXE6z7jnboyNxPMkmLuT",
+      "hash": "2afmrajkE2yLqEEcreKkUSMrYfWtjwV5XekA1MCJZYnuErgnVRvU3BcCydNznurteuBqaHcJt4WkydLHXyShqCDX",
+      "at": 1790941378000,
+      "side": "buy",
+      "quantity": 16594714.652974,
+      "usd": 146.77099230729,
+      "price": 0.000008844442063424261,
+      "symbol": "Ochouso",
+      "rawEventType": "buy",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "16594714.652974",
+      "rawCostUsd": "146.77099230729",
+      "rawGasUsd": "0.06164535",
+      "rawDexUsd": "1.83463751523"
+    },
+    {
+      "chain": "sol",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "token": "4Nr4tDX8AMrg88D4Hr5Agp6xoGHwddtpqdPHSpy2QCJk",
+      "hash": "3zQsEA8U1UcVZXyYGSeYa8dKv84gLYmo2v6zxCmWZCAkNUiUzkQDbWsskksj3K5RjPpTAjgc7sSnH6nTfTg3n3tr",
+      "at": 1790939573000,
+      "side": "sell",
+      "quantity": 26480853.712665,
+      "usd": 191.23885777875,
+      "price": 0.000007221778415976817,
+      "symbol": "Kirkinator",
+      "rawEventType": "sell",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "26480853.712665",
+      "rawCostUsd": "191.23885777875",
+      "rawGasUsd": "0.00183375",
+      "rawDexUsd": "2.39048591325"
+    },
+    {
+      "chain": "sol",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "token": "4Nr4tDX8AMrg88D4Hr5Agp6xoGHwddtpqdPHSpy2QCJk",
+      "hash": "3y5W6o9nNS1CXjeWYhprL8nKfRsmCUUWH241yuc4xRierKmkDU2uyk7euZiihr5BdghVd9Q1iT7bqwvWXkBYGDY8",
+      "at": 1790939443000,
+      "side": "buy",
+      "quantity": 26480853.712665,
+      "usd": 151.643093796,
+      "price": 0.0000057265183155132,
+      "symbol": "Kirkinator",
+      "rawEventType": "buy",
+      "fromAddress": "",
+      "toAddress": "",
+      "rawTokenAmount": "26480853.712665",
+      "rawCostUsd": "151.643093796",
+      "rawGasUsd": "0.001836",
+      "rawDexUsd": "1.8955387872"
+    }
+  ],
+  "finishedAt": "2026-10-02T19:21:26.622Z",
+  "matches": [
+    {
+      "ca": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+      "at": 1790946271000,
+      "side": "sell",
+      "leftHash": "3hXzutKGxfQcqWCtvtUNeGLYD3uqBWdwy4rGsQkBgGgzC6yuf6Z7MD25AH7L7zjwDGxZr8ZJmtwCBXk6nNF29Ewp",
+      "rightHash": "f5adiPfpCY3nTX5ugh8Ryor3bX6gJEUzpZgHesGhxLKEXst3wriNbvGWgvUT6CHG1J4dmfwTKDTeL1JxjppTgAV"
+    },
+    {
+      "ca": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+      "at": 1790946195000,
+      "side": "buy",
+      "leftHash": "ncXG4d3hBcgKcvVQKkg2SAdkwYCx6K6v5SLkiT1qUaTBrsAgSqS95epoGW1hJWKH37HcrBYSUjUQc718AeB9Yku",
+      "rightHash": "3jUSrBPQhTrS6HA8iQi2LJXviJDpYXdwSie6qpqKUsFCGZ6pEy87LNzSzAQYWULagtix46e6FWjfsrACoCjpgxB2"
+    },
+    {
+      "ca": "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8",
+      "at": 1790944751000,
+      "side": "sell",
+      "leftHash": "1GwdKiZAx5uCuDjmfuuvGjLaVL2qNoxUMVYrSRPqHUh8TdgBUTGsKfYv2uddasWAMYUb1ZnLKbznALff8sELTxZ",
+      "rightHash": "47nKojrpq9mhN6fQqPGhbkh76r53m1MJYJHswA8vYGVYG6W3KUEbfNsc2k5WbnyuWkmGY9mSM3vV87s1koFoKPa8"
+    },
+    {
+      "ca": "6yE4hFwwLzNbUjJCoA99Z12gA3yjaK1KAQTVG32dFtoo",
+      "at": 1790944751000,
+      "side": "sell",
+      "leftHash": "1GwdKiZAx5uCuDjmfuuvGjLaVL2qNoxUMVYrSRPqHUh8TdgBUTGsKfYv2uddasWAMYUb1ZnLKbznALff8sELTxZ",
+      "rightHash": "47nKojrpq9mhN6fQqPGhbkh76r53m1MJYJHswA8vYGVYG6W3KUEbfNsc2k5WbnyuWkmGY9mSM3vV87s1koFoKPa8"
+    },
+    {
+      "ca": "6yE4hFwwLzNbUjJCoA99Z12gA3yjaK1KAQTVG32dFtoo",
+      "at": 1790944677000,
+      "side": "buy",
+      "leftHash": "4f6ZG6eRnwWPEAeyi4xxD2yKTvq38L9xqgbGfpFnaGJJ6vF8n8y5yLYuwn4ya4Yid6XPZrF4poE3qhRDLry2RR5r",
+      "rightHash": "5ViZ6w5zzmEa3BEdNrs6BrAhn5sEShEehEGafGmwFds9P1BgbMPfX5y6gyA9Xpd7beXADJCz6NwmA9TB69eHfGdt"
+    },
+    {
+      "ca": "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8",
+      "at": 1790944677000,
+      "side": "buy",
+      "leftHash": "4f6ZG6eRnwWPEAeyi4xxD2yKTvq38L9xqgbGfpFnaGJJ6vF8n8y5yLYuwn4ya4Yid6XPZrF4poE3qhRDLry2RR5r",
+      "rightHash": "5ViZ6w5zzmEa3BEdNrs6BrAhn5sEShEehEGafGmwFds9P1BgbMPfX5y6gyA9Xpd7beXADJCz6NwmA9TB69eHfGdt"
+    },
+    {
+      "ca": "7dSp25Cu72rY9Co4nw2dfCkTAuaGQwtyCcaqCx8W6iXi",
+      "at": 1790943251000,
+      "side": "sell",
+      "leftHash": "3MZucT68iRoSyJoe8zBGNK67Wxsj9c6bpAhASSMvrCFh9Se1LJWznkspcGmbf1m5QoZa8MDmtooAkQmuKAZGYCZu",
+      "rightHash": "471AnsM4r9h4grdqsv6kYqqvPqbTrW3uAkofgdDJXsspqXtwp7RHBsTKeXv7oihxNDVyBWKEneLyn2yuB6adcfco"
+    },
+    {
+      "ca": "7dSp25Cu72rY9Co4nw2dfCkTAuaGQwtyCcaqCx8W6iXi",
+      "at": 1790943131000,
+      "side": "buy",
+      "leftHash": "3mt1hZNp9f3SAAUQUaHNcWHEaRZQrL8rRM1LDVtbegeciJPQonn9jz4ZWikwhoU9y4RscuGkUfq5EVJpbcP1kz8o",
+      "rightHash": "pHjNgPfbcUXNKzqgtGEcW2FyYvrYWgLKSLKF3NGEZM3JbdzvAbHar9eM4PnjvxGHyFz6Va4HMjskmKe9LFnyLwP"
+    },
+    {
+      "ca": "HiZn48GXNbnu7VWfTU8s73iHUXE6z7jnboyNxPMkmLuT",
+      "at": 1790941403000,
+      "side": "sell",
+      "leftHash": "4btUsmfjEHd66wNoUEZoBoqsWGCVQRa8FE4X2w6RjswAMgAGHM12LVT3tTb6QZK3BF9dL8suxq1D7M7VNu8dKRtc",
+      "rightHash": "iqa3P5ayV46JQoo4JW2xn6HYTZftNCrSgTKecQhS3QLDaHHqTnshMjdVApoJgCywZ15HFGZ3W6tFzVZwanNM3TK"
+    },
+    {
+      "ca": "HiZn48GXNbnu7VWfTU8s73iHUXE6z7jnboyNxPMkmLuT",
+      "at": 1790941378000,
+      "side": "buy",
+      "leftHash": "5jst51uqmpTjmJE2YRUrvUZocGzGfeuZKqo59KuPbmN8nB39FauusGpf46XgsH33fi6qxu6S8zMdzzNjqTBWZ4qe",
+      "rightHash": "2afmrajkE2yLqEEcreKkUSMrYfWtjwV5XekA1MCJZYnuErgnVRvU3BcCydNznurteuBqaHcJt4WkydLHXyShqCDX"
+    },
+    {
+      "ca": "4Nr4tDX8AMrg88D4Hr5Agp6xoGHwddtpqdPHSpy2QCJk",
+      "at": 1790939573000,
+      "side": "sell",
+      "leftHash": "Mkk8FmUjFGwKd2JC4sQ4YK9RzDqMy8QpwSiAbc1Us5c5VUKqWzzSbHiDB18gtHMeXu6RewkVNT2jBprPVbxefKe",
+      "rightHash": "3zQsEA8U1UcVZXyYGSeYa8dKv84gLYmo2v6zxCmWZCAkNUiUzkQDbWsskksj3K5RjPpTAjgc7sSnH6nTfTg3n3tr"
+    },
+    {
+      "ca": "4Nr4tDX8AMrg88D4Hr5Agp6xoGHwddtpqdPHSpy2QCJk",
+      "at": 1790939443000,
+      "side": "buy",
+      "leftHash": "2T6VE3WxbpVozm8pAxA4gAcG2ozabLZMrSbY2gKPfw9TFi1WFtApjds5MgjM8Cr9p49BUN6PPa92dVhxbjeVTLNj",
+      "rightHash": "3y5W6o9nNS1CXjeWYhprL8nKfRsmCUUWH241yuc4xRierKmkDU2uyk7euZiihr5BdghVd9Q1iT7bqwvWXkBYGDY8"
+    }
+  ],
+  "multiCaTransactions": [
+    {
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "hash": "1GwdKiZAx5uCuDjmfuuvGjLaVL2qNoxUMVYrSRPqHUh8TdgBUTGsKfYv2uddasWAMYUb1ZnLKbznALff8sELTxZ",
+      "ca": [
+        "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8",
+        "6yE4hFwwLzNbUjJCoA99Z12gA3yjaK1KAQTVG32dFtoo"
+      ],
+      "eventTypes": [
+        "sell",
+        "sell"
+      ]
+    },
+    {
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "hash": "4f6ZG6eRnwWPEAeyi4xxD2yKTvq38L9xqgbGfpFnaGJJ6vF8n8y5yLYuwn4ya4Yid6XPZrF4poE3qhRDLry2RR5r",
+      "ca": [
+        "6yE4hFwwLzNbUjJCoA99Z12gA3yjaK1KAQTVG32dFtoo",
+        "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8"
+      ],
+      "eventTypes": [
+        "buy",
+        "buy"
+      ]
+    },
+    {
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "hash": "47nKojrpq9mhN6fQqPGhbkh76r53m1MJYJHswA8vYGVYG6W3KUEbfNsc2k5WbnyuWkmGY9mSM3vV87s1koFoKPa8",
+      "ca": [
+        "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8",
+        "6yE4hFwwLzNbUjJCoA99Z12gA3yjaK1KAQTVG32dFtoo"
+      ],
+      "eventTypes": [
+        "sell",
+        "sell"
+      ]
+    },
+    {
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "hash": "5ViZ6w5zzmEa3BEdNrs6BrAhn5sEShEehEGafGmwFds9P1BgbMPfX5y6gyA9Xpd7beXADJCz6NwmA9TB69eHfGdt",
+      "ca": [
+        "6yE4hFwwLzNbUjJCoA99Z12gA3yjaK1KAQTVG32dFtoo",
+        "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8"
+      ],
+      "eventTypes": [
+        "buy",
+        "buy"
+      ]
+    }
+  ],
+  "analysis": {
+    "newActivityRows": 24,
+    "uniqueWalletTransactions": 20,
+    "uniqueCa": 6,
+    "sameSecondRowPairs": 12,
+    "uniqueTransactionPairs": 10,
+    "multiCaTransactionCount": 4,
+    "window": {
+      "from": "2026-10-02T11:10:43.000Z",
+      "to": "2026-10-02T13:04:31.000Z"
+    },
+    "transferRows": 0
+  },
+  "rpcVerification": {
+    "source": "https://api.mainnet-beta.solana.com",
+    "method": "getTransaction",
+    "commitment": "finalized",
+    "results": [
+      {
+        "hash": "1GwdKiZAx5uCuDjmfuuvGjLaVL2qNoxUMVYrSRPqHUh8TdgBUTGsKfYv2uddasWAMYUb1ZnLKbznALff8sELTxZ",
+        "startedAt": "2026-10-02T19:22:28.714Z",
+        "receivedAt": "2026-10-02T19:22:29.710Z",
+        "http": 200,
+        "errorCode": -32015,
+        "result": null
+      },
+      {
+        "hash": "4f6ZG6eRnwWPEAeyi4xxD2yKTvq38L9xqgbGfpFnaGJJ6vF8n8y5yLYuwn4ya4Yid6XPZrF4poE3qhRDLry2RR5r",
+        "startedAt": "2026-10-02T19:22:29.710Z",
+        "receivedAt": "2026-10-02T19:22:30.137Z",
+        "http": 200,
+        "errorCode": -32015,
+        "result": null
+      }
+    ]
+  },
+  "completedAt": "2026-10-02T19:25:08Z",
+  "mode": "read_only_research",
+  "profilesRefreshed": false,
+  "newAddresses": [],
+  "baselineHashesVerified": true,
+  "coverageGaps": [
+    "两次公开 RPC 返回 JSON-RPC 错误 -32015、无交易结果；HTTP 200 不算验证成功，已到抽查上限，不重试或换源绕过预算。",
+    "D/E 均只取最新一页，分别与旧基线重合 8 条，仍有旧分页；GMGN 活动无转仓记录不证明链上不存在转仓。",
+    "同哈希跨 CA 的 SPCXx/Ada 可能含兑换或路由两侧，尚未获得回执，不统计为两个独立交易周期，不相加成本、费用或盈亏。",
+    "没有原文事件/推文证据，无法推断叙事或买入动机；没有完整库存与费用证据，不评价组净利润。",
+    "本轮是 03:21 的快照补采，活动样本发生在前一天 19:10–21:04；不能据此宣称中间一直在线。"
+  ],
+  "observedCycles": [
+    {
+      "id": "D",
+      "ca": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+      "symbol": "Human",
+      "buys": 1,
+      "sells": 1,
+      "buyQty": 12943611.615459,
+      "sellQty": 12943611.615459,
+      "buyUsd": 160.06988929239,
+      "sellUsd": 201.34299989854,
+      "differenceUsd": 41.27311060615,
+      "spanSeconds": 76,
+      "events": [
+        {
+          "side": "sell",
+          "at": "2026-10-02T13:04:31.000Z",
+          "hash": "3hXzutKGxfQcqWCtvtUNeGLYD3uqBWdwy4rGsQkBgGgzC6yuf6Z7MD25AH7L7zjwDGxZr8ZJmtwCBXk6nNF29Ewp",
+          "from": "",
+          "to": ""
+        },
+        {
+          "side": "buy",
+          "at": "2026-10-02T13:03:15.000Z",
+          "hash": "ncXG4d3hBcgKcvVQKkg2SAdkwYCx6K6v5SLkiT1qUaTBrsAgSqS95epoGW1hJWKH37HcrBYSUjUQc718AeB9Yku",
+          "from": "",
+          "to": ""
+        }
+      ],
+      "eligibleForAmountDifferenceOnly": true,
+      "netPnl": null,
+      "reason": "仅窗口内数量配平与买卖金额差；未验证完整转账和净成本"
+    },
+    {
+      "id": "D",
+      "ca": "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8",
+      "symbol": "SPCXx",
+      "buys": 1,
+      "sells": 1,
+      "buyQty": 1.88550619,
+      "sellQty": 1.2601304,
+      "buyUsd": 282.11592,
+      "sellUsd": 188.382488,
+      "differenceUsd": -93.73343200000002,
+      "spanSeconds": 74,
+      "events": [
+        {
+          "side": "sell",
+          "at": "2026-10-02T12:39:11.000Z",
+          "hash": "1GwdKiZAx5uCuDjmfuuvGjLaVL2qNoxUMVYrSRPqHUh8TdgBUTGsKfYv2uddasWAMYUb1ZnLKbznALff8sELTxZ",
+          "from": "",
+          "to": ""
+        },
+        {
+          "side": "buy",
+          "at": "2026-10-02T12:37:57.000Z",
+          "hash": "4f6ZG6eRnwWPEAeyi4xxD2yKTvq38L9xqgbGfpFnaGJJ6vF8n8y5yLYuwn4ya4Yid6XPZrF4poE3qhRDLry2RR5r",
+          "from": "",
+          "to": ""
+        }
+      ],
+      "eligibleForAmountDifferenceOnly": false,
+      "netPnl": null,
+      "reason": "同哈希跨 CA 且库存不配平，隔离盈亏归因"
+    },
+    {
+      "id": "D",
+      "ca": "6yE4hFwwLzNbUjJCoA99Z12gA3yjaK1KAQTVG32dFtoo",
+      "symbol": "Ada",
+      "buys": 1,
+      "sells": 1,
+      "buyQty": 13099286.686051,
+      "sellQty": 12968293.81919,
+      "buyUsd": 283.06201222275894,
+      "sellUsd": 188.34100547005852,
+      "differenceUsd": -94.72100675270042,
+      "spanSeconds": 74,
+      "events": [
+        {
+          "side": "sell",
+          "at": "2026-10-02T12:39:11.000Z",
+          "hash": "1GwdKiZAx5uCuDjmfuuvGjLaVL2qNoxUMVYrSRPqHUh8TdgBUTGsKfYv2uddasWAMYUb1ZnLKbznALff8sELTxZ",
+          "from": "",
+          "to": ""
+        },
+        {
+          "side": "buy",
+          "at": "2026-10-02T12:37:57.000Z",
+          "hash": "4f6ZG6eRnwWPEAeyi4xxD2yKTvq38L9xqgbGfpFnaGJJ6vF8n8y5yLYuwn4ya4Yid6XPZrF4poE3qhRDLry2RR5r",
+          "from": "",
+          "to": ""
+        }
+      ],
+      "eligibleForAmountDifferenceOnly": false,
+      "netPnl": null,
+      "reason": "同哈希跨 CA 且库存不配平，隔离盈亏归因"
+    },
+    {
+      "id": "D",
+      "ca": "7dSp25Cu72rY9Co4nw2dfCkTAuaGQwtyCcaqCx8W6iXi",
+      "symbol": "Datacenter",
+      "buys": 1,
+      "sells": 1,
+      "buyQty": 19408215.152988,
+      "sellQty": 19408215.152988,
+      "buyUsd": 144.44951767532,
+      "sellUsd": 125.15423177156,
+      "differenceUsd": -19.295285903760004,
+      "spanSeconds": 120,
+      "events": [
+        {
+          "side": "sell",
+          "at": "2026-10-02T12:14:11.000Z",
+          "hash": "3MZucT68iRoSyJoe8zBGNK67Wxsj9c6bpAhASSMvrCFh9Se1LJWznkspcGmbf1m5QoZa8MDmtooAkQmuKAZGYCZu",
+          "from": "",
+          "to": ""
+        },
+        {
+          "side": "buy",
+          "at": "2026-10-02T12:12:11.000Z",
+          "hash": "3mt1hZNp9f3SAAUQUaHNcWHEaRZQrL8rRM1LDVtbegeciJPQonn9jz4ZWikwhoU9y4RscuGkUfq5EVJpbcP1kz8o",
+          "from": "",
+          "to": ""
+        }
+      ],
+      "eligibleForAmountDifferenceOnly": true,
+      "netPnl": null,
+      "reason": "仅窗口内数量配平与买卖金额差；未验证完整转账和净成本"
+    },
+    {
+      "id": "D",
+      "ca": "HiZn48GXNbnu7VWfTU8s73iHUXE6z7jnboyNxPMkmLuT",
+      "symbol": "Ochouso",
+      "buys": 1,
+      "sells": 1,
+      "buyQty": 17404390.86676,
+      "sellQty": 17404390.86676,
+      "buyUsd": 162.09813226893,
+      "sellUsd": 129.32204918373,
+      "differenceUsd": -32.776083085199986,
+      "spanSeconds": 25,
+      "events": [
+        {
+          "side": "sell",
+          "at": "2026-10-02T11:43:23.000Z",
+          "hash": "4btUsmfjEHd66wNoUEZoBoqsWGCVQRa8FE4X2w6RjswAMgAGHM12LVT3tTb6QZK3BF9dL8suxq1D7M7VNu8dKRtc",
+          "from": "",
+          "to": ""
+        },
+        {
+          "side": "buy",
+          "at": "2026-10-02T11:42:58.000Z",
+          "hash": "5jst51uqmpTjmJE2YRUrvUZocGzGfeuZKqo59KuPbmN8nB39FauusGpf46XgsH33fi6qxu6S8zMdzzNjqTBWZ4qe",
+          "from": "",
+          "to": ""
+        }
+      ],
+      "eligibleForAmountDifferenceOnly": true,
+      "netPnl": null,
+      "reason": "仅窗口内数量配平与买卖金额差；未验证完整转账和净成本"
+    },
+    {
+      "id": "D",
+      "ca": "4Nr4tDX8AMrg88D4Hr5Agp6xoGHwddtpqdPHSpy2QCJk",
+      "symbol": "Kirkinator",
+      "buys": 1,
+      "sells": 1,
+      "buyQty": 25941634.326815,
+      "sellQty": 25941634.326815,
+      "buyUsd": 158.4079780248,
+      "sellUsd": 201.39255255675,
+      "differenceUsd": 42.98457453194999,
+      "spanSeconds": 130,
+      "events": [
+        {
+          "side": "sell",
+          "at": "2026-10-02T11:12:53.000Z",
+          "hash": "Mkk8FmUjFGwKd2JC4sQ4YK9RzDqMy8QpwSiAbc1Us5c5VUKqWzzSbHiDB18gtHMeXu6RewkVNT2jBprPVbxefKe",
+          "from": "",
+          "to": ""
+        },
+        {
+          "side": "buy",
+          "at": "2026-10-02T11:10:43.000Z",
+          "hash": "2T6VE3WxbpVozm8pAxA4gAcG2ozabLZMrSbY2gKPfw9TFi1WFtApjds5MgjM8Cr9p49BUN6PPa92dVhxbjeVTLNj",
+          "from": "",
+          "to": ""
+        }
+      ],
+      "eligibleForAmountDifferenceOnly": true,
+      "netPnl": null,
+      "reason": "仅窗口内数量配平与买卖金额差；未验证完整转账和净成本"
+    },
+    {
+      "id": "E",
+      "ca": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+      "symbol": "Human",
+      "buys": 1,
+      "sells": 1,
+      "buyQty": 12211959.747402,
+      "sellQty": 12211959.747402,
+      "buyUsd": 144.51423367851,
+      "sellUsd": 199.79989353722,
+      "differenceUsd": 55.28565985870998,
+      "spanSeconds": 76,
+      "events": [
+        {
+          "side": "sell",
+          "at": "2026-10-02T13:04:31.000Z",
+          "hash": "f5adiPfpCY3nTX5ugh8Ryor3bX6gJEUzpZgHesGhxLKEXst3wriNbvGWgvUT6CHG1J4dmfwTKDTeL1JxjppTgAV",
+          "from": "",
+          "to": ""
+        },
+        {
+          "side": "buy",
+          "at": "2026-10-02T13:03:15.000Z",
+          "hash": "3jUSrBPQhTrS6HA8iQi2LJXviJDpYXdwSie6qpqKUsFCGZ6pEy87LNzSzAQYWULagtix46e6FWjfsrACoCjpgxB2",
+          "from": "",
+          "to": ""
+        }
+      ],
+      "eligibleForAmountDifferenceOnly": true,
+      "netPnl": null,
+      "reason": "仅窗口内数量配平与买卖金额差；未验证完整转账和净成本"
+    },
+    {
+      "id": "E",
+      "ca": "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8",
+      "symbol": "SPCXx",
+      "buys": 1,
+      "sells": 1,
+      "buyQty": 2.13910724,
+      "sellQty": 1.22687306,
+      "buyUsd": 320.076688,
+      "sellUsd": 183.404999,
+      "differenceUsd": -136.671689,
+      "spanSeconds": 74,
+      "events": [
+        {
+          "side": "sell",
+          "at": "2026-10-02T12:39:11.000Z",
+          "hash": "47nKojrpq9mhN6fQqPGhbkh76r53m1MJYJHswA8vYGVYG6W3KUEbfNsc2k5WbnyuWkmGY9mSM3vV87s1koFoKPa8",
+          "from": "",
+          "to": ""
+        },
+        {
+          "side": "buy",
+          "at": "2026-10-02T12:37:57.000Z",
+          "hash": "5ViZ6w5zzmEa3BEdNrs6BrAhn5sEShEehEGafGmwFds9P1BgbMPfX5y6gyA9Xpd7beXADJCz6NwmA9TB69eHfGdt",
+          "from": "",
+          "to": ""
+        }
+      ],
+      "eligibleForAmountDifferenceOnly": false,
+      "netPnl": null,
+      "reason": "同哈希跨 CA 且库存不配平，隔离盈亏归因"
+    },
+    {
+      "id": "E",
+      "ca": "6yE4hFwwLzNbUjJCoA99Z12gA3yjaK1KAQTVG32dFtoo",
+      "symbol": "Ada",
+      "buys": 1,
+      "sells": 1,
+      "buyQty": 13641371.734752,
+      "sellQty": 13504958.017404,
+      "buyUsd": 321.1339230419987,
+      "sellUsd": 183.37031286962636,
+      "differenceUsd": -137.76361017237232,
+      "spanSeconds": 74,
+      "events": [
+        {
+          "side": "sell",
+          "at": "2026-10-02T12:39:11.000Z",
+          "hash": "47nKojrpq9mhN6fQqPGhbkh76r53m1MJYJHswA8vYGVYG6W3KUEbfNsc2k5WbnyuWkmGY9mSM3vV87s1koFoKPa8",
+          "from": "",
+          "to": ""
+        },
+        {
+          "side": "buy",
+          "at": "2026-10-02T12:37:57.000Z",
+          "hash": "5ViZ6w5zzmEa3BEdNrs6BrAhn5sEShEehEGafGmwFds9P1BgbMPfX5y6gyA9Xpd7beXADJCz6NwmA9TB69eHfGdt",
+          "from": "",
+          "to": ""
+        }
+      ],
+      "eligibleForAmountDifferenceOnly": false,
+      "netPnl": null,
+      "reason": "同哈希跨 CA 且库存不配平，隔离盈亏归因"
+    },
+    {
+      "id": "E",
+      "ca": "7dSp25Cu72rY9Co4nw2dfCkTAuaGQwtyCcaqCx8W6iXi",
+      "symbol": "Datacenter",
+      "buys": 1,
+      "sells": 1,
+      "buyQty": 24145254.113537,
+      "sellQty": 24145254.113537,
+      "buyUsd": 169.40683652332,
+      "sellUsd": 164.79264266036,
+      "differenceUsd": -4.614193862960008,
+      "spanSeconds": 120,
+      "events": [
+        {
+          "side": "sell",
+          "at": "2026-10-02T12:14:11.000Z",
+          "hash": "471AnsM4r9h4grdqsv6kYqqvPqbTrW3uAkofgdDJXsspqXtwp7RHBsTKeXv7oihxNDVyBWKEneLyn2yuB6adcfco",
+          "from": "",
+          "to": ""
+        },
+        {
+          "side": "buy",
+          "at": "2026-10-02T12:12:11.000Z",
+          "hash": "pHjNgPfbcUXNKzqgtGEcW2FyYvrYWgLKSLKF3NGEZM3JbdzvAbHar9eM4PnjvxGHyFz6Va4HMjskmKe9LFnyLwP",
+          "from": "",
+          "to": ""
+        }
+      ],
+      "eligibleForAmountDifferenceOnly": true,
+      "netPnl": null,
+      "reason": "仅窗口内数量配平与买卖金额差；未验证完整转账和净成本"
+    },
+    {
+      "id": "E",
+      "ca": "HiZn48GXNbnu7VWfTU8s73iHUXE6z7jnboyNxPMkmLuT",
+      "symbol": "Ochouso",
+      "buys": 1,
+      "sells": 1,
+      "buyQty": 16594714.652974,
+      "sellQty": 16594714.652974,
+      "buyUsd": 146.77099230729,
+      "sellUsd": 129.27805002879,
+      "differenceUsd": -17.49294227849998,
+      "spanSeconds": 25,
+      "events": [
+        {
+          "side": "sell",
+          "at": "2026-10-02T11:43:23.000Z",
+          "hash": "iqa3P5ayV46JQoo4JW2xn6HYTZftNCrSgTKecQhS3QLDaHHqTnshMjdVApoJgCywZ15HFGZ3W6tFzVZwanNM3TK",
+          "from": "",
+          "to": ""
+        },
+        {
+          "side": "buy",
+          "at": "2026-10-02T11:42:58.000Z",
+          "hash": "2afmrajkE2yLqEEcreKkUSMrYfWtjwV5XekA1MCJZYnuErgnVRvU3BcCydNznurteuBqaHcJt4WkydLHXyShqCDX",
+          "from": "",
+          "to": ""
+        }
+      ],
+      "eligibleForAmountDifferenceOnly": true,
+      "netPnl": null,
+      "reason": "仅窗口内数量配平与买卖金额差；未验证完整转账和净成本"
+    },
+    {
+      "id": "E",
+      "ca": "4Nr4tDX8AMrg88D4Hr5Agp6xoGHwddtpqdPHSpy2QCJk",
+      "symbol": "Kirkinator",
+      "buys": 1,
+      "sells": 1,
+      "buyQty": 26480853.712665,
+      "sellQty": 26480853.712665,
+      "buyUsd": 151.643093796,
+      "sellUsd": 191.23885777875,
+      "differenceUsd": 39.595763982750015,
+      "spanSeconds": 130,
+      "events": [
+        {
+          "side": "sell",
+          "at": "2026-10-02T11:12:53.000Z",
+          "hash": "3zQsEA8U1UcVZXyYGSeYa8dKv84gLYmo2v6zxCmWZCAkNUiUzkQDbWsskksj3K5RjPpTAjgc7sSnH6nTfTg3n3tr",
+          "from": "",
+          "to": ""
+        },
+        {
+          "side": "buy",
+          "at": "2026-10-02T11:10:43.000Z",
+          "hash": "3y5W6o9nNS1CXjeWYhprL8nKfRsmCUUWH241yuc4xRierKmkDU2uyk7euZiihr5BdghVd9Q1iT7bqwvWXkBYGDY8",
+          "from": "",
+          "to": ""
+        }
+      ],
+      "eligibleForAmountDifferenceOnly": true,
+      "netPnl": null,
+      "reason": "仅窗口内数量配平与买卖金额差；未验证完整转账和净成本"
+    }
+  ]
+}

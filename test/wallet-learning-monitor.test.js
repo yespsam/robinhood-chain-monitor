@@ -14,6 +14,49 @@ async function fixture(t, custom = {}) {
   const monitor = createWalletLearningMonitor(options); t.after(() => monitor.stop());
   return { monitor, options, dataDir, calls, advance: ms => { now += ms; } };
 }
+test('lean trading evidence preserves verified identities and expiry without exposing reports or making requests', async t => {
+  const f = await fixture(t); await f.monitor.runOnce();
+  const calls = f.calls.length, lean = f.monitor.tradingEvidence(), full = f.monitor.snapshot(), w = teacher();
+  assert.deepEqual(Object.keys(lean).sort(), ['lastError', 'verifiedLeaderboardProfiles', 'verifiedProfiles']);
+  for (const key of Object.keys(lean)) assert.deepEqual(lean[key], full[key]);
+  assert.equal(lean.verifiedProfiles[w.key]['7d'].checkedAt, w.profile['7d'].checkedAt);
+  lean.verifiedProfiles[w.key]['7d'].wallet = 'changed';
+  assert.equal(f.monitor.tradingEvidence().verifiedProfiles[w.key]['7d'].wallet, w.wallet);
+  f.advance(2 * 3600000 + 1);
+  assert.deepEqual(f.monitor.tradingEvidence().verifiedProfiles, {});
+  assert.deepEqual(f.monitor.snapshot().verifiedProfiles, {});
+  assert.equal(f.calls.length, calls, 'reads do not acquire new wallet data');
+});
+test('behavior research persists separately, respects API pacing and isolates corrupt research memory',async t=>{
+  const f=await fixture(t,{researchContextLoader:()=>({readOnly:true,charts:[],documents:[]})});
+  await f.monitor.runOnce();assert.equal(f.monitor.snapshot().behaviorLearning.cases,1);
+  assert.equal(f.calls.length,1);await f.monitor.runOnce();assert.equal(f.calls.length,1);
+  const stored=JSON.parse(await fs.readFile(f.monitor.stateFile,'utf8'));assert.equal(stored.behaviorMemory.cases.length,1);
+  await f.monitor.stop();const resumed=createWalletLearningMonitor(f.options);
+  try{await resumed.runOnce();assert.equal(resumed.snapshot().behaviorLearning.cases,1);assert.equal(f.calls.length,1);}finally{await resumed.stop();}
+  stored.behaviorMemory={version:'corrupt'};await fs.writeFile(f.monitor.stateFile,JSON.stringify(stored));f.advance(120000);
+  const broken=createWalletLearningMonitor(f.options);
+  try{await broken.runOnce();assert.equal(broken.snapshot().behaviorLearning.status,'error');assert.equal(broken.snapshot().activityRecords,1);
+    assert.deepEqual(JSON.parse(await fs.readFile(f.monitor.stateFile,'utf8')).behaviorMemory,{version:'corrupt'});
+  }finally{await broken.stop();}
+});
+test('historical K-line occupies one normal request slot, reserves durably and resumes without duplicate calls',async t=>{
+  const w=teacher(1,'bsc');let activities=0,chartCalls=0,requested;
+  const f=await fixture(t,{sourceLoader:async()=>({flow:{profiles:{[w.key]:w.profile}}}),
+    client:{activity:async()=>{activities++;return {activities:[{...raw(1),chain:'bsc'}],next:null};},stop:async()=>{}},
+    researchContextLoader:()=>({readOnly:true,charts:[],documents:[]}),researchChartLoader:async query=>{
+      chartCalls++;requested=query;const stored=JSON.parse(await fs.readFile(f.monitor.stateFile,'utf8'));
+      assert.equal(stored.lastAction.status,'requested');assert.equal(stored.behaviorMemory.cases[0].chartAttempts,1);
+      return {...query,status:'ok',source:'gmgn-cli',candles:Array.from({length:5},(_,i)=>({time:query.to*1000-(5-i)*60000,open:1,close:1,high:1.3,low:.8,volume:100}))};
+    }});
+  await f.monitor.runOnce();assert.equal(activities,1);assert.equal(chartCalls,0);
+  f.advance(120000);await f.monitor.runOnce();assert.equal(activities,1);assert.equal(chartCalls,1);
+  assert.equal(requested.latestClosed,false);assert.equal(f.monitor.snapshot().behaviorLearning.observed.chartContexts,1);
+  await f.monitor.stop();const resumed=createWalletLearningMonitor(f.options);
+  try{await resumed.runOnce();assert.equal(chartCalls,1);assert.equal(activities,1);assert.equal(resumed.snapshot().behaviorLearning.observed.chartContexts,1);
+    f.advance(120000);await resumed.runOnce();assert.equal(activities,2);assert.equal(chartCalls,1);
+  }finally{await resumed.stop();}
+});
 test('single flight, durable request budget, head/backfill alternation and restart preserve observations', async t => {
   const f = await fixture(t);
   await Promise.all([f.monitor.runOnce(), f.monitor.runOnce()]); assert.equal(f.calls.length, 1); assert.equal(f.monitor.snapshot().activityRecords, 1);
@@ -24,6 +67,35 @@ test('single flight, durable request budget, head/backfill alternation and resta
   assert.equal((await fs.stat(f.monitor.stateFile)).mode & 0o777, 0o600);
   await f.monitor.stop(); const restarted = createWalletLearningMonitor(f.options);
   try { await restarted.runOnce(); assert.equal(restarted.snapshot().activityRecords, 1); assert.equal(f.calls.length, 3); } finally { await restarted.stop(); }
+});
+
+test('persistent inventory accumulates public non-teachers beyond the 500 candidate cap without extra API requests', async t => {
+  const w = teacher(), profiles = Object.fromEntries(Array.from({ length: 520 }, (_, i) => {
+    const candidate = teacher(i + 1); return [candidate.key, candidate.profile];
+  }));
+  const f = await fixture(t, { sourceLoader: async () => ({ flow: { profiles } }) });
+  await f.monitor.runOnce();
+  const report = f.monitor.snapshot();
+  assert.equal(report.candidateCount, 500); assert.equal(report.addressLibrary.addresses, 520);
+  assert.equal(report.addressLibrary.events, 1); assert.equal(report.addressLibrary.autoFollow, false);
+  assert.equal(f.calls.length, 1, 'cataloging uses cached evidence, no new request slot');
+  await f.monitor.stop();
+  const resumed = createWalletLearningMonitor(f.options);
+  try {
+    await resumed.runOnce(); assert.equal(resumed.snapshot().addressLibrary.addresses, 520);
+    assert.equal(f.calls.length, 1); assert.equal(resumed.snapshot().verifiedProfiles[w.key]['7d'].checkedAt, w.profile['7d'].checkedAt);
+  } finally { await resumed.stop(); }
+});
+
+test('address archive failure is visible without stopping paced learning or clearing retained evidence', async t => {
+  const f = await fixture(t);
+  const file = path.join(f.dataDir, 'wallet-address-library.sqlite');
+  await fs.writeFile(file, 'retain corrupt archive for recovery');
+  await f.monitor.runOnce();
+  const report = f.monitor.snapshot();
+  assert.equal(report.addressLibrary.status, 'error'); assert.equal(report.lastError, null);
+  assert.equal(report.activityRecords, 1); assert.equal(f.calls.length, 1);
+  assert.equal(await fs.readFile(file, 'utf8'), 'retain corrupt archive for recovery');
 });
 test('upstream 429 is persisted, never wipes history or leaks raw error text', async t => {
   const f = await fixture(t); await f.monitor.runOnce(); f.advance(120000);
@@ -65,6 +137,24 @@ test('capacity expands without erasing legacy samples; candidate profiles are no
   } finally { await expanded.stop(); }
 });
 
+test('a full roster rotates in a newly verified teacher, persists old samples and still makes only one paced request',async t=>{
+  const profiles=Object.fromEntries(Array.from({length:80},(_,i)=>{const w=teacher(i+1);
+    for(const p of Object.values(w.profile))p.realizedProfitUsd=-10;return [w.key,w.profile];}));
+  const newcomer=teacher(999);let include=false,calls=[];
+  const f=await fixture(t,{sourceLoader:async()=>({flow:{profiles:{...profiles,...(include?{[newcomer.key]:newcomer.profile}:{})}}}),
+    client:{activity:async(chain,wallet)=>{calls.push(wallet);return {activities:[raw(1,{wallet,chain})],next:null};},stop:async()=>{}}});
+  await f.monitor.runOnce();const before=JSON.parse(await fs.readFile(f.monitor.stateFile,'utf8'));
+  include=true;f.advance(120000);await f.monitor.runOnce();
+  assert.equal(calls.length,2);assert.equal(calls[1],newcomer.wallet);
+  const after=JSON.parse(await fs.readFile(f.monitor.stateFile,'utf8'));
+  assert.equal(Object.keys(after.wallets).length,80);assert.equal(Object.keys(after.walletArchive).length,1);
+  for(const [key,w] of Object.entries(before.wallets))assert.deepEqual((after.wallets[key]||after.walletArchive[key]).rows,w.rows);
+  assert.equal(f.monitor.snapshot().roster.waitingVerified,0);assert.equal(f.monitor.snapshot().roles.teacher,1);
+  await f.monitor.stop();const resumed=createWalletLearningMonitor(f.options);
+  try{await resumed.runOnce();assert.equal(calls.length,2);assert.equal(resumed.snapshot().roster.archivedWallets,1);
+    assert.equal(resumed.snapshot().walletCount,80);}finally{await resumed.stop();}
+});
+
 test('profile batches use two budgeted public calls across cycles, resume after restart and keep activity separate', async t => {
   const w = teacher(); let calls = [];
   for (const p of Object.values(w.profile)) p.checkedAt = new Date(NOW - 2 * 3600000).toISOString();
@@ -77,7 +167,11 @@ test('profile batches use two budgeted public calls across cycles, resume after 
   assert.deepEqual(calls, ['activity', 'activity', 'activity', '7d']);
   assert.equal(f.monitor.snapshot().qualifiedNow, 0); await f.monitor.stop();
   const resumed = createWalletLearningMonitor(f.options);
-  try { await resumed.runOnce(); assert.equal(calls.at(-1), '30d'); assert.equal(resumed.snapshot().qualifiedNow, 1); assert.equal(resumed.snapshot().activityRecords, 1); }
+  try { await resumed.runOnce(); assert.equal(calls.at(-1), '30d'); assert.equal(resumed.snapshot().qualifiedNow, 1); assert.equal(resumed.snapshot().activityRecords, 1);
+    assert.equal(resumed.snapshot().verifiedProfiles[w.key]['30d'].wallet,w.wallet);
+    assert.equal(resumed.snapshot().verifiedLeaderboardProfiles[w.key],undefined,'ordinary learning wallet is not relabelled as leaderboard');
+    f.advance(2*3600000+1);assert.equal(resumed.snapshot().verifiedProfiles[w.key],undefined,'expired profiles do not remain verified');
+  }
   finally { await resumed.stop(); }
 });
 

@@ -40,6 +40,21 @@ test('fast evidence cache reuses unchanged files and invalidates replaced, corru
   await fs.unlink(file); assert.equal((await load()).flowState, null);
 });
 
+test('Flap healthy RPC progress does not imply the pool scan has caught up',async t=>{
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'yesp-pool-coverage-'));
+ t.after(()=>fs.rm(dir,{recursive:true,force:true}));
+ const file=path.join(dir,'flap-quote-state.json'),load=createPaperEvidenceLoader(dir);
+ const pool={identity:{verifiedBlock:1500},cursor:{nextBlock:1001},_health:{status:'healthy'}};
+ await fs.writeFile(file,JSON.stringify(pool));
+ assert.equal((await load()).poolSourceHealth.status,'catching_up');
+ assert.equal((await load()).poolSourceHealth.pendingBlocks,500);
+ pool.cursor.nextBlock=1501;await fs.writeFile(file,JSON.stringify(pool));
+ assert.equal((await load()).poolSourceHealth.status,'healthy');
+ assert.equal((await load()).poolSourceHealth.pendingBlocks,0);
+ pool.cursor.nextBlock=1001;pool._health.status='degraded';await fs.writeFile(file,JSON.stringify(pool));
+ assert.equal((await load()).poolSourceHealth.status,'degraded');
+});
+
 test('observed net flow subtracts sells and deduplicates identical feed records', () => {
   const buy = trade('buy', 400), sell = trade('sell', 150, 'b');
   const result = build(state([buy, buy, sell]));
@@ -59,6 +74,7 @@ test('missing profit profiles do not erase a complete platform-tagged cohort or 
   const result=build(data);
   assert.equal(result.fresh,true);assert.equal(result.complete,true);assert.equal(result.coverageGap,null);
   assert.equal(result.sourceIssue,'wallet_profile_incomplete');
+  assert.equal(result.tokenEvidence.complete,true);assert.equal(result.tokenEvidence.address,CA);
   assert.equal(result.highProfitCount,0);assert.equal(result.profileCheckedCount,0);
   assert.equal(result.smartMoneyCount,1);assert.equal(result.netBuyUsd,250);
   data.trades.robinhood.push(trade('sell',400,'c'));
@@ -68,6 +84,7 @@ test('missing profit profiles do not erase a complete platform-tagged cohort or 
 test('ambiguous legs, quarantine, stale and future chain snapshots cannot qualify', () => {
   const data = state([trade('buy', 400), trade('sell', 100)]);
   assert.equal(build(data).complete, false); assert.equal(build(data).coverageGap, 'ambiguous_trade_legs');
+  assert.equal(build(data).tokenEvidence.complete,false);
   for (const date of [NOW - 120001, NOW + 30001]) {
     const item = state([trade('buy', 400)]); item.chains.robinhood.lastSuccessAt = new Date(date).toISOString();
     delete item.chains.robinhood.feedCoverage;

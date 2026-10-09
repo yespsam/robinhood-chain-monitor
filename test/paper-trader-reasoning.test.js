@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { traderDecision, traderReview, compareConfirmedCandidates, TRADER_REASONING_VERSION } from '../src/paper-trader-reasoning.js';
+import { traderDecision, traderReview, compareConfirmedCandidates, TRADER_REASONING_VERSION, CATALYST_SELECTION_VERSION } from '../src/paper-trader-reasoning.js';
 import { completedPaperRounds, confirmedAccountGate } from '../src/paper-confirmed-policy.js';
 import { evaluatePaperStrategies, createPaperStrategyAccount, advancePaperStrategyAccount, validatePaperStrategyAccount } from '../src/paper-strategy-engine.js';
 import { renderStrategyDetails } from '../dashboard/strategy-details.js';
@@ -67,6 +67,27 @@ test('eligible ranking uses costs then actual buy recency, never a completeness 
   delete cheap.evidence.costAssumptions.estimatedRoundTripCostRate;
   delete expensive.evidence.costAssumptions.estimatedRoundTripCostRate;
   assert.ok(Number.isFinite(compareConfirmedCandidates(expensive, cheap)));
+});
+test('repair ranking favors verified catalysts and freshness, not a cheap unknown narrative',()=>{
+  const price=evaluate(input()),event=evaluate(input(`0x${'b'.repeat(40)}`)),wallet=evaluate(input(`0x${'c'.repeat(40)}`));
+  price.evidence.lossRepair={ready:true,catalystReady:false,group:'price_only'};
+  event.evidence.lossRepair={ready:true,catalystReady:true,group:'event_narrative'};
+  wallet.evidence.lossRepair={ready:true,catalystReady:true,group:'verified_wallet'};
+  price.evidence.costAssumptions.estimatedRoundTripCostRate=.01;
+  event.evidence.costAssumptions.estimatedRoundTripCostRate=.04;
+  assert.deepEqual([price,wallet,event].toSorted(compareConfirmedCandidates),[event,wallet,price]);
+  const inner=structuredClone(wallet);inner.evidence.lossRepair.group='prequalified_wallet';
+  assert.deepEqual([price,inner,event].toSorted(compareConfirmedCandidates),[event,inner,price]);
+  assert.equal(compareConfirmedCandidates(inner,wallet),0,'prequalified route keeps verified-wallet priority');
+  assert.equal(traderDecision(event,NOW).selectionPolicy,CATALYST_SELECTION_VERSION);
+  const old=structuredClone(event);old.evidence.confirmedPolicy.pulse.lastBuyAt=NOW-5000;
+  old.evidence.costAssumptions.estimatedRoundTripCostRate=.001;
+  assert.ok(compareConfirmedCandidates(event,old)<0,'current catalyst ahead of cheaper older catalyst');
+  event.evidence.lossRepair.ready=false;
+  assert.ok(compareConfirmedCandidates(price,event)<0,'unready catalyst cannot borrow promotion');
+  const blocked=evaluate({...input(`0x${'d'.repeat(40)}`),token:{...input().token,isHoneypot:true}});
+  blocked.evidence.lossRepair={ready:true,catalystReady:true,group:'event_narrative'};
+  assert.equal(advancePaperStrategyAccount(createPaperStrategyAccount({nowMs:NOW}),{evaluations:[blocked],confirmedMode:true,nowMs:NOW}).trades.length,0);
 });
 
 test('real evaluator fee ranking changes only which eligible paper candidate gets the slot', () => {

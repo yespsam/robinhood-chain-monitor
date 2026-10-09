@@ -1,10 +1,11 @@
 import fs from "node:fs/promises";
 import { createReadStream, createWriteStream } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createGzip } from "node:zlib";
 import { pipeline } from "node:stream/promises";
 
-const monitorRoot = "/Users/qohfq/Documents/Playground/robinhood-chain-monitor";
+const monitorRoot = fileURLToPath(new URL("../", import.meta.url));
 const logDir = path.join(monitorRoot, "data", "logs");
 const archiveDir = path.join(logDir, "archive");
 const configuredLimit = Number(process.env.MONITOR_LOG_ROTATE_MAX_BYTES || 67_108_864);

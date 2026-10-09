@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { createBinanceFlowClient, createBinanceFlowMonitor } from '../src/binance-flow-monitor.js';
+import { createBinanceFlowClient, createBinanceFlowMonitor, BINANCE_FOCUS_ROTATION, selectBinanceFlowSlot } from '../src/binance-flow-monitor.js';
 import { NOW, row } from './fixtures/binance-flow.js';
-import { binanceFeedCoverage } from '../src/binance-flow-evidence.js';
+import { binanceFeedCoverage, validBinanceFlowState } from '../src/binance-flow-evidence.js';
 
 test('public client sends only fixed read-only endpoint and no credentials or private auth', async () => {
   const calls = [], client = createBinanceFlowClient({ now: () => NOW, fetchImpl: async (url, options) => {
@@ -103,4 +103,68 @@ test('focus chain gets alternating slots without starving other chains', async t
     assert.deepEqual(calls.filter((_, i) => i % 2 === 0).map(([chain]) => chain), ['robinhood', 'sol', 'robinhood', 'bsc', 'robinhood', 'base', 'robinhood', 'eth', 'robinhood']);
     assert.equal(calls.length, 18);
   } finally { await monitor.stop(); }
+});
+
+test('weighted rotation gives BSC/SOL three slots each and retains all other chains across restart', async t => {
+  const dataDir=await directory(t),calls=[];
+  const create=()=>createBinanceFlowMonitor({dataDir,binanceFlowFocusSchedulingEnabled:true},{now:()=>NOW,autoStart:false,
+    client:fake({trades:async(chain,kind)=>{calls.push([chain,kind]);return {code:'000000',data:[]};}})});
+  let monitor=create();
+  try {
+    await monitor.check();assert.equal(monitor.state().focusChainIndex,1);
+    await monitor.stop();monitor=create();
+    for(let i=1;i<18;i++)await monitor.check();
+    assert.deepEqual(calls.filter((_,i)=>i%2===0).map(([chain])=>chain),[...BINANCE_FOCUS_ROTATION,...BINANCE_FOCUS_ROTATION]);
+    assert.equal(calls.length,36,'unchanged two requests per slot');
+    assert.equal(monitor.state().focusChainIndex,0);
+    assert.equal(monitor.state().scheduling.version,'bsc_sol_weighted_v1');
+  }finally{await monitor.stop();}
+});
+
+test('weighted scheduler skips only fully cooling chains and is bounded when all cool down',()=>{
+  const feeds=()=>Object.fromEntries(['kol','smartmoney'].map(k=>[k,{nextAttemptAt:NOW+60000}]));
+  const state={focusChainIndex:0,chains:{bsc:{feeds:feeds()}}};
+  assert.deepEqual(selectBinanceFlowSlot(state,NOW),{chain:'sol',nextIndex:2});
+  state.chains.bsc.feeds.kol.nextAttemptAt=NOW;
+  assert.deepEqual(selectBinanceFlowSlot(state,NOW),{chain:'bsc',nextIndex:1});
+  state.chains=Object.fromEntries([...new Set(BINANCE_FOCUS_ROTATION)].map(chain=>[chain,{feeds:feeds()}]));
+  assert.equal(selectBinanceFlowSlot(state,NOW),null);
+});
+
+test('weighted mode honors global cooldown before the next chain',async t=>{
+  const dataDir=await directory(t);let calls=0;
+  const monitor=createBinanceFlowMonitor({dataDir,binanceFlowFocusSchedulingEnabled:true},{now:()=>NOW,autoStart:false,logger:{},
+    client:fake({trades:async()=>{calls++;throw Object.assign(new Error('limit'),{code:'binance_rate_limited',retryAt:NOW+60000});}})});
+  try{await monitor.check();await monitor.check();assert.equal(calls,1);assert.equal(monitor.state().cooldownUntil,NOW+60000);}
+  finally{await monitor.stop();}
+});
+
+test('actual dispatch after pacing anchors coverage and keeps index delay instead of using queue time',async t=>{
+  const dataDir=await directory(t);let clock=NOW;
+  const monitor=createBinanceFlowMonitor({dataDir,binanceFlowFocusSchedulingEnabled:true},{now:()=>clock,autoStart:false,
+    client:fake({trades:async(_chain,_kind,{onRequestStart})=>{
+      clock+=5000;onRequestStart(clock);clock+=200;return {code:'000000',data:[]};
+    }})});
+  try{
+    await monitor.check();const feed=monitor.state().chains.bsc.feeds.smartmoney;
+    assert.equal(feed.coverage.startAt,NOW+5000);assert.equal(feed.coverage.endAt,NOW-5000);
+    assert.deepEqual(feed.timing,{requestedAt:NOW,dispatchedAt:NOW+5000,receivedAt:NOW+5200,queueWaitMs:5000,responseMs:200});
+    assert.equal(binanceFeedCoverage(feed,clock).complete,false);
+    const snapshot=monitor.state();delete snapshot.focusChainIndex;assert.equal(validBinanceFlowState(snapshot),true);
+    for(const invalid of [-1,9,.5,'1',null])assert.equal(validBinanceFlowState({...snapshot,focusChainIndex:invalid}),false);
+  }finally{await monitor.stop();}
+});
+
+test('public client invokes dispatch hook at the fetch boundary, never for invalid or cooled requests',async()=>{
+  let clock=NOW;const sequence=[];
+  const client=createBinanceFlowClient({now:()=>clock,fetchImpl:async()=>{
+    sequence.push(['fetch',clock]);return new Response('',{status:429});
+  }});
+  const onRequestStart=at=>sequence.push(['dispatch',at]);
+  try{
+    await assert.rejects(client.trades('bsc','kol',{onRequestStart:'bad'}),{code:'binance_invalid_argument'});
+    await assert.rejects(client.trades('bsc','kol',{onRequestStart}),{code:'binance_rate_limited'});
+    clock+=100;await assert.rejects(client.trades('sol','kol',{onRequestStart}),{code:'binance_rate_limited'});
+    assert.deepEqual(sequence,[['dispatch',NOW],['fetch',NOW]]);
+  }finally{await client.stop();}
 });

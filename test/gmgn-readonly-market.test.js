@@ -15,6 +15,60 @@ const rankItem = {
   launchpad_platform: 'geniusfun', creation_timestamp: 1700000000,
 };
 
+test('pipeline telemetry covers distinct CAs, separates waits, and keeps only bounded public metadata',async t=>{
+  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'gmgn-pipeline-test-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));
+  let clock=1790000000000;const start=clock,scheduler={};
+  const client=createReadonlyMarketClient({dataDir:dir,scheduler,now:()=>clock,sleepImpl:async ms=>{clock+=ms;},quoteTtlMs:0,
+    execFileImpl:async(_file,args)=>{
+      clock+=args[0]==='config'?10:30;
+      return {stdout:args[0]==='config'?'fixture-secret-must-not-appear':JSON.stringify({data:{
+        address:args[args.indexOf('--address')+1],price:{price:1}}}),stderr:''};
+    }});
+  const addresses=Array.from({length:3},(_,i)=>`0x${String(i+1).repeat(40)}`);
+  const results=await Promise.all(addresses.map(address=>client.quote({chain:'bsc',address})));
+  assert.ok(results.every(r=>r.status==='ok'));assert.deepEqual(results.map(r=>r.address),addresses);
+  const first=client.diagnostics();assert.equal(first.recent.length,3);assert.equal(first.pending.count,0);
+  assert.deepEqual(first.recent.map(r=>r.address),addresses);
+  assert.ok(first.recent.every(r=>r.preflightMs>=10&&r.requestMs===30&&r.totalMs>=40));
+  assert.ok(first.recent[1].localQueueMs>first.recent[0].localQueueMs);
+  assert.doesNotMatch(JSON.stringify(first),/fixture-secret|stdout|stderr/);
+  first.recent[0].status='changed';assert.equal(client.diagnostics().recent[0].status,'ok');
+  for(let i=0;i<65;i++){clock+=1500;await client.quote({chain:'bsc',address:addresses[i%3]});}
+  assert.equal(client.diagnostics().recent.length,64);assert.ok(clock>start);
+});
+
+test('expired waiting work is reported as missing evidence, not a new observation',async()=>{
+  const address=`0x${'a'.repeat(40)}`;let clock=1790000000000,fail=false;
+  const client=createReadonlyMarketClient({ttlMs:1000,now:()=>clock,runner:async()=>{
+    if(fail)throw Object.assign(new Error('private CLI diagnostics'),{code:'GMGN_QUEUE_EXPIRED'});
+    return JSON.stringify({data:{list:[{time:1790000000,open:1,high:1,low:1,close:1,volume:100}]}});
+  }});
+  const query={chain:'bsc',address,from:1789996400,to:1790000000};
+  const original=await client.kline(query);clock+=2000;fail=true;
+  const expired=await client.kline(query);assert.equal(expired.status,'stale');
+  assert.equal(expired.reasonCode,'GMGN_QUEUE_EXPIRED');assert.equal(expired.observedAt,original.observedAt);
+  assert.deepEqual(expired.candles,original.candles);assert.doesNotMatch(JSON.stringify(expired),/private CLI/);
+});
+
+test('trenches scan refresh uses bounded normal priority and request-time age, retaining it on failure', async () => {
+  let clock=1790000000000,fail=false;const start=clock,calls=[];
+  const client=createReadonlyMarketClient({ttlMs:1000,now:()=>clock,runner:async(args,options)=>{
+    calls.push(options.priority);clock+=5000;options.onRequestStart(clock);clock+=3000;
+    if(fail)throw new Error('offline');
+    return JSON.stringify({data:{new_creation:[rankItem],pump:[],completed:[]}});
+  }});
+  const first=await client.trenches({chain:'bsc',purpose:'scan'});
+  assert.equal(first.status,'ok');assert.deepEqual(calls,[1]);
+  assert.equal(first.queuedAt,new Date(start).toISOString());
+  assert.equal(first.observedAt,new Date(start+5000).toISOString());
+  assert.equal(first.tokens[0].stageObservedAt,first.observedAt);
+  assert.equal(first.receivedAt,new Date(start+8000).toISOString());
+  clock+=2000;fail=true;
+  const failed=await client.trenches({chain:'bsc'});
+  assert.deepEqual(calls,[1,0]);assert.equal(failed.status,'stale');
+  assert.equal(failed.observedAt,first.observedAt);assert.equal(failed.tokens[0].stageObservedAt,first.observedAt);
+});
+
 test('entry confirmations use the bounded critical lane and are not captured by pending research quotes',async()=>{
   const address=`0x${'a'.repeat(40)}`,start=1790000000000;let clock=start;const calls=[];
   const client=createReadonlyMarketClient({now:()=>clock,runner:(args,options)=>new Promise(resolve=>{
@@ -260,6 +314,20 @@ test('fast ranking cache expires after one second and records actual dispatch wi
   clock += 1; const second = await client.trending(input); assert.equal(calls, 2);
   clock += 1001; fail = true; const stale = await client.trending(input);
   assert.equal(stale.status, 'stale'); assert.equal(stale.observedAt, second.observedAt);
+});
+
+test('valid empty rankings replace old members while invalid responses never renew observation time',async t=>{
+  let clock=1790000000000,payload={data:{rank:[rankItem]}};
+  const client=createReadonlyMarketClient({now:()=>clock,trendingTtlMs:0,runner:async()=>JSON.stringify(payload)});
+  t.after(()=>client.close());
+  assert.equal((await client.trending({chain:'bsc'})).tokens.length,1);
+  clock+=1000;payload={data:{rank:[]}};
+  const empty=await client.trending({chain:'bsc'});
+  assert.equal(empty.status,'ok');assert.deepEqual(empty.tokens,[]);assert.equal(empty.observedAt,new Date(clock).toISOString());
+  clock+=1000;payload={data:{message:'not a rank'}};
+  const bad=await client.trending({chain:'bsc'});
+  assert.equal(bad.status,'stale');assert.equal(bad.reasonCode,'GMGN_INVALID_RESPONSE');
+  assert.deepEqual(bad.tokens,[]);assert.equal(bad.observedAt,empty.observedAt);
 });
 
 test('readonly market parses GMGN trending envelope and applies transparent risk gate', async () => {

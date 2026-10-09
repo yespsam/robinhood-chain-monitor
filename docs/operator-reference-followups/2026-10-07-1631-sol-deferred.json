@@ -1,0 +1,165 @@
+{
+  "version": 1,
+  "mode": "readonly_public_wallet_research",
+  "group": "sol",
+  "report": "docs/operator-reference-followups/2026-10-07-1631-sol-deferred.md",
+  "evidence": "docs/operator-reference-followups/2026-10-07-1631-sol-deferred.json",
+  "question": "在不挤占实时采集的前提下，能否从D/E保存的游标继续补齐历史分页并接回10月2日检查点？",
+  "startedAt": "2026-10-07T08:31:35Z",
+  "triggeredAt": "2026-10-07T08:31:22.990Z",
+  "completedAt": "2026-10-07T08:35:40Z",
+  "configChecked": null,
+  "gmgnConfigChecks": 0,
+  "gmgnBusinessRequests": 0,
+  "gmgnBusinessDispatched": 0,
+  "gmgnSucceeded": 0,
+  "gmgnFailed": 0,
+  "rpcRequests": 0,
+  "newRows": 0,
+  "uniqueCa": 0,
+  "oneToOnePairs": 0,
+  "newAddresses": 0,
+  "status": "deferred_shared_resources_busy",
+  "summary": "本轮无新增证据，保留上轮结论。本地地址库及两份缓存无D/E匹配；共享账户4个存活请求排队，含2个优先级1实时请求，研究让路，未发GMGN/RPC。保留历史分页游标和最新活动检查点，下轮BSC。",
+  "resourcesBefore": {
+    "checkedAt": "2026-10-07T08:34:25.375Z",
+    "activeRequests": 0,
+    "queuedRequests": 4,
+    "queuedPriorities": [
+      0,
+      1,
+      0,
+      1
+    ],
+    "queuePids": [
+      49145,
+      49145,
+      41192,
+      49145
+    ],
+    "allQueueOwnersAlive": true,
+    "cooldownUntil": "2026-09-21T17:41:38.000Z",
+    "cooldownActive": false,
+    "note": "Point-in-time queue snapshot, not proof of persistent blocking; no locks/cooldown/queue modified."
+  },
+  "localSnapshot": {
+    "caches": [
+      {
+        "path": "data/wallet-learning-state.json",
+        "updatedAt": "2026-10-07T08:33:01.914Z",
+        "matches": 0
+      },
+      {
+        "path": "data/gmgn-flow-state.json",
+        "updatedAt": "2026-10-07T08:34:23.533Z",
+        "matches": 0
+      }
+    ],
+    "sqlite": {
+      "connection": "readonly",
+      "table": "addresses",
+      "filter": "Exact Solana D/E wallets",
+      "matchedRows": 0
+    },
+    "heartbeats": [
+      {
+        "name": "main",
+        "version": 1,
+        "producer": "main",
+        "pid": 45914,
+        "startedAt": "2026-10-07T08:17:26.957Z",
+        "updatedAt": "2026-10-07T08:34:27.261Z",
+        "sequence": 35
+      },
+      {
+        "name": "fomo",
+        "version": 1,
+        "producer": "fomo",
+        "pid": 49145,
+        "startedAt": "2026-10-07T08:28:43.162Z",
+        "updatedAt": "2026-10-07T08:34:13.180Z",
+        "sequence": 12
+      },
+      {
+        "name": "bsc",
+        "version": 1,
+        "producer": "bsc",
+        "pid": 49121,
+        "startedAt": "2026-10-07T08:28:34.425Z",
+        "updatedAt": "2026-10-07T08:34:16.700Z",
+        "sequence": 12
+      }
+    ],
+    "sourcePolicy": {
+      "version": 1,
+      "fomoPlatformSourcesEnabled": false,
+      "reason": "User cancelled FOMO platform sources; retain GMGN smart money, public X, other Telegram monitoring and BSC scanning.",
+      "updatedAt": "2026-10-07T08:15:27.000Z"
+    }
+  },
+  "coverage": [
+    {
+      "id": "D",
+      "chain": "sol",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "lastTrade": {
+        "at": "2026-10-04T03:27:59.000Z",
+        "hash": "2bfAF6JMTsKgmTGUSUYqZ5ZAqYLugDotWnrW7u7bpJNdP33PjywBt1eedPTn1pNv2UYPmG39f4DKf67HvqpVq89N",
+        "ca": "AZwtTLzLtfYf4XbgHEP6LPHRKQFkvx3iPGWPLZU9tXDz",
+        "side": "sell"
+      },
+      "lastActivityCheckAt": "2026-10-04T03:55:06.556Z",
+      "paginationGap": {
+        "oldCheckpoint": {
+          "at": "2026-10-02T13:04:31.000Z",
+          "hash": "3hXzutKGxfQcqWCtvtUNeGLYD3uqBWdwy4rGsQkBgGgzC6yuf6Z7MD25AH7L7zjwDGxZr8ZJmtwCBXk6nNF29Ewp",
+          "ca": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+          "side": "sell"
+        },
+        "oldestCollectedAt": "2026-10-03T05:58:36.000Z",
+        "resumeCursor": "NDUyODQ1ODEzMDA1MTAwMDg6MDo6",
+        "observedAt": "2026-10-07T00:22:20.090Z",
+        "report": "docs/operator-reference-followups/2026-10-07-0821-sol-pagination.md"
+      },
+      "headAgeHours": 76.7
+    },
+    {
+      "id": "E",
+      "chain": "sol",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "lastTrade": {
+        "at": "2026-10-04T03:27:59.000Z",
+        "hash": "3eGurwBTEcERdGqcrmBnCaFJsGiNpaZcZu23xAtk1UWfXrRqEsorW929Gp7jWeAd58Fuuxzahs7y37Hastr1vTy6",
+        "ca": "AZwtTLzLtfYf4XbgHEP6LPHRKQFkvx3iPGWPLZU9tXDz",
+        "side": "sell"
+      },
+      "lastActivityCheckAt": "2026-10-04T03:55:24.643Z",
+      "paginationGap": {
+        "oldCheckpoint": {
+          "at": "2026-10-02T13:04:31.000Z",
+          "hash": "f5adiPfpCY3nTX5ugh8Ryor3bX6gJEUzpZgHesGhxLKEXst3wriNbvGWgvUT6CHG1J4dmfwTKDTeL1JxjppTgAV",
+          "ca": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+          "side": "sell"
+        },
+        "oldestCollectedAt": "2026-10-03T05:33:46.000Z",
+        "resumeCursor": "NDUyODQwMjAyMDA3MzMwMDg6MDo6",
+        "observedAt": "2026-10-07T00:22:27.570Z",
+        "report": "docs/operator-reference-followups/2026-10-07-0821-sol-pagination.md"
+      },
+      "headAgeHours": 76.7
+    }
+  ],
+  "classification": "unverified_research_reference",
+  "limitations": [
+    "没有新增交易记录或RPC核验，不提出新的地址行为结论。",
+    "历史分页与最新头页均有缺口，不能用无匹配证明钱包无活动。",
+    "只核对当前心跳，无法证明休眠、断网或两次观测之间持续在线。",
+    "不将历史同步交易当作已确认同控、叙事或自动跟单依据。"
+  ],
+  "dayReview": {
+    "reported": true,
+    "action": "skipped_already_reported"
+  },
+  "nextGroup": "bsc",
+  "nextQuestion": "C 的 PairLab 活动页和库存再次无净变化；下个 BSC 轮优先低频补 A/B 一页近期活动，按链/CA/钱包/哈希去重并做一对一同步匹配，遇忙碌停止，不重复刷新 C 静态库存。"
+}

@@ -1,0 +1,520 @@
+{
+  "version": 1,
+  "group": "bsc",
+  "report": "docs/operator-reference-followups/2026-10-09-0438-bsc-head.md",
+  "evidence": "docs/operator-reference-followups/2026-10-09-0438-bsc-head.json",
+  "question": "B/C到期最新页是否新增活动，C上轮买入能否补足独立链上证据？",
+  "triggeredAt": "2026-10-08T20:38:01.224Z",
+  "startedAt": "2026-10-08T20:39:05.673Z",
+  "completedAt": "2026-10-08T20:42:05.075Z",
+  "configChecked": true,
+  "gmgnConfigChecks": 1,
+  "gmgnBusinessRequests": 2,
+  "gmgnBusinessDispatched": 2,
+  "gmgnSucceeded": 2,
+  "gmgnFailed": 0,
+  "rpcRequests": null,
+  "rpcRequestBudgetCharged": 2,
+  "rpcPlannedRequests": 2,
+  "rpcDispatchCountVerified": false,
+  "rpcSucceeded": 0,
+  "rpcResultsUnavailable": true,
+  "rpcLocalError": "functions.store attempted to store absent session_id on a completed exec result; response not retained",
+  "returnedRows": 31,
+  "repeatedRows": 31,
+  "newRows": 0,
+  "newIndependentActivityVerifications": 0,
+  "newAddresses": 0,
+  "status": "provider_head_repeated_rpc_result_capture_unavailable",
+  "summary": "B/C头页31条全部重复，lastNewEvidenceAt与lastTrade不变。RPC抽查输出未留存，不能确认本轮B nonce或C成功状态/净收币；保留覆盖缺口，未追加请求。",
+  "elapsedFromHeartbeatSeconds": 244,
+  "pages": [
+    {
+      "id": "B",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "ok": true,
+      "checkedAt": "2026-10-08T20:39:08.745Z",
+      "elapsedMs": 2913,
+      "identity": {
+        "requestChain": "bsc",
+        "requestWallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+        "returnedWallet": null,
+        "returnedChain": null,
+        "rowsPassedIdentityValidation": true
+      },
+      "rawRows": 20,
+      "normalized": [
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0x276ed1a8787a851f66bf341a62bd62728028d53b19a22ea8a69fa6b3f7857f6d",
+          "at": 1790939289000,
+          "side": "sell",
+          "quantity": 2438440.135282079,
+          "usd": 145.27041106513246,
+          "price": 0.00005957960790633211,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0xf21c768f9d08702bbdcbcacd8211d997056c5e8d06ba01a595a75cc72b413a5b",
+          "at": 1790939288000,
+          "side": "sell",
+          "quantity": 348348.5907545827,
+          "usd": 20.513695441865305,
+          "price": 0.00005889282927765583,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0xacb32cc30d9f432b2cbb678063bc1bd970bdefc6c72c48cca7b5d34a9665bb27",
+          "at": 1790939287000,
+          "side": "sell",
+          "quantity": 348348.5907545827,
+          "usd": 20.71131448803073,
+          "price": 0.000059460174385260453,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0x5db83af0f80e8d7d9cd1f56029356ad921d7e4c16015bb93fd2fe434983acdfd",
+          "at": 1790939287000,
+          "side": "sell",
+          "quantity": 348348.5907545827,
+          "usd": 20.776506294757507,
+          "price": 0.00005964733373715502,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0xb28715ac2228aa8d83c46fea544497fad601d1ef66e613e3c53732dc08749f3b",
+          "at": 1790939285000,
+          "side": "sell",
+          "quantity": 435435.7384432284,
+          "usd": 26.14753307269023,
+          "price": 0.00006005362439530426,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0xc3f8e6c5cbe00f9487f8fc6886ccbbbb503985152898da8ea92abb6a7de27696",
+          "at": 1790939285000,
+          "side": "sell",
+          "quantity": 435435.7384432284,
+          "usd": 26.357656932292276,
+          "price": 0.00006053622056626819,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0x99ca4abb08a390c46765b76d039711ba5893fead20ac0596e5b177b4fbbb406c",
+          "at": 1790938713000,
+          "side": "sell",
+          "quantity": 544294.6730540355,
+          "usd": 33.10233728073745,
+          "price": 0.00006082150309591877,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0x603c938f2bbb7e48f40b0d6687be914ceb7f90126161473962ab1bcaa46b7c95",
+          "at": 1790938713000,
+          "side": "sell",
+          "quantity": 544294.6730540355,
+          "usd": 33.26884529795768,
+          "price": 0.00006112744124762593,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0x848201ba92c46036de75a35e8141d7ce17451bcc5019f345b278c0afa93e4175",
+          "at": 1790938711000,
+          "side": "sell",
+          "quantity": 680368.3413175443,
+          "usd": 41.31317634138607,
+          "price": 0.000060726333888502344,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0x3e29ea056bc18a1bb1da17cee5a16e1d34a1f7e5eae4ad03628a6c713d6d090d",
+          "at": 1790938710000,
+          "side": "sell",
+          "quantity": 680368.3413175443,
+          "usd": 42.34532770629426,
+          "price": 0.00006224349557781305,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0x0931fda0e076501f12c1b99c2d87c0af9f568cf9149a1f1dc89c9746eaec25a1",
+          "at": 1790938708000,
+          "side": "sell",
+          "quantity": 755964.8236861604,
+          "usd": 49.91092763423954,
+          "price": 0.00006602776964038245,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0x746a90098371e7309cc9cc98cff377b91de2a7d37567b2d246fb3e56d20cd37f",
+          "at": 1790938708000,
+          "side": "sell",
+          "quantity": 839960.9152068449,
+          "usd": 56.527975745673,
+          "price": 0.00006730338833435633,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0xb3547c0aac9fbd227d0ffad01b4936e9ca1ae5bec3510127ef43b4048b0f166e",
+          "at": 1790937078000,
+          "side": "sell",
+          "quantity": 933289.9057853832,
+          "usd": 151.6017625087465,
+          "price": 0.0001624502017582338,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0xe00666690dd7e03aed0ca3fc017c86047341c50890af223e966fe39a6aed9ad2",
+          "at": 1790935459000,
+          "side": "sell",
+          "quantity": 1036988.7842059813,
+          "usd": 163.5482219540606,
+          "price": 0.0001577263818875077,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0x69f1785263e656d2572cd6c2c6c2fb998877ffdfc177800acb82dca6bb5f9f90",
+          "at": 1790933263000,
+          "side": "sell",
+          "quantity": 1152209.760228868,
+          "usd": 139.65808057037248,
+          "price": 0.00012121799392179071,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0x081247889dd0662729ab14c07a83073d5e3bb99aa356334844494f78041280c3",
+          "at": 1790933107000,
+          "side": "sell",
+          "quantity": 1440262.2002860853,
+          "usd": 112.88950675206141,
+          "price": 0.00007838709790321062,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0xe2eb7b749d0604472287132df7763121a676f1d7cc9d4fe02d574fd4e7b2886f",
+          "at": 1790933106000,
+          "side": "sell",
+          "quantity": 1440262.2002860853,
+          "usd": 114.74048349300506,
+          "price": 0.00007967236080481566,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0x04b7b1e461c560789313c9e7c561665a64caa22d209f2b6587da2136a068cf64",
+          "at": 1790932951000,
+          "side": "sell",
+          "quantity": 1600291.3336512058,
+          "usd": 95.19636295687529,
+          "price": 0.00005949135711583314,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0xf2fb530c98551eece8a50ad4260f63c8086cc7270593188e79cea79363cf5d9e",
+          "at": 1790932686000,
+          "side": "sell",
+          "quantity": 1778101.481834673,
+          "usd": 48.42306456163243,
+          "price": 0.000027233015132335836,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0x3d58035f695dbc52b0fab614c644734bb464267a02d3bee4e721208a78e812e7",
+          "at": 1790932684000,
+          "side": "sell",
+          "quantity": 1975668.3131496368,
+          "usd": 54.78755272715135,
+          "price": 0.000027731149182530694,
+          "symbol": "PairLab"
+        }
+      ],
+      "newRows": [],
+      "overlap": 20,
+      "next": "MTI1MjY3MDU2MDAyMTcwMDAwMDowOjo=",
+      "oldAnchor": {
+        "at": "2026-10-02T11:08:09.000Z",
+        "hash": "0x276ed1a8787a851f66bf341a62bd62728028d53b19a22ea8a69fa6b3f7857f6d",
+        "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+        "side": "sell"
+      },
+      "oldAnchorIncluded": true,
+      "providerLatestActivityAt": "2026-10-02T11:08:09.000Z",
+      "firstReturnedActivityAt": "2026-10-02T09:18:04.000Z",
+      "lastNewEvidenceAt": null
+    },
+    {
+      "id": "C",
+      "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+      "ok": true,
+      "checkedAt": "2026-10-08T20:39:13.998Z",
+      "elapsedMs": 5253,
+      "identity": {
+        "requestChain": "bsc",
+        "requestWallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+        "returnedWallet": null,
+        "returnedChain": null,
+        "rowsPassedIdentityValidation": true
+      },
+      "rawRows": 11,
+      "normalized": [
+        {
+          "chain": "bsc",
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "token": "0xf5da176cbd13d1f4a7a5ba62fb2a59be423d7777",
+          "hash": "0x8b2761461b614098e528f19111521c262bdff5251ab09307e88fe0bbf7d794d6",
+          "at": 1791450947000,
+          "side": "buy",
+          "quantity": 12937496.885040155,
+          "usd": 303.3162690022342,
+          "price": 0.000023444741413075347,
+          "symbol": "躺平"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0xc3a7ebb2d547698991357823e1206146ff0765475a00081c7fd2e077a954b63f",
+          "at": 1791208866000,
+          "side": "sell",
+          "quantity": 14245139.184253467,
+          "usd": 82.16843476994579,
+          "price": 0.000005768606175194216,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0x0bc6f1a15f6d6a076ae1821aadbd476e2f2ae3ccc83d89923c563b1acf5f912a",
+          "at": 1790954875000,
+          "side": "buy",
+          "quantity": 4914860.493939693,
+          "usd": 74.19025481175,
+          "price": 0.000015095088640507878,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0xe648bb521329e0b222a89b46ff98da04098592c65e283269a0945adc0e22846c",
+          "at": 1790933177000,
+          "side": "sell",
+          "quantity": 1234696.5431529004,
+          "usd": 120.29278538485158,
+          "price": 0.00009743431184576936,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0x60a7cb8efc32bfbf37701ca9e12d3c7c5609dd5b9bb72220375585928b39355b",
+          "at": 1790933173000,
+          "side": "sell",
+          "quantity": 1320621.9041833344,
+          "usd": 127.3556329175123,
+          "price": 0.00009644333847784558,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0x78b32218757ec0d2ef176562d92d1847081ad3de8bc61d5f678f7912b4ed72b5",
+          "at": 1790933173000,
+          "side": "sell",
+          "quantity": 1320621.9041833344,
+          "usd": 129.75441798239072,
+          "price": 0.0000982598803507717,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0x52e27a7bfe4b33bf3ce7de6248d7998291e124bef949e5fa75408060917e7425",
+          "at": 1790932689000,
+          "side": "buy",
+          "quantity": 2820673.030817244,
+          "usd": 73.865088,
+          "price": 0.000026187043727857668,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0xf3e515bcf20d36767ced5199ddea78b9a819ce0588be4b6066e338f88f7927e3",
+          "at": 1790932689000,
+          "side": "buy",
+          "quantity": 2856437.8020988856,
+          "usd": 73.865088,
+          "price": 0.000025859162046421797,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0x57e1a9bc2d33af564a5bf3c38b9ae0696f041e80da68faf87eb65cc3aff03949",
+          "at": 1790932655000,
+          "side": "buy",
+          "quantity": 2480885.8720830115,
+          "usd": 73.836576,
+          "price": 0.000029762181658926953,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0x80be55370ef28e5d43f9b80cab182a49ea95f9bdc2feeff2341d1362106a2362",
+          "at": 1790932654000,
+          "side": "buy",
+          "quantity": 2510369.445064848,
+          "usd": 73.836576,
+          "price": 0.000029412633325806216,
+          "symbol": "PairLab"
+        },
+        {
+          "chain": "bsc",
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "hash": "0x2b3d24dd6bf70d26ec913719ac31336d20d760d5b216c78ea551b234fc546f0f",
+          "at": 1790932654000,
+          "side": "buy",
+          "quantity": 2537852.8917693547,
+          "usd": 73.836576,
+          "price": 0.00002909411189256214,
+          "symbol": "PairLab"
+        }
+      ],
+      "newRows": [],
+      "overlap": 11,
+      "next": null,
+      "oldAnchor": {
+        "at": "2026-10-08T09:15:47.000Z",
+        "hash": "0x8b2761461b614098e528f19111521c262bdff5251ab09307e88fe0bbf7d794d6",
+        "ca": "0xf5da176cbd13d1f4a7a5ba62fb2a59be423d7777",
+        "side": "buy"
+      },
+      "oldAnchorIncluded": true,
+      "providerLatestActivityAt": "2026-10-08T09:15:47.000Z",
+      "firstReturnedActivityAt": "2026-10-02T09:17:34.000Z",
+      "lastNewEvidenceAt": "2026-10-08T12:38:05.121Z"
+    }
+  ],
+  "baselineHashes": [
+    {
+      "path": "docs/operator-clusters-2026-10-02.json",
+      "expected": "1b952275a0986a2dc10e1f80eb0e7a27f0e498cd2f1585ca92a3d4f5b58e1d55",
+      "actual": "1b952275a0986a2dc10e1f80eb0e7a27f0e498cd2f1585ca92a3d4f5b58e1d55"
+    },
+    {
+      "path": "docs/operator-reference-learning-2026-10-02.json",
+      "expected": "3cde872e2325e011281a9d5174514a5359ca1f47749e1f335ed3728dbbd2d4ad",
+      "actual": "3cde872e2325e011281a9d5174514a5359ca1f47749e1f335ed3728dbbd2d4ad"
+    },
+    {
+      "path": "docs/operator-reference-analysis-2026-10-02.json",
+      "expected": "3b82c386681b98e22db5455f4ffd3a9c5c034f8fe30161946079cabd202b2e04",
+      "actual": "3b82c386681b98e22db5455f4ffd3a9c5c034f8fe30161946079cabd202b2e04"
+    }
+  ],
+  "source": "gmgn-cli portfolio activity through src/gmgn-flow-client.js; default priority 0",
+  "rpc": {
+    "source": "https://bsc-dataseed-public.bnbchain.org",
+    "planned": [
+      {
+        "method": "eth_getTransactionCount",
+        "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+        "blockTag": "latest"
+      },
+      {
+        "method": "eth_getTransactionReceipt",
+        "hash": "0x8b2761461b614098e528f19111521c262bdff5251ab09307e88fe0bbf7d794d6"
+      }
+    ],
+    "accounting": "预算按2次耗尽；实际派发数及响应无法从留存结果核实，不追加调用",
+    "interpretation": "本地结果保存失败，不证明RPC服务故障、链上交易失败或没有交易"
+  },
+  "coverage": {
+    "B": "provider_freshness_unverified",
+    "C": "provider_freshness_unverified",
+    "A": "not_selected_two_wallet_limit_existing_nonce_gap_preserved",
+    "latestPageAnchorsIncluded": true,
+    "historicalGapsAndCursorsPreserved": true,
+    "continuousOnlineClaim": false
+  },
+  "nextGroup": "sol",
+  "nextQuestion": "下轮Sol优先到期D/E头页；在预算内核验D FUN卖出哈希及Cinnamon/NFLX同哈希路由，保留更早分页缺口。",
+  "pendingBscQuestion": "优先A到期头页；在预算内核验C躺平买入回执与B最新nonce。本轮RPC未取得可追溯响应，不能覆盖先前证据或套用B分类到A。",
+  "safety": {
+    "decision": "观察",
+    "newTeacher": false,
+    "strategyChanged": false,
+    "ledgerChanged": false,
+    "monitorsRestarted": false,
+    "fomoPlatformRestored": false,
+    "profilesRequested": 0,
+    "newReferenceAddresses": 0
+  }
+}

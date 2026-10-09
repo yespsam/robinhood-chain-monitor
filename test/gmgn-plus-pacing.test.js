@@ -50,6 +50,7 @@ test('Plus cross-process admission overlaps slow work, preserves spacing, and re
   for(const row of rows) {
     const active=rows.filter(item=>item.start<=row.start&&item.end>row.start);
     assert.ok(active.length<=3);assert.ok(active.filter(item=>item.priority!==2).length<=2);
+    assert.ok(active.filter(item=>item.priority===0).length<=1,'background cannot take the live normal seat');
   }
   assert.deepEqual((await slot(dir)).active,[]);
   assert.deepEqual(await fs.readdir(path.join(dir,'gmgn-account-queue')),[]);
@@ -74,12 +75,14 @@ test('hot rollback to Free waits for all Plus leases and resumes serial work',as
   release();await Promise.all([active,next]);assert.equal(entered,true);assert.deepEqual((await slot(dir)).active,[]);
 });
 
-test('local Plus queue also reserves an exit lane, so queued research cannot occupy all admissions',async()=>{
+test('local Plus queue reserves both live and exit capacity while background is stalled',async()=>{
   const scheduler={},releases=[],calls=[];
   const enqueue=(id,priority)=>enqueueReadonly(scheduler,()=>new Promise(resolve=>{calls.push(id);releases.push(resolve);}),{priority,concurrency:3,normalConcurrency:2});
-  const a=enqueue('a',0),b=enqueue('b',0);await until(()=>calls.length===2);
+  const a=enqueue('a',0);await until(()=>calls.length===1);
+  const b=enqueue('b',0);await delay(20);assert.deepEqual(calls,['a']);
   const c=enqueue('c',1),exit=enqueue('exit',2);await until(()=>calls.length===3);
-  assert.deepEqual(calls,['a','b','exit']);releases[0]();await until(()=>calls.length===4);
+  assert.deepEqual(calls,['a','exit','c']);releases[0]();await until(()=>calls.length===4);
+  assert.equal(calls[3],'b');
   releases.slice(1).forEach(resolve=>resolve());await Promise.all([a,b,c,exit]);
 });
 
@@ -104,11 +107,36 @@ setTimeout(()=>console.log(JSON.stringify({data:{chain:'bsc',address:args[args.i
 `,{mode:0o700});
   const client=createReadonlyMarketClient({dataDir:dir,cliPath:cli,scheduler:{},quoteTtlMs:0});
   const first=client.quote({chain:'bsc',address:'0x1111111111111111111111111111111111111111',purpose:'learning'});
-  const second=client.quote({chain:'bsc',address:'0x2222222222222222222222222222222222222222',purpose:'learning'});
+  const second=client.quote({chain:'bsc',address:'0x2222222222222222222222222222222222222222',purpose:'candidate'});
   await until(async()=>(await slot(dir)).active.length===2);
   const exit=client.quote({chain:'bsc',address:'0x3333333333333333333333333333333333333333',purpose:'exit'});
   const rows=await Promise.all([first,second,exit]);assert.ok(rows.every(row=>row.status==='ok'&&row.price===1.2));
   assert.ok(Date.parse(rows[2].observedAt)<Date.parse(rows[0].receivedAt));
+  assert.deepEqual((await slot(dir)).active,[]);
+});
+
+test('native gate waiters are not mistaken for network concurrency; exits keep their shared reserved seat',async t=>{
+  const dir=await fixture(t);await enable(dir);const cli=path.join(dir,'waiter-cli'),gate=createGmgnAccountGate(dir);
+  await fs.writeFile(cli,`#!/usr/bin/env node
+const args=process.argv.slice(2);if(args[0]==='config')process.exit(0);
+setTimeout(()=>console.log(JSON.stringify({data:{chain:'bsc',address:args[args.indexOf('--address')+1],price:{price:1}}})),100);
+`,{mode:0o700});
+  const releases=[],hold=()=>new Promise(resolve=>releases.push(resolve));
+  const held=[gate(hold,{},{priority:0}),gate(hold,{},{priority:1})];
+  await until(()=>releases.length===2);
+  const client=createReadonlyMarketClient({dataDir:dir,cliPath:cli,scheduler:{},quoteTtlMs:0});
+  const ordinary=[1,2,3,4].map((n,i)=>client.quote({chain:'bsc',address:`0x${String(n).repeat(40)}`,purpose:i===0?'learning':'candidate'}));
+  let urgent;
+  try {
+    await until(async()=>(await fs.readdir(path.join(dir,'gmgn-account-queue'))).filter(x=>x.endsWith('.json')).length===4);
+    assert.equal((await slot(dir)).active.length,2,'four waiters are not four business requests');
+    urgent=client.quote({chain:'bsc',address:`0x${'9'.repeat(40)}`,purpose:'exit'});
+    assert.equal((await urgent).status,'ok','exit progresses while external normal seats stay held');
+    assert.equal(client.diagnostics().active.count,4,'ordinary jobs remain bounded gate waiters');
+  } finally {
+    releases.forEach(resolve=>resolve());await Promise.allSettled([...held,...ordinary,...(urgent?[urgent]:[])]);
+  }
+  assert.ok((await Promise.all(ordinary)).every(row=>row.status==='ok'));
   assert.deepEqual((await slot(dir)).active,[]);
 });
 

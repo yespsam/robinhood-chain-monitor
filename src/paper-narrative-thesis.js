@@ -5,6 +5,7 @@ import { assessPaperNarrative, analyzePaperChart } from './paper-strategy-analys
 import { memeEntryContext } from './paper-meme-exit.js';
 import { validMonitorSignal } from './paper-monitor-signal.js';
 import { validAlphaSignal } from './binance-alpha-catalog.js';
+import { narrativeNameMatch } from './narrative-name-match.js';
 
 export const NARRATIVE_THESIS_VERSION='narrative_evidence_chain_v1';
 const HOUR=3600000,DAY=24*HOUR;
@@ -29,7 +30,7 @@ export function narrativeSourceKey(value) {
 const tokenLinks=t=>[t?.twitterUsername,t?.website,t?.raw?.twitter,t?.raw?.twitter_username,
   t?.raw?.link?.twitter,t?.raw?.link?.twitter_username,t?.raw?.link?.website]
   .map(v=>typeof v==='string'&&/^(?:i\/|[a-z\d_]{1,15}\/status\/)/i.test(v)?`https://x.com/${v}`:v).map(narrativeSourceKey).filter(Boolean);
-const tokenTerms=t=>unique([t?.symbol,t?.name].map(norm)).filter(t=>t.length>=(/\p{Script=Han}/u.test(t)?2:4)&&!generic.has(t));
+const tokenTerms=t=>unique([t?.symbol,t?.name].map(clean)).filter(t=>norm(t).length>=(/\p{Script=Han}/u.test(t)?2:4)&&!generic.has(norm(t)));
 const denial=/\b(?:not affiliated|unaffiliated|not official|no token|do not buy|don't buy|cancelled|denied|fake token|scam token)\b|没有发行|未发行|不是官方|非官方|不要买|别买|假币|仿盘|取消发布|辟谣|与.{0,8}无关/iu;
 const conditional=/\b(?:will|plans? to|planning|may|might|rumou?r|propos(?:e|al)|could)\b|计划|拟推出|即将|可能|传闻|尚未|提议/iu;
 const frames=[
@@ -93,13 +94,32 @@ function relation(doc,token,links,terms) {
   if(!ca)return null;
   const mentions=token.chain==='sol'?doc.solAddresses:doc.evmAddresses;
   if(doc.assetKey===key(token)||doc.chain===token.chain&&mentions.includes(ca))return 'direct_ca';
-  const named=terms.some(term=>doc.normalizedText.includes(term));
+  const named=terms.some(term=>narrativeNameMatch(doc.text,term));
   if(links.includes(doc.id))return named?'community_link':'project_link';
   return named?'name_only':null;
 }
-const bindingLabels={direct_ca:'原文明确提及同链 CA；不等于作者发行',official_catalog:'官方目录确认同链 CA；不等于盈利承诺',
+const bindingLabels={onchain_pool:'链上新底池与前三 CA 创建顺序已核对；不是推文背书',direct_ca:'原文明确提及同链 CA；不等于作者发行',official_catalog:'官方目录确认同链 CA；不等于盈利承诺',
   community_link:'名称与项目所引原帖一致：社区题材关联，非作者认领',project_link:'项目资料引用原帖：关系待核实',name_only:'仅名称相符，不能认定为该叙事承接币',unverified:'缺少可核实的叙事与 CA 关系'};
-const bindingRank={official_catalog:4,direct_ca:3,community_link:2,project_link:1,name_only:0,unverified:-1};
+const bindingRank={onchain_pool:4,official_catalog:4,direct_ca:3,community_link:2,project_link:1,name_only:0,unverified:-1};
+
+// A later related original can renew research attention, not the clock of the
+// old post. Names alone, copied text, URL aliases and price action cannot do so.
+function subsequentCatalyst(docs,nowMs) {
+  const bound=d=>['direct_ca','community_link'].includes(d.binding)&&!d.frame.warning&&d.frame.kind!=='unclassified';
+  const body=d=>norm(d.text).replace(/0x[0-9a-f]{40}/g,'');
+  const novel=(a,b)=>{
+    const x=body(a),y=body(b);if(Math.min(x.length,y.length)<24||x.includes(y)||y.includes(x))return false;
+    const grams=s=>new Set(Array.from({length:s.length-2},(_,i)=>s.slice(i,i+3))),xs=grams(x),ys=grams(y);
+    const shared=[...xs].filter(v=>ys.has(v)).length;
+    return 2*shared/(xs.size+ys.size)<.8;
+  };
+  for(const next of docs.filter(d=>bound(d)&&fresh(d.at,nowMs,HOUR)).toSorted((a,b)=>b.at-a.at)) {
+    const previous=docs.find(d=>bound(d)&&d.id!==next.id&&d.at<next.at&&nowMs-d.at>HOUR
+      &&d.frame.kind===next.frame.kind&&novel(next,d));
+    if(previous && !docs.some(d=>d.id!==next.id&&d.at<next.at&&body(d)===body(next)))return {next,previous};
+  }
+  return null;
+}
 
 export function classifyNarrativeCase(episode,nowMs) {
   const source=episode.narratives?.find(n=>n.binding==='verified_ca')||episode.narratives?.[0];
@@ -139,7 +159,10 @@ export function buildNarrativeThesis({token,narrative={},monitorSignal,alphaSign
     at:stamp(s.sourceAt),text:s.text,author:s.authorKey||s.authorLabel,binding:'direct_ca',frame:narrativeEventFrame(s.text)});
   if(validMonitorSignal(monitorSignal,token,nowMs)&&monitorSignal.authenticated===true)related.push({id:narrativeSourceKey(monitorSignal.sourceUrl),
     url:monitorSignal.sourceUrl,at:stamp(monitorSignal.sourceAt),text:monitorSignal.text,author:monitorSignal.theme?.author||monitorSignal.narrativeCandidate?.author||null,
-    binding:monitorSignal.source==='kol_theme_hypothesis'||monitorSignal.source==='twitter_narrative_event'&&monitorSignal.narrativeCandidate?.binding!=='direct_ca'?'community_link':'direct_ca',eventCandidate:true,frame:narrativeEventFrame(monitorSignal.text)});
+    binding:monitorSignal.source==='new_pool_first_three'?'onchain_pool':monitorSignal.source==='kol_theme_hypothesis'||monitorSignal.source==='twitter_narrative_event'&&monitorSignal.narrativeCandidate?.binding!=='direct_ca'?'community_link':'direct_ca',eventCandidate:true,
+    frame:monitorSignal.source==='new_pool_first_three'?{...narrativeEventFrame(monitorSignal.text),kind:'new_quote_asset',label:'新模板/新底池首批 CA',
+      claimStatus:'已核对链上创建与机制归属，非安全、需求或盈利证明',mechanism:'新模板/底池机制可能吸引关注；前三名仅表示创建顺序，不代表市场选择。',
+      verification:'持续观察实际交易、机制有效性与资金进出；缺严格归属/排序证据不归入此组。'}:narrativeEventFrame(monitorSignal.text)});
   if(validAlphaSignal(alphaSignal,token,nowMs))related.push({id:alphaSignal.id,url:alphaSignal.sourceUrl,
     at:alphaSignal.listingTime,text:`官方 Alpha 目录新增 ${token.symbol||'代币'} 的交易入口`,author:'binance_alpha_catalog',
     binding:'official_catalog',eventCandidate:true,frame:narrativeEventFrame('Alpha listing')});
@@ -149,9 +172,13 @@ export function buildNarrativeThesis({token,narrative={},monitorSignal,alphaSign
     if(!old||d.eventCandidate||bindingRank[d.binding]>bindingRank[old.binding])byId.set(d.id,d);
   }
   const docs=[...byId.values()].filter(d=>!conflicts.has(d.id)).sort((a,b)=>Number(!!b.eventCandidate)-Number(!!a.eventCandidate)||bindingRank[b.binding]-bindingRank[a.binding]||b.at-a.at).slice(0,12);
+  const renewal=docs[0]?.eventCandidate?null:subsequentCatalyst(docs,nowMs);
+  if(renewal){docs.splice(docs.indexOf(renewal.next),1);docs.unshift(renewal.next);}
   const lead=docs[0],frame=lead?.frame||narrativeEventFrame(''),binding=lead?.binding||'unverified',ageMs=lead?nowMs-lead.at:null;
   const repeated=lead&&docs.some(d=>d.id!==lead.id&&d.at<lead.at&&norm(d.text)===norm(lead.text));
-  const catalystPhase=repeated?'repeated':phase(ageMs);
+  const alphaFollow=lead?.binding==='official_catalog'&&lead.id===alphaSignal?.id&&validAlphaSignal(alphaSignal,token,nowMs);
+  const catalystPhase=repeated?'repeated':renewal?'reactivated':alphaFollow&&ageMs>300000?'follow_through':phase(ageMs);
+  const catalystLabel=renewal?'同 CA 关联的新原文出现后续传播；保留旧帖时间，不等于新增买盘或作者背书':alphaFollow&&ageMs>300000?'官方 Alpha 上新后二十四小时内的当前行情跟随；不续期、不回填首发买点':phaseText[catalystPhase];
   // Distinct identities and non-copied text are only dissemination evidence,
   // never proof of independent information, coordinated wallets, or endorsement.
   const seenAuthors=new Set(),seenBodies=new Set();let authors=0;
@@ -178,7 +205,9 @@ export function buildNarrativeThesis({token,narrative={},monitorSignal,alphaSign
     method:'规则辅助、证据约束；不声称通用语义理解或自动训练',researchOnly:true,authorEndorsement:false,
     event:{...frame,sourceUrl:lead?.url||null,sourceAt:lead?iso(lead.at):null,sourceId:lead?.id||null},
     relationship:{kind:binding,label:bindingLabels[binding],issuerIdentity:'未核实发行者身份或同一控制关系'},
-    catalyst:{phase:catalystPhase,ageMs,label:phaseText[catalystPhase]},
+    catalyst:{phase:catalystPhase,ageMs,label:catalystLabel,...(renewal?{renewal:{
+      previousSourceUrl:renewal.previous.url,previousSourceAt:iso(renewal.previous.at),
+      sourceUrl:lead.url,sourceAt:iso(lead.at),method:'distinct_bound_original_text_v1',independentInformationVerified:false}}:{})},
     propagation:{distinctAuthors:authors,sourceCount:docs.length,summary:`本地候选相关来源 ${docs.length} 条（含弱关联），明确 / 社区 CA 关联近六小时去重作者 ${authors} 个；非完整传播量，转述不算独立事实核验`},
     demand:{status:demand,provider:flow.provider||null,observedAt:usable?flow.observedAt:null,netBuyUsd:usable?flow.netBuyUsd:null,
       recentNetBuyers:usable?recentBuyers.length:null,netSellers:usable?sellers.length:null,
@@ -186,7 +215,7 @@ export function buildNarrativeThesis({token,narrative={},monitorSignal,alphaSign
     market:{ready:chart.ready,summary:chart.ready?`可用收盘结构，最近一根相对量 ${chart.relativeVolume===null?'未知':chart.relativeVolume.toFixed(2)} 倍；${chart.rising?'最近收盘走高':'最近收盘未走高'}，不是未来走势预测`:chart.reason},
     history:historyView,invalidation:{observed:invalidation,blockNewNarrativeEntry:relevantWarnings.length>0,
       conditions:['原帖否认或 CA 对应关系被推翻','重复旧消息且没有新增实质事件','连续新增卖盘 / 已收盘结构失效，由持仓规则确认','退出证据持续中断，按已授权断流规则处理，不编造卖价']},
-    conclusion,summary:`${frame.label}；${bindingLabels[binding]}；${phaseText[catalystPhase]}。${conclusion}。`,
+    conclusion,summary:`${frame.label}；${bindingLabels[binding]}；${catalystLabel}。${conclusion}。`,
     sources:docs.slice(0,4).map(d=>({url:d.url,at:iso(d.at),text:d.text.slice(0,300),binding:d.binding})),
     gaps:[...(!lead?['缺少关联原文']:[]),...(['unverified','name_only','project_link'].includes(binding)?['事件与 CA 关系待核实']:[]),
       ...(demand!=='buying'?['新增真实买盘待确认']:[]),...(!chart.ready?['量价结构待补']:[]),...(!authors?['可用作者身份不足']:[])]};

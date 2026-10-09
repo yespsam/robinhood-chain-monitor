@@ -7,6 +7,82 @@ import { Interface, JsonRpcProvider, formatUnits, id, isAddress } from "ethers";
 import { isTerminalAlertSuppression, sendAlerts } from "./alerts.js";
 import { assessLocalTokenSecurity } from "./local-security.js";
 import { createGmgnFlowClient } from "./gmgn-flow-client.js";
+import { createRpcPool } from "./bsc-launchpad-monitor.js";
+import { loadPrivateBscRpcConfig, validateBscRpcEndpoints, sanitizeBscRpcError } from "./bsc-private-rpc.js";
+import { sharedRpcHostCoordinator } from "./rpc-host-coordinator.js";
+import { rpcRetryAfterUntil } from "./rpc-retry-after.js";
+
+// One physical request per original batch; the shared background lease covers
+// transport, decoding and cooldown persistence. Never expose the private URL.
+export function createFomoPaidBscReader({ privateRpc, coordinator, fetchImpl = fetch, now = Date.now }) {
+  const [endpoint] = validateBscRpcEndpoints([{ host: privateRpc.host, url: privateRpc.httpUrl, preferred: true }]);
+  const methods = new Set(["eth_blockNumber", "eth_getCode", "eth_call", "eth_getTransactionCount",
+    "eth_getTransactionByHash", "eth_getTransactionReceipt", "eth_getBlockByNumber", "eth_getLogs"]);
+  const cleanError = error => {
+    const clean = Object.assign(new Error(), sanitizeBscRpcError(error));
+    if (["capacity", "host", "method"].includes(error?.rpcFailureScope)) clean.rpcFailureScope = error.rpcFailureScope;
+    if (Number.isSafeInteger(error?.retryAfterMs) && error.retryAfterMs >= 0) clean.retryAfterMs = error.retryAfterMs;
+    return clean;
+  };
+  async function read(calls, batch) {
+    if (!Array.isArray(calls) || !calls.length || calls.length > 40
+      || calls.some(call => !methods.has(call?.method) || call.method !== calls[0].method || !Array.isArray(call.params))) {
+      throw new Error("invalid bounded BSC RPC batch");
+    }
+    const method = calls[0].method;
+    const requests = calls.map((call, index) => ({ jsonrpc: "2.0", id: index + 1, method, params: call.params }));
+    try {
+      return await coordinator.run(endpoint.host, method, "background", async () => {
+        try {
+          const response = await fetchImpl(endpoint.url, {
+            method: "POST", redirect: "error", headers: { accept: "application/json", "content-type": "application/json" },
+            body: JSON.stringify(batch ? requests : requests[0]), signal: AbortSignal.timeout(batch ? 8_000 : 12_000),
+          });
+          if (response.redirected || response.url && new URL(response.url).origin !== new URL(endpoint.url).origin) {
+            throw Object.assign(new Error("BSC RPC origin mismatch"), { code: "RPC_ORIGIN_MISMATCH" });
+          }
+          const headerRetryAfter = response.headers?.get?.("retry-after");
+          if (!response.ok) throw Object.assign(new Error(`BSC RPC HTTP ${Number(response.status) || 0}`), {
+            status: Number(response.status), retryAfter: headerRetryAfter,
+          });
+          const payload = await response.json(), rows = batch ? payload : [payload];
+          if (!Array.isArray(rows) || rows.length !== requests.length) throw new Error("BSC RPC batch response count mismatch");
+          const byId = new Map();
+          for (const row of rows) {
+            if (row?.jsonrpc !== "2.0" || !Number.isSafeInteger(row.id) || row.id < 1 || row.id > requests.length || byId.has(row.id)) {
+              throw new Error("BSC RPC response identity mismatch");
+            }
+            if (row.error) {
+              const message = String(row.error.message || "BSC RPC error");
+              // A JSON-RPC limit can arrive with HTTP 200. Neither a shorter
+              // payload delay nor a missing field may discard the HTTP wait.
+              const current = Number(now());
+              const retryAfter = [headerRetryAfter, row.error.retryAfter, row.error.retry_after,
+                row.error.data?.retryAfter, row.error.data?.retry_after].filter(value => value != null)
+                .sort((left, right) => rpcRetryAfterUntil(right, current) - rpcRetryAfterUntil(left, current))[0];
+              throw Object.assign(new Error(message), {
+                code: method === "eth_call" && /revert/i.test(message) ? "CALL_EXCEPTION" : "RPC_READ_FAILED",
+                status: row.error.code === 429 || row.error.code === -32005 || /rate.?limit|too many requests/i.test(message) ? 429 : undefined,
+                rpcFailureScope: row.error.code === -32601 ? "method" : "host",
+                retryAfter,
+              });
+            }
+            if (!Object.hasOwn(row, "result")) throw new Error("BSC RPC result missing");
+            byId.set(row.id, row.result);
+          }
+          const values = requests.map(request => byId.get(request.id));
+          return batch ? values : values[0];
+        } catch (error) {
+          // A contract revert is evidence about this call, not a host outage.
+          if (error?.code !== "CALL_EXCEPTION") await coordinator.persistCooldown(endpoint.host, method,
+            rpcRetryAfterUntil(error?.retryAfter, Number(now())), error?.rpcFailureScope === "method" ? "method" : "host");
+          throw error;
+        }
+      }, { waitMs: 1_000 });
+    } catch (error) { throw cleanError(error); }
+  }
+  return { send: (method, params) => read([{ method, params }], false), batch: calls => read(calls, true) };
+}
 
 export const COPE_API_BASE = "https://api.cope.capital";
 export const FOMO_PLATFORM_URL = "https://fomo.family";
@@ -2575,7 +2651,7 @@ export function createFomoCallMonitor(config, dependencies = {}) {
   const requireGmgnFomoTag = config.fomoCallGmgnRequireFomoTag !== false;
   const newWalletLookbackBlocks = Math.max(0, Number(config.fomoCallNewWalletLookbackBlocks ?? 600));
   const requireConvergence = config.fomoCallRequireConvergence !== false;
-  const legacyBuyEnabled = config.fomoBuyMonitorEnabled === true;
+  const legacyBuyEnabled = config.fomoBuyMonitorEnabled === true && config.fomoPlatformSourcesEnabled !== false;
   // The added cross-chain lane and the existing BSC lane share one CLI queue
   // and durable account cooldown. Separate clients retain independent stops.
   const gmgnSharedClient = config.gmgnFlowMonitorEnabled
@@ -2662,7 +2738,13 @@ export function createFomoCallMonitor(config, dependencies = {}) {
   const goPlusCacheMs = Math.max(1_000, Number(config.fomoCallGoPlusCacheMs ?? 30_000));
   const strictBuyProvenance = config.fomoCallStrictBuyProvenance === true;
   const baseProvider = dependencies.baseProvider || new JsonRpcProvider(config.fomoCallBaseRpcUrl || "https://mainnet.base.org", BASE_CHAIN_ID, { staticNetwork: true, batchMaxCount: 1 });
-  const bscProvider = dependencies.bscProvider || new JsonRpcProvider(config.fomoCallBscRpcUrl || "https://bsc-rpc.publicnode.com", BSC_CHAIN_ID, { staticNetwork: true, batchMaxCount: 1 });
+  // Only this reviewed consumer opts in. Injected fixtures never read the
+  // user's private config unless they explicitly supply their own loader.
+  const injectedBscTransport = dependencies.fetchImpl || dependencies.evmRpcImpl || dependencies.evmRpcBatchImpl
+    || dependencies.bscProvider || dependencies.bscHistoricalProvider;
+  const privateRpc = config.fomoCallEnabled && !processLeaseBlocked && (legacyBuyEnabled || smartMoneyEnabled)
+    && (!injectedBscTransport || dependencies.loadPrivateBscRpcConfigImpl)
+    ? (dependencies.loadPrivateBscRpcConfigImpl || loadPrivateBscRpcConfig)({ dataDir: config.dataDir }) : null;
   const bscRpcUrls = [...new Set([
     config.fomoCallBscRpcUrl,
     ...(Array.isArray(config.bscRpcUrls) ? config.bscRpcUrls : []),
@@ -2687,6 +2769,18 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     ...(Array.isArray(config.bscArchiveRpcUrls) ? config.bscArchiveRpcUrls : []),
     "https://bsc-mainnet.public.blastapi.io",
   ].filter(Boolean))];
+  const bscRawUrls = new Set([...bscRpcUrls, ...bscReceiptRpcUrls, ...bscBatchReceiptRpcUrls, ...bscProofRpcUrls]);
+  const paidBscReader = privateRpc ? createFomoPaidBscReader({ privateRpc,
+    coordinator: dependencies.bscHostCoordinator || sharedRpcHostCoordinator(config.dataDir), fetchImpl, now }) : null;
+  const bscProvider = dependencies.bscProvider || (privateRpc
+    ? (dependencies.bscRpcPoolFactory || createRpcPool)([privateRpc.httpUrl, ...bscRpcUrls], [privateRpc.httpUrl, ...bscProofRpcUrls], 1, {
+      coordinatorDataDir: config.dataDir, hostCoordinator: dependencies.bscHostCoordinator,
+      preferredHosts: [privateRpc.host], priorityLane: "background", standardConcurrency: 2, totalConcurrency: 2,
+      requestTimeoutMs: 5_000, physicalWaitMs: 1_000, stateReadBudgetMs: 10_000, stateReadMaxAttempts: 2,
+      objectReadBudgetMs: 10_000, objectReadMaxAttempts: 2,
+    })
+    : new JsonRpcProvider(config.fomoCallBscRpcUrl || "https://bsc-rpc.publicnode.com", BSC_CHAIN_ID, { staticNetwork: true, batchMaxCount: 1 }));
+  if (paidBscReader) logger.info?.(`[bsc-wallet-reader] primary=${privateRpc.host}`);
   const assessEvmSecurity = dependencies.assessEvmSecurityImpl || assessLocalTokenSecurity;
   const assessSolanaSecurity = dependencies.assessSolanaSecurityImpl || assessSolanaMintSafety;
   const verifySolanaFirstPosition = dependencies.verifySolanaFirstPositionImpl || null;
@@ -2890,8 +2984,13 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     return payload?.result;
   }
 
-  async function evmRpc(rpcUrl, method, params) {
+  async function evmRpc(rpcUrl, method, params, skipPaid = false) {
     if (dependencies.evmRpcImpl) return dependencies.evmRpcImpl(rpcUrl, method, params);
+    if (paidBscReader && !skipPaid && bscRawUrls.has(rpcUrl)) {
+      try { return await paidBscReader.send(method, params); }
+      catch (error) { if (rpcUrl === privateRpc.httpUrl) throw error; }
+    }
+    if (paidBscReader && rpcUrl === privateRpc.httpUrl) throw new Error("paid BSC endpoint requires shared admission");
     const payload = await publicJson(rpcUrl, {
       method: "POST",
       body: { jsonrpc: "2.0", id: 1, method, params },
@@ -2900,8 +2999,13 @@ export function createFomoCallMonitor(config, dependencies = {}) {
     return payload?.result;
   }
 
-  async function evmRpcBatch(rpcUrl, calls) {
+  async function evmRpcBatch(rpcUrl, calls, skipPaid = false) {
     if (dependencies.evmRpcBatchImpl) return dependencies.evmRpcBatchImpl(rpcUrl, calls);
+    if (paidBscReader && !skipPaid && bscRawUrls.has(rpcUrl)) {
+      try { return await paidBscReader.batch(calls); }
+      catch (error) { if (rpcUrl === privateRpc.httpUrl) throw error; }
+    }
+    if (paidBscReader && rpcUrl === privateRpc.httpUrl) throw new Error("paid BSC endpoint requires shared admission");
     const requests = calls.map((call, index) => ({ jsonrpc: "2.0", id: index + 1, method: call.method, params: call.params }));
     const payload = await publicJson(rpcUrl, { method: "POST", body: requests, timeoutMs: 8_000 });
     if (!Array.isArray(payload)) throw new Error("EVM RPC batch returned a non-array response");
@@ -2916,8 +3020,14 @@ export function createFomoCallMonitor(config, dependencies = {}) {
 
   async function evmRpcFallback(rpcUrls, method, params) {
     let lastError;
+    const usePaid = paidBscReader && rpcUrls.some(url => bscRawUrls.has(url));
+    if (usePaid && !dependencies.evmRpcImpl) {
+      try { return await paidBscReader.send(method, params); }
+      catch (error) { lastError = error; }
+    }
     for (const rpcUrl of rpcUrls) {
-      try { return await evmRpc(rpcUrl, method, params); }
+      if (paidBscReader && rpcUrl === privateRpc.httpUrl) continue;
+      try { return await evmRpc(rpcUrl, method, params, Boolean(usePaid)); }
       catch (error) { lastError = error; }
     }
     throw lastError || new Error(`no RPC endpoint available for ${method}`);
@@ -2925,8 +3035,14 @@ export function createFomoCallMonitor(config, dependencies = {}) {
 
   async function evmRpcBatchFallback(rpcUrls, calls) {
     let lastError;
+    const usePaid = paidBscReader && rpcUrls.some(url => bscRawUrls.has(url));
+    if (usePaid && !dependencies.evmRpcBatchImpl) {
+      try { return await paidBscReader.batch(calls); }
+      catch (error) { lastError = error; }
+    }
     for (const rpcUrl of rpcUrls) {
-      try { return await evmRpcBatch(rpcUrl, calls); }
+      if (paidBscReader && rpcUrl === privateRpc.httpUrl) continue;
+      try { return await evmRpcBatch(rpcUrl, calls, Boolean(usePaid)); }
       catch (error) { lastError = error; }
     }
     throw lastError || new Error("no RPC endpoint available for EVM batch");
@@ -3763,6 +3879,7 @@ export function createFomoCallMonitor(config, dependencies = {}) {
   }
 
   async function fetchFomoProfile(handle, dynamicCandidate = null) {
+    if (config.fomoPlatformSourcesEnabled === false) throw new Error("FOMO platform sources disabled by user");
     let directError = null;
     try {
       const payload = await publicJson(`${fomoScanApiBase}/get-user/${encodeURIComponent(handle)}`);

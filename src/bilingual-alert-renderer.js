@@ -1844,6 +1844,8 @@ function fourMemeUpdateDetails(event) {
     const token = event?.token || list(event?.tokens)[0] || {};
     return {
       kind: "registry_first_token",
+      ordinal: event.featureTrackedToken === true ? event.featureTokenOrdinal : null,
+      target: event.featureTrackedToken === true ? event.featureTokenTarget : null,
       name: event?.preset?.name || event?.mode?.name || "OpenFour preset",
       presetId: String(event?.presetId || event?.preset?.id || "?"),
       tokenName: token?.name || "Unknown token",
@@ -2115,8 +2117,8 @@ function focusTitle(event, language = "zh") {
     ? "Four.Meme｜OpenFour Tag 登记"
     : "Four.Meme｜OpenFour Tag registration";
   if (fourUpdate?.kind === "registry_first_token") return zh
-    ? `Four.Meme｜${fourUpdate.name} 首个代币`
-    : `Four.Meme｜First ${fourUpdate.name} token`;
+    ? `Four.Meme｜${fourUpdate.name} ${fourUpdate.ordinal ? `第 ${fourUpdate.ordinal}/${fourUpdate.target} 个 CA` : '首个代币'}`
+    : `Four.Meme｜${fourUpdate.ordinal ? `${fourUpdate.name} CA ${fourUpdate.ordinal}/${fourUpdate.target}` : `First ${fourUpdate.name} token`}`;
   const agentNative = binanceAgentNativeDetails(event);
   if (agentNative?.launch) return zh ? "Binance Agent OS｜正式发布" : "Binance Agent OS｜Official launch";
   if (agentNative?.developer) return zh ? "Binance Agent Native｜Developer 更新" : "Binance Agent Native｜Developer update";
@@ -2864,8 +2866,8 @@ function focusKey(event, changeModel, language = "zh", priority = null) {
     ? `Tag ${fourUpdate.tag}｜id ${fourUpdate.tagId}`
     : `Tag ${fourUpdate.tag} | id ${fourUpdate.tagId}`;
   if (fourUpdate?.kind === "registry_first_token") return zh
-    ? `${fourUpdate.tokenName} (${fourUpdate.tokenSymbol})｜CA ${fourUpdate.tokenAddress || "待解析"}`
-    : `${fourUpdate.tokenName} (${fourUpdate.tokenSymbol}) | CA ${fourUpdate.tokenAddress || "unresolved"}`;
+    ? `${fourUpdate.tokenName} (${fourUpdate.tokenSymbol})｜CA${fourUpdate.ordinal ? ` ${fourUpdate.ordinal}/${fourUpdate.target}` : ''} ${fourUpdate.tokenAddress || "待解析"}`
+    : `${fourUpdate.tokenName} (${fourUpdate.tokenSymbol}) | CA${fourUpdate.ordinal ? ` ${fourUpdate.ordinal}/${fourUpdate.target}` : ''} ${fourUpdate.tokenAddress || "unresolved"}`;
   const twitterUpdate = interpretTwitterWeb3Update(event, language);
   if (twitterUpdate) return twitterUpdate;
   const hooklist = hooklistRegistryFacts(event);
@@ -4967,7 +4969,7 @@ export function renderBilingualTelegramText(bundle, strong = false) {
       const attribution = fourRegistrySnapshotQualifier(fourMeme, language, { firstToken: true });
       const presetHeadline = fourRegistryPresetHeadline(fourMeme, { firstToken: true });
       return [
-        `${zh ? "平台：" : "Platform: "}Four.Meme｜${presetHeadline}｜${zh ? "首个 CA" : "first CA"}${prioritySuffix}`,
+        `${zh ? "平台：" : "Platform: "}Four.Meme｜${presetHeadline}｜${fourMeme.ordinal ? `CA ${fourMeme.ordinal}/${fourMeme.target}` : zh ? "首个 CA" : "first CA"}${prioritySuffix}`,
         `${zh ? "事件：官方 Core TokenCreated" : "Event: official Core TokenCreated"}${recovery ? `${zh ? "｜" : " | "}${recovery}` : ""}`,
         `CA${zh ? "：" : ": "}${fourMeme.tokenAddress || (zh ? "待解析" : "unresolved")}`,
         `${zh ? "代币：" : "Token: "}${fourMeme.tokenName} (${fourMeme.tokenSymbol})`,

@@ -71,7 +71,7 @@ function publicTelegramNewsEvent({
   };
 }
 
-test("Telegram public news is audit-only and same-stage revisions deduplicate semantically", async (t) => {
+test("Telegram public news notifies as watch-only and same-stage revisions deduplicate semantically", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-telegram-news-"));
   const payloads = [];
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -108,17 +108,16 @@ test("Telegram public news is audit-only and same-stage revisions deduplicate se
   assert.deepEqual(telegramButtons({ ...first, messageUrl: "https://evil.example/message" }), { inline_keyboard: [] });
 
   const delivered = await sendAlerts(config, first);
-  assert.equal(delivered.status, "suppressed");
-  assert.equal(delivered.reason, "policy_suppressed");
+  assert.equal(delivered.status, "delivered");
   assert.deepEqual(first, originalFirst, "queue metadata and rendering must not mutate the source event");
   assert.equal(delivered.eventId, eventId);
-  assert.equal(payloads.length, 0);
+  assert.equal(payloads.length, 1);
+  assert.equal(payloads[0].disable_notification, true);
 
   const exactRepeat = await sendAlerts(config, structuredClone(first));
-  assert.equal(exactRepeat.status, "suppressed");
-  assert.equal(exactRepeat.reason, "policy_suppressed");
+  assert.equal(exactRepeat.status, "delivered");
   assert.equal(exactRepeat.eventId, eventId);
-  assert.equal(payloads.length, 0, "the exact same audit record is idempotent");
+  assert.equal(payloads.length, 1, "the exact same watch-only record is idempotent");
 
   const revision = publicTelegramNewsEvent({
     contentDigest: "b".repeat(64),
@@ -127,7 +126,7 @@ test("Telegram public news is audit-only and same-stage revisions deduplicate se
   const revisionResult = await sendAlerts(config, revision);
   assert.equal(revisionResult.status, "suppressed");
   assert.equal(revisionResult.reason, "semantic_duplicate");
-  assert.equal(payloads.length, 0);
+  assert.equal(payloads.length, 1);
 
   const official = {
     type: "platform_capability_update",
@@ -138,12 +137,14 @@ test("Telegram public news is audit-only and same-stage revisions deduplicate se
     url: "https://docs.flap.sh/vault-v2",
   };
   assert.equal((await sendAlerts(config, official)).status, "delivered", "public-channel news must not suppress an official source");
-  assert.equal(payloads.length, 1);
+  assert.equal(payloads.length, 2);
 
   const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   assert.equal(outbox.events[eventId].event.canonicalSignalIds.length, 1);
   assert.match(outbox.events[eventId].event.canonicalSignalId, /^telegram:story:/);
-  assert.equal(outbox.events[eventId].deliveryDisposition.mode, "audit_only");
+  assert.equal(outbox.events[eventId].deliveryDisposition.reason, "telegram_news_watch_only");
+  assert.equal(outbox.events[eventId].event.tradingPriority.tier, "T2");
+  assert.equal(outbox.events[eventId].event.tradingPriority.plan.automaticExecution, false);
   assert.equal(outbox.events[eventId].semanticDuplicateOf, null);
   const revisionId = "telegram-news:-1002540748528:271828:bbbbbbbbbbbbbbbb";
   assert.equal(outbox.events[revisionId].semanticDuplicateOf, eventId);
@@ -162,6 +163,55 @@ test("Telegram news freshness uses source time with 10-minute realtime and 2-hou
   assert.equal(late.decision, "late");
   assert.equal(suppressed.decision, "suppress");
   assert.equal(isStrongAlert({ ...event, freshness: late }), false);
+});
+
+test("Telegram watch-only policy rejects forged provenance and unassessed or expired news", () => {
+  const event = publicTelegramNewsEvent();
+  const fresh = { ...event, freshness: classifyAlertFreshness({}, event) };
+  assert.equal(alertDeliveryDisposition(fresh).reason, "telegram_news_watch_only");
+  for (const invalid of [
+    { ...fresh, chatId: "-1000000000" },
+    { ...fresh, messageUrl: "https://example.com/fake" },
+    { ...fresh, sourceTrust: "official_verified" },
+    { ...fresh, freshness: { decision: "unassessed" } },
+    { ...fresh, freshness: { decision: "suppress" } },
+    { ...fresh, freshness: { decision: "realtime", deliveryDecision: "suppress" } },
+  ]) assert.equal(alertDeliveryDisposition(invalid).deliverImmediately, false);
+});
+
+test("T2 monitoring news retries the same persisted bilingual card without changing trading priority", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-news-retry-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(console, "info", () => {});
+  const payloads = [];
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    payloads.push(JSON.parse(options.body));
+    return { ok: payloads.length > 1, status: payloads.length === 1 ? 503 : 200,
+      text: async () => JSON.stringify(payloads.length === 1
+        ? { ok: false, description: "temporary outage" }
+        : { ok: true, result: { message_id: 2 } }) };
+  });
+  const config = { ...alertConfig(dataDir), monitorScope: "focus3", telegramNewsMonitorEnabled: true,
+    alertBilingualEnabled: true, alertChineseTranslationEnabled: false,
+    alertTranslationFetchImpl: async () => { throw new Error("offline translation fixture"); } };
+  const event = publicTelegramNewsEvent();
+  assert.equal((await sendAlerts(config, event)).status, "queued");
+  const file = path.join(dataDir, "alert-outbox.json");
+  const outbox = JSON.parse(await fs.readFile(file, "utf8"));
+  const entry = Object.values(outbox.events)[0];
+  assert.equal(entry.status, "pending");
+  assert.ok(entry.renderBundle);
+  assert.equal(entry.event.tradingPriority.tier, "T2");
+  assert.equal(entry.event.tradingPriority.plan.automaticExecution, false);
+  entry.destinations.telegram.nextAttemptAt = new Date(0).toISOString();
+  await fs.writeFile(file, JSON.stringify(outbox));
+  await drainAlertOutbox(config);
+  await drainAlertOutbox(config);
+  assert.equal(payloads.length, 2);
+  assert.equal(payloads[0].text, payloads[1].text);
+  assert.equal(payloads[1].disable_notification, true);
+  assert.match(payloads[1].text, /中文/);
+  assert.match(payloads[1].text, /English/);
 });
 
 test("Binance connector and SDK code noise is filtered unless the producer proves a product feature", () => {
@@ -1697,9 +1747,9 @@ function flapPortalDelayedRecoveryEvent({
     chainId: 56,
     portal,
     portalRuntimeCodeHash: "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3",
-    portalVersion: "v5.23.1",
-    portalImplementation: "0xAb8Ec926b6e113c2212aF152b086eA62d1FDced9",
-    portalImplementationCodeHash: "0x78653cdd7296d940ae531c86bc6700ae163f1f9dec002c2af3143c9ae6696a15",
+    portalVersion: "v5.24.0",
+    portalImplementation: "0x27a0f9Da7F5BEAd616fe0bf02bf0c793bece4e20",
+    portalImplementationCodeHash: "0xb191694f7248773f714234aeb150149a2b9af5d1ab483a53d31c19ec3132b230",
     eventSignature: "QuoteTokenConfigurationSet(address,(uint8,uint8,uint8,uint8,uint8))",
     topic0: "0x9a1f38e55c729ebf0c45d240a00b09f0a79a715df7cfd6e8942bd3f8da839199",
     logIndex,
@@ -2266,7 +2316,7 @@ test("X, xAI and Grok official events use strict strong-alert cards and official
   assert.equal(isRelevantAlert({ ...fromX, signal: { relevant: false, strong: false, labels: [] } }), false);
 });
 
-test("Grok product observations without a direct trading path remain separate audit records", async (t) => {
+test("Grok official product observations notify without a trading path and deduplicate related X news", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-grok-cross-source-"));
   let telegramCalls = 0;
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -2307,13 +2357,23 @@ test("Grok product observations without a direct trading path remain separate au
     observedAt: now,
   };
   const releaseResult = await sendAlerts(config, release);
-  assert.equal(releaseResult.status, "suppressed");
-  assert.equal(releaseResult.reason, "policy_suppressed");
+  assert.equal(releaseResult.status, "delivered");
+  const saved = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8")).events[release.eventKey];
+  assert.equal(saved.deliveryDisposition.reason, "official_news_watch_only");
+  assert.equal(saved.event.tradingPriority.tier, "T2");
+  assert.equal(saved.event.tradingPriority.plan.automaticExecution, false);
+  for (const invalid of [
+    { ...saved.event, url: "https://docs.x.ai.evil.example/release" },
+    { ...saved.event, source: { ...saved.event.source, official: false } },
+    { ...saved.event, strong: false },
+    { ...saved.event, freshness: { decision: "unassessed" } },
+    { ...saved.event, freshness: { decision: "suppress" } },
+  ]) assert.equal(alertDeliveryDisposition(invalid).deliverImmediately, false);
   const xResult = await sendAlerts(config, fromX);
   assert.equal(xResult.status, "suppressed");
-  assert.equal(xResult.reason, "policy_suppressed");
+  assert.ok(["policy_suppressed", "semantic_duplicate"].includes(xResult.reason));
   assert.equal(xResult.persisted, true);
-  assert.equal(telegramCalls, 0);
+  assert.equal(telegramCalls, 1);
 });
 
 test("Uniswap official protocol updates are strong while ordinary X chatter stays silent", () => {
@@ -5459,6 +5519,32 @@ test("a valid v2 failed T1 is re-scored on duplicate observation and cannot deli
   assert.equal(expired.event.tradingPriority.hardGates.validWindow, false);
   assert.equal(expired.deliveryDisposition.mode, "audit_only");
   assert.equal(expired.destinations.telegram.disabledReason, "policy_suppressed");
+});
+
+test("outbox retention uses the pipeline clock even when replay time predates wall time by years", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-retention-clock-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  let now = Date.parse("2001-01-01T00:00:00.000Z");
+  let sends = 0;
+  t.mock.method(console, "info", () => {});
+  t.mock.method(globalThis, "fetch", async () => {
+    sends++;
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: sends } }) };
+  });
+  const config = { ...alertConfig(dataDir), monitorScope: "focus3", alertNow: () => now };
+  const event = { type: "platform_capability_update", eventKey: "platform-capability:flap:retention-clock",
+    platform: { id: "flap", name: "Flap", website: "https://flap.sh" },
+    changes: { newModules: ["Vault Clock"] }, title: "Flap launches Vault Clock",
+    publishedAt: new Date(now).toISOString(), observedAt: new Date(now).toISOString(), url: "https://docs.flap.sh/clock" };
+  assert.equal((await sendAlerts(config, event)).status, "delivered");
+  assert.equal((await sendAlerts(config, structuredClone(event))).status, "delivered");
+  assert.equal(sends, 1);
+  const file = path.join(dataDir, "alert-outbox.json");
+  assert.ok(JSON.parse(await fs.readFile(file, "utf8")).events[event.eventKey]);
+  now += 31 * 24 * 60 * 60_000;
+  await drainAlertOutbox(config);
+  assert.equal(JSON.parse(await fs.readFile(file, "utf8")).events[event.eventKey], undefined);
+  assert.equal(sends, 1);
 });
 
 test("an idle outbox drain does not rewrite a terminal-only outbox", async (t) => {

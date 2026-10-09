@@ -3,6 +3,7 @@ import { renderTradeCountReview } from './trade-count-review.js';
 import { renderNewsWire } from './news-wire.js';
 import { createCaDesk } from './ca-desk.js';
 import { createBrainDesk } from './brain-desk.js';
+import { entryStatus } from './entry-status.js';
 import { renderExitComparison } from './exit-comparison.js';
 import { revealHashSection } from './navigation.js';
 import { renderWalletLearning } from './wallet-learning.js';
@@ -79,17 +80,32 @@ function renderStatus() {
   const data = state.snapshot;
   const recent = data?.updatedAt && Date.now() - Date.parse(data.updatedAt) >= 0 && Date.now() - Date.parse(data.updatedAt) <= 120000;
   const connected = state.status === 'ok' && data?.status === 'ok' && recent;
+  const entry = entryStatus(data, Date.now(), connected);
   const dataHealth = tradingDataHealth(data);
   $('#streamLabel').textContent = connected ? dataHealth.label : state.status === 'loading' ? '策略引擎同步中' : data ? '连接异常 · 显示上次账本' : '策略引擎暂不可用';
   $('#streamStatus').dataset.status = connected && dataHealth.status === 'ok' ? 'ok' : 'stale';
   $('#focusSyncState').textContent = data?.updatedAt ? `更新于 ${clock(data.updatedAt)}` : '等待服务端账本';
   $('#paperStateLabel').textContent = connected ? '已同步' : '待同步';
-  $('#chainLabel').textContent = data?.chains?.length > 1 ? `${data.chains.length} 链模拟 · 共用本金` : chainName(data?.chain || 'robinhood');
+  const scanChains=data?.scanScope?.scanChains;
+  $('#chainLabel').textContent = scanChains ? `${scanChains.map(chainName).join(' / ')} · 模拟扫描` : data?.chains?.length > 1 ? `${data.chains.length} 链模拟 · 共用本金` : chainName(data?.chain || 'robinhood');
   $('#focusAutoToggle').checked = data?.enabled === true;
-  $('#focusAutoToggle').disabled = !connected || state.controlling;
+  $('#focusAutoToggle').disabled = !entry.online || state.controlling || (entry.lossBlocked && data?.enabled !== true);
+  $('#focusAutoToggle').title = entry.lossBlocked ? '亏损预算仍在生效；需要另行确认预算，不能通过此开关绕过。' : '';
   const continuous = data?.operatingPolicy?.continuous === true;
-  $('#focusAutoLabel').textContent = state.controlling ? '正在更新' : data ? data.enabled ? data.entryGuard?.allowed === false ? '开仓受阻 · 查看原因' : continuous ? '全天候模拟已开启' : '自动开仓已开启' : '已暂停新增仓位' : '等待引擎';
-  $('#controlNote').textContent = data?.enabled === false ? '止损、止盈和监控继续运行' : continuous ? '不按亏损、次数或固定冷却停机；满足买点且余额足够时交易。电脑与网络需保持运行。' : data?.entryMode === 'paper_diagnostic_entry_v1' ? '主账户诊断试仓已开启 · 后台持续监控' : data?.entryMode === 'standard_and_exploratory' ? '小额探索试仓已开启 · 后台持续监控' : '后台持续监控，页面关闭后仍运行';
+  $('#focusAutoLabel').textContent = state.controlling ? '正在更新' : entry.label;
+  $('#controlNote').textContent = data?.lossGuards?.enforced ? '持续扫描；本轮累计或 UTC 当日已实现亏损达到本金 10% 时暂停新仓。持仓按结构和资金证据复核退出。'
+    : data?.enabled === false ? '持仓退出和监控继续运行' : continuous ? '持续扫描，满足买点且余额足够时模拟交易。电脑与网络需保持运行。' : '后台持续监控，页面关闭后仍运行';
+  if(data?.newLaunchPolicy?.version==='new_launch_narrative_v1') $('#controlNote').textContent += ' 新盘叙事快线：内盘/临毕业＋创建十五分钟内＋原文事件两分钟内，不等 K 线和三秒报价；外盘保留 K 线检查。数据齐备后目标一秒本地决策，上游延迟另计。';
+  if(data?.poolFirstThreePolicy?.version==='paper_quote_asset_first_three_v1') $('#controlNote').textContent += ` 新底池前三 CA 自动模拟：目前接入 BSC Flap，以链上创建顺序为准，不等 K 线；每个底池资产最多三个不同 CA，不重复、不补第四名。当前有效信号 ${data.newsWire?.poolFirstThree?.readySignals??0} 个；其他发射台尚无完整排序接入。`;
+  if(data?.newsWire?.poolFirstThree?.sourceHealth?.note) $('#controlNote').textContent += ` ${data.newsWire.poolFirstThree.sourceHealth.note}。`;
+  const poolReport=data?.newsWire?.poolFirstThree,poolHealth=poolReport?.sourceHealth;
+  $('#newPoolNotice').hidden=!data?.poolFirstThreePolicy;
+  $('#newPoolNotice').textContent=data?.poolFirstThreePolicy
+    ? `新底池前三 CA 自动模拟已接入 BSC Flap：按链上创建顺序，不等 K 线；不重复、不补第四名。当前新鲜信号 ${poolReport?.readySignals??0} 个。${poolHealth?.lastErrorCode?.includes('MISMATCH')?'来源区块或合约证据尚未完成核验；尚不能保证新底池实时覆盖。':poolHealth?.note||'来源状态待核实。'} 其他发射台尚未接入此排序规则。`
+    : '';
+  if(Number.isFinite(poolReport?.expiredOnArrivalEvents)) $('#newPoolNotice').textContent += ` 保留的 ${poolReport.uniqueEvents} 个去重事件中，${poolReport.expiredOnArrivalEvents} 个形成时已超过两分钟；这是历史延迟统计，不是今日全链统计。`;
+  const launchTiming=data?.cadence?.lastCandidateEvaluation;
+  if(launchTiming?.entryLane==='new_launch_narrative_v1') $('#controlNote').textContent += ` 最近新盘报价返回至判断 ${launchTiming.receivedToDecisionMs} 毫秒（${launchTiming.decisionTargetMet?'达到一秒目标':'超过一秒目标'}）；原文发布至判断 ${launchTiming.sourceToDecisionMs} 毫秒。`;
   const cadence = data?.cadence;
   const flowAt = Date.parse(data?.coverage?.flow?.observedAt || '');
   const age = Number.isFinite(flowAt) ? `${Math.max(0, Math.round((Date.now() - flowAt) / 1000))} 秒前` : '未知';
@@ -102,9 +118,8 @@ function renderStatus() {
     : cadence?.quotePriorityScope === 'shared_account_queue' ? '共享账号跨进程排队，持仓报价优先，后台等待逐步提权' : '本进程持仓报价优先';
   const sourceAges = (cadence?.marketSourceAges || []).map(source => `${chainName(source.chain)} ${finite(source.ageMs) ? Math.ceil(source.ageMs / 1000) + '秒' : '未取得'}`).join(' / ');
   $('#cadenceNote').textContent = cadence ? `页面同步 1 秒 · 全部候选扫描目标 ${cadence.evaluationIntervalMs / 1000} 秒 · 实测间隔 ${finite(cadence.actualTickGapMs) ? (cadence.actualTickGapMs / 1000).toFixed(1) : '—'} 秒${cadence.evaluationOverrunMs > 0 ? `（本轮超时 ${(cadence.evaluationOverrunMs / 1000).toFixed(1)} 秒，不堆叠任务）` : ''}${exitNote}${quoteTiming}${sourceAges ? ` · 各链行情年龄：${sourceAges}` : ''} · ${queueNote} · 资金流窗口截至 ${age} · 扫描频率不等于上游价格更新频率` : '等待检查频率和数据时间…';
-  const guard = data?.entryGuard;
-  $('#engineNotice').hidden = connected && dataHealth.status === 'ok' && !data?.lastError && !exits?.lastError && guard?.allowed !== false;
-  $('#engineNotice').textContent = exits?.lastError ? `退出管理异常：${humanText(exits.lastError)}` : data?.lastError ? `本轮数据异常：${humanText(data.lastError)}。请以各策略的数据状态为准。` : guard?.allowed === false ? `新仓风控：${guard.reasons.join('；')}。监控和已有仓位退出继续；旧亏损账本不重置。` : connected ? dataHealth.summary : state.status === 'loading' ? '正在读取统一模拟账本…' : '暂时无法取得引擎状态。已显示的数据可能过期，正在重新连接。';
+  $('#engineNotice').hidden = entry.online && !entry.blocked && dataHealth.status === 'ok' && !data?.lastError && !exits?.lastError;
+  $('#engineNotice').textContent = !entry.online || entry.blocked ? `${entry.label}：${entry.detail}${exits?.lastError ? ` 退出管理异常：${humanText(exits.lastError)}` : ''}${data?.lastError ? ` 本轮数据异常：${humanText(data.lastError)}` : ''}` : exits?.lastError ? `退出管理异常：${humanText(exits.lastError)}` : data?.lastError ? `本轮数据异常：${humanText(data.lastError)}。请以各策略的数据状态为准。` : dataHealth.summary;
 }
 
 function renderAccount() {
@@ -119,11 +134,13 @@ function renderAccount() {
   $('#costModel').textContent = state.snapshot?.costModel || '费用及滑点按模型估算';
   const stale = num(stats.stalePositions);
   const session = state.snapshot?.session;
-  const history = session ? `${session.label} · ${session.id} · 历史账户单独保留：余额 ${money(session.legacy.cash)} / 净盈亏 ${signedMoney(session.legacy.realizedPnl)} / ${session.legacy.tradeCount} 笔；不合并成绩、不自动补款` : '与旧浏览器账本独立';
+  const history = session ? `${session.label} · ${session.id}${session.legacy ? ` · 历史账户单独保留：余额 ${money(session.legacy.cash)} / 净盈亏 ${signedMoney(session.legacy.realizedPnl)} / ${session.legacy.tradeCount} 笔；不合并成绩、不自动补款` : ''}` : '与旧浏览器账本独立';
   const sizing = state.snapshot?.positionSizing;
   const sizeNote = sizing?.mode === 'cash_fraction_cap' ? ' · 后续按可用余额 10%、最高 10 U 试仓，浮盈不计入投入' : sizing?.fixedEntryUsd === 10 ? ' · 后续每笔固定 10 U（含买入成本），不足 10 U 不下单' : sizing?.mode === 'cash_fraction' ? ' · 按可用余额滚仓，浮盈不计入投入' : '';
   const fundingNote = account?.cashAdjustments?.length ? ` · 手动虚拟资金调整 ${signedMoney(account.cashAdjustments.reduce((sum, item) => sum + item.amountUsd, 0))}（不计盈利，旧亏损保留）` : '';
-  $('#accountNote').textContent = account ? `初始虚拟资金 ${money(account.initialCash)}${fundingNote} · ${history}${sizeNote}${stale ? ` · ${stale} 个仓位估值待刷新` : ''}` : '等待真实行情及统一模拟账本';
+  const round=state.snapshot?.lossGuards;
+  const roundNote=round?.fundingId ? ` · 补款后本轮已实现 ${signedMoney(round.realizedPnlUsd)} / 本轮亏损预算 ${money(round.lossLimitUsd)}；上方净盈亏包含历史` : '';
+  $('#accountNote').textContent = account ? `初始虚拟资金 ${money(account.initialCash)}${fundingNote}${roundNote} · ${history}${sizeNote}${stale ? ` · ${stale} 个仓位估值待刷新` : ''}` : '等待真实行情及统一模拟账本';
 }
 
 function renderPositions() {
@@ -168,13 +185,14 @@ function renderStrategies() {
   const batchNode = $('#tradeCountReview');
   if (batchNode) batchNode.innerHTML = renderTradeCountReview(state.snapshot?.tradeCountReview);
   const reviewNode = $('#tradeReviewNote');
-  if (reviewNode) reviewNode.textContent = review ? `即时交易统计（非 AI 复盘）· 连亏不暂停；已完成 ${num(review.completedRounds)} 个完整仓位，当前连续 ${num(review.consecutiveNonWinningRounds)} 次未盈利。${review.recent?.at(-1) ? `${review.recent.at(-1).symbol}：${review.recent.at(-1).findings.join('；')}。` : '等待真实平仓结果。'}${continuous ? '全天候模拟：日亏损、总亏损及次数只记录；止损、真实数据与余额检查保持。' : '止损、仓位、日亏损和总亏损保护保持。'}` : '交易统计初始化中…';
+  const lossPolicyNote = state.snapshot?.lossGuards?.enforced ? '本轮累计或 UTC 当日已实现亏损达到本金 10% 会暂停新仓；扫描不代表允许交易。' : continuous ? '本版本日亏损、总亏损及次数只记录；实际开仓仍以账户状态为准。' : '日亏损和总亏损保护保持。';
+  if (reviewNode) reviewNode.textContent = review ? `即时交易统计（非 AI 复盘）· 已完成 ${num(review.completedRounds)} 个完整仓位，当前连续 ${num(review.consecutiveNonWinningRounds)} 次未盈利。${review.recent?.at(-1) ? `${review.recent.at(-1).symbol}：${review.recent.at(-1).findings.join('；')}。` : '等待真实平仓结果。'}${lossPolicyNote}` : '交易统计初始化中…';
   const trader = state.snapshot?.entryGuard?.traderReview;
   const traderNode = $('#traderReasoningNote');
   if (traderNode) {
     const s = trader?.overall;
     const current = trader?.cohorts?.filter(c => c.reasoningVersion === 'evidence_first_v1' && (!multi || c.opportunityVersion === state.snapshot.opportunityMode) && (state.snapshot?.mainExitPolicy ? c.exitVersion===state.snapshot.mainExitPolicy.version : !evidenceHold || ['evidence_hold_v1','structure_hold_v2'].includes(c.exitVersion)) && (!continuous || c.accountPolicyVersion === 'continuous_paper_v1')) || [];
-    traderNode.textContent = s ? `交易决策四问 · 为什么现在买 / 哪里判错 / 成本后是否值得 / 凭什么继续持有。完整平仓 ${num(s.closedRounds)} 笔，平均净收益 ${finite(s.averageNetUsd) ? signedMoney(s.averageNetUsd) : '待采样'}；价格亏损 ${num(s.priceLosses)} 笔，费用转亏 ${num(s.costOnlyLosses)} 笔。${continuous ? '全天候模拟版本' : evidenceHold ? '按证据持仓版本' : '新决策版本'}已平仓 ${current.reduce((n,c) => n + num(c.closedRounds), 0)} 笔，旧成交不混作新版成绩。按链与规则版本复核，未验证净期望；连亏不暂停。` : '交易决策与成本归因初始化中…';
+    traderNode.textContent = s ? `交易决策四问 · 为什么现在买 / 哪里判错 / 成本后是否值得 / 凭什么继续持有。完整平仓 ${num(s.closedRounds)} 笔，平均净收益 ${finite(s.averageNetUsd) ? signedMoney(s.averageNetUsd) : '待采样'}；价格亏损 ${num(s.priceLosses)} 笔，费用转亏 ${num(s.costOnlyLosses)} 笔。${continuous ? '全天候模拟版本' : evidenceHold ? '按证据持仓版本' : '新决策版本'}已平仓 ${current.reduce((n,c) => n + num(c.closedRounds), 0)} 笔，旧成交不混作新版成绩。按链与规则版本复核，未验证净期望。${lossPolicyNote}` : '交易决策与成本归因初始化中…';
   }
   const learner = state.snapshot?.narrativeLearning;
   const learningNote = $('#narrativeLearningNote');
@@ -187,7 +205,7 @@ function renderStrategies() {
   }
   if (recallNode) recallNode.textContent = recall?.error || (recall ? `七天叙事回溯 · 已核实文案 ${num(recall.sourceCount)} 条 / 精确 CA 绑定 ${num(recall.knownTokens)} 个。仅覆盖已采集样本，不是完整七天；大 KOL / 官方网站文案高重合后，优先查历史 OG。${recall.matches?.length ? recall.matches.map(m=>`${m.summary} 历史市值参考空间 ${finite(m.referenceRoom) ? m.referenceRoom.toFixed(2)+' 倍（非预测）' : '未知'}；${m.ready ? '叙事条件通过，仍需新买盘、报价与账户检查' : m.reasons.join('；')}`).join(' ') : '当前没有可进入交易检查的回流事件，继续采集。'}` : '七天叙事回溯初始化中；无 CA 不等于无叙事，也不等于已找到可买代币。');
   $('#strategyObjective').textContent = state.snapshot?.entryMode === 'paper_diagnostic_entry_v1' ? '主账户诊断试仓 · K 线形态、盈亏比、聪明钱人数与辅助风控只记录，不拦截。按余额 2% 试单，5% 止损；45 秒无成本后盈利则撤。真实参考价＋模拟成本，不是实盘。' : pvp ? '短线 PVP · 45 秒后仍无成本后盈利则撤；主仓最长 3 分钟，确认继续走强才留最多 20% 尾仓，开仓后最多 20 分钟。' : upside ? '大行情优先 · 小仓试错，亏损及时退出；3 / 10 / 30 倍各兑现原仓 20%，留 40% 跟随趋势。倍数是条件规则，不是收益预测。' : '按结构目标与倍数档分段退出。';
-  if (confirmed) $('#strategyObjective').textContent = `确认型 PVP v2 · 新增双地址买盘＋三次独立报价，全路径检查深跌反抽。往返模型成本≤5%、${state.snapshot?.positionSizing?.fixedEntryUsd === 10 ? '固定单笔 10 U（含买入成本）' : '单笔至少 $1'}；${continuous ? '全天候模拟：无开仓次数、固定冷却或持仓个数上限，不因日亏损或总亏损停机；保留买点、真实数据、余额检查和止损。' : '每小时最多6次、每日最多24次；连亏复盘、不设连亏冷静期，日亏损和总亏损保护保持。'}新参数尚未验证盈利。`;
+  if (confirmed) $('#strategyObjective').textContent = `确认型 PVP v2 · 新增双地址买盘＋三次独立报价，全路径检查深跌反抽。往返模型成本≤5%、${state.snapshot?.positionSizing?.fixedEntryUsd === 10 ? '固定单笔 10 U（含买入成本）' : '单笔至少 $1'}；${continuous ? `全天候模拟：无开仓次数、固定冷却或持仓个数上限。${lossPolicyNote}` : '每小时最多6次、每日最多24次；连亏复盘、不设连亏冷静期，日亏损和总亏损保护保持。'}新参数尚未验证盈利。`;
   if (multi) $('#strategyObjective').textContent = '多路机会模拟 · 内盘启动 / 聪明钱动量 / 外盘突破 / 回踩再启动 / 趋势延续 / 叙事 OG 回流。外盘量价策略不强制聪明钱标签，使用已收盘 K 线＋新鲜独立报价；按行情持仓，没有固定到期卖出。每笔 10 U，往返模型成本≤5%；持续研究但不保证每时每刻成交，不能覆盖或获利于所有代币。';
   const exitNote = $('#strategyLanes').nextElementSibling;
   if (reviewed) {
@@ -242,7 +260,7 @@ function renderCoverage() {
   const coverage = state.snapshot?.coverage || {};
   const confirmed = state.snapshot?.entryMode === 'confirmed_pvp_v2';
   if (state.snapshot?.chains?.length > 1 && state.snapshot.chainCoverage) {
-    $('#coverageList').innerHTML = state.snapshot.chains.map(chain => {
+    $('#coverageList').innerHTML = (state.snapshot.scanScope?.scanChains || state.snapshot.chains).map(chain => {
       const feed = state.snapshot.chainCoverage[chain] || {};
       const now = Date.now(), external = marketCoverageStatus(feed.market, now), internal = marketCoverageStatus(feed.trenches, now);
       const flow = flowCoverageStatus(feed.flow, now);

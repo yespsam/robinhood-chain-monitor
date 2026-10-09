@@ -6,8 +6,10 @@ import { randomUUID } from 'node:crypto';
 import { parseGmgnFlowRateLimit } from './gmgn-flow-client.js';
 import { createGmgnAccountGate } from './gmgn-account-gate.js';
 import { gmgnFlowAddress } from './gmgn-flow-signal.js';
-import { enqueueReadonly } from './readonly-priority-queue.js';
+import { enqueueReadonly, readonlyQueueSnapshot } from './readonly-priority-queue.js';
 import { GMGN_READONLY_INTERVAL_MS, gmgnReadonlyPolicy } from './gmgn-readonly-pacing.js';
+import { createReadonlyProcessRunner } from './gmgn-readonly-process.js';
+import {classifyGmgnReadError} from './gmgn-read-error.js';
 
 const execFile = promisify(nodeExecFile);
 
@@ -222,16 +224,17 @@ function candleItems(payload) {
 }
 
 const unavailable = (extra = {}) => ({ status: 'unavailable', source: 'gmgn-cli', reason: 'gmgn_unavailable', observedAt: null, ...extra });
-const safeFailureCode = error => ['GMGN_REQUEST_BUSY', 'GMGN_STATE_INVALID', 'GMGN_STOPPED', 'GMGN_RATE_LIMITED', 'GMGN_CLI_TIMEOUT', 'GMGN_INVALID_QUOTE', 'GMGN_IDENTITY_MISMATCH'].includes(error?.code)
+const safeFailureCode = error => ['GMGN_QUEUE_EXPIRED', 'GMGN_REQUEST_BUSY', 'GMGN_STATE_INVALID', 'GMGN_STOPPED', 'GMGN_RATE_LIMITED', 'GMGN_CLI_TIMEOUT', 'GMGN_INVALID_QUOTE', 'GMGN_IDENTITY_MISMATCH'].includes(error?.code)
   ? error.code : error?.message === 'gmgn_rate_limited' ? 'GMGN_RATE_LIMITED'
     : ['upstream address mismatch', 'upstream chain mismatch'].includes(error?.message) ? 'GMGN_IDENTITY_MISMATCH'
-      : error?.message === 'invalid quote' ? 'GMGN_INVALID_QUOTE' : 'GMGN_UNAVAILABLE';
+      : error?.message === 'invalid quote' ? 'GMGN_INVALID_QUOTE' : classifyGmgnReadError(error)||'GMGN_UNAVAILABLE';
 
 function createQueuedRunner({ cliPath, timeoutMs, dataDir, execute, now, sleep, scheduler }) {
   const accountGate=execute===execFile?createGmgnAccountGate(dataDir):null;
   const cooldownGate=accountGate?createGmgnAccountGate(path.join(dataDir,'gmgn-cooldown-write'),{intervalMs:1}):null;
   const rateFile = path.join(dataDir, 'gmgn-flow-rate-limit.json');
   let writeFault = false;
+  const controller = new AbortController(), jobs = new Set();
 
   async function readCooldown() {
     try {
@@ -281,51 +284,122 @@ function createQueuedRunner({ cliPath, timeoutMs, dataDir, execute, now, sleep, 
     }
   }
 
-  async function executeChecked(args, onRequestStart) {
-    await checkCooldown();
+  const executionOptions = () => ({ timeout: timeoutMs, killSignal: 'SIGKILL', maxBuffer: MAX_BUFFER, shell: false, encoding: 'utf8', signal: controller.signal });
+  async function checkConfiguration() {
+    let configuration;
+    try { configuration = await execute(cliPath, ['config', '--check'], executionOptions()); }
+    catch(error) {
+      if(parseGmgnFlowRateLimit(error,now())||error?.killed||error?.code==='ETIMEDOUT')throw error;
+      throw Object.assign(new Error('GMGN_CONFIG_FAILED'),{code:'GMGN_CONFIG_FAILED'});
+    }
+    const retry = parseGmgnFlowRateLimit(configuration?.stderr, now());
+    if (retry) throw { status: 429, reset_at: retry };
+  }
+  async function failSafely(error) {
+    const until = parseGmgnFlowRateLimit(error, now());
+    if (until) {
+      try { await (cooldownGate ? cooldownGate(()=>persistCooldown(until)) : persistCooldown(until)); }
+      catch(error) { writeFault=true;throw error; }
+    }
+    // Consumers only receive an unavailable/stale status, never CLI diagnostics.
+    throw Object.assign(new Error('gmgn_unavailable'), { code: until ? 'GMGN_RATE_LIMITED'
+      : error?.killed || error?.code === 'ETIMEDOUT' ? 'GMGN_CLI_TIMEOUT' : safeFailureCode(error) });
+  }
+
+  async function executeChecked(args, onRequestStart, configurationChecked = false) {
+    if (!configurationChecked) await checkCooldown();
     // The cross-process gate already spaces real requests. Do not sleep again
     // after taking a lease; this used to hold up exits behind background work.
     const remaining = accountGate || scheduler.lastStartedAt === null ? 0 : scheduler.lastStartedAt + REQUEST_INTERVAL_MS - now();
-    if (remaining > 0) await sleep(remaining);
-    await checkCooldown();
+    if (remaining > 0) { await sleep(remaining); await checkCooldown(); }
     try {
-      const options = { timeout: timeoutMs, killSignal: 'SIGKILL', maxBuffer: MAX_BUFFER, shell: false, encoding: 'utf8' };
-      const configuration = await execute(cliPath, ['config', '--check'], options);
-      const configRetry = parseGmgnFlowRateLimit(configuration?.stderr, now());
-      if (configRetry) throw { status: 429, reset_at: configRetry };
-      // A background monitor can enter cooldown while config --check is running.
+      if (!configurationChecked) await checkConfiguration();
+      // Recheck after both configuration and admission: a monitor can enter
+      // cooldown while either is pending. Bind quote clocks only after this.
       await checkCooldown();
       scheduler.lastStartedAt = now();
       onRequestStart?.(scheduler.lastStartedAt);
-      const result = await execute(cliPath, args, options);
+      const result = await execute(cliPath, args, executionOptions());
       const retry = parseGmgnFlowRateLimit(result?.stderr, now()) || parseGmgnFlowRateLimit(parseJson(result?.stdout), now());
       if (retry) throw { status: 429, reset_at: retry };
       return result.stdout;
-    } catch (error) {
-      const until = parseGmgnFlowRateLimit(error, now());
-      if (until) {
-        try { await (cooldownGate ? cooldownGate(()=>persistCooldown(until)) : persistCooldown(until)); }
-        catch(error) { writeFault=true;throw error; }
-      }
-      // Consumers only receive an unavailable/stale status, never CLI diagnostics.
-      throw Object.assign(new Error('gmgn_unavailable'), { code: until ? 'GMGN_RATE_LIMITED'
-        : error?.killed || error?.code === 'ETIMEDOUT' ? 'GMGN_CLI_TIMEOUT' : safeFailureCode(error) });
-    }
+    } catch (error) { return failSafely(error); }
   }
 
-  return (args, { onRequestStart, priority = 0 } = {}) => {
+  const run = (args, { onRequestStart, priority = 0 } = {}) => {
+    if(controller.signal.aborted)return Promise.reject(Object.assign(new Error('GMGN_STOPPED'),{code:'GMGN_STOPPED'}));
     const policy=accountGate?gmgnReadonlyPolicy(dataDir):{concurrency:1,normalConcurrency:1};
-    return enqueueReadonly(scheduler,
-      () => accountGate ? accountGate(() => executeChecked(args, onRequestStart), undefined, { priority }) : executeChecked(args, onRequestStart),
-      { priority, now, concurrency:policy.concurrency, normalConcurrency:policy.normalConcurrency });
+    const queuedAt=now(),kind=`${args[0]}:${args[1]}`;
+    const record={kind,priority,queuedAt:new Date(queuedAt).toISOString(),localQueueMs:null,accountWaitMs:null,preflightMs:null,requestMs:null,
+      preflightPlacement:accountGate?'before_account_gate_v1':'serial',
+      chain:args.includes('--chain')?args[args.indexOf('--chain')+1]:null,
+      address:args.includes('--address')?args[args.indexOf('--address')+1]:null};
+    let localStartedAt,admittedAt,requestedAt,workFinishedAt;
+    const executeWork=(configurationChecked=false)=>{admittedAt=now();return executeChecked(args,at=>{
+      requestedAt=at;record.preflightMs=(record.preflightMs||0)+Math.max(0,at-admittedAt);onRequestStart?.(at);
+    },configurationChecked).finally(()=>{workFinishedAt=now();if(requestedAt!=null)record.requestMs=Math.max(0,workFinishedAt-requestedAt);});};
+    const admittedWork=async()=>{
+      if(!accountGate)return executeWork();
+      // config --check only checks local configuration in the installed CLI.
+      // Keep one fresh check PER request, but do not occupy an upstream lease
+      // during CLI startup. The existing bounded local ready set also bounds
+      // these checks; all business commands still enter the shared gate.
+      const preflightStartedAt=now();
+      try { await checkCooldown();await checkConfiguration();await checkCooldown(); }
+      catch(error) { return failSafely(error); }
+      finally { record.preflightMs=Math.max(0,now()-preflightStartedAt); }
+      const gateQueuedAt=now();
+      return accountGate(()=>executeWork(true),controller.signal,{priority,onAdmitted:admission=>{
+        record.accountWaitMs=Math.max(0,now()-gateQueuedAt);record.accountQueueScans=admission.queueScans;
+      }});
+    };
+    const job = enqueueReadonly(scheduler,admittedWork,
+    // These are bounded GATE WAITERS, not upstream requests. Reusing the
+    // network concurrency here strands a normal seat behind a background job
+    // waiting for the shared background seat in another process. Let the
+    // cross-process gate arbitrate a small ready set; it ALONE owns native
+    // business concurrency/pacing. Mock transports keep serial admission.
+    {priority,now,kind,admissionOnly:!!accountGate,
+      concurrency:accountGate?policy.concurrency+3:policy.concurrency,
+      normalConcurrency:accountGate?policy.normalConcurrency+2:policy.normalConcurrency,
+      // Background must survive the existing 30s aging promotion, otherwise
+      // expiry itself starves the reserved discovery turns under sustained load.
+      maxPending:priority===2?8:24,maxWaitMs:priority===2?15000:priority===1?20000:60000,
+      onStart:()=>{localStartedAt=now();record.localQueueMs=Math.max(0,localStartedAt-queuedAt);}})
+      .then(result=>{record.status='ok';return result;},error=>{
+        record.status=controller.signal.aborted?'GMGN_STOPPED':safeFailureCode(error);
+        throw Object.assign(new Error(record.status),{code:record.status});
+      })
+      .finally(()=>{
+        record.completedAt=new Date(now()).toISOString();record.totalMs=Math.max(0,now()-queuedAt);
+        record.accountReleaseMs=workFinishedAt==null?null:Math.max(0,now()-workFinishedAt);
+        scheduler.requestHistory ||= [];scheduler.requestHistory.push(record);
+        if(scheduler.requestHistory.length>64)scheduler.requestHistory.splice(0,scheduler.requestHistory.length-64);
+      });
+    jobs.add(job);job.then(()=>jobs.delete(job),()=>jobs.delete(job));return job;
   };
+  run.diagnostics=()=>({...readonlyQueueSnapshot(scheduler,now()),recent:structuredClone(scheduler.requestHistory||[])});
+  run.close=async()=>{
+    controller.abort();
+    for(const item of scheduler.pending?.splice(0)||[]){clearTimeout(item.timer);item.reject(Object.assign(new Error('GMGN_STOPPED'),{code:'GMGN_STOPPED'}));}
+    await Promise.allSettled([...jobs]);
+  };
+  return run;
+}
+
+// Used by the dedicated read-only child. No signer / execution routes exist here.
+export function createNativeReadonlyRunner({cliPath,timeoutMs=DEFAULT_TIMEOUT_MS,dataDir}={}) {
+  return createQueuedRunner({cliPath,timeoutMs,dataDir,execute:execFile,now:Date.now,
+    sleep:ms=>new Promise(resolve=>setTimeout(resolve,ms)),scheduler:{lastStartedAt:null,rateLimitedUntil:0}});
 }
 
 export function createReadonlyMarketClient({ runner = null, ttlMs = DEFAULT_TTL_MS, quoteTtlMs = 3000, trendingTtlMs = ttlMs, timeoutMs = DEFAULT_TIMEOUT_MS,
   cliPath = process.env.GMGN_FLOW_CLI_PATH || 'gmgn-cli', dataDir = path.resolve('data'),
   execFileImpl = execFile, now = Date.now, sleepImpl = ms => new Promise(resolve => setTimeout(resolve, ms)),
-  scheduler = SHARED_SCHEDULER } = {}) {
-  const run = runner || createQueuedRunner({ cliPath, timeoutMs, dataDir: path.resolve(dataDir), execute: execFileImpl, now, sleep: sleepImpl, scheduler });
+  scheduler = SHARED_SCHEDULER, isolated = false } = {}) {
+  const run = runner || (isolated && execFileImpl===execFile
+    ? createReadonlyProcessRunner({cliPath,timeoutMs,dataDir:path.resolve(dataDir)})
+    : createQueuedRunner({ cliPath, timeoutMs, dataDir: path.resolve(dataDir), execute: execFileImpl, now, sleep: sleepImpl, scheduler }));
   const cache = new Map();
   const pendingInfo = new Map();
 
@@ -360,7 +434,12 @@ export function createReadonlyMarketClient({ runner = null, ttlMs = DEFAULT_TTL_
       entry.succeeded = result?.status === 'ok';
       if (result?.status === 'ok') entry.lastSuccess = result;
       return result;
-    }).catch(error => { entry.failureCode = safeFailureCode(error); return null; }).finally(() => { entry.pending = false; entry.expiresAt = now() + lifetime; });
+    }).catch(error => { entry.failureCode = safeFailureCode(error); return null; }).finally(() => {
+      entry.pending = false;
+      // Queue expiry is not a failed upstream sample. Retry on a later scan,
+      // with bounded backoff, without holding a stale job indefinitely.
+      entry.expiresAt = now() + (['GMGN_QUEUE_EXPIRED','GMGN_REQUEST_BUSY'].includes(entry.failureCode)?Math.min(lifetime,5000):lifetime);
+    });
     cache.set(key, entry);
     if (cache.size > 200) for (const [oldKey, old] of cache) {
       if (!old.pending && oldKey !== key) { cache.delete(oldKey); break; }
@@ -410,18 +489,20 @@ export function createReadonlyMarketClient({ runner = null, ttlMs = DEFAULT_TTL_
         { priority: purpose === 'scan' ? 1 : 0, onRequestStart: at => { requestedAt = at; } });
       const payload = parseJson(stdout);
       assertEnvelope(payload, chain);
+      if(!Array.isArray(payload)&&!Array.isArray(payload?.data?.rank)&&!Array.isArray(payload?.rank))
+        throw Object.assign(new Error('invalid rank response'),{code:'GMGN_INVALID_RESPONSE'});
       const tokens = rankItems(payload).map(item => normalizeToken(item, chain, null, 'trending')).filter(Boolean);
-      if (!tokens.length) return unavailable({ chain, interval });
       const observedAt = new Date(requestedAt).toISOString();
       tokens.forEach(token => { token.stageObservedAt = observedAt; token.volumeWindow = interval; });
       return { status: 'ok', source: 'gmgn-cli', chain, interval, orderBy: GMGN_ORDER_BY, observedAt, tokens,
         queuedAt: new Date(queuedAt).toISOString(), receivedAt: new Date(now()).toISOString(), timestampKind: 'local_request' };
-    }, interval === '1m' ? trendingTtlMs : ttlMs);
+    }, ['1m','5m'].includes(interval) ? trendingTtlMs : ttlMs);
     if (result?.status === 'ok') return result;
     const lastSuccess = cache.get(key)?.lastSuccess;
+    const reasonCode=cache.get(key)?.failureCode||'GMGN_UNAVAILABLE';
     return lastSuccess
-      ? { ...lastSuccess, status: 'stale', stale: true, staleReason: 'gmgn_unavailable', staleAt: new Date(now()).toISOString() }
-      : unavailable({ chain, interval });
+      ? { ...lastSuccess, status: 'stale', stale: true, staleReason: 'gmgn_unavailable', reasonCode, staleAt: new Date(now()).toISOString() }
+      : unavailable({ chain, interval,reasonCode });
   }
 
   async function details({ chain, address, purpose = 'research' } = {}) {
@@ -461,7 +542,8 @@ export function createReadonlyMarketClient({ runner = null, ttlMs = DEFAULT_TTL_
     }, purpose === 'candidate' ? 30_000 : 60_000);
     if (result?.status === 'ok') return result;
     const previous = cache.get(key)?.lastSuccess;
-    return previous ? { ...previous, status: 'stale', stale: true } : unavailable({ chain, address: normalized });
+    const reasonCode=cache.get(key)?.failureCode||'GMGN_UNAVAILABLE';
+    return previous ? { ...previous, status: 'stale', stale: true,reasonCode } : unavailable({ chain, address: normalized,reasonCode });
   }
 
   async function kline({ chain, address, resolution = '1m', from, to, purpose = 'research', latestClosed = false } = {}) {
@@ -488,7 +570,8 @@ export function createReadonlyMarketClient({ runner = null, ttlMs = DEFAULT_TTL_
       };
       bindWindow(queuedAt);
       const stdout = await run(args,
-        { priority: ['exit','entry_confirmation'].includes(purpose) ? 2 : purpose === 'candidate' ? 1 : 0, onRequestStart:bindWindow });
+        { priority: ['exit','entry_confirmation'].includes(purpose) ? 2 : purpose === 'candidate' ? 1 : 0, onRequestStart:bindWindow,
+          ...(latestClosed?{latestClosedDuration:duration}:{}) });
       const payload = parseJson(stdout);
       assertEnvelope(payload, chain, address);
       const candles = candleItems(payload).map(item => { assertIdentity(item, chain, address);const candle=normalizeCandle(item);
@@ -501,29 +584,34 @@ export function createReadonlyMarketClient({ runner = null, ttlMs = DEFAULT_TTL_
     if (result?.status === 'ok') return result;
     const lastSuccess = cache.get(key)?.lastSuccess;
     return lastSuccess
-      ? { ...lastSuccess, status: 'stale', stale: true, staleReason: 'gmgn_unavailable', staleAt: new Date(now()).toISOString() }
-      : unavailable({ chain, address, resolution });
+      ? { ...lastSuccess, status: 'stale', stale: true, staleReason: 'gmgn_unavailable', reasonCode:cache.get(key)?.failureCode||'GMGN_UNAVAILABLE',staleAt: new Date(now()).toISOString() }
+      : unavailable({ chain, address, resolution,reasonCode:cache.get(key)?.failureCode||'GMGN_UNAVAILABLE' });
   }
 
-  async function trenches({ chain, limit = 20 } = {}) {
+  async function trenches({ chain, limit = 20, purpose = 'research', types = Object.keys(TRENCHES_CATEGORIES) } = {}) {
     assertChain(chain);
+    if(!Array.isArray(types)||!types.length||new Set(types).size!==types.length||types.some(t=>!Object.hasOwn(TRENCHES_CATEGORIES,t)))throw new TypeError('invalid trenches categories');
+    const selected=Object.keys(TRENCHES_CATEGORIES).filter(t=>types.includes(t));
     const requestedLimit = Math.min(80, Math.max(1, Math.trunc(Number(limit) || 20)));
-    const key = `trenches:${chain}:${requestedLimit}`;
+    const key = `trenches:${chain}:${requestedLimit}:${selected.join(',')}`;
     const result = await cached(key, async () => {
-      const stdout = await run(['market', 'trenches', '--chain', chain, '--type', 'new_creation', '--type', 'near_completion', '--type', 'completed', '--limit', String(requestedLimit), '--raw']);
+      const queuedAt = now(); let requestedAt = queuedAt;
+      const stdout = await run(['market', 'trenches', '--chain', chain, ...selected.flatMap(type=>['--type',type]), '--limit', String(requestedLimit), '--raw'],
+        { priority: purpose === 'scan' ? 1 : 0, onRequestStart: at => { requestedAt = at; } });
       const payload = parseJson(stdout);
       assertEnvelope(payload, chain);
       const data = payload.data ?? payload;
       // The installed CLI normalizes upstream data.pump to near_completion.
       // Accept the observed CLI form and documented API form, never silently
       // prefer one when both are present with conflicting contents.
-      if (data.pump != null && data.near_completion != null && JSON.stringify(data.pump) !== JSON.stringify(data.near_completion)) throw new TypeError('conflicting trenches categories');
+      if (selected.includes('near_completion') && data.pump != null && data.near_completion != null && JSON.stringify(data.pump) !== JSON.stringify(data.near_completion)) throw new TypeError('conflicting trenches categories');
       const categoryData = { ...data, pump: data.pump ?? data.near_completion };
-      if (!Object.values(TRENCHES_CATEGORIES).every(field => Array.isArray(categoryData[field]))) throw new TypeError('invalid trenches categories');
-      const observedAt = new Date(now()).toISOString();
+      if (!selected.every(type => Array.isArray(categoryData[TRENCHES_CATEGORIES[type]]))) throw new TypeError('invalid trenches categories');
+      const observedAt = new Date(requestedAt).toISOString();
       const categories = {};
       const byAddress = new Map();
-      for (const [category, field] of Object.entries(TRENCHES_CATEGORIES)) {
+      for (const category of selected) {
+        const field=TRENCHES_CATEGORIES[category];
         categories[category] = categoryData[field].slice(0, requestedLimit).map(item => {
           const token = normalizeToken(item, chain, category);
           if (!token) throw new TypeError('invalid trenches token');
@@ -542,16 +630,20 @@ export function createReadonlyMarketClient({ runner = null, ttlMs = DEFAULT_TTL_
         }
         return siblings.at(-1);
       });
-      return { status: 'ok', source: 'gmgn-cli', chain, observedAt, tokens, categories };
+      return { status: 'ok', source: 'gmgn-cli', chain, observedAt, tokens, categories,
+        queuedAt: new Date(queuedAt).toISOString(), receivedAt: new Date(now()).toISOString(), timestampKind: 'local_request' };
     });
     if (result?.status === 'ok') return result;
     const lastSuccess = cache.get(key)?.lastSuccess;
+    const reasonCode=cache.get(key)?.failureCode||'GMGN_UNAVAILABLE';
     return lastSuccess
-      ? { ...lastSuccess, status: 'stale', stale: true, staleReason: 'gmgn_unavailable', staleAt: new Date(now()).toISOString() }
-      : unavailable({ chain });
+      ? { ...lastSuccess, status: 'stale', stale: true, staleReason: 'gmgn_unavailable', reasonCode, staleAt: new Date(now()).toISOString() }
+      : unavailable({ chain,reasonCode });
   }
 
-  return { trending, kline, trenches, quote, details, clearCache: () => cache.clear() };
+  return { trending, kline, trenches, quote, details, clearCache: () => cache.clear(),close:()=>run.close?.(),
+    diagnostics:()=>({...(run.diagnostics?.()||{...readonlyQueueSnapshot(scheduler,now()),recent:structuredClone(scheduler.requestHistory||[])}),
+      scope:'loaded_process',note:'当前客户端最近最多 64 次传输任务；隔离模式的请求时钟来自只读子进程。active 包括等待共享名额，非网络并发；共享账户限频不变，传输成功不等于入场通过'}) };
 }
 
-export const readonlyMarket = createReadonlyMarketClient({ ttlMs: 10_000, trendingTtlMs: 1000, quoteTtlMs: 1000 });
+export const readonlyMarket = createReadonlyMarketClient({ ttlMs: 10_000, trendingTtlMs: 1000, quoteTtlMs: 1000, isolated:true });

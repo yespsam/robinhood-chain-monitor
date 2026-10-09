@@ -1,10 +1,90 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {planHotResearch,selectResearchChart,selectQuoteCandidate,selectQuoteTarget,chartRefreshDue,advanceEntryFocus} from '../src/paper-research-scheduler.js';
+import {planHotResearch,selectResearchChart,selectQuoteCandidate,quoteCandidatePool,selectQuoteTarget,chartRefreshDue,advanceEntryFocus} from '../src/paper-research-scheduler.js';
+
+test('admission expiry retries after five seconds while real upstream failures retain their backoff',()=>{
+  for(const reasonCode of ['GMGN_QUEUE_EXPIRED','GMGN_REQUEST_BUSY']){
+    const cached={status:'unavailable',fetchedAt:100000,reasonCode};
+    assert.equal(chartRefreshDue(cached,104999,{active:true}),false);
+    assert.equal(chartRefreshDue(cached,105000,{active:true}),true);
+    assert.equal(chartRefreshDue({...cached,status:'stale'},105000),true);
+  }
+  for(const reasonCode of ['GMGN_RATE_LIMITED','GMGN_CLI_TIMEOUT','GMGN_UNAVAILABLE']){
+    const cached={status:'unavailable',fetchedAt:100000,reasonCode};
+    assert.equal(chartRefreshDue(cached,105000,{active:true}),false);
+    assert.equal(chartRefreshDue(cached,160000),true);
+  }
+});
+
+test('quote warmup has a normal chart route but cannot displace exits or fair cold discovery',()=>{
+  const warm={chain:'bsc',address:'warm',requiresStructureChart:true};
+  const cold={chain:'bsc',address:'cold'};
+  const params={holdings:[],hot:[],broad:[{input:{token:cold}}],charts:new Map(),nowMs:100000,
+    dispatch:0,chains:['bsc'],researchFocus:warm};
+  const selected=selectResearchChart(params);
+  assert.equal(selected.address,'warm');assert.equal(selected.purpose,'candidate');assert.equal(selected.researchOnly,true);
+  assert.equal(selected.researchLane,'hot','never acquire the entry-confirmation lane');
+  assert.equal(selectResearchChart({...params,dispatch:2}).address,'cold');
+  assert.equal(selectResearchChart({...params,pendingKeys:new Set(['bsc:warm'])}).address,'cold');
+  assert.equal(selectResearchChart({...params,holdings:[{...warm,address:'held',holdingTier:'main'}]}).purpose,'exit');
+  assert.equal(selectResearchChart({...params,focus:{...warm,address:'admitted'}}).researchLane,'entry');
+});
 import {createReviewComparison,validateReviewComparison,reviewComparisonSummary} from '../src/paper-review-comparison.js';
 import {createPaperStrategyAccount} from '../src/paper-strategy-engine.js';
 const NOW=Date.parse('2026-09-24T05:00:00Z');
 const row=(chain,id,ready=false)=>({input:{token:{chain,address:String(id),volume:1000}},decisions:[{evidence:{opportunityRoutes:[{basis:'ohlcv',signalReady:ready}]}}]});
+test('focused market leader remains researched after one non-setup; delisting or danger releases its bounded seat',()=>{
+  const leader=n=>({input:{memeExitMode:true,marketStatus:'ok',observedAt:new Date(NOW).toISOString(),token:{chain:'bsc',
+    address:'0x'+String(n).repeat(40),marketStage:'external',liquidity:100000,rank:n,volumeWindow:'5m',volume:100000}},
+    decisions:[{decision:'观察',evidence:{safety:{blocked:[]},opportunityRoutes:[{basis:'ohlcv',signalReady:false,pattern:{ready:false}}]}}]});
+  const a=leader(1),b=leader(2),extra=[3,4,5].map(n=>{const r=row('bsc',n);r.input.memeExitMode=true;
+    r.decisions[0].evidence.lossRepair={catalystReady:true,reentry:{ready:true}};return r;});
+  const all=[a,b,...extra],charts=new Map([['bsc:'+a.input.token.address,{status:'ok',fetchedAt:NOW,closedThroughAtMs:NOW, candles:[]}]]);
+  const choose=rs=>planHotResearch(rs,['bsc'],charts,NOW,all.slice(0,1).map(r=>'bsc:'+r.input.token.address),()=>0,{perChainLimit:3,maintainLeader:true});
+  const hot=choose(all);assert.equal(hot.length,3);assert.ok(hot.includes(a),'a fresh checked non-setup cannot lose the continuous leader seat to older caches');
+  const due=selectResearchChart({holdings:[],hot,broad:all,charts,nowMs:NOW+60000,dispatch:0,chains:['bsc']});
+  assert.equal(due.address,a.input.token.address,'next closed minute refreshes before old bars expire');
+  assert.ok(choose(all.filter(r=>r!==a)).includes(b),'delisted CA cannot pin the seat');
+  a.decisions[0].evidence.safety.blocked=['honeypot'];assert.ok(!choose(all).includes(a));assert.ok(choose(all).includes(b));
+});
+test('verified repair catalyst reaches chart research before a price-only ready pattern, without changing discovery or entry gates',()=>{
+  const price=row('bsc','a',true),event=row('bsc','b');
+  for(const r of [price,event])r.input.memeExitMode=true;
+  price.decisions[0].evidence.lossRepair={group:'price_only',catalystReady:false,reentry:{ready:true}};
+  event.decisions[0].evidence.lossRepair={group:'event_narrative',catalystReady:true,reentry:{ready:true}};
+  const before=structuredClone([price,event]),charts=new Map();
+  const hot=planHotResearch([price,event],['bsc'],charts,NOW);
+  assert.equal(hot[0],event);assert.deepEqual([price,event],before);
+  assert.equal(selectResearchChart({holdings:[],hot,broad:[price,event],charts,nowMs:NOW,dispatch:2,chains:['bsc']}).address,'a','one third remains discovery');
+  assert.equal(planHotResearch([price,event],['bsc'],charts,NOW,['bsc:a'])[0],event,'verified catalyst preempts an unstarted lower-tier reservation');
+  charts.set('bsc:a',{status:'unavailable',fetchedAt:NOW});
+  assert.equal(planHotResearch([price,event],['bsc'],charts,NOW,['bsc:a'])[0],event);
+  event.decisions[0].evidence.lossRepair.group='verified_wallet';
+  assert.equal(planHotResearch([price,event],['bsc'],charts,NOW)[0],event);
+  event.decisions[0].evidence.lossRepair.reentry.ready=false;
+  assert.equal(planHotResearch([price,event],['bsc'],charts,NOW)[0],price);
+  event.decisions[0].evidence.lossRepair.reentry.ready=true;event.input.memeExitMode=false;
+  assert.equal(planHotResearch([price,event],['bsc'],charts,NOW)[0],price,'legacy comparison ranking stays unchanged');
+});
+test('fresh verified buying receives chart priority; partial flow and labels cannot claim that priority',()=>{
+  const ordinary=row('sol','a'),verified=row('sol','b');
+  verified.input.flow={fresh:true,complete:true,highProfitCount:1};
+  const before=structuredClone(verified);
+  assert.equal(planHotResearch([ordinary,verified],['sol'],new Map(),NOW)[0],verified);
+  assert.deepEqual(verified,before,'research priority does not approve an entry');
+  verified.input.flow.complete=false;
+  assert.equal(planHotResearch([ordinary,verified],['sol'],new Map(),NOW)[0],ordinary);
+});
+test('bounded semantic hint reorders research, not independent evidence or execution eligibility',()=>{
+  const a=row('bsc','a'),b=row('bsc','b'),before=structuredClone([a,b]);
+  assert.equal(planHotResearch([a,b],['bsc'],new Map(),NOW)[0],a);
+  assert.equal(planHotResearch([a,b],['bsc'],new Map(),NOW,[],d=>d===b.decisions[0]?20:0)[0],b);
+  assert.deepEqual([a,b],before,'no eligibility or decision mutation');
+  a.input.flow={pulse:{recentBuyerCount:1}};
+  assert.equal(planHotResearch([a,b],['bsc'],new Map(),NOW,[],d=>d===a.decisions[0]?-20:0)[0],a,'no news credit means nothing to subtract from independent flow');
+  a.decisions[0].evidence.opportunityRoutes[0].signalReady=true;
+  assert.equal(planHotResearch([a,b],['bsc'],new Map(),NOW,[],d=>d===b.decisions[0]?Infinity:0)[0],a);
+});
 test('main external research is not starved by the legacy 5% estimate before chart economics exist',()=>{
   const main=row('bsc','taxed');main.input.memeExitMode=true;
   main.decisions[0].evidence.costAssumptions={estimatedRoundTripCostRate:.06224};
@@ -12,10 +92,17 @@ test('main external research is not starved by the legacy 5% estimate before cha
   const legacy=structuredClone(main);legacy.input.memeExitMode=false;
   assert.deepEqual(planHotResearch([legacy],['bsc'],new Map(),NOW),[]);
   main.decisions[0].evidence.costAssumptions.estimatedRoundTripCostRate=.151;
-  assert.deepEqual(planHotResearch([main],['bsc'],new Map(),NOW),[]);
+  assert.equal(planHotResearch([main],['bsc'],new Map(),NOW)[0],main,'research does not grant execution permission');
   main.decisions[0].evidence.costAssumptions.estimatedRoundTripCostRate=.06224;
   main.decisions[0].evidence.safety={blocked:['存在貔貅标记']};
   assert.deepEqual(planHotResearch([main],['bsc'],new Map(),NOW),[]);
+});
+test('ETH retains a bounded hot seat even when its paper fee assumption exceeds the entry budget',()=>{
+  const eth=row('eth','zc');eth.input.memeExitMode=true;
+  eth.decisions[0].evidence.costAssumptions={estimatedRoundTripCostRate:.49};
+  const hot=planHotResearch([eth],['eth'],new Map(),NOW);
+  assert.equal(hot[0],eth);
+  assert.equal(selectResearchChart({holdings:[],hot,broad:[eth],charts:new Map(),nowMs:NOW,dispatch:0,chains:['eth']}).address,'zc');
 });
 test('main unseen hotspot survives score churn until one bounded chart attempt finishes',()=>{
   const unseen=row('bsc','new'),ready=row('bsc','known',true);
@@ -41,6 +128,18 @@ test('main-ready quote candidates preempt comparison leases and cannot be overwr
   assert.equal(fallback.lease.candidateBook,'comparison');
   const mainHeld={...main,input:{...main.input,opportunityAccount:{positions:{'base:a':{}}}}};
   assert.equal(selectQuoteCandidate([mainHeld,control],null,NOW,options).row,control,'each account uses its own holdings');
+});
+test('new quote selection also prioritizes verified catalysts but preserves an already active bounded lease',()=>{
+  const price={...row('bsc','a'),candidateBook:'main'},wallet={...row('bsc','b'),candidateBook:'main'};
+  for(const [r,group,catalyst] of [[price,'price_only',false],[wallet,'verified_wallet',true]]){
+    r.decisions[0].token=r.input.token;
+    r.decisions[0].evidence.lossRepair={ready:true,catalystReady:catalyst,group};
+  }
+  const ranked=quoteCandidatePool([price,wallet],{mainFirst:true,catalystFirst:true});
+  assert.equal(ranked[0],wallet);
+  assert.equal(selectQuoteCandidate(ranked,null,NOW,{mainFirst:true}).row,wallet);
+  const previous=selectQuoteCandidate([price],null,NOW,{mainFirst:true});
+  assert.equal(selectQuoteCandidate(ranked,previous.lease,NOW+1000,{mainFirst:true}).row,price,'do not discard in-flight confirmation progress');
 });
 test('evidence-exit focus tolerates a slow first quote but never renews indefinitely or removes discovery',()=>{
   const a=row('base','a'),b=row('base','b'),options={windowMs:45000};
@@ -92,6 +191,19 @@ test('hundreds of discoveries get only one hot seat per chain and real ready set
   const hot=planHotResearch(rows,['base','bsc'],new Map(),NOW,[]);
   assert.equal(hot.length,2);assert.equal(hot[0].input.token.address,'7');assert.equal(hot[1].input.token.chain,'bsc');
 });
+test('single-chain opt-in retains three bounded hot CAs and a separate discovery slot',()=>{
+  const rows=Array.from({length:100},(_,i)=>row('bsc',String(i).padStart(3,'0')));
+  rows[50].input.memeExitMode=true;
+  rows[50].decisions[0].evidence.lossRepair={catalystReady:true,reentry:{ready:true},group:'event_narrative'};
+  const hot=planHotResearch(rows,['bsc'],new Map(),NOW,[],()=>0,{perChainLimit:3});
+  assert.equal(hot.length,3);assert.equal(hot[0],rows[50]);
+  assert.equal(new Set(hot.map(r=>r.input.token.address)).size,3);
+  const selected=selectResearchChart({holdings:[],hot,broad:rows,charts:new Map(),nowMs:NOW,dispatch:2,chains:['bsc']});
+  assert.equal(selected.researchLane,'discovery');assert.ok(!hot.some(r=>r.input.token.address===selected.address));
+  const pending=new Set(hot.slice(0,2).map(r=>`bsc:${r.input.token.address}`));
+  assert.equal(selectResearchChart({holdings:[],hot,broad:rows,charts:new Map(),nowMs:NOW,dispatch:1,chains:['bsc'],pendingKeys:pending}).address,hot[2].input.token.address);
+  assert.throws(()=>planHotResearch(rows,['bsc'],new Map(),NOW,[],()=>0,{perChainLimit:4}),/bounded/);
+});
 test('known expensive tokens and checked non-setups cannot monopolize the hot seats',()=>{
   const expensive=row('eth','expensive',true),cold=row('base','cold'),checked=row('base','checked');
   expensive.decisions[0].evidence.costAssumptions={estimatedRoundTripCostRate:.43};
@@ -115,6 +227,12 @@ test('slow held quotes do not starve candidates; stale or failed holdings still 
   assert.equal(selectQuoteTarget([held,candidate],quotes,attempts,late).purpose,'exit');
   quotes.set('base:held',{...held,status:'unavailable',observedAt:new Date(late).toISOString()});
   assert.equal(selectQuoteTarget([held,candidate],quotes,attempts,late).purpose,'exit');
+});
+test('partial confirmation history is completed before fresh candidate rotation',()=>{
+  const partial={chain:'base',address:'partial',purpose:'candidate'},fresh={chain:'base',address:'fresh',purpose:'candidate'};
+  const quotes=new Map(),attempts=new Map([['base:partial',NOW-1000],['base:fresh',NOW-10000]]);
+  const progress=new Map([['base:partial',[{observedAt:new Date(NOW-8000).toISOString()}]]]);
+  assert.equal(selectQuoteTarget([partial,fresh],quotes,attempts,NOW,{quoteProgress:progress}).address,'partial');
 });
 test('holding chart comes first, hot refreshes are bounded and cold discovery keeps a slot',()=>{
   const a=row('base','a'),b=row('bsc','b'),c=row('base','c'),d=row('bsc','d');

@@ -2,18 +2,30 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { BINANCE_FLOW_CHAINS, BINANCE_FLOW_KINDS, BINANCE_FLOW_SCHEMA, advanceBinanceFlowFeed, validBinanceFlowState } from './binance-flow-evidence.js';
+import { tradingScanChains, tradingFlowChains } from './trading-scan-scope.js';
 
 // Public market-data query only. No wallet/session, signing, swap or broadcast
 // endpoints are reachable through this client; do not reuse Square credentials.
 const URL = 'https://www.binance.com/bapi/defi/v1/public/wallet-direct/tracker/wallet/address/query';
 const failure = (code, extra = {}) => Object.assign(new Error(code), { code, ...extra });
 const MAX_BYTES = 4 * 1024 * 1024;
+export const BINANCE_FOCUS_ROTATION=Object.freeze(['bsc','sol','robinhood','bsc','sol','base','bsc','sol','eth']);
+export function selectBinanceFlowSlot(state,nowMs,allowedChains=Object.keys(BINANCE_FLOW_CHAINS)) {
+  const start=state.focusChainIndex??0;
+  for(let offset=0;offset<BINANCE_FOCUS_ROTATION.length;offset++){
+    const index=(start+offset)%BINANCE_FOCUS_ROTATION.length,chain=BINANCE_FOCUS_ROTATION[index];
+    if(allowedChains.includes(chain)&&BINANCE_FLOW_KINDS.some(kind=>!(state.chains?.[chain]?.feeds?.[kind]?.nextAttemptAt>nowMs)))
+      return {chain,nextIndex:(index+1)%BINANCE_FOCUS_ROTATION.length};
+  }
+  return null;
+}
 export function createBinanceFlowClient({ fetchImpl = fetch, now = Date.now } = {}) {
   let lastAt = 0, tail = Promise.resolve(), cooldownUntil = 0, stopped = false;
   const controller = new AbortController();
   return {
-    trades(chain, kind) {
-      if (!Object.hasOwn(BINANCE_FLOW_CHAINS, chain) || !BINANCE_FLOW_KINDS.includes(kind)) return Promise.reject(failure('binance_invalid_argument'));
+    trades(chain, kind, {onRequestStart}={}) {
+      if (!Object.hasOwn(BINANCE_FLOW_CHAINS, chain) || !BINANCE_FLOW_KINDS.includes(kind)
+        ||onRequestStart!==undefined&&typeof onRequestStart!=='function') return Promise.reject(failure('binance_invalid_argument'));
       const work = async () => {
         if (stopped) throw failure('binance_stopped');
         if (cooldownUntil > now()) throw failure('binance_rate_limited', { retryAt: cooldownUntil });
@@ -22,6 +34,7 @@ export function createBinanceFlowClient({ fetchImpl = fetch, now = Date.now } = 
         if (stopped) throw failure('binance_stopped');
         lastAt = now();
         try {
+          onRequestStart?.(lastAt);
           const response = await fetchImpl(URL, { method: 'POST', redirect: 'error', credentials: 'omit',
             headers: { 'Content-Type': 'application/json', 'Accept-Encoding': 'identity', 'User-Agent': 'yesp-atm-readonly/1.0' },
             body: JSON.stringify({ chainId: BINANCE_FLOW_CHAINS[chain], tagType: kind === 'smartmoney' ? 2 : 1, enableFilterRiskTokens: false }),
@@ -58,6 +71,8 @@ export function createBinanceFlowClient({ fetchImpl = fetch, now = Date.now } = 
 export function createBinanceFlowMonitor(config = {}, { client = createBinanceFlowClient(), now = Date.now, autoStart = true, logger = console } = {}) {
   const dataDir = path.resolve(config.dataDir || 'data'), file = path.join(dataDir, 'binance-flow-state.json'), lock = `${file}.lock`;
   const chains = Object.keys(BINANCE_FLOW_CHAINS), owner = randomUUID();
+  const scanChains=tradingScanChains(dataDir,chains),activeChains=tradingFlowChains(dataDir,scanChains);
+  const focusScheduling=config.binanceFlowFocusSchedulingEnabled===true;
   let state, active, stopped = false, held = false, loadPromise, writeFault = false, focusNext = true;
   async function load() {
     if (loadPromise) return loadPromise;
@@ -95,6 +110,7 @@ export function createBinanceFlowMonitor(config = {}, { client = createBinanceFl
   }
   async function persist() {
     if (writeFault) throw failure('binance_state_write_failed');
+    state.scanScope={scanChains,flowChains:activeChains,retainedExitChains:activeChains.filter(c=>!scanChains.includes(c))};
     state.updatedAt = now(); const text = JSON.stringify(state);
     if (Buffer.byteLength(text) > 24 * 1024 * 1024 || !validBinanceFlowState(state)) throw failure('binance_state_invalid');
     const temporary = `${file}.${owner}.tmp`; let handle;
@@ -105,21 +121,33 @@ export function createBinanceFlowMonitor(config = {}, { client = createBinanceFl
   async function run() {
     await load(); if (stopped || writeFault) return;
     if (state.cooldownUntil > now()) return;
-    // Focus chain every other slot; all other chains retain a fair rotation.
-    // Two queries per 2.5s slot remain below the client's one-request/s cap.
-    let index = Number.isSafeInteger(state.nextChainIndex) ? state.nextChainIndex % chains.length : 1;
-    if (index === 0) index = 1;
-    const chain = focusNext ? 'robinhood' : chains[index];
-    if (!focusNext) state.nextChainIndex = index === chains.length - 1 ? 1 : index + 1;
-    focusNext = !focusNext;
+    // Same two queries per 2.5s slot, but BSC/SOL get 3/9 slots each rather
+    // than 1/8. Robinhood/Base/ETH retain a slot each; cooldowns never consume
+    // a business request or become false successful observations.
+    let chain;
+    if(focusScheduling||activeChains.length!==chains.length){
+      const slot=selectBinanceFlowSlot(state,now(),activeChains);if(!slot)return;
+      chain=slot.chain;state.focusChainIndex=slot.nextIndex;
+      state.scheduling={version:activeChains.length===chains.length?'bsc_sol_weighted_v1':'scoped_flow_v1',intervalMs:2500,activeChain:chain,rotation:BINANCE_FOCUS_ROTATION.filter(c=>activeChains.includes(c))};
+    }else{
+      let index = Number.isSafeInteger(state.nextChainIndex) ? state.nextChainIndex % chains.length : 1;
+      if (index === 0) index = 1;
+      chain = focusNext ? 'robinhood' : chains[index];
+      if (!focusNext) state.nextChainIndex = index === chains.length - 1 ? 1 : index + 1;
+      focusNext = !focusNext;
+    }
     for (const kind of BINANCE_FLOW_KINDS) {
       if (stopped) break;
       const prior = state.chains[chain].feeds[kind];
       if (prior?.nextAttemptAt > now()) continue;
       const requestedAt = now();
+      let dispatchedAt=null;
       try {
-        const payload = await client.trades(chain, kind); if (stopped) break;
-        state.chains[chain].feeds[kind] = advanceBinanceFlowFeed(prior, payload, chain, kind, requestedAt, now());
+        const payload = await client.trades(chain, kind,{onRequestStart:at=>{dispatchedAt=at;}}); if (stopped) break;
+        const receivedAt=now();
+        state.chains[chain].feeds[kind] = {...advanceBinanceFlowFeed(prior, payload, chain, kind, dispatchedAt??requestedAt, receivedAt),
+          timing:{requestedAt,dispatchedAt,receivedAt,queueWaitMs:dispatchedAt===null?null:Math.max(0,dispatchedAt-requestedAt),
+            responseMs:dispatchedAt===null?null:Math.max(0,receivedAt-dispatchedAt)}};
       } catch (error) {
         if (stopped) break;
         const code = /^binance_[a-z_]+$/.test(error.code || error.message || '') ? error.code || error.message : 'binance_fetch_failed';

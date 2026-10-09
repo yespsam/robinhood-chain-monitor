@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { FLAP_PORTAL_VERIFIED_VERSION as FLAP_QUOTE_PORTAL_VERSION,
+  FLAP_PORTAL_VERIFIED_IMPLEMENTATION,
+  FLAP_PORTAL_VERIFIED_IMPLEMENTATION_HASH as FLAP_QUOTE_PORTAL_IMPLEMENTATION_HASH } from '../src/flap-portal-pins.js';
 import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -52,9 +55,7 @@ const FLAP_QUOTE_STATE_VERSION = 1;
 const FLAP_QUOTE_CHAIN_ID = 56;
 const FLAP_QUOTE_PORTAL = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
 const FLAP_QUOTE_PORTAL_RUNTIME_HASH = "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3";
-const FLAP_QUOTE_PORTAL_VERSION = "v5.23.1";
-const FLAP_QUOTE_PORTAL_IMPLEMENTATION = "0xab8ec926b6e113c2212af152b086ea62d1fdced9";
-const FLAP_QUOTE_PORTAL_IMPLEMENTATION_HASH = "0x78653cdd7296d940ae531c86bc6700ae163f1f9dec002c2af3143c9ae6696a15";
+const FLAP_QUOTE_PORTAL_IMPLEMENTATION = FLAP_PORTAL_VERIFIED_IMPLEMENTATION.toLowerCase();
 const GENIUS_FACTORY = "0x78eae9537c0ef90dfe9b7ae964682fe8138afe31";
 const GENIUS_FACTORY_CODE_HASH = "0x416f19c32fbf75ea1a0cd2f51d05f0722f1f4cb0dbaf8f00cb22832345d4eef6";
 const GENIUS_START_BLOCK = 122_266_383;
@@ -2512,6 +2513,9 @@ function evaluateFlapQuote(record, previous, nowMs, maximumAgeSeconds, required)
       || parsedInstant(cursor.baselineEstablishedAt, nowMs) === null)) {
       operationalReasons.push("flap_quote_cursor_missing_or_invalid");
     } else if (initialized) {
+      if (Number.isSafeInteger(state.identity?.verifiedBlock) && cursor.nextBlock <= state.identity.verifiedBlock) {
+        coverageReasons.push("flap_quote_historical_catchup_pending");
+      }
       progress = progressRecord({
         key: "nextBlock",
         value: cursor.nextBlock,
@@ -2554,6 +2558,8 @@ function evaluateFlapQuote(record, previous, nowMs, maximumAgeSeconds, required)
         ? Object.keys(state.quoteAssets).length : 0,
       pendingEnableCandidateCount: state.pendingEnableCandidates && typeof state.pendingEnableCandidates === "object"
         ? Object.keys(state.pendingEnableCandidates).length : 0,
+      pendingBlocks: Number.isSafeInteger(state.identity?.verifiedBlock) && Number.isSafeInteger(state.cursor?.nextBlock)
+        ? Math.max(0, state.identity.verifiedBlock - state.cursor.nextBlock + 1) : null,
     },
   });
 }

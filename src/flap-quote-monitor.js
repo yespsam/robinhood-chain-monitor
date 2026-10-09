@@ -1,7 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import {setTimeout as delay} from 'node:timers/promises';
 import { Interface, getAddress, keccak256 } from "ethers";
 import { cancelPendingFlapQuoteActivation, sendAlerts } from "./alerts.js";
+import { isMaterialFlapQuoteConfigurationChange } from "./flap-quote-generation.js";
+import { FLAP_PORTAL_VERIFIED_VERSION, FLAP_PORTAL_VERIFIED_IMPLEMENTATION,
+  FLAP_PORTAL_VERIFIED_IMPLEMENTATION_HASH } from './flap-portal-pins.js';
+export { FLAP_PORTAL_VERIFIED_VERSION, FLAP_PORTAL_VERIFIED_IMPLEMENTATION,
+  FLAP_PORTAL_VERIFIED_IMPLEMENTATION_HASH } from './flap-portal-pins.js';
 
 // Official address source:
 // https://docs.flap.sh/flap/developers/deployed-contract-addresses.md
@@ -14,26 +20,25 @@ export const FLAP_DEPLOYED_CONTRACTS_URL = "https://docs.flap.sh/flap/developers
 export const FLAP_QUOTE_CONFIGURATION_SIGNATURE = "QuoteTokenConfigurationSet(address,(uint8,uint8,uint8,uint8,uint8))";
 export const FLAP_PORTAL_RUNTIME_HASH = "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3";
 export const FLAP_PORTAL_IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
-export const FLAP_PORTAL_VERIFIED_VERSION = "v5.23.1";
-export const FLAP_PORTAL_VERIFIED_IMPLEMENTATION = "0xAb8Ec926b6e113c2212aF152b086eA62d1FDced9";
-export const FLAP_PORTAL_VERIFIED_IMPLEMENTATION_HASH = "0x78653cdd7296d940ae531c86bc6700ae163f1f9dec002c2af3143c9ae6696a15";
 // The only persisted Portal identity accepted for an in-place pin migration.
 // These values are deliberately not configurable: an arbitrary predecessor
 // would turn a local-state edit into authority to cross an implementation
 // boundary without first proving which monitor produced the cursor.
-export const FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION = "v5.23.0";
-export const FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION = "0xeb8d85bACe2AE64B74aa29cC95678a3bBb804350";
-export const FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH = "0x3ad289cea90449a420c91a8de3a077c4d74a8d41230cb32229fcd843ff1dc3e5";
+export const FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION = "v5.23.1";
+export const FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION = "0xAb8Ec926b6e113c2212aF152b086eA62d1FDced9";
+export const FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH = "0x78653cdd7296d940ae531c86bc6700ae163f1f9dec002c2af3143c9ae6696a15";
 // Canonical EIP-1967 Upgraded(address) evidence for the currently pinned
 // implementation. The block and transaction were independently reproduced
-// from rpc.48.club and rpc-bnb.blockmachine.io (receipt status 1, transaction
+// from BlockMachine, Blast and BNB Chain (receipt status 1, transaction
 // included in the same canonical block, and identical Portal upgrade log).
-// PublicNode, BNB Chain and BlockRazor also agreed on version, EIP-1967 slot,
-// proxy hash and implementation hash at fixed block 0x74b3eec, block hash
-// 0x5079cf13eb3f061b4c9b24b01e4f70555069d07cc62014acdba7a523c6b85557.
-export const FLAP_PORTAL_UPGRADE_BLOCK = 121_652_738;
-export const FLAP_PORTAL_UPGRADE_BLOCK_HASH = "0x417ed36b65fcf27dd3cd1e213fdcb9f0fce64ae13b9e403ff4b98fd0f7197845";
-export const FLAP_PORTAL_UPGRADE_TRANSACTION = "0xfa9f414b3a98527d52b3015ee4df17d61a5eb712ce7764cbfc6757e62fa1190f";
+// BlockMachine and 48.club agreed on version, EIP-1967 slot, proxy hash and
+// implementation hash at fixed block 0x772173b, block hash
+// 0xd059ab4872d92c42b8691520def5c74816cf72b00128d3a8acf78692273f38de.
+// Official deployed-address documentation still lists the predecessor; this
+// upgrade is pinned from canonical chain evidence, not an inferred doc change.
+export const FLAP_PORTAL_UPGRADE_BLOCK = 123_307_497;
+export const FLAP_PORTAL_UPGRADE_BLOCK_HASH = "0x736aaf4d42db2f599694dc4fd17458926e24202b34f06b0f1eae04824b89a5f0";
+export const FLAP_PORTAL_UPGRADE_TRANSACTION = "0xca80914e6f43449a24a5cbf17c43ba23d99aca5579a0c658e6360640f3d502b8";
 export const FLAP_QUOTE_REFERENCE_BLOCK = 119_678_948;
 export const FLAP_QUOTE_REFERENCE_BLOCK_HASH = "0x63fd84ecfc1fc73d2a2179c4735bfe1b2def3f018118db896f278a39a5349f1b";
 export const FLAP_QUOTE_REFERENCE_TRANSACTION = "0x76d94a5561c88f6e86f107ebaa1b7188aa9596a60517346f816abdd3a528eb72";
@@ -61,8 +66,8 @@ const STATE_VERSION = 1;
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const DEFAULT_CONFIRMATIONS = 3;
 const DEFAULT_POLL_INTERVAL_MS = 3_000;
-const DEFAULT_CHUNK_SIZE = 4_096;
-const DEFAULT_MAX_BLOCKS_PER_CYCLE = 4_096;
+const DEFAULT_CHUNK_SIZE = 20_000;
+const DEFAULT_MAX_BLOCKS_PER_CYCLE = 100_000;
 const DEFAULT_PROCESSED_LIMIT = 2_000;
 const DEFAULT_CHECKPOINT_LIMIT = 128;
 const DEFAULT_AUDIT_LIMIT = 500;
@@ -88,8 +93,19 @@ function monitorError(source, code, message, details = {}) {
 }
 
 function retryDetails(error) {
-  const retryAfterMs = Number(error?.retryAfterMs);
+  let rpcError=error?.info?.error||error?.error;
+  // ethers retains HTTP 429 JSON in responseBody, rather than retryAfterMs.
+  // Preserve the provider's advertised wait instead of falling back to 3 s.
+  const body=error?.info?.responseBody;
+  if(typeof body==='string'&&body.length<16000)try{rpcError=JSON.parse(body)?.error||rpcError;}catch{}
+  const retryAfterMs = Math.max(Number(error?.retryAfterMs)||0,Number(rpcError?.data?.retry_after_ms)||0);
   return Number.isFinite(retryAfterMs) && retryAfterMs > 0 ? { retryAfterMs } : {};
+}
+
+export function flapQuoteScheduleInterval(state,pollIntervalMs=3000,catchUpIntervalMs=30000) {
+  const behind=Number.isSafeInteger(state?.identity?.verifiedBlock)&&Number.isSafeInteger(state?.cursor?.nextBlock)
+    &&state.identity.verifiedBlock-state.cursor.nextBlock>=4096;
+  return behind?Math.max(pollIntervalMs,catchUpIntervalMs):pollIntervalMs;
 }
 
 function explicitArchiveStateUnavailable(error) {
@@ -670,7 +686,11 @@ function normalizeState(parsed, expectedRuntimeHash, pinOverrides = {}) {
   ];
   if (parsed.eventRecords.length > MAX_STATE_EVENT_RECORDS
     || parsed.eventRecords.some((item) => (!stateExactKeys(item, eventRecordKeys)
-      && !stateExactKeys(item, proofBoundEventRecordKeys))
+      && !stateExactKeys(item, proofBoundEventRecordKeys)
+      && !stateExactKeys(item, [...proofBoundEventRecordKeys, "configurationChange"]))
+      || (Object.hasOwn(item, "configurationChange")
+        && (!stateExactKeys(item.configurationChange, ["before", "after"])
+          || !isMaterialFlapQuoteConfigurationChange(item.configurationChange.before, item.configurationChange.after)))
       || !stateEventKey(item.eventKey)
       || !Number.isSafeInteger(item.blockNumber)
       || item.blockNumber < 0
@@ -1437,19 +1457,21 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
     "flapQuoteConfirmations",
   ));
   const pollIntervalMs = Math.max(250, Number(config.flapQuotePollIntervalMs) || DEFAULT_POLL_INTERVAL_MS);
+  const catchUpIntervalMs = Math.max(pollIntervalMs,Number(config.flapQuoteCatchUpIntervalMs)||30000);
   const chunkSize = Math.max(1, safeInteger(config.flapQuoteEventChunkSize ?? DEFAULT_CHUNK_SIZE, "flapQuoteEventChunkSize"));
   const maxBlocksPerCycle = Math.max(chunkSize, safeInteger(
     config.flapQuoteMaxBlocksPerCycle ?? DEFAULT_MAX_BLOCKS_PER_CYCLE,
     "flapQuoteMaxBlocksPerCycle",
   ));
   const logMaxBlockSpan = Math.max(1, safeInteger(
-    config.flapQuoteLogMaxBlockSpan ?? 4_096,
+    config.flapQuoteLogMaxBlockSpan ?? 10_000,
     "flapQuoteLogMaxBlockSpan",
   ));
   const logConcurrency = Math.max(1, Math.min(32, safeInteger(
-    config.flapQuoteLogConcurrency ?? 1,
+    config.flapQuoteLogConcurrency ?? 2,
     "flapQuoteLogConcurrency",
   )));
+  const publicLogIntervalMs=Math.max(0,safeInteger(config.flapQuoteLogRequestIntervalMs??1000,'flapQuoteLogRequestIntervalMs'));
   const processedLimit = Math.max(MAX_STATE_ASSETS, Math.min(20_000, safeInteger(
     config.flapQuoteProcessedLimit ?? DEFAULT_PROCESSED_LIMIT,
     "flapQuoteProcessedLimit",
@@ -1733,7 +1755,8 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
 
   async function verifyIdentityQuorum(finalizedBlock) {
     const settled = await Promise.allSettled(stateReaders.map(async (reader) => {
-      await requireLogReaderChain(reader);
+      // verifyFlapPortalIdentity already checks getNetwork AND a fresh
+      // eth_chainId on this exact reader. Avoid a third identical chain call.
       return verifyFlapPortalIdentity(
         reader.provider,
         finalizedBlock,
@@ -2063,16 +2086,28 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
       topics: [FLAP_QUOTE_CONFIGURATION_TOPIC],
     };
     const readRange = async (reader) => {
+      // Public archive endpoints have different bounds. The indexed readers
+      // reproduced both historical quote logs and the pinned upgrade log;
+      // Sentio explicitly caps a range at 10,000 blocks. NOWNodes 65k reads
+      // time out, so use the same verified 10k bound. Older fallbacks retain
+      // their smaller tested bounds.
+      // Compare the entire contiguous range after paging, never a partial set.
+      const providerSpan = {
+        'bsc.blockrazor.xyz':25, 'bsc.rpc.blxrbdn.com':512,
+        'bsc.rpc.sentio.xyz':10000, 'public-bsc.nownodes.io':10000,
+      }[reader.physicalHost];
+      const pageBlockSpan = Math.min(providerSpan||logMaxBlockSpan,logMaxBlockSpan);
       const pages = [];
-      for (let pageStart = fromBlock; pageStart <= toBlock; pageStart += logMaxBlockSpan) {
+      for (let pageStart = fromBlock; pageStart <= toBlock; pageStart += pageBlockSpan) {
         pages.push({
           fromBlock: pageStart,
-          toBlock: Math.min(toBlock, pageStart + logMaxBlockSpan - 1),
+          toBlock: Math.min(toBlock, pageStart + pageBlockSpan - 1),
         });
       }
       const pageResults = new Array(pages.length);
       let nextPage = 0;
       let firstError = null;
+      let nextRequestAt=0;
       try {
         await requireLogReaderChain(reader);
         const worker = async () => {
@@ -2082,6 +2117,11 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
             if (pageIndex >= pages.length) return;
             const page = pages[pageIndex];
             try {
+              if(['bsc.blockrazor.xyz','bsc.rpc.sentio.xyz','public-bsc.nownodes.io'].includes(reader.physicalHost)){
+                const at=Math.max(Date.now(),nextRequestAt);nextRequestAt=at+publicLogIntervalMs;
+                if(at>Date.now())await abortable(delay(at-Date.now(),undefined,{signal:cycleController?.signal}),cycleController?.signal);
+                if(firstError)return;
+              }
               pageResults[pageIndex] = await abortable(
                 Promise.resolve().then(() => reader.provider.send("eth_getLogs", [{
                   ...filter,
@@ -2102,7 +2142,7 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
         if (firstError) throw firstError;
       } catch (error) {
         if (error?.code === "FLAP_QUOTE_STOPPED" || error?.code === "FLAP_QUOTE_LOG_CHAIN_ID_MISMATCH") throw error;
-        throw monitorError("chain", "FLAP_QUOTE_GET_LOGS_FAILED", `Flap quote log scan ${fromBlock}-${toBlock} failed: ${error.message}`, retryDetails(error));
+        throw monitorError("chain", "FLAP_QUOTE_GET_LOGS_FAILED", `Flap quote log scan ${fromBlock}-${toBlock} at ${reader.physicalHost} failed: ${error.message}`, retryDetails(error));
       }
       if (pageResults.some((result) => !Array.isArray(result))) {
         throw monitorError("chain", "FLAP_QUOTE_LOG_BOUNDARY_INVALID", "RPC returned a non-array Flap quote log result");
@@ -2317,7 +2357,14 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
       transactionIndex: prepared.proof.transactionIndex,
       logIndex: prepared.proof.logIndex,
       occurredAt: prepared.proof.blockTimestamp,
-      proofType: action === "activated" ? "verified_zero_to_one" : "verified_disable",
+      proofType: action === "activated" ? "verified_zero_to_one"
+        : action === "reconfigured" ? "verified_configuration_change" : "verified_disable",
+      ...(action === "reconfigured" ? {
+        previousConfiguration: structuredClone(prepared.priorConfiguration),
+        configuration: structuredClone(prepared.eventConfiguration),
+        configurationLog: { address: prepared.log.address.toLowerCase(),
+          topics: [...prepared.log.topics], data: prepared.log.data },
+      } : {}),
       requiredConfirmations,
       monitorOnly: true,
     };
@@ -2339,6 +2386,27 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
       logIndex: record.logIndex,
       occurredAt: record.occurredAt,
       proofType: "verified_disable_orphaned",
+      requiredConfirmations: record.requiredConfirmations,
+      monitorOnly: true,
+    };
+  }
+
+  function revertedConfigurationLifecycleRecord(record) {
+    return {
+      version: 1,
+      action: "reverted",
+      quoteAddress: record.quoteAddress,
+      activationEventKey: record.eventKey,
+      targetActivationEventKey: record.previousAsset?.lifecycleActivationEventKey || null,
+      quoteName: record.nextAsset.quoteName,
+      quoteSymbol: record.nextAsset.quoteSymbol,
+      transactionHash: record.transactionHash,
+      blockNumber: record.blockNumber,
+      blockHash: record.blockHash,
+      transactionIndex: record.transactionIndex,
+      logIndex: record.logIndex,
+      occurredAt: record.occurredAt,
+      proofType: "verified_configuration_change_orphaned",
       requiredConfirmations: record.requiredConfirmations,
       monitorOnly: true,
     };
@@ -2417,13 +2485,17 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
       reorgReplacement,
       delivered,
       observedAt,
+      ...(prepared.priorTransitionProof === "verified"
+        && isMaterialFlapQuoteConfigurationChange(prepared.priorConfiguration, prepared.eventConfiguration)
+        ? { configurationChange: { before: structuredClone(prepared.priorConfiguration),
+          after: structuredClone(prepared.eventConfiguration) } } : {}),
     };
   }
 
   async function commitPrepared(prepared, identity, context, observedAt) {
     const key = flapQuoteEventKey(prepared.log);
     const addressKey = prepared.asset.quoteAddress.toLowerCase();
-    const previousAsset = state.quoteAssets[addressKey] || null;
+    const previousAsset = state.quoteAssets[addressKey] ? structuredClone(state.quoteAssets[addressKey]) : null;
     const previousCandidate = state.pendingEnableCandidates[addressKey] || null;
     const reorgReplacement = state.reorgOrphanedEventKeys.includes(key);
     const nextAsset = {
@@ -2437,6 +2509,11 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
     const activationCandidate = prepared.eventConfiguration.enabled === true
       && (prepared.priorConfiguration?.enabled === false
         || prepared.priorTransitionProof === "unavailable");
+    const configurationChanged = prepared.priorTransitionProof === "verified"
+      && isMaterialFlapQuoteConfigurationChange(prepared.priorConfiguration, prepared.eventConfiguration);
+    const pendingEnableNeedsLifecycle = configurationChanged
+      && previousCandidate?.priorTransitionProof === "verified_zero_to_one"
+      && !previousAsset?.lifecycleActivationEventKey;
     let nextCandidate = previousCandidate;
     if (!prepared.eventConfiguration.enabled) nextCandidate = null;
     else if (activationCandidate) nextCandidate = candidateFor(prepared);
@@ -2486,7 +2563,26 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
     if (!prepared.eventConfiguration.enabled) {
       await registerQuotePoolLifecycle(prepared, "disabled");
     }
+    if (configurationChanged) {
+      // Preserve the original enable identity if it is waiting only for its
+      // notification. A later semantic change gets its own generation; it is
+      // never represented as another zero-to-one activation.
+      if (pendingEnableNeedsLifecycle) {
+        const pendingProof = await verifyReceipt(previousCandidate.log, context.latestHead,
+          new Map(), new Map(), new Map());
+        await registerQuotePoolLifecycle({ ...prepared, log: previousCandidate.log,
+          proof: pendingProof }, "activated");
+        if (previousAsset) previousAsset.lifecycleActivationEventKey = previousCandidate.eventKey;
+      }
+      await registerQuotePoolLifecycle(prepared, "reconfigured");
+      await requirePreparedCanonical(prepared, context, "after configuration generation handoff");
+      nextAsset.lifecycleActivationEventKey = key;
+    }
     const next = structuredClone(state);
+    if (pendingEnableNeedsLifecycle) {
+      const priorRecord = next.eventRecords.find((item) => item.eventKey === previousCandidate.eventKey);
+      if (priorRecord) priorRecord.nextAsset.lifecycleActivationEventKey = previousCandidate.eventKey;
+    }
     // A canonical replacement may legitimately reuse the same transaction
     // hash and log index after a reorg. Once that exact key is canonical again
     // it must no longer be retained as orphan provenance.
@@ -2582,6 +2678,24 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
       const deliveryObservedAt = iso(nowMs(clock));
       deliveryCriticalSection = true;
       try {
+        // Durable scanner handoff must precede the external notification.
+        // Persist its own checkpoint without consuming the alert candidate:
+        // a TG failure/restart retries notification, not a new generation.
+        // An ambiguous registry acknowledgement is retried with the exact
+        // same event identity (the consumer is durably idempotent).
+        if (candidate.priorTransitionProof === "verified_zero_to_one"
+          && sourceRecord.nextAsset?.lifecycleActivationEventKey !== candidate.eventKey) {
+          await registerQuotePoolLifecycle(prepared, "activated");
+          await requirePreparedCanonical(prepared, context, "after lifecycle handoff and before notification");
+          const handedOff = structuredClone(state);
+          const recordIndex = handedOff.eventRecords.findIndex((item) => item.eventKey === candidate.eventKey
+            && item.blockHash === candidate.log.blockHash);
+          handedOff.eventRecords[recordIndex].nextAsset.lifecycleActivationEventKey = candidate.eventKey;
+          handedOff.eventRecords[recordIndex].configurationVerifiedAtBlock = context.finalizedBlock;
+          handedOff.eventRecords[recordIndex].configurationVerifiedAtBlockHash = context.finalizedBlockHash;
+          handedOff.quoteAssets[addressKey].lifecycleActivationEventKey = candidate.eventKey;
+          await commit(handedOff);
+        }
         const event = capabilityEvent(prepared, identity, {
           ...context,
           cursor: structuredClone(state.cursor),
@@ -2612,9 +2726,6 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
           }
           throw error;
         }
-        if (candidate.priorTransitionProof === "verified_zero_to_one") {
-          await registerQuotePoolLifecycle(prepared, "activated");
-        }
         const next = structuredClone(state);
         const retained = next.pendingEnableCandidates[addressKey];
         if (!retained || retained.eventKey !== candidate.eventKey || retained.log.blockHash !== candidate.log.blockHash) {
@@ -2631,9 +2742,8 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
         next.eventRecords[recordIndex].configurationVerifiedAtBlockHash = context.finalizedBlockHash;
         const deliveredAsset = {
           ...asset,
-          lifecycleActivationEventKey: candidate.priorTransitionProof === "verified_zero_to_one"
-            ? candidate.eventKey
-            : null,
+          lifecycleActivationEventKey: state.quoteAssets[addressKey]?.lifecycleActivationEventKey
+            || (candidate.priorTransitionProof === "verified_zero_to_one" ? candidate.eventKey : null),
         };
         next.eventRecords[recordIndex].nextAsset = deliveredAsset;
         for (const item of next.eventRecords) {
@@ -2656,15 +2766,17 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
 
   async function restoreOrphanedDisables(orphanedRecords, finalizedBlock, finalizedBlockHash) {
     const candidates = orphanedRecords
-      .filter((item) => item.nextAsset?.enabled === false
+      .filter((item) => ((item.nextAsset?.enabled === false
         && item.previousAsset?.enabled === true
-        && stateEventKey(item.previousAsset?.lifecycleActivationEventKey)
+        && stateEventKey(item.previousAsset?.lifecycleActivationEventKey))
+        || (item.nextAsset?.lifecycleActivationEventKey === item.eventKey
+          && isMaterialFlapQuoteConfigurationChange(item.configurationChange?.before, item.configurationChange?.after)))
         && Number.isSafeInteger(item.transactionIndex)
         && stateTimestamp(item.occurredAt)
         && Number.isSafeInteger(item.requiredConfirmations))
-      .sort((left, right) => left.blockNumber - right.blockNumber
-        || left.transactionIndex - right.transactionIndex
-        || left.logIndex - right.logIndex);
+      .sort((left, right) => right.blockNumber - left.blockNumber
+        || right.transactionIndex - left.transactionIndex
+        || right.logIndex - left.logIndex);
     for (const item of candidates) {
       let canonicalBlock;
       try {
@@ -2696,7 +2808,8 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
         finalizedBlockHash,
       );
       if (!finalizedAsset.configuration.enabled) continue;
-      await registerQuotePoolLifecycleRecord(restoredLifecycleRecord(item));
+      await registerQuotePoolLifecycleRecord(item.nextAsset.enabled === true
+        ? revertedConfigurationLifecycleRecord(item) : restoredLifecycleRecord(item));
     }
   }
 
@@ -2977,7 +3090,9 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
         if (stopped) throw stoppedError();
         const toBlock = Math.min(
           finalizedBlock,
-          nextBlock + chunkSize - 1,
+          // Public archival pages need durable intermediate checkpoints;
+          // don't discard thousands of already-read blocks after one 429.
+          nextBlock + Math.min(chunkSize,logReaders.some(r=>r.physicalHost==='bsc.blockrazor.xyz')?500:chunkSize) - 1,
           nextBlock + maxBlocksPerCycle - scannedBlocks - 1,
         );
         const result = await prepareRange(nextBlock, toBlock, context);
@@ -3054,7 +3169,9 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
           : Math.min(backoffMaxMs, Math.round(backoffBaseMs * (2 ** exponent) * (0.8 + randomValue * 0.4)));
         const retryAfterMs = Math.min(backoffMaxMs, Math.max(0, Number(error?.retryAfterMs) || 0));
         const delayMs = Math.max(jitteredBackoffMs, retryAfterMs);
-        returnedNextAttemptAt = delayMs > 0 ? iso(observedMs + delayMs) : null;
+        // A backfill cycle may run for minutes. A server cooldown starts when
+        // it rejects the request, not at the now-stale cycle start timestamp.
+        returnedNextAttemptAt = delayMs > 0 ? iso(Math.max(observedMs, nowMs(clock)) + delayMs) : null;
         if (durableFailureState) {
           // If the failed operation was an ambiguous state commit, carry its
           // full intended cursor/journal forward into the degraded retry
@@ -3113,7 +3230,11 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
     if (stopped) return Promise.resolve({ status: "stopped", initialized: state.initialized });
     if (!started) {
       started = true;
+      let lastScheduledAt=nowMs(clock);
       timer = setInterval(() => {
+        const current=nowMs(clock);
+        if(current-lastScheduledAt<flapQuoteScheduleInterval(state,pollIntervalMs,catchUpIntervalMs))return;
+        lastScheduledAt=current;
         void check().catch((error) => logger.error?.(`[flap-quote] scheduler: ${error.message}`));
       }, pollIntervalMs);
       timer.unref?.();

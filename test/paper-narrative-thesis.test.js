@@ -74,6 +74,23 @@ test('a fresh feed is not buying: net amounts, tags, event timing and coverage a
   assert.equal(thesis({...base,flow:sell}).demand.status,'selling');
 });
 
+test('subsequent bound original can reactivate an old story without renewing old clocks or promoting copies/names',()=>{
+  const old=doc({chain:'bsc',at:NOW-3*HOUR,text:`Mooncake viral cat mascot invites the community to a birthday celebration. ${CA}`});
+  const next=doc({url:url('202'),at:NOW-1000,author:'second',text:'Mooncake meme fans unveil a new animated cat series, with an international community art competition now open.'});
+  const options={token:{...token,twitterUsername:url('202')},index:index([old,next])};
+  const result=thesis(options);
+  assert.equal(result.catalyst.phase,'reactivated');assert.equal(result.event.sourceUrl,next.url);
+  assert.equal(result.event.sourceAt,iso(next.at));assert.equal(result.catalyst.renewal.previousSourceAt,iso(old.at));
+  assert.equal(result.relationship.kind,'community_link');assert.equal(result.authorEndorsement,false);
+  assert.equal(result.demand.status,'unknown','new text does not manufacture buying');
+  for(const changed of [ {...next,text:old.text}, {...next,text:old.text+' More!'}, {...next,at:NOW+1},
+    {...next,authenticated:false}, {...next,text:'Mooncake is fake token, do not buy this meme.'}]) {
+    assert.notEqual(thesis({...options,index:index([old,changed])}).catalyst.phase,'reactivated');
+  }
+  assert.notEqual(thesis({index:index([old,next])}).catalyst.phase,'reactivated','name-only new text cannot replace a directly bound old original');
+  assert.notEqual(thesis({...options,index:index([old,{...next,text:'We plan to launch a Mooncake software product next year, with technical integration details still pending.'}])}).catalyst.phase,'reactivated','unrelated event mechanisms are not merged as continued propagation');
+});
+
 test('negative post blocks only linked/direct new entries, never manufactures a sell or approval',()=>{
   const research=index([doc({text:'Mooncake is not affiliated. Do not buy this token.'})]);
   const nameOnly=thesis({index:research});assert.equal(nameOnly.invalidation.blockNewNarrativeEntry,false);

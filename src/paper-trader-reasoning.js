@@ -1,6 +1,12 @@
 // Observable decision summaries, not inferred wallet psychology or profit forecasts.
 import { isEvidenceHold, EVIDENCE_HOLD_TEXT } from './paper-pvp-policy.js';
 export const TRADER_REASONING_VERSION = 'evidence_first_v1';
+export const CATALYST_SELECTION_VERSION = 'eligible_algorithm_catalyst_v3';
+const catalystRank = r => {
+  const p=r.evidence?.lossRepair;
+  if(p?.ready!==true||p.catalystReady!==true)return 0;
+  return ['event_narrative','new_pool_first_three','collective_smart_money'].includes(p.group)?2:['verified_wallet','prequalified_wallet','internal_burst','onchain_internal_burst'].includes(p.group)?1:0;
+};
 const finite = n => typeof n === 'number' && Number.isFinite(n);
 const positive = n => finite(n) && n > 0;
 const money = n => finite(n) ? `$${n.toFixed(4)}` : '待确认';
@@ -27,7 +33,7 @@ export function traderDecision(row, nowMs) {
     recordedAt: new Date(nowMs).toISOString(), chain: row.token?.chain, address: row.token?.address,
     hypothesis: e.opportunity?.id || (recall ? 'narrative_recall' : 'fresh_flow_momentum'), decision: row.decision, blockers,
     sourceUrl: e.opportunity?.event?.sourceUrl || recall?.sourceUrl || e.narrativeSource || null,
-    selectionPolicy: e.opportunity ? 'eligible_cost_then_signal_recency_v1' : 'eligible_cost_then_flow_recency_v1',
+    selectionPolicy: e.lossRepair ? CATALYST_SELECTION_VERSION : e.opportunity ? 'eligible_cost_then_signal_recency_v1' : 'eligible_cost_then_flow_recency_v1',
     economics: { source: 'assumption', budgetUsd: finite(row.entryUsd) ? row.entryUsd : null,
       roundTripCostRate: finite(c.estimatedRoundTripCostRate) ? c.estimatedRoundTripCostRate : null,
       breakEvenPrice, breakEvenRise: positive(breakEvenPrice) ? breakEvenPrice / row.token.price - 1 : null,
@@ -35,7 +41,7 @@ export function traderDecision(row, nowMs) {
       scenarioPrice: positive(plan.targetPrice) ? plan.targetPrice : null,
       scenarioMeaning: '参考情景不是价格预测；止损损失不含跳价超幅', expectedProfitUsd: null },
     questions: [
-      { id: 'why_now', label: '为什么现在买', text: e.narrativeThesis?`${e.narrativeThesis.summary} ${row.entryLogic}`:['official_event','monitored_event'].includes(e.opportunity?.basis)?row.entryLogic:whyNow },
+      { id: 'why_now', label: '为什么现在买', text: e.narrativeThesis?`${e.narrativeThesis.summary} ${row.entryLogic}`:['official_event','monitored_event','wallet_signal'].includes(e.opportunity?.basis)?row.entryLogic:whyNow },
       { id: 'invalidation', label: '什么情况说明买错', text: `初始止损 ${price(plan.stopPrice)}；完整资金流反向按既有规则确认退出，缺失数据不冒充反向证据。不因亏损摊平或加大仓位。` },
       { id: 'economics', label: '成本后是否值得', text: `预算 ${money(row.entryUsd)}，往返模型成本 ${pct(c.estimatedRoundTripCostRate)}；价格需上涨 ${pct(positive(breakEvenPrice) ? breakEvenPrice / row.token.price - 1 : null)} 才覆盖一次完整退出成本。情景净收益 ${money(scenarioNet)}，触发价情景损失 ${money(finite(stopNet) && stopNet < 0 ? -stopNet : null)}；真实胜率和净期望未验证。` },
       { id: 'hold_or_exit', label: '凭什么继续持有', text: exit?.version==='structure_hold_v2' ? row.exitLogic : isEvidenceHold(exit) ? EVIDENCE_HOLD_TEXT
@@ -45,14 +51,17 @@ export function traderDecision(row, nowMs) {
   };
 }
 
-// Applied only AFTER the existing eligibility gates; cost is a tie-break objective,
-// not a new source of eligibility, forecast, or relaxation of safety constraints.
+// Applied only AFTER eligibility gates. Repair candidates prioritize a verified
+// catalyst and its recency, then cost; legacy/price-only routes retain cost order.
+// This is not an expected-profit estimate or relaxation of safety constraints.
 export function compareConfirmedCandidates(a, b) {
   const cost = r => {
     const v = r.evidence?.costAssumptions?.estimatedRoundTripCostRate;
     return finite(v) && v >= 0 ? v : Infinity;
   };
   const fresh = r => finite(r.evidence?.opportunity?.signalAt) ? r.evidence.opportunity.signalAt : finite(r.evidence?.confirmedPolicy?.pulse?.lastBuyAt) ? r.evidence.confirmedPolicy.pulse.lastBuyAt : 0;
+  if(catalystRank(a)!==catalystRank(b))return catalystRank(b)-catalystRank(a);
+  if(catalystRank(a)>0&&fresh(a)!==fresh(b))return fresh(b)-fresh(a);
   if (cost(a) !== cost(b)) return cost(a) < cost(b) ? -1 : 1;
   if (fresh(a) !== fresh(b)) return fresh(b) - fresh(a);
   return `${a.token.chain}:${a.token.address}`.localeCompare(`${b.token.chain}:${b.token.address}`);
@@ -64,6 +73,7 @@ function cohortOf(round) {
   // exit must not be attributed to the legacy exit strategy's performance.
   const recoveryExits=unique((round.exits||[]).map(t=>t.exitEvidence?.evidenceRecovery?.version));
   return { chain: round.entry.chain, hypothesis: e.traderDecision?.hypothesis || (e.narrativeRecall ? 'narrative_recall' : 'fresh_flow_momentum'),
+    selectionPolicy:e.traderDecision?.selectionPolicy || 'legacy_unknown',
     ...(e.recoveryEntry?.version?{recoveryEntryVersion:e.recoveryEntry.version}:{}),
     ...(e.routeSelectionVersion?{routeSelectionVersion:e.routeSelectionVersion}:{}),
     ...((e.recoveryEntry?.chartWindowPolicy||e.opportunity?.chartWindowPolicy)?

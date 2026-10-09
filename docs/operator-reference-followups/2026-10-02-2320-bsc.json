@@ -1,0 +1,406 @@
+{
+  "version": 1,
+  "mode": "read_only_research",
+  "group": "bsc",
+  "startedAt": "2026-10-02T15:20:31.705Z",
+  "gmgnCompletedAt": "2026-10-02T15:21:01.394Z",
+  "configChecked": true,
+  "businessRequests": 3,
+  "rpcRequests": 2,
+  "priority": 0,
+  "profilesRefreshed": false,
+  "newAddresses": [],
+  "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+  "source": "src/gmgn-flow-client.js -> gmgn-cli portfolio activity; normalized after identity/amount validation",
+  "pages": [
+    {
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "receivedAt": "2026-10-02T15:20:41.897Z",
+      "rowCount": 20,
+      "overlap": 8,
+      "newCount": 12,
+      "identityExplicit": true,
+      "hasOlderPage": true
+    },
+    {
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "receivedAt": "2026-10-02T15:20:52.958Z",
+      "rowCount": 20,
+      "overlap": 8,
+      "newCount": 12,
+      "identityExplicit": true,
+      "hasOlderPage": true
+    },
+    {
+      "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+      "receivedAt": "2026-10-02T15:21:01.394Z",
+      "rowCount": 8,
+      "overlap": 8,
+      "newCount": 0,
+      "identityExplicit": true,
+      "hasOlderPage": false
+    }
+  ],
+  "newRows": [
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "hash": "0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868",
+      "timestamp": 1790939289,
+      "side": "sell",
+      "quantity": 2456931.540114164,
+      "usd": 143.15993944594112
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "hash": "0xf5329b4689cbd5400fe283accb9dc261672214574fc6280022c181dfc1cca23a",
+      "timestamp": 1790939288,
+      "side": "sell",
+      "quantity": 350990.2200163091,
+      "usd": 20.734918615364034
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "hash": "0x79bc8e7aebfe73f4a5045cd6208064cfee316412ba7216e0548b02ed7af5af5a",
+      "timestamp": 1790939287,
+      "side": "sell",
+      "quantity": 350990.2200163091,
+      "usd": 20.8020804318047
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "hash": "0x37c6adb747f76c746dd3d085204fc5447f16ebb704018ab0542ddd8ffe8da3cc",
+      "timestamp": 1790939287,
+      "side": "sell",
+      "quantity": 350990.2200163091,
+      "usd": 21.00098943242771
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "hash": "0xbdfb4b65bffe6b587d847a6be634ee2f7b435e7bf35a661709d72991533a7305",
+      "timestamp": 1790939285,
+      "side": "sell",
+      "quantity": 438737.77502038644,
+      "usd": 26.451529054300458
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "hash": "0x0593ac9567acbd81b8b41d7e71c368eda5ad4cd4d72f7faac6cc9fa78b0a97b7",
+      "timestamp": 1790939285,
+      "side": "sell",
+      "quantity": 438737.77502038644,
+      "usd": 26.664525684456045
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "hash": "0x8e706d4fe7654b71d3a1768cc5877c4875a166790f9fe63009f9c39e5b4847b3",
+      "timestamp": 1790938713,
+      "side": "sell",
+      "quantity": 548422.2187754831,
+      "usd": 33.185793762094974
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "hash": "0x1cce17c1b86ffcd7d5800d756a4248293546b4b4a81aed1e35a3ae52c8d19522",
+      "timestamp": 1790938713,
+      "side": "sell",
+      "quantity": 548422.2187754831,
+      "usd": 33.69125586690045
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "hash": "0xac316400ce531eefe80c6ef12fc3184b209f1540ed6460381c73dea23da39179",
+      "timestamp": 1790938711,
+      "side": "sell",
+      "quantity": 685527.7734693538,
+      "usd": 41.88992178327091
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "hash": "0x963cb40538974241daedc46c3c3292997c5dead9dfab8c3ee9a4e65dea8b7263",
+      "timestamp": 1790938710,
+      "side": "sell",
+      "quantity": 685527.7734693538,
+      "usd": 42.93985690745707
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "hash": "0x9f0ed021d5a002c996db989ef147cccf3ae55c8bd1a29eaa6ab1f4a03d37b87e",
+      "timestamp": 1790938708,
+      "side": "sell",
+      "quantity": 761697.5260770598,
+      "usd": 50.65848226939961
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "hash": "0xa0e646570759ad738c381c3214ff45ed876003486db2fa468e9a38f6d9ac0475",
+      "timestamp": 1790938708,
+      "side": "sell",
+      "quantity": 846330.5845300665,
+      "usd": 57.425871517617814
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "hash": "0x276ed1a8787a851f66bf341a62bd62728028d53b19a22ea8a69fa6b3f7857f6d",
+      "timestamp": 1790939289,
+      "side": "sell",
+      "quantity": 2438440.135282079,
+      "usd": 145.27041106513246
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "hash": "0xf21c768f9d08702bbdcbcacd8211d997056c5e8d06ba01a595a75cc72b413a5b",
+      "timestamp": 1790939288,
+      "side": "sell",
+      "quantity": 348348.5907545827,
+      "usd": 20.513695441865305
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "hash": "0xacb32cc30d9f432b2cbb678063bc1bd970bdefc6c72c48cca7b5d34a9665bb27",
+      "timestamp": 1790939287,
+      "side": "sell",
+      "quantity": 348348.5907545827,
+      "usd": 20.71131448803073
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "hash": "0x5db83af0f80e8d7d9cd1f56029356ad921d7e4c16015bb93fd2fe434983acdfd",
+      "timestamp": 1790939287,
+      "side": "sell",
+      "quantity": 348348.5907545827,
+      "usd": 20.776506294757507
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "hash": "0xb28715ac2228aa8d83c46fea544497fad601d1ef66e613e3c53732dc08749f3b",
+      "timestamp": 1790939285,
+      "side": "sell",
+      "quantity": 435435.7384432284,
+      "usd": 26.14753307269023
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "hash": "0xc3f8e6c5cbe00f9487f8fc6886ccbbbb503985152898da8ea92abb6a7de27696",
+      "timestamp": 1790939285,
+      "side": "sell",
+      "quantity": 435435.7384432284,
+      "usd": 26.357656932292276
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "hash": "0x99ca4abb08a390c46765b76d039711ba5893fead20ac0596e5b177b4fbbb406c",
+      "timestamp": 1790938713,
+      "side": "sell",
+      "quantity": 544294.6730540355,
+      "usd": 33.10233728073745
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "hash": "0x603c938f2bbb7e48f40b0d6687be914ceb7f90126161473962ab1bcaa46b7c95",
+      "timestamp": 1790938713,
+      "side": "sell",
+      "quantity": 544294.6730540355,
+      "usd": 33.26884529795768
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "hash": "0x848201ba92c46036de75a35e8141d7ce17451bcc5019f345b278c0afa93e4175",
+      "timestamp": 1790938711,
+      "side": "sell",
+      "quantity": 680368.3413175443,
+      "usd": 41.31317634138607
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "hash": "0x3e29ea056bc18a1bb1da17cee5a16e1d34a1f7e5eae4ad03628a6c713d6d090d",
+      "timestamp": 1790938710,
+      "side": "sell",
+      "quantity": 680368.3413175443,
+      "usd": 42.34532770629426
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "hash": "0x0931fda0e076501f12c1b99c2d87c0af9f568cf9149a1f1dc89c9746eaec25a1",
+      "timestamp": 1790938708,
+      "side": "sell",
+      "quantity": 755964.8236861604,
+      "usd": 49.91092763423954
+    },
+    {
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "hash": "0x746a90098371e7309cc9cc98cff377b91de2a7d37567b2d246fb3e56d20cd37f",
+      "timestamp": 1790938708,
+      "side": "sell",
+      "quantity": 839960.9152068449,
+      "usd": 56.527975745673
+    }
+  ],
+  "matches": [
+    {
+      "timestamp": 1790939289,
+      "side": "sell",
+      "leftHash": "0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868",
+      "rightHash": "0x276ed1a8787a851f66bf341a62bd62728028d53b19a22ea8a69fa6b3f7857f6d"
+    },
+    {
+      "timestamp": 1790939288,
+      "side": "sell",
+      "leftHash": "0xf5329b4689cbd5400fe283accb9dc261672214574fc6280022c181dfc1cca23a",
+      "rightHash": "0xf21c768f9d08702bbdcbcacd8211d997056c5e8d06ba01a595a75cc72b413a5b"
+    },
+    {
+      "timestamp": 1790939287,
+      "side": "sell",
+      "leftHash": "0x79bc8e7aebfe73f4a5045cd6208064cfee316412ba7216e0548b02ed7af5af5a",
+      "rightHash": "0xacb32cc30d9f432b2cbb678063bc1bd970bdefc6c72c48cca7b5d34a9665bb27"
+    },
+    {
+      "timestamp": 1790939287,
+      "side": "sell",
+      "leftHash": "0x37c6adb747f76c746dd3d085204fc5447f16ebb704018ab0542ddd8ffe8da3cc",
+      "rightHash": "0x5db83af0f80e8d7d9cd1f56029356ad921d7e4c16015bb93fd2fe434983acdfd"
+    },
+    {
+      "timestamp": 1790939285,
+      "side": "sell",
+      "leftHash": "0xbdfb4b65bffe6b587d847a6be634ee2f7b435e7bf35a661709d72991533a7305",
+      "rightHash": "0xb28715ac2228aa8d83c46fea544497fad601d1ef66e613e3c53732dc08749f3b"
+    },
+    {
+      "timestamp": 1790939285,
+      "side": "sell",
+      "leftHash": "0x0593ac9567acbd81b8b41d7e71c368eda5ad4cd4d72f7faac6cc9fa78b0a97b7",
+      "rightHash": "0xc3f8e6c5cbe00f9487f8fc6886ccbbbb503985152898da8ea92abb6a7de27696"
+    },
+    {
+      "timestamp": 1790938713,
+      "side": "sell",
+      "leftHash": "0x8e706d4fe7654b71d3a1768cc5877c4875a166790f9fe63009f9c39e5b4847b3",
+      "rightHash": "0x99ca4abb08a390c46765b76d039711ba5893fead20ac0596e5b177b4fbbb406c"
+    },
+    {
+      "timestamp": 1790938713,
+      "side": "sell",
+      "leftHash": "0x1cce17c1b86ffcd7d5800d756a4248293546b4b4a81aed1e35a3ae52c8d19522",
+      "rightHash": "0x603c938f2bbb7e48f40b0d6687be914ceb7f90126161473962ab1bcaa46b7c95"
+    },
+    {
+      "timestamp": 1790938711,
+      "side": "sell",
+      "leftHash": "0xac316400ce531eefe80c6ef12fc3184b209f1540ed6460381c73dea23da39179",
+      "rightHash": "0x848201ba92c46036de75a35e8141d7ce17451bcc5019f345b278c0afa93e4175"
+    },
+    {
+      "timestamp": 1790938710,
+      "side": "sell",
+      "leftHash": "0x963cb40538974241daedc46c3c3292997c5dead9dfab8c3ee9a4e65dea8b7263",
+      "rightHash": "0x3e29ea056bc18a1bb1da17cee5a16e1d34a1f7e5eae4ad03628a6c713d6d090d"
+    },
+    {
+      "timestamp": 1790938708,
+      "side": "sell",
+      "leftHash": "0x9f0ed021d5a002c996db989ef147cccf3ae55c8bd1a29eaa6ab1f4a03d37b87e",
+      "rightHash": "0x0931fda0e076501f12c1b99c2d87c0af9f568cf9149a1f1dc89c9746eaec25a1"
+    },
+    {
+      "timestamp": 1790938708,
+      "side": "sell",
+      "leftHash": "0xa0e646570759ad738c381c3214ff45ed876003486db2fa468e9a38f6d9ac0475",
+      "rightHash": "0x746a90098371e7309cc9cc98cff377b91de2a7d37567b2d246fb3e56d20cd37f"
+    }
+  ],
+  "totals": [
+    {
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "soldQuantity": 8463305.845300663,
+      "activityAmountUsd": 518.6051647710349,
+      "notNetProfit": true
+    },
+    {
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "soldQuantity": 8399609.152068451,
+      "activityAmountUsd": 516.2457073010565,
+      "notNetProfit": true
+    }
+  ],
+  "rpcVerification": {
+    "source": "https://bsc-dataseed-public.bnbchain.org",
+    "method": "eth_call balanceOf(address)",
+    "blockTag": "latest",
+    "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+    "result": [
+      {
+        "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+        "checkedAt": "2026-10-02T15:21:41.365Z",
+        "receivedAt": "2026-10-02T15:21:42.293Z",
+        "http": 200,
+        "result": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "errorCode": null
+      },
+      {
+        "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+        "checkedAt": "2026-10-02T15:21:42.293Z",
+        "receivedAt": "2026-10-02T15:21:42.422Z",
+        "http": 200,
+        "result": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "errorCode": null
+      }
+    ]
+  },
+  "completedAt": "2026-10-02T15:23:16Z",
+  "limitations": [
+    "GMGN 返回分页与基线有交集，但不是全链转账完整性证明；A/B 仍有旧分页未取。",
+    "本轮 latest balanceOf 核对只覆盖 A/B 在 23:21 的余额，非 19:08 历史余额证明，C 未查。",
+    "未逐笔验证新卖出回执、未刷新盈亏画像、未计算组内净收益或浮盈。",
+    "活动时间与验证时间区分；未证明 18:48–23:20 持续在线，未见新增不等于绝无链上事件。",
+    "同秒一对一匹配说明同步，不能证明控制人、庄家身份或推特叙事动机。"
+  ]
+}

@@ -1,0 +1,808 @@
+{
+  "group": "sol",
+  "report": "docs/operator-reference-followups/2026-10-09-0839-sol-head.md",
+  "evidence": "docs/operator-reference-followups/2026-10-09-0839-sol-head.json",
+  "question": "D/E到期头页的新活动是否揭示同步交易后的分批退出及库存不平？",
+  "triggeredAt": "2026-10-09T00:39:32.054Z",
+  "startedAt": "2026-10-09T00:42:29.896Z",
+  "completedAt": "2026-10-09T00:44:15.246Z",
+  "configChecked": true,
+  "gmgnConfigChecks": 1,
+  "gmgnBusinessRequests": 2,
+  "gmgnBusinessDispatched": 2,
+  "gmgnSucceeded": 2,
+  "gmgnFailed": 0,
+  "rpcRequests": 1,
+  "rpcRequestBudgetCharged": 1,
+  "rpcSucceeded": 1,
+  "returnedRows": 40,
+  "repeatedRows": 27,
+  "newRows": 13,
+  "newIndependentActivityVerifications": 1,
+  "newAddresses": 0,
+  "status": "new_activity_with_inventory_gap_pending_transfer_verification",
+  "summary": "D/E最新页40条，新增13条（D4/E9）、重复27条；两页连接既有锚点，4组同秒一对一配对。TIKTOK D余额差与E超额卖出均5,107,456.922757枚，仅为待验证转仓假设。Alpha同步41秒退出均负金额差。D FUN卖出RPC成功，旧买入证据与本轮卖出目标币净变动数量相抵；不作完整净盈亏。",
+  "elapsedFromHeartbeatSeconds": 283,
+  "baselineHashes": [
+    {
+      "path": "docs/operator-clusters-2026-10-02.json",
+      "expected": "1b952275a0986a2dc10e1f80eb0e7a27f0e498cd2f1585ca92a3d4f5b58e1d55",
+      "actual": "1b952275a0986a2dc10e1f80eb0e7a27f0e498cd2f1585ca92a3d4f5b58e1d55"
+    },
+    {
+      "path": "docs/operator-reference-learning-2026-10-02.json",
+      "expected": "3cde872e2325e011281a9d5174514a5359ca1f47749e1f335ed3728dbbd2d4ad",
+      "actual": "3cde872e2325e011281a9d5174514a5359ca1f47749e1f335ed3728dbbd2d4ad"
+    },
+    {
+      "path": "docs/operator-reference-analysis-2026-10-02.json",
+      "expected": "3b82c386681b98e22db5455f4ffd3a9c5c034f8fe30161946079cabd202b2e04",
+      "actual": "3b82c386681b98e22db5455f4ffd3a9c5c034f8fe30161946079cabd202b2e04"
+    }
+  ],
+  "pages": [
+    {
+      "id": "D",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "checkedAt": "2026-10-09T00:42:34.243Z",
+      "elapsedMs": 4186,
+      "returnedRows": 20,
+      "rows": [
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "286n7jH4akdp7qiRSrMm7VKCduuWRr5oyphML3cVj5fH",
+          "hash": "5xaHTEzyZtiJkZpHiVG8tikCuomZYhPxuC7QcCJHMzrpTUhtoEAeefkpsX6WZdnhes1Rv3XWjEHygf2oDw9fxtBb",
+          "at": 1791492060000,
+          "side": "sell",
+          "quantity": 13543721.274764,
+          "usd": 141.1131893052,
+          "price": 0.00001041908545239582,
+          "symbol": "Alpha"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "286n7jH4akdp7qiRSrMm7VKCduuWRr5oyphML3cVj5fH",
+          "hash": "5SYHzCbhHdjA4rgeyZa6X4HEDvuLA3syURtcxDYVuXp5Xx4bhZyQ3Nn5ZYAWkYDKknWi421zDmHFc9FYu69YgRLF",
+          "at": 1791492019000,
+          "side": "buy",
+          "quantity": 13543721.274764,
+          "usd": 146.3371579692,
+          "price": 0.000010804796924008375,
+          "symbol": "Alpha"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+          "hash": "36zV5MjUXw1AxRFcmssFbnHU3qrdydRyaXU6rYcxbo91jX8aUHBpDgCAUqaynvQDRKCCA6ZE3t2LQsU7GXMwjfUX",
+          "at": 1791490378000,
+          "side": "sell",
+          "quantity": 23909126.419197,
+          "usd": 205.67509858733,
+          "price": 0.00000860236777292653,
+          "symbol": "TIKTOK"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+          "hash": "5VnbGugQ5vqSxokh1xrUuUTT875S2se55VkWRixju69vMw16LqAY8C97JoMkaBosDrPxTfoqQsRdukShxJTJ13Ck",
+          "at": 1791489362000,
+          "side": "buy",
+          "quantity": 29016583.341954,
+          "usd": 134.64866984793,
+          "price": 0.00000464040401521841,
+          "symbol": "TIKTOK"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "HN5ZCDuoqz6q88ZNKYs4GhUJQqf3iXaxGtGeKgKmBD63",
+          "hash": "3coy4LNaf35toqRvHkHiAiD1daFSAfccXTwkncepCb63XLJWqU8a5Uq52XZCG25Pf34UouwK5TKQREMMmgT9LHZH",
+          "at": 1791453557000,
+          "side": "sell",
+          "quantity": 27239930.77277,
+          "usd": 125.86089894248,
+          "price": 0.0000046204559032249074,
+          "symbol": "Runners"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "HN5ZCDuoqz6q88ZNKYs4GhUJQqf3iXaxGtGeKgKmBD63",
+          "hash": "4qu7QjeCjn2ZEKvvERjd3Pkv9zPjLvVxcutGbY1gKaoYmeN3mJ5XbPP1LGp3o6THNwj8nR3LDxmnusKNTLdfdDPb",
+          "at": 1791453546000,
+          "side": "buy",
+          "quantity": 27239930.77277,
+          "usd": 122.7696202368,
+          "price": 0.000004506972549266304,
+          "symbol": "Runners"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "8iWVJ85PN88Y9dmJJV2zm1pae8xZU6HARw2B7JMu4mvL",
+          "hash": "5DbPKHMoL4RPa3zZhTuNt7cz8acxYietvH3BFSjinqyAL2r1vsgZppW44DoQ3AKd1JnmSrfxdHmZjTgxaASG5o8F",
+          "at": 1791452660000,
+          "side": "sell",
+          "quantity": 22595545.622534,
+          "usd": 93.12482895415,
+          "price": 0.000004121379961777778,
+          "symbol": "Mardi"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "8iWVJ85PN88Y9dmJJV2zm1pae8xZU6HARw2B7JMu4mvL",
+          "hash": "4K9su34oK1SXqgG7KZFhmm3A4JqtSDbzvJPRFwa88bx3irTmBTBsqHgEBTt48WEg6ivMp4wYKsRfTHUmUf6xEDpQ",
+          "at": 1791452641000,
+          "side": "buy",
+          "quantity": 22595545.622534,
+          "usd": 112.15881765511,
+          "price": 0.000004963757880812983,
+          "symbol": "Mardi"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "F1AqAoT7T9KgBLqowWPASbhQyPpMKatz72QWiyyQ6HJe",
+          "hash": "2mQzxWBdo5qXigJMzcSdWAMn65bfF3rtbuurrmePWPD6fWp3NnoUU56vD7UzfxgS8j5HSRqiaUffCD4ZQpX47Q41",
+          "at": 1791451542000,
+          "side": "sell",
+          "quantity": 14534671.496203,
+          "usd": 93.66959428496,
+          "price": 0.0000064445621842518146,
+          "symbol": "FUN"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "F1AqAoT7T9KgBLqowWPASbhQyPpMKatz72QWiyyQ6HJe",
+          "hash": "281aNsJEoTSCTBCc7dfHAaXPgy6tZgxZkLsD5FPGhJWkjtSsQic8PPhX3pcbaDyMMNjR82jMPvqZsQ5QpAoxCwk4",
+          "at": 1791451537000,
+          "side": "buy",
+          "quantity": 14534671.496203,
+          "usd": 104.7725471288,
+          "price": 0.000007208456493575544,
+          "symbol": "FUN"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "NFLX7qV57zuVxCoHy3s1jiGZyALraLNwttbxdvmYJLJ",
+          "hash": "2TuafP7yhqTuEDoJUxm3gtczgvdiYtKJ8YuM1GumqV1rYjaKxrG6qBD5eaM2gyHSwAPowtG5gdWGRQvtP8sbKM2H",
+          "at": 1791450462000,
+          "side": "sell",
+          "quantity": 1.767171,
+          "usd": 122.227992,
+          "price": 69.1659109390093,
+          "symbol": "NFLX"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "HKae765DWrFYxoowxYeFHnDttGHvf6w4ynLwpXJewamH",
+          "hash": "2TuafP7yhqTuEDoJUxm3gtczgvdiYtKJ8YuM1GumqV1rYjaKxrG6qBD5eaM2gyHSwAPowtG5gdWGRQvtP8sbKM2H",
+          "at": 1791450462000,
+          "side": "sell",
+          "quantity": 20990463.974191,
+          "usd": 123.77523342770564,
+          "price": 0.000005896736421828887,
+          "symbol": "Cinnamon"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "HKae765DWrFYxoowxYeFHnDttGHvf6w4ynLwpXJewamH",
+          "hash": "3L1vDSb2Sj3NEkEC6gwwZKuuTA8dWknmNCtDVwSeZQCG4d1nuot4cNM3tX2nnfrrfnuF3e6vHXj2yxtkFp7f8ymz",
+          "at": 1791450424000,
+          "side": "buy",
+          "quantity": 20990463.974191,
+          "usd": 110.66196553076843,
+          "price": 0.000005272011407981915,
+          "symbol": "Cinnamon"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "NFLX7qV57zuVxCoHy3s1jiGZyALraLNwttbxdvmYJLJ",
+          "hash": "3L1vDSb2Sj3NEkEC6gwwZKuuTA8dWknmNCtDVwSeZQCG4d1nuot4cNM3tX2nnfrrfnuF3e6vHXj2yxtkFp7f8ymz",
+          "at": 1791450424000,
+          "side": "buy",
+          "quantity": 1.587975,
+          "usd": 112.045338,
+          "price": 70.55862844188353,
+          "symbol": "NFLX"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "C38iyfaUeZZsdvjznGQLMkJbvkHX1XcdGgjBqCCUrgeT",
+          "hash": "2PxFi5aFDDrmy7gRWuszDaw3Vt8eTL6fP5sDSUeNEm3WyMBaxDB2pqddpnv6ryWUisXVwLUUFSAV1bBjBLSuruG5",
+          "at": 1791448918000,
+          "side": "sell",
+          "quantity": 30775185.22509,
+          "usd": 112.73268101703,
+          "price": 0.0000036631032499885577,
+          "symbol": "GOODBYE"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "C38iyfaUeZZsdvjznGQLMkJbvkHX1XcdGgjBqCCUrgeT",
+          "hash": "sXs1zwYj9RV3VS5LH1A6vd9bSqdX2eitdLa1amTFTzzxL3L5pmCoDW2KfYbjhyDY7DhoaxrxXUuoyqzL3usrmxV",
+          "at": 1791448918000,
+          "side": "buy",
+          "quantity": 7486510.648431,
+          "usd": 28.06466661564,
+          "price": 0.0000037486978825739507,
+          "symbol": "GOODBYE"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "C38iyfaUeZZsdvjznGQLMkJbvkHX1XcdGgjBqCCUrgeT",
+          "hash": "3mRmgGdHKrcY4jkADyYHLiAbU5VDEZugQvXuaJ2Kn8KwGuK2ebUwwtuxYo4UUfV2X6dTu5qqxSGNQ59xrzsYRCfk",
+          "at": 1791448918000,
+          "side": "buy",
+          "quantity": 7600697.336387,
+          "usd": 28.06466661564,
+          "price": 0.0000036923804979426578,
+          "symbol": "GOODBYE"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "C38iyfaUeZZsdvjznGQLMkJbvkHX1XcdGgjBqCCUrgeT",
+          "hash": "2ow1SLmu7ojXLhedJbV5kM7Hs6D5sdEF4Kz5f8cB62ej61tDXkpoaz8j2dBTGyWCdCjUDrjSsFqwHw1wWa5qx8rU",
+          "at": 1791448914000,
+          "side": "buy",
+          "quantity": 7761098.205116,
+          "usd": 28.06466661564,
+          "price": 0.0000036160689987330634,
+          "symbol": "GOODBYE"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "C38iyfaUeZZsdvjznGQLMkJbvkHX1XcdGgjBqCCUrgeT",
+          "hash": "5EDwqD4NgEDxzo76kpeocqTcjjXehHaJyvR1TUsgrEsxHhFpPWM5h9DvJun551NERQGXkMpxYx8cGRB1y6j75TNW",
+          "at": 1791448914000,
+          "side": "buy",
+          "quantity": 7926879.035156,
+          "usd": 28.06466661564,
+          "price": 0.000003540443406689488,
+          "symbol": "GOODBYE"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "vHzYAxbS1NDguVtQUbti4B2T4WW7syomL5GoTDZpump",
+          "hash": "HSWiAG94Ppv8voyULWGNmaurGWbnVFQNWaWfp8p4bbYznPeqit8XR4kHr6KJ9eguZS2g2fWsaNAcn9xozremMPn",
+          "at": 1791448567000,
+          "side": "sell",
+          "quantity": 19276709.319438,
+          "usd": 95.3903390104,
+          "price": 0.000004948476289685096,
+          "symbol": "PorkBelly"
+        }
+      ],
+      "newRows": [
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "286n7jH4akdp7qiRSrMm7VKCduuWRr5oyphML3cVj5fH",
+          "hash": "5xaHTEzyZtiJkZpHiVG8tikCuomZYhPxuC7QcCJHMzrpTUhtoEAeefkpsX6WZdnhes1Rv3XWjEHygf2oDw9fxtBb",
+          "at": 1791492060000,
+          "side": "sell",
+          "quantity": 13543721.274764,
+          "usd": 141.1131893052,
+          "price": 0.00001041908545239582,
+          "symbol": "Alpha"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "286n7jH4akdp7qiRSrMm7VKCduuWRr5oyphML3cVj5fH",
+          "hash": "5SYHzCbhHdjA4rgeyZa6X4HEDvuLA3syURtcxDYVuXp5Xx4bhZyQ3Nn5ZYAWkYDKknWi421zDmHFc9FYu69YgRLF",
+          "at": 1791492019000,
+          "side": "buy",
+          "quantity": 13543721.274764,
+          "usd": 146.3371579692,
+          "price": 0.000010804796924008375,
+          "symbol": "Alpha"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+          "hash": "36zV5MjUXw1AxRFcmssFbnHU3qrdydRyaXU6rYcxbo91jX8aUHBpDgCAUqaynvQDRKCCA6ZE3t2LQsU7GXMwjfUX",
+          "at": 1791490378000,
+          "side": "sell",
+          "quantity": 23909126.419197,
+          "usd": 205.67509858733,
+          "price": 0.00000860236777292653,
+          "symbol": "TIKTOK"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "token": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+          "hash": "5VnbGugQ5vqSxokh1xrUuUTT875S2se55VkWRixju69vMw16LqAY8C97JoMkaBosDrPxTfoqQsRdukShxJTJ13Ck",
+          "at": 1791489362000,
+          "side": "buy",
+          "quantity": 29016583.341954,
+          "usd": 134.64866984793,
+          "price": 0.00000464040401521841,
+          "symbol": "TIKTOK"
+        }
+      ],
+      "overlap": 16,
+      "next": "NDU0NDkyNzE3MDAzMzYwMDg6MDo6",
+      "anchorIncluded": true,
+      "rootIdentity": {
+        "wallet": null,
+        "chain": null
+      },
+      "identity": "request-bound; explicit row identity validated by parser; omitted root identity not independently verified"
+    },
+    {
+      "id": "E",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "checkedAt": "2026-10-09T00:42:40.773Z",
+      "elapsedMs": 6529,
+      "returnedRows": 20,
+      "rows": [
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "286n7jH4akdp7qiRSrMm7VKCduuWRr5oyphML3cVj5fH",
+          "hash": "5Zp8jyP19bzQraqXwJyrTeSKwGUazggtc4tyAEYjVdpQ8P4etMrtGxvAz3T2LGTgYJqKxpc37zVh9nZpxVagJWpR",
+          "at": 1791492060000,
+          "side": "sell",
+          "quantity": 12550221.331892,
+          "usd": 136.8278978542,
+          "price": 0.000010902429067645457,
+          "symbol": "Alpha"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "286n7jH4akdp7qiRSrMm7VKCduuWRr5oyphML3cVj5fH",
+          "hash": "66AXrNxbPHVi9J1k1RxdjdSUQqdN7XpQRo6CY8baFmBNg3rCLbHzT92qQbdSoTBRdxJEzW8YJb1gNURn8EpyWWkE",
+          "at": 1791492019000,
+          "side": "buy",
+          "quantity": 12550221.331892,
+          "usd": 146.27390148966,
+          "price": 0.000011655085406179199,
+          "symbol": "Alpha"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+          "hash": "2H79D3yC9ApDA7VAs4HAUNE9ALvKiT9dBTkXFEk7g4s8kWjj7jKvRpeicYxmFeqQSZF4TtfJbkQg39ohPUQENhUC",
+          "at": 1791490378000,
+          "side": "sell",
+          "quantity": 17838372.165068,
+          "usd": 177.80755710677,
+          "price": 0.000009967700833990005,
+          "symbol": "TIKTOK"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+          "hash": "3WAcbME8yCKKatbf4bdH12S37razU3bhuM96XnZBE6BrXvzNUCMRZh62aKDdPTMwayi72gsbeeoht9WyZxbrujgN",
+          "at": 1791490187000,
+          "side": "sell",
+          "quantity": 3182728.810577,
+          "usd": 127.28106358279,
+          "price": 0.000039991174604573405,
+          "symbol": "TIKTOK"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+          "hash": "HwBoWiXjFAccFf3UR5CWFiKkriV6E13vCRSiniDBuUB382XMscszkWrwL5ayir1cPXW8sSjvJoURN4qy5TGrXTT",
+          "at": 1791489908000,
+          "side": "sell",
+          "quantity": 3978411.013221,
+          "usd": 205.65045637737,
+          "price": 0.00005169160644638104,
+          "symbol": "TIKTOK"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+          "hash": "2q9pkSrWAmVAQEjVtd8YaRmy8XSpx9Y3mw7kNovyM5zJasB1sx8FsXSQQnjbp9kqC1tAFA7AeYj2SNhdXconRyEY",
+          "at": 1791489653000,
+          "side": "sell",
+          "quantity": 4973013.766527,
+          "usd": 194.466792137,
+          "price": 0.0000391044145998436,
+          "symbol": "TIKTOK"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+          "hash": "5tjVdY81cfmhFN6KbYBE38ZSmhd7eYAQvWPkan9V4dYvxHawA2KhGkE8Z8Vf5rtfRfV92iBgdhEeFtfwPq6CTErw",
+          "at": 1791489620000,
+          "side": "sell",
+          "quantity": 6216267.208159,
+          "usd": 179.01046278862,
+          "price": 0.00002879709909407748,
+          "symbol": "TIKTOK"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+          "hash": "4Z2X6VQZ4Bx8fZUnPG99ATGpMSLUY291tvRzcDr7RjJcCKCAdoeNMkNzRYB4x2yzwPtnrteeTU6YVxtCSFFo8LjU",
+          "at": 1791489618000,
+          "side": "sell",
+          "quantity": 7770334.010198,
+          "usd": 239.10554470642,
+          "price": 0.00003077159159343828,
+          "symbol": "TIKTOK"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+          "hash": "4qLc6isfvRD3aScHDn6g5G21EDRoBWziKjni8p6FTXj47HAbQZ1wjXTVCUdycpKarEB81JEicSbmn52sddEuf1yA",
+          "at": 1791489362000,
+          "side": "buy",
+          "quantity": 38851670.050993,
+          "usd": 155.96757746931,
+          "price": 0.000004014436889446056,
+          "symbol": "TIKTOK"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "HN5ZCDuoqz6q88ZNKYs4GhUJQqf3iXaxGtGeKgKmBD63",
+          "hash": "2EyUS6QeTADzrdeJogrNvN6CLvq3ofPtoybQQk5W4QFT1fNDgFZSmrKdYp2Ncgu5qfPespsczw7fGoUquCGqSgRH",
+          "at": 1791453557000,
+          "side": "sell",
+          "quantity": 30112731.447441,
+          "usd": 123.5370023836,
+          "price": 0.000004102484113712205,
+          "symbol": "Runners"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "HN5ZCDuoqz6q88ZNKYs4GhUJQqf3iXaxGtGeKgKmBD63",
+          "hash": "4RcjQLhqMRpEtWWaCZkR4bkRL358zavdoUaQcGXkySZss8PSS1Z6JvJ7D34YgCBZadgu8WX6MN4bL4GZKopjDSAL",
+          "at": 1791453546000,
+          "side": "buy",
+          "quantity": 30112731.447441,
+          "usd": 103.6927579392,
+          "price": 0.000003443485627339776,
+          "symbol": "Runners"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "8iWVJ85PN88Y9dmJJV2zm1pae8xZU6HARw2B7JMu4mvL",
+          "hash": "2dgXPWcFRhzPo8wSRK1hHcfSbkSKER3YHxsTPsarT7ZKmcpHpoyVQTXRhuQui4KK5PgMK36NusvQjZqXfmSMh7Tg",
+          "at": 1791452660000,
+          "side": "sell",
+          "quantity": 19928183.234505,
+          "usd": 85.9394593967,
+          "price": 0.000004312458310192932,
+          "symbol": "Mardi"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "8iWVJ85PN88Y9dmJJV2zm1pae8xZU6HARw2B7JMu4mvL",
+          "hash": "2bj5EGbAmgdobJhs4rVpbzGdMWj6QebjSAFigwniwLuAKxUyk7zofocKeDeBb4Mn9s28FaWuJNSGzuMifvr87Shr",
+          "at": 1791452641000,
+          "side": "buy",
+          "quantity": 19928183.234505,
+          "usd": 103.96749260936,
+          "price": 0.000005217108423077006,
+          "symbol": "Mardi"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "F1AqAoT7T9KgBLqowWPASbhQyPpMKatz72QWiyyQ6HJe",
+          "hash": "4vZCrhr34VhcjsD25RGSs3rNw9hyJUfJmaZaoBa3WzCPHycei7cxmTFVLSAcw35R6t7XcL8TAmUBnj9o7wFqSe44",
+          "at": 1791451542000,
+          "side": "sell",
+          "quantity": 15984778.255899,
+          "usd": 98.99099243248,
+          "price": 0.000006192828630322483,
+          "symbol": "FUN"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "F1AqAoT7T9KgBLqowWPASbhQyPpMKatz72QWiyyQ6HJe",
+          "hash": "sAKPALuToTjAAMmRPD5p3hjtPetvGBczAVwyvT8YcfZWp5BhMdys3XV1HH4zEqz6BDkxQ7y5pzn4YjLQL1is3Tw",
+          "at": 1791451537000,
+          "side": "buy",
+          "quantity": 15984778.255899,
+          "usd": 110.47359637296,
+          "price": 0.000006911174781682647,
+          "symbol": "FUN"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "NFLX7qV57zuVxCoHy3s1jiGZyALraLNwttbxdvmYJLJ",
+          "hash": "3MvkRE5ztDpXAD73CeYywzohyfW2oEig7YzdK2FArNGSzuoyqhsSBNJwDGWJ4syJ8CgBdeLNsBTBXki3D3WVkxhc",
+          "at": 1791450462000,
+          "side": "sell",
+          "quantity": 1.738144,
+          "usd": 120.204916,
+          "price": 69.1570525802235,
+          "symbol": "NFLX"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "HKae765DWrFYxoowxYeFHnDttGHvf6w4ynLwpXJewamH",
+          "hash": "3MvkRE5ztDpXAD73CeYywzohyfW2oEig7YzdK2FArNGSzuoyqhsSBNJwDGWJ4syJ8CgBdeLNsBTBXki3D3WVkxhc",
+          "at": 1791450462000,
+          "side": "sell",
+          "quantity": 21815851.590296,
+          "usd": 121.72657862792266,
+          "price": 0.000005579730780808196,
+          "symbol": "Cinnamon"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "HKae765DWrFYxoowxYeFHnDttGHvf6w4ynLwpXJewamH",
+          "hash": "5u9ZatvaJeg33Qkck8cQc23QCX4KjZCnmeNKYVPejT1T6ZtPeHx6T9kbKxz39MW3egbRKByUDLdDtagSrxow66Yh",
+          "at": 1791450424000,
+          "side": "buy",
+          "quantity": 21815851.590296,
+          "usd": 121.29495927166542,
+          "price": 0.000005559946113936038,
+          "symbol": "Cinnamon"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "NFLX7qV57zuVxCoHy3s1jiGZyALraLNwttbxdvmYJLJ",
+          "hash": "5u9ZatvaJeg33Qkck8cQc23QCX4KjZCnmeNKYVPejT1T6ZtPeHx6T9kbKxz39MW3egbRKByUDLdDtagSrxow66Yh",
+          "at": 1791450424000,
+          "side": "buy",
+          "quantity": 1.740343,
+          "usd": 122.811238,
+          "price": 70.56726059173393,
+          "symbol": "NFLX"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "vHzYAxbS1NDguVtQUbti4B2T4WW7syomL5GoTDZpump",
+          "hash": "5NmrVxNuuM96fpCaVYQZjUGiEzcroDEndw51KhZq364Ph2ZDVubzb8cVQd5YRexYRE7KVdaxQzgr1sBLfaZFf8Nw",
+          "at": 1791448567000,
+          "side": "sell",
+          "quantity": 16760410.072239,
+          "usd": 75.764560018,
+          "price": 0.000004520447870394708,
+          "symbol": "PorkBelly"
+        }
+      ],
+      "newRows": [
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "286n7jH4akdp7qiRSrMm7VKCduuWRr5oyphML3cVj5fH",
+          "hash": "5Zp8jyP19bzQraqXwJyrTeSKwGUazggtc4tyAEYjVdpQ8P4etMrtGxvAz3T2LGTgYJqKxpc37zVh9nZpxVagJWpR",
+          "at": 1791492060000,
+          "side": "sell",
+          "quantity": 12550221.331892,
+          "usd": 136.8278978542,
+          "price": 0.000010902429067645457,
+          "symbol": "Alpha"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "286n7jH4akdp7qiRSrMm7VKCduuWRr5oyphML3cVj5fH",
+          "hash": "66AXrNxbPHVi9J1k1RxdjdSUQqdN7XpQRo6CY8baFmBNg3rCLbHzT92qQbdSoTBRdxJEzW8YJb1gNURn8EpyWWkE",
+          "at": 1791492019000,
+          "side": "buy",
+          "quantity": 12550221.331892,
+          "usd": 146.27390148966,
+          "price": 0.000011655085406179199,
+          "symbol": "Alpha"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+          "hash": "2H79D3yC9ApDA7VAs4HAUNE9ALvKiT9dBTkXFEk7g4s8kWjj7jKvRpeicYxmFeqQSZF4TtfJbkQg39ohPUQENhUC",
+          "at": 1791490378000,
+          "side": "sell",
+          "quantity": 17838372.165068,
+          "usd": 177.80755710677,
+          "price": 0.000009967700833990005,
+          "symbol": "TIKTOK"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+          "hash": "3WAcbME8yCKKatbf4bdH12S37razU3bhuM96XnZBE6BrXvzNUCMRZh62aKDdPTMwayi72gsbeeoht9WyZxbrujgN",
+          "at": 1791490187000,
+          "side": "sell",
+          "quantity": 3182728.810577,
+          "usd": 127.28106358279,
+          "price": 0.000039991174604573405,
+          "symbol": "TIKTOK"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+          "hash": "HwBoWiXjFAccFf3UR5CWFiKkriV6E13vCRSiniDBuUB382XMscszkWrwL5ayir1cPXW8sSjvJoURN4qy5TGrXTT",
+          "at": 1791489908000,
+          "side": "sell",
+          "quantity": 3978411.013221,
+          "usd": 205.65045637737,
+          "price": 0.00005169160644638104,
+          "symbol": "TIKTOK"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+          "hash": "2q9pkSrWAmVAQEjVtd8YaRmy8XSpx9Y3mw7kNovyM5zJasB1sx8FsXSQQnjbp9kqC1tAFA7AeYj2SNhdXconRyEY",
+          "at": 1791489653000,
+          "side": "sell",
+          "quantity": 4973013.766527,
+          "usd": 194.466792137,
+          "price": 0.0000391044145998436,
+          "symbol": "TIKTOK"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+          "hash": "5tjVdY81cfmhFN6KbYBE38ZSmhd7eYAQvWPkan9V4dYvxHawA2KhGkE8Z8Vf5rtfRfV92iBgdhEeFtfwPq6CTErw",
+          "at": 1791489620000,
+          "side": "sell",
+          "quantity": 6216267.208159,
+          "usd": 179.01046278862,
+          "price": 0.00002879709909407748,
+          "symbol": "TIKTOK"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+          "hash": "4Z2X6VQZ4Bx8fZUnPG99ATGpMSLUY291tvRzcDr7RjJcCKCAdoeNMkNzRYB4x2yzwPtnrteeTU6YVxtCSFFo8LjU",
+          "at": 1791489618000,
+          "side": "sell",
+          "quantity": 7770334.010198,
+          "usd": 239.10554470642,
+          "price": 0.00003077159159343828,
+          "symbol": "TIKTOK"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+          "hash": "4qLc6isfvRD3aScHDn6g5G21EDRoBWziKjni8p6FTXj47HAbQZ1wjXTVCUdycpKarEB81JEicSbmn52sddEuf1yA",
+          "at": 1791489362000,
+          "side": "buy",
+          "quantity": 38851670.050993,
+          "usd": 155.96757746931,
+          "price": 0.000004014436889446056,
+          "symbol": "TIKTOK"
+        }
+      ],
+      "overlap": 11,
+      "next": "NDU0NDkyNzE3MDAzNTgwMDg6MDo6",
+      "anchorIncluded": true,
+      "rootIdentity": {
+        "wallet": null,
+        "chain": null
+      },
+      "identity": "request-bound; explicit row identity validated by parser; omitted root identity not independently verified"
+    }
+  ],
+  "oneToOneMatches": [
+    {
+      "ca": "286n7jH4akdp7qiRSrMm7VKCduuWRr5oyphML3cVj5fH",
+      "at": "2026-10-08T20:41:00.000Z",
+      "side": "sell",
+      "D": "5xaHTEzyZtiJkZpHiVG8tikCuomZYhPxuC7QcCJHMzrpTUhtoEAeefkpsX6WZdnhes1Rv3XWjEHygf2oDw9fxtBb",
+      "E": "5Zp8jyP19bzQraqXwJyrTeSKwGUazggtc4tyAEYjVdpQ8P4etMrtGxvAz3T2LGTgYJqKxpc37zVh9nZpxVagJWpR"
+    },
+    {
+      "ca": "286n7jH4akdp7qiRSrMm7VKCduuWRr5oyphML3cVj5fH",
+      "at": "2026-10-08T20:40:19.000Z",
+      "side": "buy",
+      "D": "5SYHzCbhHdjA4rgeyZa6X4HEDvuLA3syURtcxDYVuXp5Xx4bhZyQ3Nn5ZYAWkYDKknWi421zDmHFc9FYu69YgRLF",
+      "E": "66AXrNxbPHVi9J1k1RxdjdSUQqdN7XpQRo6CY8baFmBNg3rCLbHzT92qQbdSoTBRdxJEzW8YJb1gNURn8EpyWWkE"
+    },
+    {
+      "ca": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+      "at": "2026-10-08T20:12:58.000Z",
+      "side": "sell",
+      "D": "36zV5MjUXw1AxRFcmssFbnHU3qrdydRyaXU6rYcxbo91jX8aUHBpDgCAUqaynvQDRKCCA6ZE3t2LQsU7GXMwjfUX",
+      "E": "2H79D3yC9ApDA7VAs4HAUNE9ALvKiT9dBTkXFEk7g4s8kWjj7jKvRpeicYxmFeqQSZF4TtfJbkQg39ohPUQENhUC"
+    },
+    {
+      "ca": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+      "at": "2026-10-08T19:56:02.000Z",
+      "side": "buy",
+      "D": "5VnbGugQ5vqSxokh1xrUuUTT875S2se55VkWRixju69vMw16LqAY8C97JoMkaBosDrPxTfoqQsRdukShxJTJ13Ck",
+      "E": "4qLc6isfvRD3aScHDn6g5G21EDRoBWziKjni8p6FTXj47HAbQZ1wjXTVCUdycpKarEB81JEicSbmn52sddEuf1yA"
+    }
+  ],
+  "rpc": {
+    "method": "getTransaction",
+    "signature": "2mQzxWBdo5qXigJMzcSdWAMn65bfF3rtbuurrmePWPD6fWp3NnoUU56vD7UzfxgS8j5HSRqiaUffCD4ZQpX47Q41",
+    "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+    "mint": "F1AqAoT7T9KgBLqowWPASbhQyPpMKatz72QWiyyQ6HJe",
+    "endpoint": "https://api.mainnet-beta.solana.com",
+    "startedAt": "2026-10-09T00:42:54.527Z",
+    "dispatched": true,
+    "httpStatus": 200,
+    "checkedAt": "2026-10-09T00:42:55.945Z",
+    "verification": {
+      "signatureMatches": true,
+      "slot": 454503864,
+      "blockTime": 1791451542,
+      "metaError": null,
+      "feeLamports": 15000,
+      "walletAccountIndex": 0,
+      "signer": true,
+      "nativeDeltaLamports": 795991491,
+      "tokenDeltas": [
+        {
+          "accountIndex": 13,
+          "decimals": 6,
+          "rawDelta": "-14534671496203"
+        }
+      ]
+    }
+  },
+  "priorBuyEvidence": {
+    "source": "docs/operator-reference-followups/2026-10-09-0037-sol-head.json",
+    "signature": "281aNsJEoTSCTBCc7dfHAaXPgy6tZgxZkLsD5FPGhJWkjtSsQic8PPhX3pcbaDyMMNjR82jMPvqZsQ5QpAoxCwk4",
+    "rawTokenDelta": "14534671496203",
+    "checkedAt": "2026-10-08T16:40:22.969Z"
+  },
+  "inventoryHypothesis": {
+    "chain": "sol",
+    "ca": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+    "D": {
+      "bought": 29016583.341954,
+      "sold": 23909126.419197,
+      "residual": 5107456.922757
+    },
+    "E": {
+      "bought": 38851670.050993,
+      "sold": 43959126.97375,
+      "excessSold": 5107456.922757,
+      "sellCount": 6
+    },
+    "directTransferVerified": false,
+    "interpretation": "数量对称仅提示转仓假设；还可能存在页外库存/漏记/路由。不得合并平台盈亏或宣称盈利。"
+  },
+  "limitations": [
+    "每钱包仅最新20条，旧分页缺口不消失",
+    "头页root钱包/链字段缺省；以请求绑定和显式行字段校验，独立RPC仅验证一笔旧D FUN卖出",
+    "最新链上活动未独立核验，provider_freshness_unverified",
+    "只有时间点采样，不证明期间持续在线；无逐区块/全天覆盖",
+    "本轮未补画像、未增地址、未触碰交易/监控设置"
+  ],
+  "nextQuestion": "下轮Sol先查到期D/E头页；聚焦TIKTOK 5,107,456.922757枚库存差是否为D→E直接转仓，按哈希核验；未证实前不作组内完整盈亏归因，保留Cinnamon/NFLX路由及更早分页缺口。"
+}

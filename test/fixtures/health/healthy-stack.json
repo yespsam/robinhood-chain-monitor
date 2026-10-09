@@ -356,13 +356,13 @@
       "chainId": 56,
       "portal": "0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0",
       "portalRuntimeCodeHash": "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3",
-      "version": "v5.23.1",
-      "implementation": "0xAb8Ec926b6e113c2212aF152b086eA62d1FDced9",
-      "implementationCodeHash": "0x78653cdd7296d940ae531c86bc6700ae163f1f9dec002c2af3143c9ae6696a15",
+      "version": "v5.24.0",
+      "implementation": "0x27a0f9Da7F5BEAd616fe0bf02bf0c793bece4e20",
+      "implementationCodeHash": "0xb191694f7248773f714234aeb150149a2b9af5d1ab483a53d31c19ec3132b230",
       "verifiedBlock": 400,
       "verifiedBlockHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "portalRuntimeCodeBytes": 2882,
-      "implementationCodeBytes": 20438
+      "implementationCodeBytes": 20475
     },
     "quoteAssets": {},
     "pendingEnableCandidates": {},

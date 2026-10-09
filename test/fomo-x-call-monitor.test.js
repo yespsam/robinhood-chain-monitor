@@ -74,6 +74,85 @@ function passQualification() {
   };
 }
 
+test("FOMO cancellation skips seed and binding calls but keeps independent GMGN-to-X monitoring", async t => {
+  const dataDir = await fixture(t);
+  const nowRef = { value: Date.parse("2026-10-07T08:00:00Z") };
+  const rowsRef = { value: [candidate(nowRef.value)] }, tweetsRef = { value: [] };
+  const requests = [], alerts = [];
+  const monitor = createHarness({ dataDir, nowRef, rowsRef, tweetsRef, requests, alerts,
+    configOverrides: { fomoPlatformSourcesEnabled: false, fomoCallPublicHandles: ["alpha"] },
+    discoverVerifiedSeedImpl: async () => { throw new Error("cancelled FOMO source called"); },
+    resolveBindingImpl: async () => { throw new Error("cancelled FOMO binding called"); },
+  });
+  t.after(() => monitor.stop());
+  await monitor.check();
+  const state = await monitor.getState();
+  assert.equal(state.health.sources.fomoscanSeeds.status, "disabled_by_user");
+  assert.ok(requests.some(url => url.includes("fxtwitter.test/2/profile/alpha")));
+  assert.ok(requests.some(url => url.includes("/statuses?count=40")));
+  assert.equal(requests.some(url => url.includes("fomoscan")), false);
+  assert.equal(state.roster.alpha.source, "gmgn_bsc_kol_feed");
+});
+
+test("X rotation fills cached rejection slots with due timelines and retries the rejection only when due", async t => {
+  const dataDir = await fixture(t);
+  const nowRef = { value: Date.parse("2026-10-07T08:00:00Z") };
+  const rowsRef = { value: [candidate(nowRef.value), candidate(nowRef.value - 1000, {
+    handle: "beta", twitterHandles: ["beta"], wallet: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    wallets: ["0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+  })] };
+  const requests = [];
+  const monitor = createHarness({ dataDir, nowRef, rowsRef, tweetsRef: { value: [] }, alerts: [],
+    configOverrides: { fomoXCallBatchSize: 1 },
+    fetchImpl: async url => {
+      requests.push(url);
+      const handle = url.endsWith("/alpha") ? "alpha" : "beta";
+      return url.includes("/statuses?")
+        ? { ok: true, status: 200, json: async () => ({ code: 200, results: [] }) }
+        : { ok: true, status: 200, json: async () => ({ code: 200, user: {
+          id: handle === "alpha" ? X_ID : "99999", screen_name: handle,
+          followers: handle === "alpha" ? 9999 : 25000, protected: false,
+        } }) };
+    },
+  });
+  t.after(() => monitor.stop());
+  await monitor.check(); // alpha rejected
+  nowRef.value += 5000; await monitor.check(); // beta
+  nowRef.value += 5000; await monitor.check(); // skip alpha, check beta again
+  assert.equal(requests.filter(url => url.endsWith("/alpha")).length, 1);
+  assert.equal(requests.filter(url => url.includes("/statuses?")).length, 2);
+  let state = await monitor.getState();
+  assert.equal(state.health.rejectedCount, 1);
+  assert.equal(state.health.backlogCount, 1, "do not hide the rejected identity from coverage");
+  nowRef.value = state.roster.alpha.admissionRejectedUntil;
+  await monitor.check();
+  assert.equal(requests.filter(url => url.endsWith("/alpha")).length, 2);
+});
+
+test("cancelled cached FOMO binding cannot block a retained GMGN X profile refresh", async t => {
+  const dataDir = await fixture(t);
+  const nowRef = { value: Date.parse("2026-10-07T08:00:00Z") };
+  const rowsRef = { value: [candidate(nowRef.value)] }, tweetsRef = { value: [timelineTweet("900", "baseline", nowRef.value)] };
+  const binding = { status: "verified", verified: true, proofSource: "fomoscan", wallet: WALLET,
+    handle: "alpha", twitterHandle: "alpha", checkedAt: new Date(nowRef.value).toISOString(), lastCheckedAt: new Date(nowRef.value).toISOString() };
+  const first = createHarness({ dataDir, nowRef, rowsRef, tweetsRef, alerts: [], binding });
+  await first.check(); await first.stop();
+  assert.equal((await first.getState()).roster.alpha.walletBinding.proofSource, "fomoscan");
+  nowRef.value += 2 * 60 * 60_000; rowsRef.value = [candidate(nowRef.value)];
+  const requests = [];
+  const monitor = createHarness({ dataDir, nowRef, rowsRef, tweetsRef, alerts: [], requests,
+    configOverrides: { fomoPlatformSourcesEnabled: false },
+    resolveBindingImpl: async () => { throw new Error("cancelled binding queried"); },
+  });
+  t.after(() => monitor.stop());
+  await monitor.check();
+  const state = await monitor.getState();
+  assert.equal(state.roster.alpha.walletBinding, null);
+  assert.equal(state.roster.alpha.admissionRejectionReason, undefined);
+  assert.ok(requests.some(url => url.includes("/statuses?")));
+  assert.equal(state.initialized.alpha.latestId, "900", "existing cursor preserved");
+});
+
 function capitalCatalogFixtureDependencies(overrides = {}) {
   const snapshot = {
     schemaVersion: 1,
@@ -1295,6 +1374,8 @@ test("an ineligible X profile is cached instead of being requested every five se
   assert.equal(state.health.backlogCount, 1);
   assert.equal(state.health.sources.x.coverage, "source_limited");
   assert.equal(state.health.sources.x.failures, 0);
+  assert.match(state.health.coverage.admissionRejections.alpha.reason, /followers 9999 below required 10000/);
+  assert.equal(Date.parse(state.health.coverage.admissionRejections.alpha.retryAt), state.roster.alpha.admissionRejectedUntil);
 });
 
 test("22 live timelines out of 41 keep coverage degraded but record a clean operational success", async (t) => {

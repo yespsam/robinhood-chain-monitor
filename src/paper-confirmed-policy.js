@@ -4,19 +4,31 @@ import { traderDecision, traderReview } from './paper-trader-reasoning.js';
 import { isEvidenceHold, EVIDENCE_HOLD_TEXT, STRUCTURE_HOLD_EXIT_POLICY } from './paper-pvp-policy.js';
 import {ALPHA_ENTRY_VERSION,validAlphaSignal} from './binance-alpha-catalog.js';
 import {MONITOR_ENTRY_VERSION,validMonitorSignal} from './paper-monitor-signal.js';
-import { paperCostGate, STRUCTURE_COST_TEXT } from './paper-cost-policy.js';
+import {isWalletSignalVersion,walletSignalRoute} from './paper-collective-signal.js';
+import { paperCostGate, STRUCTURE_COST_TEXT, GAS_ACCOUNT_ONLY_TEXT } from './paper-cost-policy.js';
+import { GAS_ACCOUNT_ONLY } from './paper-chain-gas.js';
+import { paperLossGuard } from './paper-loss-guard.js';
 
 export const CONFIRMED_PAPER_VERSION = 'confirmed_pvp_v2';
 export const CONFIRMED_QUOTE_VERSION = 'path_checked_v1';
 export const LOSS_RESPONSE_VERSION = 'review_without_pause_v1';
 export const CONTINUOUS_PAPER_VERSION = 'continuous_paper_v1';
-export function paperOperatingPolicy(continuousPaperMode = false) {
+export function paperOperatingPolicy(continuousPaperMode = false, enforceLossGuards = false) {
+  const disabledLimits = continuousPaperMode ? ['日亏损停机', '累计亏损停机', '每日与每小时开仓次数', '开仓固定间隔', '同币亏损次数', '平仓固定冷却', '两个持仓上限'] : [];
+  if (enforceLossGuards) {
+    for (const label of ['日亏损停机', '累计亏损停机']) {
+      const index = disabledLimits.indexOf(label);
+      if (index >= 0) disabledLimits.splice(index, 1);
+    }
+  }
   return { version: continuousPaperMode ? CONTINUOUS_PAPER_VERSION : 'bounded_paper_v1',
     mode: 'paper', continuous: continuousPaperMode, execution: false, signing: false, broadcast: false,
-    label: continuousPaperMode ? '全天候模拟 · 不按亏损或次数停机' : '限额模拟',
-    disabledLimits: continuousPaperMode ? ['日亏损停机', '累计亏损停机', '每日与每小时开仓次数', '开仓固定间隔', '同币亏损次数', '平仓固定冷却', '两个持仓上限'] : [],
+    enforceLossGuards,
+    label: enforceLossGuards ? '持续扫描 · 保留亏损熔断' : continuousPaperMode ? '全天候模拟 · 不按亏损或次数停机' : '限额模拟',
+    disabledLimits,
     retainedChecks: ['真实新鲜行情', '买点与退出条件', '可用余额及单笔预算', '旧信号去重', '账本一致性'],
-    note: '全天候是持续评估，不是保证每时每刻成交；电脑及网络需保持运行，不自动补充虚拟本金。' };
+    note: enforceLossGuards ? '持续扫描保留累计与当日亏损熔断；数据断档不自动卖出，不自动补充虚拟本金。'
+      : '全天候是持续评估，不是保证每时每刻成交；电脑及网络需保持运行，不自动补充虚拟本金。' };
 }
 export const CONFIRMED_PAPER_POLICY = Object.freeze({ version: CONFIRMED_PAPER_VERSION,
   minBuyers: 2, minSmartMoney: 1, minNetBuy: 500, minLiquidity: 20_000,
@@ -31,6 +43,76 @@ const p = CONFIRMED_PAPER_POLICY;
 const positive = n => typeof n === 'number' && Number.isFinite(n) && n > 0;
 export const isConfirmedPaperEntry = evidence => evidence?.confirmedPolicy?.version === CONFIRMED_PAPER_VERSION
   && evidence.entryPlan?.confirmedPolicyVersion === CONFIRMED_PAPER_VERSION && evidence.entryTier === 'exploratory';
+
+// Minimal paper-entry lane: strategy evidence is retained for research, but
+// only the data that can make a simulated fill nonsensical remains blocking.
+// This is intentionally paper-only; it never authorizes signing or broadcast.
+const minimalChain = value => String(value ?? '').trim().toLowerCase();
+const minimalValidAddress = (chain, address) => chain === 'sol'
+  ? /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(address || ''))
+  : /^(0x[\da-f]{40})$/i.test(String(address || ''));
+const minimalFinite = value => typeof value === 'number' && Number.isFinite(value) ? value : Number.isFinite(Number(value)) ? Number(value) : null;
+
+export const isMinimalPaperEntry = evidence => isConfirmedPaperEntry(evidence) && evidence?.minimalEntryMode === true;
+
+export function minimalPaperEntry(row, { sourceSafety, token: sourceToken = null, nowMs }) {
+  const { positionSizing: _ignoredSizing, ...rawEvidence } = row.evidence || {};
+  const v = rawEvidence, token = sourceToken || row.token || {}, chain = minimalChain(token.chain);
+  const hardBlocked = new Set(['存在貔貅标记', '可卖出检测未通过', '禁止卖出', '黑名单', '可任意增发', '可任意冻结', '可任意暂停', '池子真实性异常', '流动性为零']);
+  const reasons = (sourceSafety?.blocked || []).filter(reason => hardBlocked.has(reason) || /税率|买入税|卖出税/.test(reason));
+  const missing = [];
+  const auditMissing = [...new Set(sourceSafety?.missing || [])];
+  const hardAuditFields = new Set(['买入税', '卖出税', '可卖出检测', '内外盘来源冲突待核对']);
+  for (const field of auditMissing) if (hardAuditFields.has(field)) missing.push(field);
+  if (!['sol', 'eth', 'base', 'bsc', 'robinhood'].includes(chain) || !minimalValidAddress(chain, token.address)) missing.push('有效链和合约地址');
+  if (v.marketFresh !== true) missing.push('两分钟内的真实行情');
+  if (v.priceFresh !== true || !minimalFinite(token.price) || minimalFinite(token.price) <= 0) missing.push('五秒内的独立报价');
+  if (minimalFinite(v.liquidity) === null || minimalFinite(v.liquidity) <= 0) missing.push('真实流动性');
+  const buyTax = minimalFinite(sourceSafety?.metrics?.buyTax ?? v.costAssumptions?.buyTax);
+  const sellTax = minimalFinite(sourceSafety?.metrics?.sellTax ?? v.costAssumptions?.sellTax);
+  if (buyTax === null) missing.push('买入税');
+  if (sellTax === null) missing.push('卖出税');
+  if (buyTax !== null && buyTax > .06 || sellTax !== null && sellTax > .06) reasons.push('税率超过 6%');
+  const sellFlags = token.sellabilityFlags || {};
+  const explicitlySellable = token.isHoneypot === false || token.cannotSell === false
+    || sellFlags.canSell === true || sellFlags.sellable === true || token.sellability === 'ok';
+  if (!explicitlySellable && !reasons.some(reason => /貔貅|禁止卖出|可卖出检测/.test(reason))) missing.push('可卖出检测');
+  const eligible = !missing.length && !reasons.length;
+  const price = minimalFinite(token.price);
+  const confirmedAt = v.priceObservedAt || row.observedAt || new Date(nowMs).toISOString();
+  const entryPlan = {
+    version: STRATEGY_ANALYSIS_VERSION,
+    confirmedPolicyVersion: CONFIRMED_PAPER_VERSION,
+    eligible,
+    setup: '最小必要门槛：真实报价＋可卖性＋税费＋流动性',
+    reasons,
+    entryZone: price > 0 ? { low: price, high: price } : null,
+    stopPrice: price > 0 ? price * .90 : null,
+    targetPrice: price > 0 ? price * 1.15 : null,
+    targetRole: 'structure_reference_only',
+    exitPolicyVersion: v.exitPolicy?.version || null,
+    targetKind: '仅作情景参考，不是固定止盈',
+    confirmedAt,
+    summary: '取消叙事、聪明钱、K 线、成本比例与恢复期证明的开仓硬门槛；仅模拟，不代表盈利预测。'
+  };
+  const confirmation = { version: CONFIRMED_QUOTE_VERSION, ready: eligible, count: eligible ? 1 : 0,
+    confirmedAt: eligible ? confirmedAt : null, reason: eligible ? null : '最小安全门槛未通过',
+    rows: eligible ? [{ observedAt: confirmedAt, price }] : [] };
+  return { ...row,
+    label: '最小门槛探索',
+    decision: sourceSafety?.blocked?.length ? '不买' : eligible ? '可模拟' : '观察',
+    reasons: eligible ? ['最小安全门槛通过，进入模拟账本；策略证据仅作研究记录'] : [...new Set(reasons)],
+    missing: [...new Set(missing)],
+    score: Math.max(0, 100 - missing.length * 20 - reasons.length * 30),
+    entryLogic: '最小门槛模拟：不再要求叙事、聪明钱、K 线、成本比例或恢复期证明；必须有有效 CA、两分钟内行情、五秒内报价、可卖性、税率不高于 6%、非零流动性和一致数据绑定。仅模拟，不能用于真实交易授权。',
+    exitLogic: v.exitPolicy?.version ? '沿用主盘叙事与资金行为退出；结构参考位不作为固定止盈止损。' : '依据新鲜行情、叙事与资金行为复核退出；无固定收益保证。',
+    evidence: { ...v, minimalEntryMode: true, paperEligible: eligible,
+      safety: { ...sourceSafety, auditMissing, auditComplete: auditMissing.length === 0, policyVersion: 'minimal_hard_safety_v1' },
+      entryThresholds: { minBuyers: 0, minHighProfit: 0, minSmartMoney: 0, minNetBuy: 0, minLiquidity: 0, maxTaxRate: .06 },
+      entryPlan, confirmedPolicy: { version: CONFIRMED_PAPER_VERSION, lossResponseVersion: LOSS_RESPONSE_VERSION, pulse: null, confirmation,
+        minimal: true, ignoredStrategyGates: ['叙事', '聪明钱', 'K 线', '成本比例', '恢复期证明'] } }
+  };
+}
 
 function quotePathStats(rows) {
   if (!Array.isArray(rows) || rows.length < 2 || rows.some(r=>!positive(r.price))) return null;
@@ -70,7 +152,7 @@ export function confirmPaperQuotes(history, token, nowMs) {
     rows: rows.map(r => ({ observedAt: new Date(r.at).toISOString(), price: r.price })) };
 }
 
-export function confirmedPaperEntry(row, { sourceSafety, pulse, quoteHistory, narrativeRecall, continuousPaperMode = false, memeExitMode = false, route = null, nowMs }) {
+export function confirmedPaperEntry(row, { sourceSafety, pulse, quoteHistory, narrativeRecall, continuousPaperMode = false, lossRepairMode = false, memeExitMode = false, route = null, nowMs }) {
   const v = row.evidence, price = row.token.price, costs = v.costAssumptions;
   const structural = route?.basis === 'ohlcv';
   const internal = route?.id === 'internal_launch';
@@ -125,10 +207,14 @@ export function confirmedPaperEntry(row, { sourceSafety, pulse, quoteHistory, na
     evidence: { ...v, costGate, exitPolicy:structuredClone(exitProfile), paperEligible: eligible, safety: { ...sourceSafety, auditMissing: [...sourceSafety.missing], auditComplete: !sourceSafety.missing.length, policyVersion: 'strict_fields_v1' },
       ...(recall ? { narrativeRecall: structuredClone(recall) } : {}),
       entryThresholds: { minBuyers: p.minBuyers, minHighProfit: 0, minSmartMoney, minNetBuy: p.minNetBuy, minLiquidity: p.minLiquidity },
-      ...(continuousPaperMode ? { accountPolicy: paperOperatingPolicy(true) } : {}),
+      ...(continuousPaperMode ? { accountPolicy: paperOperatingPolicy(true, lossRepairMode) } : {}),
       entryPlan, confirmedPolicy: { version: CONFIRMED_PAPER_VERSION, lossResponseVersion: LOSS_RESPONSE_VERSION, pulse: structuredClone(pulse || null), confirmation } } };
   if (continuousPaperMode) {
     result.entryLogic = result.entryLogic.replace('其他账户保护保留。', '全天候模拟：亏损、交易次数、固定冷却及持仓个数不触发停机；真实数据、买点、余额和旧信号去重仍需通过。');
+  }
+  if(costs.gasAdmissionPolicy===GAS_ACCOUNT_ONLY) {
+    result.entryLogic=result.entryLogic.replace('往返模型成本最多 5%', '不含 Gas 的费用门槛最多 5%');
+    result.entryLogic+=` ${GAS_ACCOUNT_ONLY_TEXT}`;
   }
   if (route) {
     result.label = route.label;
@@ -141,11 +227,13 @@ export function confirmedPaperEntry(row, { sourceSafety, pulse, quoteHistory, na
         && v.flow.smartMoneyCount >= minSmartMoney && v.flow.netBuyUsd >= minNetBuy && !route.reasons.length && !route.missing.length };
     result.evidence.entryThresholds = { ...result.evidence.entryThresholds, minSmartMoney, minNetBuy };
     if (structural) {
-      if (memeExitMode) result.entryLogic += ` ${STRUCTURE_COST_TEXT}`;
+      if (memeExitMode) result.entryLogic += ` ${costs.gasAdmissionPolicy===GAS_ACCOUNT_ONLY?GAS_ACCOUNT_ONLY_TEXT:STRUCTURE_COST_TEXT}`;
       result.evidence.entryPlan = { ...entryPlan,setup:route.label,summary:`${route.description} 结构失效位 ${priceText(stopPrice)}；不按固定持仓时间卖出。` };
       result.exitLogic = `结构止损 ${priceText(stopPrice)}（距离不超过 6%）；${EVIDENCE_HOLD_TEXT} 仅按新鲜观察价模拟成交，跳价可能超过止损线。`;
       if (reviewed) {
-        result.entryLogic += ' 报价必须向上并收复确认位；区间空间与扣成本盈亏比通过，不用固定 15% 假设证明利润。';
+        result.entryLogic += costs.gasAdmissionPolicy===GAS_ACCOUNT_ONLY
+          ? ' 报价必须向上并收复确认位；入场只检查结构与非 Gas 成本后的空间。包含 Gas 的净收益另行展示，即使为负也不代表预测可盈利。'
+          : ' 报价必须向上并收复确认位；区间空间与扣成本盈亏比通过，不用固定 15% 假设证明利润。';
         result.exitLogic = `真实结构加波动缓冲止损 ${priceText(stopPrice)}；连续两根入场后收盘线确认结构失效才作逻辑退出。历史结构参考位且扣成本盈利时兑现原仓 20%，2 / 3 倍各兑现 30%，余 20% 跟踪；无固定持仓期限。成本保护与波动回撤线只上调不放宽。`;
       }
     }
@@ -195,16 +283,19 @@ function lossReview(rounds) {
     automaticParameterChanges:false,note:'完整平仓后复盘，不按连亏次数停机；分批卖出不重复计数，日亏损、总亏损和同币保护仍有效。'};
 }
 
-export function confirmedAccountGate(account, nowMs, token = null, pulse = null, narrativeRecall = null, { continuousPaperMode = false, opportunity = null } = {}) {
+export function confirmedAccountGate(account, nowMs, token = null, pulse = null, narrativeRecall = null, { continuousPaperMode = false, opportunity = null, enforceLossGuards = false } = {}) {
   if (typeof continuousPaperMode !== 'boolean' || continuousPaperMode && (account.mode !== 'paper' || account.execution !== false
     || account.signing !== false || account.broadcast !== false || account.variant)) throw new TypeError('continuous mode is paper-main only');
   const day = Math.floor(nowMs / 86_400_000) * 86_400_000;
   const trades = account.trades.filter(t => t.atMs <= nowMs), buys = trades.filter(t => t.side === 'buy');
   const dailyPnl = trades.filter(t => t.atMs >= day).reduce((n, t) => n + t.realizedPnl, 0);
   const rounds = completedPaperRounds(trades), reasons = [], warnings = [];
-  const limits = continuousPaperMode ? warnings : reasons;
-  if (account.realizedPnl <= -account.initialCash * p.maxAccountLossRate) limits.push(continuousPaperMode ? '累计亏损超过原 10% 线，仅记录复盘、不停机' : '累计已实现亏损达到初始本金 10%，需复盘后人工处理');
-  if (dailyPnl <= -account.initialCash * p.dailyLossRate) limits.push(continuousPaperMode ? 'UTC 当日亏损超过原 3% 线，仅记录复盘、不停机' : 'UTC 当日已实现亏损达到初始本金 3%，暂停新仓');
+  const limits = !continuousPaperMode || enforceLossGuards ? reasons : warnings;
+  if (enforceLossGuards) reasons.push(...paperLossGuard(account, nowMs).reasons);
+  else {
+    if (account.realizedPnl <= -account.initialCash * p.maxAccountLossRate) limits.push(continuousPaperMode ? '累计亏损超过原 10% 线，仅记录复盘、不停机' : '累计已实现亏损达到初始本金 10%，需复盘后人工处理');
+    if (dailyPnl <= -account.initialCash * p.dailyLossRate) limits.push(continuousPaperMode ? 'UTC 当日亏损超过原 3% 线，仅记录复盘、不停机' : 'UTC 当日已实现亏损达到初始本金 3%，暂停新仓');
+  }
   if (!continuousPaperMode) {
     if (buys.filter(t => t.atMs >= day).length >= p.dailyEntries) reasons.push('达到每日 24 次开仓上限');
     if (buys.filter(t => t.atMs > nowMs - 3600_000).length >= p.hourlyEntries) reasons.push('达到每小时 6 次开仓上限');
@@ -227,6 +318,14 @@ export function confirmedAccountGate(account, nowMs, token = null, pulse = null,
         reasons.push('监控事件无效、过期或主模拟模式未批准');
       if(buys.some(t=>t.entryEvidence?.opportunity?.signalId===opportunity.signalId)
         ||lastBuy&&opportunity.signalAt<=lastBuy.atMs)reasons.push('这条监控事件已消费或早于上次买入，不重复买');
+    } else if(opportunity?.basis==='wallet_signal') {
+      if(!continuousPaperMode||token.chain!=='bsc'||opportunity.id!==walletSignalRoute({version:opportunity.entryPolicyVersion})
+        ||!isWalletSignalVersion(opportunity.entryPolicyVersion)||opportunity.signalReady!==true
+        ||!Number.isFinite(opportunity.signalAt)||opportunity.signalAt>nowMs||nowMs-opportunity.signalAt>30000
+        ||typeof opportunity.signalId!=='string'||!opportunity.signalId.startsWith(`${key}:${opportunity.entryPolicyVersion}:`))
+        reasons.push('集体钱包信号无效、过期或主模拟模式未批准');
+      if(buys.some(t=>t.entryEvidence?.opportunity?.signalId===opportunity.signalId)
+        ||lastBuy&&opportunity.signalAt<=lastBuy.atMs)reasons.push('钱包信号已消费，等待上次开仓后的新买盘');
     } else if (opportunity?.basis === 'ohlcv') {
       const at=opportunity.signalAt;
       if (!['multi_setup_v1','multi_setup_v2'].includes(opportunity.version) || !['external_breakout','external_pullback','external_trend'].includes(opportunity.id)
@@ -238,9 +337,10 @@ export function confirmedAccountGate(account, nowMs, token = null, pulse = null,
     if (!continuousPaperMode && (account.cooldowns[key] || 0) > nowMs) reasons.push('同币平仓后冷却三十分钟');
   }
   const review = lossReview(rounds);
-  if (continuousPaperMode) review.note = '全天候模拟：亏损与次数只用于复盘、不停机；真实数据、余额、旧信号去重及退出规则仍生效。';
+  if (enforceLossGuards) review.note = '持续扫描但保留亏损熔断：累计或当日亏损达到阈值后停止新仓；真实数据、余额、旧信号去重及退出规则仍生效。';
+  else if (continuousPaperMode) review.note = '全天候模拟：亏损与次数只用于复盘、不停机；真实数据、余额、旧信号去重及退出规则仍生效。';
   return { version: CONFIRMED_PAPER_VERSION, lossResponseVersion: LOSS_RESPONSE_VERSION,
-    operatingPolicy: paperOperatingPolicy(continuousPaperMode),
+    operatingPolicy: paperOperatingPolicy(continuousPaperMode, enforceLossGuards),
     allowed: reasons.length === 0, reasons, warnings, dailyPnl, dailyEntries: buys.filter(t => t.atMs >= day).length,
     lossReview: review, traderReview: traderReview(rounds, nowMs) };
 }

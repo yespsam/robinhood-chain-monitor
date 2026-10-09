@@ -1,4 +1,9 @@
 import { createHash } from "node:crypto";
+import { isMaterialFlapQuoteConfigurationChange, validFlapQuoteConfigurationLog } from "./flap-quote-generation.js";
+import { isCancelledFomoPlatformEvent } from "./monitor-source-policy.js";
+import { FLAP_PORTAL_VERIFIED_VERSION as FLAP_QUOTE_PORTAL_VERSION,
+  FLAP_PORTAL_VERIFIED_IMPLEMENTATION as FLAP_QUOTE_PORTAL_IMPLEMENTATION,
+  FLAP_PORTAL_VERIFIED_IMPLEMENTATION_HASH as FLAP_QUOTE_PORTAL_IMPLEMENTATION_HASH } from './flap-portal-pins.js';
 import { claimsGeniusSource, isGeniusOfficialEvent } from "./genius-source-policy.js";
 import { isGmgnFlowEvent } from "./gmgn-flow-signal.js";
 import { isGiwaEvent } from "./giwa-monitor.js";
@@ -7,6 +12,7 @@ import {
   FOUR_REGISTRY_FIRST_TOKEN_KIND,
   isFourRegistryCapabilityEvent as isRawFourRegistryCapabilityEvent,
   isFourRegistryFirstTokenEvent as isRawFourRegistryFirstTokenEvent,
+  fourRegistryEventSupersedesTrackedToken as rawFourRegistryEventSupersedesTrackedToken,
 } from "./four-registry-monitor.js";
 import {
   isKolSelfLaunchEvent,
@@ -147,9 +153,6 @@ const FLAP_QUOTE_SOURCE_ID = "flap_portal_quote_configuration";
 const FLAP_QUOTE_SOURCE_TRUST = "official_docs_bound_fingerprinted_portal_receipt";
 const FLAP_QUOTE_DOCS_URL = "https://docs.flap.sh/flap/developers/deployed-contract-addresses";
 const FLAP_QUOTE_PORTAL_RUNTIME_HASH = "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3";
-const FLAP_QUOTE_PORTAL_VERSION = "v5.23.1";
-const FLAP_QUOTE_PORTAL_IMPLEMENTATION = "0xAb8Ec926b6e113c2212aF152b086eA62d1FDced9";
-const FLAP_QUOTE_PORTAL_IMPLEMENTATION_HASH = "0x78653cdd7296d940ae531c86bc6700ae163f1f9dec002c2af3143c9ae6696a15";
 const FLAP_QUOTE_CONFIGURATION_SIGNATURE = "QuoteTokenConfigurationSet(address,(uint8,uint8,uint8,uint8,uint8))";
 const FLAP_QUOTE_CONFIGURATION_TOPIC = "0x9a1f38e55c729ebf0c45d240a00b09f0a79a715df7cfd6e8942bd3f8da839199";
 const FLAP_QUOTE_RISK = "A Portal quote configuration is platform capability evidence, not proof of token safety, liquidity depth, backing, or favorable execution.";
@@ -198,7 +201,7 @@ const FLAP_TRACKED_TOKEN_EVENT_KEYS = new Set([
   "pools", "mode", "structural", "security", "featureTokenProof", "delayedRecovery",
   "canonicalRevision", "launchEvidence", "sourceUrl", "activationSourceUrl", "explorerUrl", "launcherUrl",
   "observedAt", "canonicalSignalId", "canonicalSignalIds", "freshness", "tradingPriority",
-  "alertQueuedAt",
+  "alertQueuedAt", "featureActivationProof",
 ]);
 const FLAP_DIRECT_EVENT_KEYS = new Set([
   "type", "kind", "changeType", "eventKey", "platform", "chain", "chainId", "portal",
@@ -1640,6 +1643,17 @@ export function isStrictFourRegistryFirstTokenUpdate(source) {
   return Boolean(raw && isRawFourRegistryFirstTokenEvent(raw));
 }
 
+// The legacy first-token envelope carries no three-slot ordering authority.
+export function isStrictFourRegistryTrackedTokenUpdate(source) {
+  const raw = fourRegistryRawEvent(source);
+  return Boolean(raw?.featureTrackedToken === true && isRawFourRegistryFirstTokenEvent(raw));
+}
+
+export function fourRegistryEventSupersedesTrackedToken(capability, tokenEvent) {
+  const rawCapability = fourRegistryRawEvent(capability), rawToken = fourRegistryRawEvent(tokenEvent);
+  return Boolean(rawCapability && rawToken && rawFourRegistryEventSupersedesTrackedToken(rawCapability, rawToken));
+}
+
 export function isStrictFourRegistryDelayedRecovery(source) {
   const raw = fourRegistryRawEvent(source);
   return Boolean(raw?.delayedRecovery
@@ -2056,7 +2070,7 @@ export function isStrictFlapTrackedPoolTokenUpdate(source) {
     || mode.quoteAsset !== quoteAddress
     || !validFlapMetadataText(mode.quoteName, 256)
     || !validFlapDirectQuoteSymbol(mode.quoteSymbol)
-    || mode.componentMode !== `Flap ${mode.quoteSymbol} 新底池`
+    || mode.componentMode !== `Flap ${mode.quoteSymbol} ${Object.hasOwn(source, "featureActivationProof") ? "新配置" : "新底池"}`
     || mode.componentModeAlertEligible !== true
     || mode.featureActivationEligible !== true
     || mode.monitorOnly !== true) return false;
@@ -2094,6 +2108,24 @@ export function isStrictFlapTrackedPoolTokenUpdate(source) {
     || proof.confirmations < proof.requiredConfirmations
     || proof.pairAddress !== pool.pool
     || proof.pairKind !== pool.kind) return false;
+
+  if (Object.hasOwn(source, "featureActivationProof")) {
+    const activation = source.featureActivationProof;
+    const keys = new Set(["type", "transactionHash", "blockHash", "blockNumber",
+      "transactionIndex", "logIndex", "before", "after", "configurationLog"]);
+    if (!exactFlapKeys(activation, keys, [...keys])
+      || activation.type !== "verified_configuration_change"
+      || activation.transactionHash !== generation[3]
+      || activation.blockHash !== generation[2]
+      || activation.logIndex !== Number(generation[4])
+      || !Number.isSafeInteger(activation.blockNumber) || activation.blockNumber < 0
+      || !Number.isSafeInteger(activation.transactionIndex) || activation.transactionIndex < 0
+      || !isMaterialFlapQuoteConfigurationChange(activation.before, activation.after)
+      || !validFlapQuoteConfigurationLog(activation.configurationLog, quoteAddress, activation.after)
+      || activation.blockNumber > blockNumber
+      || (activation.blockNumber === blockNumber && (activation.transactionIndex > transactionIndex
+        || (activation.transactionIndex === transactionIndex && activation.logIndex >= logIndex)))) return false;
+  }
 
   const launchEvidenceKeys = new Set(["emitter", "topic", "token"]);
   const launchEvidence = Array.isArray(source.launchEvidence) && source.launchEvidence.length === 1
@@ -3712,6 +3744,17 @@ function isOfficialAiInternalEvent(source) {
   return source.platform == null && source.launchpad == null && source.repository == null;
 }
 
+// Provenance only: notification importance and freshness are evaluated by the
+// alert policy, independently from whether this news has a tradable target.
+export function isOfficialMonitoringNews(source) {
+  if (isOfficialAiInternalEvent(source) || isOfficialBinanceInternalEvent(source)) return true;
+  if (source?.type !== "uniswap_official_update" || source.source?.id !== "uniswap_blog") return false;
+  return [source.url, source.source.url].every(value => {
+    const url = parsedHttpsUrl(value);
+    return url?.hostname === "blog.uniswap.org" && !url.port;
+  });
+}
+
 function exactOfficialAiXUrl(value, handle, { statusAllowed = false } = {}) {
   const url = strictAiUrl(value);
   if (!url || url.hash) return false;
@@ -4791,6 +4834,7 @@ export function isFomoMonitorHealthUpdateAllowed(config, source, now = Date.now(
 }
 
 export function isMonitoringSourceEnabled(config, source) {
+  if (isCancelledFomoPlatformEvent(config, source)) return false;
   if (source?.type === "giwa_ecosystem_update") return config?.giwaMonitorEnabled === true && isGiwaEvent(source);
   if (source?.type === "gmgn_flow_surge" || source?.source?.id === "gmgn_flow_observed") {
     return config?.gmgnFlowMonitorEnabled === true && isGmgnFlowEvent(source)

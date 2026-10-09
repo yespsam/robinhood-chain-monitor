@@ -8,6 +8,7 @@ import {evaluatePaperStrategies,createPaperStrategyAccount,advancePaperStrategyA
 import {confirmedAccountGate} from '../src/paper-confirmed-policy.js';
 import {createPaperStrategyRuntime} from '../src/paper-strategy-runtime.js';
 import {renderNewsWire} from '../dashboard/news-wire.js';
+import {gasFixture} from './helpers/paper-gas-fixture.js';
 
 // Offline fixtures only; no test token is written to running data/.
 const NOW=Date.parse('2026-09-25T13:00:00Z'),CA=`0x${'a'.repeat(40)}`,iso=n=>new Date(n).toISOString();
@@ -23,6 +24,20 @@ const input=(listingTime=NOW-60000)=>({...modes,token,marketStatus:'ok',observed
   alphaSignal:alphaListingSignals(catalog(NOW,listingTime),NOW)[0],quoteHistory:[{...token,status:'ok',observedAt:iso(NOW)}]});
 const evaluate=i=>evaluatePaperStrategies(i)[0];
 const advance=(a,rows,extra={})=>advancePaperStrategyAccount(a,{...modes,evaluations:rows,nowMs:NOW,...extra});
+
+test('Alpha admits high gas on the main only and uses refreshed receipt samples for exit fees',()=>{
+  const i={...input(),chainGasAccounting:true,gasEstimate:gasFixture('bsc',NOW,2)},row=evaluate(i);
+  assert.equal(row.decision,'可模拟');assert.ok(row.evidence.costAssumptions.estimatedRoundTripCostRate>.4);
+  const a=advance(createPaperStrategyAccount({nowMs:NOW}),[row],{chainGasAccounting:true});
+  assert.equal(a.trades.length,1);const at=NOW+180000;
+  const rows=Array.from({length:24},(_,j)=>({time:at-(24-j)*60000,open:j===23?.9:1,close:j===23?.8:j===22?.9:1,high:1.01,low:j===23?.79:j===22?.89:.99,volume:j===23?200:100}));
+  const mark={...token,status:'ok',price:.8,observedAt:iso(at),structureChart:{...token,ready:true,rows}};
+  assert.equal(advance(a,[],{nowMs:at,marks:[mark]}).trades.length,1,'missing live exit gas cannot fabricate an exit fee');
+  const next=advance(a,[],{nowMs:at,marks:[{...mark,gasEstimate:gasFixture('bsc',at,.3)}]});
+  assert.equal(next.trades.length,2);const sale=next.trades[1];
+  assert.ok(Math.abs(sale.costsUsd-sale.grossUsd*.02-.3)<1e-10);
+  assert.equal(sale.exitEvidence.gasUsd,.3);assert.equal(validatePaperStrategyAccount(next),true);
+});
 
 test('official Alpha route also filters either tax strictly above 6%',()=>{
   for(const field of ['buyTax','sellTax']) {

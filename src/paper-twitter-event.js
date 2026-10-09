@@ -1,4 +1,5 @@
 import {gmgnFlowAddress} from './gmgn-flow-signal.js';
+import {narrativeNameMatch} from './narrative-name-match.js';
 
 export const TWITTER_EVENT_VERSION='twitter_event_candidate_v1';
 export const TWITTER_EVENT_TTL_MS=3600000;
@@ -25,11 +26,7 @@ const allowedDoc=d=>d?.authenticated===true&&['reviewed_big_kol','official_x','i
 const topicIds=text=>concepts.filter(c=>c.pattern.test(text)).map(c=>c.id);
 const terms=t=>[...new Set([t.name,t.symbol].filter(v=>typeof v==='string'&&v.length<=120))]
   .filter(v=>norm(v).length>=(/\p{Script=Han}/u.test(v)?2:3)&&!generic.has(norm(v)));
-const matchingTerm=(body,term)=>{
-  if(/\p{Script=Han}/u.test(term))return body.includes(term);
-  const escaped=term.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-  return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`,'iu').test(body);
-};
+const matchingTerm=narrativeNameMatch;
 const tags=t=>[...(Array.isArray(t.narrativeTags)?t.narrativeTags:[]),...(Array.isArray(t.raw?.tags)?t.raw.tags:[])]
   .filter(v=>typeof v==='string'&&v.length<=120).slice(0,40);
 const links=t=>[t.twitterUsername,t.website,t.raw?.twitter,t.raw?.twitter_username,t.raw?.link?.twitter_username,t.raw?.link?.website]
@@ -74,8 +71,10 @@ export function buildTwitterEventCandidates({documents=[],anchorDocuments=[],can
       const matchedConcepts=eventConcepts.filter(c=>topicIds(`${t.name||''} ${t.symbol||''}`).includes(c));
       const matchedTags=f.tags.filter(tag=>!generic.has(norm(tag))&&(eventConcepts.some(c=>topicIds(tag).includes(c))||matchingTerm(d.text,tag)));
       const mentioned=t.chain==='sol'?d.text.includes(t.address):d.chain===t.chain&&d.text.toLowerCase().includes(t.address);
-      if(!mentioned&&!matchedNames.length&&!matchedConcepts.length&&!matchedTags.length)continue;
       const exact=f.links.includes(id);
+      // A picture/short post need not repeat the community token's name. Its
+      // exact project permalink is an association, never author endorsement.
+      if(!mentioned&&!exact&&!matchedNames.length&&!matchedConcepts.length&&!matchedTags.length)continue;
       const anchor=f.links.map(k=>docMap.get(k)).find(p=>p&&p.at<d.at&&p.author.toLowerCase()===d.author.toLowerCase()
         &&!warning.test(p.text)&&eventConcepts.some(c=>topicIds(p.text).includes(c)&&[...matchedConcepts,...topicIds(matchedTags.join(' '))].includes(c)));
       const binding=mentioned?'direct_ca':exact?'project_permalink':anchor?'historical_topic_permalink':'name_tag_only';

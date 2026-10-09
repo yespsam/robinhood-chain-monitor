@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { Signature, Transaction } from "ethers";
 import {
   FOUR_CORE_ADDRESS,
   FOUR_CORE_INTERFACE,
@@ -19,6 +20,7 @@ import {
   isFourRegistryFirstTokenEvent,
   isFourRegistryProtocolCapabilityEvent,
   readFourRegistryInventory,
+  restoreFourLegacyTransaction,
 } from "../src/four-registry-monitor.js";
 import { createRpcPool } from "../src/bsc-launchpad-monitor.js";
 
@@ -570,7 +572,7 @@ test("post-baseline ModuleUpserted, TokenImplUpserted, and TagRegistered emit ex
   assert.deepEqual(Object.values(state.processedEvents).map((entry) => entry.subjectType), ["module", "token-impl", "tag"]);
 });
 
-test("a finalized new preset emits one capability update then only its first later TokenCreated confirmation", async (t) => {
+test("a finalized new preset emits one capability update then ordered distinct TokenCreated confirmations", async (t) => {
   const existing = preset("1778027615723");
   const added = preset("1778027615732", { name: "Lista Yield" });
   const provider = new FakeBscProvider({ head: 102 });
@@ -596,6 +598,7 @@ test("a finalized new preset emits one capability update then only its first lat
   assert.deepEqual(result.events.map((event) => event.type), [
     "platform_capability_update",
     "bsc_launchpad_update",
+    "bsc_launchpad_update",
   ]);
   assert.equal(result.events[0].kind, "four_registry_preset_added");
   assert.equal(result.events[0].lifecycleStage, "preset_added");
@@ -614,12 +617,15 @@ test("a finalized new preset emits one capability update then only its first lat
   assert.equal(result.events[1].lifecycleStage, "first_token_confirmed");
   assert.equal(result.events[1].lifecycleKey, result.events[0].lifecycleKey);
   assert.equal(isFourRegistryFirstTokenEvent(result.events[1]), true);
+  assert.deepEqual(result.events.slice(1).map((event) => event.featureTokenOrdinal), [1, 2]);
+  assert.equal(isFourRegistryFirstTokenEvent(result.events[2]), true);
+  assert.equal(result.events[2].featureFirstToken, false);
   assert.deepEqual(delivered.map((event) => event.eventKey), result.events.map((event) => event.eventKey));
 
   const state = await monitor.getState();
   assert.deepEqual(state.pendingConfirmations, {});
   assert.equal((await monitor.check()).events.length, 0, "cursor and deterministic keys suppress repeats");
-  assert.equal(delivered.length, 2);
+  assert.equal(delivered.length, 3);
 
   const restartedDelivered = [];
   const restarted = createFourRegistryMonitor({ dataDir: path.dirname(monitor.stateFile), fourRegistryConfirmations: 2 }, {
@@ -721,6 +727,70 @@ test("a non-canonical receipt proof emits nothing and does not advance the curso
   assert.deepEqual(Object.keys(after.presets), Object.keys(before.presets));
 });
 
+function malformedLegacyFixture(v = 28) {
+  // Synthetic public signature components: no wallet/key or signing call.
+  const r = "0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+  const s = `0x${"0".repeat(63)}1`;
+  const transaction = Transaction.from({ type: 0, chainId: Signature.getChainId(v),
+    nonce: 1, gasLimit: 100000n, gasPrice: 1000000000n, value: 0n,
+    to: FOUR_REGISTRY_ADDRESS, data: "0x1234", signature: { r, s, v } });
+  return { hash: transaction.hash, from: transaction.from, to: transaction.to,
+    nonce: "0x1", gas: "0x186a0", gasPrice: "0x3b9aca00", value: "0x0",
+    input: "0x1234", chainId: "", type: "0x0", r, s, v: `0x${v.toString(16)}`,
+    blockNumber: "0x65", blockHash: blockHash(101), transactionIndex: "0x1" };
+}
+
+test("legacy empty chainId is recovered from the signed transaction, not filled with BSC", () => {
+  for (const v of [27, 28, 147, 148]) {
+    const raw = malformedLegacyFixture(v), before = structuredClone(raw);
+    const restored = restoreFourLegacyTransaction(raw, raw.hash);
+    assert.equal(restored.chainId, v < 35 ? "0x0" : "0x38");
+    assert.equal(restored.index, 1);
+    assert.deepEqual(raw, before);
+  }
+});
+
+test("legacy recovery rejects altered payloads, identity, inclusion fields and foreign signatures", () => {
+  const raw = malformedLegacyFixture();
+  for (const change of [{ input: "0x1235" }, { input: undefined }, { from: CREATOR },
+    { hash: txHash("f") }, { chainId: null }, { type: "0x2" }, { gas: null },
+    { blockHash: null }, { transactionIndex: null }, { v: "0x25" }]) {
+    assert.throws(() => restoreFourLegacyTransaction({ ...raw, ...change }, raw.hash),
+      { code: "FOUR_REGISTRY_TRANSACTION_INVALID" });
+  }
+});
+
+test("canonical Four proof recovers malformed legacy RPC data through the same source", async (t) => {
+  const existing = preset("1778027615723"), added = preset("1778027615732");
+  const provider = new FakeBscProvider({ head: 102 });
+  provider.setSnapshot(100, [existing]);
+  const { monitor, delivered } = await fixture(t, provider);
+  await monitor.check();
+  provider.head = 103;
+  provider.setSnapshot(101, [existing, added]);
+  const raw = malformedLegacyFixture();
+  addUpsert(provider, added, 101, 1, 0, raw.hash);
+  provider.getTransaction = async () => { throw new Error("invalid value.chainId: empty string"); };
+  const originalSend = provider.send.bind(provider);
+  let rawReads = 0;
+  let badBlock = true;
+  provider.send = async (method, args) => {
+    if (method !== "eth_getTransactionByHash") return originalSend(method, args);
+    assert.deepEqual(args, [raw.hash]); rawReads++;
+    return { ...raw, blockHash: badBlock ? blockHash(100) : raw.blockHash };
+  };
+  const rejected = await monitor.check();
+  assert.equal(rejected.status, "degraded");
+  assert.equal(rejected.errorCode, "FOUR_REGISTRY_LOG_NOT_CANONICAL");
+  assert.equal(delivered.length, 0);
+  badBlock = false;
+  const result = await monitor.check();
+  assert.equal(result.status, "ok");
+  assert.ok(rawReads > 0);
+  assert.equal(delivered.length, 1);
+  assert.equal(delivered[0].evidence.canonical, true);
+});
+
 test("a changed finalized anchor hash performs bounded checkpoint recovery and replays post-baseline canonical events", async (t) => {
   const existing = preset("1778027615723");
   const provider = new FakeBscProvider({ head: 102 });
@@ -795,7 +865,7 @@ test("the monitor works through a createRpcPool-style raw eth_getLogs facade wit
   assert.ok(facade.rawFilters.every((filter) => Array.isArray(filter.address) && filter.address.length === 2));
 });
 
-test("Multicall3 keeps the default 4096-block catch-up scan within the fixed physical-host RPC budget", async (t) => {
+test("Multicall3 keeps the default 10000-block catch-up scan within the fixed physical-host RPC budget", async (t) => {
   const provider = new FakeBscProvider({ head: 102 });
   provider.setSnapshot(100, Array.from({ length: 7 }, (_, index) => preset(String(1778027615800 + index))));
   const dependencies = {
@@ -812,11 +882,12 @@ test("Multicall3 keeps the default 4096-block catch-up scan within the fixed phy
   assert.equal((await monitor.check()).status, "baseline");
   const before = monitor.getRpcTelemetry();
 
-  provider.head = 4_198;
+  provider.head = 10_102;
   const result = await monitor.check();
   const after = monitor.getRpcTelemetry();
   assert.equal(result.status, "ok");
-  assert.equal(result.finalizedBlock.number, 4_196);
+  assert.equal(result.finalizedBlock.number, 10_100);
+  assert.ok(provider.logQueries.every((filter) => filter.toBlock - filter.fromBlock + 1 <= 10_000));
   assert.equal(result.hasMore, false);
 
   const delta = (host, lane) => (
@@ -992,6 +1063,82 @@ test("physical-host telemetry exposes a 429 without advancing the durable cursor
   assert.equal(telemetry.hosts["limited-rpc.test"].rateLimited, 1);
   assert.equal(telemetry.hosts["limited-rpc.test"].lanes.log.rateLimited, 1);
   assert.ok(errors.some((message) => message.includes("limited-rpc.test log/getLogs rate limited")));
+});
+
+test("nested 429 waits for Retry-After without recursively splitting ranges or moving the cursor", async (t) => {
+  const provider = new FakeBscProvider({ head: 102 });
+  provider.setSnapshot(100, [preset("1778027615807")]);
+  let failing = false;
+  let attempts = 0;
+  const dependencies = verificationDependencies(provider);
+  dependencies.logVerificationProviders[0].provider = providerFacade(provider, {
+    getLogs: async (filter) => {
+      attempts += 1;
+      if (!failing) return provider.getLogs(filter);
+      const cause = Object.assign(new Error("log query rate limit exceeded"), { status: 429, retryAfterMs: 120_000 });
+      throw new Error("log query limit exceeded", { cause });
+    },
+  });
+  const timers = [];
+  dependencies.setTimeoutImpl = (callback, delay) => {
+    const handle = { callback, delay, unref() {} };
+    timers.push(handle);
+    return handle;
+  };
+  dependencies.clearTimeoutImpl = (handle) => { handle.cleared = true; };
+  const { monitor } = await fixture(t, provider, { dependencies });
+  assert.equal((await monitor.start()).status, "baseline");
+  failing = true;
+  provider.head = 112;
+  await timers.shift().callback();
+  assert.equal(attempts, 1, "quota errors cannot trigger range bisection");
+  assert.equal((await monitor.getState()).cursor.anchorBlock, 100);
+  assert.equal(timers.length, 1, "no overlapping retry timers");
+  assert.equal(timers[0].delay, 120_000, "wrapped provider Retry-After survives Registry error wrapping");
+  failing = false;
+  await timers.shift().callback();
+  assert.equal((await monitor.getState()).cursor.anchorBlock, 110);
+  assert.equal(timers[0].delay, 30_000, "normal cadence returns after a complete successful scan");
+  await monitor.stop();
+  assert.equal(timers[0].cleared, true, "stop cancels even a deferred retry");
+});
+
+test("scheduler respects non-429 shared cooldowns and backs off repeated unclassified failures", async (t) => {
+  const provider = new FakeBscProvider({ head: 102 });
+  provider.setSnapshot(100, [preset("1778027615807")]);
+  const timers = [];
+  let failure = Object.assign(new Error("providers cooling down"), { retryAfterMs: 180_000 });
+  const { monitor } = await fixture(t, provider, { dependencies: {
+    provider: providerFacade(provider, { getBlockNumber: async () => {
+      if (failure) throw failure;
+      return provider.head;
+    } }),
+    setTimeoutImpl: (callback, delay) => {
+      const handle = { callback, delay, unref() {} };
+      timers.push(handle);
+      return handle;
+    },
+    clearTimeoutImpl: (handle) => { handle.cleared = true; },
+  } });
+  assert.equal((await monitor.start()).status, "degraded");
+  assert.equal(timers[0].delay, 180_000);
+  failure = null;
+  await timers.shift().callback();
+  assert.equal(timers[0].delay, 30_000);
+  assert.equal((await monitor.getState()).cursor.anchorBlock, 100);
+  failure = new Error("network unavailable");
+  for (const expected of [30_000, 60_000, 60_000]) {
+    await timers.shift().callback();
+    assert.equal(timers.length, 1);
+    assert.equal(timers[0].delay, expected);
+  }
+  assert.equal((await monitor.getState()).cursor.anchorBlock, 100);
+  failure = null;
+  provider.head = 103;
+  await timers.shift().callback();
+  assert.equal(timers[0].delay, 30_000);
+  assert.equal((await monitor.getState()).cursor.anchorBlock, 101);
+  await monitor.stop();
 });
 
 test("a divergent Multicall3 state snapshot fails closed under the two fixed state readers", async (t) => {

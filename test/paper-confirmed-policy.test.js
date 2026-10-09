@@ -44,6 +44,23 @@ test('evidence hold has no stagnation, core or runner clock exit and keeps a ful
   }
 });
 
+test('minimal paper lane removes strategy gates but keeps fresh quote, sellability, tax and liquidity checks', () => {
+  const base = input();
+  const row = evaluate({ ...base, token: { ...base.token, liquidity: 1000, volume: 0 }, flow: {}, quoteHistory: [],
+    minimalEntryMode: true, evidenceHoldMode: true, continuousPaperMode: true });
+  assert.equal(row.decision, '可模拟');
+  assert.deepEqual(row.missing, []);
+  assert.equal(row.evidence.minimalEntryMode, true);
+  const account = advancePaperStrategyAccount(createPaperStrategyAccount({ nowMs: NOW }), {
+    evaluations: [row], nowMs: NOW, confirmedMode: true, continuousPaperMode: true, minimalEntryMode: true,
+  });
+  assert.equal(account.trades.filter(trade => trade.side === 'buy').length, 1);
+  const highTax = evaluate({ ...base, token: { ...base.token, buyTax: .061 }, flow: {}, quoteHistory: [],
+    minimalEntryMode: true, evidenceHoldMode: true, continuousPaperMode: true });
+  assert.equal(highTax.decision, '不买');
+  assert.ok(highTax.reasons.some(reason => /税率|买入税/.test(reason)));
+});
+
 test('evidence hold growing price can last 83 minutes without a time-based trim', () => {
   let a = openEvidence(); const quantity = held(a).quantity;
   for (const [ms, price] of [[120000, 1.03], [300000, 1.08], [1200000, 1.16], [83*60000, 1.3]]) a = step(a, price, ms);

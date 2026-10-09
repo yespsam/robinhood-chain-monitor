@@ -114,8 +114,10 @@ test('review segregates continuous entries from bounded entries instead of relab
 
 test('dashboard describes continuous mode without claiming that entry criteria or real-money locks were removed', async () => {
   const app = await readFile(new URL('../dashboard/app.js', import.meta.url), 'utf8');
-  assert.match(app, /全天候模拟已开启/);
-  assert.match(app, /满足买点且余额足够时交易/);
+  assert.match(app, /entryStatus\(data/);
+  assert.match(app, /focusAutoLabel.*entry.label/);
+  assert.match(app, /满足买点且余额足够时模拟交易/);
+  assert.match(app, /lossGuards\?\.enforced/);
   assert.match(app, /c.accountPolicyVersion === 'continuous_paper_v1'/);
   const server = await readFile(new URL('../scripts/dashboard-server.js', import.meta.url), 'utf8');
   assert.match(server, /continuousPaperMode: confirmedMode && process.env.PAPER_CONTINUOUS_MODE !== '0'/);

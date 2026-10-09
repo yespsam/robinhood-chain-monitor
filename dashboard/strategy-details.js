@@ -7,10 +7,12 @@ const safeLink = value => { try { const url = new URL(value); return url.protoco
 export function renderStrategyDetails(plan, narrative, position = null, decision = position?.entryEvidence?.traderDecision) {
   if(position?.memeExitPolicy || !position&&['meme_evidence_exit_v1','meme_evidence_exit_v2'].includes(plan?.effectiveExitPolicyVersion)){
     const status=position?.thesisStatus;
-    const recovery=position?.evidenceGapPolicy?.version==='evidence_gap_exit_v1';
+    const gapTracked=position?.evidenceGapPolicy?.version==='evidence_gap_exit_v1';
+    const recovery=gapTracked && position?.exitStatus?.evidenceGapExitEnabled!==false;
     const gap=position?.evidenceGap;
     const rows=[['实际退出方式',recovery?'叙事与资金行为退出，加已授权的证据中断退出；不按固定持仓时长卖出':'叙事与资金行为退出；无固定百分比、倍数或时间触发'],
       ...(recovery?[['证据中断保护',`连续五分钟无法取得量价与有效地址行为证据，须新鲜真实报价才模拟退出；有效证据恢复则清零。${gap?`已观测 ${Math.floor((gap.lastObservedAt-gap.since)/1000)} 秒。`:'尚未开始断流计时。'}`]]:[]),
+      ...(gapTracked&&!recovery?[['证据中断状态','仅记录数据缺口并继续补采；不会仅因中断满五分钟自动卖出。']]:[]),
       ...(plan?.entryPolicyVersion==='meme_structure_entry_v1'?[['实际买入规则','取消固定 6% 结构距离门槛；形态、报价与成本条件仍须通过']]:[]),
       ...(['alpha_event_entry_v1','monitored_event_entry_v1'].includes(plan?.entryPolicyVersion)?[['实际买入规则',plan.summary],['事件入口价格目标','不设固定止盈止损；不虚构历史结构目标或盈亏比']]:[]),
       ['当前持有 / 退出依据',position?.markStatus==='stale'?'报价过期，等待更新；不能确认仍有效':position?.exitStatus?.holdReason||'候选预案，尚未持仓'],

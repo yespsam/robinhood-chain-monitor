@@ -12,6 +12,7 @@ import {confirmedAccountGate} from '../src/paper-confirmed-policy.js';
 import {readyForPaperQuote} from '../src/paper-candidate-research.js';
 import {kolEvent} from './fixtures/paper-narrative-recall.js';
 import {renderNewsWire} from '../dashboard/news-wire.js';
+import {gasFixture} from './helpers/paper-gas-fixture.js';
 
 // Isolated, synthetic fixtures. Nothing here is a real monitoring signal.
 const NOW=Date.parse('2026-09-25T13:00:00Z'),CA=`0x${'a'.repeat(40)}`,OTHER=`0x${'b'.repeat(40)}`,iso=n=>new Date(n).toISOString();
@@ -25,6 +26,15 @@ const input=()=>({...modes,token:structuredClone(token),marketStatus:'ok',observ
   quoteHistory:[{...token,status:'ok',observedAt:iso(NOW)}]});
 const evaluate=i=>evaluatePaperStrategies(i)[0];
 const advance=(a,rows,extra={})=>advancePaperStrategyAccount(a,{...modes,evaluations:rows,nowMs:NOW,...extra});
+
+test('monitor event high Gas is accounted for, not rejected at the old five-percent gate',()=>{
+  const row=evaluate({...input(),chainGasAccounting:true,gasEstimate:gasFixture('bsc',NOW,2)});
+  assert.equal(row.decision,'可模拟');assert.equal(row.evidence.opportunity.id,'monitored_event');
+  assert.ok(row.evidence.costAssumptions.estimatedRoundTripCostRate>.4);
+  const a=advance(createPaperStrategyAccount({nowMs:NOW}),[row],{chainGasAccounting:true});
+  assert.equal(a.trades.length,1);assert.ok(a.positions[`bsc:${CA}`].entryCostsUsd>2);
+  assert.equal(validatePaperStrategyAccount(a),true);
+});
 
 test('monitor signal is a separate opt-in paper lane, not authenticated Twitter or safety evidence',()=>{
   const w=buildPaperNewsWire({gmgn:feed(),nowMs:NOW}),s=w.paperSignals[0];

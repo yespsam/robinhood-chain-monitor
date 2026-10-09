@@ -4,20 +4,29 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { createHash } from 'node:crypto';
 import { gzip } from 'node:zlib';
 import { readonlyMarket, GMGN_CHAINS } from '../src/gmgn-readonly-market.js';
 import { createResearchTeamReport, renderResearchTeamBrief } from '../src/ai-research-team.js';
 import { gmgnFlowAddress } from '../src/gmgn-flow-signal.js';
 import { buildPaperFlowEvidence, buildPaperNarrativeEvidence, loadPaperEvidence } from '../src/paper-strategy-evidence.js';
 import { createPaperStrategyRuntime } from '../src/paper-strategy-runtime.js';
+import {createInternalDepthProbe} from '../src/paper-internal-depth.js';
+import {createInnerTradeMonitor} from '../src/bsc-inner-trade-monitor.js';
+import {loadPrivateBscRpcConfig,privateBscRpcEndpoints} from '../src/bsc-private-rpc.js';
 import { createGmgnSocialMonitor } from '../src/gmgn-social-monitor.js';
 import { createAlphaCatalogMonitor } from '../src/binance-alpha-catalog.js';
 import { createSquareKeyStore } from '../src/square-key-store.js';
 import { createSquareKeyRoute } from '../src/square-key-route.js';
 import { createSquarePreview } from '../src/square-preview.js';
 import { createWalletLearningMonitor } from '../src/wallet-learning-monitor.js';
-import { loadPaperSession } from '../src/paper-account-session.js';
+import { loadPaperSession, loadEstimatedPaperSession, paperSessionLedgerFile } from '../src/paper-account-session.js';
+import { loadPaperLossGuardPolicy } from '../src/paper-loss-guard.js';
+import { ESTIMATED_COST_VERSION } from '../src/paper-estimated-cost.js';
 import { createTwitterNarrativeMonitor } from '../src/twitter-narrative-monitor.js';
+import { createEthGasMonitor } from '../src/paper-eth-gas.js';
+import { createChainGasMonitor } from '../src/paper-chain-gas.js';
+import { createJevResearchMonitor } from '../src/jev-research-pilot.js';
 
 const PROJECT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DASHBOARD = path.join(PROJECT, 'dashboard');
@@ -112,7 +121,7 @@ async function researchTeamSnapshot({ market, chain, address } = {}) {
   };
 }
 
-export function createDashboardServer({ host = '127.0.0.1', port = 4173, market = readonlyMarket, strategyRuntime = null, squareKeyStore = createSquareKeyStore({ publicationReceiptFile: path.join(PROJECT, 'data', 'binance-square-test-20260922.json') }) } = {}) {
+export function createDashboardServer({ host = '127.0.0.1', port = 4173, market = readonlyMarket, strategyRuntime = null, mainPaperSnapshot = null, squareKeyStore = createSquareKeyStore({ publicationReceiptFile: path.join(PROJECT, 'data', 'binance-square-test-20260922.json') }) } = {}) {
   const squareKeyRoute = createSquareKeyRoute(squareKeyStore);
   const server = http.createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store'); response.setHeader('X-Content-Type-Options', 'nosniff');
@@ -132,6 +141,10 @@ export function createDashboardServer({ host = '127.0.0.1', port = 4173, market 
         if (request.method !== 'GET') { json(response, { error: '只读接口' }, 405); return; }
         await strategyJson(request, response, strategyRuntime?.snapshot() || { status: 'loading', mode: 'paper', execution: false, signing: false, broadcast: false, account: null, strategies: [], lastError: '模拟引擎未启动' }); return;
       }
+      if(url.pathname==='/api/main-paper-state'){
+        if(request.method!=='GET'){json(response,{error:'原主盘只读'},405);return;}
+        json(response,mainPaperSnapshot?await mainPaperSnapshot():strategyRuntime?.snapshot());return;
+      }
       if (['/api/strategy-control', '/api/paper-cash-reset'].includes(url.pathname)) {
         if (request.method !== 'POST') { json(response, { error: '仅支持 POST' }, 405); return; }
         if ((request.headers.origin && request.headers.origin !== url.origin) || (request.headers['sec-fetch-site'] && !['same-origin', 'none'].includes(request.headers['sec-fetch-site']))) { json(response, { error: '不允许跨站修改' }, 403); return; }
@@ -150,7 +163,9 @@ export function createDashboardServer({ host = '127.0.0.1', port = 4173, market 
           json(response, await strategyRuntime.resetCash(payload.operationId)); return;
         }
         if (typeof payload?.enabled !== 'boolean' || Object.keys(payload).some(key => key !== 'enabled')) { json(response, { error: '只接受 enabled 布尔值' }, 400); return; }
-        json(response, await strategyRuntime.setEnabled(payload.enabled)); return;
+        try { json(response, await strategyRuntime.setEnabled(payload.enabled)); }
+        catch(error) { if(!['PAPER_ORDER_FEES_UNAVAILABLE','PAPER_LOSS_GUARD_ACTIVE'].includes(error.code))throw error;json(response,{error:error.message,code:error.code},409); }
+        return;
       }
       if (!['GET', 'HEAD'].includes(request.method)) { json(response, { error: '只读接口' }, 405); return; }
       if (url.pathname === '/api/paper-state') { json(response, await readPaperState()); return; }
@@ -196,15 +211,31 @@ export function createDashboardServer({ host = '127.0.0.1', port = 4173, market 
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   const port = Number(process.env.DASHBOARD_PORT || 4173);
-  const session = await loadPaperSession(path.join(PROJECT, 'data'));
-  const learner = createWalletLearningMonitor({ dataDir: path.join(PROJECT, 'data') });
+  const mainSession=await loadPaperSession(path.join(PROJECT,'data'));
+  const session = await loadEstimatedPaperSession(path.join(PROJECT,'data')) || mainSession;
+  const estimatedFeeMode=session?.costModel===ESTIMATED_COST_VERSION;
+  if(estimatedFeeMode){
+    if(!mainSession||session.legacy.file!==paperSessionLedgerFile(mainSession))throw Error('原主盘引用不一致，估算盘未启动');
+    const raw=await fs.readFile(path.join(PROJECT,'data',session.legacy.file),'utf8'),main=JSON.parse(raw);
+    if(createHash('sha256').update(raw).digest('hex')!==session.legacy.sha256||main.enabled!==false||Object.keys(main.account.positions).length)throw Error('原主盘快照已改变，估算盘未启动');
+  }
+  const learner = createWalletLearningMonitor({ dataDir: path.join(PROJECT, 'data'),
+    researchContextLoader:()=>strategyRuntime.walletResearchContext(),researchChartLoader:query=>readonlyMarket.kline(query) });
   const socialMonitor=process.env.PAPER_GMGN_SOCIAL_MONITOR==='0'?null:createGmgnSocialMonitor({dataDir:path.join(PROJECT,'data')});
   const alphaMonitor=process.env.PAPER_ALPHA_MONITOR==='0'?null:createAlphaCatalogMonitor({dataDir:path.join(PROJECT,'data')});
   const twitterNarrativeMonitor=createTwitterNarrativeMonitor({dataDir:path.join(PROJECT,'data')});
   const chain = session?.chain || process.env.PAPER_STRATEGY_CHAIN || 'robinhood';
   const confirmedMode = process.env.PAPER_PVP_MODE !== '0' && process.env.PAPER_EXPLORATORY_ENTRIES !== '0';
   const chains = session?.chains || (process.env.PAPER_STRATEGY_CHAINS ? process.env.PAPER_STRATEGY_CHAINS.split(',').map(value => value.trim()) : [chain, ...GMGN_CHAINS.filter(value => value !== chain)]);
-  const strategyRuntime = createPaperStrategyRuntime({ market: readonlyMarket, dataDir: path.join(PROJECT, 'data'), session, chain, chains,
+  const chainGasAccounting=!estimatedFeeMode && confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0';
+  const gasMonitor = estimatedFeeMode?null:chainGasAccounting?createChainGasMonitor({chains}):createEthGasMonitor();
+  const jevResearch = createJevResearchMonitor({ dataDir: path.join(PROJECT, 'data'), sessionId: session?.id || 'default' });
+  const internalRpcEndpoints=privateBscRpcEndpoints(loadPrivateBscRpcConfig({dataDir:path.join(PROJECT,'data')}));
+  const strategyRuntime = createPaperStrategyRuntime({ market: readonlyMarket, gasMonitor, jevResearch, chainGasAccounting,
+    internalDepthProbe:estimatedFeeMode?createInternalDepthProbe({dataDir:path.join(PROJECT,'data'),rpcEndpoints:internalRpcEndpoints}):null,
+    internalTradeMonitor:estimatedFeeMode?createInnerTradeMonitor({dataDir:path.join(PROJECT,'data'),rpcEndpoints:internalRpcEndpoints}):null,
+    discoveryMode:'gmgn_three_lists_v1', enforceLossGuards:await loadPaperLossGuardPolicy(path.join(PROJECT,'data'),session),
+    lossRepairMode:(estimatedFeeMode || chainGasAccounting) && process.env.PAPER_RECOVERY_MODE !== '0', dataDir: path.join(PROJECT, 'data'), session, chain, chains,
     twitterNarrativeSnapshot:twitterNarrativeMonitor.snapshot,
     allowExploratory: process.env.PAPER_EXPLORATORY_ENTRIES !== '0', compoundEntries: process.env.PAPER_COMPOUNDING !== '0',
     pvpMode: process.env.PAPER_PVP_MODE !== '0',
@@ -213,20 +244,30 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
     confirmedMode, fixedEntryUsd: confirmedMode ? 10 : null, evidenceHoldMode: confirmedMode,
     tradeReviewEvery: 100,
     higherFrequencyResearch: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0',
+    minimalEntryMode: confirmedMode && process.env.PAPER_MINIMAL_ENTRY === '1',
+    evidenceGapExitMode: process.env.PAPER_EVIDENCE_GAP_EXIT !== '0',
     memeExitMode: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0',
     recoveryMode: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0' && process.env.PAPER_RECOVERY_MODE !== '0',
     continuousPaperMode: confirmedMode && process.env.PAPER_CONTINUOUS_MODE !== '0',
     opportunityMode: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0',
-    thesisExitExperiment: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_EXIT_COMPARISON !== '0',
-    activeEntrySampling: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_EXIT_COMPARISON !== '0' && process.env.PAPER_ACTIVE_ENTRY_SAMPLING !== '0',
-    upsideMode: process.env.PAPER_PVP_MODE === '0' && process.env.PAPER_UPSIDE_MODE !== '0', learningLoader: learner.snapshot });
-  const app = createDashboardServer({ port, strategyRuntime });
+    thesisExitExperiment: !estimatedFeeMode && confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_EXIT_COMPARISON !== '0',
+    activeEntrySampling: !estimatedFeeMode && confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_EXIT_COMPARISON !== '0' && process.env.PAPER_ACTIVE_ENTRY_SAMPLING !== '0',
+    upsideMode: process.env.PAPER_PVP_MODE === '0' && process.env.PAPER_UPSIDE_MODE !== '0',
+    learningLoader: estimatedFeeMode ? learner.tradingEvidence : learner.snapshot,
+    learningReportSnapshot: estimatedFeeMode ? learner.snapshot : null });
+  const mainPaperSnapshot=estimatedFeeMode?async()=>{
+    const old=JSON.parse(await fs.readFile(path.join(PROJECT,'data',paperSessionLedgerFile(mainSession)),'utf8'));
+    return {status:'retained_readonly',mode:'paper',execution:false,signing:false,broadcast:false,
+      enabled:old.enabled,session:old.session,account:old.account,updatedAt:old.account.updatedAt,
+      costModel:'原主盘只读保留；估算费用测试盘为独立账本，不合并成绩'};
+  }:null;
+  const app = createDashboardServer({ port, strategyRuntime,mainPaperSnapshot });
   app.listen().then(async address => {
     console.log(`yesp atm 模拟盘：http://${address.address}:${address.port}（仅模拟盘）`);
     try { await strategyRuntime.start(); await socialMonitor?.start(); await alphaMonitor?.start(); twitterNarrativeMonitor.start(); } catch (error) { console.error(`模拟引擎/消息发现启动失败：${error.message}`); }
     try { await learner.start(); } catch { console.error('钱包学习启动失败，原模拟引擎继续运行；请检查学习账本及锁'); }
   }).catch(error => { console.error(`dashboard failed: ${error.message}`); process.exitCode = 1; });
   let closing = false;
-  const shutdown = async () => { if (closing) return; closing = true; await Promise.all([app.close(), strategyRuntime.stop(), learner.stop(),socialMonitor?.stop(),alphaMonitor?.stop(),twitterNarrativeMonitor.stop()]); };
+  const shutdown = async () => { if (closing) return; closing = true; await Promise.all([app.close(), strategyRuntime.stop(), learner.stop(),socialMonitor?.stop(),alphaMonitor?.stop(),twitterNarrativeMonitor.stop(),gasMonitor?.stop()]); await readonlyMarket.close(); };
   process.once('SIGTERM', shutdown); process.once('SIGINT', shutdown);
 }

@@ -1,0 +1,201 @@
+{
+  "version": 1,
+  "group": "bsc",
+  "mode": "public_wallet_read_only",
+  "report": "docs/operator-reference-followups/2026-10-07-1222-bsc-deferred.md",
+  "evidence": "docs/operator-reference-followups/2026-10-07-1222-bsc-deferred.json",
+  "question": "BSC A/B 上次成功活动检查后的记录，能否由本地采集补齐并连接原交易检查点？共享监控资源忙碌时停止新增请求。",
+  "startedAt": "2026-10-07T04:22:52.098Z",
+  "triggeredAt": "2026-10-07T04:22:52.098Z",
+  "completedAt": "2026-10-07T04:23:29Z",
+  "configChecked": null,
+  "gmgnConfigChecks": 0,
+  "gmgnBusinessRequests": 0,
+  "gmgnBusinessDispatched": 0,
+  "gmgnSucceeded": 0,
+  "gmgnFailed": 0,
+  "rpcRequests": 0,
+  "newRows": 0,
+  "uniqueCa": 0,
+  "oneToOnePairs": 0,
+  "newAddresses": 0,
+  "status": "deferred_shared_resources_busy",
+  "summary": "本轮无新增证据，保留上轮结论。BSC A/B 在只读地址库和两份缓存无匹配；共享账户有2个活动和2个排队请求，包含FOMO优先级1采集，研究让路，未发GMGN/RPC。活动覆盖缺口约109小时，不代表钱包没有交易；保留旧交易和分页检查点，下轮Solana。",
+  "classification": "观察",
+  "resourceSnapshot": {
+    "checkedAt": "2026-10-07T04:23:16.909Z",
+    "slot": {
+      "version": 1,
+      "startedAt": 1791346995902,
+      "active": [
+        {
+          "token": "6ebffe4b-55ad-4a15-a81a-1720b6aa4f5f",
+          "pid": 47431,
+          "priority": 1,
+          "processAlive": true
+        },
+        {
+          "token": "3b541806-db1b-4b40-b234-12a2c7503e71",
+          "pid": 47431,
+          "priority": 0,
+          "processAlive": true
+        }
+      ]
+    },
+    "queue": [
+      {
+        "version": 1,
+        "token": "bd2e44dc-f906-4c08-b680-d1221596e683",
+        "pid": 1982,
+        "queuedAt": 1791346994940,
+        "expiresAt": 1791347024940,
+        "priority": 0,
+        "processAlive": true
+      },
+      {
+        "version": 1,
+        "token": "eb844b6a-f87f-452b-a456-8f70d8edf3ae",
+        "pid": 1978,
+        "queuedAt": 1791346996324,
+        "expiresAt": 1791347026324,
+        "priority": 0,
+        "processAlive": true
+      }
+    ],
+    "cooldown": {
+      "version": 1,
+      "rateLimitedUntil": "2026-09-21T17:41:38.000Z",
+      "checkedAt": "2026-09-21T17:41:07.491Z",
+      "reason": "gmgn_cli_rate_limit"
+    }
+  },
+  "localSnapshot": {
+    "checkedAt": "2026-10-07T04:23:17.494Z",
+    "caches": [
+      {
+        "path": "data/wallet-learning-state.json",
+        "updatedAt": "2026-10-07T04:22:49.784Z",
+        "matches": [
+          {
+            "id": "A",
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "found": false
+          },
+          {
+            "id": "B",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "found": false
+          }
+        ]
+      },
+      {
+        "path": "data/gmgn-flow-state.json",
+        "updatedAt": "2026-10-07T04:23:15.691Z",
+        "matches": [
+          {
+            "id": "A",
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "found": false
+          },
+          {
+            "id": "B",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "found": false
+          }
+        ]
+      }
+    ],
+    "heartbeats": [
+      {
+        "name": "main",
+        "version": 1,
+        "producer": "main",
+        "pid": 17133,
+        "startedAt": "2026-10-03T07:41:16.954Z",
+        "updatedAt": "2026-10-07T04:23:07.501Z",
+        "sequence": 11123
+      },
+      {
+        "name": "fomo",
+        "version": 1,
+        "producer": "fomo",
+        "pid": 47431,
+        "startedAt": "2026-10-03T16:48:52.895Z",
+        "updatedAt": "2026-10-07T04:22:58.458Z",
+        "sequence": 10025
+      },
+      {
+        "name": "bsc",
+        "version": 1,
+        "producer": "bsc",
+        "pid": 1821,
+        "startedAt": "2026-10-06T18:01:09.711Z",
+        "updatedAt": "2026-10-07T04:23:08.142Z",
+        "sequence": 1214
+      }
+    ],
+    "sqlite": {
+      "connection": "readonly",
+      "filter": "Exact BSC A/B public wallets",
+      "rows": []
+    },
+    "baselines": [
+      {
+        "path": "docs/operator-clusters-2026-10-02.json",
+        "hashMatches": true
+      },
+      {
+        "path": "docs/operator-reference-learning-2026-10-02.json",
+        "hashMatches": true
+      },
+      {
+        "path": "docs/operator-reference-analysis-2026-10-02.json",
+        "hashMatches": true
+      }
+    ],
+    "originalMainLedgerSha256": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36"
+  },
+  "coverage": [
+    {
+      "id": "A",
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "lastTrade": {
+        "at": "2026-10-02T11:08:09.000Z",
+        "hash": "0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868",
+        "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+        "side": "sell"
+      },
+      "lastSuccessfulActivityCheckAt": "2026-10-02T15:20:41.897Z",
+      "hoursSinceSuccessfulCheck": 109.0464175,
+      "profileCheckedAt": "2026-10-02T10:45:59.081Z",
+      "olderPageRemaining": true
+    },
+    {
+      "id": "B",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "lastTrade": {
+        "at": "2026-10-02T11:08:09.000Z",
+        "hash": "0x276ed1a8787a851f66bf341a62bd62728028d53b19a22ea8a69fa6b3f7857f6d",
+        "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+        "side": "sell"
+      },
+      "lastSuccessfulActivityCheckAt": "2026-10-02T15:20:52.958Z",
+      "hoursSinceSuccessfulCheck": 109.043345,
+      "profileCheckedAt": "2026-10-02T10:46:12.148Z",
+      "olderPageRemaining": true
+    }
+  ],
+  "dayReview": {
+    "reported": true,
+    "skipped": true
+  },
+  "configCheckSkippedReason": "没有执行GMGN命令或业务请求，仅读本地队列、缓存、公共地址库及检查点。",
+  "nextGroup": "sol",
+  "nextQuestion": "从D/E新resumeCursor继续补旧分页，D已到2026-10-03T05:58:36Z、E到05:33:46Z，仍需接回2026-10-02T13:04:31Z旧检查点。最新头页未刷新；另有E PRINTRCAT库存缺口和BE/SPYx三笔同哈希多CA归因待有界回执核验，不能相加各腿收益。",
+  "limits": [
+    "当前资源快照不能证明整个109小时均因队列阻塞；该数字仅为距上次成功活动检查的时长。",
+    "本地无匹配不等于地址没有链上交易，旧同步行为不能代替当前信号。",
+    "当前心跳只证明本轮观察时点，不证明全天连续在线。",
+    "没有新增收益、叙事、同控或操纵结论。"
+  ]
+}

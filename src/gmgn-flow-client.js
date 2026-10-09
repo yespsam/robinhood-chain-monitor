@@ -4,11 +4,14 @@ import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createGmgnAccountGate } from './gmgn-account-gate.js';
 import { GMGN_READONLY_INTERVAL_MS } from './gmgn-readonly-pacing.js';
+import {classifyGmgnReadError} from './gmgn-read-error.js';
 
 export const GMGN_FLOW_FULL_CHAINS = Object.freeze(["sol", "bsc", "base", "eth", "robinhood"]);
 export const GMGN_FLOW_HOT_SEARCH_CHAINS = Object.freeze(["sol", "bsc", "base", "eth", "monad", "megaeth", "hyperevm", "tron"]);
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
-// All client instances in this process share one queue, including different chains.
+// Share actual dispatch spacing/cooldown. The account gate owns concurrency and
+// priority; a process-wide response FIFO must not hide feed requests behind a
+// slow profile read before they can even reach that gate.
 const GLOBAL_SCHEDULER = { tail: Promise.resolve(), lastStartedAt: null, rateLimitedUntil: 0 };
 
 function failure(code, message, details = {}) {
@@ -200,19 +203,26 @@ export function createGmgnFlowClient(config = {}, dependencies = {}) {
   function enqueue(args, configuration = false, { priority = 0, onRequestStart } = {}) {
     if (stopped) return Promise.reject(stoppedError());
     const controller = new AbortController();
-    const job = { controller, promise: null, execution: null, started: false };
+    const job = { controller, promise: null, execution: null, started: false, gated:!!accountGate&&!configuration };
     jobs.add(job);
     const work = async () => {
       job.started = true;
       const signal = controller.signal;
-      await checkCooldown(signal);
-      const remaining = scheduler.lastStartedAt === null ? 0 : Number(scheduler.lastStartedAt) + interval - Number(now());
-      if (remaining > 0) await pause(remaining, signal);
-      await checkCooldown(signal);
-      scheduler.lastStartedAt = Number(now());
       try {
-        onRequestStart?.(Number(now()));
-        const result = await runChild(args, signal);
+        // Only serialize admission to the child, not its network response.
+        // Free remains serial in the shared gate; Plus retains its bounded
+        // leases and reserved critical slot. Explicit slower pacing survives.
+        const dispatch=(scheduler.dispatchTail||Promise.resolve()).catch(()=>{}).then(async()=>{
+          await checkCooldown(signal);
+          const remaining=scheduler.lastStartedAt===null?0:Number(scheduler.lastStartedAt)+interval-Number(now());
+          if(remaining>0)await pause(remaining,signal);
+          await checkCooldown(signal);
+          scheduler.lastStartedAt=Number(now());
+          onRequestStart?.(Number(now()));
+          return {response:runChild(args,signal)};
+        });
+        scheduler.dispatchTail=dispatch.then(()=>{},()=>{});
+        const result = await (await dispatch).response;
         assertActive(signal);
         if (Buffer.byteLength(result.stdout) > MAX_OUTPUT_BYTES || Buffer.byteLength(result.stderr) > MAX_OUTPUT_BYTES) {
           throw failure("GMGN_RESPONSE_TOO_LARGE", "GMGN CLI output exceeds 4 MiB");
@@ -241,12 +251,17 @@ export function createGmgnFlowClient(config = {}, dependencies = {}) {
         // Never expose stdout, stderr, command strings, credentials, or provider errors.
         if (error?.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") throw failure("GMGN_RESPONSE_TOO_LARGE", "GMGN CLI output exceeds 4 MiB");
         if (error?.killed || error?.code === "ETIMEDOUT") throw failure("GMGN_CLI_TIMEOUT", "GMGN CLI request timed out");
+        const category=classifyGmgnReadError(error);
+        if(category)throw failure(category,category);
         throw failure(configuration ? "GMGN_CONFIG_FAILED" : "GMGN_CLI_FAILED", configuration ? "GMGN CLI configuration check failed" : "GMGN CLI request failed");
       }
     };
-    const execution = scheduler.tail.catch(() => {}).then(() => accountGate && !configuration ? accountGate(work,controller.signal,{priority}) : work());
+    const execution = accountGate && !configuration ? accountGate(work,controller.signal,{priority})
+      : scheduler.tail.catch(() => {}).then(work);
     job.execution = execution;
-    scheduler.tail = execution.catch(() => {});
+    // Legacy/no-gate callers still serialize complete responses. Gated calls
+    // must not lengthen the fallback/configuration FIFO.
+    if(!accountGate||configuration)scheduler.tail = execution.catch(() => {});
     job.promise = new Promise((resolve, reject) => {
       const abort = () => reject(stoppedError());
       controller.signal.addEventListener("abort", abort, { once: true });
@@ -319,6 +334,26 @@ export function createGmgnFlowClient(config = {}, dependencies = {}) {
       return request(['portfolio', 'activity', '--chain', chain, '--wallet', wallet, '--limit', String(limit),
         ...(cursor === null ? [] : ['--cursor', cursor])]);
     },
+    createdTokens(chain, wallet, options = {}) {
+      chainValue(chain, ['sol', 'bsc', 'base', 'eth']); addressValue(chain, wallet);
+      const allowed = { orderBy: ['market_cap', 'token_ath_mc'], direction: ['asc', 'desc'], migrateState: ['migrated', 'non_migrated'] };
+      if (options === null || typeof options !== 'object' || Array.isArray(options)
+        || ![Object.prototype, null].includes(Object.getPrototypeOf(options))
+        || Reflect.ownKeys(options).some(key => typeof key !== 'string' || !Object.hasOwn(allowed, key))) {
+        throw failure('GMGN_INVALID_ARGUMENT', 'Invalid created-token options');
+      }
+      for (const [key, values] of Object.entries(allowed)) {
+        if (options[key] !== undefined && !values.includes(options[key])) {
+          throw failure('GMGN_INVALID_ARGUMENT', 'Invalid created-token option value');
+        }
+      }
+      // Public creator history uses the same background queue and cooldown as
+      // profiles. Never introduce a signing endpoint or elevated priority here.
+      return request(['portfolio', 'created-tokens', '--chain', chain, '--wallet', wallet,
+        ...(options.orderBy === undefined ? [] : ['--order-by', options.orderBy]),
+        ...(options.direction === undefined ? [] : ['--direction', options.direction]),
+        ...(options.migrateState === undefined ? [] : ['--migrate-state', options.migrateState])]);
+    },
     hotSearches(chains) {
       if (!Array.isArray(chains) || !chains.length || chains.length > GMGN_FLOW_HOT_SEARCH_CHAINS.length) {
         throw failure("GMGN_INVALID_ARGUMENT", "GMGN hot-search chains must be a nonempty bounded list");
@@ -333,7 +368,8 @@ export function createGmgnFlowClient(config = {}, dependencies = {}) {
       await Promise.allSettled(pending.map((job) => job.promise));
       // Active work can be between its child callback and durable cooldown write.
       // Finish that write before shutdown; abandoned queued work starts no child.
-      await Promise.allSettled(pending.filter((job) => job.started).map((job) => job.execution));
+      // Cancelled gate tickets/leases also have filesystem cleanup to drain.
+      await Promise.allSettled(pending.filter((job) => job.started||job.gated).map((job) => job.execution));
     },
   };
 }

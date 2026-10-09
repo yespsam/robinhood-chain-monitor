@@ -2,9 +2,25 @@
 export const PAPER_SIZING_VERSION = 'cash_fraction_v1';
 export const PAPER_FIXED_SIZING_VERSION = 'fixed_ten_v1';
 export const PAPER_RECOVERY_SIZING_VERSION = 'cash_tenth_cap_ten_v1';
+export const PAPER_INTERNAL_DEPTH_SIZING_VERSION = 'internal_curve_cash_tenth_v1';
 export const PAPER_FIXED_ENTRY_USD = 10;
 export const PAPER_LIQUIDITY_CAP_RATE = .001;
 const validMoney = n => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= Number.MAX_SAFE_INTEGER / 100;
+
+// A bounded proposal, NOT permission to fill. The internal-only entry/ledger
+// must verify a fresh exact-order curve proof. Preserve the provider's liquidity
+// value (including null); never invent USD reserves to reuse the external cap.
+export function paperInternalDepthPositionSize({cash,liquidity,baseEntryUsd,maxBudgetUsd=null}={}) {
+  if(!validMoney(cash)||!([2,4,5,8].includes(baseEntryUsd))
+    ||liquidity!==null&&(!validMoney(liquidity)||liquidity<=0)
+    ||maxBudgetUsd!==null&&!validMoney(maxBudgetUsd))return null;
+  const requestedBudgetUsd=Math.min(10,cash*.1);
+  const budgetUsd=Math.floor((Math.min(requestedBudgetUsd,maxBudgetUsd??cash)+1e-9)*100)/100;
+  return {version:PAPER_INTERNAL_DEPTH_SIZING_VERSION,mode:'internal_curve_proposal',fixedEntryUsd:null,
+    cashBeforeEntry:cash,entryFraction:.1,maxEntryUsd:10,liquidityUsd:liquidity,
+    liquidityCapRate:null,liquidityCapUsd:null,requiresOrderDepth:true,
+    requestedBudgetUsd,signalBudgetCapUsd:maxBudgetUsd,budgetUsd};
+}
 
 export function paperPositionSize({ cash, liquidity, baseEntryUsd, maxBudgetUsd = null, fixedEntryUsd = null, recoverySizing = false } = {}) {
   if (!validMoney(cash) || !validMoney(liquidity) || liquidity <= 0 || ![2, 4, 5, 8].includes(baseEntryUsd)
@@ -38,13 +54,14 @@ export function paperPositionSize({ cash, liquidity, baseEntryUsd, maxBudgetUsd 
 export function validPaperPositionSize(size, baseEntryUsd, budgetUsd, liquidity) {
   if (!size || size.liquidityUsd !== liquidity || size.budgetUsd !== budgetUsd || budgetUsd <= 0) return false;
   if (size.version !== PAPER_FIXED_SIZING_VERSION && size.fixedEntryUsd != null) return false;
-  const expected = paperPositionSize({ cash: size.cashBeforeEntry, liquidity, baseEntryUsd, maxBudgetUsd: size.signalBudgetCapUsd,
+  const expected = (size.version===PAPER_INTERNAL_DEPTH_SIZING_VERSION?paperInternalDepthPositionSize:paperPositionSize)({ cash: size.cashBeforeEntry, liquidity, baseEntryUsd, maxBudgetUsd: size.signalBudgetCapUsd,
     fixedEntryUsd: size.version === PAPER_FIXED_SIZING_VERSION ? size.fixedEntryUsd : null,
     recoverySizing:size.version===PAPER_RECOVERY_SIZING_VERSION });
   return !!expected && Object.entries(expected).every(([key, value]) => size[key] === value);
 }
 
 export function paperSizingText(size) {
+  if(size?.version===PAPER_INTERNAL_DEPTH_SIZING_VERSION)return `内盘曲线预算：现金的 10%、最高 10U，本笔 ${size.budgetUsd.toFixed(2)}U（含模型成本）；按本单真实曲线试算核验，不将榜单字段当成已核美元储备。`;
   if(size?.version===PAPER_RECOVERY_SIZING_VERSION)return `恢复期试仓：可用现金的 10%、最高 10U，本笔 ${size.budgetUsd.toFixed(2)}U（含买入模型成本），不使用浮盈或自动补款。`;
   if (size?.version === PAPER_FIXED_SIZING_VERSION) return `固定单笔 ${size.fixedEntryUsd.toFixed(2)} U：本笔总预算 $${size.budgetUsd.toFixed(2)}（含买入模型成本）；余额或流动性额度不足则不下单，不自动缩小或补款。`;
   return size ? `滚仓：可用余额 $${size.cashBeforeEntry.toFixed(2)} × ${(size.entryFraction * 100).toFixed(0)}%，本笔总预算 $${size.budgetUsd.toFixed(2)}（含模型成本；不超过已观察流动性的 0.1%）。` : '';

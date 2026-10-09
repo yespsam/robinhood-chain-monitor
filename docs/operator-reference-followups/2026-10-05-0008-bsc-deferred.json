@@ -1,0 +1,171 @@
+{
+  "version": 1,
+  "mode": "read_only_incremental_research",
+  "group": "bsc",
+  "report": "docs/operator-reference-followups/2026-10-05-0008-bsc-deferred.md",
+  "evidence": "docs/operator-reference-followups/2026-10-05-0008-bsc-deferred.json",
+  "question": "BSC A/B 的本地新增活动能否接上原检查点并补充跨 CA 同步？共享队列忙碌时不追加网络采集。",
+  "startedAt": "2026-10-04T16:08:48.450Z",
+  "triggeredAt": "2026-10-04T16:08:48.450Z",
+  "completedAt": "2026-10-04T16:12:59Z",
+  "configChecked": null,
+  "gmgnConfigChecks": 0,
+  "gmgnBusinessRequests": 0,
+  "gmgnBusinessDispatched": 0,
+  "gmgnSucceeded": 0,
+  "gmgnFailed": 0,
+  "rpcRequests": 0,
+  "newRows": 0,
+  "uniqueCa": 0,
+  "oneToOnePairs": 0,
+  "newAddresses": 0,
+  "status": "deferred_shared_queue_busy",
+  "summary": "本轮无新增证据，保留上轮结论。A/B 在只读地址库、钱包学习及资金流缓存中均无匹配；共享队列仍有 FOMO/模拟盘工作，研究未发网络请求。保留最后交易标识与分页缺口，下一轮切换 Solana。",
+  "priority": 0,
+  "client": "src/gmgn-flow-client.js (not invoked)",
+  "networkDeferred": true,
+  "reason": "no_matching_local_reference_rows_and_shared_account_busy",
+  "queueSnapshot": {
+    "at": "2026-10-04T16:09:48.164Z",
+    "waiting": [
+      {
+        "pid": 6570,
+        "priority": 0,
+        "waitMs": 5357
+      }
+    ],
+    "active": [
+      {
+        "pid": 47431,
+        "priority": 1
+      },
+      {
+        "pid": 6570,
+        "priority": 0
+      }
+    ]
+  },
+  "localRuntimeSnapshot": {
+    "at": "2026-10-04T16:10:37.383Z",
+    "pending": {
+      "count": 0,
+      "oldestWaitMs": 0,
+      "byKind": {}
+    },
+    "active": {
+      "count": 2,
+      "oldestWaitMs": 2030,
+      "byKind": {
+        "token:info": 2
+      }
+    },
+    "limits": {
+      "concurrency": 6,
+      "normalConcurrency": 4,
+      "admissionOnly": true
+    },
+    "cadenceVersion": "paper_compute_memo_v2"
+  },
+  "localLookup": {
+    "database": "data/wallet-address-library.sqlite",
+    "connection": "sqlite3 -readonly",
+    "matchingAddresses": {
+      "A": 0,
+      "B": 0
+    },
+    "walletLearning": {
+      "updatedAt": "2026-10-04T16:09:56.910Z",
+      "matches": {
+        "A": 0,
+        "B": 0
+      }
+    },
+    "flowCache": {
+      "updatedAt": "2026-10-04T16:10:33.373Z",
+      "matches": {
+        "A": 0,
+        "B": 0
+      }
+    }
+  },
+  "preservedCheckpoints": [
+    {
+      "id": "A",
+      "chain": "bsc",
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "lastTrade": {
+        "at": "2026-10-02T11:08:09.000Z",
+        "hash": "0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868",
+        "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+        "side": "sell"
+      },
+      "lastActivityCheckAt": "2026-10-02T15:20:41.897Z",
+      "olderPageRemaining": true
+    },
+    {
+      "id": "B",
+      "chain": "bsc",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "lastTrade": {
+        "at": "2026-10-02T11:08:09.000Z",
+        "hash": "0x276ed1a8787a851f66bf341a62bd62728028d53b19a22ea8a69fa6b3f7857f6d",
+        "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+        "side": "sell"
+      },
+      "lastActivityCheckAt": "2026-10-02T15:20:52.958Z",
+      "olderPageRemaining": true
+    }
+  ],
+  "baseline": [
+    {
+      "path": "docs/operator-clusters-2026-10-02.json",
+      "sha256": "1b952275a0986a2dc10e1f80eb0e7a27f0e498cd2f1585ca92a3d4f5b58e1d55"
+    },
+    {
+      "path": "docs/operator-reference-learning-2026-10-02.json",
+      "sha256": "3cde872e2325e011281a9d5174514a5359ca1f47749e1f335ed3728dbbd2d4ad"
+    },
+    {
+      "path": "docs/operator-reference-analysis-2026-10-02.json",
+      "sha256": "3b82c386681b98e22db5455f4ffd3a9c5c034f8fe30161946079cabd202b2e04"
+    }
+  ],
+  "profilesRefreshed": false,
+  "netPnl": null,
+  "currentUnrealizedPnl": null,
+  "heartbeatSnapshot": {
+    "main": {
+      "pid": 17133,
+      "updatedAt": "2026-10-04T16:10:11.705Z",
+      "sequence": 3898
+    },
+    "bsc": {
+      "pid": 17135,
+      "updatedAt": "2026-10-04T16:10:22.260Z",
+      "sequence": 3810
+    },
+    "fomo": {
+      "pid": 47431,
+      "updatedAt": "2026-10-04T16:10:28.761Z",
+      "sequence": 2803
+    }
+  },
+  "protectedFiles": {
+    "data/yesp-atm-confirmed-pvp-v2-20260923.json": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36",
+    "data/jev-research-pilot.json": "496acafa6498cd196c45d59c859a634f2ce241137afaadefc669ad665d108f2a"
+  },
+  "dayReview": {
+    "eligibleAfter": "2026-10-05T07:07:57Z",
+    "due": false,
+    "checkpoint": "not_created",
+    "changed": false
+  },
+  "limitations": [
+    "本地无匹配不表示地址没有链上交易；没有新增原始活动，未做新同步配对或库存/收益归因。",
+    "队列忙碌是研究主动让路，不是 GMGN 业务失败或已确认 429。未发 GMGN 请求，故配置检查为 0。",
+    "最后成功 A/B 活动检查仍为 2026-10-02T15:20；之后覆盖缺口未填，旧 lastTrade 不是当前状态。",
+    "历史同步和直接资金关系不证明同控或操纵；平台标签及共同交易所资金源不单独用作同控证据。",
+    "没有原文事件证据，不从买卖结果倒推叙事；没有浮盈数据不按零计算。",
+    "心跳只表示本轮截面新鲜，不证明两轮间或全天持续在线。"
+  ]
+}

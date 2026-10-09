@@ -41,6 +41,9 @@ import { isMonitoringSourceEnabled, isThreePlatformScope } from "./source-contro
 import { createRobinhoodScanPolicy, loadRobinhoodSignalCandidate } from "./robinhood-scan-policy.js";
 import { createBoundedStartupQueue, startIndependentMonitor } from "./startup-stagger.js";
 import { startRuntimeHeartbeat } from "./runtime-heartbeat.js";
+import { createBscWorkerClient } from "./bsc-worker-client.js";
+import { applyPrivateBscRpcConfig, loadPrivateBscRpcConfig } from "./bsc-private-rpc.js";
+import { createPaperLaunchEvidenceWriter } from "./paper-launch-evidence.js";
 
 for (const level of ["error", "info"]) {
   const write = console[level].bind(console);
@@ -83,11 +86,24 @@ const fourRegistryStateProviders = new Map();
 let flapQuoteRpcProvider = null;
 let fourRegistryRpcProvider = null;
 let ponRpcProvider = null;
+let mainBscPrimaryReadConfig = null;
+function bscPrimaryReadConfig() {
+  // Only primary BSC reads share this private copy. Fixed-origin proof readers
+  // and all unrelated consumers keep the global config and their source IDs.
+  // Load on first use so a disabled consumer does not create a new RPC path.
+  if (!mainBscPrimaryReadConfig) {
+    mainBscPrimaryReadConfig = applyPrivateBscRpcConfig({ ...config },
+      config.dataDir ? loadPrivateBscRpcConfig({ dataDir: config.dataDir }) : null);
+    console.info(`[bsc-main-reader] primary=${new URL(mainBscPrimaryReadConfig.bscRpcUrl).hostname}`);
+  }
+  return mainBscPrimaryReadConfig;
+}
 async function resolveFlapQuoteAssetMetadata({ address, chainId }) {
   if (shutdownRequested) return null;
   const numericChainId = Number(chainId);
+  const readConfig = numericChainId === 56 ? bscPrimaryReadConfig() : config;
   const rpcUrls = numericChainId === 56
-    ? orderedFlapQuoteMetadataRpcUrls(config.bscRpcUrl, config.bscRpcUrls)
+    ? orderedFlapQuoteMetadataRpcUrls(readConfig.bscRpcUrl, readConfig.bscRpcUrls)
     : numericChainId === 2818 ? orderedFlapQuoteMetadataRpcUrls(config.morphRpcUrl) : [];
   const configuredTimeoutMs = numericChainId === 56
     ? config.bscRpcRequestTimeoutMs
@@ -104,10 +120,13 @@ async function resolveFlapQuoteAssetMetadata({ address, chainId }) {
       const providerKey = `${numericChainId}:${rpcUrl}`;
       let metadataProvider = flapQuoteMetadataProviders.get(providerKey);
       if (!metadataProvider) {
-        metadataProvider = createAbortableJsonRpcProvider(rpcUrl, numericChainId, {
-          requestTimeoutMs,
-          batchMaxCount: 5,
-        });
+        metadataProvider = numericChainId === 56
+          ? createRpcPool([rpcUrl], [], 1, {
+            requestTimeoutMs, standardConcurrency: 1,
+            preferredHosts: readConfig.bscPreferredRpcHosts,
+            coordinatorDataDir: readConfig.bscPreferredRpcHosts?.length || config.bscSharedRpcEnabled ? config.dataDir : null,
+          })
+          : createAbortableJsonRpcProvider(rpcUrl, numericChainId, { requestTimeoutMs, batchMaxCount: 5 });
         flapQuoteMetadataProviders.set(providerKey, metadataProvider);
       }
       return metadataProvider;
@@ -247,7 +266,12 @@ async function emit(item, transaction, block) {
   await deliverAlert(config, event);
 }
 
+const recordPaperLaunchEvidence = createPaperLaunchEvidenceWriter(config.dataDir);
 async function deliverAlert(runtimeConfig, event) {
+  // Persist the narrow paper research feed before notification. Telegram
+  // delivery failures and historical outbox size must not hide fresh CA proof.
+  try { await recordPaperLaunchEvidence(event); }
+  catch { console.error('[paper-launch-evidence] canonical projection write failed; notification continues'); }
   if (narrativeSniperRuntime?.enabled === true) {
     return narrativeSniperRuntime.sendAlert(runtimeConfig, event);
   }
@@ -417,8 +441,9 @@ function startIndependentMonitors() {
   }
   alertOutboxWorker = startAlertOutboxWorker(config);
   if (config.narrativeSniperEnabled) {
+    const readConfig = bscPrimaryReadConfig();
     narrativeEvidenceRpcProvider ||= createRpcPool(
-      config.bscCausalClassificationRpcUrls || config.bscRpcUrls || [config.bscRpcUrl],
+      readConfig.bscCausalClassificationRpcUrls || readConfig.bscRpcUrls || [readConfig.bscRpcUrl],
       [],
       1,
       {
@@ -428,6 +453,9 @@ function startIndependentMonitors() {
           Number(config.bscCausalClassificationRpcRequestTimeoutMs || 6_000),
         )),
         standardConcurrency: 2,
+        preferredHosts: readConfig.bscPreferredRpcHosts,
+        coordinatorDataDir: readConfig.bscPreferredRpcHosts?.length || config.bscSharedRpcEnabled ? config.dataDir : null,
+        priorityLane: "realtime",
       },
     );
     const shadowQuoteProvider = createProductionNarrativeShadowQuoteProvider(config);
@@ -500,7 +528,9 @@ function startIndependentMonitors() {
     return handle;
   };
   startMonitor("bsc", () => {
-    bscLaunchpadMonitor = createBscLaunchpadMonitor(config, {
+    const createMonitor = config.bscWorkerEnabled && config.bscMonitorEnabled && !config.once
+      ? createBscWorkerClient : createBscLaunchpadMonitor;
+    bscLaunchpadMonitor = createMonitor(config, {
       onLaunchpadCandidate: onBscLaunchpadCandidate,
       sendAlertsImpl: deliverAlert,
     });
@@ -547,30 +577,40 @@ function startIndependentMonitors() {
     });
   });
   if (config.flapQuoteMonitorEnabled) startMonitor("flap-quote", () => {
+    const readConfig = bscPrimaryReadConfig();
     flapQuoteRpcProvider ||= createRpcPool(
-      orderedFlapQuoteMetadataRpcUrls(config.bscRpcUrl, config.bscRpcUrls),
-      config.bscArchiveRpcUrls || [],
+      orderedFlapQuoteMetadataRpcUrls(readConfig.bscRpcUrl, readConfig.bscRpcUrls),
+      readConfig.bscArchiveRpcUrls || [],
       2,
       {
         requestTimeoutMs: Math.max(1_000, Number(config.bscRpcRequestTimeoutMs || 7_000)),
         standardConcurrency: 2,
+        preferredHosts: readConfig.bscPreferredRpcHosts,
+        physicalWaitMs: 3_000,
+        coordinatorDataDir: readConfig.bscPreferredRpcHosts?.length || config.bscSharedRpcEnabled ? config.dataDir : null,
       },
     );
     for (const rpcUrl of config.flapQuoteLogRpcUrls) {
       const sourceId = new URL(rpcUrl).origin.toLowerCase();
       if (!flapQuoteLogProviders.has(sourceId)) {
-        flapQuoteLogProviders.set(sourceId, createAbortableJsonRpcProvider(rpcUrl, 56, {
-          requestTimeoutMs: Math.max(1_000, Math.min(7_000, Number(config.bscRpcRequestTimeoutMs || 7_000))),
-          batchMaxCount: 1,
+        // A single-URL pool preserves this proof source's identity while sharing
+        // the BSC host budget/circuit with metadata and other verification lanes.
+        flapQuoteLogProviders.set(sourceId, createRpcPool([rpcUrl], [], 2, {
+          requestTimeoutMs: Math.max(1_000, Math.min(30_000, Number(config.flapQuoteLogRpcTimeoutMs || 20_000))),
+          standardConcurrency: 1,
+          physicalWaitMs: 3_000,
+          coordinatorDataDir: config.bscSharedRpcEnabled ? config.dataDir : null,
         }));
       }
     }
     for (const rpcUrl of config.flapQuoteStateRpcUrls) {
       const sourceId = new URL(rpcUrl).origin.toLowerCase();
       if (!flapQuoteStateProviders.has(sourceId)) {
-        flapQuoteStateProviders.set(sourceId, createAbortableJsonRpcProvider(rpcUrl, 56, {
+        flapQuoteStateProviders.set(sourceId, createRpcPool([rpcUrl], [], 2, {
+          coordinatorDataDir: config.bscSharedRpcEnabled ? config.dataDir : null,
           requestTimeoutMs: Math.max(1_000, Math.min(7_000, Number(config.bscRpcRequestTimeoutMs || 7_000))),
-          batchMaxCount: 1,
+          standardConcurrency: 1,
+          physicalWaitMs: 3_000,
         }));
       }
     }
@@ -592,38 +632,54 @@ function startIndependentMonitors() {
         if (typeof bscLaunchpadMonitor?.registerFlapQuotePoolLifecycle !== "function") {
           throw new Error("BSC launchpad monitor lifecycle registry is not ready");
         }
-        return bscLaunchpadMonitor.registerFlapQuotePoolLifecycle(record);
+        const result = await bscLaunchpadMonitor.registerFlapQuotePoolLifecycle(record);
+        if (result?.accepted === true) {
+          // Durable local vetoes must reach paper research independently of TG.
+          // Failure is retried by the existing lifecycle producer, not ignored.
+          await recordPaperLaunchEvidence({type:'paper_flap_quote_lifecycle_v1',
+            lifecycle:record,observedAt:new Date().toISOString()});
+        }
+        return result;
       },
     });
   });
   if (config.fourRegistryMonitorEnabled) startMonitor("four-registry", () => {
+    const readConfig = bscPrimaryReadConfig();
     fourRegistryRpcProvider ||= createRpcPool(
-      config.bscRpcUrls || [config.bscRpcUrl],
-      config.bscArchiveRpcUrls || [],
+      readConfig.bscRpcUrls || [readConfig.bscRpcUrl],
+      readConfig.bscArchiveRpcUrls || [],
       Math.max(1, Number(config.bscArchiveConcurrency || 4)),
       {
         requestTimeoutMs: Math.max(1_000, Number(config.bscRpcRequestTimeoutMs || 7_000)),
-        standardConcurrency: Math.max(1, Number(config.bscRpcConcurrency || 4)),
+        standardConcurrency: 2,
+        preferredHosts: readConfig.bscPreferredRpcHosts,
+        physicalWaitMs: 3_000,
+        coordinatorDataDir: readConfig.bscPreferredRpcHosts?.length || config.bscSharedRpcEnabled ? config.dataDir : null,
       },
     );
     for (const rpcUrl of config.fourRegistryLogRpcUrls) {
       const sourceId = new URL(rpcUrl).origin.toLowerCase();
       if (!fourRegistryLogProviders.has(sourceId)) {
-        fourRegistryLogProviders.set(sourceId, createAbortableJsonRpcProvider(rpcUrl, 56, {
+        fourRegistryLogProviders.set(sourceId, createRpcPool([rpcUrl], [], 2, {
+          coordinatorDataDir: config.bscSharedRpcEnabled ? config.dataDir : null,
           requestTimeoutMs: Math.max(1_000, Math.min(7_000, Number(config.bscRpcRequestTimeoutMs || 7_000))),
-          batchMaxCount: 1,
+          standardConcurrency: 1,
+          physicalWaitMs: 3_000,
         }));
       }
     }
     for (const rpcUrl of config.fourRegistryStateRpcUrls) {
       const sourceId = new URL(rpcUrl).origin.toLowerCase();
       if (!fourRegistryStateProviders.has(sourceId)) {
-        fourRegistryStateProviders.set(sourceId, createAbortableJsonRpcProvider(rpcUrl, 56, {
+        fourRegistryStateProviders.set(sourceId, createRpcPool([rpcUrl], [], 2, {
+          coordinatorDataDir: config.bscSharedRpcEnabled ? config.dataDir : null,
           requestTimeoutMs: Math.max(1_000, Math.min(7_000, Number(config.bscRpcRequestTimeoutMs || 7_000))),
-          batchMaxCount: 1,
+          standardConcurrency: 1,
+          physicalWaitMs: 3_000,
         }));
       }
     }
+    console.log(`[four-registry] fixed RPC hosts: log=${[...fourRegistryLogProviders.keys()].map((origin) => new URL(origin).host).join(",")} state=${[...fourRegistryStateProviders.keys()].map((origin) => new URL(origin).host).join(",")}`);
     fourRegistryMonitor = createFourRegistryMonitor(config, {
       provider: fourRegistryRpcProvider,
       logVerificationProviders: [...fourRegistryLogProviders].map(([sourceId, logProvider]) => ({

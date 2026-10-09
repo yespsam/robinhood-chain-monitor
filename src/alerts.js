@@ -8,6 +8,7 @@ import {
   isFomoMonitorHealthUpdateAllowed,
   isFourMemePolicyFixRecoveryEvent,
   isOfficialFourMemeCapabilityUpdate,
+  isOfficialMonitoringNews,
   isOfficialPonFunUpdate,
   isStrictBscOpenFourFirstTokenUpdate,
   isStrictFourRegistryCapabilityUpdate,
@@ -4393,7 +4394,10 @@ async function mutateOutbox(config, mutation, { writeIf = () => true } = {}) {
   const file = path.join(config.dataDir, "alert-outbox.json");
   return withFileLock(file, async () => {
     const outbox = await readOutbox(file);
-    const pruned = pruneOutbox(outbox);
+    // Retention must use the same clock as enqueue, freshness and delivery.
+    // Otherwise deterministic replays can prune a just-delivered record and
+    // manufacture a duplicate (or turn terminal suppression into "queued").
+    const pruned = pruneOutbox(outbox, alertPipelineNow(config));
     const result = await mutation(outbox);
     if (pruned > 0 || writeIf(result)) await writeOutbox(file, outbox, config.alertOutboxFsImpl || fs);
     return result;
@@ -4672,6 +4676,20 @@ export function alertDeliveryDisposition(event = {}) {
   }
   const priority = isTradingPriority(event.tradingPriority) ? event.tradingPriority : null;
   const tier = priority?.tier || null;
+  // A news observation can be worth notifying without an exact CA or trade
+  // setup. Keep its T2/no-execution classification and all source, freshness,
+  // semantic-dedup and persisted-render gates; never promote it into T1.
+  if (["realtime", "late"].includes(effectiveFreshnessDecision(event))) {
+    if (isTelegramNewsUpdateAllowed(event)) {
+      return Object.freeze({ mode: "immediate", deliverImmediately: true, tier, reason: "telegram_news_watch_only" });
+    }
+    // Official provenance alone does not make an ordinary CMS notice important.
+    // Keep this exception for substantive news, not every announcement class.
+    if (tier === "T2" && event.strong === true
+      && isOfficialMonitoringNews(event) && isRelevantAlert(event)) {
+      return Object.freeze({ mode: "immediate", deliverImmediately: true, tier, reason: "official_news_watch_only" });
+    }
+  }
   if (isFourMemePolicyFixRecoveryEvent(event)
     && tier === "T2"
     && priority?.category === "focus_policy_recovery"

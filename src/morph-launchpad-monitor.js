@@ -127,11 +127,26 @@ export function createAbortableJsonRpcProvider(url, chainId, {
         body: prepared.body ? Buffer.from(prepared.body) : undefined,
         signal: controller.signal,
       });
+      const body = new Uint8Array(await response.arrayBuffer());
+      // Let the monitor own retries; ethers otherwise retries HTTP 429 inside
+      // one call and can spend the whole public-node cooldown on more calls.
+      if (response.status === 429) {
+        const retryHeader = response.headers.get("retry-after");
+        const seconds = retryHeader === null ? NaN : Number(retryHeader);
+        const timestamp = Number.isFinite(seconds) ? NaN : Date.parse(retryHeader || "");
+        let rpcDelay = 0;
+        try { rpcDelay = Number(JSON.parse(Buffer.from(body).toString("utf8"))?.error?.data?.retry_after_ms) || 0; } catch {}
+        const retryAfterMs = Math.max(rpcDelay, Number.isFinite(seconds) ? seconds * 1000
+          : Number.isFinite(timestamp) ? timestamp - Date.now() : 0);
+        throw Object.assign(new Error(`HTTP 429 from ${new URL(prepared.url).hostname}`), {
+          code: "SERVER_ERROR", status: 429, retryAfterMs: Math.max(1000, retryAfterMs || 60000),
+        });
+      }
       return {
         statusCode: response.status,
         statusMessage: response.statusText,
         headers: Object.fromEntries(response.headers.entries()),
-        body: new Uint8Array(await response.arrayBuffer()),
+        body,
       };
     } catch (error) {
       if (abortKind) {

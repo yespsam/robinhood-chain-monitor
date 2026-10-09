@@ -1,0 +1,329 @@
+{
+  "version": 1,
+  "scope": "BSC ingestion capacity and causal evidence bound; no strategy or trade mutations",
+  "verifiedAt": "2026-10-08T11:57:14.777Z",
+  "tests": {
+    "files": 9,
+    "passed": 425,
+    "failed": 0,
+    "monitor": 329,
+    "other": 96
+  },
+  "backup": "data/backups/live-reserve-20261008-IjeTUQ",
+  "changes": {
+    "isolation": "durable_live_reserve_v2",
+    "baseActiveCapacity": 40000,
+    "liveReservedCapacity": 1000,
+    "activePhysicalHardLimit": 41000,
+    "causalBarrierKeyHardLimit": 128,
+    "completionReleaseRequiresDurability": true,
+    "rawPendingProofRequiresCommittedReservation": true
+  },
+  "before": {
+    "at": "2026-10-08T11:49:30.978Z",
+    "pid": 35274,
+    "total": 39999,
+    "liveSlotsAvailable": 1,
+    "completed": 125204,
+    "liveAdmitted": 163518,
+    "tailCoveredBlock": 126438660,
+    "tailError": "BSC realtime pending capacity 1+4>1000 or live admission paused",
+    "paused": {
+      "realtimePendingEntries": {
+        "count": 28857,
+        "sha256": "a8dc9b8ea1c262525152ac0bf5cfa8dab4e8908b14dfb3b7a6522b442a33fb4b"
+      },
+      "deferredCreationEvidence": {
+        "count": 5032,
+        "sha256": "7aa4b1c4b5309a805ea1c17a62d8a67e275b9a88dcf8a2f715a680ac2652be60"
+      }
+    },
+    "policy": {
+      "version": 1,
+      "mode": "live_only",
+      "fromBlock": 125126748,
+      "activatedAt": "2026-10-01T15:45:18.063Z"
+    }
+  },
+  "verification": {
+    "tests": {
+      "files": 9,
+      "passed": 425,
+      "failed": 0,
+      "monitor": 329,
+      "other": 96
+    },
+    "policyUnchanged": true,
+    "pausedUnchanged": true,
+    "historicalCursor": 119873135,
+    "original238TradesUnchanged": true,
+    "liveWatchedCompleted": 4,
+    "mainPidUnchanged": true,
+    "gmgnXPidUnchanged": true
+  },
+  "observations": [
+    {
+      "at": "2026-10-08T11:56:07.914Z",
+      "heartbeats": {
+        "main": {
+          "pid": 45914,
+          "startedAt": "2026-10-07T08:17:26.957Z",
+          "updatedAt": "2026-10-08T11:55:55.194Z"
+        },
+        "bsc": {
+          "pid": 6484,
+          "startedAt": "2026-10-08T11:55:36.639Z",
+          "updatedAt": "2026-10-08T11:55:36.640Z"
+        },
+        "fomo": {
+          "pid": 49145,
+          "startedAt": "2026-10-07T08:28:43.162Z",
+          "updatedAt": "2026-10-08T11:55:54.620Z"
+        }
+      },
+      "queue": {
+        "version": 1,
+        "checkedAt": "2026-10-08T11:56:04.308Z",
+        "activeSince": "2026-10-02T02:19:10.817Z",
+        "status": "backpressure",
+        "historyPaused": true,
+        "pending": 34692,
+        "deferred": 5295,
+        "total": 39987,
+        "limits": {
+          "pendingMax": 25000,
+          "liveReserve": 1000,
+          "historyHigh": 20000,
+          "historyLow": 15000,
+          "totalHigh": 30000,
+          "totalLow": 25000,
+          "totalMax": 40000
+        },
+        "liveSlotsAvailable": 984,
+        "completed": 125238,
+        "lastWarningAt": "2026-10-08T11:54:27.193Z",
+        "liveAdmitted": 163540,
+        "lastCompletedAt": "2026-10-08T11:55:31.438Z",
+        "throughput": {
+          "windowStartedAt": "2026-10-08T11:55:44.609Z",
+          "admittedBase": 163748,
+          "completedBase": 125238,
+          "arrivalPerSecond": 0.04253207627419012,
+          "completionPerSecond": 0.07088679379031686,
+          "measuredAt": "2026-10-08T11:55:44.609Z",
+          "windowMs": 70535
+        },
+        "lastWarningStatus": "backpressure",
+        "historicalOrdinaryCompleted": 33503,
+        "ordinaryDiscoveryCompleted": 45544,
+        "isolation": "durable_live_reserve_v2",
+        "livePending": 6,
+        "historyPending": 39971,
+        "storageFull": false,
+        "scope": "live_since_block",
+        "pausedPending": 28857,
+        "pausedDeferred": 5032,
+        "retainedTotal": 73876,
+        "historyAdmitted": 215,
+        "liveReservedPending": 16,
+        "liveReservedDeferred": 0,
+        "liveCapacityFull": false,
+        "historyRetained": 39971,
+        "historyQueuedPending": 34676,
+        "physicalHardLimit": 41000,
+        "liveReleasesAwaitingDurability": 0,
+        "physicalReleasesAwaitingDurability": 0
+      },
+      "tail": {
+        "status": "degraded",
+        "coveredBlock": 126439580,
+        "lagBlocks": 77,
+        "lastSuccessAt": "2026-10-08T11:56:02.623Z",
+        "lastCycle": {
+          "startedAt": "2026-10-08T11:56:02.169Z",
+          "stage": "complete",
+          "initializeMs": 0,
+          "cursorMs": 22,
+          "queryMs": 425,
+          "commitWaitMs": 1,
+          "commitMs": 248,
+          "filters": {
+            "filters": 5,
+            "started": 5,
+            "completed": 5,
+            "failed": 0,
+            "skipped": 0,
+            "elapsedMs": 414,
+            "maxFilterMs": 302
+          },
+          "fromBlock": 126439561,
+          "toBlock": 126439580,
+          "outcome": "success",
+          "durationMs": 702,
+          "completedAt": "2026-10-08T11:56:02.871Z"
+        }
+      },
+      "lastFinalizedBlock": 119873135
+    },
+    {
+      "at": "2026-10-08T11:57:14.777Z",
+      "heartbeats": {
+        "main": {
+          "pid": 45914,
+          "updatedAt": "2026-10-08T11:56:55.352Z"
+        },
+        "bsc": {
+          "pid": 6484,
+          "updatedAt": "2026-10-08T11:57:10.181Z"
+        },
+        "fomo": {
+          "pid": 49145,
+          "updatedAt": "2026-10-08T11:56:54.622Z"
+        }
+      },
+      "queue": {
+        "version": 1,
+        "checkedAt": "2026-10-08T11:57:10.728Z",
+        "activeSince": "2026-10-02T02:19:10.817Z",
+        "status": "overloaded",
+        "historyPaused": true,
+        "pending": 34712,
+        "deferred": 5296,
+        "total": 40008,
+        "limits": {
+          "pendingMax": 25000,
+          "liveReserve": 1000,
+          "historyHigh": 20000,
+          "historyLow": 15000,
+          "totalHigh": 30000,
+          "totalLow": 25000,
+          "totalMax": 40000
+        },
+        "liveSlotsAvailable": 961,
+        "completed": 125252,
+        "lastWarningAt": "2026-10-08T11:56:45.297Z",
+        "liveAdmitted": 163574,
+        "lastCompletedAt": "2026-10-08T11:57:10.728Z",
+        "throughput": {
+          "windowStartedAt": "2026-10-08T11:56:45.297Z",
+          "admittedBase": 163765,
+          "completedBase": 125242,
+          "arrivalPerSecond": 0.28012127603480097,
+          "completionPerSecond": 0.0659108884787767,
+          "measuredAt": "2026-10-08T11:56:45.297Z",
+          "windowMs": 60688
+        },
+        "lastWarningStatus": "overloaded",
+        "historicalOrdinaryCompleted": 33503,
+        "ordinaryDiscoveryCompleted": 45544,
+        "isolation": "durable_live_reserve_v2",
+        "livePending": 26,
+        "historyPending": 39969,
+        "storageFull": false,
+        "scope": "live_since_block",
+        "pausedPending": 28857,
+        "pausedDeferred": 5032,
+        "retainedTotal": 73896,
+        "historyAdmitted": 215,
+        "liveReservedPending": 39,
+        "liveReservedDeferred": 1,
+        "liveCapacityFull": false,
+        "historyRetained": 39969,
+        "historyQueuedPending": 34674,
+        "physicalHardLimit": 41000,
+        "liveReleasesAwaitingDurability": 1,
+        "physicalReleasesAwaitingDurability": 1
+      },
+      "tail": {
+        "status": "healthy",
+        "coveredBlock": 126439793,
+        "lagBlocks": 10,
+        "lastSuccessAt": "2026-10-08T11:57:07.574Z",
+        "lastCycle": {
+          "startedAt": "2026-10-08T11:57:06.225Z",
+          "stage": "complete",
+          "initializeMs": 0,
+          "cursorMs": 31,
+          "queryMs": 1286,
+          "commitWaitMs": 28,
+          "commitMs": 58,
+          "filters": {
+            "filters": 5,
+            "started": 5,
+            "completed": 5,
+            "failed": 0,
+            "skipped": 0,
+            "elapsedMs": 1285,
+            "maxFilterMs": 942
+          },
+          "fromBlock": 126439781,
+          "toBlock": 126439793,
+          "outcome": "success",
+          "durationMs": 1406,
+          "completedAt": "2026-10-08T11:57:07.631Z"
+        }
+      },
+      "lastFinalizedBlock": 119873135
+    }
+  ],
+  "liveEvidence": {
+    "watchedNewTransactionsCompleted": [
+      {
+        "hash": "0x7bb2709fb6114743e7522143cb1c4d7589adb64d95c6fa4d7487c06b831bcb37",
+        "seen": 126438811
+      },
+      {
+        "hash": "0x8812318f24634a83745dd907dc64fc0731ed9090d766e2e4aed080597a2c541e",
+        "seen": 126438928
+      },
+      {
+        "hash": "0x86dfa11160a0006962cee2f9e4047b5b630b9c9f7a7a3fe701058adb11b11430",
+        "seen": 126438938
+      },
+      {
+        "hash": "0xad6918921b37c46516ec91b073b9dcae9a263ecf8e98e49cce9263b689bea1a4",
+        "seen": 126438947
+      }
+    ],
+    "over64KeyEntries": [
+      {
+        "hash": "0x6176bc55600445ccbf217fa19273f218d797a82626c3fd7a0ce43b9018adfcef",
+        "block": 126439536,
+        "keys": 77
+      },
+      {
+        "hash": "0x3d5584da3bb089f2db6163c263bc4a3731cd6f4d48864946642495ce8672d488",
+        "block": 126439557,
+        "keys": 77
+      }
+    ]
+  },
+  "account": {
+    "trades": 238,
+    "baselineTradesHash": "e280340245ce3b72a188112d2e94a159aea6fad881eeefec413c5d8360190f51",
+    "enabled": true,
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false
+  },
+  "limitations": [
+    "Only sampled runtime coverage, not uninterrupted availability.",
+    "Historical active backlog remains; arrival rate can exceed processing throughput and exhaust the fixed live pool.",
+    "Causal barrier evidence is never truncated; more than 128 keys still fails closed.",
+    "Proof completion is not a buy signal, trade fill, or profitability evidence.",
+    "Platform quote/curve-depth adapter gaps from the prior diagnosis were not changed."
+  ],
+  "preserved": {
+    "fomoPlatformSources": "not restored",
+    "mainAndGmgnXPidsUnchanged": true,
+    "pausedHistoricalRows": 33889,
+    "pausedHistoricalRowsHashUnchanged": true,
+    "original238PaperTradesHashUnchanged": true,
+    "historicalScanCursorUnchanged": true,
+    "rpcConcurrency": "unchanged",
+    "realExecution": false,
+    "signing": false,
+    "broadcast": false
+  }
+}

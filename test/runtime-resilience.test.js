@@ -33,6 +33,17 @@ test("chain events remain durable without duplicating every event into launchd s
   assert.match(source, /if \(config\.logEventsToStdout\) console\.log/);
 });
 
+test("Four defaults retain two fixed log/state readers across three proven physical hosts", async () => {
+  const source = await fs.readFile(new URL("../src/config.js", import.meta.url), "utf8");
+  const config = source.slice(source.indexOf("fourRegistryLogRpcUrls:"), source.indexOf("ponsMonitorEnabled:"));
+  assert.match(config, /"https:\/\/public-bsc\.nownodes\.io,https:\/\/bsc\.rpc\.sentio\.xyz"/);
+  assert.match(config, /"https:\/\/bsc\.rpc\.sentio\.xyz,https:\/\/bsc-mainnet\.nodereal\.io\/v1\//);
+  assert.doesNotMatch(config, /"https:\/\/rpc-bnb\.blockmachine\.io|https:\/\/bsc-mainnet\.public\.blastapi\.io/);
+  assert.match(source, /fourRegistryLogChunkSize: integer\("FOUR_REGISTRY_LOG_CHUNK_SIZE", 10_000\)/);
+  assert.match(config, /process\.env\.FOUR_REGISTRY_LOG_RPC_URLS/);
+  assert.match(config, /process\.env\.FOUR_REGISTRY_STATE_RPC_URLS/);
+});
+
 test("ordinary Twitter monitoring has an independent kill switch while narrow critical-X lanes can stay alive", async () => {
   const indexSource = await fs.readFile(new URL("../src/index.js", import.meta.url), "utf8");
   const configSource = await fs.readFile(new URL("../src/config.js", import.meta.url), "utf8");
@@ -111,8 +122,8 @@ test("graceful shutdown covers every independently created monitor and stops new
   assert.match(source, /provider,\s+flapQuoteRpcProvider,\s+fourRegistryRpcProvider,\s+ponRpcProvider,/);
   assert.match(source, /const fourRegistryLogProviders = new Map\(\)/);
   assert.match(source, /const fourRegistryStateProviders = new Map\(\)/);
-  assert.match(source, /fourRegistryLogProviders\.set\(sourceId, createAbortableJsonRpcProvider\(rpcUrl, 56,/);
-  assert.match(source, /fourRegistryStateProviders\.set\(sourceId, createAbortableJsonRpcProvider\(rpcUrl, 56,/);
+  assert.match(source, /fourRegistryLogProviders\.set\(sourceId, createRpcPool\(\[rpcUrl\], \[\], 2,/);
+  assert.match(source, /fourRegistryStateProviders\.set\(sourceId, createRpcPool\(\[rpcUrl\], \[\], 2,/);
   assert.match(source, /logVerificationProviders: \[\.\.\.fourRegistryLogProviders\]/);
   assert.match(source, /stateVerificationProviders: \[\.\.\.fourRegistryStateProviders\]/);
   assert.match(source, /while \(!shutdownRequested && next <= safeHead\)/);

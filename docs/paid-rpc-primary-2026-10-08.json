@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "checkedAt": "2026-10-08T14:09:42Z",
+  "request": "当前 BSC 交易与监控的链上读取使用已购买的付费节点优先",
+  "status": "deployed_paid_primary_with_bounded_fallback",
+  "primaryHost": "bsc-mainnet.core.chainstack.com",
+  "scope": {
+    "paidPrimary": [
+      "BSC 扫链、实时尾部与既有 WebSocket",
+      "模拟盘内盘成交读取与内盘深度读取",
+      "Four.Meme 快速回放与 Four/Flap 主读取",
+      "BSC 元数据与叙事主证据读取",
+      "保留的 GMGN 聪明钱钱包链上扫描",
+      "保留的 X 监控所需 BSC nonce 与默认本地安全检查"
+    ],
+    "exceptions": [
+      "固定来源的独立安全交叉验证仍保留各自节点，不能把同一付费节点当成多个独立来源",
+      "实际排队拒绝、节点故障或冷却时，按原有有界规则回退公共节点；内盘单轮与快速回放保留自身不跨主机重试约束",
+      "GMGN、X、网站 API 不属于区块链 RPC，原有服务限频不会因付费 RPC 消失",
+      "其他链不套用 BSC 节点；没有新增节点购买或付费服务"
+    ]
+  },
+  "changes": [
+    "健康付费节点即使有普通队列也先进入原有有界排队，不再仅因公共节点空闲而被排到后面",
+    "共享冷却、半开探测和能力限制优先于付费偏好",
+    "保留每主机总并发2、后台并发1、实时保留名额、FIFO及原有请求预算，不提高并发或删除锁",
+    "主进程 BSC 消费者使用私有配置副本，不污染独立验证或其他链配置",
+    "聪明钱批量 RPC 保留原批量形状，并通过跨进程共享门控",
+    "X 默认链读使用付费优先及单公共备用，共用原有截止时间，取消后等待真实传输结束才释放名额",
+    "拒绝重定向，诊断只输出主机名，限流尊重最长 Retry-After，截止或停止后的迟到成功不得被接受"
+  ],
+  "deployment": {
+    "dashboard": { "beforePid": 37617, "afterPid": 42731 },
+    "main": {
+      "beforePid": 45914,
+      "afterPid": 49050,
+      "drainStartedAt": "2026-10-08T14:07:45.415Z",
+      "drainCompletedAt": "2026-10-08T14:07:50.603Z",
+      "startedAt": "2026-10-08T14:07:51.543Z",
+      "oldExitCode": 0
+    },
+    "bscWorker": { "beforePid": 6484, "afterPid": 49051, "startedAt": "2026-10-08T14:07:51.791Z" },
+    "gmgnXWorker": {
+      "beforePid": 49145,
+      "afterPid": 49172,
+      "drainCompletedAt": "2026-10-08T14:08:14.595Z",
+      "startedAt": "2026-10-08T14:08:22.497Z",
+      "oldExitCode": 0,
+      "method": "原任务 SIGTERM 排空后，通过原 launchd 任务 kickstart；未强杀、未创建重复进程"
+    },
+    "coverageCaveat": "重载存在短暂采集空档；现在在线不证明全时段连续在线"
+  },
+  "runtimeEvidence": {
+    "innerPaidSuccess": {
+      "startedAt": "2026-10-08T13:49:08.259Z",
+      "finishedAt": "2026-10-08T13:49:14.074Z",
+      "host": "bsc-mainnet.core.chainstack.com",
+      "physicalRequests": 7,
+      "rpcItems": 16,
+      "logs": 6,
+      "durationMs": 5815
+    },
+    "innerLaterSuccessfulReadAt": "2026-10-08T14:07:53.652Z",
+    "postReloadPaidLeasesObservedThrough": "2026-10-08T14:09:40.882Z",
+    "postReloadPaidLeaseOperations": {
+      "main49050": ["eth_blockNumber"],
+      "bsc49051": ["eth_getLogs", "eth_blockNumber", "eth_getCode", "eth_call", "eth_getTransactionReceipt", "eth_getTransactionByHash", "eth_getBlockByNumber"],
+      "gmgnX49172": ["eth_blockNumber", "eth_getBlockByNumber"]
+    },
+    "leaseInterpretation": "共享 SQLite 只读快照证明相应进程已经获准在付费主机发出读取，不单独证明每个请求成功",
+    "bscRealtimeTail": {
+      "lastSuccessAt": "2026-10-08T14:08:40.963Z",
+      "status": "healthy",
+      "cycleDurationMs": 1349,
+      "lagSecondsAtSnapshot": 5,
+      "websocketLastHeadAt": "2026-10-08T14:08:44.065Z"
+    },
+    "xOperationalSuccessAt": "2026-10-08T14:09:41.463Z",
+    "notYetNaturallyExercised": [
+      "内盘深度没有本轮自然候选触发，不强制成交或制造读取",
+      "X 独立 nonce/安全检查保留新鲜缓存，本轮未观察到其懒加载主机日志；接线与截止边界已用隔离测试验证"
+    ],
+    "remainingGaps": [
+      "本地共享队列仍出现容量等待或拒绝；内盘在14:08:40的轮次仍显示 unavailable，不能宣称延迟问题全部解决",
+      "聪明钱扫描已有50项覆盖缺口、25081个 skippedBlocks 计数未清除；本次不把旧缺口视为已恢复",
+      "聪明钱完整扫描 lastSuccessAt 在核验窗口仍为14:08:00.777Z，早于重载；新的付费读取已观察到，但尚不能据此宣布该轮完整扫描成功",
+      "付费前后不是相同负载的对照试验，不能从单轮耗时证明全面提速或盈利能力"
+    ]
+  },
+  "verification": {
+    "finalRegression": { "tests": 220, "passed": 220, "failed": 0 },
+    "files": [
+      "test/fomo-x-paid-rpc.test.js",
+      "test/fomo-x-call-monitor.test.js",
+      "test/fomo-call-paid-rpc.test.js",
+      "test/fomo-call-monitor.test.js",
+      "test/bsc-main-read-wiring.test.js",
+      "test/bsc-fourmeme-fast-rpc.test.js",
+      "test/bsc-paid-rpc-wiring.test.js",
+      "test/monitor-source-policy.test.js"
+    ],
+    "additionalEarlierChecks": [
+      "内盘60项与深度62项测试通过",
+      "扫链、回放、证明吞吐和日志队列相关373项测试通过",
+      "共享协调、状态预算及取消相关52项测试通过",
+      "六个修改源码语法检查与相关 git diff --check 通过；以上各组可能重叠，不相加为唯一测试数"
+    ]
+  },
+  "preservation": {
+    "paper": { "enabled": true, "mode": "paper", "execution": false, "signing": false, "broadcast": false, "trades": 238, "positions": 0 },
+    "paperTradesSha256Unchanged": "e280340245ce3b72a188112d2e94a159aea6fad881eeefec413c5d8360190f51",
+    "legacyLedgerSha256Unchanged": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36",
+    "unchangedPolicies": ["monitor-source-policy.json", "bsc-scan-policy.json", "trading-scan-scope.json", "paper-loss-guard-policy.json"],
+    "fomoPlatformSourcesEnabled": false,
+    "gmgnSmartMoneyAndXRetained": true,
+    "noStrategyOrBalanceChange": true,
+    "noRealTradeSigningOrBroadcast": true,
+    "noSecretOutput": true,
+    "backup": "data/backups/paid-rpc-primary-20261008-JTEE0j/yesp-atm-confirmed-pvp-v2-estimated-20260928.json"
+  },
+  "nextEvidence": "观察自然到期的聪明钱完整扫描、X 链上校验与内盘深度候选；优先区分本地排队时间与节点响应时间，不能直接取消限流或降低安全门槛"
+}

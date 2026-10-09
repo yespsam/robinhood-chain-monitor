@@ -1,0 +1,236 @@
+{
+  "version": 1,
+  "group": "sol",
+  "mode": "public_wallet_read_only",
+  "report": "docs/operator-reference-followups/2026-10-06-1616-sol-deferred.md",
+  "evidence": "docs/operator-reference-followups/2026-10-06-1616-sol-deferred.json",
+  "question": "从D/E新resumeCursor继续低优先级补旧分页，先接上2026-10-02T13:04:31Z旧检查点；每钱包最多两页，遇忙碌/限流停止。最新头页仍停在10月4日，历史补页不能冒充最新覆盖。Aiden分笔退出和SAW十秒退出尚缺回执、完整费用、转账及动机证据。",
+  "startedAt": "2026-10-06T08:16:19.730Z",
+  "triggeredAt": "2026-10-06T08:16:19.730Z",
+  "completedAt": "2026-10-06T08:17:20.159Z",
+  "configChecked": null,
+  "gmgnConfigChecks": 0,
+  "gmgnBusinessRequests": 0,
+  "gmgnBusinessDispatched": 0,
+  "gmgnSucceeded": 0,
+  "gmgnFailed": 0,
+  "rpcRequests": 0,
+  "newRows": 0,
+  "uniqueCa": 0,
+  "oneToOnePairs": 0,
+  "newAddresses": 0,
+  "status": "deferred_shared_resources_busy",
+  "summary": "本轮无新增证据，保留上轮结论。Solana D/E在只读地址库及两份缓存均无匹配；共享账户有2个活动、4个排队请求，其中活动和排队均有优先级1请求，未追加GMGN/RPC。保留上午40条历史活动及分页游标；最新头页约52小时未更新，不能据缺数据认定无交易。下轮BSC。",
+  "classification": "观察",
+  "resourceSnapshot": {
+    "checkedAt": "2026-10-06T08:16:32.412Z",
+    "slot": {
+      "version": 1,
+      "startedAt": 1791274592205,
+      "active": [
+        {
+          "token": "798473b6-59bd-4e83-b4e7-633f2e5a0620",
+          "pid": 47431,
+          "priority": 1
+        },
+        {
+          "token": "95b24ebd-7ed5-4c9c-9309-5f5f89f7c538",
+          "pid": 82696,
+          "priority": 0
+        }
+      ]
+    },
+    "queue": [
+      {
+        "version": 1,
+        "token": "36585c1d-0323-4db4-bdcd-844cbe7b35a7",
+        "pid": 47431,
+        "queuedAt": 1791274590315,
+        "expiresAt": 1791274620315,
+        "priority": 1
+      },
+      {
+        "version": 1,
+        "token": "7196e08f-cd67-4c18-b1f1-7753e8bdc03f",
+        "pid": 82696,
+        "queuedAt": 1791274591561,
+        "expiresAt": 1791274621561,
+        "priority": 0
+      },
+      {
+        "version": 1,
+        "token": "d0a5dce7-b7fd-4580-a93c-999a8ed13bcd",
+        "pid": 82697,
+        "queuedAt": 1791274589964,
+        "expiresAt": 1791274619964,
+        "priority": 0
+      },
+      {
+        "version": 1,
+        "token": "faea6bab-837e-4422-bbeb-6f160bee7771",
+        "pid": 47431,
+        "queuedAt": 1791274589017,
+        "expiresAt": 1791274619017,
+        "priority": 0
+      }
+    ],
+    "cooldown": {
+      "version": 1,
+      "rateLimitedUntil": "2026-09-21T17:41:38.000Z",
+      "checkedAt": "2026-09-21T17:41:07.491Z",
+      "reason": "gmgn_cli_rate_limit"
+    }
+  },
+  "localSnapshot": {
+    "checkedAt": "2026-10-06T08:16:48.843Z",
+    "caches": [
+      {
+        "path": "data/wallet-learning-state.json",
+        "updatedAt": "2026-10-06T08:16:39.240Z",
+        "matches": [
+          {
+            "id": "D",
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "found": false
+          },
+          {
+            "id": "E",
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "found": false
+          }
+        ]
+      },
+      {
+        "path": "data/gmgn-flow-state.json",
+        "updatedAt": "2026-10-06T08:16:48.278Z",
+        "matches": [
+          {
+            "id": "D",
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "found": false
+          },
+          {
+            "id": "E",
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "found": false
+          }
+        ]
+      }
+    ],
+    "sqlite": {
+      "connection": "readonly",
+      "filter": "Exact Solana D/E public wallets",
+      "rows": []
+    },
+    "heartbeats": [
+      {
+        "name": "main",
+        "version": 1,
+        "producer": "main",
+        "pid": 17133,
+        "startedAt": "2026-10-03T07:41:16.954Z",
+        "updatedAt": "2026-10-06T08:16:28.747Z",
+        "sequence": 8710
+      },
+      {
+        "name": "fomo",
+        "version": 1,
+        "producer": "fomo",
+        "pid": 47431,
+        "startedAt": "2026-10-03T16:48:52.895Z",
+        "updatedAt": "2026-10-06T08:16:25.651Z",
+        "sequence": 7613
+      },
+      {
+        "name": "bsc",
+        "version": 1,
+        "producer": "bsc",
+        "pid": 17135,
+        "startedAt": "2026-10-03T07:41:17.608Z",
+        "updatedAt": "2026-10-06T08:16:28.092Z",
+        "sequence": 8517
+      }
+    ],
+    "baseline": [
+      {
+        "path": "docs/operator-clusters-2026-10-02.json",
+        "sha256": "1b952275a0986a2dc10e1f80eb0e7a27f0e498cd2f1585ca92a3d4f5b58e1d55",
+        "actual": "1b952275a0986a2dc10e1f80eb0e7a27f0e498cd2f1585ca92a3d4f5b58e1d55"
+      },
+      {
+        "path": "docs/operator-reference-learning-2026-10-02.json",
+        "sha256": "3cde872e2325e011281a9d5174514a5359ca1f47749e1f335ed3728dbbd2d4ad",
+        "actual": "3cde872e2325e011281a9d5174514a5359ca1f47749e1f335ed3728dbbd2d4ad"
+      },
+      {
+        "path": "docs/operator-reference-analysis-2026-10-02.json",
+        "sha256": "3b82c386681b98e22db5455f4ffd3a9c5c034f8fe30161946079cabd202b2e04",
+        "actual": "3b82c386681b98e22db5455f4ffd3a9c5c034f8fe30161946079cabd202b2e04"
+      }
+    ],
+    "integrity": {
+      "data/yesp-atm-confirmed-pvp-v2-20260923.json": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36",
+      "data/jev-research-pilot.json": "496acafa6498cd196c45d59c859a634f2ce241137afaadefc669ad665d108f2a"
+    }
+  },
+  "coverage": [
+    {
+      "id": "D",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "lastTrade": {
+        "at": "2026-10-04T03:27:59.000Z",
+        "hash": "2bfAF6JMTsKgmTGUSUYqZ5ZAqYLugDotWnrW7u7bpJNdP33PjywBt1eedPTn1pNv2UYPmG39f4DKf67HvqpVq89N",
+        "ca": "AZwtTLzLtfYf4XbgHEP6LPHRKQFkvx3iPGWPLZU9tXDz",
+        "side": "sell"
+      },
+      "lastSuccessfulHeadCheckAt": "2026-10-04T03:55:06.556Z",
+      "hoursSinceHeadCheck": 52.370445277777776,
+      "lastHistoricalCheckAt": "2026-10-06T00:17:22.597Z",
+      "paginationGap": {
+        "oldCheckpoint": {
+          "at": "2026-10-02T13:04:31.000Z",
+          "hash": "3hXzutKGxfQcqWCtvtUNeGLYD3uqBWdwy4rGsQkBgGgzC6yuf6Z7MD25AH7L7zjwDGxZr8ZJmtwCBXk6nNF29Ewp",
+          "ca": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+          "side": "sell"
+        },
+        "oldestCollectedAt": "2026-10-03T17:43:13.000Z",
+        "resumeCursor": "NDUzMDA0MTM0MDA4MDEwMzI6MDo6",
+        "observedAt": "2026-10-06T00:17:22.597Z",
+        "report": "docs/operator-reference-followups/2026-10-06-0816-sol-pagination.md"
+      },
+      "profileCheckedAt": "2026-10-02T10:46:40.006Z"
+    },
+    {
+      "id": "E",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "lastTrade": {
+        "at": "2026-10-04T03:27:59.000Z",
+        "hash": "3eGurwBTEcERdGqcrmBnCaFJsGiNpaZcZu23xAtk1UWfXrRqEsorW929Gp7jWeAd58Fuuxzahs7y37Hastr1vTy6",
+        "ca": "AZwtTLzLtfYf4XbgHEP6LPHRKQFkvx3iPGWPLZU9tXDz",
+        "side": "sell"
+      },
+      "lastSuccessfulHeadCheckAt": "2026-10-04T03:55:24.643Z",
+      "hoursSinceHeadCheck": 52.36542111111111,
+      "lastHistoricalCheckAt": "2026-10-06T00:18:01.052Z",
+      "paginationGap": {
+        "oldCheckpoint": {
+          "at": "2026-10-02T13:04:31.000Z",
+          "hash": "f5adiPfpCY3nTX5ugh8Ryor3bX6gJEUzpZgHesGhxLKEXst3wriNbvGWgvUT6CHG1J4dmfwTKDTeL1JxjppTgAV",
+          "ca": "A6nmQEYUdBUdSZiJGjWCJp6aHqGgQmE8SjwEF8S7pump",
+          "side": "sell"
+        },
+        "oldestCollectedAt": "2026-10-03T05:55:02.000Z",
+        "resumeCursor": "NDUyODQ1MDExMDAzOTUwMzI6MDo6",
+        "observedAt": "2026-10-06T00:18:01.052Z",
+        "report": "docs/operator-reference-followups/2026-10-06-0816-sol-pagination.md"
+      },
+      "profileCheckedAt": "2026-10-02T10:46:54.499Z"
+    }
+  ],
+  "dayReview": {
+    "reported": true,
+    "skipped": true
+  },
+  "nextGroup": "bsc",
+  "nextQuestion": "C 的 PairLab 活动页和库存再次无净变化；下个 BSC 轮优先低频补 A/B 一页近期活动，按链/CA/钱包/哈希去重并做一对一同步匹配，遇忙碌停止，不重复刷新 C 静态库存。"
+}

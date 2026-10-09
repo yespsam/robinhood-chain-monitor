@@ -555,7 +555,7 @@ test("a Registry semantic-duplicate receipt survives 31-day pruning and authenti
     ownerDeliveredAt: weak.observedAt,
   });
 
-  const old = new Date(Date.now() - 31 * 24 * 60 * 60_000).toISOString();
+  const old = new Date(now.value - 31 * 24 * 60 * 60_000).toISOString();
   await backdateDeliveredEntries(dataDir, old);
   const orphaned = await cancelPendingFourRegistryEvent(config, registryCancellation(weak));
   assert.equal(orphaned.status, "delivered_orphaned");
@@ -942,7 +942,7 @@ test("a compact Registry delivery owner survives 31-day pruning and closes an ac
     deliveredAt: event.observedAt,
   });
 
-  await backdateDeliveredEntries(dataDir, new Date(Date.now() - 31 * 24 * 60 * 60_000).toISOString());
+  await backdateDeliveredEntries(dataDir, new Date(now.value - 31 * 24 * 60 * 60_000).toISOString());
   const orphaned = await cancelPendingFourRegistryEvent(config, registryCancellation(event));
   assert.equal(orphaned.status, "delivered_orphaned");
   assert.equal(orphaned.persisted, true);
@@ -1192,7 +1192,7 @@ test("a 31-day BSC safety owner cannot swallow the Registry first-token canonica
   assert.equal(outbox.fourRegistryDeliveryOwners[oldFirst.eventKey].status, "semantic_duplicate");
   assert.equal(payloads.length, 2, "old capability and BSC safety cards are visible; weak Registry first-token folds");
 
-  await backdateDeliveredEntries(alertDataDir, new Date(Date.now() - 31 * 24 * 60 * 60_000).toISOString());
+  await backdateDeliveredEntries(alertDataDir, new Date(now.value - 31 * 24 * 60 * 60_000).toISOString());
   const capabilityTx = fourRegistryTxHash("a");
   const tokenTx = fourRegistryTxHash("c");
   produced.provider.logs = produced.provider.logs.filter((log) => ![capabilityTx, tokenTx].includes(log.transactionHash));
@@ -1208,7 +1208,7 @@ test("a 31-day BSC safety owner cannot swallow the Registry first-token canonica
   assert.equal((await produced.monitor.check()).status, "recovered_reorg");
   const replayed = await produced.monitor.check();
   const revisedFirst = replayed.events.find((event) => event.kind === "four_registry_first_token");
-  assert.ok(revisedFirst?.canonicalRevision);
+  assert.ok(revisedFirst?.canonicalRevision, JSON.stringify({ status: replayed.status, errorCode: replayed.errorCode, error: replayed.error }));
   assert.equal(revisedFirst.canonicalRevision.replacesDeliveryStatus, "semantic_duplicate");
   assert.equal(revisedFirst.canonicalRevision.replacesDuplicateOf, legacySafety.eventKey);
   assert.equal(revisedFirst.canonicalRevision.replacesCanonicalOwnerDelivered, true);

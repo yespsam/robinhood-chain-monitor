@@ -1,4 +1,6 @@
 // Deterministic paper research, not a price forecast or an execution adapter.
+import { admissionCosts } from './paper-cost-policy.js';
+import { GAS_ACCOUNT_ONLY } from './paper-chain-gas.js';
 export const OPPORTUNITY_REVIEW_VERSION = 'opportunity_review_v2';
 export const MEME_STRUCTURE_ENTRY_VERSION = 'meme_structure_entry_v1';
 export const REFERENCE_COST_VERSION = 'gmgn_reference_cost_v1';
@@ -44,9 +46,15 @@ export function structureEconomics(pattern, price, costs, budget) {
   const netRewardRisk=loss>0 && gain>0 ? gain/loss : null;
   const ready=positive(breakEvenPrice) && positive(pattern.targetPrice) && pattern.targetPrice>price
     && pattern.targetPrice/price-1 >= (breakEvenPrice/price-1)*1.5 && netRewardRisk>=1.2;
-  return {version:OPPORTUNITY_REVIEW_VERSION,ready,breakEvenPrice,breakEvenRate:positive(breakEvenPrice)?breakEvenPrice/price-1:null,
+  const actual={version:OPPORTUNITY_REVIEW_VERSION,ready,breakEvenPrice,breakEvenRate:positive(breakEvenPrice)?breakEvenPrice/price-1:null,
     estimatedStopLossUsd:loss,netRewardRisk,netReferenceGainUsd:gain,
     reason:ready?null:'已观察结构空间不足以覆盖往返成本及失效损失，继续观察'};
+  if(costs.gasAdmissionPolicy===GAS_ACCOUNT_ONLY) {
+    const admission=structureEconomics(pattern,price,{...admissionCosts(costs,budget),gasAdmissionPolicy:null},budget);
+    return {...actual,ready:admission.ready,reason:admission.reason,actualCostEconomicsReady:actual.ready,
+      gasAdmissionPolicy:GAS_ACCOUNT_ONLY,admission};
+  }
+  return actual;
 }
 
 // Two distinct CLOSED post-entry bars, plus a fresh current quote, must agree.

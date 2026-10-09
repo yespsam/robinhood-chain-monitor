@@ -1,11 +1,14 @@
 import { gmgnFlowAddress } from './gmgn-flow-signal.js';
 import { validBinanceFlowState, BINANCE_FLOW_KINDS } from './binance-flow-evidence.js';
-import { buildPaperDualFlowEvidence } from './paper-strategy-evidence.js';
+import { createPaperEvidenceIndex } from './paper-strategy-evidence.js';
 
 // Discovery is not an entry signal. Every candidate still needs independently
 // refreshed market/security data, confirmed flow, candles and a fast quote.
-export function discoverPaperFlowCandidates({ evidence, chains, nowMs, limitPerChain = 30 }) {
+export function discoverPaperFlowCandidates({ evidence, chains, nowMs, limitPerChain = 30, evidenceIndex }) {
   const secondary = validBinanceFlowState(evidence?.binanceState) ? evidence.binanceState : null;
+  // Share the immutable, CA-scoped index with the evaluator. Previously each
+  // discovered address scanned every trade in every provider again.
+  const index = evidenceIndex || createPaperEvidenceIndex({...evidence, binanceState:secondary});
   return chains.flatMap(chain => {
     const addresses = new Set();
     const groups = [evidence?.flowState?.trades?.[chain] || [],
@@ -16,7 +19,7 @@ export function discoverPaperFlowCandidates({ evidence, chains, nowMs, limitPerC
         && row.at >= nowMs - 300_000 && row.at <= nowMs) addresses.add(address);
     }
     return [...addresses].map(address => ({ token: { chain, address, symbol: address.slice(0, 8) },
-      flow: buildPaperDualFlowEvidence({ state: evidence?.flowState, binanceState: secondary, chain, address, nowMs }) }))
+      flow: index.flow({ chain, address, nowMs }) }))
       .filter(item => item.flow.fresh && item.flow.uniqueBuyerCount > 0 && item.flow.netBuyUsd > 0)
       .sort((a, b) => Number(b.flow.complete) - Number(a.flow.complete)
         || b.flow.highProfitCount - a.flow.highProfitCount || b.flow.uniqueBuyerCount - a.flow.uniqueBuyerCount

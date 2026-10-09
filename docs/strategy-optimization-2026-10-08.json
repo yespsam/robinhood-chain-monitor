@@ -1,0 +1,209 @@
+{
+  "schema": 1,
+  "kind": "bsc_paper_strategy_optimization",
+  "createdAt": "2026-10-08T13:31:22.721Z",
+  "status": "deployed_paper_forward_validation_pending",
+  "scope": "BSC existing paper main only",
+  "changes": [
+    {
+      "version": "bsc_breakout_observed_outflow_v1",
+      "route": "external_breakout",
+      "description": "仅已知来源、绑定链/CA、新鲜完整窗口净流出转观察；未知、零值不当成卖压，也不授予买入许可。保留其他独立路线。",
+      "sourceCoverage": "Public tagged-wallet subset, not whole-market flow",
+      "mainAndSerializedWriter": true,
+      "preTruncationCoveragePreserved": true
+    },
+    {
+      "version": "bounded_zero_rpc_capacity_retry_v1",
+      "description": "仅capacity范围且0次实际RPC的排队拒绝，在固定10秒失败链内最多3次尝试、至少1秒间隔；成功后仍用原有5秒正常深度刷新。",
+      "maxAttempts": 3,
+      "fixedWindowMs": 10000,
+      "minBackoffMs": 1000,
+      "failureBackoffMs": 60000,
+      "maxTrackedCandidates": 64,
+      "hostMethodCooldownPreserved": true,
+      "safetyQuoteDepthFreshnessUnchanged": true,
+      "implementationReview": "passed"
+    }
+  ],
+  "baseline": {
+    "at": "2026-10-08T13:27:45.677Z",
+    "tradeCount": 238,
+    "tradeHash": "e280340245ce3b72a188112d2e94a159aea6fad881eeefec413c5d8360190f51",
+    "cash": 87.06183166976324,
+    "realizedPnl": -112.60664181883618,
+    "positions": 0,
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "originalMainHash": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36"
+  },
+  "backup": "data/backups/strategy-optimization-20261008-adZ41U/yesp-atm-confirmed-pvp-v2-estimated-20260928.json",
+  "replay": {
+    "at": "2026-10-08T13:29:20.581Z",
+    "rows": [
+      {
+        "symbol": "币安AI",
+        "chain": "bsc",
+        "address": "0x43f824bed191b79a7de9589c4b85e9e9bf0c7777",
+        "at": "2026-10-03T17:16:54.831Z",
+        "entryId": "1791047814831:206",
+        "provider": "gmgn",
+        "flowAgeMs": 7064,
+        "observedNetBuyUsd": 0,
+        "guardBlocked": false,
+        "actualHistoricalPaperPnl": -1.4665871636327203
+      },
+      {
+        "symbol": "旺柴",
+        "chain": "bsc",
+        "address": "0x14f6a94909c407854390aa2d2462a3095d317777",
+        "at": "2026-10-04T09:19:57.090Z",
+        "entryId": "1791105597090:212",
+        "provider": "binance_smartmoney",
+        "flowAgeMs": 12198,
+        "observedNetBuyUsd": 3847.449459018464,
+        "guardBlocked": false,
+        "actualHistoricalPaperPnl": -1.2287681035580302
+      },
+      {
+        "symbol": "SI",
+        "chain": "bsc",
+        "address": "0xa4c4c292598280287c13758113baa4c466d37777",
+        "at": "2026-10-04T15:38:05.516Z",
+        "entryId": "1791128285516:214",
+        "provider": "gmgn",
+        "flowAgeMs": 5036,
+        "observedNetBuyUsd": 387.688563714375,
+        "guardBlocked": false,
+        "actualHistoricalPaperPnl": -3.1359332099067085
+      },
+      {
+        "symbol": "bibi",
+        "chain": "bsc",
+        "address": "0x7906a4516d7da442344739e10625d2c28bad7777",
+        "at": "2026-10-04T18:33:35.208Z",
+        "entryId": "1791138815208:216",
+        "provider": "gmgn",
+        "flowAgeMs": 5860,
+        "observedNetBuyUsd": 0,
+        "guardBlocked": false,
+        "actualHistoricalPaperPnl": 6.230772360203517
+      },
+      {
+        "symbol": "BEM",
+        "chain": "bsc",
+        "address": "0x5ce033b2bfca3af30b3e8c8457deaf776a8b695a",
+        "at": "2026-10-04T23:05:45.524Z",
+        "entryId": "1791155145524:220",
+        "provider": "binance_smartmoney",
+        "flowAgeMs": 11868,
+        "observedNetBuyUsd": -50.719325441757334,
+        "guardBlocked": true,
+        "actualHistoricalPaperPnl": -1.701632201209545
+      },
+      {
+        "symbol": "CZ",
+        "chain": "bsc",
+        "address": "0xb1b798c76a9f7bc6f5002dd72c23cf0d64b76666",
+        "at": "2026-10-05T15:03:09.344Z",
+        "entryId": "1791212589344:228",
+        "provider": "binance_smartmoney",
+        "flowAgeMs": 12421,
+        "observedNetBuyUsd": -241.75297226409694,
+        "guardBlocked": true,
+        "actualHistoricalPaperPnl": -2.336593036749825
+      },
+      {
+        "symbol": "薄肌理论",
+        "chain": "bsc",
+        "address": "0x22dbe570df85c36515da1f244617123aebea7777",
+        "at": "2026-10-08T10:34:06.044Z",
+        "entryId": "1791455646044:236",
+        "provider": "binance_kol",
+        "flowAgeMs": 11172,
+        "observedNetBuyUsd": -375.21011954994185,
+        "guardBlocked": true,
+        "actualHistoricalPaperPnl": -1.5542010246845077
+      }
+    ],
+    "blockedCount": 3,
+    "blockedHistoricalPnl": -5.592426262643878,
+    "retainedHistoricalPnl": 0.39948388310605765
+  },
+  "limitations": [
+    "七笔突破样本不足以验证稳定盈利；被新过滤命中的旧亏损不是已验证避免的损失。",
+    "冻结K线/报价的完整评估重建使用安全派生结果还原部分字段，不是完整原始输入与后续交易路径的反事实。",
+    "保留样本仍含三笔亏损；不把净流入为零提升为禁止交易条件。",
+    "本轮未增加来源、仓位、模型调用或并发；未修改实盘、资金、历史成交、100笔复盘设置。"
+  ],
+  "runtimeVerification": {
+    "at": "2026-10-08T13:33:20.714Z",
+    "status": "ok",
+    "lastError": null,
+    "enabled": true,
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "scanChains": [
+      "bsc"
+    ],
+    "tradeCount": 238,
+    "positions": 0,
+    "cash": 87.06183166976324,
+    "realizedPnl": -112.60664181883618,
+    "original238TradeHash": "e280340245ce3b72a188112d2e94a159aea6fad881eeefec413c5d8360190f51",
+    "originalMainHash": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36",
+    "priorTradeHistoryUnchanged": true,
+    "oldMainUnchanged": true,
+    "dashboardReload": {
+      "method": "single_launchctl_SIGTERM",
+      "at": "2026-10-08T13:32:57.265Z",
+      "oldPid": 34951,
+      "newPid": 37617
+    },
+    "unrestartedWorkers": {
+      "main": 45914,
+      "bsc": 6484,
+      "gmgnX": 49145
+    },
+    "breakoutCheckCount": 107,
+    "observedNetOutflow": 10,
+    "note": "10个净流出检查结果不等于10个原本可成交机会；重载观察期无新增成交。",
+    "followup": {
+      "at": "2026-10-08T13:33:58.832Z",
+      "pid": 37617,
+      "lastExitStatus": 0,
+      "status": "ok",
+      "lastError": null,
+      "ticks": 57,
+      "lastTickDurationMs": 346,
+      "tradeCount": 238,
+      "positions": 0,
+      "sourcePolicy": {
+        "fomoPlatformSourcesEnabled": false,
+        "monitorSourcePolicyStatus": "loaded"
+      }
+    }
+  },
+  "updatedAt": "2026-10-08T13:34:22.836Z",
+  "tests": {
+    "command": "node --test test/paper-loss-repair.test.js test/paper-loss-learning.test.js test/paper-opportunity.test.js test/paper-recovery-policy.test.js test/paper-strategy-engine.test.js test/paper-entry-funnel.test.js test/paper-candidate-research.test.js test/paper-confirmed-policy.test.js test/paper-strategy-runtime.test.js test/paper-onchain-entry.test.js test/paper-onchain-exit.test.js test/paper-launch-entry.test.js test/paper-pool-entry.test.js test/paper-internal-depth.test.js test/paper-collective-signal.test.js test/rpc-host-coordinator.test.js test/rpc-retry-after.test.js",
+    "files": 17,
+    "tests": 389,
+    "passed": 389,
+    "failed": 0,
+    "diffCheck": "passed"
+  },
+  "nextValidation": "沿既有100笔本地复盘记录此版本：实际入场路线、拒绝原因、信号到评估/成交延迟与扣模拟费用结果。当前仅代码和短时运行验证，未证明实盘可盈利，不新增自动化频率。",
+  "sources": [
+    "data/yesp-atm-confirmed-pvp-v2-estimated-20260928.json",
+    "http://127.0.0.1:4173/api/strategy-state",
+    "src/paper-recovery-policy.js",
+    "src/paper-strategy-engine.js",
+    "src/paper-internal-depth.js",
+    "src/paper-strategy-runtime.js"
+  ]
+}

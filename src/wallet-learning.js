@@ -88,7 +88,7 @@ export function mergeLearningActivity(previous = [], incoming = [], nowMs = Date
 }
 
 export function analyzeWalletHabits(rows = []) {
-  const tokens = new Map(), matches = [], holds = [], buys = [], addMoves = [];
+  const tokens = new Map(), matches = [], actions = [], holds = [], buys = [], addMoves = [];
   const tokenSpend = [];
   let excludedTokens = 0, unmatchedSells = 0, openLots = 0, adds = 0, partialSells = 0;
   for (const row of rows) { const group = tokens.get(row.token) || []; group.push(row); tokens.set(row.token, group); }
@@ -97,9 +97,11 @@ export function analyzeWalletHabits(rows = []) {
     // Transfers, unknown actions, same-second opposite events and oversells
     // invalidate inventory attribution for this token, not just one bad row.
     if (ordered.some(r => r.side === 'unattributable') || ordered.some((r, i) => i && r.at === ordered[i - 1].at && r.side !== ordered[i - 1].side)) { excludedTokens++; continue; }
-    const lots = [], tokenMatches = [], tokenBuys = [], tokenMoves = []; let invalid = false, tokenAdds = 0, tokenPartials = 0;
+    const lots = [], tokenMatches = [], tokenActions = [], tokenBuys = [], tokenMoves = []; let invalid = false, tokenAdds = 0, tokenPartials = 0;
     for (const row of ordered) {
       if (row.side === 'buy') {
+        tokenActions.push({...row,positionAction:lots.length?'add':'observed_entry',
+          addPriceChange:lots.length?row.price/lots.at(-1).price-1:null});
         if (lots.length) { tokenAdds++; tokenMoves.push(row.price / lots.at(-1).price - 1); }
         lots.push({ ...row, remaining: row.quantity }); tokenBuys.push(row.usd); continue;
       }
@@ -117,9 +119,12 @@ export function analyzeWalletHabits(rows = []) {
       const holdMs = weightedHold / row.quantity, grossReturn = row.usd / cost - 1;
       if (!Number.isFinite(holdMs) || !Number.isFinite(grossReturn)) { invalid = true; break; }
       tokenMatches.push({ token: row.token, at: row.at, holdMs, grossReturn, sellHash: row.hash });
+      tokenActions.push({...row,positionAction:row.quantity<balance*(1-1e-8)?'partial_exit':'observed_exit',
+        soldFraction:row.quantity/balance,holdMs,grossReturn,matchedCostUsd:cost,averageBuyPrice:cost/row.quantity});
     }
     if (invalid) { excludedTokens++; continue; }
     matches.push(...tokenMatches); holds.push(...tokenMatches.map(x => x.holdMs)); buys.push(...tokenBuys); addMoves.push(...tokenMoves);
+    actions.push(...tokenActions);
     if (tokenBuys.length) tokenSpend.push(tokenBuys.reduce((s, v) => s + v, 0));
     openLots += lots.length; adds += tokenAdds; partialSells += tokenPartials;
   }
@@ -136,7 +141,7 @@ export function analyzeWalletHabits(rows = []) {
     medianHoldMs: quantile(holds), medianBuyUsd: quantile(buys), medianAddPriceChange: quantile(addMoves),
     medianWinningExit: quantile(copyable.filter(x => x.grossReturn > 0).map(x => x.grossReturn)),
     medianLosingExit: quantile(copyable.filter(x => x.grossReturn < 0).map(x => x.grossReturn)),
-    tooFastSells: matches.length - copyable.length, matches,
+    tooFastSells: matches.length - copyable.length, matches, actions,
     scope: '观察窗口内 FIFO 数量配对，非完整持仓；毛收益未扣费用，不能当作跟单回测',
     unknown: ['交易前真实总仓位', '场外及跨链头寸', '可复制净收益', '动机与因果', '买入前价格路径'] };
 }
@@ -196,7 +201,7 @@ export function buildLearningReport(state, nowMs = Date.now(), habitCache = null
         return [period, p?.chain === w.chain && p.wallet === w.wallet && p.period === period
           ? { checkedAt: p.checkedAt, realizedProfitUsd: p.realizedProfitUsd, winRate: p.winRate, realizedRoi: p.realizedRoi, tokenCount: p.tokenCount } : null];
       })),
-      habits: { ...w.habits, matches: undefined }, role: w.role, persona: w.persona, qualifiedNow: w.role === 'teacher' })),
+      habits: { ...w.habits, matches: undefined, actions: undefined }, role: w.role, persona: w.persona, qualifiedNow: w.role === 'teacher' })),
     groups, policies, promotion: '不自动替换原策略；先累计同时间、同报价、同成本的独立模拟对照' };
 }
 

@@ -17,6 +17,10 @@ import {
   parseFxTwitterProfile,
 } from "./fomo-call-monitor.js";
 import { defaultQualifyFomoThesis } from "./fomo-thesis-monitor.js";
+import { createRpcPool } from "./bsc-launchpad-monitor.js";
+import { loadPrivateBscRpcConfig, privateBscRpcEndpoints, sanitizeBscRpcError } from "./bsc-private-rpc.js";
+import { createAbortableJsonRpcProvider } from "./morph-launchpad-monitor.js";
+import { sharedRpcHostCoordinator } from "./rpc-host-coordinator.js";
 import { parseFxTwitterTimeline, parseOfficialXOembed } from "./twitter-monitor.js";
 
 const STATE_VERSION = 2;
@@ -499,6 +503,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
   const stateFile = path.join(config.dataDir, "fomo-x-call-state.json");
   const fxTwitterBase = String(config.fomoCallFxTwitterApiBase || "https://api.fxtwitter.com").replace(/\/$/, "");
   const fomoScanBase = String(config.fomoScanApiBase || "https://api.fomoscan.sh").replace(/\/$/, "");
+  const fomoPlatformSourcesEnabled = config.fomoPlatformSourcesEnabled !== false;
   const xOembedBase = String(config.fomoXCallOembedBase || "https://publish.x.com/oembed").replace(/\/$/, "");
   const bscRpcUrl = String(config.fomoCallBscRpcUrl || "https://bsc-rpc.publicnode.com");
   const intervalMs = Math.max(1_000, Number(config.fomoXCallPollIntervalMs || 5_000));
@@ -554,6 +559,165 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
   let timer = null;
   let started = false;
   let stopped = false;
+  let paidEndpoints;
+  const paidHostCircuits = new Map();
+
+  // Credentials stay in this consumer's closure, never in qualification config,
+  // state, events, or error causes. Injected readers keep their existing behavior.
+  function createPaidBscReadSession(signal) {
+    if (paidEndpoints === undefined) {
+      const privateRpc = (dependencies.loadPrivateBscRpcConfigImpl || loadPrivateBscRpcConfig)({ dataDir: config.dataDir });
+      paidEndpoints = privateRpc ? privateBscRpcEndpoints(privateRpc).slice(0, 2) : null;
+      if (paidEndpoints) logger.info?.(`[fomo-x-bsc-reader] primary=${paidEndpoints[0].host}`);
+    }
+    if (!paidEndpoints) return null;
+    const controller = new AbortController();
+    const onAbort = () => controller.abort();
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted || stopped) controller.abort();
+    const work = new Set(), physical = new Map();
+    let pool, deadline, lastTransportFailure, deadlineExpired = false;
+    const cancelError = () => Object.assign(new Error("Fomo X BSC read cancelled"), { code: "CANCELLED" });
+    const checkCancelled = () => { if (controller.signal.aborted) throw cancelError(); };
+    const safeError = (error) => {
+      const safe = sanitizeBscRpcError(error);
+      const clean = Object.assign(new Error(safe.message), safe);
+      const networkCode = reliableNetworkErrorCode(error);
+      if (networkCode) clean.code = networkCode;
+      const rpcCode = Number(error?.error?.code ?? error?.info?.error?.code);
+      if (rpcCode === 429 || rpcCode === -32005 || /\b(?:rate[ -]?limit(?:ed)?|too many requests)\b/i.test(clean.message)) clean.status = 429;
+      const rpcError = error?.error || error?.info?.error;
+      const retryHint = sanitizeBscRpcError({ retryAfter: rpcError?.retryAfter ?? rpcError?.retry_after
+        ?? rpcError?.data?.retryAfter ?? rpcError?.data?.retry_after }).retryAfter;
+      if (retryHint !== undefined) clean.retryAfter = retryHint;
+      if (Number.isFinite(error?.retryAfterMs) && error.retryAfterMs >= 0) clean.retryAfter = String(error.retryAfterMs / 1_000);
+      return clean;
+    };
+    function getPool() {
+      checkCancelled();
+      if (pool) return pool;
+      // Start the chain deadline lazily, after profile/market discovery. The
+      // paid and single public fallback attempts share the original X deadline.
+      deadline = setTimeout(() => { deadlineExpired = true; controller.abort(); }, requestTimeoutMs);
+      const attemptMs = Math.max(1, Math.floor(requestTimeoutMs / 3));
+      const coordinator = dependencies.rpcHostCoordinator || sharedRpcHostCoordinator(config.dataDir);
+      const guardedCoordinator = {
+        ...coordinator,
+        run: (host, operation, lane, callback, options) => coordinator.run(host, operation, lane, async () => {
+          checkCancelled();
+          try { return await callback(); }
+          finally {
+            // A logical timeout must not release a physical host lease before
+            // fetch AND body consumption have actually settled.
+            await Promise.allSettled([...(physical.get(host) || [])]);
+          }
+        }, options),
+      };
+      pool = createRpcPool(paidEndpoints.map(endpoint => endpoint.url), [], 1, {
+        preferredHosts: [paidEndpoints[0].host], hostCoordinator: guardedCoordinator,
+        hostCircuitRegistry: paidHostCircuits, priorityLane: "background",
+        requestTimeoutMs: attemptMs, physicalWaitMs: Math.max(1, Math.min(1_000, Math.floor(requestTimeoutMs / 6))),
+        stateReadBudgetMs: requestTimeoutMs, stateReadMaxAttempts: 2,
+        objectReadBudgetMs: requestTimeoutMs, objectReadMaxAttempts: 2,
+        standardConcurrency: 2, totalConcurrency: 2,
+        providerFactory: url => {
+          const host = new URL(url).hostname;
+          const provider = createAbortableJsonRpcProvider(url, 56, {
+            requestTimeoutMs: Math.max(1, attemptMs - Math.min(250, Math.max(1, Math.floor(attemptMs / 10)))),
+            batchMaxCount: 1,
+            fetchImpl: async (requestUrl, options) => {
+              checkCancelled();
+              const transport = (async () => {
+                const response = await fetchImpl(requestUrl, { ...options, redirect: "error",
+                  signal: AbortSignal.any([options.signal, controller.signal]) });
+                if (response.redirected || response.url && new URL(response.url).origin !== new URL(url).origin) {
+                  throw new Error("BSC RPC redirect refused");
+                }
+                const body = await response.arrayBuffer();
+                let rpcError;
+                try { rpcError = JSON.parse(Buffer.from(body).toString("utf8"))?.error; } catch {}
+                if (rpcError && ([429, -32005].includes(Number(rpcError.code))
+                  || /\b(?:rate[ -]?limit(?:ed)?|too many requests)\b/i.test(String(rpcError.message || "")))) {
+                  const at = Date.now();
+                  const retryMs = Math.max(0, parseRetryAfterMs(response.headers.get("retry-after"), at) || 0,
+                    ...[rpcError.retryAfter, rpcError.retry_after, rpcError.data?.retryAfter, rpcError.data?.retry_after]
+                      .map(value => parseRetryAfterMs(value, at) || 0),
+                    Number(rpcError.data?.retry_after_ms) || 0);
+                  throw Object.assign(new Error("BSC activity JSON-RPC rate limited"), { code: "SERVER_ERROR", status: 429,
+                    ...(Number.isFinite(retryMs) && retryMs > 0 ? { retryAfter: String(retryMs / 1_000) } : {}) });
+                }
+                if (response.status >= 400 && response.status !== 429) {
+                  throw Object.assign(new Error(`HTTP ${response.status} BSC RPC`), { status: response.status });
+                }
+                return { status: response.status, statusText: response.statusText, headers: response.headers,
+                  arrayBuffer: async () => body };
+              })();
+              if (!physical.has(host)) physical.set(host, new Set());
+              physical.get(host).add(transport);
+              try { return await transport; }
+              catch (error) {
+                if (controller.signal.aborted) throw cancelError();
+                lastTransportFailure = safeError(error);
+                throw lastTransportFailure;
+              }
+              finally { physical.get(host).delete(transport); }
+            },
+          });
+          // Ethers can wrap transport errors. Normalize caller cancellation
+          // before the pool so it cannot open a physical-host outage circuit.
+          return Object.fromEntries(["getCode", "getStorage", "call", "send"].map(method => [method, async (...args) => {
+            checkCancelled();
+            lastTransportFailure = null;
+            try {
+              const result = await provider[method](...args);
+              checkCancelled();
+              return result;
+            }
+            catch (error) {
+              if (controller.signal.aborted) throw cancelError();
+              const clean = safeError(error);
+              if (clean.status || clean.code === "TIMEOUT" || !lastTransportFailure) lastTransportFailure = clean;
+              throw clean;
+            }
+          }]).concat([["destroy", () => provider.destroy()]]));
+        },
+      });
+      return pool;
+    }
+    const provider = Object.fromEntries(["getCode", "getStorage", "call", "send"].map(method => [method, async (...args) => {
+      const task = Promise.resolve().then(() => getPool()[method](...args));
+      work.add(task);
+      try {
+        const result = await task;
+        throwIfCheckCancelled(signal);
+        if (deadlineExpired) throw Object.assign(new Error("BSC activity request timed out"), { code: "TIMEOUT" });
+        checkCancelled();
+        return result;
+      }
+      catch (error) {
+        throwIfCheckCancelled(signal);
+        if (deadlineExpired) throw Object.assign(new Error("BSC activity request timed out"), { code: "TIMEOUT" });
+        const clean = safeError(error);
+        // Pool aggregation intentionally strips raw causes. Keep only the
+        // final transport's safe status/code for X's established cache/backoff.
+        // An earlier paid 429 must not reclassify a later malformed/public
+        // hard failure as retryable cached evidence.
+        if (lastTransportFailure) delete clean.status;
+        if (lastTransportFailure?.status) clean.status = lastTransportFailure.status;
+        if (lastTransportFailure?.retryAfter) clean.retryAfter = lastTransportFailure.retryAfter;
+        if (reliableNetworkErrorCode(lastTransportFailure)) clean.code = lastTransportFailure.code;
+        throw clean;
+      } finally { work.delete(task); }
+    }]));
+    return { provider, async close() {
+      controller.abort();
+      clearTimeout(deadline);
+      signal?.removeEventListener("abort", onAbort);
+      await Promise.allSettled([...work]);
+      await Promise.allSettled([...physical.values()].flatMap(tasks => [...tasks]));
+      pool?.destroy();
+    } };
+  }
 
   const ensureState = async () => {
     if (!state) state = await readState(stateFile, fsImpl);
@@ -602,6 +766,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
   }
 
   function freshVerifiedBinding(candidate, binding, nowMs) {
+    if (!fomoPlatformSourcesEnabled) return false;
     const checkedAtMs = Date.parse(binding?.checkedAt || binding?.lastCheckedAt || "");
     return binding?.status === "verified" && binding?.verified === true && binding?.proofSource === "fomoscan"
       && String(binding?.wallet || "").toLowerCase() === candidate.wallet
@@ -792,11 +957,17 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       () => fetchJson(`${fxTwitterBase}/2/profile/${encodeURIComponent(handle)}`));
     const parsed = parseFxTwitterProfile(payload, handle);
     if (!parsed) throw admissionError(`@${handle} FxTwitter profile schema or handle/id mismatch`, "ineligible_x_profile");
-    if (!/^\d+$/.test(String(parsed.id || "")) || parsed.protected === true
-      || capitalCandidate && String(parsed.id) !== String(candidate.expectedXUserId)
-      || !capitalCandidate && parsed.followers < minimumFollowers) {
-      const gate = capitalCandidate ? `pinned X id ${candidate.expectedXUserId}` : `${minimumFollowers}+ follower gate`;
-      throw admissionError(`@${handle} failed numeric X identity or ${gate}`, "ineligible_x_profile");
+    if (!/^\d+$/.test(String(parsed.id || ""))) {
+      throw admissionError(`@${handle} X identity is not numeric`, "ineligible_x_profile");
+    }
+    if (parsed.protected === true) {
+      throw admissionError(`@${handle} X profile is protected`, "ineligible_x_profile");
+    }
+    if (capitalCandidate && String(parsed.id) !== String(candidate.expectedXUserId)) {
+      throw admissionError(`@${handle} does not match pinned X id ${candidate.expectedXUserId}`, "ineligible_x_profile");
+    }
+    if (!capitalCandidate && parsed.followers < minimumFollowers) {
+      throw admissionError(`@${handle} X followers ${parsed.followers} below required ${minimumFollowers}`, "ineligible_x_profile");
     }
     return { ...parsed, checkedAt: new Date(now()).toISOString() };
   }
@@ -817,6 +988,14 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       } finally {
         signal.removeEventListener("abort", onAbort);
       }
+    }
+    const paid = createPaidBscReadSession(signal);
+    if (paid) {
+      try {
+        const result = await paid.provider.send("eth_getTransactionCount", [wallet, "latest"]);
+        if (!/^0x[0-9a-f]+$/i.test(String(result || ""))) throw new Error("invalid BSC activity response");
+        return Number(BigInt(result));
+      } finally { await paid.close(); }
     }
     let payload;
     try {
@@ -846,6 +1025,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
   }
 
   async function resolveVerifiedBinding(candidate) {
+    if (!fomoPlatformSourcesEnabled) return null;
     if (dependencies.resolveVerifiedBindingImpl) return dependencies.resolveVerifiedBindingImpl(candidate);
     const cachedCheckedAt = Date.parse(candidate?.walletBinding?.checkedAt || candidate?.walletBinding?.lastCheckedAt || "");
     if (candidate?.walletBinding?.status === "verified" && candidate?.walletBinding?.verified === true
@@ -1121,6 +1301,13 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
   }
 
   function verifiedSeedRefreshPlan(nowMs) {
+    if (!fomoPlatformSourcesEnabled) {
+      state.health.sources.fomoscanSeeds = {
+        status: "disabled_by_user", checkedAt: new Date(nowMs).toISOString(),
+        configured: 0, queried: 0, verified: 0, inFlight: false, backlog: 0,
+      };
+      return null;
+    }
     if (!verifiedSeedHandles.length) {
       state.health.sources.fomoscanSeeds = {
         status: "disabled_no_handles",
@@ -1340,6 +1527,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
         }
         if (!hasExactCandidateIdentity(candidate)) return false;
         if (candidate.source === FOMOSCAN_SEED_SOURCE) {
+          if (!fomoPlatformSourcesEnabled) return false;
           const binding = freshVerifiedBinding(candidate, candidate.walletBinding, nowMs)
             ? candidate.walletBinding : migrateFreshSeedBinding(candidate, nowMs);
           return Boolean(binding);
@@ -1355,12 +1543,21 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       .sort((left, right) => Number(right.discoveredAt) - Number(left.discoveredAt) || left.handle.localeCompare(right.handle));
   }
 
-  function selectBatch(roster) {
+  function selectBatch(roster, nowMs) {
     if (!roster.length) return [];
     const start = Math.max(0, Number(state.batchCursor || 0)) % roster.length;
-    const count = Math.min(batchSize, roster.length);
-    const selected = Array.from({ length: count }, (_, index) => roster[(start + index) % roster.length]);
-    state.batchCursor = (start + count) % roster.length;
+    const selected = [];
+    let visited = 0;
+    // Cached admission rejections used to consume timeline slots while doing
+    // no work. Retain them in coverage and honor their retry deadline, but
+    // spend the existing bounded batch on due identities. No extra batch or
+    // concurrency, and an expired rejection naturally rejoins the rotation.
+    while (visited < roster.length && selected.length < batchSize) {
+      const candidate = roster[(start + visited++) % roster.length];
+      if (Number(candidate.admissionRejectedUntil || 0) > nowMs) continue;
+      selected.push(candidate);
+    }
+    state.batchCursor = (start + visited) % roster.length;
     return selected;
   }
 
@@ -1378,9 +1575,16 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     const effectiveCircuitHandles = [];
     const reasonsByHandle = {};
     const reasonCounts = {};
+    const admissionRejections = {};
     for (const candidate of uniqueRoster) {
       const handle = candidate.handle.toLowerCase();
       const stored = state.roster[handle] || candidate;
+      if (Number(stored.admissionRejectedUntil || 0) > nowMs) {
+        admissionRejections[handle] = {
+          reason: stored.admissionRejectionReason || "admission gate",
+          retryAt: new Date(Number(stored.admissionRejectedUntil)).toISOString(),
+        };
+      }
       const capitalCandidate = isCapitalKolCandidate(candidate);
       const reasons = [];
       const profile = stored.xProfile;
@@ -1464,6 +1668,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       effectiveCircuitHandles: [...new Set(effectiveCircuitHandles)].sort(),
       reasonsByHandle,
       reasonCounts,
+      admissionRejections,
       rotationMs,
       timelineFreshnessMs,
     };
@@ -1690,7 +1895,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     };
   }
 
-  async function processTweet(candidate, profile, bscActivity, binding, tweet, nowMs, captureNarrative = false) {
+  async function processTweet(candidate, profile, bscActivity, binding, tweet, nowMs, captureNarrative = false, signal) {
     const key = `${candidate.handle}:${tweet.id}`.toLowerCase();
     if (state.seenTweets[key]) return { status: "seen" };
     if (tweet.isReply === true) {
@@ -1753,7 +1958,9 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
         return { status: "duplicate_tweet_contract" };
       }
       let assessedQualification;
+      let paidQualification;
       try {
+        if (!dependencies.qualifyCallImpl && !dependencies.bscProvider) paidQualification = createPaidBscReadSession(signal);
         assessedQualification = await qualifyCall({
           token: official.token,
           contractAddress: official.token,
@@ -1766,15 +1973,17 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
             followers: profile.followers,
           },
           body: verifiedTweet.text,
-        }, { config: qualificationConfig, fetchImpl, bscProvider: dependencies.bscProvider });
+        }, { config: qualificationConfig, fetchImpl, bscProvider: dependencies.bscProvider || paidQualification?.provider });
       } catch (error) {
+        throwIfCheckCancelled(signal);
         if (!selfLaunch) throw error;
         assessedQualification = {
           decision: "watch",
           reason: `qualification_unavailable:${String(error?.message || error).slice(0, 100)}`,
           security: { decision: "unknown" },
         };
-      }
+      } finally { await paidQualification?.close(); }
+      throwIfCheckCancelled(signal);
       if (!selfLaunch && !strictQualification(assessedQualification, minimumLiquidityUsd)) {
         markPending(key, official.token, assessedQualification?.reason || "local_security_or_liquidity_blocked", nowMs, verifiedTweet);
         return { status: "qualification_pending" };
@@ -1820,6 +2029,12 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     const key = candidate.handle.toLowerCase();
     const stored = state.roster[key];
     const capitalCandidate = isCapitalKolCandidate(candidate);
+    // A retained GMGN identity must not depend on a previously cached FOMO
+    // binding after that platform has been cancelled. Do not clear unrelated
+    // admission decisions or cursors, and do not relabel it as verified.
+    if (!fomoPlatformSourcesEnabled && stored.walletBinding?.proofSource === "fomoscan") {
+      stored.walletBinding = null;
+    }
     let transportIssue = null;
     if (Number(stored?.admissionRejectedUntil || 0) > nowMs) {
       return { status: "ineligible_cached", reason: stored.admissionRejectionReason || "admission gate" };
@@ -2068,7 +2283,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
     let narrativeChecks = 0;
     for (const tweet of candidates) {
       throwIfCheckCancelled(signal);
-      const result = await processTweet(candidate, profile, bscActivity, stored.walletBinding || null, tweet, nowMs, narrativeChecks++ < 4);
+      const result = await processTweet(candidate, profile, bscActivity, stored.walletBinding || null, tweet, nowMs, narrativeChecks++ < 4, signal);
       throwIfCheckCancelled(signal);
       if (result.status === "delivered") delivered += 1;
       if (result.status === "qualification_pending" || result.status === "pending_error") pending += 1;
@@ -2111,7 +2326,7 @@ export function createFomoXCallMonitor(config, dependencies = {}) {
       discoveryStatus = await refreshDiscovery(nowMs);
       if (stopped || controller.signal.aborted) return stoppedResult();
       roster = eligibleRoster(nowMs);
-      batch = selectBatch(roster);
+      batch = selectBatch(roster, nowMs);
       results = await settleBounded(batch, concurrency, (candidate) => processIdentity(candidate, nowMs, controller.signal));
     } finally {
       activeCheckControllers.delete(controller);

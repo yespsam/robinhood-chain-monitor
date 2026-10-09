@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import { coverageAge, marketCoverageStatus, flowCoverageStatus, tradingDataHealth } from '../dashboard/coverage-status.js';
 const now = Date.parse('2026-09-22T08:30:00Z'), iso = ms => new Date(ms).toISOString();
 const quote = age => ({ status: 'ok', observedAt: iso(now - age) });
+test('an unseen cold-start feed is distinguished from an upstream failure',()=>{
+  const status=marketCoverageStatus({status:'loading',observedAt:null,reason:'not_requested'},now);
+  assert.equal(status.fresh,false);assert.match(status.label,/首次采集/);
+});
 test('a connected engine cannot show healthy while all upstream data is stale', () => {
   const feed = { market: quote(1000), trenches: quote(1000), flow: { ...quote(1000), complete: true, fresh: true } };
   const state = { status: 'ok', chains: ['sol', 'base'], chainCoverage: { sol: feed, base: structuredClone(feed) } };

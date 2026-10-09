@@ -1,4 +1,5 @@
 import test from "node:test";
+import {flapQuoteScheduleInterval} from '../src/flap-quote-monitor.js';
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -550,42 +551,82 @@ test("runtime wiring owns and destroys one fixed provider per configured Flap lo
   assert.match(source, /const flapQuoteStateProviders = new Map\(\)/);
   assert.match(source, /for \(const rpcUrl of config\.flapQuoteLogRpcUrls\)/);
   assert.match(source, /for \(const rpcUrl of config\.flapQuoteStateRpcUrls\)/);
-  assert.match(source, /flapQuoteLogProviders\.set\(sourceId, createAbortableJsonRpcProvider\(rpcUrl, 56,/);
-  assert.match(source, /flapQuoteStateProviders\.set\(sourceId, createAbortableJsonRpcProvider\(rpcUrl, 56,/);
+  assert.match(source, /flapQuoteLogProviders\.set\(sourceId, createRpcPool\(\[rpcUrl\], \[\], 2,/);
+  assert.match(source, /flapQuoteStateProviders\.set\(sourceId, createRpcPool\(\[rpcUrl\], \[\], 2,/);
+  assert.match(source, /fourRegistryLogProviders\.set\(sourceId, createRpcPool\(\[rpcUrl\], \[\], 2,/);
+  assert.match(source, /fourRegistryStateProviders\.set\(sourceId, createRpcPool\(\[rpcUrl\], \[\], 2,/);
   assert.match(source, /logVerificationProviders: \[\.\.\.flapQuoteLogProviders\]/);
   assert.match(source, /stateVerificationProviders: \[\.\.\.flapQuoteStateProviders\]/);
   assert.match(source, /\.\.\.flapQuoteLogProviders\.values\(\)/);
   assert.match(source, /\.\.\.flapQuoteStateProviders\.values\(\)/);
   assert.match(source, /flapQuoteLogProviders\.clear\(\)/);
   assert.match(source, /flapQuoteStateProviders\.clear\(\)/);
-  const logDefaults = "https://rpc-bnb.blockmachine.io,https://rpc.48.club";
-  const stateDefaults = "https://rpc-bnb.blockmachine.io,https://bsc-mainnet.public.blastapi.io";
+  const logDefaults = "https://bsc.rpc.sentio.xyz,https://public-bsc.nownodes.io";
+  const stateDefaults = "https://bsc.rpc.sentio.xyz,https://bsc-mainnet.nodereal.io/v1/64a9df0874fb4a93b9d0a3849de012d3";
   assert.match(configSource, new RegExp(logDefaults.replaceAll(".", "\\.")));
   assert.match(configSource, new RegExp(stateDefaults.replaceAll(".", "\\.")));
   assert.match(envExample, new RegExp(`FLAP_QUOTE_LOG_RPC_URLS=${logDefaults.replaceAll(".", "\\.")}`));
   assert.match(envExample, new RegExp(`FLAP_QUOTE_STATE_RPC_URLS=${stateDefaults.replaceAll(".", "\\.")}`));
 });
 
-test("production Portal pins carry the exact independently reproduced v5.23.1 upgrade evidence", () => {
-  assert.equal(FLAP_PORTAL_VERIFIED_VERSION, "v5.23.1");
-  assert.equal(FLAP_PORTAL_VERIFIED_IMPLEMENTATION, "0xAb8Ec926b6e113c2212aF152b086eA62d1FDced9");
+test("production Portal pins carry the exact independently reproduced v5.24.0 upgrade evidence", () => {
+  assert.equal(FLAP_PORTAL_VERIFIED_VERSION, "v5.24.0");
+  assert.equal(FLAP_PORTAL_VERIFIED_IMPLEMENTATION, "0x27a0f9Da7F5BEAd616fe0bf02bf0c793bece4e20");
   assert.equal(
     FLAP_PORTAL_VERIFIED_IMPLEMENTATION_HASH,
-    "0x78653cdd7296d940ae531c86bc6700ae163f1f9dec002c2af3143c9ae6696a15",
+    "0xb191694f7248773f714234aeb150149a2b9af5d1ab483a53d31c19ec3132b230",
   );
-  assert.equal(FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION, "v5.23.0");
-  assert.equal(FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION, "0xeb8d85bACe2AE64B74aa29cC95678a3bBb804350");
+  assert.equal(FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION, "v5.23.1");
+  assert.equal(FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION, "0xAb8Ec926b6e113c2212aF152b086eA62d1FDced9");
   assert.equal(FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH,
-    "0x3ad289cea90449a420c91a8de3a077c4d74a8d41230cb32229fcd843ff1dc3e5");
-  assert.equal(FLAP_PORTAL_UPGRADE_BLOCK, 121_652_738);
+    "0x78653cdd7296d940ae531c86bc6700ae163f1f9dec002c2af3143c9ae6696a15");
+  assert.equal(FLAP_PORTAL_UPGRADE_BLOCK, 123_307_497);
   assert.equal(
     FLAP_PORTAL_UPGRADE_BLOCK_HASH,
-    "0x417ed36b65fcf27dd3cd1e213fdcb9f0fce64ae13b9e403ff4b98fd0f7197845",
+    "0x736aaf4d42db2f599694dc4fd17458926e24202b34f06b0f1eae04824b89a5f0",
   );
   assert.equal(
     FLAP_PORTAL_UPGRADE_TRANSACTION,
-    "0xfa9f414b3a98527d52b3015ee4df17d61a5eb712ce7764cbfc6757e62fa1190f",
+    "0xca80914e6f43449a24a5cbf17c43ba23d99aca5579a0c658e6360640f3d502b8",
   );
+});
+
+test('archive backlog uses a bounded slow schedule while live Flap discovery retains its fast poll',()=>{
+ const s={identity:{verifiedBlock:10000},cursor:{nextBlock:100}};
+ assert.equal(flapQuoteScheduleInterval(s),30000);
+ s.cursor.nextBlock=9999;assert.equal(flapQuoteScheduleInterval(s),3000);
+ assert.equal(flapQuoteScheduleInterval({}),3000);
+ assert.equal(flapQuoteScheduleInterval({identity:{verifiedBlock:10000},cursor:{nextBlock:100}},5000,1000),5000);
+});
+
+test('an ethers HTTP rate-limit body preserves the advertised cooldown without consuming the cursor',async t=>{
+ const provider=new FakeBscProvider();
+ const first=new FakeLogRpcEndpoint('https://quota-a.test',provider);
+ const second=new FakeLogRpcEndpoint('https://quota-b.test',provider,{result:async(method,params)=>{
+  if(method==='eth_getLogs')throw Object.assign(new Error('exceeded maximum retry limit'),
+   {info:{responseBody:JSON.stringify({error:{code:-32029,data:{retry_after_ms:44000}}})}});
+  return provider.send(method,params);
+ }});
+ const f=await harness(t,{provider,logVerificationProviders:[first.descriptor(),second.descriptor()],
+  config:{flapQuoteBackoffBaseMs:3000,flapQuoteBackoffMaxMs:60000}});
+ await f.monitor.check();const cursor=f.monitor.state().cursor;provider.head=101;
+ const result=await f.monitor.check();assert.equal(result.errorCode,'FLAP_QUOTE_GET_LOGS_FAILED');
+ assert.equal(result.nextAttemptAt,'2026-09-03T07:00:44.000Z');
+ assert.deepEqual(f.monitor.state().cursor,cursor);
+ const before=second.calls.length;assert.equal((await f.monitor.check()).status,'backoff');
+ assert.equal(second.calls.length,before);
+});
+
+test('slow backfill failures start the provider cooldown at rejection time, not cycle start',async t=>{
+ let clock=Date.parse('2026-09-03T07:00:00Z');const provider=new FakeBscProvider();
+ const readers=[new FakeLogRpcEndpoint('https://slow-a.test',provider),new FakeLogRpcEndpoint('https://slow-b.test',provider,{result:async(method,params)=>{
+  if(method==='eth_getLogs'){clock+=120000;throw Object.assign(new Error('HTTP 429'),{retryAfterMs:44000});}
+  return provider.send(method,params);
+ }})];
+ const f=await harness(t,{provider,now:()=>clock,logVerificationProviders:readers.map(r=>r.descriptor()),config:{flapQuoteBackoffBaseMs:3000,flapQuoteBackoffMaxMs:60000}});
+ await f.monitor.check();provider.head=101;
+ assert.equal((await f.monitor.check()).nextAttemptAt,'2026-09-03T07:02:44.000Z');
+ assert.equal((await f.monitor.check()).status,'backoff');
 });
 
 test("first check establishes a silent finalized-head-plus-one baseline", async (t) => {
@@ -611,7 +652,7 @@ test("first check establishes a silent finalized-head-plus-one baseline", async 
   assert.equal((await fs.stat(fixture.monitor.stateFile)).mode & 0o777, 0o600);
 });
 
-test("production defaults advance one exact 4096-block Flap quote range per catch-up cycle", async (t) => {
+test("production defaults checkpoint contiguous ranges within a bounded 100k-block cycle", async (t) => {
   const provider = new FakeBscProvider();
   const fixture = await harness(t, {
     provider,
@@ -622,14 +663,28 @@ test("production defaults advance one exact 4096-block Flap quote range per catc
     },
   });
   assert.equal((await fixture.monitor.check()).status, "baseline");
-  provider.head = 4_196;
+  provider.head = 120_100;
   const result = await fixture.monitor.check();
   assert.equal(result.status, "healthy");
-  assert.equal(result.caughtUp, true);
-  assert.equal(result.cursor.anchorBlock, 4_194);
-  assert.equal(result.cursor.nextBlock, 4_195);
-  assert.equal(provider.getLogsCalls.length, 2, "each independent log reader uses one exact range request");
-  assert.ok(provider.getLogsCalls.every((filter) => filter.fromBlock === 99 && filter.toBlock === 4_194));
+  assert.equal(result.caughtUp, false);
+  assert.equal(result.cursor.anchorBlock, 100_098);
+  assert.equal(result.cursor.nextBlock, 100_099);
+  const ranges=provider.getLogsCalls.map(f=>[f.fromBlock,f.toBlock]).sort((a,b)=>a[0]-b[0]);
+  assert.equal(ranges.length,20,"two independent readers cover all ten exact 10k pages");
+  for(let page=0;page<10;page++){
+    assert.deepEqual(ranges.slice(page*2,page*2+2),Array(2).fill([99+page*10000,10098+page*10000]));
+  }
+});
+
+test('indexed archive readers cap oversized configuration at 10k pages without skipping blocks',async t=>{
+ const provider=new FakeBscProvider();
+ const readers=['https://bsc.rpc.sentio.xyz','https://public-bsc.nownodes.io'].map(url=>new FakeLogRpcEndpoint(url,provider));
+ const f=await harness(t,{provider,logVerificationProviders:readers.map(r=>r.descriptor()),
+  config:{flapQuoteEventChunkSize:20001,flapQuoteMaxBlocksPerCycle:20001,flapQuoteLogMaxBlockSpan:50000,flapQuoteLogRequestIntervalMs:0}});
+ await f.monitor.check();provider.head=20101;
+ const result=await f.monitor.check();assert.equal(result.status,'healthy');
+ for(const r of readers)assert.deepEqual(r.calls.filter(c=>c.method==='eth_getLogs').map(c=>[Number(c.params[0].fromBlock),Number(c.params[0].toBlock)]).sort((a,b)=>a[0]-b[0]),[[99,10098],[10099,20098],[20099,20099]]);
+ assert.equal(f.monitor.state().cursor.nextBlock,20100);
 });
 
 test("a pre-baseline RPC failure uses only volatile backoff and a restart baselines cleanly", async (t) => {
@@ -827,6 +882,33 @@ test("fixed log readers split wide catch-up ranges into bounded concurrent pages
     assert.ok(pages.every(([fromBlock, toBlock]) => toBlock - fromBlock + 1 <= 25));
   }
   assert.equal(fixture.monitor.state().cursor.nextBlock, 199);
+});
+
+test('public archive reader pages at 512 blocks while preserving the full-range two-reader quorum',async t=>{
+ const provider=new FakeBscProvider();
+ const first=new FakeLogRpcEndpoint('https://rpc-bnb.blockmachine.io',provider);
+ const archive=new FakeLogRpcEndpoint('https://bsc.rpc.blxrbdn.com',provider);
+ const fixture=await harness(t,{provider,logVerificationProviders:[first.descriptor(),archive.descriptor()],
+  config:{flapQuoteEventChunkSize:1100,flapQuoteMaxBlocksPerCycle:1100,flapQuoteLogMaxBlockSpan:4096,flapQuoteLogConcurrency:2}});
+ await fixture.monitor.check();const from=fixture.monitor.state().cursor.nextBlock;provider.head=from+1101;
+ const result=await fixture.monitor.check();assert.equal(result.status,'healthy');
+ const ranges=endpoint=>endpoint.calls.filter(c=>c.method==='eth_getLogs').map(c=>[Number(c.params[0].fromBlock),Number(c.params[0].toBlock)]).sort((a,b)=>a[0]-b[0]);
+ assert.deepEqual(ranges(first),[[from,from+1099]]);
+ assert.deepEqual(ranges(archive),[[from,from+511],[from+512,from+1023],[from+1024,from+1099]]);
+ assert.equal(fixture.monitor.state().cursor.nextBlock,from+1100);
+});
+
+test('BlockRazor archive paging respects its 25-block cap and agrees with the larger reader',async t=>{
+ const provider=new FakeBscProvider();
+ const first=new FakeLogRpcEndpoint('https://bsc.blockrazor.xyz',provider);
+ const second=new FakeLogRpcEndpoint('https://bsc.rpc.blxrbdn.com',provider);
+ const f=await harness(t,{provider,logVerificationProviders:[first.descriptor(),second.descriptor()],
+  config:{flapQuoteEventChunkSize:80,flapQuoteMaxBlocksPerCycle:80,flapQuoteLogMaxBlockSpan:4096,flapQuoteLogConcurrency:2}});
+ await f.monitor.check();provider.head=180;const result=await f.monitor.check();
+ assert.equal(result.status,'healthy');
+ const ranges=p=>p.calls.filter(c=>c.method==='eth_getLogs').map(c=>[Number(c.params[0].fromBlock),Number(c.params[0].toBlock)]).sort((a,b)=>a[0]-b[0]);
+ assert.deepEqual(ranges(first),[[99,123],[124,148],[149,173],[174,178]]);
+ assert.deepEqual(ranges(second),[[99,178]]);assert.equal(f.monitor.state().cursor.nextBlock,179);
 });
 
 test("a later page rate limit preserves earlier page commits and resumes exactly once after restart", async (t) => {
@@ -1222,6 +1304,37 @@ test("a verified direct bStock activation hands off one exact monitor-only lifec
     monitorOnly: true,
   }]);
   assert.equal(fixture.alerts[0].changes.newFlapPools[0].quoteSymbol, "SQQQB");
+});
+
+test("scanner handoff is durable before a blocked TG call and notification failure survives restart without re-arming", async (t) => {
+  const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),"flap-handoff-before-tg-"));
+  t.after(()=>fs.rm(dataDir,{recursive:true,force:true}));
+  const provider=new FakeBscProvider(),records=[];
+  let release,entered;
+  const sending=new Promise(resolve=>{entered=resolve;});
+  const lifecycle=async record=>{
+    records.push(record);
+    return {accepted:true,action:record.action,status:record.action,quoteAddress:record.quoteAddress,generationKey:'test-generation'};
+  };
+  const first=await harness(t,{provider,dataDir,onFlapQuotePoolLifecycle:lifecycle,
+    sendAlertsImpl:async()=>{entered();return new Promise(resolve=>{release=()=>resolve({status:'failed'});});}});
+  await first.monitor.check();
+  const log=addAssetEvent(provider,{blockNumber:99,logIndex:20});provider.head=101;
+  const job=first.monitor.check();
+  await sending;
+  try {
+    assert.equal(records.length,1,'the scanner is armed while TG is still pending');
+    const s=first.monitor.state();
+    assert.equal(s.eventRecords[0].delivered,false);
+    assert.equal(s.quoteAssets[lower(FLAP_MRNAB_ADDRESS)].lifecycleActivationEventKey,flapQuoteEventKey(log));
+    assert.ok(s.pendingEnableCandidates[lower(FLAP_MRNAB_ADDRESS)]);
+  } finally {release();}
+  assert.equal((await job).errorCode,'FLAP_QUOTE_ALERT_NOT_DURABLE');
+  await first.monitor.stop();
+  const restarted=await harness(t,{provider,dataDir,onFlapQuotePoolLifecycle:lifecycle});
+  assert.equal((await restarted.monitor.check()).delivered,1);
+  assert.equal(records.length,1,'notification retry must not create another scanner generation');
+  assert.equal(restarted.alerts.length,1);
 });
 
 test("a non-durable lifecycle reply leaves delivery pending and retries the same record after restart", async (t) => {
@@ -3356,7 +3469,7 @@ test("disabled configuration is removal audit, never a platform capability alert
   assert.equal(fixture.lifecycles.at(-1).monitorOnly, true);
 });
 
-test("an enabled configuration refresh is audited instead of being mislabeled as a new pool", async (t) => {
+test("an enabled material configuration change arms a distinct generation, never a new-pool alert", async (t) => {
   const fixture = await harness(t);
   await fixture.monitor.check();
   addAssetEvent(fixture.provider, { blockNumber: 99 });
@@ -3379,8 +3492,10 @@ test("an enabled configuration refresh is audited instead of being mislabeled as
   assert.equal(fixture.alerts.length, 1);
   assert.equal(fixture.monitor.state().auditTrail.at(-1).action, "updated");
   assert.equal(fixture.monitor.state().quoteAssets[lower(FLAP_MRNAB_ADDRESS)].configuration.defaultCurve, 33);
-  assert.deepEqual(fixture.lifecycles.map(({ action }) => action), ["activated"],
-    "an enabled-to-enabled configuration refresh does not create another lifecycle generation");
+  assert.deepEqual(fixture.lifecycles.map(({ action }) => action), ["activated", "reconfigured"]);
+  assert.equal(fixture.lifecycles.at(-1).proofType, "verified_configuration_change");
+  assert.equal(fixture.lifecycles.at(-1).previousConfiguration.defaultCurve, 32);
+  assert.equal(fixture.lifecycles.at(-1).configuration.defaultCurve, 33);
 });
 
 test("an already-enabled pre-baseline asset is not mislabeled as newly enabled", async (t) => {
@@ -3408,6 +3523,82 @@ test("an already-enabled pre-baseline asset is not mislabeled as newly enabled",
   assert.equal(fixture.alerts.length, 0);
   assert.equal(fixture.monitor.state().auditTrail.at(-1).action, "updated");
   assert.equal(fixture.monitor.state().quoteAssets[lower(FLAP_MRNAB_ADDRESS)].configuration.defaultCurve, 33);
+  assert.equal(fixture.lifecycles.length, 1);
+  assert.equal(fixture.lifecycles[0].action, "reconfigured");
+});
+
+test("an identical enabled Portal configuration does not re-arm a generation", async (t) => {
+  const fixture = await harness(t);
+  await fixture.monitor.check();
+  addAssetEvent(fixture.provider, { blockNumber: 99 });
+  fixture.provider.head = 101;
+  await fixture.monitor.check();
+  fixture.provider.addQuoteEvent({ address: FLAP_MRNAB_ADDRESS,
+    configuration: [1, 32, 32, 7, 0], blockNumber: 100, logIndex: 11 });
+  fixture.provider.head = 102;
+  assert.equal((await fixture.monitor.check()).status, "healthy");
+  assert.deepEqual(fixture.lifecycles.map(({action}) => action), ["activated"]);
+});
+
+test("configuration generation handoff retries durably and an orphan restores the exact predecessor", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-configuration-reorg-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const provider = new FakeBscProvider();
+  const lifecycles = [];
+  let held = true;
+  const onFlapQuotePoolLifecycle = async (record) => {
+    lifecycles.push(structuredClone(record));
+    if (record.action === "reconfigured" && held) return { accepted: false, status: "queued" };
+    return { accepted: true, action: record.action, status: record.action, quoteAddress: record.quoteAddress };
+  };
+  let fixture = await harness(t, { provider, dataDir, onFlapQuotePoolLifecycle });
+  await fixture.monitor.check();
+  const enable = addAssetEvent(provider, { blockNumber: 99 });
+  provider.head = 101;
+  await fixture.monitor.check();
+  provider.setConfiguration(FLAP_MRNAB_ADDRESS, [1, 33, 34, 7, 0]);
+  const update = provider.addQuoteEvent({ address: FLAP_MRNAB_ADDRESS,
+    configuration: [1, 33, 34, 7, 0], blockNumber: 100, logIndex: 11 });
+  provider.head = 102;
+  assert.equal((await fixture.monitor.check()).errorCode, "FLAP_QUOTE_LIFECYCLE_NOT_DURABLE");
+  assert.equal(fixture.monitor.state().quoteAssets[lower(FLAP_MRNAB_ADDRESS)].configuration.defaultCurve, 32);
+  await fixture.monitor.stop();
+  held = false;
+  fixture = await harness(t, { provider, dataDir, onFlapQuotePoolLifecycle });
+  assert.equal((await fixture.monitor.check()).status, "healthy");
+  assert.deepEqual(lifecycles[1], lifecycles[2]);
+  await fixture.monitor.stop();
+  provider.setBlockHash(100, id("configuration-reorg-replacement"));
+  provider.logs = provider.logs.filter((log) => flapQuoteEventKey(log) !== flapQuoteEventKey(update));
+  provider.configurationHistory.set(lower(FLAP_MRNAB_ADDRESS),
+    provider.configurationHistory.get(lower(FLAP_MRNAB_ADDRESS)).filter((entry) => entry.blockNumber !== 100));
+  provider.setConfiguration(FLAP_MRNAB_ADDRESS, [1, 32, 32, 7, 0]);
+  fixture = await harness(t, { provider, dataDir, onFlapQuotePoolLifecycle });
+  assert.equal((await fixture.monitor.check()).status, "healthy");
+  assert.equal(lifecycles.at(-1).action, "reverted");
+  assert.equal(lifecycles.at(-1).targetActivationEventKey, flapQuoteEventKey(enable));
+  assert.equal(fixture.monitor.state().quoteAssets[lower(FLAP_MRNAB_ADDRESS)].configuration.defaultCurve, 32);
+});
+
+test("same-range enable and two material updates retain each exact predecessor without repeat arming", async (t) => {
+  const fixture = await harness(t);
+  await fixture.monitor.check();
+  const enable = addAssetEvent(fixture.provider, { blockNumber: 99 });
+  const one = fixture.provider.addQuoteEvent({ address: FLAP_MRNAB_ADDRESS,
+    configuration: [1, 33, 34, 7, 0], blockNumber: 100, logIndex: 11 });
+  const two = fixture.provider.addQuoteEvent({ address: FLAP_MRNAB_ADDRESS,
+    configuration: [1, 34, 35, 7, 0], blockNumber: 101, logIndex: 11 });
+  fixture.provider.setConfiguration(FLAP_MRNAB_ADDRESS, [1, 34, 35, 7, 0]);
+  fixture.provider.head = 103;
+  assert.equal((await fixture.monitor.check()).status, "healthy");
+  assert.deepEqual(fixture.lifecycles.map(({action}) => action), ["activated", "reconfigured", "reconfigured"]);
+  const records = fixture.monitor.state().eventRecords;
+  assert.equal(records.find((r) => r.eventKey === flapQuoteEventKey(one)).previousAsset.lifecycleActivationEventKey,
+    flapQuoteEventKey(enable));
+  assert.equal(records.find((r) => r.eventKey === flapQuoteEventKey(two)).previousAsset.lifecycleActivationEventKey,
+    flapQuoteEventKey(one));
+  assert.equal(fixture.monitor.state().quoteAssets[lower(FLAP_MRNAB_ADDRESS)].lifecycleActivationEventKey,
+    flapQuoteEventKey(two));
 });
 
 test("independent prior-state disagreement freezes an apparent enable transition", async (t) => {
@@ -3601,7 +3792,7 @@ test("persisted Portal identity pins cannot be forged or carried across an upgra
   assert.equal(provider.getLogsCalls.length, 0);
 });
 
-test("the exact v5.23.0 state migrates only after v5.23.1 quorum verification and resumes its cursor", async (t) => {
+test("the exact v5.23.1 state migrates only after v5.24.0 quorum verification and resumes its cursor", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-quote-pin-migration-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
   const provider = new FakeBscProvider();

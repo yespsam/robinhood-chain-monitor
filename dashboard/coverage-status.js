@@ -8,7 +8,7 @@ export function marketCoverageStatus(snapshot, now = Date.now()) {
   const ageMs = coverageAge(snapshot, now);
   const fresh = snapshot?.status === 'ok' && ageMs !== null && ageMs <= 120000;
   const age = ageMs === null ? '' : `（${Math.floor(ageMs / 1000)} 秒前）`;
-  const label = fresh ? `新鲜${age}` : ageMs > 120000 ? `已过期${age}`
+  const label = snapshot?.status === 'loading' && !snapshot.observedAt ? '启动后等待首次采集' : fresh ? `新鲜${age}` : ageMs > 120000 ? `已过期${age}`
     : snapshot?.observedAt && ageMs === null ? '时间戳异常'
       : snapshot?.status === 'stale' ? `上次快照${age}` : '等待新鲜数据';
   return { fresh, ageMs, label };
@@ -24,7 +24,7 @@ export function flowCoverageStatus(snapshot, now = Date.now()) {
 
 // A healthy local process is not evidence that its upstream feeds are usable.
 export function tradingDataHealth(state, now = Date.now()) {
-  const chains = state?.chains || [];
+  const chains = state?.scanScope?.scanChains || state?.chains || [];
   const rows = chains.map(chain => {
     const feed = state.chainCoverage?.[chain] || {};
     const marketFresh = marketCoverageStatus(feed.market, now).fresh || marketCoverageStatus(feed.trenches, now).fresh;

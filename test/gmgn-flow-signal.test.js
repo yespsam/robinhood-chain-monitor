@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {GMGN_FLOW_CHAINS,gmgnFlowAddress,parseGmgnFlowTrades,parseGmgnFlowCandles,parseGmgnFlowProfile,
-  qualifiesGmgnFlowWallet,gmgnFlowVolume,evaluateGmgnFlowSignal,isGmgnFlowEvent} from '../src/gmgn-flow-signal.js';
+  qualifiesGmgnFlowWallet,gmgnFlowWalletQualification,gmgnFlowVolume,evaluateGmgnFlowSignal,isGmgnFlowEvent} from '../src/gmgn-flow-signal.js';
 const now=Date.parse('2026-09-20T01:00:10Z'),end=Math.floor(now/60000)*60000;
 const addr=n=>`0x${n.toString(16).padStart(40,'0')}`,hash=n=>`0x${n.toString(16).padStart(64,'0')}`;
 function input(chain='bsc') {
@@ -77,6 +77,21 @@ test('an unknown zero creation timestamp cannot qualify as an old high-profit wa
   assert.equal(evaluateGmgnFlowSignal({...e,profiles:{...e.profiles,[wallet]:unknownAge}}),null,
    'unknown wallet age cannot supply the fifth high-profit buyer');
  }
+});
+
+test('wallet qualification distinguishes missing evidence from measured insufficient performance',()=>{
+ const e=input(),wallet=addr(1),p=e.profiles[wallet];
+ assert.equal(gmgnFlowWalletQualification(p,'bsc',wallet,now).status,'qualified');
+ const unknown=structuredClone(p);unknown['7d'].createdAt=0;
+ const before=JSON.stringify(unknown),missing=gmgnFlowWalletQualification(unknown,'bsc',wallet,now);
+ assert.equal(missing.status,'missing_evidence');assert.equal(missing.qualified,false);
+ assert.deepEqual(missing.missing,['7d:wallet_age_unknown']);assert.deepEqual(missing.failed,[]);
+ assert.equal(JSON.stringify(unknown),before,'known performance is preserved, never rewritten to compensate for missing identity');
+ const losing=structuredClone(p);losing['30d'].realizedProfitUsd=-100;
+ const failed=gmgnFlowWalletQualification(losing,'bsc',wallet,now);
+ assert.equal(failed.status,'not_qualified');assert.deepEqual(failed.missing,[]);
+ assert.ok(failed.failed.includes('30d:realizedProfitUsd_below_requirement'));
+ assert.equal(gmgnFlowWalletQualification({},'bsc',wallet,now).status,'missing_evidence');
 });
 
 test('blocked performance-profile tags exclude the whole wallet even when its trade has the fomo tag',()=>{

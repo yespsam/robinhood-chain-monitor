@@ -3,6 +3,7 @@ import { readAuthenticatedNarrativeDocument } from './narrative-source-adapter.j
 import { verifyCapitalKolEventSnapshot, capitalKolCatalogFreshness } from './capital-kol-catalog.js';
 import { collectGmgnFlowNarratives } from './gmgn-flow-narrative.js';
 import { gmgnFlowAddress } from './gmgn-flow-signal.js';
+import { createBoundedTextMemo } from './bounded-text-memo.js';
 
 export const NARRATIVE_RECALL_VERSION = 'og_recall_v1';
 const DAY = 86400000, WEEK = 7 * DAY, TRIGGER_TTL = 120000;
@@ -22,12 +23,16 @@ const negative = /\b(?:scam|rugged|honeypot|fake|avoid|not affiliated|do not buy
 const stop = new Set('the a an and or of on in to for is are was be with this that it its as at by from we i you our my your they have has now new today live token coin meme crypto blockchain market buy buying launch launched official project community soon again back more not ai web3 defi solana bsc ethereum base gmgn com https http www us all will can may just about into here there one first launchpad 的 了 是 在 和 与 一个 这个 那个 我 我们 你 他们 已经 今天 现在 发布 上线 代币 项目 社区 官方 买入 加密 叙事 机会 可以 再次 关注'.split(/\s+/));
 const segmenter = new Intl.Segmenter('zh', {granularity:'word'});
 // Explainable lexical recall, not an LLM claim of semantic equivalence.
-export function narrativeTerms(text) {
+function extractNarrativeTerms(text) {
   let s = clean(text).toLowerCase().replace(/https?:\/\/\S+|0x[\da-f]{40,64}|\b[1-9A-HJ-NP-Za-km-z]{32,100}\b/gu,' ');
   for(const [re,word] of [[/无人驾驶出租车|自动驾驶出租车|robot\s+taxi/gu,'robotaxi'],[/回购销毁|buyback\s+and\s+burn/gu,'buybackburn'],[/人工智能代理|ai\s+agents?/gu,'aiagent'],[/永续合约|perpetuals?/gu,'perpetual']])s=s.replace(re,word);
   return [...new Set([...segmenter.segment(s)].filter(x=>x.isWordLike).map(x=>x.segment)
     .filter(x=>x.length>=2 && !stop.has(x) && !/^\d+$/.test(x)))].slice(0,64);
 }
+// Cache text segmentation only. readRecallDocument still authenticates every
+// event and rechecks its clock, content conflicts and exact-CA binding.
+const termMemo = createBoundedTextMemo(extractNarrativeTerms, { maxEntries: 2048, maxLength: 4000 });
+export function narrativeTerms(text) { return [...termMemo.get(text)]; }
 export function narrativeOverlap(a,b) {
   const left=new Set(a),right=new Set(b),matched=[...left].filter(x=>right.has(x));
   const score=matched.length/(left.size+right.size-matched.length || 1);

@@ -1,0 +1,147 @@
+{
+  "version": 1,
+  "mode": "readonly_research",
+  "group": "bsc",
+  "triggeredAt": "2026-10-03T15:49:10.918Z",
+  "completedAt": "2026-10-03T15:54:29.241Z",
+  "question": "C 的 PairLab 是否已有后续退出；若活动接口忙碌，核验固定区块库存并保留交易路径缺口。",
+  "baseline": [
+    {
+      "path": "docs/operator-clusters-2026-10-02.json",
+      "sha256": "1b952275a0986a2dc10e1f80eb0e7a27f0e498cd2f1585ca92a3d4f5b58e1d55"
+    },
+    {
+      "path": "docs/operator-reference-learning-2026-10-02.json",
+      "sha256": "3cde872e2325e011281a9d5174514a5359ca1f47749e1f335ed3728dbbd2d4ad"
+    },
+    {
+      "path": "docs/operator-reference-analysis-2026-10-02.json",
+      "sha256": "3b82c386681b98e22db5455f4ffd3a9c5c034f8fe30161946079cabd202b2e04"
+    }
+  ],
+  "baselineHashesVerified": true,
+  "priorCheckpointUpdatedAt": "2026-10-03T11:51:50.440Z",
+  "bounds": {
+    "gmgnConfigChecks": 2,
+    "gmgnBusinessAttempts": 1,
+    "gmgnBusinessDispatched": 0,
+    "gmgnSucceeded": 0,
+    "gmgnFailed": 1,
+    "rpcRequests": 2,
+    "rpcSucceeded": 2,
+    "newRows": 0,
+    "newInventoryVerifications": 1,
+    "newAddresses": 0
+  },
+  "configCheck": {
+    "explicit": {
+      "passed": true,
+      "checkedAt": "2026-10-03T15:50:05.418Z"
+    },
+    "clientInternal": {
+      "passed": true,
+      "source": "createGmgnFlowClient.checkConfig awaited before activity"
+    }
+  },
+  "activityAttempt": {
+    "startedAt": "2026-10-03T15:50:43.445Z",
+    "receivedAt": "2026-10-03T15:51:14.031Z",
+    "businessRequests": 1,
+    "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+    "error": {
+      "code": "GMGN_REQUEST_BUSY",
+      "retryAt": null
+    }
+  },
+  "rpc": [
+    {
+      "source": "https://bsc-dataseed-public.bnbchain.org",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "eth_getBlockByNumber",
+        "params": [
+          "latest",
+          false
+        ]
+      },
+      "startedAt": "2026-10-03T15:52:08.572Z",
+      "receivedAt": "2026-10-03T15:52:09.528Z",
+      "http": 200,
+      "result": {
+        "number": "0x77b2766",
+        "hash": "0xdd49ba8c200dff2faaa533ff90f459132323f9d1df249762a432782b62d2d4df",
+        "parentHash": "0x668d14ca7a0987a85a8f7f038d0f040f0975402f412c41e5ece6953e40f0bb1e",
+        "timestamp": "0x6ac124aa",
+        "stateRoot": "0x63efcf252034e8ec6bea485652c0b1447f2649db6c1a811b8d6f83a72dc9654f",
+        "transactionsCount": 70
+      },
+      "error": null
+    },
+    {
+      "source": "https://bsc-dataseed-public.bnbchain.org",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "eth_call",
+        "params": [
+          {
+            "to": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "data": "0x70a082310000000000000000000000006ac1d33ecdaf26b6092e010bca251d2917af6e01"
+          },
+          "0x77b2766"
+        ]
+      },
+      "startedAt": "2026-10-03T15:52:09.529Z",
+      "receivedAt": "2026-10-03T15:52:09.631Z",
+      "http": 200,
+      "result": "0x0000000000000000000000000000000000000000000bc8868ae450764220d8ac",
+      "error": null
+    }
+  ],
+  "analysis": {
+    "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+    "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+    "blockNumber": 125511526,
+    "blockHash": "0xdd49ba8c200dff2faaa533ff90f459132323f9d1df249762a432782b62d2d4df",
+    "blockTimestamp": "2026-10-03T15:52:10.000Z",
+    "checkedAt": "2026-10-03T15:52:09.631Z",
+    "balanceRaw": "14245139184253467814320300",
+    "balanceToken": "14245139.184253467814320300",
+    "prior": {
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "checkedAt": "2026-10-02T23:22:52.369Z",
+      "balanceRaw": "14245139184253467814320300",
+      "decimals": 18,
+      "balanceToken": "14245139.184253467814320300",
+      "source": "https://bsc-dataseed-public.bnbchain.org",
+      "blockTag": "latest"
+    },
+    "deltaRaw": "0",
+    "equal": true
+  },
+  "decimalsSource": "docs/operator-reference-followups/2026-10-03-0722-bsc-c.json",
+  "limitations": [
+    "GMGN 活动查询在共享账户队列内返回 GMGN_REQUEST_BUSY，未取得新页；无法确认早上活动检查之后是否有卖出或转仓，不能把失败当零交易。",
+    "两个时点余额完全相同只证明净库存相同，不排除中间等量买卖或转账；没有新交易哈希可做退出回执核验。",
+    "本轮仅以区块高度固定 balanceOf，区块哈希来自前一请求；未作 EIP-1898 哈希绑定、finalized 或第二节点交叉检查，仍有节点/重组边界。",
+    "decimals=18 复用此前同 CA 的 RPC 结果，本轮未再次查询；以原始整数余额为主要证据。",
+    "只刷新 C 的单个 CA；不将 A/B 旧零余额拼接成当前整组库存，不估计净利润或未返回浮盈。",
+    "仅为本轮时点抽查，未证明两轮之间持续采集；持仓未变不是看涨、叙事成立或稳定盈利证据。"
+  ],
+  "heartbeatSnapshot": {
+    "checkedAt": "2026-10-03T15:51:13.422Z",
+    "main": {
+      "pid": 17133,
+      "updatedAt": "2026-10-03T15:50:52.542Z"
+    },
+    "fomo": {
+      "pid": 71742,
+      "updatedAt": "2026-10-03T15:51:01.060Z"
+    },
+    "bsc": {
+      "pid": 17135,
+      "updatedAt": "2026-10-03T15:50:55.674Z"
+    }
+  }
+}

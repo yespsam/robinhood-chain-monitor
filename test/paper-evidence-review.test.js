@@ -7,6 +7,21 @@ const entry=()=>({id:'buy',side:'buy',chain:'bsc',address:CA,atMs:NOW,costsUsd:.
   flowDiagnostics:{complete:true,observedAt:NOW-1000,profileCheckedCount:0,sourceStatus:'healthy'},
   narrativeThesis:{chain:'bsc',address:CA,observedAt:NOW-5,relationship:{kind:'community_link'},
     event:{sourceUrl:url,sourceAt:NOW-10000},sources:[{url,at:NOW-10000,binding:'community_link'}]}}});
+test('new per-CA complete window proof isolates global warnings without relaxing old records or missing profiles',()=>{
+  const e=entry(),d=e.entryEvidence.flowDiagnostics;
+  Object.assign(d,{provider:'gmgn',sourceStatus:'partial',sourceIssue:'bounded_trade_feed_not_full_chain',profileCheckedCount:1});
+  e.entryEvidence.flow.highProfitCount=1;
+  assert.equal(classifyEntryEvidence(e).wallet,'unknown','legacy records keep their original strict classification');
+  d.tokenEvidence={version:'ca_flow_window_v1',chain:'bsc',address:CA,scope:'gmgn_public_smartmoney_kol_5m',
+    status:'healthy',complete:true,observedAt:d.observedAt};
+  assert.equal(classifyEntryEvidence(e).wallet,'verified_profit');
+  for(const mutate of [x=>x.flowDiagnostics.tokenEvidence.address='0x'+'2'.repeat(40),
+    x=>x.flowDiagnostics.tokenEvidence.complete=false,x=>x.flowDiagnostics.tokenEvidence.observedAt=NOW,
+    x=>x.flowDiagnostics.coverageGap='ambiguous_trade_legs',x=>x.flowDiagnostics.profileCheckedCount=0,
+    x=>x.flowFresh=false]) {
+    const bad=structuredClone(e);mutate(bad.entryEvidence);assert.equal(classifyEntryEvidence(bad).wallet,'unknown');
+  }
+});
 test('frozen community link is not direct endorsement; tags are not verified profit',()=>{
   assert.equal(classifyEntryEvidence(entry()).narrative,'community_link');
   assert.equal(classifyEntryEvidence(entry()).wallet,'tagged_only');

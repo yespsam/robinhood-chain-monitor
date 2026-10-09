@@ -103,6 +103,9 @@ function startFomoWorker() {
   }
 
   let stopping = false;
+  if (config.fomoPlatformSourcesEnabled === false) {
+    console.info("[monitor-sources] FOMO platform sources disabled by user; GMGN smart-money and public X retain their existing settings");
+  }
   const runtimeHeartbeat = startRuntimeHeartbeat({
     file: path.join(config.dataDir, "fomo-runtime-heartbeat.json"),
     producer: "fomo",

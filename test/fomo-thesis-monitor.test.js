@@ -318,6 +318,33 @@ test("BSC-only mode accepts resolver-confirmed records without a chain claim", a
   assert.equal(alerts[0].chain.id, 56);
 });
 
+test("slow thesis polls coalesce concurrent ticks and allow a fresh poll after completion", async (t) => {
+  const dataDir = await fixture(t);
+  let release, entered;
+  const gate = new Promise(resolve => { release = resolve; });
+  const started = new Promise(resolve => { entered = resolve; });
+  let requests = 0;
+  const monitor = createFomoThesisMonitor({ dataDir, fomoPublishedCallEnabled: true, fomoOfficialBearerToken: "test-only" }, {
+    autoStart: false, logger: quietLogger,
+    fetchImpl: async () => {
+      requests += 1;
+      entered();
+      await gate;
+      return ok({ data: { feed: [] } });
+    },
+    sendAlertsImpl: async () => { throw new Error("no records to send"); },
+  });
+  const firstCheck = monitor.check();
+  await started;
+  for (let index = 0; index < 20; index++) assert.equal(monitor.check(), firstCheck);
+  const stopping = monitor.stop();
+  release();
+  await Promise.all([firstCheck, stopping]);
+  assert.equal(requests, 1, "shutdown must not drain twenty duplicate queued polls");
+  await monitor.check();
+  assert.equal(requests, 2, "completed poll cannot suppress the next fresh sample");
+});
+
 test("missing credentials writes blocked health and never sends", async (t) => {
   const dataDir = await fixture(t);
   const alerts = [];

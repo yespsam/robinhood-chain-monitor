@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import { gmgnReadonlyPolicy } from './gmgn-readonly-pacing.js';
+import { compareReadonlyWork, canAdmitReadonly } from './readonly-admission-policy.js';
 
 const failure = code => Object.assign(new Error(code), {code});
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -27,9 +28,11 @@ export function createGmgnAccountGate(dataDir, {intervalMs=null, waitMs=30_000, 
       if(dead||(!raw&&Date.now()-stat.mtimeMs>60_000))await fs.unlink(lock);
     } finally {await fs.rmdir(recovery);}
   }
-  return async function gate(work, signal, {priority=0}={}) {
+  return async function gate(work, signal, {priority=0,onAdmitted}={}) {
     if (![0,1,2].includes(priority)) throw failure('GMGN_INVALID_ARGUMENT');
-    const token=randomUUID(),started=Date.now();let handle,owned=false,temp,leased=false;
+    if(onAdmitted!==undefined&&typeof onAdmitted!=='function')throw failure('GMGN_INVALID_ARGUMENT');
+    const token=randomUUID(),started=Date.now();let handle,owned=false,temp,leased=false,serialWorkStartedAt=0;
+    let queueScans=0,queueHighWater=0;
     const ticket=path.join(queue,`${token}.json`);
     const active=()=>{if(signal?.aborted)throw failure('GMGN_STOPPED');};
     async function unlock() {
@@ -72,31 +75,47 @@ export function createGmgnAccountGate(dataDir, {intervalMs=null, waitMs=30_000, 
         const state=await readSlot(),last=state.startedAt;
         const policy=intervalMs===null ? gmgnReadonlyPolicy(dataDir) : {intervalMs,concurrency:1,normalConcurrency:1};
         const at=Date.now(),waiting=[];
+        // A saturated seat / pacing interval cannot admit this request. Do not
+        // rescan every ticket under the shared mutex every 50ms in that case.
+        // Another priority (especially an exit) may still acquire the lock.
+        if(at<last+policy.intervalMs||!canAdmitReadonly({priority},state.active,policy)) {
+          await unlock();await delay(50);continue;
+        }
         const names=(await fs.readdir(queue)).filter(name=>/^[0-9a-f-]{36}\.json$/.test(name));
         if(names.length>1000)throw failure('GMGN_STATE_INVALID');
-        for(const name of names) {
+        queueScans++;queueHighWater=Math.max(queueHighWater,names.length);
+        const readTicket=async name=>{
           const file=path.join(queue,name);let item;
           try {
             const stat=await fs.stat(file);if(!stat.isFile()||stat.size>4096)throw failure('GMGN_STATE_INVALID');
             item=JSON.parse(await fs.readFile(file,'utf8'));
-          } catch(e) {if(e.code==='ENOENT')continue;throw failure('GMGN_STATE_INVALID');}
+          } catch(e) {if(e.code==='ENOENT')return null;throw failure('GMGN_STATE_INVALID');}
           if(item?.version!==1||`${item.token}.json`!==name||!Number.isSafeInteger(item.pid)||item.pid<=0
             ||!Number.isFinite(item.queuedAt)||!Number.isFinite(item.expiresAt)||item.expiresAt<=item.queuedAt
             ||item.queuedAt>at+1000||![0,1,2].includes(item.priority))throw failure('GMGN_STATE_INVALID');
-          if(item.expiresAt<=at||!alive(item.pid)) {await fs.unlink(file).catch(e=>{if(e.code!=='ENOENT')throw e;});continue;}
-          if(state.active.length<policy.concurrency && (item.priority===2
-            || state.active.filter(entry=>entry.priority!==2).length<policy.normalConcurrency))waiting.push(item);
+          if(item.expiresAt<=at||!alive(item.pid)) {await fs.unlink(file).catch(e=>{if(e.code!=='ENOENT')throw e;});return null;}
+          return item;
+        };
+        // Bounded parallel FILE reads, not parallel business requests. Await
+        // every result before releasing the mutex, including on corruption.
+        for(let i=0;i<names.length;i+=16) {
+          const batch=await Promise.allSettled(names.slice(i,i+16).map(readTicket));
+          const failed=batch.find(result=>result.status==='rejected');
+          if(failed)throw failed.reason;
+          for(const {value:item} of batch)if(item&&canAdmitReadonly(item,state.active,policy))waiting.push(item);
         }
-        const score=item=>item.priority+Math.floor(Math.max(0,at-item.queuedAt)/agingMs);
-        waiting.sort((a,b)=>score(b)-score(a)||a.queuedAt-b.queuedAt||a.token.localeCompare(b.token));
+        waiting.sort((a,b)=>compareReadonlyWork(a,b,at,agingMs));
         if(at>=last+policy.intervalMs&&waiting[0]?.token===token) {
           active();
+          if(Date.now()-started>=waitMs)throw failure('GMGN_REQUEST_BUSY');
           await writeSlot({version:1,startedAt:Date.now(),active:[...state.active,{token,pid:process.pid,priority}]});leased=true;
           await fs.unlink(ticket);
           // The lock protects admission/state only under Plus. The lease keeps
           // network requests bounded while an exit may use the reserved slot.
           // Free keeps the old lock-through-work protocol for rolling upgrades.
           if(policy.concurrency>1)await unlock();
+          else serialWorkStartedAt=Date.now();
+          onAdmitted?.({waitMs:Date.now()-started,queueScans,queueHighWater});
           return await work();
         }
         // Do not reserve the entire pacing interval: a later exit request must
@@ -112,7 +131,13 @@ export function createGmgnAccountGate(dataDir, {intervalMs=null, waitMs=30_000, 
             try {handle=await fs.open(lock,'wx',0o600);owned=true;await handle.writeFile(JSON.stringify({pid:process.pid,token}));await handle.close();handle=null;}
             catch(e){if(e.code!=='EEXIST')throw e;await recoverDeadOwner();await delay(50);}
           }
-          const state=await readSlot();await writeSlot({...state,active:state.active.filter(item=>item.token!==token)});
+          const state=await readSlot();
+          // Serial admission timestamps precede filesystem I/O. Under load,
+          // that I/O can consume the pacing interval before work even starts.
+          // Keep the lock through work and publish its actual start before the
+          // next owner is admitted, without altering Plus parallel leases.
+          await writeSlot({...state,startedAt:Math.max(state.startedAt,serialWorkStartedAt),
+            active:state.active.filter(item=>item.token!==token)});
         }
       } finally {
         await unlock();

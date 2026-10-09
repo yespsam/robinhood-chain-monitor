@@ -406,6 +406,7 @@ export function createFomoThesisMonitor(config, dependencies = {}) {
   let stopped = false;
   let pollTimer = null;
   let serial = Promise.resolve();
+  let pendingCheck = null;
   const sockets = new Map();
   const reconnectTimers = new Map();
 
@@ -575,7 +576,7 @@ export function createFomoThesisMonitor(config, dependencies = {}) {
   async function runCheck() {
     await ensureState();
     const observedAt = now();
-    if (config.fomoPublishedCallEnabled !== true) {
+    if (config.fomoPublishedCallEnabled !== true || config.fomoPlatformSourcesEnabled === false) {
       state.health = { status: "disabled", checkedAt: new Date(observedAt).toISOString(), sources: state.health.sources || {} };
       await persist();
       return { status: "disabled" };
@@ -629,7 +630,17 @@ export function createFomoThesisMonitor(config, dependencies = {}) {
     return { status: state.health.status };
   }
 
-  const check = () => serialize(runCheck);
+  // Timers may tick while a multi-source poll is still running or waiting for
+  // a socket delivery. Join that poll instead of creating an unbounded queue
+  // of obsolete polls. Distinct websocket events retain their own serial work.
+  const check = () => {
+    if (pendingCheck) return pendingCheck;
+    const work = serialize(runCheck).finally(() => {
+      if (pendingCheck === work) pendingCheck = null;
+    });
+    pendingCheck = work;
+    return work;
+  };
 
   function attachSocket(handle) {
     if (!started || stopped || !relayToken || !websocketEnabled || !WebSocketImpl) return;
@@ -722,7 +733,7 @@ export function createFomoThesisMonitor(config, dependencies = {}) {
   }
 
   async function start() {
-    if (started || config.fomoPublishedCallEnabled !== true) return;
+    if (started || config.fomoPublishedCallEnabled !== true || config.fomoPlatformSourcesEnabled === false) return;
     started = true;
     stopped = false;
     await check();

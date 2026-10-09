@@ -31,9 +31,37 @@ export function gmgnFlowTags(tags) {
   if (!Array.isArray(tags)) return [];
   return [...new Set(tags.filter(t=>typeof t === 'string').map(t=>t.trim().toLowerCase()))].sort();
 }
+export function validGmgnReceiptLegs(t) {
+  const v=t?.receiptLegs;
+  if(v===undefined)return true;
+  const near=(a,b)=>Number.isFinite(a)&&Number.isFinite(b)&&Math.abs(a-b)<=Math.max(1,a,b)*1e-10;
+  return t.chain==='eth' && v?.version===1 && /^0x[\da-f]{64}$/.test(v.blockHash||'')
+    && Array.isArray(v.parts) && v.parts.length>=2 && v.parts.length<=12
+    && v.parts.every(p=>['baseAmount','quoteAmount','amountUsd'].every(k=>Number.isFinite(p[k])&&p[k]>0))
+    && new Set(v.parts.map(p=>`${p.baseAmount}:${p.quoteAmount}`)).size===v.parts.length
+    && ['baseAmount','quoteAmount','amountUsd'].every(k=>near(t[k],v.parts.reduce((n,p)=>n+p[k],0)));
+}
 export function mergeGmgnFlowTrade(prior, next) {
+  if(!validGmgnReceiptLegs(next)||prior&&!validGmgnReceiptLegs(prior))throw new Error('GMGN_TRADE_CONFLICT');
   if (!prior) return next;
   if (['chain','hash','wallet','tokenAddress','side','at'].some(k => prior[k] !== next[k])) throw new Error('GMGN_TRADE_CONFLICT');
+  // Repeated feeds may show only one receipt-verified leg. Preserve the proven
+  // aggregate; never downgrade it to the partial leg or count it again.
+  const full=prior.receiptLegs?prior:next.receiptLegs?next:null,part=full===prior?next:prior;
+  if(prior.receiptLegs&&next.receiptLegs) {
+    if(prior.receiptLegs.blockHash!==next.receiptLegs.blockHash||prior.receiptLegs.parts.length!==next.receiptLegs.parts.length)throw new Error('GMGN_TRADE_CONFLICT');
+    const parts=prior.receiptLegs.parts.map(p=>{
+      const q=next.receiptLegs.parts.find(q=>q.baseAmount===p.baseAmount&&q.quoteAmount===p.quoteAmount);
+      if(!q)throw new Error('GMGN_TRADE_CONFLICT');
+      return {...p,amountUsd:next.side==='buy'?Math.min(p.amountUsd,q.amountUsd):Math.max(p.amountUsd,q.amountUsd)};
+    });
+    return {...next,amountUsd:parts.reduce((n,p)=>n+p.amountUsd,0),receiptLegs:{...next.receiptLegs,parts},tags:gmgnFlowTags([...prior.tags,...next.tags])};
+  }
+  if(full && !part.receiptLegs && full.receiptLegs.parts.some(p=>p.baseAmount===part.baseAmount&&p.quoteAmount===part.quoteAmount)) {
+    const parts=full.receiptLegs.parts.map(p=>p.baseAmount===part.baseAmount&&p.quoteAmount===part.quoteAmount
+      ? {...p,amountUsd:next.side==='buy'?Math.min(p.amountUsd,part.amountUsd):Math.max(p.amountUsd,part.amountUsd)}:p);
+    return {...full,amountUsd:parts.reduce((n,p)=>n+p.amountUsd,0),receiptLegs:{...full.receiptLegs,parts},tags:gmgnFlowTags([...prior.tags,...next.tags])};
+  }
   const sameUnits = ['baseAmount','quoteAmount'].every(k => Number.isFinite(prior[k]) && prior[k] > 0 && prior[k] === next[k]);
   const tinyRounding = Math.abs(prior.amountUsd - next.amountUsd) <= Math.max(prior.amountUsd, next.amountUsd) * 1e-12;
   if (prior.amountUsd !== next.amountUsd && !tinyRounding && !sameUnits) throw new Error('GMGN_TRADE_CONFLICT');
@@ -82,22 +110,33 @@ export function parseGmgnFlowProfile(payload, chain, wallet, period, checkedAtMs
     || ['tokenCount','buyCount','sellCount','createdAt','lastTradeAt','createdTokenCount'].some(k=>!Number.isSafeInteger(profile[k]) || profile[k]<0)) return null;
   return profile;
 }
-export function qualifiesGmgnFlowWallet(profiles, chain, wallet, nowMs=Date.now()) {
+export function gmgnFlowWalletQualification(profiles, chain, wallet, nowMs=Date.now()) {
   const d=GMGN_FLOW_DEFAULTS;
+  const missing=[],failed=[];
   for (const period of ['7d','30d']) {
     const p=profiles?.[period], checked=Date.parse(p?.checkedAt || '');
-    if (!p || p.chain!==chain || p.wallet!==wallet || p.period!==period
-      || !Number.isFinite(checked) || checked>nowMs+30000 || checked<nowMs-2*3600000
-      || !Array.isArray(p.tags) || p.tags.some(t=>blocked.test(t))
-      || !Number.isFinite(p.realizedProfitUsd) || p.realizedProfitUsd<(period==='7d'?d.minimumProfit7dUsd:d.minimumProfit30dUsd)
-      || !Number.isFinite(p.realizedRoi) || p.realizedRoi<d.minimumRoi
-      || !Number.isFinite(p.winRate) || p.winRate<d.minimumWinRate || p.winRate>1
-      || !Number.isSafeInteger(p.tokenCount) || p.tokenCount<(period==='7d'?d.minimumTokens7d:d.minimumTokens30d)
-      || !Number.isSafeInteger(p.createdAt) || p.createdAt<=0 || p.createdAt*1000>nowMs-30*86400000
-      || !Number.isSafeInteger(p.lastTradeAt) || p.lastTradeAt*1000>nowMs+30000 || p.lastTradeAt*1000<nowMs-7*86400000
-      || !Number.isSafeInteger(p.createdTokenCount) || p.createdTokenCount>10 || p.createdTokenCount<0) return false;
+    if(!p){missing.push(`${period}:profile_missing`);continue;}
+    if(p.chain!==chain||p.wallet!==wallet||p.period!==period){missing.push(`${period}:identity_mismatch`);continue;}
+    if(!Number.isFinite(checked)||checked>nowMs+30000||checked<nowMs-2*3600000)missing.push(`${period}:profile_stale`);
+    if(!Array.isArray(p.tags))missing.push(`${period}:tags_missing`);
+    else if(p.tags.some(t=>blocked.test(t)))failed.push(`${period}:excluded_wallet_tag`);
+    for(const [field,minimum] of [['realizedProfitUsd',period==='7d'?d.minimumProfit7dUsd:d.minimumProfit30dUsd],
+      ['realizedRoi',d.minimumRoi],['winRate',d.minimumWinRate],['tokenCount',period==='7d'?d.minimumTokens7d:d.minimumTokens30d]]) {
+      if(!Number.isFinite(p[field])||(field==='tokenCount'&&!Number.isSafeInteger(p[field])))missing.push(`${period}:${field}_missing`);
+      else if(p[field]<minimum||(field==='winRate'&&p[field]>1))failed.push(`${period}:${field}_below_requirement`);
+    }
+    if(!Number.isSafeInteger(p.createdAt)||p.createdAt<=0)missing.push(`${period}:wallet_age_unknown`);
+    else if(p.createdAt*1000>nowMs-30*86400000)failed.push(`${period}:wallet_age_under_30d`);
+    if(!Number.isSafeInteger(p.lastTradeAt))missing.push(`${period}:last_trade_missing`);
+    else if(p.lastTradeAt*1000>nowMs+30000||p.lastTradeAt*1000<nowMs-7*86400000)failed.push(`${period}:last_trade_outside_window`);
+    if(!Number.isSafeInteger(p.createdTokenCount)||p.createdTokenCount<0)missing.push(`${period}:created_token_count_unknown`);
+    else if(p.createdTokenCount>10)failed.push(`${period}:deployer_count_exceeded`);
   }
-  return true;
+  return {version:'gmgn_wallet_qualification_v1',qualified:!missing.length&&!failed.length,
+    status:missing.length?'missing_evidence':failed.length?'not_qualified':'qualified',missing,failed};
+}
+export function qualifiesGmgnFlowWallet(profiles, chain, wallet, nowMs=Date.now()) {
+  return gmgnFlowWalletQualification(profiles,chain,wallet,nowMs).qualified;
 }
 export function parseGmgnFlowCandles(payload) {
   const data=gmgnFlowData(payload);

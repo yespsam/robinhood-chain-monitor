@@ -75,7 +75,8 @@ export function binanceFeedCoverage(feed, nowMs = Date.now()) {
 export function validBinanceFlowState(state) {
   if (state?.schema !== BINANCE_FLOW_SCHEMA || state.mode !== 'readonly' || !state.chains || typeof state.chains !== 'object' || Array.isArray(state.chains)
     || !Number.isFinite(state.updatedAt) || !Number.isSafeInteger(state.nextChainIndex) || state.nextChainIndex < 0 || state.nextChainIndex >= 5
-    || !Number.isFinite(state.cooldownUntil) || state.cooldownUntil < 0) return false;
+    || !Number.isFinite(state.cooldownUntil) || state.cooldownUntil < 0
+    || state.focusChainIndex!==undefined&&(!Number.isSafeInteger(state.focusChainIndex)||state.focusChainIndex<0||state.focusChainIndex>=9)) return false;
   return Object.entries(state.chains).every(([chain, value]) => Object.hasOwn(BINANCE_FLOW_CHAINS, chain) && value?.feeds
     && Object.entries(value.feeds).every(([kind, feed]) => BINANCE_FLOW_KINDS.includes(kind) && Array.isArray(feed?.rows) && feed.rows.length <= MAX_ROWS
       && ['ok', 'warming', 'backoff'].includes(feed.status) && Number.isFinite(feed.checkedAt)

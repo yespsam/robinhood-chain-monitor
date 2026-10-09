@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createGmgnFlowClient, parseGmgnFlowRateLimit } from "../src/gmgn-flow-client.js";
+import {createGmgnAccountGate} from '../src/gmgn-account-gate.js';
 
 const EVM = "0x1234567890abcdef1234567890abcdef12345678";
 const SOL = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -20,6 +21,73 @@ test('trade feeds use research priority and bind coverage to dispatch after queu
   assert.ok(dispatched>=START+12000);assert.equal(admissions[0],1);
   await fx.client.stats('bsc',EVM,'7d');assert.equal(admissions[1],0);
   assert.throws(()=>fx.client.trades('bsc','kol',{onRequestStart:true}),{code:'GMGN_INVALID_ARGUMENT'});
+});
+
+test('Plus feed reaches the shared gate while a profile response is stalled; reserved exit seat survives', {timeout:10000}, async t=>{
+  let fx,releaseProfile,releaseFeed,profileStarted,feedStarted;
+  const profileReady=new Promise(r=>{profileStarted=r;}),feedReady=new Promise(r=>{feedStarted=r;});
+  const order=[];
+  fx=await fixture(t,{dependencies:{accountGate:(work,signal,options)=>createGmgnAccountGate(fx.dataDir)(work,signal,options)},
+    execFileImpl:async(_file,args)=>{
+      if(args[0]==='config')return {stdout:'ok'};
+      order.push({route:args[0],at:fx.current()});
+      if(args[0]==='portfolio'){profileStarted();await new Promise(r=>{releaseProfile=r;});}
+      if(args[0]==='track'){feedStarted();await new Promise(r=>{releaseFeed=r;});}
+      return {stdout:'{"data":[]}'};
+    }});
+  await fs.writeFile(path.join(fx.dataDir,'gmgn-readonly-plan.json'),JSON.stringify({version:1,plan:'plus'}));
+  const profile=fx.client.stats('bsc',EVM,'7d');await profileReady;
+  const feed=fx.client.trades('sol','smartmoney');await feedReady;
+  assert.deepEqual(order.map(x=>x.route),['portfolio','track']);
+  assert.ok(order[1].at-order[0].at>=1200,'retain configured process dispatch spacing');
+  assert.equal(await createGmgnAccountGate(fx.dataDir)(async()=>42,undefined,{priority:2}),42);
+  releaseFeed();await feed;releaseProfile();await profile;
+  const slot=JSON.parse(await fs.readFile(path.join(fx.dataDir,'gmgn-account-slot.json'),'utf8'));
+  assert.equal(slot.active.length,0);
+});
+
+test('Free still waits for the active profile; no phantom concurrency without Plus', {timeout:10000}, async t=>{
+  let fx,release,entered;const ready=new Promise(r=>{entered=r;}),order=[];
+  fx=await fixture(t,{dependencies:{accountGate:(work,signal,options)=>createGmgnAccountGate(fx.dataDir)(work,signal,options)},
+    execFileImpl:async(_file,args)=>{
+      if(args[0]==='config')return {stdout:'ok'};
+      order.push(args[0]);if(args[0]==='portfolio'){entered();await new Promise(r=>{release=r;});}
+      return {stdout:'{"data":[]}'};
+    }});
+  const profile=fx.client.stats('bsc',EVM,'7d');await ready;
+  const feed=fx.client.trades('sol','smartmoney');
+  await new Promise(r=>setTimeout(r,100));assert.deepEqual(order,['portfolio']);
+  release();await Promise.all([profile,feed]);assert.deepEqual(order,['portfolio','track']);
+});
+
+test('gated parallel responses retain shared 429 cooldown before another dispatch and drain on stop',async t=>{
+  let fx,releaseProfile,releaseFeed,enteredProfile,enteredFeed;
+  const profileReady=new Promise(r=>{enteredProfile=r;}),feedReady=new Promise(r=>{enteredFeed=r;});
+  let launches=0;
+  fx=await fixture(t,{dependencies:{accountGate:(work)=>work()},execFileImpl:async(_file,args)=>{
+    if(args[0]==='config')return {stdout:'ok'};
+    launches++;
+    if(args[0]==='portfolio'){enteredProfile();await new Promise(r=>{releaseProfile=r;});throw {status:429,reset_at:(START+600000)/1000};}
+    enteredFeed();await new Promise(r=>{releaseFeed=r;});return {stdout:'{"data":[]}'};
+  }});
+  const profile=fx.client.stats('bsc',EVM,'7d'),rejected=assert.rejects(profile,{code:'GMGN_RATE_LIMITED'});await profileReady;
+  const feed=fx.client.trades('sol','smartmoney');await feedReady;
+  releaseProfile();await rejected;
+  await assert.rejects(fx.client.trades('eth','kol'),{code:'GMGN_RATE_LIMITED'});assert.equal(launches,2);
+  releaseFeed();await feed;await fx.client.stop();
+  await assert.rejects(fx.client.trades('sol','kol'),{code:'GMGN_STOPPED'});
+});
+
+test('stop drains cancelled account-gate tickets as well as active children',async t=>{
+  let fx,entered;const ready=new Promise(r=>{entered=r;});let ticketCleaned=false;
+  fx=await fixture(t,{dependencies:{accountGate:async(_work,signal)=>{
+    entered();await new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true}));
+    await new Promise(resolve=>setTimeout(resolve,20));ticketCleaned=true;
+    throw Object.assign(new Error('stopped'),{code:'GMGN_STOPPED'});
+  }}});
+  const request=fx.client.trades('bsc','smartmoney'),rejected=assert.rejects(request,{code:'GMGN_STOPPED'});
+  await ready;await fx.client.stop();await rejected;
+  assert.equal(ticketCleaned,true);assert.equal(fx.calls.length,1,'only config check ran, no business request');
 });
 
 test('platform call route is read-only and limited to validated chains and type 13', async t=>{
@@ -111,6 +179,57 @@ test('wallet learning activity is public read-only with bounded pagination argum
   assert.deepEqual(calls[1].args, ['portfolio', 'activity', '--chain', 'bsc', '--wallet', EVM, '--limit', '100', '--cursor', 'cursor-value', '--raw']);
   for (const options of [{ limit: 101 }, { limit: 0 }, { cursor: '\n' }, { cursor: '' }, { cursor: 'x'.repeat(2049) }]) assert.throws(() => client.activity('bsc', EVM, options), { code: 'GMGN_INVALID_ARGUMENT' });
   assert.equal(calls.length, 2);
+});
+
+test('creator history uses public read-only argv and one configuration check for all supported chains', async t => {
+  const { client, calls } = await fixture(t);
+  await client.createdTokens('bsc', EVM);
+  await client.createdTokens('sol', SOL, { orderBy: 'token_ath_mc', direction: 'desc', migrateState: 'migrated' });
+  await client.createdTokens('base', EVM, { orderBy: 'market_cap', direction: 'asc', migrateState: 'non_migrated' });
+  await client.createdTokens('eth', EVM, { orderBy: undefined });
+  assert.deepEqual(calls[0].args, ['config', '--check']);
+  assert.deepEqual(calls[1].args, ['portfolio', 'created-tokens', '--chain', 'bsc', '--wallet', EVM, '--raw']);
+  assert.deepEqual(calls[2].args, ['portfolio', 'created-tokens', '--chain', 'sol', '--wallet', SOL,
+    '--order-by', 'token_ath_mc', '--direction', 'desc', '--migrate-state', 'migrated', '--raw']);
+  assert.deepEqual(calls[3].args, ['portfolio', 'created-tokens', '--chain', 'base', '--wallet', EVM,
+    '--order-by', 'market_cap', '--direction', 'asc', '--migrate-state', 'non_migrated', '--raw']);
+  assert.deepEqual(calls[4].args, ['portfolio', 'created-tokens', '--chain', 'eth', '--wallet', EVM, '--raw']);
+  assert.equal(calls.filter(call => call.args[0] === 'config').length, 1);
+  for (const call of calls) assert.equal(call.opts.shell, false);
+});
+
+test('creator history rejects unsupported chains, wallet identities and non-allowlisted options before CLI work', async t => {
+  const { client, calls } = await fixture(t);
+  for (const [chain, wallet] of [['robinhood', EVM], ['monad', EVM], ['BSC', EVM], ['bsc;echo bad', EVM],
+    ['bsc', SOL], ['sol', EVM], ['eth', '--wallet'], ['base', [EVM]]]) {
+    assert.throws(() => client.createdTokens(chain, wallet), { code: 'GMGN_INVALID_ARGUMENT' });
+  }
+  for (const options of [null, [], 'desc', 0, true, () => {}, new Date(), Object.create({ direction: 'asc' }),
+    { orderBy: 'profit' }, { orderBy: null }, { direction: 'DESC' }, { direction: '--raw' },
+    { migrateState: 'all' }, { migrateState: false }, { orderBy: ['market_cap'] },
+    { priority: 2 }, { limit: 100 }, { cursor: 'next' }, { wallet: EVM }, { [Symbol('direction')]: 'asc' }]) {
+    assert.throws(() => client.createdTokens('bsc', EVM, options), { code: 'GMGN_INVALID_ARGUMENT' });
+  }
+  assert.equal(calls.length, 0);
+});
+
+test('creator history keeps shared background priority and account cooldown without a second business dispatch', async t => {
+  const priorities = [], commands = [];
+  const fx = await fixture(t, {
+    dependencies: { accountGate: async (work, _signal, options) => { priorities.push(options.priority); return work(); } },
+    execFileImpl: async (_file, args) => {
+      commands.push(args);
+      if (args[0] === 'config') return { stdout: 'ok' };
+      throw { status: 429, reset_at: (START + 600_000) / 1000 };
+    },
+  });
+  await assert.rejects(fx.client.createdTokens('bsc', EVM), { code: 'GMGN_RATE_LIMITED' });
+  await assert.rejects(fx.client.createdTokens('sol', SOL), { code: 'GMGN_RATE_LIMITED' });
+  await assert.rejects(fx.client.stats('eth', EVM, '7d'), { code: 'GMGN_RATE_LIMITED' });
+  assert.deepEqual(priorities, [0, 0, 0]);
+  assert.equal(commands.length, 2, 'configuration and the initial creator request only');
+  const cooldown = JSON.parse(await fs.readFile(path.join(fx.dataDir, 'gmgn-flow-rate-limit.json'), 'utf8'));
+  assert.equal(cooldown.rateLimitedUntil, new Date(START + 600_000).toISOString());
 });
 
 test("concurrent routes share one serial process queue and one configuration check", async (t) => {

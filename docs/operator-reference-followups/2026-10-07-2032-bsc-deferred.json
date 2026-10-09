@@ -1,0 +1,182 @@
+{
+  "version": 1,
+  "mode": "readonly_public_wallet_research",
+  "group": "bsc",
+  "report": "docs/operator-reference-followups/2026-10-07-2032-bsc-deferred.md",
+  "evidence": "docs/operator-reference-followups/2026-10-07-2032-bsc-deferred.json",
+  "question": "优先复用本地BSC A/B活动；共享实时资源允许时补一页近期活动，判断是否能连接10月2日交易检查点。",
+  "startedAt": "2026-10-07T12:33:06Z",
+  "triggeredAt": "2026-10-07T12:32:54.114Z",
+  "completedAt": "2026-10-07T12:34:24Z",
+  "configChecked": null,
+  "gmgnConfigChecks": 0,
+  "gmgnBusinessRequests": 0,
+  "gmgnBusinessDispatched": 0,
+  "gmgnSucceeded": 0,
+  "gmgnFailed": 0,
+  "rpcRequests": 0,
+  "newRows": 0,
+  "uniqueCa": 0,
+  "oneToOnePairs": 0,
+  "newAddresses": 0,
+  "status": "deferred_shared_resources_busy",
+  "summary": "本轮无新增证据，保留上轮结论。本地地址库及两份缓存无BSC A/B/C匹配；共享账户1个活动请求和2个排队请求，研究让路，未追加GMGN/RPC。A/B最新活动检查覆盖缺口约117小时，不能解释为无交易，旧检查点保留，下轮Solana。",
+  "resourcesBefore": {
+    "checkedAt": "2026-10-07T12:33:17.439Z",
+    "active": [
+      {
+        "pid": 49145,
+        "priority": 0,
+        "alive": true
+      }
+    ],
+    "queue": [
+      {
+        "pid": 41192,
+        "priority": 0,
+        "expiresAt": 1791376425321,
+        "alive": true
+      },
+      {
+        "pid": 41190,
+        "priority": 0,
+        "expiresAt": 1791376425438,
+        "alive": true
+      }
+    ],
+    "cooldownUntil": "2026-09-21T17:41:38.000Z",
+    "cooldownActive": false,
+    "note": "Point-in-time busy snapshot; no inference of permanent blocking and no modification of shared locks or queue."
+  },
+  "localSnapshot": {
+    "checkedAt": "2026-10-07T12:33:33.545Z",
+    "caches": [
+      {
+        "path": "data/wallet-learning-state.json",
+        "updatedAt": "2026-10-07T12:31:13.770Z",
+        "walletMatches": []
+      },
+      {
+        "path": "data/gmgn-flow-state.json",
+        "updatedAt": "2026-10-07T12:33:17.982Z",
+        "walletMatches": []
+      }
+    ],
+    "sqlite": {
+      "connection": "readonly",
+      "table": "addresses",
+      "filter": "chain=bsc and exact A/B/C reference wallets",
+      "matchedRows": 0
+    },
+    "heartbeats": [
+      {
+        "name": "main",
+        "version": 1,
+        "producer": "main",
+        "pid": 45914,
+        "startedAt": "2026-10-07T08:17:26.957Z",
+        "updatedAt": "2026-10-07T12:33:29.467Z",
+        "sequence": 513
+      },
+      {
+        "name": "fomo",
+        "version": 1,
+        "producer": "fomo",
+        "pid": 49145,
+        "startedAt": "2026-10-07T08:28:43.162Z",
+        "updatedAt": "2026-10-07T12:33:20.610Z",
+        "sequence": 490
+      },
+      {
+        "name": "bsc",
+        "version": 1,
+        "producer": "bsc",
+        "pid": 49121,
+        "startedAt": "2026-10-07T08:28:34.425Z",
+        "updatedAt": "2026-10-07T12:33:22.337Z",
+        "sequence": 474
+      }
+    ],
+    "sourcePolicy": {
+      "version": 1,
+      "fomoPlatformSourcesEnabled": false,
+      "reason": "User cancelled FOMO platform sources; retain GMGN smart money, public X, other Telegram monitoring and BSC scanning.",
+      "updatedAt": "2026-10-07T08:15:27.000Z"
+    }
+  },
+  "baselines": [
+    {
+      "path": "docs/operator-clusters-2026-10-02.json",
+      "sha256": "1b952275a0986a2dc10e1f80eb0e7a27f0e498cd2f1585ca92a3d4f5b58e1d55",
+      "unchanged": true
+    },
+    {
+      "path": "docs/operator-reference-learning-2026-10-02.json",
+      "sha256": "3cde872e2325e011281a9d5174514a5359ca1f47749e1f335ed3728dbbd2d4ad",
+      "unchanged": true
+    },
+    {
+      "path": "docs/operator-reference-analysis-2026-10-02.json",
+      "sha256": "3b82c386681b98e22db5455f4ffd3a9c5c034f8fe30161946079cabd202b2e04",
+      "unchanged": true
+    }
+  ],
+  "coverage": [
+    {
+      "id": "A",
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "chain": "bsc",
+      "lastTrade": {
+        "at": "2026-10-02T11:08:09.000Z",
+        "hash": "0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868",
+        "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+        "side": "sell"
+      },
+      "lastActivityCheckAt": "2026-10-02T15:20:41.897Z",
+      "headAgeHours": 117.2,
+      "olderPageRemaining": true
+    },
+    {
+      "id": "B",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "chain": "bsc",
+      "lastTrade": {
+        "at": "2026-10-02T11:08:09.000Z",
+        "hash": "0x276ed1a8787a851f66bf341a62bd62728028d53b19a22ea8a69fa6b3f7857f6d",
+        "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+        "side": "sell"
+      },
+      "lastActivityCheckAt": "2026-10-02T15:20:52.958Z",
+      "headAgeHours": 117.2,
+      "olderPageRemaining": true
+    },
+    {
+      "id": "C",
+      "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+      "chain": "bsc",
+      "lastTrade": {
+        "at": "2026-10-02T15:27:55.000Z",
+        "hash": "0x0bc6f1a15f6d6a076ae1821aadbd476e2f2ae3ccc83d89923c563b1acf5f912a",
+        "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+        "side": "buy"
+      },
+      "lastActivityCheckAt": "2026-10-03T23:53:09.755Z",
+      "headAgeHours": 84.7,
+      "olderPageRemaining": false
+    }
+  ],
+  "classification": "observation_only_unverified_research_reference",
+  "limitations": [
+    "未获取新活动或回执；无新增地址行为结论。",
+    "本地未匹配及研究请求让路不代表钱包未交易或市场无机会。",
+    "仅有当前心跳，不能证明两次观测之间持续在线。",
+    "A/B同步及A向C资金往来作为旧假设保留，不升级为确认同控或自动跟单信号。",
+    "不计算有缺口库存的完整盈亏；不重复累计历史样本。"
+  ],
+  "dayReview": {
+    "reported": true,
+    "action": "skipped_already_reported"
+  },
+  "nextGroup": "sol",
+  "nextQuestion": "从D/E新resumeCursor继续补旧分页，D已到2026-10-03T05:58:36Z、E到05:33:46Z，仍需接回2026-10-02T13:04:31Z旧检查点。最新头页未刷新；另有E PRINTRCAT库存缺口和BE/SPYx三笔同哈希多CA归因待有界回执核验，不能相加各腿收益。"
+}

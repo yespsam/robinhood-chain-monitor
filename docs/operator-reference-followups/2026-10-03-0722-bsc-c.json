@@ -1,0 +1,235 @@
+{
+  "version": 1,
+  "mode": "read_only_research",
+  "group": "bsc",
+  "question": "C 的 PairLab 当前剩余库存及新增转出",
+  "startedAt": "2026-10-02T23:22:51.589Z",
+  "chain": "bsc",
+  "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+  "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+  "priority": 0,
+  "configChecked": true,
+  "configChecks": 1,
+  "businessRequests": 1,
+  "rpcRequests": 2,
+  "pages": [
+    {
+      "page": 0,
+      "startedAt": "2026-10-02T23:22:52.050Z",
+      "receivedAt": "2026-10-02T23:22:58.835Z",
+      "rowCount": 9,
+      "identityExplicit": true,
+      "baselineOverlap": 8,
+      "newCount": 1,
+      "next": null,
+      "latest": {
+        "chain": "bsc",
+        "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+        "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+        "hash": "0x0bc6f1a15f6d6a076ae1821aadbd476e2f2ae3ccc83d89923c563b1acf5f912a",
+        "at": 1790954875000,
+        "side": "buy",
+        "quantity": 4914860.493939693,
+        "usd": 74.19025481175,
+        "price": 0.000015095088640507878,
+        "symbol": "PairLab"
+      },
+      "rawRows": [
+        {
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "chain": "bsc",
+          "hash": "0x0bc6f1a15f6d6a076ae1821aadbd476e2f2ae3ccc83d89923c563b1acf5f912a",
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "eventType": "buy",
+          "quantity": "4914860.493939693",
+          "fromAddress": "",
+          "toAddress": "",
+          "timestamp": 1790954875
+        },
+        {
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "chain": "bsc",
+          "hash": "0xe648bb521329e0b222a89b46ff98da04098592c65e283269a0945adc0e22846c",
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "eventType": "sell",
+          "quantity": "1234696.5431529004",
+          "fromAddress": "",
+          "toAddress": "",
+          "timestamp": 1790933177
+        },
+        {
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "chain": "bsc",
+          "hash": "0x60a7cb8efc32bfbf37701ca9e12d3c7c5609dd5b9bb72220375585928b39355b",
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "eventType": "sell",
+          "quantity": "1320621.9041833344",
+          "fromAddress": "",
+          "toAddress": "",
+          "timestamp": 1790933173
+        },
+        {
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "chain": "bsc",
+          "hash": "0x78b32218757ec0d2ef176562d92d1847081ad3de8bc61d5f678f7912b4ed72b5",
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "eventType": "sell",
+          "quantity": "1320621.9041833344",
+          "fromAddress": "",
+          "toAddress": "",
+          "timestamp": 1790933173
+        },
+        {
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "chain": "bsc",
+          "hash": "0x52e27a7bfe4b33bf3ce7de6248d7998291e124bef949e5fa75408060917e7425",
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "eventType": "buy",
+          "quantity": "2820673.030817244",
+          "fromAddress": "",
+          "toAddress": "",
+          "timestamp": 1790932689
+        },
+        {
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "chain": "bsc",
+          "hash": "0xf3e515bcf20d36767ced5199ddea78b9a819ce0588be4b6066e338f88f7927e3",
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "eventType": "buy",
+          "quantity": "2856437.8020988856",
+          "fromAddress": "",
+          "toAddress": "",
+          "timestamp": 1790932689
+        },
+        {
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "chain": "bsc",
+          "hash": "0x57e1a9bc2d33af564a5bf3c38b9ae0696f041e80da68faf87eb65cc3aff03949",
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "eventType": "buy",
+          "quantity": "2480885.8720830115",
+          "fromAddress": "",
+          "toAddress": "",
+          "timestamp": 1790932655
+        },
+        {
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "chain": "bsc",
+          "hash": "0x80be55370ef28e5d43f9b80cab182a49ea95f9bdc2feeff2341d1362106a2362",
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "eventType": "buy",
+          "quantity": "2510369.445064848",
+          "fromAddress": "",
+          "toAddress": "",
+          "timestamp": 1790932654
+        },
+        {
+          "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+          "chain": "bsc",
+          "hash": "0x2b3d24dd6bf70d26ec913719ac31336d20d760d5b216c78ea551b234fc546f0f",
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "eventType": "buy",
+          "quantity": "2537852.8917693547",
+          "fromAddress": "",
+          "toAddress": "",
+          "timestamp": 1790932654
+        }
+      ]
+    }
+  ],
+  "newRows": [
+    {
+      "chain": "bsc",
+      "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+      "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "hash": "0x0bc6f1a15f6d6a076ae1821aadbd476e2f2ae3ccc83d89923c563b1acf5f912a",
+      "at": 1790954875000,
+      "side": "buy",
+      "quantity": 4914860.493939693,
+      "usd": 74.19025481175,
+      "price": 0.000015095088640507878,
+      "symbol": "PairLab"
+    }
+  ],
+  "rpc": [
+    {
+      "source": "https://bsc-dataseed-public.bnbchain.org",
+      "method": "eth_call",
+      "contractMethod": "balanceOf",
+      "to": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+      "blockTag": "latest",
+      "startedAt": "2026-10-02T23:22:51.593Z",
+      "receivedAt": "2026-10-02T23:22:52.369Z",
+      "http": 200,
+      "result": "0x0000000000000000000000000000000000000000000bc8868ae450764220d8ac",
+      "errorCode": null
+    },
+    {
+      "source": "https://bsc-dataseed-public.bnbchain.org",
+      "method": "eth_call",
+      "contractMethod": "decimals",
+      "to": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "wallet": null,
+      "blockTag": "latest",
+      "startedAt": "2026-10-02T23:22:52.369Z",
+      "receivedAt": "2026-10-02T23:22:52.469Z",
+      "http": 200,
+      "result": "0x0000000000000000000000000000000000000000000000000000000000000012",
+      "errorCode": null
+    }
+  ],
+  "finishedAt": "2026-10-02T23:22:58.836Z",
+  "analysis": {
+    "balanceRaw": "14245139184253467814320300",
+    "decimals": 18,
+    "balanceToken": "14245139.184253467814320300",
+    "priorRecordedBalance": 9330278.690313775,
+    "expectedFromSampleTrades": 14245139.18425347,
+    "approximateDifference": -1.862645149230957e-9,
+    "newBuyLocalTime": "2026-10-02 23:27:55",
+    "observedAtLocal": "2026-10-03 07:22:52",
+    "newBuys": 1,
+    "newSells": 0,
+    "newTransferRows": 0,
+    "attribution": "current_inventory_only_not_pnl",
+    "identityVerified": true,
+    "netPnl": null,
+    "currentUnrealizedPnl": null
+  },
+  "priorInventory": {
+    "buyRows": 5,
+    "sellRows": 3,
+    "bought": 13206219.041833345,
+    "sold": 3875940.3515195698,
+    "netFromRecordedTrades": 9330278.690313775,
+    "traderSnapshotBalance": 9330278.690313775,
+    "snapshotAt": "2026-10-02T10:21:13.021Z"
+  },
+  "completedAt": "2026-10-02T23:25:30Z",
+  "triggeredAt": "2026-10-02T23:21:09.099Z",
+  "baselineHashesVerified": [
+    {
+      "path": "docs/operator-clusters-2026-10-02.json",
+      "unchanged": true
+    },
+    {
+      "path": "docs/operator-reference-learning-2026-10-02.json",
+      "unchanged": true
+    },
+    {
+      "path": "docs/operator-reference-analysis-2026-10-02.json",
+      "unchanged": true
+    }
+  ],
+  "profilesRefreshed": false,
+  "newAddresses": [],
+  "limitations": [
+    "当前余额由 latest balanceOf 与 decimals 两次读取得到，未固定同一区块，不是全时段历史余额回放。",
+    "新增交易的买入类别、金额与时间来自 GMGN；本轮没有剩余 RPC 名额核实该交易回执及其资金来源。",
+    "GMGN 返回 9 条且 next 为空不等于全链全部转账已收录；样本净变化与当前余额相符也不能排除中间等量进出。",
+    "A/B 零余额是 10 月 2 日 23:21 的旧时点，本轮未刷新 A/B；不能将不同时点快照拼成当前整组库存。",
+    "未查实时价格、完整费用或浮盈，不估计当前盈利，不从加仓行为推导叙事动机或操盘归属。",
+    "本轮仅 07:22 的快照核查，不宣称两轮之间持续在线。"
+  ]
+}
