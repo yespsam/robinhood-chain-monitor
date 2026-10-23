@@ -35,7 +35,7 @@
 | `server/manual-trade.mjs` | 审阅有效期、费用/风险确认、重复检查、提交与只读状态核对 |
 | `server/trade-journal.mjs` | 先落盘再提交、进程间写锁、原子更新、不可改的意图字段 |
 | `server/diagnostics.mjs` | 只保留允许公开的错误类别、阶段与官方代码 |
-| `public/` | 本地静态界面；`wallet.js` 维护真实连接、读取和逐笔确认状态 |
+| `public/` | 本地静态界面；`wallet.js` 维护真实连接、扫码展示、读取和逐笔确认状态；`auth-qr.js` 在本地 canvas 编码完整官方授权链接 |
 | `tests/` | CLI/RPC 替身、HTTP 边界、数据完整性、交易与日志故障测试 |
 | `server/fixtures.mjs`、`server/auth.mjs`、`server/owner-store.mjs`、`server/setup.mjs` | 保留的演示/旧会话及密码配置能力；默认入口不要求设置看板密码 |
 | `.private/` | 运行时访问密钥、日志、交易意图；只留本机，不属于可分享源码 |
@@ -113,3 +113,7 @@ UNKNOWN 表示本地不能确定提交结果，绝不等同失败。超时、解
 首版手动提交仅支持 BSC。NFT 交易、材料合成、转账、授权变更、自动买卖及后台定时策略没有接入。专用资产读取不是全链资产索引，没有提供 NFT 可实现估值。macOS 是当前主要适配路径，保留的 Windows 代理/启动脚本不能视为本次跨平台实机验收。公共节点、官方报价或审计不可用时可能暂停功能；不采用假数据继续执行。
 
 历史 `README.txt` 及各核查、验收文本仅用于理解 0.3.x 的实现背景。0.4.0 的运行方法见 [README.md](README.md)，具体执行限制以当前代码及官方 CLI 的实际返回为准。
+
+## 扫码入口修正
+
+登录页直接展示 QR 和原始配对码，二维码 payload 与官方 CLI `qrInfo.qrCodeUrl → urlForWeb` 一致。`public/vendor/` 内固定保存 npm `qrcode-generator@2.0.4` 的原始 ESM 编码器和 MIT 许可，不依赖远端 QR 服务。页面使用独立过期定时器，即使状态查询挂起也会清除二维码；离屏生成完成后再次核对当前会话，避免旧结果重新画回页面。服务端对已过期或无有效期限的 WAITING 状态也不再返回 URL 和配对码。原官方 verify 继续等待结束，不自动复用旧码或重复发起登录。

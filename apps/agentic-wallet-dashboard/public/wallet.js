@@ -1,5 +1,6 @@
 import { PHASES, STAGES, activePhases, diagnosticText, safeDiagnosticExport } from './connection-state.js';
 import { AUTH_URL_ISSUES } from './official-error-catalog.js';
+import { renderAuthQr } from './auth-qr.js';
 const $ = id => document.getElementById(id);
 // The launch capability is transient. Never persist it, display it, or send it to external origins.
 const accessMatch = /^#access=([a-f0-9]{64})$/.exec(location.hash);
@@ -7,6 +8,7 @@ const localAccessKey = accessMatch?.[1] || null;
 if (location.hash) history.replaceState(null, '', location.pathname + location.search);
 let token = null, state = null, epoch = 0, pollTimer, expiryTimer, pollBusy = false, readVersion = 0;
 let connectBusy = false, pollController = null, lastDiagnostic = null, cooldownTimer, cliVersions = {};
+let authQrVersion = 0, authExpiryTimer;
 let quoteBusy = false, quoteVersion = 0, displayedIntentId = null;
 let tradeReview = null, tradeTimer, reviewTimer, tradeSubmitting = false, trackedIntentId = null, tradePollBusy = false, trades = [];
 let currentView = 'overview', assetTab = 'tokens', assetSnapshot = null, portfolioSnapshot = null, mergedAssets = [], readBusy = false;
@@ -37,7 +39,7 @@ const messages = {
 };
 const el = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = String(text); if (className) node.className = className; return node; };
 const shortAddress = value => typeof value === 'string' && value.length > 20 ? value.slice(0, 6) + '…' + value.slice(-4) : value || '未返回';
-const timestamp = value => typeof value === 'number' ? value : Date.parse(value);
+const timestamp = value => typeof value === 'number' ? value : typeof value === 'string' && /^\d{13}$/.test(value) ? Number(value) : Date.parse(value);
 const localTime = value => { const d = new Date(value); return Number.isFinite(d.getTime()) ? d.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '时间未返回'; };
 function numberText(value, maximumFractionDigits = 6) { if (value === null || value === undefined || value === '') return '—'; const n = Number(value); return Number.isFinite(n) ? n.toLocaleString('en-US', { maximumFractionDigits }) : '—'; }
 function usdText(value) { return value === null || value === undefined ? '暂无估值' : '$' + numberText(value, 2); }
@@ -70,6 +72,50 @@ function describeDiagnostic(d) {
   const urlIssues = safe.authUrlIssues?.map(x => AUTH_URL_ISSUES[x]).join('、');
   return `${STAGES[d.stage] || '本地流程'}：${d.message || '请求失败。'}${identity ? ' 官方错误：' + identity + '。' : ''}${signals ? ' 连接标识：' + signals + '。' : ''}${urlIssues ? ' 拦截原因：' + urlIssues + '。' : ''} ${d.nextStep || ''}`;
 }
+function clearAuthQr({ forgetPayload = true } = {}) {
+  authQrVersion++; clearTimeout(authExpiryTimer);
+  for (const id of ['auth-qr', 'top-auth-qr']) { const canvas = $(id); canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height); canvas.width = 1; canvas.height = 1; canvas.hidden = true; }
+  for (const id of ['wallet-auth', 'top-wallet-auth']) $(id).hidden = true;
+  for (const id of ['pairing-code', 'top-pairing-code', 'auth-expiry', 'top-auth-expiry', 'auth-qr-status', 'top-auth-qr-status']) $(id).textContent = '';
+  for (const id of ['official-auth-link', 'top-official-auth-link']) $(id).removeAttribute('href');
+  if (forgetPayload && state) { delete state.urlForWeb; delete state.pairingCode; }
+}
+function authExpiredMessage() {
+  const message = '二维码已过期并已清除，等待本次核验结束后重新获取。';
+  for (const id of ['wallet-badge', 'top-wallet-state']) $(id).textContent = '二维码已过期';
+  $('top-wallet-message').textContent = message; $('wallet-message').textContent = message;
+}
+function showAuthQr(v) {
+  const urlForWeb = v.urlForWeb, expiresAt = timestamp(v.authExpiresAt), pairingCode = v.pairingCode;
+  clearAuthQr({ forgetPayload: false });
+  const version = authQrVersion, current = epoch;
+  for (const id of ['wallet-auth', 'top-wallet-auth']) $(id).hidden = false;
+  for (const id of ['pairing-code', 'top-pairing-code']) $(id).textContent = typeof pairingCode === 'string' ? pairingCode : '';
+  for (const id of ['official-auth-link', 'top-official-auth-link']) $(id).href = urlForWeb;
+  for (const id of ['auth-qr-status', 'top-auth-qr-status']) $(id).textContent = '正在本机生成二维码…';
+  const stillCurrent = () => current === epoch && version === authQrVersion && state?.phase === 'WAITING' && Date.now() < expiresAt;
+  const countdown = () => {
+    if (current !== epoch || version !== authQrVersion) return;
+    const remaining = Math.max(0, expiresAt - Date.now());
+    if (!remaining) { clearAuthQr(); authExpiredMessage(); return; }
+    const seconds = Math.ceil(remaining / 1000), minutes = Math.floor(seconds / 60);
+    const label = `剩余 ${minutes}:${String(seconds % 60).padStart(2, '0')} · ${localTime(expiresAt)} 到期`;
+    for (const id of ['auth-expiry', 'top-auth-expiry']) $(id).textContent = label;
+    authExpiryTimer = setTimeout(countdown, Math.min(1000, remaining));
+  };
+  countdown();
+  const offscreen = document.createElement('canvas'); offscreen.width = 1; offscreen.height = 1;
+  // Keep the full official payload untouched. No remote QR service, storage, or URL rewrite.
+  Promise.resolve().then(() => renderAuthQr(offscreen, urlForWeb)).then(result => {
+    if (!stillCurrent()) return;
+    if (result === false || offscreen.width < 2 || offscreen.height < 2) throw Error('QR_RENDER_FAILED');
+    for (const id of ['auth-qr', 'top-auth-qr']) { const canvas = $(id); canvas.width = offscreen.width; canvas.height = offscreen.height; canvas.getContext('2d').drawImage(offscreen, 0, 0); canvas.hidden = false; }
+    for (const id of ['auth-qr-status', 'top-auth-qr-status']) $(id).textContent = '';
+  }).catch(() => {
+    if (!stillCurrent()) return;
+    for (const id of ['auth-qr-status', 'top-auth-qr-status']) $(id).textContent = '二维码未能生成，请打开官方授权页继续。';
+  }).finally(() => { offscreen.getContext('2d')?.clearRect(0, 0, offscreen.width, offscreen.height); offscreen.width = 1; offscreen.height = 1; });
+}
 function connectionControls(v, message) {
   clearTimeout(cooldownTimer);
   const phase = v?.phase || 'DISCONNECTED', active = activePhases.includes(phase);
@@ -77,17 +123,17 @@ function connectionControls(v, message) {
   for (const name of ['wallet-badge', 'top-wallet-state']) $(name).textContent = PHASES[phase] || PHASES.DISCONNECTED;
   for (const name of ['connect-wallet', 'top-connect-wallet']) {
     $(name).disabled = !localAccessKey || connectBusy || active || phase === 'CONNECTED' || remaining > 0;
-    $(name).textContent = !localAccessKey ? '请使用本机启动器' : phase === 'CONNECTED' ? '钱包已连接' : remaining > 0 ? `稍候 ${Math.ceil(remaining / 1000)} 秒` : phase === 'REVIEW' ? '核对钱包地址' : ['FAILED', 'TIMEOUT', 'PAUSED'].includes(phase) || v?.requiresStatusCheck ? '核对状态后重试' : '连接 Agentic Wallet';
+    $(name).textContent = !localAccessKey ? '请使用本机启动器' : phase === 'CONNECTED' ? '钱包已连接' : remaining > 0 ? `稍候 ${Math.ceil(remaining / 1000)} 秒` : phase === 'REVIEW' ? '核对钱包地址' : ['FAILED', 'TIMEOUT', 'PAUSED'].includes(phase) || v?.requiresStatusCheck ? '核对状态后重试' : '扫码登录';
   }
   if (remaining > 0) cooldownTimer = setTimeout(() => connectionControls(v, message), Math.min(1000, remaining));
   $('top-wallet-message').textContent = message || ''; $('wallet-message').textContent = message || '';
-  const expired = Number.isFinite(Number(v?.authExpiresAt)) && Number(v.authExpiresAt) <= Date.now();
-  const showAuth = phase === 'WAITING' && !!v?.urlForWeb && !expired;
-  for (const name of ['wallet-auth', 'top-wallet-auth']) $(name).hidden = !showAuth;
-  for (const name of ['pairing-code', 'top-pairing-code']) $(name).textContent = showAuth ? v.pairingCode || '' : '';
-  for (const name of ['official-auth-link', 'top-official-auth-link']) { if (showAuth) $(name).href = v.urlForWeb; else $(name).removeAttribute('href'); }
-  $('stop-wallet-wait').hidden = !active; $('stop-wallet-wait').disabled = v?.stage === 'BIND';
-  if (expired && phase === 'WAITING') $('top-wallet-message').textContent = '配对码已到期，核验仍待官方返回。停止本页等待不会撤销远端授权。';
+  const authExpiry = timestamp(v?.authExpiresAt), expired = v?.authQrExpired === true || (Number.isFinite(authExpiry) && authExpiry <= Date.now());
+  const showAuth = phase === 'WAITING' && typeof v?.urlForWeb === 'string' && v.urlForWeb.length > 0 && Number.isFinite(authExpiry) && !expired;
+  if (showAuth) showAuthQr(v); else clearAuthQr();
+  $('stop-wallet-wait').hidden = !active; $('stop-wallet-wait').disabled = v?.stage === 'BIND'; $('drawer-stop-wallet-wait').disabled = v?.stage === 'BIND';
+  if (expired && phase === 'WAITING') authExpiredMessage();
+  else if (phase === 'WAITING' && !showAuth) { $('top-wallet-message').textContent = '官方登录信息或有效期尚未确认，暂不展示二维码。'; $('wallet-message').textContent = $('top-wallet-message').textContent; }
+
 }
 function clearBalances() {
   assetSnapshot = null; portfolioSnapshot = null; mergedAssets = [];
@@ -101,6 +147,7 @@ function clearBalances() {
   emptyState('asset-table', '等待钱包数据', '连接并核对地址后，读取真实持仓。');
 }
 function clearPrivateData() {
+  clearAuthQr();
   clearTradeUI();
   readVersion++; readBusy = false; clearBalances(); emptyState('live-table', '暂无已读取的记录', '连接钱包后刷新当前列表。');
   $('live-review-details').replaceChildren(); $('live-review-blockers').replaceChildren(); if ($('live-review').open) $('live-review').close();
@@ -126,7 +173,7 @@ function showFailure(message) {
 }
 async function session() { if (!localAccessKey) throw Error(launchMessage); if (!token) { const current = epoch, v = await api('/api/local/session'); if (current !== epoch) throw Error('本页连接请求已取消。'); token = v.token; } }
 function render(v) {
-  const wasConnected = !!state?.walletConnected, wasReview = state?.phase === 'REVIEW'; state = v;
+  const wasConnected = !!state?.walletConnected, wasReview = state?.phase === 'REVIEW', wasWaiting = state?.phase === 'WAITING'; state = v;
   clearTimeout(expiryTimer);
   const expiresAt = Math.min(v.expiresAt, v.walletExpiresAt || Infinity);
   if (Number.isFinite(expiresAt)) expiryTimer = setTimeout(() => lock('本页连接或官方授权到期，请重新连接。'), Math.max(0, expiresAt - Date.now()));
@@ -143,12 +190,13 @@ function render(v) {
   } else $('candidate-addresses').replaceChildren();
   if (v.diagnostic) lastDiagnostic = v.diagnostic;
   const message = connected ? '钱包地址已核对，可读取资产并逐笔确认 BSC 兑换。' : v.diagnostic ? describeDiagnostic(v.diagnostic)
-    : v.phase === 'WAITING' ? '打开官方授权页面，在 Binance App 核对配对码。核验最多等待 5 分钟。'
+    : v.phase === 'WAITING' ? '用币安 App 扫描下方二维码，核对配对码并确认。二维码到期后会自动清除。'
     : v.phase === 'REVIEW' ? '已找到官方钱包会话，请在连接设置中核对地址。'
     : v.phase === 'PAUSED' ? '本页等待已停止，远端授权未撤销。核验结束后可重查状态。'
     : activePhases.includes(v.phase) ? `正在${STAGES[v.stage] || '核验'}…`
-    : '优先连接本机已有的 Agentic Wallet 会话。';
+    : '用币安 App 扫码登录；本机已有会话会直接复用。';
   connectionControls(v, message);
+  if (v.phase === 'WAITING' && !wasWaiting && !$('wallet-auth').hidden) document.dispatchEvent(new CustomEvent('wallet:show-settings'));
   $('read-permission').textContent = connected ? '已绑定' : '待绑定'; $('wallet-notice').textContent = connected ? '我的 Agentic Wallet' : '连接本机钱包';
   $('global-state').textContent = connected ? '真实钱包 · 手动交易逐笔确认' : '本机直开 · 钱包待连接';
   for (const name of ['live-chain', 'read-wallet', 'live-quote-button']) $(name).disabled = !connected || (name === 'read-wallet' && readBusy) || (name === 'live-quote-button' && (tradeSubmitting || hasOpenTrade()));
@@ -289,6 +337,7 @@ $('stop-wallet-wait').onclick = async () => {
   state = { ...state, phase: 'PAUSED', stage: 'LOCAL', diagnostic: null, requiresStatusCheck: true }; connectionControls(state, '正在停止本页等待…');
   try { const v = await api('/api/wallet/stop-waiting'); if (current === epoch) render(v); } catch (error) { if (current === epoch) showFailure(error.message); }
 };
+$('drawer-stop-wallet-wait').onclick = () => $('stop-wallet-wait').onclick();
 $('copy-wallet-diagnostic').onclick = async () => {
   const value = diagnosticText(state, lastDiagnostic, document.body.dataset.qa === 'true', cliVersions);
   try { await navigator.clipboard.writeText(value); $('diagnostic-copy-message').textContent = '已复制脱敏诊断，不含地址、配对码或授权链接。'; $('diagnostic-fallback').hidden = true; }

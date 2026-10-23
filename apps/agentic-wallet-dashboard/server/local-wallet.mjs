@@ -46,7 +46,11 @@ export class LocalWalletAccess {
       stage: f?.stage || 'LOCAL', diagnostic: f?.diagnostic || null, operationPending: this.busy,
       nextSignInAt: this.nextAuth,
       requiresStatusCheck: !!f?.requiresStatusCheck, waitStopped: !!f?.paused };
-    if (f?.phase === 'WAITING' && !f.paused) Object.assign(state, { urlForWeb: f.urlForWeb, pairingCode: f.pairingCode, authExpiresAt: f.expireAt });
+    if (f?.phase === 'WAITING' && !f.paused) {
+      const expiry = Number(f.expireAt), valid = Number.isSafeInteger(expiry) && expiry > this.clock();
+      Object.assign(state, { authExpiresAt: f.expireAt, authQrExpired: !valid });
+      if (valid) Object.assign(state, { urlForWeb: f.urlForWeb, pairingCode: f.pairingCode });
+    }
     if (f?.phase === 'REVIEW' || connected) Object.assign(state, { candidateId: f?.candidateId,
       chains: f?.chains, addresses: f?.addresses, walletExpiresAt: f?.walletExpiresAt, alreadyConnected: !!f?.alreadyConnected });
     return state;

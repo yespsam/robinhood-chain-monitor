@@ -39,7 +39,7 @@ test('no vendor call on opening; an existing CLI login needs explicit address co
 test('official QR link and code are verbatim, private QR identifier never reaches browser', async () => {
   const c = setup(); let complete, received, connected = false;
   c.wallet.status = async () => connected ? 'CONNECTED' : 'UNCONNECTED';
-  c.wallet.beginOfficialSignIn = async () => ({ urlForWeb: 'https://web3.binance.com/en/agent-login?url=synthetic', pairingCode: '012345', qrCodeId: 'private-id', expireAt: '123' });
+  c.wallet.beginOfficialSignIn = async () => ({ urlForWeb: 'https://web3.binance.com/en/agent-login?url=synthetic', pairingCode: '012345', qrCodeId: 'private-id', expireAt: String(Date.now() + 300000) });
   c.wallet.verifyOfficialSignIn = async qr => { received = qr; return new Promise(resolve => { complete = resolve; }); };
   await c.local.start(c.key); await new Promise(setImmediate);
   const result = c.local.state(c.key); assert.equal(result.phase, 'WAITING'); assert.equal(result.pairingCode, '012345'); assert.equal(result.qrCodeId, undefined);
@@ -120,4 +120,30 @@ test('HTTP live mode requires same-origin JSON and tab capability, never sets co
   assert.equal((await post('/api/wallet/read', { chainId: '56', kind: 'assets' }, h)).status, 200);
   assert.equal((await post('/api/trade/submit', { confirmed: true }, h)).status, 403);
   assert.equal((await fetch(app.origin + '/wallet.js')).status, 200); assert.equal(app.sessions.items.size, 0);
+});
+
+test('expired QR data disappears while the original verification keeps running without retries', async () => {
+  const c = setup(); let complete, verifies = 0;
+  const expiry = Date.now() + 300000;
+  c.wallet.status = async () => 'UNCONNECTED';
+  c.wallet.beginOfficialSignIn = async () => ({ urlForWeb: 'https://www.binance.com/synthetic-qr?url=a%2Bb', pairingCode: '012345', qrCodeId: 'synthetic', expireAt: String(expiry) });
+  c.wallet.verifyOfficialSignIn = async () => { verifies++; return new Promise(resolve => { complete = resolve; }); };
+  await c.local.start(c.key); await new Promise(setImmediate);
+  assert.equal(c.local.state(c.key).authQrExpired, false);
+  c.advance(300001);
+  const expired = c.local.state(c.key);
+  assert.equal(expired.phase, 'WAITING'); assert.equal(expired.authQrExpired, true);
+  assert.equal(expired.urlForWeb, undefined); assert.equal(expired.pairingCode, undefined);
+  assert.equal(c.local.busy, true); assert.equal(verifies, 1);
+  complete({ verified: false }); await c.local.verification;
+  assert.equal(c.local.state(c.key).urlForWeb, undefined);
+});
+test('malformed QR expiry never releases the authentication payload', async () => {
+  const c = setup(); let complete;
+  c.wallet.status = async () => 'UNCONNECTED';
+  c.wallet.beginOfficialSignIn = async () => ({ urlForWeb: 'https://www.binance.com/synthetic-qr', pairingCode: '012345', qrCodeId: 'synthetic', expireAt: 'unknown' });
+  c.wallet.verifyOfficialSignIn = () => new Promise(resolve => { complete = resolve; });
+  await c.local.start(c.key); await new Promise(setImmediate);
+  const s = c.local.state(c.key); assert.equal(s.authQrExpired, true); assert.equal(s.urlForWeb, undefined); assert.equal(s.pairingCode, undefined);
+  complete({ verified: false }); await c.local.verification;
 });
