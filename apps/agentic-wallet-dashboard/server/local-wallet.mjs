@@ -10,7 +10,8 @@ const fields = (body, allowed) => { if (Object.keys(body).some(k => !allowed.inc
 export const LOCAL_CAPABILITIES = Object.freeze({ liveWalletAuth: true, walletRead: true, livePortfolio: true, swapQuotes: true,
   liveTrades: false, manualTrades: false, tokenRevocation: false, automation: false, offlineAutomation: false });
 
-// No dashboard password or Binance credentials. This capability lives in one tab's memory.
+// No dashboard password or Binance credentials. The browser may retain this short-lived
+// local capability in origin-scoped sessionStorage to recover across refreshes.
 // Local access is an OS trust boundary, not proof of the human owner's identity.
 export class LocalWalletAccess {
   constructor(wallet, clock = Date.now, { portfolioReader = createPortfolioReader({ clock }), tradeService = null } = {}) {
@@ -33,7 +34,15 @@ export class LocalWalletAccess {
   }
   touch(key) { const c = this.check(key); c.expiresAt = Math.min(this.clock() + 600_000, c.maxExpiresAt); }
   lock() { this.client = null; this.flow = null; this.gate.binding = null; }
-  bootstrap() {
+  bootstrap({ reuseExisting = false } = {}) {
+    if (reuseExisting && this.client) {
+      try {
+        const c = this.check(this.client.key);
+        return { token: c.key, expiresAt: c.expiresAt, identityVerified: false };
+      } catch (error) { if (error.code !== 'LOCAL_SESSION_EXPIRED') throw error; }
+    }
+    // Reopening the launcher must not replace a still-running official verification.
+    if (reuseExisting && this.busy) throw new Denied('AUTH_IN_PROGRESS', 409);
     this.lock(); const now = this.clock();
     this.client = { key: id(), owner: 'local-browser', lastSeen: now, expiresAt: now + 600_000, maxExpiresAt: now + 3_600_000 };
     return { token: this.client.key, expiresAt: this.client.expiresAt, identityVerified: false };
@@ -127,8 +136,8 @@ export class LocalWalletAccess {
     catch (error) { this.lock(); throw error; }
     f.bindingInProgress = false; return this.state(key);
   }
-  async handle(path, key, body) {
-    if (path === '/api/local/session') { fields(body, []); return this.bootstrap(); }
+  async handle(path, key, body, { reuseSession = false } = {}) {
+    if (path === '/api/local/session') { fields(body, []); return this.bootstrap({ reuseExisting: reuseSession }); }
     this.check(key);
     if (path === '/api/local/state') {
       fields(body, []);

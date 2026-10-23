@@ -1,6 +1,7 @@
 import { PHASES, STAGES, activePhases, diagnosticText, safeDiagnosticExport } from './connection-state.js';
 import { AUTH_URL_ISSUES } from './official-error-catalog.js';
 import { renderAuthQr } from './auth-qr.js';
+import { readLocalSession, saveLocalSession, clearLocalSession } from './session-recovery.js';
 const $ = id => document.getElementById(id);
 // The launch capability is transient. Never persist it, display it, or send it to external origins.
 const accessMatch = /^#access=([a-f0-9]{64})$/.exec(location.hash);
@@ -9,6 +10,9 @@ if (location.hash) history.replaceState(null, '', location.pathname + location.s
 let token = null, state = null, epoch = 0, pollTimer, expiryTimer, pollBusy = false, readVersion = 0;
 let connectBusy = false, pollController = null, lastDiagnostic = null, cooldownTimer, cliVersions = {};
 let authQrVersion = 0, authExpiryTimer;
+let restoreBusy = false, restoreRetryNeeded = false, suspended = false, sessionExpiresAt = 0;
+const readControllers = new Set();
+const abortablePaths = new Set(['/api/local/session', '/api/local/state', '/api/wallet/check', '/api/wallet/read', '/api/wallet/quote', '/api/trade/preview', '/api/trade/list', '/api/trade/status']);
 let quoteBusy = false, quoteVersion = 0, displayedIntentId = null;
 let tradeReview = null, tradeTimer, reviewTimer, tradeSubmitting = false, trackedIntentId = null, tradePollBusy = false, trades = [];
 let currentView = 'overview', assetTab = 'tokens', assetSnapshot = null, portfolioSnapshot = null, mergedAssets = [], readBusy = false;
@@ -24,7 +28,7 @@ const messages = {
   INSUFFICIENT_TRADE_BALANCE: '支付代币余额不足，请调整数量。',
   INSUFFICIENT_GAS_RESERVE: '需保留足够 BNB 支付网络费用，请减少数量或补足燃料。',
   WALLET_TRANSACTION_LOCKED: '官方钱包交易暂时锁定，请检查币安 App。',
-  LOCAL_SESSION_EXPIRED: '本页连接已过期或已在另一页面重新打开，请重新连接。',
+  LOCAL_SESSION_EXPIRED: '本页短期会话已过期，请通过本机启动器重新打开。',
   WALLET_NOT_BOUND: '请先在 Binance App 核对钱包地址并绑定。',
   WALLET_AUTH_INVALID: '官方钱包尚未连接或授权已失效，请重新连接。',
   WALLET_AUTH_EXPIRED: '官方钱包授权已过期，请重新连接。',
@@ -49,20 +53,31 @@ function priceValue(balance, price) { const a = decimalUnits(balance), b = decim
 function setReadMessage(message, error = false) { $('live-read-message').textContent = message; $('live-read-message').closest('.data-status').classList.toggle('error', error); }
 function emptyState(target, title, description) { const box = el('div', undefined, 'empty-state'); box.append(el('span', '◇', 'empty-symbol'), el('strong', title), el('p', description)); $(target).replaceChildren(box); }
 function skeleton(target) { const table = el('table', undefined, 'skeleton-table'); const body = el('tbody'); for (let row = 0; row < 3; row++) { const tr = el('tr'); for (let col = 0; col < 3; col++) { const td = el('td'); td.append(el('div', undefined, 'skeleton-line')); if (col === 0) td.append(el('div', undefined, 'skeleton-line')); tr.append(td); } body.append(tr); } table.append(body); $(target).replaceChildren(table); }
-async function api(path, body = {}, signal) {
-  let response, data;
-  try { response = await fetch(path, { method: 'POST', credentials: 'omit', cache: 'no-store', signal,
-    headers: { 'Content-Type': 'application/json', ...(token ? { 'X-Local-Session': token } : {}), ...(path === '/api/local/session' && localAccessKey ? { 'X-Local-Access': localAccessKey } : {}) }, body: JSON.stringify(body) }); }
-  catch (error) { if (error.name === 'AbortError') throw error; lastDiagnostic = { code: 'LOCAL_SERVICE_UNAVAILABLE', category: 'LOCAL_HTTP', stage: 'HTTP', at: new Date().toISOString() }; throw Error('无法连接本机服务，请通过本机启动器重新打开。'); }
-  try { data = await response.json(); }
-  catch { lastDiagnostic = { code: 'LOCAL_RESPONSE_PARSE_FAILED', category: 'PARSE', stage: 'HTTP', at: new Date().toISOString() }; throw Error('本机接口返回格式异常，未能核对连接状态。'); }
-  if (!response.ok) {
-    lastDiagnostic = data.diagnostic || { code: 'INTERNAL_ERROR', category: 'LOCAL_FLOW', stage: 'LOCAL' };
-    const message = messages[data.error] || describeDiagnostic(data.diagnostic) || '请求未完成，请在连接设置中查看诊断。';
-    if (response.status === 401 || ['WALLET_AUTH_INVALID', 'WALLET_AUTH_EXPIRED', 'WALLET_IDENTITY_MISMATCH', 'WALLET_BINDING_CHANGED'].includes(data.error)) wipe(message);
-    const error = Error(message); error.code = data.error; throw error;
-  }
-  return data;
+async function api(path, body = {}, signal, { preserveOnAuthFailure = false } = {}) {
+  const requestEpoch = epoch, requestToken = token;
+  const isCurrentRequest = () => requestEpoch === epoch && requestToken === token;
+  const controller = !signal && abortablePaths.has(path) ? new AbortController() : null;
+  if (controller) { signal = controller.signal; readControllers.add(controller); }
+  try {
+    let response, data;
+    try { response = await fetch(path, { method: 'POST', credentials: 'omit', cache: 'no-store', signal,
+      headers: { 'Content-Type': 'application/json', ...(requestToken ? { 'X-Local-Session': requestToken } : {}), ...(path === '/api/local/session' && localAccessKey ? { 'X-Local-Access': localAccessKey } : {}) }, body: JSON.stringify(body) }); }
+    catch (error) { if (error.name === 'AbortError') throw error; if (isCurrentRequest()) lastDiagnostic = { code: 'LOCAL_SERVICE_UNAVAILABLE', category: 'LOCAL_HTTP', stage: 'HTTP', at: new Date().toISOString() }; throw Error('无法连接本机服务，可恢复网络后重试；官方会话未退出。'); }
+    try { data = await response.json(); }
+    catch (error) { if (error.name === 'AbortError') throw error; if (isCurrentRequest()) lastDiagnostic = { code: 'LOCAL_RESPONSE_PARSE_FAILED', category: 'PARSE', stage: 'HTTP', at: new Date().toISOString() }; throw Error('本机接口返回格式异常，未能核对连接状态。'); }
+    if (!response.ok) {
+      if (isCurrentRequest()) lastDiagnostic = data.diagnostic || { code: 'INTERNAL_ERROR', category: 'LOCAL_FLOW', stage: 'LOCAL' };
+      const message = messages[data.error] || describeDiagnostic(data.diagnostic) || '请求未完成，请在连接设置中查看诊断。';
+      const authenticationLost = response.status === 401 || ['WALLET_AUTH_INVALID', 'WALLET_AUTH_EXPIRED', 'WALLET_IDENTITY_MISMATCH', 'WALLET_BINDING_CHANGED'].includes(data.error);
+      if (authenticationLost && isCurrentRequest()) {
+        clearLocalSession();
+        if (preserveOnAuthFailure) { token = null; state = null; sessionExpiresAt = 0; }
+        else wipe(message);
+      }
+      const error = Error(message); error.code = data.error; error.authenticationLost = authenticationLost; throw error;
+    }
+    return data;
+  } finally { if (controller) readControllers.delete(controller); }
 }
 function describeDiagnostic(d) {
   if (!d) return '';
@@ -122,8 +137,8 @@ function connectionControls(v, message) {
   const remaining = phase === 'DISCONNECTED' && Number.isSafeInteger(v?.nextSignInAt) ? Math.max(0, v.nextSignInAt - Date.now()) : 0;
   for (const name of ['wallet-badge', 'top-wallet-state']) $(name).textContent = PHASES[phase] || PHASES.DISCONNECTED;
   for (const name of ['connect-wallet', 'top-connect-wallet']) {
-    $(name).disabled = !localAccessKey || connectBusy || active || phase === 'CONNECTED' || remaining > 0;
-    $(name).textContent = !localAccessKey ? '请使用本机启动器' : phase === 'CONNECTED' ? '钱包已连接' : remaining > 0 ? `稍候 ${Math.ceil(remaining / 1000)} 秒` : phase === 'REVIEW' ? '核对钱包地址' : ['FAILED', 'TIMEOUT', 'PAUSED'].includes(phase) || v?.requiresStatusCheck ? '核对状态后重试' : '扫码登录';
+    $(name).disabled = !(token || localAccessKey) || restoreBusy || suspended || connectBusy || active || phase === 'CONNECTED' || remaining > 0;
+    $(name).textContent = restoreBusy ? '正在恢复连接…' : suspended ? '等待恢复连接' : restoreRetryNeeded ? '重试恢复连接' : !(token || localAccessKey) ? '请使用本机启动器' : phase === 'CONNECTED' ? '钱包已连接' : remaining > 0 ? `稍候 ${Math.ceil(remaining / 1000)} 秒` : phase === 'REVIEW' ? '核对钱包地址' : ['FAILED', 'TIMEOUT', 'PAUSED'].includes(phase) || v?.requiresStatusCheck ? '核对状态后重试' : '扫码登录';
   }
   if (remaining > 0) cooldownTimer = setTimeout(() => connectionControls(v, message), Math.min(1000, remaining));
   $('top-wallet-message').textContent = message || ''; $('wallet-message').textContent = message || '';
@@ -154,8 +169,15 @@ function clearPrivateData() {
   $('candidate-addresses').replaceChildren(); $('live-address').textContent = '尚未绑定'; $('copy-wallet-address').disabled = true; $('copy-address-message').textContent = '';
   $('read-wallet').classList.remove('loading'); document.body.classList.remove('wallet-connected');
 }
-function wipe(message = '本页已断开，官方 CLI 会话保持不变。') {
-  epoch++; token = null; state = null; connectBusy = false; clearTimeout(pollTimer); clearTimeout(expiryTimer); pollController?.abort(); clearPrivateData();
+function stopLocalWork() {
+  clearTimeout(pollTimer); clearTimeout(expiryTimer); clearTimeout(cooldownTimer);
+  pollController?.abort(); for (const controller of readControllers) controller.abort(); readControllers.clear();
+  pollBusy = false; tradePollBusy = false;
+}
+function wipe(message = '本页已断开，官方 CLI 会话保持不变。', { preserveSession = false } = {}) {
+  epoch++; state = null; connectBusy = false; restoreBusy = false; restoreRetryNeeded = false; stopLocalWork();
+  if (!preserveSession) { token = null; sessionExpiresAt = 0; clearLocalSession(); suspended = false; }
+  clearPrivateData();
   $('wallet-candidate').hidden = true; $('read-permission').textContent = '待绑定'; $('wallet-notice').textContent = '连接本机钱包'; $('live-data-badge').textContent = '等待连接';
   $('global-state').textContent = '本机直开 · 钱包待连接'; $('confirm-wallet-address').checked = false;
   for (const name of ['lock-wallet', 'signout-wallet', 'bind-wallet', 'read-wallet', 'live-chain', 'live-quote-button']) $(name).disabled = true;
@@ -164,18 +186,58 @@ function wipe(message = '本页已断开，官方 CLI 会话保持不变。') {
   $('live-quote-message').textContent = '请先连接并核对钱包。'; $('quote-chain-label').textContent = '等待连接'; setReadMessage(message);
   connectionControls({ phase: 'DISCONNECTED' }, message);
 }
+function suspendSession(message = '页面已暂停，返回后将恢复连接。') {
+  suspended = true; wipe(message, { preserveSession: true });
+}
+function rememberSession(expiresAt) {
+  const value = timestamp(expiresAt);
+  if (token && Number.isFinite(value)) { sessionExpiresAt = value; saveLocalSession(token, value); }
+}
+async function restoreSession() {
+  if (restoreBusy) return;
+  if (navigator.onLine === false) { suspendSession('网络已离线，恢复网络后将重新读取连接状态。'); return; }
+  const saved = readLocalSession();
+  if (saved) { token = saved.token; sessionExpiresAt = saved.expiresAt; }
+  else if (!(token && sessionExpiresAt > Date.now())) { token = null; sessionExpiresAt = 0; }
+  suspended = false; restoreBusy = true; restoreRetryNeeded = false; const current = ++epoch; stopLocalWork(); state = null; clearPrivateData();
+  connectionControls({ phase: 'CHECKING', stage: 'STATUS' }, '正在恢复本页连接，不会重新扫码或提交交易。');
+  $('wallet-notice').textContent = '正在恢复钱包连接'; setReadMessage('正在核对已保存的本页短期会话…');
+  try {
+    let value;
+    if (token) {
+      try { value = await api('/api/local/state', {}, undefined, { preserveOnAuthFailure: true }); }
+      catch (error) { if (!error.authenticationLost) throw error; }
+      if (current !== epoch) return;
+    }
+    if (!value) {
+      if (!localAccessKey) { restoreBusy = false; wipe(launchMessage); return; }
+      await session(); if (current !== epoch) return;
+      value = await api('/api/local/state'); if (current !== epoch) return;
+    }
+    // A recovery check never starts a new official signin, repeats a binding, or submits a trade.
+    if (value.phase === 'DISCONNECTED' && !value.operationPending) {
+      value = await api('/api/wallet/check'); if (current !== epoch) return;
+    }
+    restoreBusy = false; render(value);
+    if (!value.walletConnected) setReadMessage(value.phase === 'WAITING' ? '已恢复原扫码流程，继续等待同一次 App 确认。' : value.phase === 'REVIEW' ? '已恢复待核对的钱包地址，确认后读取资产。' : '已恢复本页会话，钱包状态已核对。');
+  } catch (error) {
+    if (current === epoch && error.name !== 'AbortError') { restoreBusy = false; showFailure(error.message); }
+  } finally { if (current === epoch) restoreBusy = false; }
+}
 function showFailure(message) {
-  if (state?.walletConnected) void lock(message);
+  if (state?.walletConnected) wipe(message, { preserveSession: true });
+  restoreRetryNeeded = !!(token || localAccessKey);
   clearTimeout(pollTimer); pollController?.abort(); clearPrivateData(); $('wallet-candidate').hidden = true;
   for (const name of ['bind-wallet', 'read-wallet', 'live-chain', 'live-quote-button']) $(name).disabled = true;
   state = { ...state, walletConnected: false, phase: lastDiagnostic?.category === 'TIMEOUT' ? 'TIMEOUT' : 'FAILED', stage: lastDiagnostic?.stage || 'LOCAL', diagnostic: lastDiagnostic, requiresStatusCheck: true };
   connectionControls(state, message); setReadMessage(message, true);
 }
-async function session() { if (!localAccessKey) throw Error(launchMessage); if (!token) { const current = epoch, v = await api('/api/local/session'); if (current !== epoch) throw Error('本页连接请求已取消。'); token = v.token; } }
+async function session() { if (!token) { if (!localAccessKey) throw Error(launchMessage); const current = epoch, v = await api('/api/local/session'); if (current !== epoch) throw Error('本页连接请求已取消。'); token = v.token; rememberSession(v.expiresAt); } }
 function render(v) {
   const wasConnected = !!state?.walletConnected, wasReview = state?.phase === 'REVIEW', wasWaiting = state?.phase === 'WAITING'; state = v;
   clearTimeout(expiryTimer);
-  const expiresAt = Math.min(v.expiresAt, v.walletExpiresAt || Infinity);
+  const expiresAt = Math.min(timestamp(v.expiresAt), v.walletExpiresAt ? timestamp(v.walletExpiresAt) : Infinity);
+  rememberSession(expiresAt);
   if (Number.isFinite(expiresAt)) expiryTimer = setTimeout(() => lock('本页连接或官方授权到期，请重新连接。'), Math.max(0, expiresAt - Date.now()));
   const connected = v.walletConnected;
   $('refresh-trades').disabled = !connected;
@@ -321,7 +383,9 @@ async function refreshCurrent() {
   finally { if (current === epoch && version === readVersion) { readBusy = false; $('read-wallet').disabled = !state?.walletConnected; $('read-wallet').classList.remove('loading'); } }
 }
 async function connectWallet() {
-  if (!localAccessKey) { setReadMessage(launchMessage, true); return; }
+  if (restoreRetryNeeded) { await restoreSession(); return; }
+  if (!(token || localAccessKey)) { setReadMessage(launchMessage, true); return; }
+  if (restoreBusy || suspended) return;
   if (connectBusy || activePhases.includes(state?.phase) || state?.walletConnected) return;
   if (state?.phase === 'REVIEW') { document.dispatchEvent(new CustomEvent('wallet:show-settings')); return; }
   const checkOnly = ['FAILED', 'TIMEOUT', 'PAUSED'].includes(state?.phase) || state?.requiresStatusCheck;
@@ -505,8 +569,9 @@ $('confirm-trade').onclick = async () => {
 $('close-live-review').onclick = () => { if (!tradeSubmitting) invalidateReview(); };
 $('live-review').addEventListener('cancel', event => { if (tradeSubmitting) event.preventDefault(); else invalidateReview(); });
 $('refresh-trades').onclick = async () => { if (!trackedIntentId) trackedIntentId = intentIdOf(trades.find(intent => ['UNKNOWN', 'SUBMISSION_UNKNOWN'].includes(stateOf(intent)))); if (trackedIntentId) await pollTrade(); await loadTrades(); };
-window.addEventListener('offline', () => lock('网络中断，本页已断开并清除账户信息。'));
-window.addEventListener('pagehide', () => lock());
-window.addEventListener('pageshow', event => { if (event.persisted) wipe('页面已恢复，请重新连接并核对钱包。'); });
-if (!localAccessKey) { connectionControls({ phase: 'DISCONNECTED' }, launchMessage); setReadMessage(launchMessage); }
+window.addEventListener('offline', () => suspendSession('网络已离线，已隐藏资产；恢复网络后继续当前会话。'));
+window.addEventListener('online', () => { void restoreSession(); });
+window.addEventListener('pagehide', () => suspendSession());
+window.addEventListener('pageshow', event => { if (event.persisted) void restoreSession(); });
+void restoreSession();
 fetch('/api/status', { credentials: 'omit', cache: 'no-store' }).then(response => response.json()).then(value => { cliVersions = value.cli || {}; $('installed-cli-version').textContent = cliVersions.installedVersion || '未确认'; if (!value.capabilities?.liveWalletAuth) { connectionControls({ phase: 'DISCONNECTED' }, '本机服务暂未启用钱包连接。'); $('top-connect-wallet').disabled = true; $('connect-wallet').disabled = true; } }).catch(() => { $('installed-cli-version').textContent = '未确认'; setReadMessage('本机服务未响应，请通过启动器重新打开。', true); });

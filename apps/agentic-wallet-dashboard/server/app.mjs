@@ -13,6 +13,7 @@ const files = new Map([['/', ['index.html', 'text/html']], ['/app.js', ['app.js'
   ['/favicon.svg', ['favicon.svg', 'image/svg+xml']],
   ['/wallet.js', ['wallet.js', 'text/javascript']],
   ['/auth-qr.js', ['auth-qr.js', 'text/javascript']],
+  ['/session-recovery.js', ['session-recovery.js', 'text/javascript']],
   ['/vendor/qrcode.mjs', ['vendor/qrcode.mjs', 'text/javascript']],
   ['/vendor/qrcode_UTF8.mjs', ['vendor/qrcode_UTF8.mjs', 'text/javascript']],
   ['/connection-state.js', ['connection-state.js', 'text/javascript']],
@@ -90,7 +91,7 @@ export async function createApplication({ sessions, wallet = new OfficialWallet(
             localWallet.check(key); localWallet.touch(key);
             json(res, 200, await manualTrades[tradeMethod](key, body)); return;
           }
-          json(res, 200, await localWallet.handle(url.pathname, key, body)); return;
+          json(res, 200, await localWallet.handle(url.pathname, key, body, { reuseSession: localAccessKey !== null })); return;
         }
         throw new Denied('LOCAL_ACCESS_DEMO_ONLY');
       }
