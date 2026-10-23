@@ -1,9 +1,11 @@
 # Robinhood Chain 发射台与合约部署监控
 
-## 监控和模拟交易：技能资料
+## 监控和模拟交易：技能与本机钱包
 
 - [Binance Agentic Wallet 技能](skills/binance-agentic-wallet/README.md)：钱包查询、报价与交易预演参考，归档版本 `1.13.0`。该技能也包含实盘命令，使用时需遵循授权与安全流程；本仓库现有监控和模拟盘没有接入钱包执行器。
-- 本次归档仅含技能文档；不包含密码、私钥、助记词、API 密钥、登录会话、钱包配置或用户交易记录。
+- [YESP 本机钱包看板 0.4.0](apps/agentic-wallet-dashboard/README.md)：资产、PTAH 材料与矿机持仓、交易记录，以及逐笔确认的 BSC 手动兑换。独立启动，仅绑定本机回环地址；现有监控和模拟盘没有接入真实钱包执行器。
+- [原始源码包 0.3.5](vendor/binance-agentic-wallet/README.md)及[源码解析](apps/agentic-wallet-dashboard/SOURCE_ANALYSIS.md)。
+- 归档不包含密码、私钥、助记词、API 密钥、登录会话、钱包配置或用户交易记录。
 
 ## 当前维护基线（2026-10-09）
 

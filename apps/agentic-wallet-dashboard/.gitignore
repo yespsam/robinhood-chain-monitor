@@ -1,0 +1,17 @@
+.private/
+node_modules/
+.env
+.env.*
+*.log
+*.pem
+*.key
+coverage/
+.DS_Store
+Thumbs.db
+
+# Local QA and browser artifacts
+.playwright-cli/
+test-results/
+playwright-report/
+*.har
+*.trace

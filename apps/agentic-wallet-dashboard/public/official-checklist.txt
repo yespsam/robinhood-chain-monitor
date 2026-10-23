@@ -1,0 +1,46 @@
+【历史资料：0.3.5 原始快照】
+以下是原版本记录，不代表 0.4.0 的功能、当前登录状态或交易授权。当前说明请见 README.md 与 SOURCE_ANALYSIS.md。
+
+2026-10-23 授权接入阻塞：等待 Binance 官方确认
+本人在 0.3.5 返回的脱敏诊断已确认 HOST_MISMATCH 与 PATH_MISMATCH；CLI 返回地址的域名和路径均不同于项目目前允许的文档示例。
+这只能证明本地规则拒绝了返回地址，不证明该地址非官方、账户不合格或 Binance 拒绝授权。当前钱包未连接。
+项目此前将示例 web3.binance.com/en/agent-login 当成唯一允许值；官方认证文档要求原样使用 urlForWeb，但未给出完整授权地址白名单。
+本轮没有读取实际完整授权链接或重新发起登录。已有诊断不保存实际域名和路径，无法从历史记录恢复；不要求用户反复生成授权或粘贴敏感链接。
+请 Binance 官方确认：
+A. @binance/agentic-wallet 1.11.0 的 auth signin / urlForWeb 当前允许的准确 HTTPS 域名、路径规则及是否存在版本/地区差异。
+B. 哪些重定向目标或 App 深链属于此授权流程，第三方看板应如何验证；是否应以官方 CLI 的返回链接为准，文档示例是否已更新。
+C. 如何提供不含查询参数、片段、配对码、qrCodeId 或其他凭证的排障信息，并取得对当前返回地址的官方确认。
+核验来源：
+https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/authentication.md
+https://developers.binance.com/en/docs/products/agentic-wallet/quickstart/install-agentic-wallet
+现有来源不足以确认本次替代地址。按用户要求停止放宽认证接入；不猜测新域名或路径，不删除来源校验，不开启交易或策略。
+供 Binance / Flap / Four.meme 官方确认的缺失信息
+日期：2026-10-22
+
+这些是“未确认”项目，不代表官方绝对没有相关能力。当前不启用缺失能力。
+
+第一阶段真实上线前
+1. 官方报价的完整返回 schema：价格影响、交易总 Gas、各项已知手续费、费用币种、路由、最少到账、有效期。wallet gas-price 只给单位价格，不能擅自乘一个估算 gasLimit。
+2. 报价与执行如何绑定：是否有固定 quoteId、过期拒绝或等价机制，如何保证执行的条款不超出本人已确认的交易。
+3. 新增代币授权的预览与额度控制：spender、approve/Permit2 类型、精确额度、期限、是否可以强制非无限授权，以及兑换前后如何逐步确认。仅有 approvals list/revoke 不等于可安全配置新增授权。
+4. Agentic Wallet 会话的官方隔离方式、后台凭证安全存储要求、可核验的钱包/所有者标识。是否支持正式仅只读授权？不能把本看板自己的 read 权限当成官方只读凭证。
+5. 下单请求幂等标识、超时且没有 orderId 时的可靠核对方法，以及链上最终性/重组/部分执行的完整状态语义。没有文档支持不得猜测参数。
+6. wallet balance 的低估值过滤是否有公开可关闭方式；价格更新时间、数据完整性和完整成本基础。缺失时保持未知，不补余额与盈亏。
+7. 限价功能各网络实际支持的支付代币：CLI 文档列 USDT/USDC/native，开发者网页范围更广，需确认与版本适配。
+8. v0.3 已实现官方登录控制器和完整地址确认绑定。尚未完成本人真实钱包只读联调；交易上线还需要凭证隔离、持久化幂等与未知结果核对。如改变仅限本机的范围，必须重新设计身份认证与 HTTPS。
+
+第二阶段
+9. Flap/Four.meme 新币创建事件的官方源、部署合约与版本、分页/断线补偿、重组处理和延迟保证。
+10. 限制“只有特定 Agentic Wallet 可以购买”的实际链上检查位置、合约地址/ABI、名单或资格证明接口，以及如何验证本人地址资格。请明确是否真的存在此机制。
+11. aiCreator 标签只表示创建者属性；Agent NFT 不等于 Binance Agentic Wallet。需要独立资格证据，不能用 AI 关键词替代。
+12. 官方允许的 Agentic Wallet 执行路径、模拟/风险预检、硬 Gas 上限、预算与滑点限制如何落实，以及是否必须逐次官方签名。
+13. 策略是本机还是远端运行，停止请求的真实确认状态，断网/退出后的行为、已在途操作和挂单如何处理。没有停止确认不得显示已停止。
+14. 本人应另外授权策略条件、资金/滑点/Gas 上限、退出规则、期限、停止方式及离线运行；目前这些授权全部缺失，因此策略禁用。
+
+原始文档入口
+https://developers.binance.com/en/docs/products/agentic-wallet/welcome
+https://github.com/binance/binance-skills-hub/tree/main/skills/binance-web3/binance-agentic-wallet/references
+https://web3.binance.com/en/dev-docs/products/wallet-skills/supported-skills
+https://four.meme/en/agentic
+https://docs.flap.sh/flap/developers/wallet-and-terminal-and-bot-developers
+

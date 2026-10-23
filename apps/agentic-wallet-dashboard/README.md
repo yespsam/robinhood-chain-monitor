@@ -1,0 +1,82 @@
+# YESP Wallet 本机钱包看板 · 0.4.0
+
+基于用户提供的 `binance-agentic-wallet-source-0.3.5.zip` 源码快照整理和扩展，连接本机 Binance Agentic Wallet，查看真实资产，并逐笔确认 BNB Smart Chain（BSC）代币兑换。本项目是独立的本机看板，**不是 Binance 官方开发或发布的看板**；官方组件是所调用的 `@binance/agentic-wallet` CLI。
+
+源码不内置用户钱包地址、持仓、登录状态或交易记录。原快照的结构、0.4.0 的改动和执行边界见 [SOURCE_ANALYSIS.md](SOURCE_ANALYSIS.md)。
+
+## 启动
+
+主要适配 macOS，要求 Node.js 22+。应用固定核验官方 CLI **1.11.0**；这个版本是本项目已审查版本，不表示最新版本或通用最低支持版本。
+
+已有可用的官方 CLI 时，在项目目录执行：
+
+```sh
+npm run open
+```
+
+也可以在 macOS 双击 **打开钱包.command**。启动器会复用正在运行的本项目服务，或启动服务后打开浏览器。默认地址为 `http://127.0.0.1:51769`；应使用启动器进入，直接输入地址不会取得本机访问能力。刷新后需要重新进入时，再运行启动器即可。
+
+macOS 优先使用经包名、版本和入口核验的现有全局安装：Homebrew 的 `/opt/homebrew/lib/node_modules/`、`/usr/local/lib/node_modules/`，然后才尝试项目的 `node_modules/`。这会复用已有官方登录，不需要为了看板再次登录；进入看板后仍需核对并确认完整钱包地址。
+
+新机器先阅读 [Binance 官方安装与开通指南](https://developers.binance.com/en/docs/products/agentic-wallet/quickstart/install-agentic-wallet)，满足账户、App 钱包和平台要求，并安装本项目固定版本：
+
+```sh
+npm install -g @binance/agentic-wallet@1.11.0
+```
+
+安装和系统钥匙串依赖须按官方指引完成。`npm ci --ignore-scripts` 只下载依赖，不能证明 `@github/keytar` 等原生钥匙串组件可用，也不是本项目推荐的首次开通步骤。不要覆盖已有可用的官方会话文件来排障。使用非上述位置的安装或其他 CLI 版本时，需先审查并适配解析器；应用不会任意搜索或执行 PATH 中的命令。
+
+开发检查与前台启动：
+
+```sh
+npm test
+npm start
+```
+
+`npm start` 在前台运行；另开终端执行 `npm run open` 获取带本机访问能力的入口。前台服务可用 Ctrl+C 停止。启动器启动的服务在浏览器关闭后继续运行；停止时只处理本项目进程，不要终止所有 Node 进程。
+
+## 使用范围
+
+| 功能 | 当前行为 |
+| --- | --- |
+| 钱包连接 | 检查现有官方连接；未连接时可由用户发起官方授权。确认完整地址后绑定当前页面。 |
+| 资产与记录 | 通过官方 CLI 查询余额、历史、待处理交易、兑换订单及支持的授权/挂单记录。读取失败显示未知或错误。 |
+| PTAH 资产 | 通过公共 BSC RPC 读取 BNB、USDT、PTAH、Relic 材料数量、Loom 矿机数量及挖矿状态，显示来源与更新时间。 |
+| 手动兑换 | 仅 BSC，输入完整合约、数量和滑点，先预览、再逐笔确认真实提交；固定 MEV 保护及 MEDIUM Gas 档位。 |
+| 其他网络 | 仅在官方返回且本项目支持的范围内读取、查询报价，不能通过本版本提交兑换。 |
+| 暂不提供 | NFT 下单/撤单、材料合成、挖矿领取或操作、代币转账、链上授权撤销、自动策略及无人值守交易。 |
+
+真实资产页不以演示数据填补缺失值。PTAH 专项查询覆盖固定合约，不能发现钱包内所有资产；NFT 数量不等于可立即变现价值，未取得的价格和估值不计为零。资产总览可能不完整。
+
+## 手动兑换如何执行
+
+1. 连接并确认钱包地址，填写 BSC 兑换参数，获取报价和目标币风险信息。
+2. 在审阅页核对合约、支付数量、滑点、参考最低到账和费用说明。报价审阅默认有效 2 分钟；修改参数或过期须重新预览。
+3. 明确确认费用未知项；风险资料不完整时还需单独确认。已命中的强风险会阻止提交，不能用勾选绕过。
+4. 点击确认后，后端重新核验绑定、余额、交易锁、Gas 和报价，先持久保存交易意图，再调用官方 CLI 一次。
+5. 页面查询订单状态。已提交不代表成交；只有核验官方终态及交易哈希后才显示完成。实际到账以官方返回的实收字段为准，缺失时不拿报价代替。
+
+**参考最低到账不是链上保证值。** 它由报价和滑点计算，官方报价未提供完整逐笔费用、最终 Gas 或授权方案。提交前保留的 `0.001 BNB` 是本地最低原生币余额门槛，不是 Gas 估算，也不保证足够支付最终费用。最终路由、授权与可能的 App 确认由官方钱包处理。
+
+超时、解析异常或不能证明拒绝的服务错误会记为 **UNKNOWN（结果未知）**。此时只读核对原订单，不自动重发；未解决的交易意图会阻止同钱包继续提交。不要删除本地交易记录或锁文件来强行重试。若没有返回订单 ID，需先到官方钱包核查交易历史，再进行人工恢复。
+
+## 本机访问与隐私
+
+- 服务只监听 `127.0.0.1`，不面向局域网或公网；请求检查 Host、Origin 和页面会话。
+- 每次服务启动生成随机访问密钥，保存于 `.private/access.json`，文件权限 `0600`，目录权限 `0700`。启动器通过 URL fragment 将密钥交给页面内存，页面立即从地址栏移除 fragment；密钥不放入 URL 查询参数、Cookie 或浏览器持久存储。
+- 默认无需看板密码；官方登录仍由 CLI 和 Binance App 管理。看板不读取私钥、助记词、官方凭据文件，也不上传这些内容。
+- `.private/` 保存本机访问资料、运行日志和交易意图记录，**不得上传 GitHub 或放入分享的 ZIP**。项目 `.gitignore` 已排除该目录、依赖、环境文件、日志和密钥类文件。
+- 看板没有自建云端账户、钱包数据同步或遥测服务。正常功能仍需访问 Binance 官方服务和公共 BSC RPC；查询钱包余额时，公共节点会收到查询所需的钱包公开地址。代币风险查询只发送链和合约等查询参数，不发送钱包地址或登录信息。
+- 同一系统用户下其他程序可能共享官方 CLI 登录状态。本机访问密钥不能证明操作人的自然人身份，也不能抵御已控制本机账户的程序。
+
+“断开本页”只失效页面能力，不撤销链上授权、不撤单，也不停止其他程序。退出官方 CLI 是独立操作。当前页面会话闲置 10 分钟或累计 1 小时后失效，重新打开和绑定不会删除已有交易记录。
+
+## 历史文档与来源
+
+`README.txt`、`官方接入核查.txt`、`待官方确认.txt`、`验收记录.txt`、`安全检查报告.txt` 及 `public/official-checklist.txt` 保留为 **0.3.x 开发历史**。其中“交易关闭”、安装方式、平台、授权失败、账户状态和验收结论不代表 0.4.0 的当前行为、当前账户或本次验证结果；当前功能以本 README 和实际代码为准。
+
+0.4.0 已调整授权链接校验：使用官方 CLI 实际返回的 `urlForWeb`，仅接受审核过的精确官方 HTTPS 域名，拒绝附带用户信息、自定义端口、fragment 或控制字符；不再要求历史示例中的固定路径，也不拼接授权链接。当前账户是否连接以实时状态为准。本版交易测试使用替身，未以真币兑换作验收。
+
+官方参考：[Agentic Wallet 技能及版本要求](https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/SKILL.md)、[认证流程](https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/authentication.md)、[钱包查询](https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/wallet-view.md)、[兑换命令](https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/market-order.md)、[代币审计](https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/query-token-audit/SKILL.md)。
+
+提供的源码快照中未发现明确的项目许可证文件，本次未擅自添加许可证或声称获得 Binance 官方授权。第三方依赖仍受各自许可证约束。

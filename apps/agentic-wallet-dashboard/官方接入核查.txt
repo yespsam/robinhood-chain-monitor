@@ -1,0 +1,173 @@
+【历史资料：0.3.5 原始快照】
+以下是原版本记录，不代表 0.4.0 的功能、当前登录状态或交易授权。当前说明请见 README.md 与 SOURCE_ANALYSIS.md。
+
+v0.3.0 更新：官方认证、地址确认绑定、真实只读查询和 Swap 报价入口现已开放；仅由本人点击触发。真实交易提交仍未开放。详见 README.txt、public/research.json 与待官方确认.txt。
+官方 authentication.md SHA: cf5c67a8d7aef390c849c2b0d7ca216b684d155f
+官方 market-order.md SHA: 53edffd118c51f8d80f80af67dde76a8c33e0be5
+官方 wallet-setting.md SHA: 19800776704770184932daafaa8ed64f6d54d30c
+官方 security.md SHA: 329c34603d8019127da751ebac493612072e8499
+未调用真实 auth / swap / signout 进行开发验收。以下为旧版核查记录，启用状态以上述 v0.3 说明为准：
+
+Binance Agentic Wallet 接入核查与开发边界
+核查日期：2026-10-22（北京时间）
+
+结论
+本项目仅服务于本人通过官方流程授权的 Binance Agentic Wallet。没有使用 AI Pro、交易所主账户、其他钱包或其他 AI 作为替代。
+官方提供的是可核验的 Agentic Wallet CLI/Skill 工作流。本次按官方文档固定 @binance/agentic-wallet 1.11.0（Skill 1.13.0 要求），不猜测 MCP、HTTP 服务地址或配置参数。
+已在项目内安装该版本并验证 Windows 上的 --help。没有执行真实 signin、verify、signout、余额查询、swap、限价下单、撤单或链上授权撤销。
+
+这次交付是第一阶段的本地开发版本，不是已经连接真实钱包的交易产品。
+已实现独立看板登录、模拟资产和交易审阅、官方 CLI 的认证与只读适配层，以及服务端会话/地址/网络/权限校验。
+真实认证 HTTP 流程、本人地址确认绑定与端到端官方验收尚未开放；全部状态变更端点固定拒绝，不能靠前端解锁。没有官方会话或钱包凭证被创建。
+在补齐交易预览信息、持久化幂等处理与正式安全边界前，不能将本版本改一个开关便用于真钱交易。
+
+能力清单
+1. 看板身份
+官方结论：本地独立身份，不是 Binance 身份或交易权限。
+本版本（0.2.0）：按本人要求取消看板登录，仅监听 127.0.0.1，直接展示模拟数据；不核验个人身份，不授予钱包或交易权限。
+依据：[3]
+
+2. 钱包登录与绑定
+官方结论：已支持：官方 CLI 返回登录链接与配对码，用户 App 确认，再 verify 并检查 CONNECTED。地址来自 wallet address。
+本版本：官方认证适配器已编写；开发 HTTP 不开放真实授权。端到端登录与地址绑定待本人授权验收，当前未连接。
+依据：[2]、[3]、[4]
+
+3. 网络与余额
+官方结论：已支持：wallet chains/address/balance；按网络和合约查询。概览列出 BSC、Ethereum、Base、Solana；实际以 chains 为准。CLI 隐藏估值低于 $0.01 的资产。
+本版本：模拟四网络资产；已实现受保护的只读适配层，未对真实钱包查询。不将缺失项解释为零。
+依据：[1]、[4]
+
+4. 估值与盈亏
+官方结论：余额响应包含 price/value；价格的更新时间与完备性保证未确认，完整成本基础未确认。
+本版本：估值注明来源；无价格显示“暂无估值”；不计算盈亏。只有模拟价格。
+依据：[4]、[10]
+
+5. 交易记录 / 待处理
+官方结论：已支持 tx-history，含状态、哈希、分页、网络及 pending 筛选。
+本版本：当前界面仅模拟；适配器为最近 20 条，不声称完整历史。
+依据：[4]
+
+6. 兑换报价与手动下单
+官方结论：已支持 quote、swap、list；官方授权与风控仍适用。orderId 仅代表提交。完整总 Gas、价格影响、费用拆分、预先授权额度和可复核报价期限未确认。
+本版本：报价只读适配器与模拟审阅已实现；真实 swap 不实现、不开放；缺失字段持续阻断。
+依据：[6]、[9]、[11]
+
+7. 限价单 / 挂单
+官方结论：已支持 BSC 与 Solana 的创建、查询、取消；Ethereum / Base 不适用此限价接口。不同官方页面的支持稳定币范围有差异，需确认。
+本版本：显示模拟挂单和审阅草稿；查询适配层就绪。真实创建与取消禁用。
+依据：[7]
+
+8. 授权查看与撤销
+官方结论：已支持 EVM approve / Permit2 的查询、详情与撤销。Solana 不适用。BROADCASTED 不是撤销完成。
+本版本：只读适配层就绪；界面未读取真实授权。撤销是状态变更，开发期禁用。
+依据：[8]
+
+9. 期限 / 风控 / 签名
+官方结论：wallet settings 可读取到期时间、额度与风险处理模式；设置只能在 Binance App 更改。Secure Auto Sign 不保证逐笔弹窗。
+本版本：每次后端读取检查期限、地址、网络、会话和内部权限；本看板逐笔确认与官方风控分别处理。
+依据：[5]、[11]
+
+10. 停止与退出
+官方结论：auth signout 清除钱包本地会话；限价取消、链上授权撤销是不同操作。未发现一个能原子停止全部外部策略并撤回所有已发交易的官方接口。
+本版本：看板退出只使自身会话失效并丢弃待执行任务，不调用官方 signout、取消或撤销。远端停止状态未确认。
+依据：[3]、[7]、[8]
+
+11. Flap / Four.meme 数据
+官方结论：已找到 Binance meme-rush 数据能力及发行平台官方资料。实时延迟、覆盖与完整性仍需针对策略验证。
+本版本：第二阶段，尚未建立监控或后台定时任务。
+依据：[10]、[12]、[14]
+
+12. 特定钱包购买资格
+官方结论：未确认“仅指定 Agentic Wallet 可买”的限制、名单或证明接口。Four.meme aiCreator 标记本身不改变交易行为；Agent NFT 不是 Binance 钱包身份。
+本版本：资格未知，策略始终禁用；不以名称、AI 标签或持 NFT 作为购买资格。
+依据：[13]、[14]
+
+13. 受限自动执行
+官方结论：基础交易能力已支持，不等于已确认任意平台受限币的执行能力、硬 Gas 上限、策略撤销与原子停止语义。
+本版本：第二阶段关闭；离线授权、限额、退出规则、期限与停止确认均未配置。无无人值守交易。
+依据：[5]、[6]、[9]、[13]
+
+官方授权和身份边界
+- 当前本机直开不识别 owner 身份，也不能证明某个链上钱包属于本人。旧版密码认证模块保留，但没有用于当前访问路径。
+- 官方 auth signin 返回 urlForWeb、pairingCode、qrCodeId；链接和配对码需原样呈现，用户在 Binance App 核对确认；后台 verify 后仍须 wallet status = CONNECTED。
+- 正式接入还须由用户确认官方 address 返回的具体网络地址，后端保存与本次 owner 会话绑定的允许清单。不能接收前端指定的任意钱包作为操作对象。
+- ALREADY_CONNECTED 不能直接等同于本用户指定的钱包。CLI 会话必须隔离，不能继承其他软件留下的身份。未完成隔离/绑定时拒绝查询或交易。
+- 官方 settings 的期限、额度与风险处理只读；本看板内部 read/manual/automation 是自身权限划分，并非 Binance 文档定义的 OAuth scopes。
+- Secure Auto Sign 可能自动签名；不能声称每笔都由 App 弹窗。因此看板逐笔确认不可省略。授权钱包不等于授权自动策略。
+- 本项目没有读取 CLI 凭证存储、浏览器 Cookie、登录令牌、私钥或助记词。适配层只通过文档公开的 CLI 命令工作。
+
+资产数据的准确性
+- 实际网络应按 wallet chains 返回值确定；四个网络仅为概览与原型范围，不能将参考文档例子当作当前钱包已连接状态。
+- 资产键必须是网络 + 完整合约；EVM 地址比较忽略大小写，Solana 保留大小写。EVM 原生币标记不是 ERC-20 合约。
+- CLI 隐藏估值低于 $0.01 的资产。没有返回数据不能被翻译成“余额为零”“没有此币”或完整资产总值。
+- 文档返回 price/value，但没有证实全部资产覆盖、价格更新时间、完整成本或盈亏口径。数据缺失时不计算。当前界面所有价格是明确标记的固定模拟价格。
+- 当前只读适配器的历史/订单读取范围为第一页、最多 20 条；不宣称历史完整。完整分页与数据一致性留待正式只读联调。
+
+订单与撤销语义
+提交返回 orderId 只说明已提交；strategyId 只说明限价单已建立。WORKING 是等待触发，TRIGGERED/PENDING 是执行中，FINISHED/FAILED/EXPIRED/CANCELED 应分别呈现。
+未知状态不转成成功，超时不盲目再次下单。开发队列使用同一确认 ID 防重并把结果未知固定为 UNKNOWN；该队列仅供测试，不连接真实执行器，尚未实现跨进程重启的持久化幂等账本。
+限价单可能在看板退出后继续等待并执行。没有官方停止确认时不能显示“已停止”。本版本没有启动任何策略。
+EVM 撤销授权返回 BROADCASTED/txHash 时仍然是等待链上确认；不能声称授权已经消失。看板退出、CLI signout、代币授权撤销、限价取消是独立操作。
+
+第二阶段
+Binance 官方技能目录提供 meme-rush 数据能力；Four.meme 和 Flap 也有官方开发者资料，但数据覆盖和实时性需要另行验证。
+Four.meme 官方说明 aiCreator 标记本身不会改变交易行为；AgentIdentifier.isAgent 查询的 Agent NFT 身份不能推导为 Binance Agentic Wallet 身份或某个代币的购买资格。
+没有足够官方证据确认“只有特定 Agentic Wallet 可以购买”的合约限制、资格名单/证明、本人资格或可通过钱包风控的执行路径。第二阶段不得启用，仅保留禁用模块。
+正式策略前须逐项取得本人确认：目标网络与代币范围、资格证明、资金上限、单次/累计预算、滑点和 Gas 硬上限、退出规则、期限、停止语义、是否允许离线运行。缺任一项拒绝启动，不承诺首笔成交。
+不采用要求 PRIVATE_KEY 的其他平台 CLI 替代本钱包。
+
+官方来源
+[1] Binance Agentic Wallet 官方概览
+https://developers.binance.com/en/docs/products/agentic-wallet/welcome
+
+[2] 官方 CLI 安装与版本要求
+https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/preflight.md
+
+[3] 官方扫码认证与退出
+https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/authentication.md
+
+[4] 地址、余额、历史与钱包锁
+https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/wallet-view.md
+
+[5] 钱包设置与授权期限
+https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/wallet-setting.md
+
+[6] 兑换报价、提交和订单状态
+https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/market-order.md
+
+[7] 限价单与取消
+https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/limit-order.md
+
+[8] EVM 代币授权查询与撤销
+https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/approvals.md
+
+[9] Gas 单价及单位
+https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/gas.md
+
+[10] Binance Wallet Skills 数据能力
+https://web3.binance.com/en/dev-docs/products/wallet-skills/supported-skills
+
+[11] Binance Agentic Wallet FAQ
+https://www.binance.com/en/support/faq/detail/3ff00e2d488a41c4aaa4aabb6fc36763
+
+[12] Four.meme 官方 Agentic 入口
+https://four.meme/en/agentic
+
+[13] Four.meme 官方 Agent 标记说明
+https://github.com/four-meme-community/four-meme-ai/blob/main/skills/four-meme-integration/references/agent-creator-and-wallets.md
+
+[14] Flap 官方开发者入口
+https://docs.flap.sh/flap/developers/wallet-and-terminal-and-bot-developers
+
+[15] Binance 官方安装指南
+https://developers.binance.com/en/docs/products/agentic-wallet/quickstart/install-agentic-wallet
+
+文档取证版本
+认证文件 SHA: cf5c67a8d7aef390c849c2b0d7ca216b684d155f
+钱包查看 SHA: d01eb27894281f4159e9c8596fa5a0c745a4a6f7
+市场订单 SHA: 53edffd118c51f8d80f80af67dde76a8c33e0be5
+限价订单 SHA: e2f5b0675d1e68ac7092b5f91f2d069d5c9bcb2f
+授权文件 SHA: 6e31c542201fb52ddd3946adbe5263e1f4f83bae
+钱包设置 SHA: 19800776704770184932daafaa8ed64f6d54d30c
+以上链接的 main 分支会变化；升级 CLI 时应重新核查文档与返回结构。
+

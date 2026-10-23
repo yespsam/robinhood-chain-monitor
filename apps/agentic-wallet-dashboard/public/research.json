@@ -1,0 +1,192 @@
+{
+  "checkedAt": "2026-10-22",
+  "cliVersion": "1.11.0",
+  "skillVersion": "1.13.0",
+  "sources": [
+    {
+      "title": "Binance Agentic Wallet 官方概览",
+      "url": "https://developers.binance.com/en/docs/products/agentic-wallet/welcome"
+    },
+    {
+      "title": "官方 CLI 安装与版本要求",
+      "url": "https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/preflight.md"
+    },
+    {
+      "title": "官方扫码认证与退出",
+      "url": "https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/authentication.md"
+    },
+    {
+      "title": "地址、余额、历史与钱包锁",
+      "url": "https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/wallet-view.md"
+    },
+    {
+      "title": "钱包设置与授权期限",
+      "url": "https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/wallet-setting.md"
+    },
+    {
+      "title": "兑换报价、提交和订单状态",
+      "url": "https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/market-order.md"
+    },
+    {
+      "title": "限价单与取消",
+      "url": "https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/limit-order.md"
+    },
+    {
+      "title": "EVM 代币授权查询与撤销",
+      "url": "https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/approvals.md"
+    },
+    {
+      "title": "Gas 单价及单位",
+      "url": "https://github.com/binance/binance-skills-hub/blob/main/skills/binance-web3/binance-agentic-wallet/references/gas.md"
+    },
+    {
+      "title": "Binance Wallet Skills 数据能力",
+      "url": "https://web3.binance.com/en/dev-docs/products/wallet-skills/supported-skills"
+    },
+    {
+      "title": "Binance Agentic Wallet FAQ",
+      "url": "https://www.binance.com/en/support/faq/detail/3ff00e2d488a41c4aaa4aabb6fc36763"
+    },
+    {
+      "title": "Four.meme 官方 Agentic 入口",
+      "url": "https://four.meme/en/agentic"
+    },
+    {
+      "title": "Four.meme 官方 Agent 标记说明",
+      "url": "https://github.com/four-meme-community/four-meme-ai/blob/main/skills/four-meme-integration/references/agent-creator-and-wallets.md"
+    },
+    {
+      "title": "Flap 官方开发者入口",
+      "url": "https://docs.flap.sh/flap/developers/wallet-and-terminal-and-bot-developers"
+    },
+    {
+      "title": "Binance 官方安装指南",
+      "url": "https://developers.binance.com/en/docs/products/agentic-wallet/quickstart/install-agentic-wallet"
+    },
+    {
+      "title": "Binance Wallet / Agentic Wallet 官方服务费说明",
+      "url": "https://www.binance.com/en/support/faq/detail/87cbb1ca0df34a348eaecb73c26167d7"
+    }
+  ],
+  "capabilities": [
+    {
+      "name": "本机直接访问",
+      "official": "看板访问方式不代表 Binance 身份或钱包交易权限。",
+      "implementation": "无需看板密码，仅监听 127.0.0.1。信任本机操作系统访问控制，不声称能验证自然人身份。页面会话仅存内存。",
+      "sources": [
+        2
+      ]
+    },
+    {
+      "name": "钱包登录与绑定",
+      "official": "已支持：官方 CLI 返回登录链接与配对码，用户 App 确认，再 verify 并检查 CONNECTED。地址来自 wallet address。",
+      "implementation": "已开放官方 signin/verify 流程；由本人在 App 确认，并核对完整地址后绑定。ALREADY_CONNECTED 不会自动绑定。开发验收未登录真实钱包。",
+      "sources": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "name": "网络与余额",
+      "official": "已支持：wallet chains/address/balance；按网络和合约查询。概览列出 BSC、Ethereum、Base、Solana；实际以 chains 为准。CLI 隐藏估值低于 $0.01 的资产。",
+      "implementation": "绑定后按官方返回网络与地址读取资产；前后核验授权、地址与本页会话。真实钱包与模拟原型分开。",
+      "sources": [
+        0,
+        3
+      ]
+    },
+    {
+      "name": "估值与盈亏",
+      "official": "余额响应包含 price/value；价格的更新时间与完备性保证未确认，完整成本基础未确认。",
+      "implementation": "使用官方返回价格，不补缺失价格；成本不足不计算盈亏。低估值过滤导致总额不完整。",
+      "sources": [
+        3,
+        9
+      ]
+    },
+    {
+      "name": "交易记录 / 待处理",
+      "official": "已支持 tx-history，含状态、哈希、分页、网络及 pending 筛选。",
+      "implementation": "绑定后可查询官方首批 20 条记录；不声称完整历史。",
+      "sources": [
+        3
+      ]
+    },
+    {
+      "name": "兑换报价与手动下单",
+      "official": "已支持 quote、swap、list；官方授权与风控仍适用。orderId 仅代表提交。完整总 Gas、价格影响、费用拆分、预先授权额度和可复核报价期限未确认。",
+      "implementation": "已开放真实 Swap 报价；未开放真实购买提交。官方文档未给出完整 Gas、价格影响、逐笔费用及精确授权控制；不得伪造补齐。",
+      "sources": [
+        5,
+        8,
+        10
+      ]
+    },
+    {
+      "name": "限价单 / 挂单",
+      "official": "已支持 BSC 与 Solana 的创建、查询、取消；Ethereum / Base 不适用此限价接口。不同官方页面的支持稳定币范围有差异，需确认。",
+      "implementation": "绑定后可查询 BSC/Solana 挂单；真实创建、取消保持禁用。",
+      "sources": [
+        6
+      ]
+    },
+    {
+      "name": "授权查看与撤销",
+      "official": "已支持 EVM approve / Permit2 的查询、详情与撤销。Solana 不适用。BROADCASTED 不是撤销完成。",
+      "implementation": "绑定后可查询 EVM 授权。链上撤销保持禁用，退出 CLI 不代表撤销链上授权。",
+      "sources": [
+        7
+      ]
+    },
+    {
+      "name": "期限 / 风控 / 签名",
+      "official": "wallet settings 可读取到期时间、额度与风险处理模式；设置只能在 Binance App 更改。Secure Auto Sign 不保证逐笔弹窗。",
+      "implementation": "每次后端读取检查期限、地址、网络、会话和内部权限；本看板逐笔确认与官方风控分别处理。",
+      "sources": [
+        4,
+        10
+      ]
+    },
+    {
+      "name": "停止与退出",
+      "official": "auth signout 清除钱包本地会话；限价取消、链上授权撤销是不同操作。未发现一个能原子停止全部外部策略并撤回所有已发交易的官方接口。",
+      "implementation": "断开本页立即废弃本页查询凭据；独立“退出官方 CLI”需确认并只报告实际返回结果。不会撤单、平仓或停止远端策略。",
+      "sources": [
+        2,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "Flap / Four.meme 数据",
+      "official": "已找到 Binance meme-rush 数据能力及发行平台官方资料。实时延迟、覆盖与完整性仍需针对策略验证。",
+      "implementation": "第二阶段，尚未建立监控或后台定时任务。",
+      "sources": [
+        9,
+        11,
+        13
+      ]
+    },
+    {
+      "name": "特定钱包购买资格",
+      "official": "未确认“仅指定 Agentic Wallet 可买”的限制、名单或证明接口。Four.meme aiCreator 标记本身不改变交易行为；Agent NFT 不是 Binance 钱包身份。",
+      "implementation": "资格未知，策略始终禁用；不以名称、AI 标签或持 NFT 作为购买资格。",
+      "sources": [
+        12,
+        13
+      ]
+    },
+    {
+      "name": "受限自动执行",
+      "official": "基础交易能力已支持，不等于已确认任意平台受限币的执行能力、硬 Gas 上限、策略撤销与原子停止语义。",
+      "implementation": "第二阶段关闭；离线授权、限额、退出规则、期限与停止确认均未配置。无无人值守交易。",
+      "sources": [
+        4,
+        5,
+        8,
+        12
+      ]
+    }
+  ]
+}
