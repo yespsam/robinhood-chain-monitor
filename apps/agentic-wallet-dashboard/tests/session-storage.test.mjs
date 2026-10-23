@@ -13,8 +13,8 @@ test('browser persistence contains only the short-lived local token and expiry',
   assert.deepEqual(readLocalSession(s, now), { token, expiresAt: now + 600_000 });
   clearLocalSession(s); assert.equal(readLocalSession(s, now), null);
 });
-test('invalid, expired, overlong or extra-field session data is removed without restoration', () => {
-  for (const value of [null, [], {}, { token, expiresAt: now }, { token, expiresAt: now + 3_600_001 },
+test('invalid, excessively old, overlong or extra-field session data is removed without restoration', () => {
+  for (const value of [null, [], {}, { token, expiresAt: now - 86_400_000 }, { token, expiresAt: now + 86_400_001 },
     { token, expiresAt: String(now + 10) }, { token: 'bad', expiresAt: now + 10 },
     { token, expiresAt: now + 10, urlForWeb: 'https://app.binance.com/synthetic' },
     { token, expiresAt: now + 10, accessKey: 'not-allowed' }]) {
@@ -23,6 +23,13 @@ test('invalid, expired, overlong or extra-field session data is removed without 
   }
   const s = storage(); s.setItem(SESSION_STORAGE_KEY, '{broken');
   assert.equal(readLocalSession(s, now), null); assert.equal(s.map.size, 0);
+});
+test('a stale tab deadline is retained only for authoritative server revalidation', () => {
+  const s = storage();
+  s.setItem(SESSION_STORAGE_KEY, JSON.stringify({ token, expiresAt: now - 600_000 }));
+  assert.deepEqual(readLocalSession(s, now), { token, expiresAt: now - 600_000 });
+  assert.equal(saveLocalSession(token, now + 86_400_000, s, now), true);
+  assert.deepEqual(readLocalSession(s, now), { token, expiresAt: now + 86_400_000 });
 });
 test('invalid updates clear an older capability and inaccessible storage never crashes', () => {
   const s = storage(); saveLocalSession(token, now + 600_000, s, now);

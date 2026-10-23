@@ -88,7 +88,7 @@ test('lock during a read suppresses stale sensitive data; old tab and idle sessi
   await assert.rejects(c.local.handle('/api/wallet/read', c.key, { chainId: '56', kind: 'assets' }), { code: 'LOCAL_SESSION_EXPIRED' });
   const d = await bind(setup()); d.local.bootstrap();
   await assert.rejects(d.local.handle('/api/wallet/read', d.key, { chainId: '56', kind: 'assets' }), { code: 'LOCAL_SESSION_EXPIRED' });
-  const e = await bind(setup()); e.advance(600001);
+  const e = setup(); e.advance(600001);
   await assert.rejects(e.local.handle('/api/local/state', e.key, {}), { code: 'LOCAL_SESSION_EXPIRED' });
 });
 test('dashboard disconnect does not sign out CLI; separate confirmed signout does', async () => {

@@ -6,6 +6,7 @@ import { safeDiagnostic } from './diagnostics.mjs';
 import { createPortfolioReader } from './portfolio.mjs';
 
 const id = () => randomBytes(32).toString('hex');
+const BOUND_SESSION_LIFETIME_MS = 24 * 60 * 60 * 1000;
 const fields = (body, allowed) => { if (Object.keys(body).some(k => !allowed.includes(k))) throw new Denied('UNEXPECTED_FIELD', 400); };
 export const LOCAL_CAPABILITIES = Object.freeze({ liveWalletAuth: true, walletRead: true, livePortfolio: true, swapQuotes: true,
   liveTrades: false, manualTrades: false, tokenRevocation: false, automation: false, offlineAutomation: false });
@@ -22,22 +23,47 @@ export class LocalWalletAccess {
       byKey: key => this.check(key), invalidateAll: () => this.lock()
     } });
   }
-  check(key) {
+  check(key, { allowExpiredBound = false } = {}) {
     const c = this.client;
     const now = this.clock();
-    if (!c || c.key !== key || now < c.lastSeen || now >= c.expiresAt || now >= c.maxExpiresAt) {
+    if (!c || c.key !== key || now < c.lastSeen || now >= c.maxExpiresAt || (!c.bound && now >= c.expiresAt)) {
       if (c?.key === key) this.lock();
       throw new Denied('LOCAL_SESSION_EXPIRED', 401);
     }
     c.lastSeen = now;
+    // A cached official idle deadline can become stale while this page sleeps.
+    // Only the read-only state verifier may cross it to ask the official wallet.
+    // Other requests remain blocked without destroying that recovery capability.
+    if (now >= c.expiresAt && !(allowExpiredBound && this.gate.binding && !this.flow?.bindingInProgress))
+      throw new Denied('AUTH_STATUS_UNCONFIRMED', 503);
     return c;
   }
-  touch(key) { const c = this.check(key); c.expiresAt = Math.min(this.clock() + 600_000, c.maxExpiresAt); }
+  touch(key) {
+    const c = this.check(key);
+    // After address confirmation, the official authorization and the fixed local
+    // bound-session deadline govern access. Reads must not shorten it to 10 minutes.
+    if (!c.bound) c.expiresAt = Math.min(this.clock() + 600_000, c.maxExpiresAt);
+  }
+  updateAuthorization(key, expiresAt, { bound = false, checkSession = () => this.check(key) } = {}) {
+    const c = checkSession();
+    if (!Number.isFinite(expiresAt) || expiresAt <= this.clock()) {
+      this.lock(); throw new Denied('WALLET_AUTH_EXPIRED');
+    }
+    if (bound && !c.bound) {
+      c.bound = true;
+      c.maxExpiresAt = this.clock() + BOUND_SESSION_LIFETIME_MS;
+    }
+    if (c.bound) c.expiresAt = Math.min(expiresAt, c.maxExpiresAt);
+    if (this.flow) this.flow.walletExpiresAt = expiresAt;
+    this.check(key);
+  }
   lock() { this.client = null; this.flow = null; this.gate.binding = null; }
   bootstrap({ reuseExisting = false } = {}) {
     if (reuseExisting && this.client) {
       try {
-        const c = this.check(this.client.key);
+        // The protected launcher can recover an existing bound capability; its
+        // next /state request still has to revalidate the official authorization.
+        const c = this.check(this.client.key, { allowExpiredBound: true });
         return { token: c.key, expiresAt: c.expiresAt, identityVerified: false };
       } catch (error) { if (error.code !== 'LOCAL_SESSION_EXPIRED') throw error; }
     }
@@ -132,21 +158,35 @@ export class LocalWalletAccess {
     const binding = { sessionKey: key, owner: this.check(key).owner, userConfirmed: true, permissions: this.tradeService ? ['read', 'manual'] : ['read'],
       addresses: Object.fromEntries(f.addresses.map(x => [x.chainId, x.address])) };
     f.phase = 'VERIFYING'; f.stage = 'BIND'; f.bindingInProgress = true; this.gate.binding = binding;
-    try { for (const chain of Object.keys(binding.addresses)) await this.gate.check(key, chain); }
+    try {
+      let expiresAt = Infinity;
+      for (const chain of Object.keys(binding.addresses)) {
+        const verified = await this.gate.check(key, chain);
+        expiresAt = Math.min(expiresAt, verified.expiresAt);
+      }
+      this.updateAuthorization(key, expiresAt, { bound: true });
+    }
     catch (error) { this.lock(); throw error; }
     f.bindingInProgress = false; return this.state(key);
   }
   async handle(path, key, body, { reuseSession = false } = {}) {
     if (path === '/api/local/session') { fields(body, []); return this.bootstrap({ reuseExisting: reuseSession }); }
-    this.check(key);
     if (path === '/api/local/state') {
       fields(body, []);
+      const checkSession = () => this.check(key, { allowExpiredBound: true });
+      checkSession();
       if (this.gate.binding && !this.flow?.bindingInProgress) {
-        const first = Object.keys(this.gate.binding.addresses)[0]; await this.gate.check(key, first);
+        const first = Object.keys(this.gate.binding.addresses)[0];
+        const verified = await this.gate.check(key, first, 'read', { checkSession });
+        this.updateAuthorization(key, verified.expiresAt, { checkSession });
       }
       return this.state(key);
     }
-    if (path === '/api/local/lock') { fields(body, []); this.lock(); return { locked: true, walletSignedOut: false, ordersCanceled: false }; }
+    if (path === '/api/local/lock') {
+      fields(body, []); this.check(key, { allowExpiredBound: true });
+      this.lock(); return { locked: true, walletSignedOut: false, ordersCanceled: false };
+    }
+    this.check(key);
     if (path === '/api/wallet/signin') { fields(body, []); return this.start(key); }
     if (path === '/api/wallet/check') { fields(body, []); return this.start(key, { checkOnly: true }); }
     if (path === '/api/wallet/stop-waiting') {

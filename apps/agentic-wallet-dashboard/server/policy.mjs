@@ -9,9 +9,9 @@ export class WalletGate {
   constructor({ sessions, wallet, binding = null, clock = Date.now }) {
     this.sessions = sessions; this.wallet = wallet; this.binding = binding; this.clock = clock;
   }
-  async check(key, chain, permission = 'read') {
+  async check(key, chain, permission = 'read', { checkSession = () => this.sessions.byKey(key) } = {}) {
     validChain(chain);
-    const session = this.sessions.byKey(key);
+    const session = checkSession();
     const bind = this.binding;
     if (!bind || bind.sessionKey !== key || bind.owner !== session.owner || bind.userConfirmed !== true)
       throw new Denied('WALLET_NOT_BOUND');
@@ -20,7 +20,7 @@ export class WalletGate {
     const snapshot = structuredClone(bind);
     let expiry = null;
     const revalidate = () => {
-      this.sessions.byKey(key);
+      checkSession();
       if (this.binding !== bind || !isDeepStrictEqual(bind, snapshot)) {
         this.sessions.invalidateAll('WALLET_BINDING_CHANGED'); throw new Denied('WALLET_BINDING_CHANGED');
       }
@@ -29,7 +29,10 @@ export class WalletGate {
       }
     };
     const status = await this.wallet.status(); revalidate();
-    if (status !== 'CONNECTED') { this.sessions.invalidateAll('WALLET_AUTH_INVALID'); throw new Denied('WALLET_AUTH_INVALID'); }
+    if (status === 'UNCONNECTED') { this.sessions.invalidateAll('WALLET_AUTH_INVALID'); throw new Denied('WALLET_AUTH_INVALID'); }
+    // An indeterminate status must block access without treating a temporary
+    // upstream response as proof that the existing authorization was revoked.
+    if (status !== 'CONNECTED') throw new Denied('AUTH_STATUS_UNCONFIRMED', 503);
     const settings = await this.wallet.settings(); revalidate();
     expiry = Math.min(Date.parse(settings.sessionExpireTime), Date.parse(settings.inactiveSignOutTime));
     revalidate();
