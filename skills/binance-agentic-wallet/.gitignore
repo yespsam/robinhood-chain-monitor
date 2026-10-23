@@ -1,0 +1,16 @@
+# This export contains documentation only. Never track local auth/runtime data.
+*
+!*/
+!*.md
+!.gitignore
+
+.env
+.env.*
+*.local.md
+credentials*
+secrets*
+*session*
+*token-cache*
+*wallet-state*
+*qr-code*
+*pairing-code*
