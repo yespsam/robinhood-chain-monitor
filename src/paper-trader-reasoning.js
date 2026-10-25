@@ -1,6 +1,7 @@
 // Observable decision summaries, not inferred wallet psychology or profit forecasts.
 import { isEvidenceHold, EVIDENCE_HOLD_TEXT } from './paper-pvp-policy.js';
 export const TRADER_REASONING_VERSION = 'evidence_first_v1';
+export const TRADER_COHORT_VERSION = 'frozen_entry_actual_exit_v3';
 export const CATALYST_SELECTION_VERSION = 'eligible_algorithm_catalyst_v3';
 const catalystRank = r => {
   const p=r.evidence?.lossRepair;
@@ -67,13 +68,54 @@ export function compareConfirmedCandidates(a, b) {
   return `${a.token.chain}:${a.token.address}`.localeCompare(`${b.token.chain}:${b.token.address}`);
 }
 
+const policyVersion = value => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(value) ? value : null;
+const unversioned = 'legacy_unversioned';
+function recordedVersion(values) {
+  const recorded = unique(values.filter(value => value != null).map(policyVersion));
+  const invalid = values.some(value => value != null && !policyVersion(value));
+  return { version: recorded.sort().join('+') || unversioned,
+    evidence: invalid || recorded.length > 1 ? 'conflict' : recorded.length ? 'recorded' : 'missing' };
+}
+function exitVersions(round, select) {
+  const rows = (round.exits || []).map(select), known = rows.filter(row => row.evidence === 'recorded');
+  const versions = unique(rows.map(row => row.version)).sort();
+  const conflict = rows.some(row => row.evidence === 'conflict'), missing = rows.some(row => row.evidence === 'missing');
+  return { version: versions.join('+') || unversioned,
+    evidence: conflict ? 'conflict' : !rows.length || !known.length ? 'missing' : missing ? 'partial'
+      : versions.length > 1 ? 'mixed' : 'recorded' };
+}
+function actualExitPolicy(exit) {
+  // A zero-price accounting writeoff runs before the exit decision. Its copied
+  // prior hold observation is not proof that a rule executed on this tick.
+  if (exit.side === 'writeoff') return recordedVersion([]);
+  const evidence = exit.exitEvidence || {};
+  // Recovery is an explicitly recorded execution override. Its decision may
+  // still contain the original meme rule; do not mistake that for a conflict.
+  return recordedVersion(evidence.evidenceRecovery?.version != null
+    ? [evidence.exitPolicyVersion, evidence.evidenceRecovery.version]
+    : [evidence.exitPolicyVersion, evidence.thesisDecision?.version]);
+}
 function cohortOf(round) {
   const e = round.entry.entryEvidence || {};
-  // An explicitly migrated old lot keeps its entry version, but a recovery
-  // exit must not be attributed to the legacy exit strategy's performance.
-  const recoveryExits=unique((round.exits||[]).map(t=>t.exitEvidence?.evidenceRecovery?.version));
-  return { chain: round.entry.chain, hypothesis: e.traderDecision?.hypothesis || (e.narrativeRecall ? 'narrative_recall' : 'fresh_flow_momentum'),
+  const entryFlow = recordedVersion([e.recoveryCheck?.entryFlow?.version, e.opportunity?.entryFlow?.version]);
+  const actualExit = exitVersions(round, actualExitPolicy);
+  const exitObservation = exitVersions(round, exit => recordedVersion(exit.side === 'writeoff' ? [] : [exit.exitEvidence?.thesisDecision?.flow?.observationVersion]));
+  const exitStructure = exitVersions(round, exit => recordedVersion(exit.side === 'writeoff' ? [] : [exit.exitEvidence?.thesisDecision?.structureObservationVersion]));
+  const exitCost = exitVersions(round, exit => recordedVersion([exit.exitEvidence?.costVersion]));
+  const writeoffs = (round.exits || []).filter(exit => exit.side === 'writeoff').length;
+  return { cohortVersion: TRADER_COHORT_VERSION,
+    exitExecutionKind: writeoffs ? writeoffs === round.exits.length ? 'zero_price_writeoff' : 'sale_and_writeoff' : 'sale',
+    chain: round.entry.chain, hypothesis: e.traderDecision?.hypothesis || (e.narrativeRecall ? 'narrative_recall' : 'fresh_flow_momentum'),
     selectionPolicy:e.traderDecision?.selectionPolicy || 'legacy_unknown',
+    entryFlowVersion: entryFlow.version, entryFlowVersionEvidence: entryFlow.evidence,
+    targetSelectionVersion: policyVersion(e.opportunity?.pattern?.targetSelectionVersion) || unversioned,
+    entryStructureVersion: policyVersion(e.structureValidation?.version) || unversioned,
+    entryCostVersion: policyVersion(e.costAssumptions?.version) || unversioned,
+    exitCostVersion: exitCost.version, exitCostVersionEvidence: exitCost.evidence,
+    exitObservationVersion: exitObservation.version, exitObservationVersionEvidence: exitObservation.evidence,
+    exitStructureObservationVersion: exitStructure.version, exitStructureObservationVersionEvidence: exitStructure.evidence,
+    entryExitVersion: e.memeExitPolicy?.version || e.exitExperiment?.version || e.exitPolicy?.version || unversioned,
+    exitVersion: actualExit.version, exitVersionEvidence: actualExit.evidence,
     ...(e.recoveryEntry?.version?{recoveryEntryVersion:e.recoveryEntry.version}:{}),
     ...(e.routeSelectionVersion?{routeSelectionVersion:e.routeSelectionVersion}:{}),
     ...((e.recoveryEntry?.chartWindowPolicy||e.opportunity?.chartWindowPolicy)?
@@ -86,7 +128,7 @@ function cohortOf(round) {
     sizingVersion: e.positionSizing?.version || 'legacy_fixed',
     quoteVersion: e.confirmedPolicy?.confirmation?.version || 'legacy_unversioned',
     lossResponseVersion: e.confirmedPolicy?.lossResponseVersion || 'legacy_unversioned',
-    reasoningVersion: e.traderDecision?.version || 'legacy_unversioned', exitVersion: recoveryExits.length?recoveryExits.join('+'):e.memeExitPolicy?.version || e.exitExperiment?.version || e.exitPolicy?.version || 'legacy_unversioned' };
+    reasoningVersion: e.traderDecision?.version || 'legacy_unversioned' };
 }
 
 function summarize(rounds) {
@@ -132,10 +174,10 @@ export function traderReview(rounds, nowMs) {
     if (!groups.has(key)) groups.set(key, { cohort, rows: [] });
     groups.get(key).rows.push(r);
   }
-  return { version: TRADER_REASONING_VERSION, mode: 'descriptive_review', automaticParameterChanges: false,
+  return { version: TRADER_REASONING_VERSION, cohortVersion: TRADER_COHORT_VERSION, mode: 'descriptive_review', automaticParameterChanges: false,
     objective: '比较同版本的成本后净收益与回撤，不最大化交易笔数', overall: summarize(complete),
     cohorts: [...groups.values()].map(g => ({ ...g.cohort, ...summarize(g.rows) })),
-    limitations: ['均为完整平仓的样本统计，不预测未来净期望', '模型费用不等于链上成交费用', '完整平仓回撤不是含浮亏的账户最大回撤', '三十笔、十币、三天只是复核起点，不证明盈利优势'],
+    limitations: ['均为完整平仓的样本统计，不预测未来净期望', '模型费用不等于链上成交费用', '实际退出、资金流观察或成本版本未记录时保留未知，不借入场版本补全', '零价核销损失保留在总计中，但上次持有观察不证明核销时执行了退出规则', '完整平仓回撤不是含浮亏的账户最大回撤', '三十笔、十币、三天只是复核起点，不证明盈利优势'],
     nextStep: '亏损按价格、费用和止损报价缺口分类；钱包候选规则先经既有同期对照，不自动晋升主策略',
   };
 }

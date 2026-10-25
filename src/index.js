@@ -616,6 +616,7 @@ function startIndependentMonitors() {
     }
     flapQuoteMonitor = createFlapQuoteMonitor(config, {
       provider: flapQuoteRpcProvider,
+      headObservationFile: path.join(config.dataDir, "flap-chain-head-observation.json"),
       sendAlertsImpl: deliverAlert,
       logVerificationProviders: [...flapQuoteLogProviders].map(([sourceId, logProvider]) => ({
         sourceId,
@@ -682,6 +683,7 @@ function startIndependentMonitors() {
     console.log(`[four-registry] fixed RPC hosts: log=${[...fourRegistryLogProviders.keys()].map((origin) => new URL(origin).host).join(",")} state=${[...fourRegistryStateProviders.keys()].map((origin) => new URL(origin).host).join(",")}`);
     fourRegistryMonitor = createFourRegistryMonitor(config, {
       provider: fourRegistryRpcProvider,
+      headObservationFile: path.join(config.dataDir, "four-chain-head-observation.json"),
       logVerificationProviders: [...fourRegistryLogProviders].map(([sourceId, logProvider]) => ({
         sourceId,
         provider: logProvider,
@@ -690,7 +692,9 @@ function startIndependentMonitors() {
         sourceId,
         provider: stateProvider,
       })),
-      onEvent: (event) => deliverAlert(config, event),
+      // An fsynced queue receipt is enough for this producer; the existing
+      // alert worker retains delivery/retry ownership and reorg cancellation.
+      onEvent: (event) => deliverAlert({ ...config, alertFourRegistryDurableHandoff: true }, event),
       cancelPendingEvent: (evidence) => cancelPendingFourRegistryEvent(config, evidence),
       autoStart: true,
     });

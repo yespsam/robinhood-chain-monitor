@@ -1,0 +1,1033 @@
+{
+  "version": 1,
+  "mode": "read_only_incremental_heartbeat",
+  "completedAt": "2026-10-13T21:37:13.008Z",
+  "requests": {
+    "config": 1,
+    "gmgnBusiness": 1,
+    "gmgnSucceeded": 1,
+    "publicRpc": 1,
+    "rpcSucceeded": 1,
+    "model": 0
+  },
+  "operator": {
+    "group": "bsc",
+    "report": "docs/operator-reference-followups/2026-10-14-0533-bsc-head-four-stall.md",
+    "evidence": "docs/operator-reference-followups/2026-10-14-0533-bsc-head-four-stall.json",
+    "question": "A到期头页是否新增，已知后续nonce缺口是否继续扩大。",
+    "triggeredAt": "2026-10-13T21:33:33.771Z",
+    "startedAt": "2026-10-13T21:34:14.072Z",
+    "completedAt": "2026-10-13T21:37:13.008Z",
+    "configChecked": true,
+    "gmgnConfigChecks": 1,
+    "gmgnBusinessRequests": 1,
+    "gmgnBusinessDispatched": 1,
+    "gmgnSucceeded": 1,
+    "gmgnFailed": 0,
+    "rpcRequests": 1,
+    "rpcSucceeded": 1,
+    "rpcFailed": 0,
+    "returnedRows": 20,
+    "repeatedRows": 20,
+    "newRows": 0,
+    "newIndependentActivityVerifications": 0,
+    "independentFreshnessChecks": 1,
+    "newAddresses": 0,
+    "skipped": [
+      {
+        "kind": "not_due",
+        "id": "B",
+        "checkedAt": "2026-10-13T21:34:57.275Z",
+        "dueAt": "2026-10-13T21:36:36.431Z"
+      }
+    ],
+    "status": "duplicate_A_head_unchanged_nonce_four_checkpoint_stall",
+    "summary": "A20条全重复，nonce计数仍162，旧差异4次未分类，不判不活跃。模拟无新增交易；Flap快照恢复healthy，Four两轮游标相同需人工排查。",
+    "elapsedFromHeartbeatSeconds": 219
+  },
+  "pages": [
+    {
+      "id": "A",
+      "chain": "bsc",
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "startedAt": "2026-10-13T21:34:47.733Z",
+      "checkedAt": "2026-10-13T21:34:57.275Z",
+      "identityMatch": true,
+      "returnedRows": 20,
+      "uniqueRows": 20,
+      "pageOverlap": 20,
+      "newRows": 0,
+      "newKeys": [],
+      "newActivities": [],
+      "providerLatestActivityAt": "2026-10-02T11:08:09.000Z",
+      "lastTrade": {
+        "at": "2026-10-02T11:08:09.000Z",
+        "hash": "0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868",
+        "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+        "side": "sell"
+      },
+      "connectionAnchor": {
+        "at": "2026-10-02T11:08:09.000Z",
+        "hash": "0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868",
+        "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+        "side": "sell"
+      },
+      "anchorReached": true,
+      "nextCursor": "MTI1MjY3MDU2MDAxOTAwMDAwMDowOjo=",
+      "nextHeadCheckDueAt": "2026-10-14T05:34:57.275Z",
+      "returnedKeys": [
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868",
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0xf5329b4689cbd5400fe283accb9dc261672214574fc6280022c181dfc1cca23a",
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0x79bc8e7aebfe73f4a5045cd6208064cfee316412ba7216e0548b02ed7af5af5a",
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0x37c6adb747f76c746dd3d085204fc5447f16ebb704018ab0542ddd8ffe8da3cc",
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0xbdfb4b65bffe6b587d847a6be634ee2f7b435e7bf35a661709d72991533a7305",
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0x0593ac9567acbd81b8b41d7e71c368eda5ad4cd4d72f7faac6cc9fa78b0a97b7",
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0x8e706d4fe7654b71d3a1768cc5877c4875a166790f9fe63009f9c39e5b4847b3",
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0x1cce17c1b86ffcd7d5800d756a4248293546b4b4a81aed1e35a3ae52c8d19522",
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0xac316400ce531eefe80c6ef12fc3184b209f1540ed6460381c73dea23da39179",
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0x963cb40538974241daedc46c3c3292997c5dead9dfab8c3ee9a4e65dea8b7263",
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0x9f0ed021d5a002c996db989ef147cccf3ae55c8bd1a29eaa6ab1f4a03d37b87e",
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0xa0e646570759ad738c381c3214ff45ed876003486db2fa468e9a38f6d9ac0475",
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0x706f6d229209e48023215af140db1c168b07ab49e4ff31fa60d8d9986ff80045",
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0x72258a2854565512e1aae736a7e550b348acdc35fca6984fd573dd14b88caefd",
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0x17d34e77d89583058a4c866f57fa41f817bb1d375c48e151ef74672a1aa0de9d",
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0xe8de65e7fbc09100e4292ed811246b4407f29781e467f6a070d3b852ebfbda66",
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0x54ea77e128121dd1871ad07eeb11758e74897c82fcb270212b1abc85e44807a0",
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0x517e20b8293376b80f007451d645b7574a876e02bc9bc4d48a25b3bfcc82705b",
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0xb2d6c9457082b4ffd65572666974f0e7e36f231d21278b2d4485736fc30c12ff",
+        "bsc:0x7a3f00299a61ca38c4d5981c34661f6bda4a7777:0x452b8fd1edd95184fa7f9123da2e441d323a9fd7:0x1f233cef19b97ac78e1e03a566075135ad86f1b5ae762585e03c304999ea203e"
+      ]
+    }
+  ],
+  "nonceVerification": {
+    "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+    "source": "https://bsc-dataseed-public.bnbchain.org",
+    "method": "eth_getTransactionCount",
+    "blockTag": "latest",
+    "startedAt": "2026-10-13T21:34:47.562Z",
+    "checkedAt": "2026-10-13T21:34:48.663Z",
+    "httpStatus": 200,
+    "error": null,
+    "result": "0xa2",
+    "knownNonce": 157,
+    "knownNonceSource": "prior verified checkpoint",
+    "knownHash": "0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868",
+    "value": 162,
+    "previousValue": 162,
+    "previousCheckedAt": "2026-10-11T21:27:44.433Z",
+    "deltaSincePrior": 0,
+    "laterNonceCount": 4,
+    "newActivityEvidence": false,
+    "classification": "provider_coverage_gap_pending_classification",
+    "transactionTypesVerified": false,
+    "note": "nonce计数快照非新增买卖笔数、成功状态或钱包不活跃证明；未分类旧差异保留。"
+  },
+  "forward": {
+    "generatedAt": "2026-10-13T21:34:14.315Z",
+    "inputs": {
+      "ledger": {
+        "path": "/Users/qohfq/Documents/Playground/robinhood-chain-monitor/data/yesp-atm-confirmed-pvp-v2-estimated-20260928.json",
+        "sha256": "06a9a8908a3bc42fc73657f0cecf10967682fac6fc415844f3e25e39b7db7a7d"
+      },
+      "snapshot": null
+    },
+    "entryFrom": "2026-10-10T14:51:42.000Z",
+    "requirements": {
+      "opportunityMode": "multi_setup_v2",
+      "operatingPolicy": {
+        "continuous": true
+      },
+      "mainExitPolicy": {
+        "version": "meme_evidence_exit_v2"
+      },
+      "strategyValidationRequirements": {
+        "entryFlowVersion": "paper_entry_observed_outflow_v1",
+        "exitObservationVersion": "entry_cohort_sell_retention_v1",
+        "exitStructureObservationVersion": "independent_confirmed_trail_v1",
+        "entryStructureBySetup": {
+          "external_breakout": "reconstructed_ohlcv_entry_v1",
+          "external_pullback": "reconstructed_ohlcv_entry_v1",
+          "external_trend": "reconstructed_ohlcv_entry_v1"
+        },
+        "targetSelectionBySetup": {
+          "external_pullback": "pullback_nearest_observed_level_v1"
+        },
+        "entryCostVersion": "isolated_estimated_cost_v1",
+        "exitCostVersion": "isolated_estimated_cost_v1"
+      }
+    },
+    "tradeCount": 287,
+    "lastTradeId": "1791894316666:286",
+    "lastTradeAt": "2026-10-13T12:25:16.666Z",
+    "account": {
+      "initialCashUsd": 100,
+      "cashUsd": 63.05291297555459,
+      "cashAdjustmentUsd": 99.6684734885994,
+      "totalContributedUsd": 199.6684734885994,
+      "modelCostsAllFillsUsd": 57.51924176900107,
+      "remainingCostBasisUsd": 8.7,
+      "realizedPnlUsd": -127.91556051304478,
+      "unrealizedPnlUsd": -5.621323740775998,
+      "totalPnlIncludingOpenUsd": -133.53688425382077,
+      "netLiquidationValueUsd": 66.13158923477859,
+      "valuationComplete": true,
+      "note": "补款不是利润；总已实现含未平仓头寸的部分卖出，不混入当前版本完整回合成绩。"
+    },
+    "currentVersion": {
+      "closedRounds": 10,
+      "tokens": 9,
+      "spanMs": 220722344,
+      "wins": 4,
+      "losses": 6,
+      "breakeven": 0,
+      "netPnlUsd": 4.2823845857067235,
+      "modelCostsUsd": 3.643789640543377,
+      "grossPricePnlUsd": 7.926174226250101,
+      "winRate": 0.4,
+      "averageNetUsd": 0.42823845857067233,
+      "averageWinUsd": 2.5070341726994014,
+      "averageLossUsd": 0.9576253508484805,
+      "profitFactor": 1.7453131474141428,
+      "payoffRatio": 2.6179697211212143,
+      "averageNetR": 0.5722765040208879,
+      "riskKnownRounds": 10,
+      "closedRoundDrawdownUsd": 3.922557646123826,
+      "costOnlyLosses": 0,
+      "priceLosses": 6,
+      "stopShortfalls": 0,
+      "stopExitsWithoutQuotePath": 0,
+      "sampleStatus": "collecting",
+      "byChainRoute": [
+        {
+          "chain": "bsc",
+          "route": "external_breakout",
+          "closedRounds": 5,
+          "tokens": 4,
+          "spanMs": 220722344,
+          "wins": 2,
+          "losses": 3,
+          "breakeven": 0,
+          "netPnlUsd": 4.898353487100084,
+          "modelCostsUsd": 2.260602131128035,
+          "grossPricePnlUsd": 7.158955618228119,
+          "winRate": 0.4,
+          "averageNetUsd": 0.9796706974200168,
+          "averageWinUsd": 3.832181886228065,
+          "averageLossUsd": 0.9220034284520153,
+          "profitFactor": 2.7709093538202656,
+          "payoffRatio": 4.156364030730399,
+          "averageNetR": 1.355516958916271,
+          "riskKnownRounds": 5,
+          "closedRoundDrawdownUsd": 0.957701324589527,
+          "costOnlyLosses": 0,
+          "priceLosses": 3,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        },
+        {
+          "chain": "sol",
+          "route": "external_breakout",
+          "closedRounds": 4,
+          "tokens": 4,
+          "spanMs": 102528732,
+          "wins": 2,
+          "losses": 2,
+          "breakeven": 0,
+          "netPnlUsd": 0.4315163658452139,
+          "modelCostsUsd": 1.1248528750132476,
+          "grossPricePnlUsd": 1.5563692408584615,
+          "winRate": 0.5,
+          "averageNetUsd": 0.10787909146130348,
+          "averageWinUsd": 1.1818864591707383,
+          "averageLossUsd": 0.9661282762481314,
+          "profitFactor": 1.2233225009834963,
+          "payoffRatio": 1.2233225009834963,
+          "averageNetR": -0.10903364188050674,
+          "riskKnownRounds": 4,
+          "closedRoundDrawdownUsd": 1.9322565524962627,
+          "costOnlyLosses": 0,
+          "priceLosses": 2,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        },
+        {
+          "chain": "robinhood",
+          "route": "external_pullback",
+          "closedRounds": 1,
+          "tokens": 1,
+          "spanMs": 868622,
+          "wins": 0,
+          "losses": 1,
+          "breakeven": 0,
+          "netPnlUsd": -1.0474852672385744,
+          "modelCostsUsd": 0.25833463440209364,
+          "grossPricePnlUsd": -0.7891506328364808,
+          "winRate": 0,
+          "averageNetUsd": -1.0474852672385744,
+          "averageWinUsd": null,
+          "averageLossUsd": 1.0474852672385744,
+          "profitFactor": 0,
+          "payoffRatio": null,
+          "averageNetR": -0.6186851868504517,
+          "riskKnownRounds": 1,
+          "closedRoundDrawdownUsd": 1.0474852672385744,
+          "costOnlyLosses": 0,
+          "priceLosses": 1,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        }
+      ],
+      "concentration": {
+        "caCount": 9,
+        "largestCaRoundShare": 0.2,
+        "largestCaPositivePnlShare": 0.6317788618023847,
+        "denominator": "sum_of_positive_round_pnl_not_total_net_pnl",
+        "byCA": [
+          {
+            "chain": "bsc",
+            "address": "0x5e066411ca15adaa15d3c16edfea3fbb92987777",
+            "rounds": 2,
+            "netPnlUsd": 5.470071650133314,
+            "positivePnlUsd": 6.3355647845108445
+          },
+          {
+            "chain": "sol",
+            "address": "t9bnCGiZVUYsRKvx4d5dPcoDCSyuBM9C33ZNGNULARP",
+            "rounds": 1,
+            "netPnlUsd": 1.9690897303963517,
+            "positivePnlUsd": 1.9690897303963517
+          },
+          {
+            "chain": "sol",
+            "address": "33jENUQnjoitkMFpvNJcSHyLAHFWJuHwT6E3E8CNpump",
+            "rounds": 1,
+            "netPnlUsd": 0.3946831879451249,
+            "positivePnlUsd": 0.3946831879451249
+          },
+          {
+            "chain": "bsc",
+            "address": "0x0699c83f715271da83c4d2191194d12d61417777",
+            "rounds": 1,
+            "netPnlUsd": -0.9428158263889888,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "robinhood",
+            "address": "0xb1da35ddb716a2f66c612d15e6d3ce5b90afb447",
+            "rounds": 1,
+            "netPnlUsd": -1.0474852672385744,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "sol",
+            "address": "Cy1GS2FqefgaMbi45UunrUzin1rfEmTUYnomddzBpump",
+            "rounds": 1,
+            "netPnlUsd": -0.67126794341557,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "sol",
+            "address": "6x4Z2dr5DgHUBCKvta8T8GNsFTxJhsBZxNrycWQ8pump",
+            "rounds": 1,
+            "netPnlUsd": -1.2609886090806928,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "bsc",
+            "address": "0x794ac64f70ebee4cae3b116154d3def76ba37777",
+            "rounds": 1,
+            "netPnlUsd": 1.3287989879452855,
+            "positivePnlUsd": 1.3287989879452855
+          },
+          {
+            "chain": "bsc",
+            "address": "0x8dceff98285b93013ab708d65e0206880c167777",
+            "rounds": 1,
+            "netPnlUsd": -0.957701324589527,
+            "positivePnlUsd": 0
+          }
+        ]
+      },
+      "automaticPromotion": false
+    },
+    "legacy": 0,
+    "mixed": 0,
+    "carried": 0,
+    "openPositions": [
+      {
+        "key": "bsc:0x07bcb8e8226f671300e135b4a61dc157359b7777",
+        "chain": "bsc",
+        "address": "0x07bcb8e8226f671300e135b4a61dc157359b7777",
+        "route": "external_pullback",
+        "entryId": "1791473723820:238",
+        "openedAt": "2026-10-08T15:35:23.820Z",
+        "enteredAfterBaseline": false,
+        "quantity": 5993.959722058011,
+        "costBasisUsd": 8.7,
+        "valuationStatus": "fresh",
+        "markAt": "2026-10-13T21:34:06.576Z",
+        "valuationAgeMs": 7739,
+        "maxValuationAgeMs": 15000,
+        "lastRecorded": {
+          "markPrice": 0.00054768755,
+          "markValueUsd": 3.282817114972633,
+          "unrealizedPnlUsd": -5.621323740775998
+        },
+        "currentMarkValueUsd": 3.282817114972633,
+        "currentNetLiquidationUsd": 3.078676259224001,
+        "currentUnrealizedPnlUsd": -5.621323740775998
+      }
+    ],
+    "firstThreeRoute": {
+      "source": "new_pool_first_three",
+      "configured": {
+        "observed": false,
+        "version": null,
+        "maxUniqueCA": null,
+        "mode": null
+      },
+      "actual": {
+        "allHistoryBuys": 0,
+        "forwardBuys": 0,
+        "forwardDistinctCA": 0,
+        "forwardClosedRounds": 0,
+        "currentVersionForwardClosedRounds": 0,
+        "openPositions": 0
+      },
+      "note": "配置前三 CA 上限不等于产生三笔成交；只按冻结买入事件来源计数，不能用已配置代替实绩。"
+    }
+  },
+  "delta": {
+    "since": "2026-10-13T17:38:21.620Z",
+    "newFills": 0,
+    "newCurrentVersionClosedRounds": 0,
+    "currentVersionNetPnlDeltaUsd": 0,
+    "currentVersionModelCostsDeltaUsd": 0,
+    "newRounds": [],
+    "fourCursorAdvance": 0,
+    "flapCursorAdvance": 32128,
+    "fourVsFlapCheckpointDistanceBlocks": 57948,
+    "notIndependentlyVerifiedHeadLag": true,
+    "mainPidChanged": false,
+    "bscPidChanged": false,
+    "flapPriorStatus": "degraded",
+    "flapStatus": "healthy"
+  },
+  "health": {
+    "capturedAt": "2026-10-13T21:34:14.072Z",
+    "heartbeats": {
+      "main": {
+        "version": 1,
+        "producer": "main",
+        "pid": 83916,
+        "startedAt": "2026-10-12T06:01:24.038Z",
+        "updatedAt": "2026-10-13T21:33:56.204Z",
+        "sequence": 4745
+      },
+      "bsc": {
+        "version": 1,
+        "producer": "bsc",
+        "pid": 83919,
+        "startedAt": "2026-10-12T06:01:24.292Z",
+        "updatedAt": "2026-10-13T21:33:47.449Z",
+        "sequence": 4647
+      },
+      "fomo": {
+        "version": 1,
+        "producer": "fomo",
+        "pid": 7258,
+        "startedAt": "2026-10-10T04:56:33.184Z",
+        "updatedAt": "2026-10-13T21:33:50.652Z",
+        "sequence": 10631
+      }
+    },
+    "flap": {
+      "cursor": {
+        "nextBlock": 127475487,
+        "afterLogIndex": -1,
+        "anchorBlock": 127475486,
+        "anchorBlockHash": "0x9268476ef73e35dc50ee34c4170031514f0267dafb51867ee467b2c2e05f977d",
+        "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+      },
+      "checkedAt": "2026-10-13T21:34:01.577Z",
+      "health": {
+        "status": "healthy",
+        "consecutiveFailures": 0,
+        "lastSuccessAt": "2026-10-13T21:34:01.577Z",
+        "lastErrorAt": null,
+        "lastError": null,
+        "lastErrorCode": null,
+        "reorgCount": 0,
+        "lastReorgAt": null,
+        "lastAttemptAt": "2026-10-13T21:34:01.577Z",
+        "nextAttemptAt": null,
+        "failureClass": null
+      }
+    },
+    "four": {
+      "chainId": 56,
+      "updatedAt": "2026-10-13T21:29:40.428Z",
+      "cursor": {
+        "nextBlock": 127417539,
+        "anchorBlock": 127417538,
+        "anchorBlockHash": "0x142378383160b8dc3e8f4808739d82e84a7eef6426b3e3a6bc19149216956398"
+      }
+    },
+    "localPlatforms": {
+      "flap": {
+        "checkedAt": "2026-10-13T21:32:36.840Z",
+        "observedChains": [
+          {
+            "name": "Base",
+            "chainId": null,
+            "environment": "unknown",
+            "stage": "deployed"
+          },
+          {
+            "name": "BNB Chain",
+            "chainId": 56,
+            "environment": "mainnet",
+            "stage": "deployed"
+          },
+          {
+            "name": "BNB Chain",
+            "chainId": 97,
+            "environment": "testnet",
+            "stage": "deployed"
+          },
+          {
+            "name": "Morph",
+            "chainId": 2818,
+            "environment": "mainnet",
+            "stage": "deployed"
+          },
+          {
+            "name": "Robinhood Chain",
+            "chainId": null,
+            "environment": "testnet",
+            "stage": "deployed"
+          },
+          {
+            "name": "Robinhood Chain",
+            "chainId": 4663,
+            "environment": "mainnet",
+            "stage": "deployed"
+          }
+        ],
+        "pendingDocumentChanges": 0
+      },
+      "fourmeme": {
+        "checkedAt": "2026-10-13T21:30:26.899Z",
+        "observedChains": [
+          {
+            "name": "BNB Chain",
+            "chainId": 56,
+            "environment": "mainnet",
+            "stage": "supported"
+          }
+        ],
+        "pendingDocumentChanges": 0
+      }
+    },
+    "localTwitter": {
+      "fourdotmemezh": {
+        "checkedAt": "2026-10-13T21:34:08.369Z",
+        "latestId": "2109946141098045680"
+      },
+      "flapdotsh": {
+        "checkedAt": "2026-10-13T21:34:08.142Z",
+        "latestId": "2110005548917870632"
+      }
+    },
+    "lastTrade": {
+      "id": "1791894316666:286",
+      "at": "2026-10-13T12:25:16.666Z"
+    },
+    "log": {
+      "checkedThisRound": false,
+      "lastVerifiedObservation": {
+        "fromOffset": 37290927,
+        "endOffset": 37484543,
+        "inspectedBytes": 193616,
+        "through": "2026-10-12T06:07:35.621Z",
+        "newOomCount": 0
+      }
+    }
+  },
+  "launchUpdateCoverage": {
+    "version": "launch_update_coverage_v1",
+    "checkedAt": "2026-10-13T21:34:13.825Z",
+    "readOnly": true,
+    "status": "coverage_limited",
+    "platforms": {
+      "flap": {
+        "officialX": {
+          "handle": "flapdotsh",
+          "status": "source_limited",
+          "lastAttemptAt": null,
+          "lastSuccessAt": "2026-10-13T21:34:08.142Z",
+          "nextAttemptAt": null,
+          "ageMs": 5683,
+          "lastErrorCode": null
+        },
+        "officialWeb": {
+          "status": "fresh",
+          "total": 5,
+          "fresh": 5,
+          "unverified": 0,
+          "stale": 0,
+          "source_limited": 0,
+          "degraded": 0,
+          "metadata_only": 0
+        },
+        "documentBodies": {
+          "version": "official_document_body_v1",
+          "allowedPages": 59,
+          "uncheckedPages": 0,
+          "freshPages": 58,
+          "stalePages": 0,
+          "failedPages": 1,
+          "untrackedPages": 0,
+          "rosterOverflowPages": 0,
+          "pendingChanges": 0,
+          "omittedChangeCount": 0,
+          "nextDueAt": "2026-10-13T21:01:49.553Z",
+          "originNextAttemptAt": null,
+          "rosterDiscovery": {
+            "status": "fresh",
+            "total": 1,
+            "fresh": 1,
+            "unverified": 0,
+            "stale": 0,
+            "source_limited": 0,
+            "degraded": 0,
+            "metadata_only": 0
+          },
+          "status": "partial"
+        },
+        "github": {
+          "status": "fresh",
+          "total": 4,
+          "fresh": 4,
+          "unverified": 0,
+          "stale": 0,
+          "source_limited": 0,
+          "degraded": 0,
+          "metadata_only": 0,
+          "repositories": [
+            {
+              "repository": "flap-sh/flap-vault-component-template",
+              "status": "fresh",
+              "lastAttemptAt": "2026-10-13T21:33:12.355Z",
+              "lastSuccessAt": "2026-10-13T21:33:12.355Z",
+              "nextAttemptAt": null,
+              "ageMs": 61470,
+              "lastErrorCode": null,
+              "metadataHealth": {
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-13T21:33:12.355Z",
+                "lastSuccessAt": "2026-10-13T21:33:12.355Z",
+                "nextAttemptAt": null,
+                "ageMs": 61470,
+                "lastErrorCode": null
+              },
+              "lastCommitReadAt": "2026-10-13T21:33:12.355Z",
+              "observationBasis": "commit_poll"
+            },
+            {
+              "repository": "flap-sh/FlapVaultExample",
+              "status": "fresh",
+              "lastAttemptAt": "2026-10-13T21:33:11.710Z",
+              "lastSuccessAt": "2026-10-13T21:33:11.710Z",
+              "nextAttemptAt": null,
+              "ageMs": 62115,
+              "lastErrorCode": null,
+              "metadataHealth": {
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-13T21:33:11.710Z",
+                "lastSuccessAt": "2026-10-13T21:33:11.710Z",
+                "nextAttemptAt": null,
+                "ageMs": 62115,
+                "lastErrorCode": null
+              },
+              "lastCommitReadAt": "2026-10-13T21:33:11.710Z",
+              "observationBasis": "commit_poll"
+            },
+            {
+              "repository": "flap-sh/flap-skills",
+              "status": "fresh",
+              "lastAttemptAt": "2026-10-13T21:33:12.358Z",
+              "lastSuccessAt": "2026-10-13T21:33:12.358Z",
+              "nextAttemptAt": null,
+              "ageMs": 61467,
+              "lastErrorCode": null,
+              "metadataHealth": {
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-13T21:33:12.358Z",
+                "lastSuccessAt": "2026-10-13T21:33:12.358Z",
+                "nextAttemptAt": null,
+                "ageMs": 61467,
+                "lastErrorCode": null
+              },
+              "lastCommitReadAt": "2026-10-13T21:33:12.358Z",
+              "observationBasis": "commit_poll"
+            }
+          ],
+          "organizations": [
+            {
+              "organization": "flap-sh",
+              "status": "fresh",
+              "lastAttemptAt": null,
+              "lastSuccessAt": "2026-10-13T21:31:32.533Z",
+              "nextAttemptAt": null,
+              "ageMs": 161292,
+              "lastErrorCode": null
+            }
+          ],
+          "repositoryCount": 3,
+          "candidateRepositories": 0
+        },
+        "onchain": {
+          "status": "adapter_observed_head_unverified",
+          "lastAttemptAt": "2026-10-13T21:34:01.577Z",
+          "lastSuccessAt": "2026-10-13T21:34:01.577Z",
+          "nextAttemptAt": null,
+          "ageMs": 12248,
+          "lastErrorCode": null,
+          "adapterHealth": {
+            "status": "fresh",
+            "lastAttemptAt": "2026-10-13T21:34:01.577Z",
+            "lastSuccessAt": "2026-10-13T21:34:01.577Z",
+            "nextAttemptAt": null,
+            "ageMs": 12248,
+            "lastErrorCode": null
+          },
+          "checkpointAt": "2026-10-13T21:34:01.577Z",
+          "nextBlock": 127475487,
+          "headLagBlocks": null,
+          "liveHeadVerified": false,
+          "scope": "BSC pinned Portal quote adapter"
+        },
+        "coverageStatus": "bounded_sources_not_all_future_schemas"
+      },
+      "fourmeme": {
+        "officialX": {
+          "handle": "fourdotmemezh",
+          "status": "source_limited",
+          "lastAttemptAt": null,
+          "lastSuccessAt": "2026-10-13T21:34:08.369Z",
+          "nextAttemptAt": null,
+          "ageMs": 5456,
+          "lastErrorCode": null
+        },
+        "officialWeb": {
+          "status": "fresh",
+          "total": 13,
+          "fresh": 13,
+          "unverified": 0,
+          "stale": 0,
+          "source_limited": 0,
+          "degraded": 0,
+          "metadata_only": 0
+        },
+        "documentBodies": {
+          "version": "official_document_body_v1",
+          "allowedPages": 10,
+          "uncheckedPages": 0,
+          "freshPages": 8,
+          "stalePages": 0,
+          "failedPages": 2,
+          "untrackedPages": 0,
+          "rosterOverflowPages": 0,
+          "pendingChanges": 0,
+          "omittedChangeCount": 0,
+          "nextDueAt": "2026-10-13T21:26:08.650Z",
+          "originNextAttemptAt": null,
+          "rosterDiscovery": {
+            "status": "fresh",
+            "total": 1,
+            "fresh": 1,
+            "unverified": 0,
+            "stale": 0,
+            "source_limited": 0,
+            "degraded": 0,
+            "metadata_only": 0
+          },
+          "status": "partial"
+        },
+        "github": {
+          "status": "partial",
+          "total": 6,
+          "fresh": 4,
+          "unverified": 0,
+          "stale": 0,
+          "source_limited": 0,
+          "degraded": 0,
+          "metadata_only": 2,
+          "repositories": [
+            {
+              "repository": "four-meme-community/openfour-docs",
+              "status": "fresh",
+              "lastAttemptAt": "2026-10-13T21:33:12.550Z",
+              "lastSuccessAt": "2026-10-13T21:33:12.550Z",
+              "nextAttemptAt": null,
+              "ageMs": 61275,
+              "lastErrorCode": null,
+              "metadataHealth": {
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-13T21:33:12.550Z",
+                "lastSuccessAt": "2026-10-13T21:33:12.550Z",
+                "nextAttemptAt": null,
+                "ageMs": 61275,
+                "lastErrorCode": null
+              },
+              "lastCommitReadAt": "2026-10-13T21:33:12.550Z",
+              "observationBasis": "commit_poll"
+            },
+            {
+              "repository": "four-meme-community/four-meme-ai",
+              "status": "fresh",
+              "lastAttemptAt": "2026-10-13T21:33:12.691Z",
+              "lastSuccessAt": "2026-10-13T21:33:12.691Z",
+              "nextAttemptAt": null,
+              "ageMs": 61134,
+              "lastErrorCode": null,
+              "metadataHealth": {
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-13T21:33:12.691Z",
+                "lastSuccessAt": "2026-10-13T21:33:12.691Z",
+                "nextAttemptAt": null,
+                "ageMs": 61134,
+                "lastErrorCode": null
+              },
+              "lastCommitReadAt": "2026-10-13T21:33:12.691Z",
+              "observationBasis": "commit_poll"
+            },
+            {
+              "repository": "four-meme-community/fourmeme-docs",
+              "status": "metadata_only",
+              "lastAttemptAt": "2026-10-13T21:28:42.498Z",
+              "lastSuccessAt": "2026-09-11T07:48:05.561Z",
+              "nextAttemptAt": "2026-10-13T21:33:42.498Z",
+              "ageMs": 2814368264,
+              "lastErrorCode": null,
+              "metadataHealth": {
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-13T21:28:42.498Z",
+                "lastSuccessAt": "2026-10-13T21:28:42.498Z",
+                "nextAttemptAt": "2026-10-13T21:33:42.498Z",
+                "ageMs": 331327,
+                "lastErrorCode": null
+              },
+              "lastCommitReadAt": "2026-09-11T07:48:05.561Z",
+              "observationBasis": "organization_metadata_unchanged"
+            },
+            {
+              "repository": "four-meme-community/openfour-boost-launchpad",
+              "status": "metadata_only",
+              "lastAttemptAt": "2026-10-13T21:28:42.498Z",
+              "lastSuccessAt": "2026-10-13T02:37:09.236Z",
+              "nextAttemptAt": "2026-10-13T21:33:42.498Z",
+              "ageMs": 68224589,
+              "lastErrorCode": null,
+              "metadataHealth": {
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-13T21:28:42.498Z",
+                "lastSuccessAt": "2026-10-13T21:28:42.498Z",
+                "nextAttemptAt": "2026-10-13T21:33:42.498Z",
+                "ageMs": 331327,
+                "lastErrorCode": null
+              },
+              "lastCommitReadAt": "2026-10-13T02:37:09.236Z",
+              "observationBasis": "organization_metadata_unchanged"
+            }
+          ],
+          "organizations": [
+            {
+              "organization": "four-meme-community",
+              "status": "fresh",
+              "lastAttemptAt": null,
+              "lastSuccessAt": "2026-10-13T21:31:31.958Z",
+              "nextAttemptAt": null,
+              "ageMs": 161867,
+              "lastErrorCode": null
+            },
+            {
+              "organization": "four-meme",
+              "status": "fresh",
+              "lastAttemptAt": null,
+              "lastSuccessAt": "2026-10-13T21:31:31.363Z",
+              "nextAttemptAt": null,
+              "ageMs": 162462,
+              "lastErrorCode": null
+            }
+          ],
+          "repositoryCount": 4,
+          "candidateRepositories": 1
+        },
+        "onchain": {
+          "adapterHealth": null,
+          "status": "checkpoint_only_unverified",
+          "checkpointAt": "2026-10-13T21:29:40.428Z",
+          "nextBlock": 127417539,
+          "headLagBlocks": null,
+          "liveHeadVerified": false,
+          "scope": "BSC pinned OpenFour registry adapter"
+        },
+        "coverageStatus": "bounded_sources_not_all_future_schemas"
+      }
+    },
+    "readErrors": [],
+    "executionBoundary": "更新正文仅作待核实观察；仅已绑定受支持链上版本且顺序核实的最早三个不同 CA 进入模拟评估，不补第四名，仍须通过时效、可卖性及仓位检查。",
+    "remainingGaps": [
+      "未知合约地址、事件 ABI 和同地址 Hook 新版本仍需核实适配",
+      "链上检查点不等于已追平链头；网站正常不等于狙击完整覆盖",
+      "X 上游来源受限或电脑离线时不保证连续覆盖"
+    ],
+    "localSourceObservedAt": "2026-10-13T21:34:14.072Z",
+    "localPlatformSummary": {
+      "flap": {
+        "checkedAt": "2026-10-13T21:32:36.840Z",
+        "observedChains": [
+          {
+            "name": "Base",
+            "chainId": null,
+            "environment": "unknown",
+            "stage": "deployed"
+          },
+          {
+            "name": "BNB Chain",
+            "chainId": 56,
+            "environment": "mainnet",
+            "stage": "deployed"
+          },
+          {
+            "name": "BNB Chain",
+            "chainId": 97,
+            "environment": "testnet",
+            "stage": "deployed"
+          },
+          {
+            "name": "Morph",
+            "chainId": 2818,
+            "environment": "mainnet",
+            "stage": "deployed"
+          },
+          {
+            "name": "Robinhood Chain",
+            "chainId": null,
+            "environment": "testnet",
+            "stage": "deployed"
+          },
+          {
+            "name": "Robinhood Chain",
+            "chainId": 4663,
+            "environment": "mainnet",
+            "stage": "deployed"
+          }
+        ],
+        "pendingDocumentChanges": 0
+      },
+      "fourmeme": {
+        "checkedAt": "2026-10-13T21:30:26.899Z",
+        "observedChains": [
+          {
+            "name": "BNB Chain",
+            "chainId": 56,
+            "environment": "mainnet",
+            "stage": "supported"
+          }
+        ],
+        "pendingDocumentChanges": 0
+      }
+    },
+    "localTwitter": {
+      "fourdotmemezh": {
+        "checkedAt": "2026-10-13T21:34:08.369Z",
+        "latestId": "2109946141098045680"
+      },
+      "flapdotsh": {
+        "checkedAt": "2026-10-13T21:34:08.142Z",
+        "latestId": "2110005548917870632"
+      }
+    },
+    "twitterProgress": [
+      {
+        "handle": "fourdotmemezh",
+        "previousLatestId": "2109946141098045680",
+        "latestId": "2109946141098045680",
+        "changed": false,
+        "checkedAt": "2026-10-13T21:34:08.369Z",
+        "bodyInspectedThisRound": false,
+        "announcementAt": null,
+        "verifiedAt": null,
+        "classification": "checkpoint_only_not_launch_verification"
+      },
+      {
+        "handle": "flapdotsh",
+        "previousLatestId": "2110005548917870632",
+        "latestId": "2110005548917870632",
+        "changed": false,
+        "checkedAt": "2026-10-13T21:34:08.142Z",
+        "bodyInspectedThisRound": false,
+        "announcementAt": null,
+        "verifiedAt": null,
+        "classification": "checkpoint_only_not_launch_verification"
+      }
+    ],
+    "unadapted": [
+      {
+        "id": "four_robinhood_deployment",
+        "officialAnnouncementCollected": null,
+        "announcementAt": null,
+        "firstDiscoveredAt": null,
+        "verifiedAt": null,
+        "chainAndContractVerified": false,
+        "adapterSupported": false,
+        "adapterEvidence": "Four state chainId=56; supported first-three sources bsc:flap,bsc:fourmeme",
+        "earliestThreeCA": null,
+        "caCreationOrder": null,
+        "simulationAdmission": "not_eligible_unverified_unadapted",
+        "rejectionReason": "missing_verified_official_deployment_and_chain_contract_ABI_adapter",
+        "actualBuys": 0,
+        "actualClosedRounds": 0,
+        "status": "unverified_unadapted_coverage_gap",
+        "notes": "HOODb/新增报价资产不是Robinhood Chain部署证据。零买入为本地前三路线总计，非证明新平台无机会。"
+      }
+    ],
+    "noNewVerifiedLaunchClaim": true,
+    "fourStall": {
+      "detectedAt": "2026-10-13T21:34:14.072Z",
+      "previousObservationAt": "2026-10-13T17:33:34.507Z",
+      "previousCursor": 127417539,
+      "currentCursor": 127417539,
+      "previousStateUpdatedAt": "2026-10-13T17:31:04.107Z",
+      "currentStateUpdatedAt": "2026-10-13T21:29:40.428Z",
+      "observationSpanSeconds": 14439.565,
+      "classification": "same_cursor_at_two_four_hour_observations_despite_state_timestamp_updates",
+      "needsManualInvestigation": true,
+      "rootCause": null,
+      "independentChainHead": null,
+      "restarted": false,
+      "historyGapResolved": false
+    },
+    "scopeNote": "Four状态时间更新不能证明游标推进。HOODb/新增报价资产与Flap文档链名不能作为Four在Robinhood部署证明。"
+  },
+  "gaps": [
+    "A最新页重复、nonce仍162；相对最后已知nonce157的4个后续nonce未分类，不能认定不活跃或新增买卖。",
+    "B在21:34:57选择检查时尚未到期（21:36:36Z），未提前刷新；C本轮未选中。",
+    "Four两次约4小时相隔快照游标均127417539，状态文件更新时间有变；需人工排查，根因未核，不自动重启。",
+    "Flap当前健康快照不证明历史断档已补齐或持续在线；未独立查询链头。",
+    "Four Robinhood官方公告未核验、未适配；X来源受限、正文仍有失败页；无新增已核实上线证据。"
+  ],
+  "limits": [
+    "基线已读摘要复用；一次性日复盘reported=true不重复。",
+    "仅研究报告与两个检查点修改；未改交易源码/策略/主名单/账本/余额/历史。",
+    "未交易、签名、广播、重启、扩展自动化或发送外部消息。",
+    "不恢复FOMO平台/旧Four X，GMGN/X及100笔复盘保留，十分钟/Jev保持暂停。"
+  ],
+  "nextQuestion": "下一轮Sol优先到期D/E头页，预算内核验Glonk资金回流；下一次BSC按最久未成功头页优先B/C。A nonce158–161类型仍待按哈希核验。"
+}

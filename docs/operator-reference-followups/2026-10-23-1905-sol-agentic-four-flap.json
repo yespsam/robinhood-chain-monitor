@@ -1,0 +1,154 @@
+{
+  "round": 105,
+  "scheduledAt": "2026-10-23T19:05:21.800Z",
+  "startedAt": "2026-10-23T19:07:44Z",
+  "completedAt": "2026-10-23T19:13:30Z",
+  "group": "sol",
+  "question": "刷新 Solana D/E 最新活动头页，并核对 Four.Meme / Flap 当前 Agentic Wallet 专属规则与纸盘覆盖",
+  "requests": {
+    "configCheckedBeforeRequests": true,
+    "configChecks": 2,
+    "gmgnBusiness": 4,
+    "gmgnSuccessful": 4,
+    "gmgnFailed": 0,
+    "publicRpc": 0,
+    "model": 0,
+    "priority": 0
+  },
+  "wallets": {
+    "D": {
+      "chain": "sol",
+      "address": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "headCheckedAt": "2026-10-23T19:09:25.981Z",
+      "latestActivityAt": "2026-10-23T16:30:30Z",
+      "latestActivity": {
+        "ca": "pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn",
+        "side": "sell",
+        "txHash": "54pWXHwmGXuybT1VnCH6f3vWMvW8pgvUVfjkYjZmGosmPEXFZUN1JDoSiTEHY9QH6Feu7tVYj9UidxNbSsFMGgKV"
+      },
+      "rows": 20,
+      "distinctTransactionHashes": 16,
+      "identityEchoValidated": true,
+      "knownKeyOverlap": 0,
+      "anchorFound": false,
+      "candidateNewRowsAfterAnchor": 20,
+      "fullPageOverlap": null,
+      "nextHeadCursor": "NDYwNDkwNzEwMDAxMDIwNDg6MDo6",
+      "historicalResumeCursorPreserved": true,
+      "nextHeadCheckDueAt": "2026-10-24T03:09:25.981Z"
+    },
+    "E": {
+      "chain": "sol",
+      "address": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "headCheckedAt": "2026-10-23T19:09:25.981Z",
+      "latestActivityAt": "2026-10-23T16:30:30Z",
+      "latestActivity": {
+        "ca": "pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn",
+        "side": "sell",
+        "txHash": "2wmJ31fhgpbiEssudFqhBALNPGxQHRhfBuSTKGVepfef8NLvw4mZAQkD9BESAZHjBpiKGBLn3ZFssPfYh9UHZe9V"
+      },
+      "rows": 20,
+      "distinctTransactionHashes": 15,
+      "identityEchoValidated": true,
+      "knownKeyOverlap": 0,
+      "anchorFound": false,
+      "candidateNewRowsAfterAnchor": 20,
+      "fullPageOverlap": null,
+      "nextHeadCursor": "NDYwNDk2NDE2MDAyNjIwMDg6MDo6",
+      "historicalResumeCursorPreserved": true,
+      "nextHeadCheckDueAt": "2026-10-24T03:09:25.981Z"
+    }
+  },
+  "synchrony": {
+    "matchKey": ["chain", "ca", "side", "timestampSecond"],
+    "matching": "one_to_one_no_row_reuse",
+    "matchedPairs": 15,
+    "sameTransactionHashPairs": 0,
+    "distinctCAsApprox": 7,
+    "walletActivityRows": 40,
+    "distinctWalletTransactionHashes": 31,
+    "interpretation": "同秒同 CA 同方向行为相关性；匹配签名不同，不证明同控、共同资金或因果关系。"
+  },
+  "paperForward": {
+    "checkedAt": "2026-10-23T19:09:46Z",
+    "tradeCount": 321,
+    "lastTradeId": "1792761076261:320",
+    "newTrades": 0,
+    "newClosedRounds": 0,
+    "profitRetentionCursorMatches": true,
+    "newCompletePairIds": [],
+    "quoteGapCount": 322,
+    "quoteOpportunityScheduler": null,
+    "exitMonitorRunning": true,
+    "exitMonitorLastError": null,
+    "openPositions": 3,
+    "freshPaperValuationAt": "2026-10-23T19:09:42Z",
+    "paperExecution": false,
+    "signing": false,
+    "broadcast": false
+  },
+  "fourFlap": {
+    "four": {
+      "proofAt": "2026-10-23T13:00:05.562Z",
+      "safeHeadAtProof": 129326125,
+      "cursorNextBlockAtProof": 129326094,
+      "lagAtProof": 32,
+      "currentLag": null,
+      "freshDualSourceProofThisRound": false
+    },
+    "flap": {
+      "proofAt": "2026-10-23T11:17:03.599Z",
+      "safeHeadAtProof": 129312396,
+      "cursorNextBlockAtProof": 129312379,
+      "lagAtProof": 18,
+      "quoteVersion": "v5.26.0",
+      "cursorNextBlock": 129316431,
+      "lastSuccessAt": "2026-10-23T13:11:24.781Z",
+      "consecutiveFailures": 70,
+      "lastErrorCode": "FLAP_QUOTE_CHAIN_ID_UNAVAILABLE",
+      "lastErrorAt": "2026-10-23T19:07:58.410Z",
+      "currentLag": null
+    },
+    "quoteOpportunityScheduler": null
+  },
+  "agenticWalletMonitoring": {
+    "officialScope": [
+      "Binance Agentic Wallet FAQ and developer docs",
+      "Four.Meme Agent Skill and Binance Wallet Exclusive Token Launch announcement",
+      "Flap bStocks Booster and Degen ID event pages"
+    ],
+    "officialAgenticWalletExclusiveRuleFound": false,
+    "qualifyingCandidateBuys": null,
+    "fullChainScan": false,
+    "triggerFired": false,
+    "findings": [
+      "Agentic Wallet is a separate Binance-account keyless wallet; AI Pro preinstalls skills, while supported external agent frameworks may install them too.",
+      "Four.Meme's Agent Skill is broadly usable. A separate Four_meme announcement says Binance Wallet exclusive token-launch page/users, but the inspected source does not state Agentic Wallet-only identity.",
+      "Flap bStocks requires Binance Wallet MPC and at least 2 Alpha Points and binds eligible task activity to the same wallet; it is campaign eligibility/attribution, not exclusive Agentic Wallet issuance.",
+      "Flap Degen ID is an address-input, read-only trade-history profile; it is not Binance Agent ID (.ai) registration or Agentic Wallet identity evidence."
+    ],
+    "candidate": {
+      "name": "DOTAI",
+      "ca": "0xd4c14b32e4b49e5b8acbf499f156ee5d09ba7777",
+      "status": "third_party_gate_lead_unverified",
+      "identityAndSuccessfulBuyPair": false,
+      "qualifyingBuyTxHash": null
+    },
+    "sources": [
+      "https://www.binance.com/en-IN/support/faq/detail/3ff00e2d488a41c4aaa4aabb6fc36763",
+      "https://developers.binance.com/en/docs/products/agentic-wallet/welcome",
+      "https://www.four.meme/en/agentic",
+      "https://www.binance.com/en/square/post/30772514003738",
+      "https://flap.sh/event/bstocks?lang=en",
+      "https://flap.sh/event/degen-id"
+    ]
+  },
+  "coverageGaps": [
+    "D/E full-page overlap cannot be computed against a complete saved prior-page hash set; pageOverlap remains null.",
+    "Matched activity transactions have not been chain-verified this round; estimated USD values do not establish P&L.",
+    "No full-chain candidate scan; DOTAI remains unverified and no qualifying Agentic Wallet buy evidence pair was found in bounded official-source scope.",
+    "Four and Flap current lag are unknown because fresh same-window dual-source head evidence was unavailable; current quote scheduler snapshot is null.",
+    "No continuous-online inference across intervals."
+  ],
+  "nextQuestion": "轮换 BSC；刷新到期 A/B 头页，并按官方身份+成功链上买入双证据门槛继续复核 Four.Meme/Flap 新发行。"
+}

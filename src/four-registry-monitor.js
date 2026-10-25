@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createChainHeadObserver } from "./chain-head-observation.js";
 import { Interface, Signature, Transaction, keccak256, toUtf8Bytes } from "ethers";
 
 export const FOUR_REGISTRY_CHAIN_ID = 56;
@@ -165,7 +166,59 @@ export const FOUR_TOKEN_CREATED_TOPIC = FOUR_CORE_INTERFACE.getEvent("TokenCreat
 function fourError(code, message, cause = undefined) {
   const error = new Error(message, cause ? { cause } : undefined);
   error.code = code;
+  if (cause) Object.assign(error, fourRpcFailureDetails(cause));
   return error;
+}
+
+function fourRpcFailureDetails(error) {
+  const seen = new Set();
+  const queue = [error];
+  const details = {};
+  const scopes = [];
+  while (queue.length > 0) {
+    const candidate = queue.shift();
+    if (!candidate || typeof candidate !== "object" || seen.has(candidate)) continue;
+    seen.add(candidate);
+    if (["host", "method", "capacity"].includes(candidate.rpcFailureScope)) scopes.push(candidate.rpcFailureScope);
+    for (const field of ["retryAfterMs", "rpcHostRetryAfterMs"]) {
+      const value = Number(candidate[field]);
+      if (Number.isFinite(value) && value > 0) details[field] = Math.max(details[field] || 0, Math.ceil(value));
+    }
+    if (candidate.rpcCircuitAlreadyOpen === true) details.rpcCircuitAlreadyOpen = true;
+    if (!details.rpcOperation && typeof candidate.rpcOperation === "string") details.rpcOperation = candidate.rpcOperation;
+    queue.push(candidate.cause, candidate.error, candidate.info?.error);
+  }
+  // Nested wrappers must not convert a local queue refusal into an upstream
+  // failure, or hide an actual host-wide rate limit behind that refusal.
+  const scope = rateLimitFailure(error) ? "host"
+    : scopes.includes("host") ? "host" : scopes.includes("method") ? "method" : scopes[0];
+  if (scope) details.rpcFailureScope = scope;
+  if (scope === "host" && details.retryAfterMs) {
+    details.rpcHostRetryAfterMs = Math.max(details.rpcHostRetryAfterMs || 0, details.retryAfterMs);
+  }
+  return details;
+}
+
+// Every member is required. Drain already-started reads before returning a
+// failure; a fast local refusal cannot hide a peer's later 429 or leave that
+// peer running into the next check. This does not admit or retry any RPC.
+export async function settleFourRpcReads(reads) {
+  const settled = await Promise.allSettled(reads);
+  const failures = settled.filter((result) => result.status === "rejected")
+    .map(({ reason }) => ({ reason, details: fourRpcFailureDetails(reason) }));
+  if (failures.length === 0) return settled.map(({ value }) => value);
+  const byWait = (left, right) => rpcRetryAfterMs(right.reason) - rpcRetryAfterMs(left.reason);
+  const selected = failures.find(({ reason }) => reason?.code === "FOUR_REGISTRY_STOPPED")
+    || failures.filter(({ details }) => details.rpcFailureScope === "host").sort(byWait)[0]
+    || failures.filter(({ details }) => details.rpcFailureScope !== "capacity").sort(byWait)[0]
+    || failures.sort(byWait)[0];
+  const error = fourError(selected.reason?.code || "FOUR_REGISTRY_RPC_FAILED",
+    selected.reason?.message || String(selected.reason), selected.reason);
+  const retryAfterMs = Math.max(...failures.map(({ reason }) => rpcRetryAfterMs(reason)));
+  if (retryAfterMs > 0) error.retryAfterMs = retryAfterMs;
+  const hostRetryAfterMs = Math.max(0, ...failures.map(({ details }) => details.rpcHostRetryAfterMs || 0));
+  if (hostRetryAfterMs > 0) error.rpcHostRetryAfterMs = hostRetryAfterMs;
+  throw error;
 }
 
 function iso(value) {
@@ -483,7 +536,7 @@ function normalizeCanonicalRevision(raw, context) {
     || newBlockHash !== context.blockHash
     || hash32(raw.currentBasePayloadDigest, "canonicalRevision.currentBasePayloadDigest") !== raw.currentBasePayloadDigest
     || hash32(raw.replacesPayloadDigest, "canonicalRevision.replacesPayloadDigest") !== raw.replacesPayloadDigest
-    || !["delivered", "queued", "semantic_duplicate"].includes(raw.replacesDeliveryStatus)
+    || !["delivered", "queued", "semantic_duplicate", "policy_suppressed"].includes(raw.replacesDeliveryStatus)
     || typeof raw.replacesCanonicalOwnerDelivered !== "boolean"
     || (raw.replacesDeliveryStatus === "semantic_duplicate"
       ? replacesDuplicateOf === null || raw.replacesCanonicalOwnerDelivered !== true
@@ -531,6 +584,7 @@ function normalizeProcessedRecord(raw, expectedKey) {
     "evidenceBasis", "eventName", "canonicalLog", "canonicalTokenCreatedKey", "payloadDigest", "deliveryStatus",
     "duplicateOf", "canonicalOwnerDelivered", "acceptedAt",
   ];
+  if (raw?.deliveryStatus === "policy_suppressed") keys.push("policySuppression");
   if (!hasExactKeys(raw, keys)) {
     throw fourError("FOUR_REGISTRY_STATE_INVALID", `processed event ${expectedKey} is invalid`);
   }
@@ -641,12 +695,18 @@ function normalizeProcessedRecord(raw, expectedKey) {
     || (subjectType !== "preset"
       && lifecycleKey !== `fourmeme:openfour:${subjectType}:${subjectKey}:generation:${transactionHash}:${processedLogIndex}`)
     || raw.presetId !== (subjectType === "preset" ? subjectKey : null)
-    || !["delivered", "queued", "semantic_duplicate"].includes(raw.deliveryStatus)
+    || !["delivered", "queued", "semantic_duplicate", "policy_suppressed"].includes(raw.deliveryStatus)
     || typeof raw.canonicalOwnerDelivered !== "boolean"
     || (raw.deliveryStatus === "semantic_duplicate"
       ? duplicateOf === null || raw.canonicalOwnerDelivered !== true
       : duplicateOf !== null || raw.canonicalOwnerDelivered !== false)) {
     throw fourError("FOUR_REGISTRY_STATE_INVALID", `processed event ${expectedKey} schema is inconsistent`);
+  }
+  if (raw.deliveryStatus === "policy_suppressed"
+    && (!isPersistedFourPolicySuppression(raw.policySuppression, eventKey)
+      || !hasExactKeys(raw.policySuppression, ["status", "reason", "disposition", "terminal", "persisted", "eventId", "suppressedAt"])
+      || Date.parse(raw.policySuppression.suppressedAt) > Date.parse(raw.acceptedAt))) {
+    throw fourError("FOUR_REGISTRY_STATE_INVALID", `processed event ${expectedKey} policy suppression receipt is invalid`);
   }
   return {
     eventKey,
@@ -674,6 +734,7 @@ function normalizeProcessedRecord(raw, expectedKey) {
     duplicateOf,
     canonicalOwnerDelivered: raw.canonicalOwnerDelivered,
     acceptedAt: exactIso(raw.acceptedAt, "processed.acceptedAt"),
+    ...(raw.deliveryStatus === "policy_suppressed" ? { policySuppression: clone(raw.policySuppression) } : {}),
   };
 }
 
@@ -1381,7 +1442,7 @@ export async function verifyFourRegistryIdentity(provider, blockNumber) {
   let registryCode;
   let coreCode;
   try {
-    [network, block, registryCode, coreCode] = await Promise.all([
+    [network, block, registryCode, coreCode] = await settleFourRpcReads([
       provider.getNetwork(),
       exactBlock(provider, blockNumber),
       provider.getCode(FOUR_REGISTRY_ADDRESS, blockNumber),
@@ -1400,7 +1461,7 @@ export async function verifyFourRegistryIdentity(provider, blockNumber) {
   if (typeof coreCode !== "string" || !/^0x[a-f0-9]+$/iu.test(coreCode) || coreCode === "0x") {
     throw fourError("FOUR_CORE_CODE_EMPTY", "pinned OpenFour Core has no finalized runtime code");
   }
-  const [coreResult, registryResult] = await Promise.all([
+  const [coreResult, registryResult] = await settleFourRpcReads([
     contractCall(provider, FOUR_REGISTRY_INTERFACE, "openFourCore", FOUR_REGISTRY_ADDRESS, [], blockNumber),
     contractCall(provider, FOUR_CORE_INTERFACE, "registry", FOUR_CORE_ADDRESS, [], blockNumber),
   ]);
@@ -1421,7 +1482,7 @@ export async function verifyFourRegistryIdentity(provider, blockNumber) {
 
 export async function readFourRegistryPreset(provider, idValue, blockNumber) {
   const id = uintString(idValue, "presetId");
-  const [preset, activeResult, createEnabledResult] = await Promise.all([
+  const [preset, activeResult, createEnabledResult] = await settleFourRpcReads([
     readFourRegistryPresetTuple(provider, id, blockNumber),
     contractCall(provider, FOUR_REGISTRY_INTERFACE, "isPresetActive", FOUR_REGISTRY_ADDRESS, [id], blockNumber),
     contractCall(provider, FOUR_REGISTRY_INTERFACE, "isPresetCreateEnabled", FOUR_REGISTRY_ADDRESS, [id], blockNumber),
@@ -1463,11 +1524,13 @@ export async function readFourRegistryInventory(provider, blockNumber) {
   const ids = await readFourRegistryPresetIds(provider, blockNumber);
   const records = new Array(ids.length);
   let nextIndex = 0;
-  await Promise.all(Array.from({ length: Math.min(INVENTORY_READ_CONCURRENCY, ids.length) }, async () => {
-    while (nextIndex < ids.length) {
+  let failed = false;
+  await settleFourRpcReads(Array.from({ length: Math.min(INVENTORY_READ_CONCURRENCY, ids.length) }, async () => {
+    while (!failed && nextIndex < ids.length) {
       const index = nextIndex;
       nextIndex += 1;
-      records[index] = await readFourRegistryPreset(provider, ids[index], blockNumber);
+      try { records[index] = await readFourRegistryPreset(provider, ids[index], blockNumber); }
+      catch (error) { failed = true; throw error; }
     }
   }));
   return Object.fromEntries(records.map((preset) => [preset.id, preset]));
@@ -1535,7 +1598,7 @@ async function runtimeIdentityAt(provider, blockNumber, cache) {
   let coreCode;
   let multicallCode;
   try {
-    [network, registryCode, coreCode, multicallCode, liveChainId] = await Promise.all([
+    [network, registryCode, coreCode, multicallCode, liveChainId] = await settleFourRpcReads([
       provider.getNetwork(),
       provider.getCode(FOUR_REGISTRY_ADDRESS, blockNumber),
       provider.getCode(FOUR_CORE_ADDRESS, blockNumber),
@@ -1577,7 +1640,7 @@ async function readFourRegistryMulticallSnapshot(provider, block, runtimeCache) 
     multicallRead(FOUR_CORE_ADDRESS, FOUR_CORE_INTERFACE, "registry", [], "core.registry"),
     multicallRead(FOUR_REGISTRY_ADDRESS, FOUR_REGISTRY_INTERFACE, "getPresetIds", [], "registry.getPresetIds"),
   ];
-  const [runtime, headerResults] = await Promise.all([
+  const [runtime, headerResults] = await settleFourRpcReads([
     runtimePromise,
     executeFourRegistryMulticall(provider, headerReads, block.number),
   ]);
@@ -1631,14 +1694,16 @@ async function readFourRegistryTupleInventory(provider, blockNumber) {
   const ids = await readFourRegistryPresetIds(provider, blockNumber);
   const records = new Array(ids.length);
   let nextIndex = 0;
-  await Promise.all(Array.from({ length: Math.min(INVENTORY_READ_CONCURRENCY, ids.length) }, async () => {
-    while (nextIndex < ids.length) {
+  let failed = false;
+  await settleFourRpcReads(Array.from({ length: Math.min(INVENTORY_READ_CONCURRENCY, ids.length) }, async () => {
+    while (!failed && nextIndex < ids.length) {
       const index = nextIndex;
       nextIndex += 1;
       // The tuple already includes both status bits. Two fixed state hosts
       // must agree on the complete tuple below; the dedicated status getters
       // remain an additional baseline/event-position identity check.
-      records[index] = await readFourRegistryPresetTuple(provider, ids[index], blockNumber);
+      try { records[index] = await readFourRegistryPresetTuple(provider, ids[index], blockNumber); }
+      catch (error) { failed = true; throw error; }
     }
   }));
   return Object.fromEntries(records.map((preset) => [preset.id, preset]));
@@ -1706,7 +1771,7 @@ async function verifyCanonicalLog(provider, log, expectedAddress, allowedTopics,
   let block;
   let transaction;
   try {
-    [receipt, block, transaction] = await Promise.all([
+    [receipt, block, transaction] = await settleFourRpcReads([
       exactTransactionReceipt(provider, transactionHash),
       exactBlock(provider, position.blockNumber),
       exactTransaction(provider, transactionHash),
@@ -1815,7 +1880,7 @@ function parseRegistryLog(log, proof) {
 
 async function attachProtocolRuntimeProof(stateVerificationProviders, registryEvent) {
   if (registryEvent.eventName === "ModuleUpserted") {
-    const [implementationRuntime, beaconRuntime] = await Promise.all([
+    const [implementationRuntime, beaconRuntime] = await settleFourRpcReads([
       consensusRuntimeCodeAt(
         stateVerificationProviders,
         registryEvent.record.implementation,
@@ -3752,7 +3817,7 @@ function exactConsensus(value, label) {
 }
 
 async function consensusBlockAt(providers, blockNumber, label) {
-  const records = await Promise.all(providers.map(async ({ provider }) => blockRecord(
+  const records = await settleFourRpcReads(providers.map(async ({ provider }) => blockRecord(
     await exactBlock(provider, blockNumber),
     blockNumber,
     label,
@@ -3761,7 +3826,7 @@ async function consensusBlockAt(providers, blockNumber, label) {
 }
 
 async function consensusStateSnapshotAt(providers, blockNumber, runtimeCache) {
-  const snapshots = await Promise.all(providers.map(async ({ provider }) => {
+  const snapshots = await settleFourRpcReads(providers.map(async ({ provider }) => {
     const before = blockRecord(await exactBlock(provider, blockNumber), blockNumber, "state snapshot start block");
     const snapshot = await readFourRegistryMulticallSnapshot(provider, before, runtimeCache);
     const after = blockRecord(await exactBlock(provider, blockNumber), blockNumber, "state snapshot end block");
@@ -3774,7 +3839,7 @@ async function consensusStateSnapshotAt(providers, blockNumber, runtimeCache) {
 }
 
 async function consensusPresetAt(providers, presetId, blockNumber, expectedBlockHash) {
-  const snapshots = await Promise.all(providers.map(async ({ provider }) => {
+  const snapshots = await settleFourRpcReads(providers.map(async ({ provider }) => {
     const before = blockRecord(await exactBlock(provider, blockNumber), blockNumber, "preset snapshot start block");
     if (before.hash !== expectedBlockHash) {
       throw fourError("FOUR_REGISTRY_LOG_NOT_CANONICAL", `preset ${presetId} snapshot is not on the canonical event block`);
@@ -3799,7 +3864,7 @@ function normalizedRuntimeCode(value, label) {
 
 async function consensusRuntimeCodeAt(providers, target, blockNumber, label) {
   if (target === ZERO_ADDRESS) return { present: false, codeHash: null };
-  const results = await Promise.all(providers.map(async ({ provider }) => {
+  const results = await settleFourRpcReads(providers.map(async ({ provider }) => {
     const code = normalizedRuntimeCode(await provider.getCode(target, blockNumber), label);
     return { present: code !== "0x", codeHash: code === "0x" ? null : keccak256(code).toLowerCase() };
   }));
@@ -3866,7 +3931,7 @@ function logRangeLimitError(error) {
 
 async function queryConsensusLogs(providers, filter, label, expectedToBlockHash) {
   try {
-    const results = await Promise.all(providers.map(async ({ provider, sourceId }) => {
+    const results = await settleFourRpcReads(providers.map(async ({ provider, sourceId }) => {
       const endpointBlock = blockRecord(
         await exactBlock(provider, filter.toBlock),
         filter.toBlock,
@@ -3890,7 +3955,7 @@ async function queryConsensusLogs(providers, filter, label, expectedToBlockHash)
     const agreed = exactConsensus(results, `${label} log set`);
     if (agreed.length > MAX_LOGS_PER_QUERY && filter.fromBlock < filter.toBlock) {
       const midpoint = Math.floor((filter.fromBlock + filter.toBlock) / 2);
-      const [leftEnd, rightEnd] = await Promise.all([
+      const [leftEnd, rightEnd] = await settleFourRpcReads([
         consensusBlockAt(providers, midpoint, `${label} split range end`),
         consensusBlockAt(providers, filter.toBlock, `${label} split final range end`),
       ]);
@@ -3915,7 +3980,7 @@ async function queryConsensusLogs(providers, filter, label, expectedToBlockHash)
     // multiply calls against the same physical host during its cooldown.
     if (filter.fromBlock < filter.toBlock && !rateLimitFailure(error) && logRangeLimitError(error)) {
       const midpoint = Math.floor((filter.fromBlock + filter.toBlock) / 2);
-      const [leftEnd, rightEnd] = await Promise.all([
+      const [leftEnd, rightEnd] = await settleFourRpcReads([
         consensusBlockAt(providers, midpoint, `${label} limited split range end`),
         consensusBlockAt(providers, filter.toBlock, `${label} limited split final range end`),
       ]);
@@ -3948,7 +4013,7 @@ async function consensusCanonicalLog(
   fromBlock,
   toBlock,
 ) {
-  const proofs = await Promise.all(stateVerificationProviders.map(({ provider }) => verifyCanonicalLog(
+  const proofs = await settleFourRpcReads(stateVerificationProviders.map(({ provider }) => verifyCanonicalLog(
     provider,
     log,
     expectedAddress,
@@ -4055,11 +4120,27 @@ async function fetchCanonicalEvents(
   return { registryEvents, tokenEvents };
 }
 
+function isPersistedFourPolicySuppression(result, expectedEventKey) {
+  // Policy rejection is a completed local outcome, not an external delivery.
+  // Only the durable sender receipt may settle it; transient/source gates and
+  // an unbound `terminal: true` must continue to retain the producer event.
+  return result?.status === "suppressed"
+    && result.reason === "policy_suppressed"
+    && result.eventId === expectedEventKey
+    && result.persisted === true
+    && result.terminal === true
+    && result.disposition === "terminal"
+    && typeof result.suppressedAt === "string"
+    && Number.isFinite(Date.parse(result.suppressedAt))
+    && new Date(result.suppressedAt).toISOString() === result.suppressedAt;
+}
+
 export function classifyFourRegistryDelivery(result, expectedEventKey) {
   const status = String(result?.status || "").toLowerCase();
   const eventId = String(result?.eventId || "").trim();
   if (typeof expectedEventKey !== "string" || !expectedEventKey || eventId !== expectedEventKey) return "retry";
   if (["delivered", "queued"].includes(status) && result?.persisted === true) return status;
+  if (isPersistedFourPolicySuppression(result, expectedEventKey)) return "policy_suppressed";
   const reason = String(result?.reason || result?.disabledReason || "").toLowerCase();
   if (status === "suppressed"
     && reason === "semantic_duplicate"
@@ -4226,11 +4307,49 @@ async function verifyDurableOutboxEntryOnProvider(entry, provider) {
   return proof;
 }
 
+function outboxTransactionProofReader(provider) {
+  // One retry, one fixed source. Only hash-addressed transaction material is
+  // reused; headers, runtime and contract reads still pass through the shared
+  // gates. Every event must independently match its own receipt log/payload.
+  // Never retain this cache across checks, or merge the two providers' views.
+  const methods = new Set([
+    "getTransactionReceipt", "getHistoricalTransactionReceipt",
+    "getTransaction", "getHistoricalTransaction",
+  ]);
+  const reads = new Map();
+  return new Proxy(provider, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target);
+      if (typeof value !== "function") return value;
+      if (!methods.has(property)) return value.bind(target);
+      return (...args) => {
+        if (args.length !== 1 || typeof args[0] !== "string" || !/^0x[0-9a-f]{64}$/iu.test(args[0])) {
+          return value.apply(target, args);
+        }
+        const key = `${property}:${args[0].toLowerCase()}`;
+        if (!reads.has(key)) reads.set(key, Promise.resolve().then(() => value.apply(target, args)));
+        return reads.get(key);
+      };
+    },
+  });
+}
+
 async function verifyDurableOutboxCanonical(outbox, stateVerificationProviders) {
+  const readers = stateVerificationProviders.map(({ provider }) => outboxTransactionProofReader(provider));
+  const verifiedBlocks = new Map();
   for (const entry of outbox) {
-    const proofs = await Promise.all(stateVerificationProviders.map(({ provider }) =>
+    const proofs = await settleFourRpcReads(readers.map(provider =>
       verifyDurableOutboxEntryOnProvider(entry, provider)));
-    exactConsensus(proofs, `durable outbox event ${entry.eventKey}`);
+    const proof = exactConsensus(proofs, `durable outbox event ${entry.eventKey}`);
+    verifiedBlocks.set(proof.blockNumber, proof.blockHash);
+  }
+  // Re-read the quorum's canonical headers without the transaction cache
+  // before allowing any delivery/terminal acknowledgement to leave the queue.
+  for (const [blockNumber, blockHash] of verifiedBlocks) {
+    const block = await consensusBlockAt(stateVerificationProviders, blockNumber, "durable outbox final block");
+    if (block.hash !== blockHash) {
+      throw fourError("FOUR_REGISTRY_OUTBOX_PROOF_MISMATCH", `durable outbox block ${blockNumber} changed before delivery`);
+    }
   }
 }
 
@@ -4285,6 +4404,11 @@ function acceptedRecord(entry, deliveryStatus, acceptedAt, deliveryResult = null
     duplicateOf: deliveryStatus === "semantic_duplicate" ? deliveryResult.duplicateOf : null,
     canonicalOwnerDelivered: deliveryStatus === "semantic_duplicate" && deliveryResult.canonicalOwnerDelivered === true,
     acceptedAt,
+    ...(deliveryStatus === "policy_suppressed" ? { policySuppression: {
+      status: "suppressed", reason: "policy_suppressed", disposition: "terminal",
+      terminal: true, persisted: true, eventId: entry.eventKey,
+      suppressedAt: deliveryResult.suppressedAt,
+    } } : {}),
   };
 }
 
@@ -4376,7 +4500,13 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
     "fourRegistryConfirmations",
     1,
   );
-  const scanChunkSize = Math.max(1, Math.min(10_000, integer(
+  // The fixed log quorum must use one range every member can serve. Sentio's
+  // public endpoint caps eth_getLogs at 1000 blocks; smaller configured chunks
+  // remain smaller, and state-only readers do not constrain the log range.
+  const logRangeLimit = rawLogVerificationProviders.some((entry) => (
+    new URL(`https://${entry.sourceId}`).hostname === "bsc.rpc.sentio.xyz"
+  )) ? 1_000 : 10_000;
+  const scanChunkSize = Math.max(1, Math.min(logRangeLimit, integer(
     config.fourRegistryLogChunkSize ?? 10_000,
     "fourRegistryLogChunkSize",
   )));
@@ -4400,6 +4530,13 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
   let timer = null;
   let stopped = false;
   let consecutiveFailures = 0;
+  // Display-only, paced, fixed-origin reads reuse both the local physical
+  // budget and the shared RPC coordinator. Never used as trading authority.
+  const headObserver = dependencies.headObservationFile ? createChainHeadObserver({
+    file: dependencies.headObservationFile, producer: "fourmeme", providers: stateVerificationProviders,
+    confirmations, now: clock, getCursor: () => clone(state.cursor), isStopped: () => stopped,
+    writeSnapshot: dependencies.writeHeadObservation,
+  }) : null;
   const runtimeIdentityCache = new WeakMap();
   runtimeIdentityCache.expectedMulticall3CodeHash = dependencies.multicall3CodeHashForTesting === undefined
     ? FOUR_REGISTRY_MULTICALL3_CODE_HASH
@@ -4470,15 +4607,21 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
       }
       const acceptedState = clone(state);
       const acceptedEntry = acceptedState.outbox.shift();
+      const acceptedAt = classification === "policy_suppressed"
+        ? iso(Math.max(Number(clock()), Date.parse(result.suppressedAt)))
+        : attemptedAt;
       acceptedState.processedEvents[acceptedEntry.eventKey] = acceptedRecord(
         acceptedEntry,
         classification,
-        attemptedAt,
+        acceptedAt,
         result,
       );
       acceptedState.processedEventKeys.push(acceptedEntry.eventKey);
       pruneProcessed(acceptedState);
-      acceptedState.updatedAt = attemptedAt;
+      acceptedState.updatedAt = acceptedAt;
+      // A policy rejection is retained as a complete, explicitly non-delivered
+      // processed record. It must not block unrelated later chain discovery or
+      // be converted into a retry that re-enables a forbidden notification.
       // If this acknowledgement write fails, the pre-delivery outbox record
       // remains durable. A restart retries the identical eventKey; sendAlerts
       // can then return its canonical-owner semantic duplicate receipt.
@@ -4754,7 +4897,7 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
           processedEvent: clone(processedEvent),
           cancellationStatus: cancellation.status,
         });
-      } else if (processedEvent.deliveryStatus === "queued" && cancellation.status === "superseded") {
+      } else if (["queued", "policy_suppressed"].includes(processedEvent.deliveryStatus) && cancellation.status === "superseded") {
         resolvedOwners.push({
           origin: owner.source,
           processedEvent: clone(processedEvent),
@@ -5266,9 +5409,15 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
     // delivery. Policy/source suppression can therefore retry without chain
     // replay, and an acknowledgement failure cannot invent a new event key.
     await commitState(nextState);
-    const postCommitBlock = await consensusBlockAt(stateVerificationProviders, scanNumber, "post-commit finalized block");
-    if (postCommitBlock.hash !== finalizedBlock.hash) {
-      throw fourError("FOUR_REGISTRY_FINALIZED_BLOCK_CHANGED", "finalized block changed after discovery commit; delivery was withheld");
+    // This additional quorum guards delivery after the durable write, not the
+    // already verified cursor commit. With no queued event there is nothing
+    // to deliver; the next check still revalidates the persisted anchor using
+    // fresh reads. Never skip this boundary when an event remains queued.
+    if (state.outbox.length > 0) {
+      const postCommitBlock = await consensusBlockAt(stateVerificationProviders, scanNumber, "post-commit finalized block");
+      if (postCommitBlock.hash !== finalizedBlock.hash) {
+        throw fourError("FOUR_REGISTRY_FINALIZED_BLOCK_CHANGED", "finalized block changed after discovery commit; delivery was withheld");
+      }
     }
     const currentDelivery = await drainOutbox();
     const delivery = {
@@ -5295,18 +5444,28 @@ export function createFourRegistryMonitor(config = {}, dependencies = {}) {
   async function check() {
     if (stopped) return { status: "stopped", events: [] };
     if (activeCheck) return activeCheck;
-    activeCheck = checkOnce().then((result) => {
+    activeCheck = checkOnce().then(async (result) => {
       consecutiveFailures = 0;
+      // Proof telemetry follows durable collection; failed/busy cycles never
+      // trigger another probe. Its failures cannot change the scan outcome.
+      if (!stopped && ["ok", "baseline"].includes(result.status)) {
+        const headResult = await headObserver?.observe();
+        if (headResult?.persistenceErrorCode) logger.error?.("[four-registry] CHAIN_HEAD_WRITE_FAILED (display only)");
+      }
       return result;
     }).catch((error) => {
-      consecutiveFailures += 1;
+      const rpcDetails = fourRpcFailureDetails(error);
+      const capacityWait = rpcDetails.rpcFailureScope === "capacity";
+      if (!capacityWait) consecutiveFailures += 1;
       const retryAfterMs = Math.max(
         rpcRetryAfterMs(error),
         rateLimitFailure(error) ? 60_000 : 0,
-        Math.min(60_000, pollIntervalMs * (2 ** Math.min(consecutiveFailures - 1, 6))),
+        capacityWait ? pollIntervalMs
+          : Math.min(60_000, pollIntervalMs * (2 ** Math.min(consecutiveFailures - 1, 6))),
       );
       logger.error?.(`[four-registry] ${error.code || "FOUR_REGISTRY_FAILED"}: ${error.message}`);
-      return { status: "degraded", errorCode: error.code || "FOUR_REGISTRY_FAILED", error: error.message, retryAfterMs, events: [] };
+      return { status: "degraded", errorCode: error.code || "FOUR_REGISTRY_FAILED", error: error.message,
+        ...rpcDetails, consecutiveFailures, retryAfterMs, events: [] };
     }).finally(() => { activeCheck = null; });
     return activeCheck;
   }

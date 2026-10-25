@@ -10,6 +10,7 @@ import { advanceWalletContext, walletContextReport, selectWalletChartTarget } fr
 import { admitLearningWallets, LEARNING_ARCHIVE_LIMIT } from './wallet-learning-roster.js';
 import { tradingScanChains } from './trading-scan-scope.js';
 import { createWalletAddressLibraryClient } from './wallet-address-library-client.js';
+import { loadKolTeacherReviews } from './kol-learning-teachers.js';
 
 async function read(file, max = 96 * 1024 * 1024) {
   try { if ((await fs.stat(file)).size > max) throw new Error('learning_file_too_large'); return JSON.parse(await fs.readFile(file, 'utf8')); }
@@ -307,7 +308,7 @@ export function createWalletLearningMonitor({ dataDir, client = createGmgnFlowCl
   }
   function snapshot() {
     if (state !== reportState || !reportCache || now() - reportAt >= 15_000) {
-      reportCache = {...buildLearningReport(state, now(), habitCache),behaviorLearning:walletContextReport(state?.behaviorMemory,state?.behaviorError)};
+      reportCache = {...buildLearningReport(state, now(), habitCache, loadKolTeacherReviews(dataDir)),behaviorLearning:walletContextReport(state?.behaviorMemory,state?.behaviorError)};
       reportState = state; reportAt = now();
     }
     const ranked = Object.values(state?.universe || {}).filter(w => w.leaderboard?.researchEligible);

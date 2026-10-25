@@ -42,7 +42,10 @@ export function paperLossLearning(account, nowMs) {
   // never manufacture proof. This is a distinct basis, not a profit teacher.
   const onchainBurst=rounds.filter(r=>validFrozenOnchain(r.entry));
   const onchainRounds=new Set(onchainBurst);
-  const noProof = rounds.filter(r => {
+  // This group only describes missing narrative/profitable-wallet context.
+  // A separate structural route can have evidence; neither its route label nor
+  // this context classification proves that the entry was valid or profitable.
+  const missingContext = rounds.filter(r => {
     if(onchainRounds.has(r))return false;
     const e=classifyEntryEvidence(r.entry);
     return !['onchain_pool','official_catalog','direct_ca','community_link'].includes(e.narrative) && e.wallet!=='verified_profit';
@@ -57,8 +60,8 @@ export function paperLossLearning(account, nowMs) {
   const nextTrades = trades.slice(baseline), nextBuys = new Set(nextTrades.filter(t=>t.side==='buy').map(t=>t.id));
   const currentRounds=rounds.filter(r=>nextBuys.has(r.entry.id));
   const lessons = [
-    { id:'entry_evidence',label:'入场依据不足',...summary(noProof),
-      action:'新仓冻结原文与 CA 关联或已核验盈利买盘；历史不补故事，缺口进入研究队列' },
+    { id:'entry_evidence',label:'缺少已核叙事或盈利钱包上下文',...summary(missingContext),
+      action:'结构依据另行评价；本分组不判定全部入场依据不足，也不证明结构有效。上下文缺失保留未知，历史不补故事，不以路线标签或盈利结果补证据' },
     { id:'evidence_gap_exit',label:'退出跟踪中断',...summary(gaps),
       action:'保持持仓退出优先；区分采集断档与叙事失效，未知不冒充卖出或持有证据' },
     { id:'cost_drag',label:'毛结果非负却净亏',...summary(costOnly),

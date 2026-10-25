@@ -43,6 +43,14 @@ test('estimated book skips legacy shadow evaluation and renders full learning re
     assert.equal(reportReads, 0, 'observation reports are not in scan/decision preparation');
     assert.ok(evidenceReads >= 2); assert.equal(legacyEvaluations, 0);
     const s = r.snapshot(); assert.equal(reportReads, 1); assert.equal(s.learning.walletCount, 7);
+    assert.equal(s.strategyValidationRequirements.entryFlowVersion, 'paper_entry_observed_outflow_v1');
+    assert.equal(s.strategyValidationRequirements.exitObservationVersion, 'entry_cohort_sell_retention_v1');
+    assert.equal(s.strategyValidationRequirements.exitStructureObservationVersion, 'independent_confirmed_trail_v1');
+    assert.deepEqual(s.strategyValidationRequirements.entryStructureBySetup, {
+      external_breakout:'reconstructed_ohlcv_entry_v1', external_pullback:'reconstructed_ohlcv_entry_v1', external_trend:'reconstructed_ohlcv_entry_v1' });
+    assert.equal(s.strategyValidationRequirements.entryCostVersion, ESTIMATED_COST_VERSION);
+    assert.equal(s.strategyValidationRequirements.exitCostVersion, ESTIMATED_COST_VERSION);
+    assert.equal(s.strategyValidationRequirements.targetSelectionBySetup.external_pullback, 'pullback_nearest_observed_level_v1');
     assert.equal(s.account.cash, 100); assert.equal(s.account.trades.length, 0);
     assert.equal(s.cadence.runtimePathVersion, 'paper_compute_memo_v2');
     assert.equal(s.cadence.phaseTiming.newsWireMs, 0);
@@ -181,16 +189,18 @@ test('isolated external route completes chart, quote, fill and restart without o
     assert.equal(await fs.readFile(f.originalFile,'utf8'),f.original);
   }finally{await r.stop();}
 });
-test('three-list BSC ranking and completed-only candidates can still complete a paper fill and restore it',async t=>{
-  for(const source of ['ranking_5m','completed'])await t.test(source,async t=>{
-    const f=await fixture(t,'bsc'),session=await createEstimatedPaperSession({dataDir:f.dataDir,id:ID,nowMs:NOW});
-    let clock=NOW,price=1.028;const current=()=>({...token,chain:'bsc',price,
+test('three-list BSC, Solana and Robinhood candidates complete the same paper fill and restore it',async t=>{
+  for(const chain of ['bsc','sol','robinhood'])for(const source of ['ranking_5m','completed'])await t.test(`${chain}:${source}`,async t=>{
+    const f=await fixture(t,chain),session=await createEstimatedPaperSession({dataDir:f.dataDir,id:ID,nowMs:NOW});
+    const address=chain==='sol'?'So11111111111111111111111111111111111111112':CA,calls=[];
+    const authority=chain==='sol'?{renouncedMint:true,renouncedFreezeAccount:true}:{};
+    let clock=NOW,price=1.028;const current=()=>({...token,chain,address,price,...authority,
       ...(source==='ranking_5m'?{volumeWindow:'5m',rank:1}:{marketCategory:'completed'})});
-    const market={trending:async q=>({status:'ok',interval:q.interval,observedAt:iso(clock),tokens:source==='ranking_5m'?[current()]:[]}),
-      trenches:async()=>({status:'ok',observedAt:iso(clock),tokens:source==='completed'?[current()]:[]}),
-      kline:async q=>({...q,status:'ok',candles:candles()}),
-      quote:async q=>({...q,price,status:'ok',observedAt:iso(clock)})};
-    const options={...modes,dataDir:f.dataDir,session,chain:'bsc',chains:['bsc'],discoveryMode:'gmgn_three_lists_v1',market,now:()=>clock,evidenceLoader:()=>({})};
+    const market={trending:async q=>{calls.push(['ranking',q]);return {status:'ok',interval:q.interval,observedAt:iso(clock),tokens:source==='ranking_5m'?[current()]:[]};},
+      trenches:async q=>{calls.push(['trenches',q]);return {status:'ok',observedAt:iso(clock),tokens:source==='completed'?[current()]:[]};},
+      kline:async q=>{calls.push(['chart',q]);return {...q,status:'ok',candles:candles()};},
+      quote:async q=>{calls.push(['quote',q]);return {...q,price,status:'ok',observedAt:iso(clock)};}};
+    const options={...modes,dataDir:f.dataDir,session,chain,chains:[chain],discoveryMode:'gmgn_three_lists_v1',market,now:()=>clock,evidenceLoader:()=>({})};
     let r=createPaperStrategyRuntime(options);
     try{
       await r.runOnce();await r.setEnabled(true);
@@ -198,13 +208,37 @@ test('three-list BSC ranking and completed-only candidates can still complete a 
         await r.fastOnce();await r.refreshQuote();await r.fastOnce();clock+=4000;price=1.03;
       }
       const s=r.snapshot();assert.equal(s.account.trades.length,1,JSON.stringify(s.evaluations.map(x=>x.missing)));
-      assert.equal(s.account.trades[0].chain,'bsc');assert.equal(s.execution,false);assert.equal(s.signing,false);assert.equal(s.broadcast,false);
+      assert.equal(s.account.trades[0].chain,chain);assert.equal(s.account.trades[0].address,address);
+      assert.equal(s.account.trades[0].entryEvidence.lossRepair.entryPath,'external_structure');
+      assert.ok(calls.some(([kind])=>kind==='chart'));assert.ok(calls.filter(([kind])=>kind==='quote').length>=2);
+      assert.ok(calls.every(([,q])=>q.chain===chain&&(!q.address||q.address===address)));
+      assert.ok(s.account.positions[`${chain}:${address}`],'chain and case-sensitive CA identify the position');
+      assert.equal(s.execution,false);assert.equal(s.signing,false);assert.equal(s.broadcast,false);
       const trades=JSON.parse(JSON.stringify(s.account.trades)),cash=s.account.cash;
       await r.stop();r=createPaperStrategyRuntime(options);await r.runOnce();
       assert.deepEqual(JSON.parse(JSON.stringify(r.snapshot().account.trades)),trades);assert.equal(r.snapshot().account.cash,cash);
       assert.equal(await fs.readFile(f.originalFile,'utf8'),f.original);
+      assert.deepEqual(await loadEstimatedPaperSession(f.dataDir),session,'scope cannot rewrite the session identity');
+      assert.equal(await fs.readFile(path.join(f.dataDir,PAPER_SESSION_FILE),'utf8'),f.pointer);
     }finally{await r.stop();}
   });
+});
+
+test('Solana estimated external entries keep mint and freeze checks mandatory and preserve CA case',()=>{
+  const candidate=input(),address='So11111111111111111111111111111111111111112';
+  candidate.token={...candidate.token,chain:'sol',address,renouncedMint:true,renouncedFreezeAccount:true};
+  candidate.flow={};candidate.quoteHistory=candidate.quoteHistory.map(q=>({...q,chain:'sol',address}));
+  const valid=evaluatePaperStrategies(candidate)[0];
+  assert.equal(valid.decision,'可模拟',JSON.stringify({missing:valid.missing,reasons:valid.reasons}));
+  assert.equal(valid.token.address,address);
+  for(const field of ['renouncedMint','renouncedFreezeAccount'])for(const value of [null,false]){
+    const invalid=structuredClone(candidate);invalid.token[field]=value;
+    const rows=evaluatePaperStrategies(invalid);
+    assert.notEqual(rows[0].decision,'可模拟',`${field}=${value} must not be treated as safe`);
+    assert.equal(advancePaperStrategyAccount(estimatedAccount(),{...modes,estimatedFeeMode:true,evaluations:rows,nowMs:NOW}).trades.length,0);
+  }
+  const mismatched=structuredClone(candidate);mismatched.quoteHistory.forEach(q=>{q.address=address.toLowerCase();});
+  assert.notEqual(evaluatePaperStrategies(mismatched)[0].decision,'可模拟','a lowercased Solana quote cannot confirm a different mint');
 });
 
 test('repair Alpha follow-through uses the same original 24h catalog clock through ledger commit',()=>{

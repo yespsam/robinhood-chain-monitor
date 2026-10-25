@@ -27,6 +27,19 @@ test('lean trading evidence preserves verified identities and expiry without exp
   assert.deepEqual(f.monitor.snapshot().verifiedProfiles, {});
   assert.equal(f.calls.length, calls, 'reads do not acquire new wallet data');
 });
+test('missing or corrupt KOL review registry blocks strategy teachers without blocking collector or ordinary flow evidence', async t => {
+  const f = await fixture(t); await f.monitor.runOnce();
+  const before = await fs.readFile(f.monitor.stateFile, 'utf8'), evidence = f.monitor.tradingEvidence(), calls = f.calls.length;
+  assert.equal(f.monitor.snapshot().teacherSelection.eligibleWallets, 0);
+  await fs.writeFile(path.join(f.dataDir, 'kol-learning-teacher-reviews.json'), '{broken-json');
+  f.advance(15001);
+  const report = f.monitor.snapshot();
+  assert.equal(report.teacherSelection.eligibleWallets, 0); assert.ok(report.teacherSelection.registryError);
+  assert.equal(report.qualifiedNow, 1); assert.equal(report.lastError, null);
+  assert.deepEqual(f.monitor.tradingEvidence(), evidence);
+  assert.equal(await fs.readFile(f.monitor.stateFile, 'utf8'), before);
+  assert.equal(f.calls.length, calls);
+});
 test('behavior research persists separately, respects API pacing and isolates corrupt research memory',async t=>{
   const f=await fixture(t,{researchContextLoader:()=>({readOnly:true,charts:[],documents:[]})});
   await f.monitor.runOnce();assert.equal(f.monitor.snapshot().behaviorLearning.cases,1);

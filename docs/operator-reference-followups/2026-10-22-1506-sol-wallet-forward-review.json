@@ -1,0 +1,179 @@
+{
+  "round": 99,
+  "checkedAt": "2026-10-22T15:06:58.791Z",
+  "startedAt": "2026-10-22T14:59:17.265Z",
+  "durationSecondsApprox": 461,
+  "group": "sol",
+  "question": "Verify the known D/E same-second same-CA token outflow candidates on chain and preserve local forward/coverage state.",
+  "gmgn": {
+    "configChecks": 2,
+    "businessRequests": 2,
+    "successfulRequests": 2,
+    "failedRequests": 0,
+    "priority": 0,
+    "wallets": [
+      {
+        "id": "D",
+        "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+        "providerHeadCheckedAt": "2026-10-22T15:00:54.612Z",
+        "providerLatestActivityAt": "2026-10-21T22:57:10.000Z",
+        "responseEnvelopeFields": ["activities", "next"],
+        "rowCount": null,
+        "pageOverlap": null,
+        "newRows": null,
+        "identityEcho": null,
+        "cursorRetained": false,
+        "status": "success_response_envelope_received_but_activity_rows_not_retained",
+        "nextHeadCheckDueAt": "2026-10-22T23:00:54.612Z"
+      },
+      {
+        "id": "E",
+        "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+        "providerHeadCheckedAt": "2026-10-22T15:01:05.884Z",
+        "providerLatestActivityAt": "2026-10-21T22:57:10.000Z",
+        "responseEnvelopeFields": ["activities", "next"],
+        "rowCount": null,
+        "pageOverlap": null,
+        "newRows": null,
+        "identityEcho": null,
+        "cursorRetained": false,
+        "status": "success_response_envelope_received_but_activity_rows_not_retained",
+        "nextHeadCheckDueAt": "2026-10-22T23:01:05.884Z"
+      }
+    ],
+    "note": "Parser did not retain activities rows; no retry; previous historical/head cursors were preserved."
+  },
+  "walletEvidence": {
+    "rpcRequests": 2,
+    "rpcMethod": "getTransaction",
+    "encoding": "json",
+    "maxSupportedTransactionVersion": 1,
+    "sameSlot": 459806079,
+    "sameBlockTime": "2026-10-21T22:57:10.000Z",
+    "ca": "4Kee4JuLWTGFR9r9N4iZ9E9K4B297uDgbYt2psy7pump",
+    "distinctTransactions": 2,
+    "oneToOneSameSecondMatch": true,
+    "transactions": [
+      {
+        "walletId": "D",
+        "signature": "Kgnexit28xqnr4ANkZQjFqJ5LqnCCSupAaam3XmoXZPwHZUhvcB91FqcT3fuT9r8RyXSywrqR2WANK2WobRHRQv",
+        "httpStatus": 200,
+        "success": true,
+        "metaErr": null,
+        "feeLamports": 15000,
+        "targetTokenOwnerDelta": -19152851.089815,
+        "recipientTokenOwner": "AjVnhuqRRwzkfjMvzBiTgiDNbQTw9wW9FAxRLyyiK72D",
+        "recipientTokenOwnerDelta": 19152851.08981502,
+        "signerIdentityVerified": null,
+        "quoteLegVerified": false
+      },
+      {
+        "walletId": "E",
+        "signature": "HY7s4f1WdhMDcSTaVADasDMFdTPWPizYfWvm3JcXBHT8EpCyViCjf8x2rBB12bb5fhRaeFbmqHiQRfdAFxqraiN",
+        "httpStatus": 200,
+        "success": true,
+        "metaErr": null,
+        "feeLamports": 15000,
+        "targetTokenOwnerDelta": -18672300.86385,
+        "recipientTokenOwner": "AjVnhuqRRwzkfjMvzBiTgiDNbQTw9wW9FAxRLyyiK72D",
+        "recipientTokenOwnerDelta": 18672300.863849998,
+        "signerIdentityVerified": null,
+        "quoteLegVerified": false
+      }
+    ],
+    "classification": "successful_target_token_outflow_to_shared_token_owner; swap_quote_leg_and_signer_identity_unverified; not proof_of_common_control"
+  },
+  "paperForward": {
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "reviewScriptGeneratedAt": "2026-10-22T15:02:56.021Z",
+    "tradeCount": 311,
+    "lastTradeId": "1792647072099:310",
+    "newTrades": 0,
+    "newClosedRounds": 0,
+    "multiarmCheckpoint": {
+      "savedAt": "2026-10-22T15:06:58.791Z",
+      "tradeCount": 311,
+      "lastTradeId": "1792647072099:310",
+      "cursorMatchesMainLedger": true,
+      "reportedCompletePairIds": ["1792274973724:305", "1792567092580:307", "1792645698811:309"],
+      "newCompletePairIds": [],
+      "cumulativeQuoteGapCount": 105,
+      "quoteGapReasons": {
+        "missing_quote": 58,
+        "pre_entry_quote": 6,
+        "out_of_order_quote": 39,
+        "stale_quote": 2
+      },
+      "incrementalArmMetrics": null
+    },
+    "accountSnapshot": {
+      "cashUsd": 44.348991189490235,
+      "realizedPnlUsd": -135.46948229910913,
+      "freshOpenPositions": 3,
+      "freshOpenUnrealizedUsd": -8.564803612843548,
+      "openMarkAsOf": "2026-10-22T15:02:50.468Z",
+      "cashAdjustmentIsProfit": false
+    },
+    "quoteOpportunityScheduler": null,
+    "strategyApiReadThisRound": false
+  },
+  "fourFlap": {
+    "four": {
+      "proofAt": "2026-10-22T15:06:57.408Z",
+      "sourceTips": [129151094, 129151094],
+      "headSpread": 0,
+      "safeHead": 129151091,
+      "proofCursorNextBlock": 129151080,
+      "liveCursorNextBlock": 129151080,
+      "lagBlocks": 12,
+      "cursorMatchesProof": true
+    },
+    "flap": {
+      "proofAt": "2026-10-22T15:05:52.188Z",
+      "sourceTips": [129150950, 129150950],
+      "headSpread": 0,
+      "safeHead": 129150947,
+      "proofCursorNextBlock": 129150925,
+      "proofLagBlocks": 23,
+      "laterStateAt": "2026-10-22T15:06:31.651Z",
+      "laterStateCursorNextBlock": 129151039,
+      "laterStateHealth": "healthy",
+      "laterStateError": null,
+      "currentLagBlocks": null,
+      "capacityWaitResolved": null
+    },
+    "note": "Flap worker cursor advanced beyond its last verified head snapshot. Four current proof and cursor match. This is checkpoint evidence, not uninterrupted coverage."
+  },
+  "agenticWalletMonitoring": {
+    "officialSourceChecks": [
+      "https://www.binance.com/en/support/faq/detail/3ff00e2d488a41c4aaa4aabb6fc36763",
+      "https://developers.binance.com/en/docs/products/agentic-wallet/welcome",
+      "https://www.four.meme/en/agentic",
+      "https://flap.sh/event/bstocks?lang=en"
+    ],
+    "officialAiProExclusiveLaunchRuleFound": false,
+    "identityAndSuccessfulBuyPairObserved": false,
+    "fullChainScan": false,
+    "triggerFired": false,
+    "walletConnected": false,
+    "signing": false,
+    "broadcast": false,
+    "paperExecution": false
+  },
+  "mainRuntime": {
+    "pid": 48659,
+    "startedAt": "2026-10-21T10:38:45.834Z",
+    "updatedAt": "2026-10-22T15:04:11.142Z",
+    "continuousUptimeProven": false
+  },
+  "bscRuntime": {
+    "pid": 88295,
+    "startedAt": "2026-10-22T13:11:43.165Z",
+    "updatedAt": "2026-10-22T15:04:15.941Z",
+    "continuousUptimeProven": false
+  },
+  "nextQuestion": "Rotate to BSC A/B; parse the GMGN activities/next response shape correctly on a future refresh, preserve all cursors and verify Four/Flap current lag only from contemporaneous head and cursor snapshots."
+}

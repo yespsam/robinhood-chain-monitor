@@ -27,6 +27,7 @@ import { createTwitterNarrativeMonitor } from '../src/twitter-narrative-monitor.
 import { createEthGasMonitor } from '../src/paper-eth-gas.js';
 import { createChainGasMonitor } from '../src/paper-chain-gas.js';
 import { createJevResearchMonitor } from '../src/jev-research-pilot.js';
+import { createLaunchUpdateCoverageReader } from '../src/launch-update-coverage.js';
 
 const PROJECT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DASHBOARD = path.join(PROJECT, 'dashboard');
@@ -121,7 +122,7 @@ async function researchTeamSnapshot({ market, chain, address } = {}) {
   };
 }
 
-export function createDashboardServer({ host = '127.0.0.1', port = 4173, market = readonlyMarket, strategyRuntime = null, mainPaperSnapshot = null, squareKeyStore = createSquareKeyStore({ publicationReceiptFile: path.join(PROJECT, 'data', 'binance-square-test-20260922.json') }) } = {}) {
+export function createDashboardServer({ host = '127.0.0.1', port = 4173, market = readonlyMarket, strategyRuntime = null, mainPaperSnapshot = null, launchUpdateCoverage = null, squareKeyStore = createSquareKeyStore({ publicationReceiptFile: path.join(PROJECT, 'data', 'binance-square-test-20260922.json') }) } = {}) {
   const squareKeyRoute = createSquareKeyRoute(squareKeyStore);
   const server = http.createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store'); response.setHeader('X-Content-Type-Options', 'nosniff');
@@ -139,7 +140,11 @@ export function createDashboardServer({ host = '127.0.0.1', port = 4173, market 
       }
       if (url.pathname === '/api/strategy-state') {
         if (request.method !== 'GET') { json(response, { error: '只读接口' }, 405); return; }
-        await strategyJson(request, response, strategyRuntime?.snapshot() || { status: 'loading', mode: 'paper', execution: false, signing: false, broadcast: false, account: null, strategies: [], lastError: '模拟引擎未启动' }); return;
+        const snapshot = strategyRuntime?.snapshot() || { status: 'loading', mode: 'paper', execution: false, signing: false, broadcast: false, account: null, strategies: [], lastError: '模拟引擎未启动' };
+        // Coverage is a separate, cached read-only projection, never persisted to a ledger.
+        let coverage;
+        if (launchUpdateCoverage) { try { coverage = await launchUpdateCoverage(); } catch { coverage = { version: 'launch_update_coverage_v1', status: 'unavailable' }; } }
+        await strategyJson(request, response, coverage ? { ...snapshot, launchUpdateCoverage: coverage } : snapshot); return;
       }
       if(url.pathname==='/api/main-paper-state'){
         if(request.method!=='GET'){json(response,{error:'原主盘只读'},405);return;}
@@ -246,8 +251,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
     higherFrequencyResearch: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0',
     minimalEntryMode: confirmedMode && process.env.PAPER_MINIMAL_ENTRY === '1',
     evidenceGapExitMode: process.env.PAPER_EVIDENCE_GAP_EXIT !== '0',
+    // New v3 opt-in only. Retired v1/v2 flags cannot activate or select an arm.
+    profitRetentionShadow: process.env.PAPER_PROFIT_RETENTION_MULTIARM_SHADOW === '1',
     memeExitMode: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0',
     recoveryMode: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0' && process.env.PAPER_RECOVERY_MODE !== '0',
+    narrativeAdmissionGate: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0' && process.env.PAPER_RECOVERY_MODE !== '0',
     continuousPaperMode: confirmedMode && process.env.PAPER_CONTINUOUS_MODE !== '0',
     opportunityMode: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0',
     thesisExitExperiment: !estimatedFeeMode && confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_EXIT_COMPARISON !== '0',
@@ -261,7 +269,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
       enabled:old.enabled,session:old.session,account:old.account,updatedAt:old.account.updatedAt,
       costModel:'原主盘只读保留；估算费用测试盘为独立账本，不合并成绩'};
   }:null;
-  const app = createDashboardServer({ port, strategyRuntime,mainPaperSnapshot });
+  const app = createDashboardServer({ port, strategyRuntime,mainPaperSnapshot, launchUpdateCoverage: createLaunchUpdateCoverageReader({dataDir:path.resolve(process.env.DATA_DIR || path.join(PROJECT,'data'))}) });
   app.listen().then(async address => {
     console.log(`yesp atm 模拟盘：http://${address.address}:${address.port}（仅模拟盘）`);
     try { await strategyRuntime.start(); await socialMonitor?.start(); await alphaMonitor?.start(); twitterNarrativeMonitor.start(); } catch (error) { console.error(`模拟引擎/消息发现启动失败：${error.message}`); }

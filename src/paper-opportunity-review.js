@@ -3,12 +3,29 @@ import { admissionCosts } from './paper-cost-policy.js';
 import { GAS_ACCOUNT_ONLY } from './paper-chain-gas.js';
 export const OPPORTUNITY_REVIEW_VERSION = 'opportunity_review_v2';
 export const MEME_STRUCTURE_ENTRY_VERSION = 'meme_structure_entry_v1';
+export const PULLBACK_TARGET_SELECTION_VERSION = 'pullback_nearest_observed_level_v1';
 export const REFERENCE_COST_VERSION = 'gmgn_reference_cost_v1';
 const positive = n => typeof n === 'number' && Number.isFinite(n) && n > 0;
 export const ema = (rows, period) => rows.reduce((v,r,i) => i ? r.close*2/(period+1)+v*(1-2/(period+1)) : r.close, 0);
 export function candleVolatility(rows) {
   const ranges = rows.slice(-15).map((r,i,a) => Math.max(r.high-r.low, i ? Math.abs(r.high-a[i-1].close) : 0, i ? Math.abs(r.low-a[i-1].close) : 0));
   return ranges.reduce((a,b)=>a+b,0)/ranges.length;
+}
+
+// Reconstruct both levels from the SAME closed pre-entry window. A distant
+// peak remains an upside scenario, not permission to ignore nearer observed
+// prices when deciding whether local space covers costs. An individual high
+// is an observed level, not proof of a strong resistance or a future fill.
+export function pullbackTargetSelection(rows, price) {
+  const history=Array.isArray(rows)?rows.slice(0,-3):[];
+  const peak=history.length&&history.every(r=>positive(r?.high))?Math.max(...history.map(r=>r.high)):null;
+  const nearbyObservedLevel=positive(price)&&Array.isArray(rows)
+    ?rows.slice(0,-1).map(r=>r?.high).filter(n=>positive(n)&&n>price*1.005).sort((a,b)=>a-b)[0]??null:null;
+  const targetPrice=positive(peak)?Math.min(peak,nearbyObservedLevel??peak):null;
+  return {targetSelectionVersion:PULLBACK_TARGET_SELECTION_VERSION,targetPrice,nearbyObservedLevel,
+    upsideScenarioTargetPrice:peak,
+    targetKind:nearbyObservedLevel!==null&&nearbyObservedLevel<peak
+      ?'近端已观察上方价位，非确认强阻力或保证可达':'历史峰值情景，非保证可达'};
 }
 
 export function reviewStructurePattern(route, chart, price, pattern, { evidenceExit = false } = {}) {
@@ -23,6 +40,7 @@ export function reviewStructurePattern(route, chart, price, pattern, { evidenceE
   const priorResistance = rows.slice(0,-1).map(r=>r.high).filter(n=>n>price*1.005).sort((a,b)=>a-b)[0];
   const targetPrice = route.id === 'external_pullback' ? pattern.peak
     : priorResistance || Math.min(price*2, (route.id === 'external_breakout' ? pattern.resistance : price) + rangeHigh-rangeLow);
+  const pullbackTarget=evidenceExit&&route.id==='external_pullback'?pullbackTargetSelection(rows,price):null;
   let reason = pattern.reason;
   if (route.id === 'external_trend') {
     const separation = pattern.ema8/pattern.ema21-1, slope = pattern.ema8/pattern.priorEma8-1;
@@ -34,6 +52,7 @@ export function reviewStructurePattern(route, chart, price, pattern, { evidenceE
   return { ...pattern, reviewVersion:OPPORTUNITY_REVIEW_VERSION, ready:pattern.ready && !reason, reason,
     atr, rangeHigh, rangeLow, support, targetPrice,
     targetKind:priorResistance || route.id==='external_pullback' ? '已观察历史压力位，非保证可达' : '已观察区间幅度投影，非收益预测',
+    ...(pullbackTarget||{}),
     reclaimPrice: route.id==='external_breakout' ? pattern.resistance : route.id==='external_pullback' ? chart.previous.high : pattern.ema8 };
 }
 

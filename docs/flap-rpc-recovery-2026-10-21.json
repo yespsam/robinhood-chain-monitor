@@ -1,0 +1,232 @@
+{
+  "schema": "flap_rpc_recovery_evidence_v1",
+  "status": "deployed_and_contiguous_scan_recovery_verified",
+  "validatedAt": "2026-10-20T18:11:34.991Z",
+  "scope": "paper_only_no_ledger_rewrite_no_limit_or_dual_source_bypass",
+  "rootCause": {
+    "providerHost": "bsc.rpc.sentio.xyz",
+    "method": "eth_getLogs",
+    "oldAssumedBlockLimit": 10000,
+    "observedBlockLimit": 1000,
+    "observedAt": "2026-10-20T17:33:19.291Z",
+    "httpStatus": 429,
+    "providerMessage": "public eth_getLogs is limited to 1000 blocks",
+    "diagnosticPhysicalRequests": 3,
+    "diagnosticGateRefusals": 4,
+    "diagnosticsUsedOriginalSharedPool": true
+  },
+  "tests": {
+    "preliminaryFullSuite": {
+      "command": "node --test --test-concurrency=2 --test-reporter=spec",
+      "passed": 4233,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 333117.393375,
+      "log": "/tmp/flap-rpc-full-20261021-uZq628"
+    },
+    "fullSuite": {
+      "command": "node --test --test-concurrency=2 --test-reporter=spec",
+      "passed": 4252,
+      "failed": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "durationMs": 280063.378,
+      "log": "/tmp/flap-rpc-final-20261021-UwhvGa"
+    },
+    "finalKeySuites": { "passed": 537, "failed": 0, "durationSeconds": 72 },
+    "finalFourFileRetest": { "passed": 69, "failed": 0 },
+    "focused": {
+      "flapQuoteMonitor": 166,
+      "rpcHostCoordinator": 27,
+      "rpcBodyRetryAfter": 23
+    }
+  },
+  "sourceSha256": {
+    "src/rpc-host-coordinator.js": "d0f4da7fa7029c68ee66d993517bf211a2561840f0c020b0329cefb32c1687eb",
+    "src/flap-quote-monitor.js": "7ebfe8aaa1f3944af54637e75cd38c0306b6b57b6c246ad73779e818b05364c3",
+    "src/bsc-launchpad-monitor.js": "ae8e5453616a92c0977dc8645a33c1ffdf6f0ad188bed4812c515f159dcc47de",
+    "src/four-registry-monitor.js": "fb6c93c4329ac78006c5ac39ec602a9520304fb3207b0e7d3c784ecb4ec315d6",
+    "src/bsc-inner-trade-monitor.js": "33d0cef6c673aa8eef0de36f68e6a624b6723b4b82e0b59dad49224b4b68e12e",
+    "src/paper-internal-depth.js": "654b8e92aa134f771eddcbe07b3be87f6b33cbd1863ca8977a02e4374a0537b2"
+  },
+  "revisionReason": "Removed the newly introduced all-method 1000ms gap after integration review found conflict with the existing 200ms depth queue budget. Original shared limits/cooldowns remain unchanged. Explicit inner/depth timeouts now cool only the failed method for the original 30 seconds; HTTP 429/503 and other network failures retain host cooldown.",
+  "initialCoordinatorSha256": "c5552b4e0dbdffe905a3c45e5087f5fa7d998c160dde5c490124ea5b48e03918",
+  "deployment": {
+    "release": "initial",
+    "signal": "SIGTERM",
+    "mainOldPid": 76849,
+    "mainSignalAt": "2026-10-20T17:45:13.637Z",
+    "oldBscExitedAt": "2026-10-20T17:45:21.824Z",
+    "mainShutdownCompleteAt": "2026-10-20T17:47:37.473Z",
+    "mainNewPid": 89947,
+    "mainNewStartedAt": "2026-10-20T17:47:38.347Z",
+    "bscNewPid": 89949,
+    "dashboardOldPid": 77576,
+    "dashboardNewPid": 90124,
+    "independentGmgnXWorkerPidUnchanged": 829,
+    "continuousCollectionDuringDeployment": false,
+    "forcedKill": false,
+    "manualCooldownOrLockEdits": false,
+    "backupDirectory": "data/backups/flap-rpc-20261021-OcLTom"
+  },
+  "finalDeployment": {
+    "signal": "SIGTERM",
+    "mainOldPid": 89947,
+    "mainSignalAt": "2026-10-20T18:05:40.201Z",
+    "oldBscExitedAt": "2026-10-20T18:05:49.879Z",
+    "mainShutdownCompleteAt": "2026-10-20T18:08:10.756Z",
+    "mainNewPid": 97224,
+    "mainNewStartedAt": "2026-10-20T18:08:11.560Z",
+    "bscNewPid": 97226,
+    "dashboardOldPid": 90124,
+    "dashboardNewPid": 97377,
+    "independentGmgnXWorkerPidUnchanged": 829,
+    "continuousCollectionDuringDeployment": false,
+    "forcedKill": false,
+    "manualCooldownOrLockEdits": false,
+    "finalSourceArchive": "data/backups/flap-rpc-20261021-OcLTom/release-source-final.tgz"
+  },
+  "ledgerBaseline": {
+    "checkedAt": "2026-10-20T17:45:06.461Z",
+    "tradeCount": 307,
+    "lastTradeId": "1792275648715:306",
+    "prefix307Sha256": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437",
+    "sealedLegacyFileSha256": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36"
+  },
+  "apiAfterDeployment": {
+    "checkedAt": "2026-10-20T18:09:03.236Z",
+    "status": 200,
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "exitMonitorRunning": true,
+    "exitMonitorLastError": null,
+    "multiarmVersion": "profit_retention_multiarm_v3",
+    "multiarmStatus": "observing",
+    "quoteOpportunityScheduler": "evidence_preserving_event_lease_v1",
+    "innerCoverage": {
+      "status": "unavailable",
+      "lastErrorAt": "2026-10-20T18:08:57.301Z",
+      "code": "RPC_COORDINATOR_UNAVAILABLE",
+      "reason": "shared RPC coordinator: capacity wait deadline",
+      "physicalRequests": 0,
+      "note": "A separate inner-monitor round safely refused local contention; not new upstream failure or proof that all collection lanes recovered."
+    }
+  },
+  "cursorBefore": {
+    "nextBlock": 128103371,
+    "afterLogIndex": -1,
+    "anchorBlock": 128103370,
+    "anchorBlockHash": "0xc0f5445175a135ce2db493a3eaa88a011e47e29c3a423d37183c6eac8e6ed395",
+    "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+  },
+  "cursorProgressObservations": [
+    {
+      "release": "initial",
+      "observedAt": "2026-10-20T18:04:34.533Z",
+      "cycleStartedAt": "2026-10-20T18:04:11.010Z",
+      "nextBlock": 128104371,
+      "anchorBlock": 128104370,
+      "anchorBlockHash": "0xd71469b12d21e0896b372adefd5170ef20ba825658461a034b0b9ebac7d5b823",
+      "verifiedIdentityBlock": 128790869,
+      "status": "healthy",
+      "eventCount": 30
+    },
+    {
+      "release": "initial",
+      "observedAt": "2026-10-20T18:04:49.543Z",
+      "cycleStartedAt": "2026-10-20T18:04:11.010Z",
+      "nextBlock": 128105371,
+      "anchorBlock": 128105370,
+      "anchorBlockHash": "0x52ba9b10b08bd6f0aa4c602289b8e69052cb65b552a6afbebcc08d83a05479fc",
+      "status": "healthy",
+      "eventCount": 30
+    },
+    {
+      "release": "initial",
+      "observedAt": "2026-10-20T18:05:36.143Z",
+      "nextBlock": 128109371,
+      "anchorBlock": 128109370,
+      "anchorBlockHash": "0x6048790f3943408d1f274087136e78646e72f4832bd130b2ec15bacc14cc2149",
+      "status": "healthy",
+      "eventCount": 30
+    },
+    {
+      "release": "final",
+      "observedAt": "2026-10-20T18:08:37.886Z",
+      "cycleStartedAt": "2026-10-20T18:08:11.586Z",
+      "nextBlock": 128112371,
+      "anchorBlock": 128112370,
+      "anchorBlockHash": "0x72037b0211bed188ff7ad55c3b2024447256001731d6eb0dee3b37d289403a47",
+      "verifiedIdentityBlock": 128791406,
+      "status": "healthy",
+      "eventCount": 30
+    },
+    {
+      "release": "final",
+      "observedAt": "2026-10-20T18:08:57.387Z",
+      "cycleStartedAt": "2026-10-20T18:08:11.586Z",
+      "nextBlock": 128115371,
+      "anchorBlock": 128115370,
+      "anchorBlockHash": "0xdaf34494f77cd64f4c60d0b9a00640a24b5e0face827caf59e123729edff8bcf",
+      "verifiedIdentityBlock": 128791406,
+      "status": "healthy",
+      "eventCount": 30
+    }
+  ],
+  "postDeploymentFailures": [
+    {
+      "at": "2026-10-20T17:47:53.507Z",
+      "errorCode": "FLAP_QUOTE_PORTAL_IMPLEMENTATION_INVALID",
+      "transport": "Sentio getCode request timed out after 6750ms",
+      "nextAttemptAt": "2026-10-20T17:52:53.507Z",
+      "note": "Entered HTTP transport phase, not a local capacity timeout; does not establish that the provider received the request or that the version hash mismatched."
+    }
+  ],
+  "ledgerAfterValidation": {
+    "checkedAt": "2026-10-20T18:08:57.387Z",
+    "tradeCount": 307,
+    "lastTradeId": "1792275648715:306",
+    "prefix307Sha256": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437",
+    "sealedLegacyFileSha256": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36",
+    "matchesBaseline": true
+  },
+  "finalRuntimeFollowup": {
+    "observedAt": "2026-10-20T18:11:34.991Z",
+    "nextBlock": 128137371,
+    "anchorBlock": 128137370,
+    "anchorBlockHash": "0x9e249d744abeaef1ac80e869e93ea3a50440010571c9ebde516cc4c042830256",
+    "verifiedIdentityBlock": 128791538,
+    "status": "degraded",
+    "consecutiveFailures": 1,
+    "lastErrorAt": "2026-10-20T18:11:11.690Z",
+    "lastErrorCode": "FLAP_QUOTE_SCAN_ANCHOR_INVALID",
+    "cause": "Sentio getBlock rejected by existing shared host/method cooldown; not a new HTTP 429 or proven reorg",
+    "nextAttemptAt": "2026-10-20T18:11:41.668Z",
+    "reorgCount": 0,
+    "priorCapacityRefusalRecovered": {
+      "failedAt": "2026-10-20T18:08:59.401Z",
+      "retainedNextBlock": 128115371,
+      "recoveredCycleStartedAt": "2026-10-20T18:09:11.618Z",
+      "observedAt": "2026-10-20T18:10:19.610Z",
+      "nextBlock": 128127371,
+      "status": "healthy"
+    }
+  },
+  "remainingCoverage": {
+    "flapContiguousBlocksAdvanced": 34000,
+    "newFlapEvents": 0,
+    "flapBacklogRelativeToVerifiedBlock": 654168,
+    "caughtUp": false,
+    "allRpcErrorsEliminated": false,
+    "otherLanesStillHaveCapacityOrTimeoutGaps": true,
+    "unrelatedRobinhoodStartupGap": {
+      "chainId": 4663,
+      "observedAt": "2026-10-20T18:08:14.794Z",
+      "from": 93645096,
+      "to": 93646154,
+      "existingPolicyChanged": false
+    }
+  }
+}

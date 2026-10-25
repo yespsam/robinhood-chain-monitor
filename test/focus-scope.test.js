@@ -236,10 +236,9 @@ const strictFlapQuoteAssetEvent = (pool = strictFlapQuoteAsset(), changeOverride
   changes: { newFlapPools: [pool], ...changeOverrides },
 });
 
-const strictFlapPortalQuoteAssetEvent = () => {
+const strictFlapPortalQuoteAssetEvent = ({ blockNumber = 123_700_000, portalIdentity = {} } = {}) => {
   const portal = "0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0";
   const transactionHash = `0x${"ab".repeat(32)}`;
-  const blockNumber = 119_700_000;
   const blockHash = `0x${"cd".repeat(32)}`;
   const finalizedHead = blockNumber + 2;
   const finalizedHeadHash = `0x${"ef".repeat(32)}`;
@@ -288,6 +287,7 @@ const strictFlapPortalQuoteAssetEvent = () => {
     portalVersion: "v5.24.0",
     portalImplementation: "0x27a0f9Da7F5BEAd616fe0bf02bf0c793bece4e20",
     portalImplementationCodeHash: "0xb191694f7248773f714234aeb150149a2b9af5d1ab483a53d31c19ec3132b230",
+    ...portalIdentity,
     eventSignature: "QuoteTokenConfigurationSet(address,(uint8,uint8,uint8,uint8,uint8))",
     topic0: "0x9a1f38e55c729ebf0c45d240a00b09f0a79a715df7cfd6e8942bd3f8da839199",
     logIndex,
@@ -1088,6 +1088,55 @@ test("focus3 accepts the direct Flap Portal quote event only when board metadata
     assert.equal(isStrictFlapPortalQuoteAssetUpdate(event), false, label);
     assert.equal(isStrictFlapQuoteAssetUpdate(event), false, label);
     assert.equal(isMonitoringSourceEnabled(focusConfig, event), false, label);
+  }
+});
+
+test("focus3 retains exact historical Flap Portal identities only within their verified block windows", () => {
+  const v525 = {
+    portalVersion: "v5.25.0",
+    portalImplementation: "0xE13227370996f892a56d2Ff4a30f6026887B48Fb",
+    portalImplementationCodeHash: "0xf8d56fe09f2ec5e3eeaabdbfeeb0faf55e4ed8996a55bc1b69a78e62dbb792e4",
+  };
+  const v523 = {
+    portalVersion: "v5.23.1",
+    portalImplementation: "0xAb8Ec926b6e113c2212aF152b086eA62d1FDced9",
+    portalImplementationCodeHash: "0x78653cdd7296d940ae531c86bc6700ae163f1f9dec002c2af3143c9ae6696a15",
+  };
+  for (const [label, head, identity, allowed] of [
+    ["v5.23 last verified block", 123_307_496, v523, true],
+    ["v5.23 after successor activation", 123_307_497, v523, false],
+    ["v5.24 before verified activation", 123_307_496, {}, false],
+    ["v5.24 activation", 123_307_497, {}, true],
+    ["v5.24 last verified block", 128_103_370, {}, true],
+    ["v5.24 unverified interval", 128_103_371, {}, false],
+    ["v5.24 at new identity", 128_501_895, {}, false],
+    ["v5.25 unverified interval", 128_501_894, v525, false],
+    ["v5.25 first verified block", 128_501_895, v525, true],
+    ["v5.25 later block", 128_501_999, v525, true],
+    ["unknown tuple", 128_501_895, { ...v525, portalVersion: "v5.26.0" }, false],
+    ["spliced implementation", 128_501_895, { portalVersion: v525.portalVersion }, false],
+    ["spliced code hash", 128_501_895, { ...v525, portalImplementationCodeHash: v523.portalImplementationCodeHash }, false],
+  ]) {
+    const event = strictFlapPortalQuoteAssetEvent({ blockNumber: head - 2, portalIdentity: identity });
+    const before = structuredClone(event);
+    assert.equal(isStrictFlapPortalQuoteAssetUpdate(event), allowed, label);
+    assert.equal(isMonitoringSourceEnabled(focusConfig, event), allowed, label);
+    assert.deepEqual(event, before, `${label}: retained proofs must never be rewritten`);
+  }
+
+  const current = strictFlapPortalQuoteAssetEvent({ blockNumber: 128_501_895, portalIdentity: v525 });
+  for (const [label, mutate] of [
+    ["receipt", (event) => { event.receiptProof.status = 0; }],
+    ["official source", (event) => { event.source.official = false; }],
+    ["time ordering", (event) => { event.observedAt = "2026-09-02T23:59:59.000Z"; }],
+    ["different finalized configuration block", (event) => {
+      event.onchainProof.configurationVerifiedAtBlock -= 1;
+      event.evidence.configurationVerifiedAtBlock -= 1;
+    }],
+  ]) {
+    const event = structuredClone(current);
+    mutate(event);
+    assert.equal(isStrictFlapPortalQuoteAssetUpdate(event), false, `v5.25 still enforces ${label}`);
   }
 });
 

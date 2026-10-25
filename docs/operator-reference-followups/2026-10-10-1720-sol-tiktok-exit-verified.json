@@ -1,0 +1,2268 @@
+{
+  "version": 1,
+  "mode": "read_only_public_reference_research",
+  "group": "sol",
+  "report": "docs/operator-reference-followups/2026-10-10-1720-sol-tiktok-exit-verified.md",
+  "evidence": "docs/operator-reference-followups/2026-10-10-1720-sol-tiktok-exit-verified.json",
+  "question": "TIKTOK直接转仓后，E已知退出能否核实成功与目标币净退出量？先核对到期D/E头页。",
+  "triggeredAt": "2026-10-10T09:20:39.928Z",
+  "startedAt": "2026-10-10T09:21:33.652Z",
+  "completedAt": "2026-10-10T09:27:18Z",
+  "configChecked": true,
+  "gmgnConfigChecks": 1,
+  "gmgnBusinessRequests": 2,
+  "gmgnBusinessDispatched": 2,
+  "gmgnSucceeded": 2,
+  "gmgnFailed": 0,
+  "rpcRequests": 1,
+  "rpcSucceeded": 1,
+  "returnedRows": 40,
+  "repeatedRows": 36,
+  "newRows": 4,
+  "newIndependentActivityVerifications": 1,
+  "newAddresses": 0,
+  "status": "tiktok_E_exit_verified_new_synchronized_negative_amount_example",
+  "summary": "D/E头页新增4条Benny’s活动、重复36条并连接旧锚点；同秒一对一买卖各一对，73秒后平台卖出金额均较低。TIKTOK E历史退出已按版本1核验成功，目标账户17838372.165068→0，衔接此前D→E转仓；不证明当前组内清仓或完整盈利。",
+  "elapsedFromHeartbeatSeconds": 398,
+  "timingNote": "采集已在09:22:29Z完成；证据整理、检查点校验与上下文恢复使总耗时超过约5分钟目标，未追加外部请求。",
+  "pages": [
+    {
+      "id": "D",
+      "chain": "sol",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "checkedAt": "2026-10-10T09:21:40.663Z",
+      "elapsedMs": 6836,
+      "payload": {
+        "activities": [
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "5frV1Gtf7xVceLH45rXxKq9ThX8dDwb42mbW2nDqXMwSuWiGjJAynXao6wWpTcH6Y7QuXRUj7LFw7xhikRZGa2nR",
+            "timestamp": 1791609031,
+            "event_type": "sell",
+            "token": {
+              "address": "EwYudQcf96PAGanfLA9q4Q8QSAUk1QzkbiC3jrbppump",
+              "symbol": "Benny's",
+              "logo": "https://gmgn.ai/external-res/c013d6a09c064c3147499be8724d3167_v2.webp",
+              "total_supply": "999924409.74195"
+            },
+            "token_amount": "10171816.862233",
+            "quote_amount": "1.064894945",
+            "cost_usd": "117.04260340495",
+            "buy_cost_usd": "187.05757109808",
+            "price_usd": "0.000011506558266843767",
+            "price": "0.00000010469073120593",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00164865",
+            "dex_native": "0.013311187",
+            "dex_usd": "1.46303256317",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "3Djep24WK2HMMC9MA4h45Ukt7tySiCkdemmk6QtbE2dED1x9DnpDJFMLES4F388Qsu7L5B5riaw8kaNDLZKd1tfz",
+            "timestamp": 1791608958,
+            "event_type": "buy",
+            "token": {
+              "address": "EwYudQcf96PAGanfLA9q4Q8QSAUk1QzkbiC3jrbppump",
+              "symbol": "Benny's",
+              "logo": "https://gmgn.ai/external-res/c013d6a09c064c3147499be8724d3167_v2.webp",
+              "total_supply": "999924409.74195"
+            },
+            "token_amount": "10171816.862233",
+            "quote_amount": "1.702380516",
+            "cost_usd": "187.05757109808",
+            "buy_cost_usd": null,
+            "price_usd": "0.00001838978951662095",
+            "price": "0.00000016736248194959",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0016482",
+            "dex_native": "0.021279757",
+            "dex_usd": "2.33821969916",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "4xDGT8QQpmRhR9wUcztZJGq2TFJSt8L3eJADkLrW68AsDqDavC6ZGihqGqjEaFCcjRQYKVCXiTMoA7pnsQbpCJ5E",
+            "timestamp": 1791593457,
+            "event_type": "sell",
+            "token": {
+              "address": "5mXnbBAKPaEzC7Yd9JfvgqDmVsf8L4hXGbgiA2NEpump",
+              "symbol": "Longboi",
+              "logo": "https://gmgn.ai/external-res/7f330b09fed25bba3301a178cab3959e_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "20632594.46263",
+            "quote_amount": "1.20530732",
+            "cost_usd": "131.920886174",
+            "buy_cost_usd": "143.45018559198",
+            "price_usd": "0.000006393809872671479",
+            "price": "0.00000005841763245931",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00164175",
+            "dex_native": "0.015066342",
+            "dex_usd": "1.6490111319",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "rFR6c7QZZDB1iawdC1PQdmwfei16dA8vexpHiGjP3q5QH7gsfqBgttRLnsZVYaQM8FAE2S7ERGJmfatRe3NxGLo",
+            "timestamp": 1791593432,
+            "event_type": "buy",
+            "token": {
+              "address": "5mXnbBAKPaEzC7Yd9JfvgqDmVsf8L4hXGbgiA2NEpump",
+              "symbol": "Longboi",
+              "logo": "https://gmgn.ai/external-res/7f330b09fed25bba3301a178cab3959e_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "20632594.46263",
+            "quote_amount": "1.311005169",
+            "cost_usd": "143.45018559198",
+            "buy_cost_usd": null,
+            "price_usd": "0.0000069526004522499904",
+            "price": "0.00000006354049033312",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0016413",
+            "dex_native": "0.016387566",
+            "dex_usd": "1.79312747172",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "2MKDc4KmrMGzU4vFypHhCZQKr8RqPt4ruCkiWgpMRaKnZcQL11gLLF9FE2bdFzySScyag7keRxyjb7GnsJA34Mk2",
+            "timestamp": 1791592075,
+            "event_type": "sell",
+            "token": {
+              "address": "DzrhHidK7nt9rtXYzKWvQvHitAywjGeDYhnTyEWZpump",
+              "symbol": "JUANITO",
+              "logo": "https://gmgn.ai/external-res/381a8dbd4115e7b7dff5054d6804f3b6_v2.webp",
+              "total_supply": "999292178.944332"
+            },
+            "token_amount": "19896503.028753",
+            "quote_amount": "1.469097132",
+            "cost_usd": "160.46947972836",
+            "buy_cost_usd": "149.1039778569",
+            "price_usd": "0.000008065210227971445",
+            "price": "0.00000007383695164306",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00163845",
+            "dex_native": "0.018363715",
+            "dex_usd": "2.00586858945",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "57x1keeMfPVXVMHxFqGSmrMEEgnwf2AsWDCQXUE6buid6jDHC1Bta2D2nVAG8iK4fvxrNEryTiyi3LQSKg1XC4Z7",
+            "timestamp": 1791592054,
+            "event_type": "buy",
+            "token": {
+              "address": "DzrhHidK7nt9rtXYzKWvQvHitAywjGeDYhnTyEWZpump",
+              "symbol": "JUANITO",
+              "logo": "https://gmgn.ai/external-res/381a8dbd4115e7b7dff5054d6804f3b6_v2.webp",
+              "total_supply": "999292178.944332"
+            },
+            "token_amount": "19896503.028753",
+            "quote_amount": "1.36504603",
+            "cost_usd": "149.1039778569",
+            "buy_cost_usd": null,
+            "price_usd": "0.000007493979099816182",
+            "price": "0.00000006860733406405",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00163845",
+            "dex_native": "0.017063077",
+            "dex_usd": "1.86379990071",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "Q9GLsnRKDGGYLjRTibw6Zi9YJhjX9CrYRRmoEm8fy5Qhm6CWakG3H2fXc7mXv4mkLNMvyYZqcXTe4yMYdbpccui",
+            "timestamp": 1791591240,
+            "event_type": "sell",
+            "token": {
+              "address": "7LVuFpj1vYiBvD4kp6oNHxwQ6AStGyFZGHWyUZ57pump",
+              "symbol": "angel",
+              "logo": "https://gmgn.ai/external-res/7d3e99147163a96cc3114565a7fd3286_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "23950478.174118",
+            "quote_amount": "0.741380418",
+            "cost_usd": "80.97356925396",
+            "buy_cost_usd": "80.09466619338",
+            "price_usd": "0.000003380874847895988",
+            "price": "0.00000003095472301681",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0016383",
+            "dex_native": "0.009267256",
+            "dex_usd": "1.01216970032",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "43vdgU27FKbzAhvH65DV47T5Uz5oNkUPuiPuEuV7PxzJqZpMhktM2tQsvdBmE7XUkSkkcS9QpnWVGtzkjEucCq89",
+            "timestamp": 1791591240,
+            "event_type": "buy",
+            "token": {
+              "address": "7LVuFpj1vYiBvD4kp6oNHxwQ6AStGyFZGHWyUZ57pump",
+              "symbol": "angel",
+              "logo": "https://gmgn.ai/external-res/7d3e99147163a96cc3114565a7fd3286_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "7901576.725184",
+            "quote_amount": "0.244444443",
+            "cost_usd": "26.69822206446",
+            "buy_cost_usd": null,
+            "price_usd": "0.0000033788474114748724",
+            "price": "0.00000003093616014901",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0016383",
+            "dex_native": "0.003055557",
+            "dex_usd": "0.33372793554",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "42pRQidetuhNm1toXARigFPvAxfWTtrcCDdQ13EoZhjQER68BJFvP9XnGEe4AFR1UaBgMtcN5yfow3xpPUAFywZo",
+            "timestamp": 1791591239,
+            "event_type": "buy",
+            "token": {
+              "address": "7LVuFpj1vYiBvD4kp6oNHxwQ6AStGyFZGHWyUZ57pump",
+              "symbol": "angel",
+              "logo": "https://gmgn.ai/external-res/7d3e99147163a96cc3114565a7fd3286_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "7961812.514815",
+            "quote_amount": "0.244444443",
+            "cost_usd": "26.69822206446",
+            "buy_cost_usd": null,
+            "price_usd": "0.0000033532844455683434",
+            "price": "0.00000003070210992097",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0016383",
+            "dex_native": "0.003055557",
+            "dex_usd": "0.33372793554",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "3dnFKdPJ2pVFHBisUaRfjbg47Dtkov9jrfG37bYy3JVBfpbkJNFcUEL9AexfHwHG8EwLFn3wbqnrnhz9HKwhveDE",
+            "timestamp": 1791591239,
+            "event_type": "buy",
+            "token": {
+              "address": "7LVuFpj1vYiBvD4kp6oNHxwQ6AStGyFZGHWyUZ57pump",
+              "symbol": "angel",
+              "logo": "https://gmgn.ai/external-res/7d3e99147163a96cc3114565a7fd3286_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "8087088.934119",
+            "quote_amount": "0.244444443",
+            "cost_usd": "26.69822206446",
+            "buy_cost_usd": null,
+            "price_usd": "0.000003301338996263844",
+            "price": "0.0000000302265061002",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0016383",
+            "dex_native": "0.003055557",
+            "dex_usd": "0.33372793554",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "4ZQvoKVQSLWbUBmsShS9kWQ5oMaGgDgqqd8VYx4hBsmixE7D2nqHkoE8iieANKP6BVDVpToEAssM7koSaTBKRCBX",
+            "timestamp": 1791591167,
+            "event_type": "sell",
+            "token": {
+              "address": "BmF6dwpuuA67FXBDxZpsf2xP6hk39QLsoPbH4juQpump",
+              "symbol": "qpcsbdef",
+              "logo": "https://gmgn.ai/external-res/d5ac197f008e137c310d7582f4570c7f_v2.webp",
+              "total_supply": "959365983.046823"
+            },
+            "token_amount": "13045428.84016",
+            "quote_amount": "1.25821922",
+            "cost_usd": "137.2339703254",
+            "buy_cost_usd": "104.19108043176",
+            "price_usd": "0.000010519697896241557",
+            "price": "0.00000009644905011682",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00163605",
+            "dex_native": "0.015727741",
+            "dex_usd": "1.71542471087",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "4tSFq2LJEuGPVfGgsLiGcRdyWU56Mfv8A3szetNZ6WM5AQntE2MR8hYtuPw5gdXwvUUW8pUabQjDT1i6DK3smWvp",
+            "timestamp": 1791591101,
+            "event_type": "buy",
+            "token": {
+              "address": "BmF6dwpuuA67FXBDxZpsf2xP6hk39QLsoPbH4juQpump",
+              "symbol": "qpcsbdef",
+              "logo": "https://gmgn.ai/external-res/d5ac197f008e137c310d7582f4570c7f_v2.webp",
+              "total_supply": "959365983.046823"
+            },
+            "token_amount": "13045428.84016",
+            "quote_amount": "0.955180422",
+            "cost_usd": "104.19108043176",
+            "buy_cost_usd": null,
+            "price_usd": "0.000007986788453516231",
+            "price": "0.00000007321954944551",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0016362",
+            "dex_native": "0.011939757",
+            "dex_usd": "1.30238869356",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "LpBmEjAq21hUj49VRuSJa1D5rRJoratSdFG7p9WiaKuKAqAe4jdqxYPDvQiCVDbzuNyFszWuZXtvaTPXw3eDidf",
+            "timestamp": 1791590948,
+            "event_type": "sell",
+            "token": {
+              "address": "32oavsRr4YuBkpFNgXK5atCYaCEKkbWhotsLSLCnpump",
+              "symbol": "Starblo",
+              "logo": "https://gmgn.ai/external-res/fe103ff1befe44411b0be33b3990e472_v2.webp",
+              "total_supply": "999990576.69244"
+            },
+            "token_amount": "25665409.050573",
+            "quote_amount": "1.130517946",
+            "cost_usd": "123.226456114",
+            "buy_cost_usd": "113.1147153586",
+            "price_usd": "0.00000480126601026284",
+            "price": "0.00000004404831202076",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.001635",
+            "dex_native": "0.014131475",
+            "dex_usd": "1.540330775",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "3g3MpE9Xb8pT2cjFHYG6ybDfcvXDfMf8CrX7k2Lg9yvMj4MvMspQuPbP5vWYhAPifwyZkq8pSxdPRG8igLm7Sjq",
+            "timestamp": 1791590937,
+            "event_type": "buy",
+            "token": {
+              "address": "32oavsRr4YuBkpFNgXK5atCYaCEKkbWhotsLSLCnpump",
+              "symbol": "Starblo",
+              "logo": "https://gmgn.ai/external-res/fe103ff1befe44411b0be33b3990e472_v2.webp",
+              "total_supply": "999990576.69244"
+            },
+            "token_amount": "25665409.050573",
+            "quote_amount": "1.03803538",
+            "cost_usd": "113.1147153586",
+            "buy_cost_usd": null,
+            "price_usd": "0.000004407282780325826",
+            "price": "0.00000004044491860444",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00163455",
+            "dex_native": "0.012975444",
+            "dex_usd": "1.41393413268",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "2KYoij5TmZcri8WSLHoN6eusij1dexCwCCMeHkgdcPq3KXmn7vUYkvMGukEGRad5GCGSCLNF8zm2KG48PZEzZoXU",
+            "timestamp": 1791590932,
+            "event_type": "sell",
+            "token": {
+              "address": "32oavsRr4YuBkpFNgXK5atCYaCEKkbWhotsLSLCnpump",
+              "symbol": "Starblo",
+              "logo": "https://gmgn.ai/external-res/fe103ff1befe44411b0be33b3990e472_v2.webp",
+              "total_supply": "999990576.69244"
+            },
+            "token_amount": "12257873.572063",
+            "quote_amount": "0.880039421",
+            "cost_usd": "95.88909531216",
+            "buy_cost_usd": null,
+            "price_usd": "0.000007822653313270973",
+            "price": "0.00000007179380794118",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0016344",
+            "dex_native": "0.011000494",
+            "dex_usd": "1.19861382624",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "4MYndWSkVRipeUiWEagqipkdqrQfXb8efi5xRDW2TW4Br9bgTtXwdFDZYsu3W8br77BR5pG4K17akGAuy7GyDLci",
+            "timestamp": 1791590931,
+            "event_type": "buy",
+            "token": {
+              "address": "32oavsRr4YuBkpFNgXK5atCYaCEKkbWhotsLSLCnpump",
+              "symbol": "Starblo",
+              "logo": "https://gmgn.ai/external-res/fe103ff1befe44411b0be33b3990e472_v2.webp",
+              "total_supply": "999990576.69244"
+            },
+            "token_amount": "12257873.572063",
+            "quote_amount": "0.911989696",
+            "cost_usd": "99.37951717312",
+            "buy_cost_usd": null,
+            "price_usd": "0.000008107402690105865",
+            "price": "0.00000007440031834547",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00163455",
+            "dex_native": "0.011399873",
+            "dex_usd": "1.24224416081",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "5TzCUyvkBnGquvttSnHWxczCD8u3dBsu936udRZGifBxLnY6hpPrK8bevw66xmW9S6FfdJVJ1dEVRssG2SB44UGs",
+            "timestamp": 1791584039,
+            "event_type": "sell",
+            "token": {
+              "address": "2MEwjKxNiD1AJF4dAHH6xK4JezfXC9vKDWiUFSr4pump",
+              "symbol": "Xcreen",
+              "logo": "https://gmgn.ai/external-res/3008aa3eef743cf49c623d5594cc35f6_v2.webp",
+              "total_supply": "999999999.999999"
+            },
+            "token_amount": "21834363.133753",
+            "quote_amount": "0.746680125",
+            "cost_usd": "81.18652999125",
+            "buy_cost_usd": null,
+            "price_usd": "0.0000037182916439526155",
+            "price": "0.00000003419747672172",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00163095",
+            "dex_native": "0.009333503",
+            "dex_usd": "1.01483178119",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "3aqwFrWiS7aEJ4thpBf9EajMTC6NJbRoxq8aHKKG3238QiZXi3EsDc5B2tP1jriukhCTTgTGuEDD6rssZZoVFqf3",
+            "timestamp": 1791584006,
+            "event_type": "buy",
+            "token": {
+              "address": "2MEwjKxNiD1AJF4dAHH6xK4JezfXC9vKDWiUFSr4pump",
+              "symbol": "Xcreen",
+              "logo": "https://gmgn.ai/external-res/3008aa3eef743cf49c623d5594cc35f6_v2.webp",
+              "total_supply": "999999999.999999"
+            },
+            "token_amount": "21834363.133753",
+            "quote_amount": "0.882019526",
+            "cost_usd": "95.93726384302",
+            "buy_cost_usd": null,
+            "price_usd": "0.000004393865910140055",
+            "price": "0.00000004039593555337",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00163155",
+            "dex_native": "0.011025245",
+            "dex_usd": "1.19921589865",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "AAf19ZmoU8o32vUknbPPdwhhNRutur21VdVnps89QvLfSbi3WvsyahBoKLrzu5PpzYGQPCHA1AJPtKQAaTokke8",
+            "timestamp": 1791583907,
+            "event_type": "sell",
+            "token": {
+              "address": "7XG4ortkYTvSa3hAj4oCYGrRTDDccpsXwzoMLsxHpump",
+              "symbol": "OpenWhip",
+              "logo": "https://gmgn.ai/external-res/1289394a713b1c45c56a5b67a99bda2d_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "23691040.828631",
+            "quote_amount": "1.383914385",
+            "cost_usd": "150.5145285126",
+            "buy_cost_usd": "109.27704793445",
+            "price_usd": "0.000006353225660339005",
+            "price": "0.00000005841509433927",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0016314",
+            "dex_native": "0.017298931",
+            "dex_usd": "1.88143173556",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "2bkuGrCc7vDeE5CXTiYjyaDmxUydCQp1HZwZ9oFaLSDFc4DaeeqefcimHY2GJiMmuAt2tZxv2r5BFjhVEAjXGjuR",
+            "timestamp": 1791583862,
+            "event_type": "buy",
+            "token": {
+              "address": "7XG4ortkYTvSa3hAj4oCYGrRTDDccpsXwzoMLsxHpump",
+              "symbol": "OpenWhip",
+              "logo": "https://gmgn.ai/external-res/1289394a713b1c45c56a5b67a99bda2d_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "23691040.828631",
+            "quote_amount": "1.004476955",
+            "cost_usd": "109.27704793445",
+            "buy_cost_usd": null,
+            "price_usd": "0.00000461258957446797",
+            "price": "0.00000004239902173424",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00163185",
+            "dex_native": "0.012555963",
+            "dex_usd": "1.36596321477",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          }
+        ],
+        "next": "NDU1MDE5NTQ3MDExNjMwMzI6MDo6"
+      },
+      "identityMatches": true,
+      "returned": 20,
+      "unique": 20,
+      "newKeys": [
+        "sol:EwYudQcf96PAGanfLA9q4Q8QSAUk1QzkbiC3jrbppump:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:5frV1Gtf7xVceLH45rXxKq9ThX8dDwb42mbW2nDqXMwSuWiGjJAynXao6wWpTcH6Y7QuXRUj7LFw7xhikRZGa2nR",
+        "sol:EwYudQcf96PAGanfLA9q4Q8QSAUk1QzkbiC3jrbppump:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:3Djep24WK2HMMC9MA4h45Ukt7tySiCkdemmk6QtbE2dED1x9DnpDJFMLES4F388Qsu7L5B5riaw8kaNDLZKd1tfz"
+      ],
+      "overlap": 18,
+      "anchorIncluded": true,
+      "rootIdentityFields": "absent",
+      "identityConfirmed": true
+    },
+    {
+      "id": "E",
+      "chain": "sol",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "checkedAt": "2026-10-10T09:21:49.342Z",
+      "elapsedMs": 8679,
+      "payload": {
+        "activities": [
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "48TbMQLjpYW4W828wa8U8CLpw1mXuikiANmh5mu33kv6ec3vLokwBQ69c34KFxE2XSpahhRZ5aHx4hStNUPndwcN",
+            "timestamp": 1791609031,
+            "event_type": "sell",
+            "token": {
+              "address": "EwYudQcf96PAGanfLA9q4Q8QSAUk1QzkbiC3jrbppump",
+              "symbol": "Benny's",
+              "logo": "https://gmgn.ai/external-res/c013d6a09c064c3147499be8724d3167_v2.webp",
+              "total_supply": "999924409.74195"
+            },
+            "token_amount": "10266808.499195",
+            "quote_amount": "1.11558374",
+            "cost_usd": "122.6138088634",
+            "buy_cost_usd": "180.3036237272",
+            "price_usd": "0.00001194273847350043",
+            "price": "0.0000001086592527841",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00164865",
+            "dex_native": "0.013944798",
+            "dex_usd": "1.53267274818",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "54V9z55fxgEnyCXkJJrkALREzmx2iiXdL5YcZ5ypkQrxAjmceXjae7kxpvdPp5FcFiZ24FeHQDJaQCMbuyMiW5uT",
+            "timestamp": 1791608958,
+            "event_type": "buy",
+            "token": {
+              "address": "EwYudQcf96PAGanfLA9q4Q8QSAUk1QzkbiC3jrbppump",
+              "symbol": "Benny's",
+              "logo": "https://gmgn.ai/external-res/c013d6a09c064c3147499be8724d3167_v2.webp",
+              "total_supply": "999924409.74195"
+            },
+            "token_amount": "10266808.499195",
+            "quote_amount": "1.64091394",
+            "cost_usd": "180.3036237272",
+            "buy_cost_usd": null,
+            "price_usd": "0.000017561798658398554",
+            "price": "0.00000015982707188204",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0016482",
+            "dex_native": "0.020511425",
+            "dex_usd": "2.253795379",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "2XbbMgcBpQUhNtzveDdz5H3bFVVoAcgMNwREhLUJeksn3jCduj5CTBiz2LkVqoU5zDEgmQR5hUY44tuycJH1gqBt",
+            "timestamp": 1791593457,
+            "event_type": "sell",
+            "token": {
+              "address": "5mXnbBAKPaEzC7Yd9JfvgqDmVsf8L4hXGbgiA2NEpump",
+              "symbol": "Longboi",
+              "logo": "https://gmgn.ai/external-res/7f330b09fed25bba3301a178cab3959e_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "18512038.68658",
+            "quote_amount": "1.203556046",
+            "cost_usd": "131.7292092347",
+            "buy_cost_usd": "136.08325617012",
+            "price_usd": "0.000007115867218352013",
+            "price": "0.00000006501477586434",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00164175",
+            "dex_native": "0.015044452",
+            "dex_usd": "1.6466152714",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "4nXVWfYN7mx8fJqfR86i1ujvUakUc1oHR6drQSKCc1xUhuDPj8p4djqGbEFnnEtddcx74wexWSiC1P1NwMU5yqQo",
+            "timestamp": 1791593432,
+            "event_type": "buy",
+            "token": {
+              "address": "5mXnbBAKPaEzC7Yd9JfvgqDmVsf8L4hXGbgiA2NEpump",
+              "symbol": "Longboi",
+              "logo": "https://gmgn.ai/external-res/7f330b09fed25bba3301a178cab3959e_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "18512038.68658",
+            "quote_amount": "1.243678086",
+            "cost_usd": "136.08325617012",
+            "buy_cost_usd": null,
+            "price_usd": "0.000007351068052205803",
+            "price": "0.00000006718212440327",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0016413",
+            "dex_native": "0.015545977",
+            "dex_usd": "1.70104080334",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "3hvpbzRMVYYr6tPnKXeWof8U4BjRmc2BuVE14nYuiNc6ouG44YJHtmwK7CWBcCprLpFx4TWu5vNanzJx9UCaEMLw",
+            "timestamp": 1791592075,
+            "event_type": "sell",
+            "token": {
+              "address": "DzrhHidK7nt9rtXYzKWvQvHitAywjGeDYhnTyEWZpump",
+              "symbol": "JUANITO",
+              "logo": "https://gmgn.ai/external-res/381a8dbd4115e7b7dff5054d6804f3b6_v2.webp",
+              "total_supply": "999292178.944332"
+            },
+            "token_amount": "19542430.566033",
+            "quote_amount": "1.533161764",
+            "cost_usd": "167.46725948172",
+            "buy_cost_usd": null,
+            "price_usd": "0.00000856941816504664",
+            "price": "0.00000007845297230657",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00163845",
+            "dex_native": "0.019164523",
+            "dex_usd": "2.09334084729",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "2NtQcYvAwKiuxsL5w8ZQejpbT6jq3iFq3WNgfvwxZ3XkqZN4gPWCu6UygKmAjwTq41rrwmF19FnQtF2jUPja6623",
+            "timestamp": 1791592054,
+            "event_type": "buy",
+            "token": {
+              "address": "DzrhHidK7nt9rtXYzKWvQvHitAywjGeDYhnTyEWZpump",
+              "symbol": "JUANITO",
+              "logo": "https://gmgn.ai/external-res/381a8dbd4115e7b7dff5054d6804f3b6_v2.webp",
+              "total_supply": "999292178.944332"
+            },
+            "token_amount": "19542430.566033",
+            "quote_amount": "1.194873195",
+            "cost_usd": "130.51599908985",
+            "buy_cost_usd": null,
+            "price_usd": "0.000006678596024626921",
+            "price": "0.00000006114250686283",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00163845",
+            "dex_native": "0.014935916",
+            "dex_usd": "1.63145010468",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "5V3qBgXaADMqH4hj7bxi9Pvh5vCLeK1LGJQXe7cw2NxRGvH8JxYovLrMhDg5j5fReYVbqC76kGHRTa44RnfTQ6Pf",
+            "timestamp": 1791591157,
+            "event_type": "sell",
+            "token": {
+              "address": "BmF6dwpuuA67FXBDxZpsf2xP6hk39QLsoPbH4juQpump",
+              "symbol": "qpcsbdef",
+              "logo": "https://gmgn.ai/external-res/d5ac197f008e137c310d7582f4570c7f_v2.webp",
+              "total_supply": "959365983.046823"
+            },
+            "token_amount": "11817641.289683",
+            "quote_amount": "1.218583234",
+            "cost_usd": "132.95961666174",
+            "buy_cost_usd": null,
+            "price_usd": "0.000011250943686860247",
+            "price": "0.00000010311560523197",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00163665",
+            "dex_native": "0.015232291",
+            "dex_usd": "1.66199527101",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "5yvkWBwjWhFMnMc9dy2odpWn7QLJr4Hkzyg4jA4Nh4itaLu8rNoSU3LCk7XBy7hkzt9z6wPohhnxgGzpwe8LHtaC",
+            "timestamp": 1791591156,
+            "event_type": "sell",
+            "token": {
+              "address": "BmF6dwpuuA67FXBDxZpsf2xP6hk39QLsoPbH4juQpump",
+              "symbol": "qpcsbdef",
+              "logo": "https://gmgn.ai/external-res/d5ac197f008e137c310d7582f4570c7f_v2.webp",
+              "total_supply": "959365983.046823"
+            },
+            "token_amount": "365494.060505",
+            "quote_amount": "0.039305545",
+            "cost_usd": "4.28862801495",
+            "buy_cost_usd": "3.0334128451156888",
+            "price_usd": "0.00001173378305799128",
+            "price": "0.00000010754085838137",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00163665",
+            "dex_native": "0.00049132",
+            "dex_usd": "0.0536079252",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "4vZw8x7qR3WLCJYUNX2yMQ78HfaEVUbJ7wRFYWBgtMM5fHTWdsA1ag14zv4EKYytneq7Uu6jpXuyPAQsN1qYtTTD",
+            "timestamp": 1791591101,
+            "event_type": "buy",
+            "token": {
+              "address": "BmF6dwpuuA67FXBDxZpsf2xP6hk39QLsoPbH4juQpump",
+              "symbol": "qpcsbdef",
+              "logo": "https://gmgn.ai/external-res/d5ac197f008e137c310d7582f4570c7f_v2.webp",
+              "total_supply": "959365983.046823"
+            },
+            "token_amount": "12183135.350188",
+            "quote_amount": "0.926968844",
+            "cost_usd": "101.11376150352",
+            "buy_cost_usd": null,
+            "price_usd": "0.000008299486018757872",
+            "price": "0.00000007608623046166",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0016362",
+            "dex_native": "0.011587112",
+            "dex_usd": "1.26392217696",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "2pQgEpHoKpQqKSD8oZ2CoLjJchTmbK5Z59624gEpL4K4SrPc4gtQnepTH4PBJC1itF9GxcWJa7yRzbGjzZwHTGRh",
+            "timestamp": 1791590948,
+            "event_type": "sell",
+            "token": {
+              "address": "32oavsRr4YuBkpFNgXK5atCYaCEKkbWhotsLSLCnpump",
+              "symbol": "Starblo",
+              "logo": "https://gmgn.ai/external-res/fe103ff1befe44411b0be33b3990e472_v2.webp",
+              "total_supply": "999990576.69244"
+            },
+            "token_amount": "27085475.038053",
+            "quote_amount": "1.122740767",
+            "cost_usd": "122.378743603",
+            "buy_cost_usd": "106.98708914653",
+            "price_usd": "0.00000451824246874252",
+            "price": "0.00000004145176576828",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.001635",
+            "dex_native": "0.014034261",
+            "dex_usd": "1.529734449",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "3LENoAYtEJwPWx1ov17P2gy2n6H6qjHgNNvzDmo9H7bRuXoRQUaXWkYBCke2bEzqa7FtAFfnaZgJA2bq8G1gcDPx",
+            "timestamp": 1791590937,
+            "event_type": "buy",
+            "token": {
+              "address": "32oavsRr4YuBkpFNgXK5atCYaCEKkbWhotsLSLCnpump",
+              "symbol": "Starblo",
+              "logo": "https://gmgn.ai/external-res/fe103ff1befe44411b0be33b3990e472_v2.webp",
+              "total_supply": "999990576.69244"
+            },
+            "token_amount": "27085475.038053",
+            "quote_amount": "0.981803149",
+            "cost_usd": "106.98708914653",
+            "buy_cost_usd": null,
+            "price_usd": "0.000003949980164505827",
+            "price": "0.00000003624832673677",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00163455",
+            "dex_native": "0.01227254",
+            "dex_usd": "1.3373386838",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "5SW2Tf2K1bPKQQ331bnbEL4B5KkQjdrnLd9nKd6aTJWLwPBKbNrdNuriKQxEF7AHmEVvzq1Dp3Ah8nMCocJ1WCom",
+            "timestamp": 1791590932,
+            "event_type": "sell",
+            "token": {
+              "address": "32oavsRr4YuBkpFNgXK5atCYaCEKkbWhotsLSLCnpump",
+              "symbol": "Starblo",
+              "logo": "https://gmgn.ai/external-res/fe103ff1befe44411b0be33b3990e472_v2.webp",
+              "total_supply": "999990576.69244"
+            },
+            "token_amount": "13943704.742866",
+            "quote_amount": "0.922233529",
+            "cost_usd": "100.48656531984",
+            "buy_cost_usd": null,
+            "price_usd": "0.000007206590154689328",
+            "price": "0.0000000661397774843",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0016344",
+            "dex_native": "0.01152792",
+            "dex_usd": "1.2560821632",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "5h6AcNyq5mTkYB9VVyiXF4jFHuzkCv4UHBbJV5G4dHKiedXBh1pnRJm4NQLDXA2h6XV2Ftt6B8Zd5rVvTbdV8VnJ",
+            "timestamp": 1791590931,
+            "event_type": "buy",
+            "token": {
+              "address": "32oavsRr4YuBkpFNgXK5atCYaCEKkbWhotsLSLCnpump",
+              "symbol": "Starblo",
+              "logo": "https://gmgn.ai/external-res/fe103ff1befe44411b0be33b3990e472_v2.webp",
+              "total_supply": "999990576.69244"
+            },
+            "token_amount": "13943704.742866",
+            "quote_amount": "0.954335575",
+            "cost_usd": "103.99394760775",
+            "buy_cost_usd": null,
+            "price_usd": "0.000007458128920934807",
+            "price": "0.00000006844203836776",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00163455",
+            "dex_native": "0.011929195",
+            "dex_usd": "1.29992437915",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "2YHxNGc2SaQeDfz59Erv7gVuocPokhTxWAy3Vw5tgaidAeP59LSySyK3QKnybwhkMT7TbvPGW1nSLNWDQRBACdDq",
+            "timestamp": 1791584039,
+            "event_type": "sell",
+            "token": {
+              "address": "2MEwjKxNiD1AJF4dAHH6xK4JezfXC9vKDWiUFSr4pump",
+              "symbol": "Xcreen",
+              "logo": "https://gmgn.ai/external-res/3008aa3eef743cf49c623d5594cc35f6_v2.webp",
+              "total_supply": "999999999.999999"
+            },
+            "token_amount": "25751944.230658",
+            "quote_amount": "0.798393133",
+            "cost_usd": "86.80928535109",
+            "buy_cost_usd": null,
+            "price_usd": "0.000003370979859755541",
+            "price": "0.00000003100321769296",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00163095",
+            "dex_native": "0.009979915",
+            "dex_usd": "1.08511615795",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "5cF9pffKdeq1mT7ohZDKGuyoJAEbfzudSHDwpaa18hWVkSrbUJv2dGvqtkfeQZzo1BuXPDH4aYC7Eszx3pBHHHFS",
+            "timestamp": 1791584006,
+            "event_type": "buy",
+            "token": {
+              "address": "2MEwjKxNiD1AJF4dAHH6xK4JezfXC9vKDWiUFSr4pump",
+              "symbol": "Xcreen",
+              "logo": "https://gmgn.ai/external-res/3008aa3eef743cf49c623d5594cc35f6_v2.webp",
+              "total_supply": "999999999.999999"
+            },
+            "token_amount": "25751944.230658",
+            "quote_amount": "0.987011128",
+            "cost_usd": "107.35720039256",
+            "buy_cost_usd": null,
+            "price_usd": "0.000004168896896908554",
+            "price": "0.00000003832763534898",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00163155",
+            "dex_native": "0.01233764",
+            "dex_usd": "1.3419651028",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "4P1uNZ1vZuvCHmD4Wptt9gTKRYYnAUQP5fw9ivnqgnMVnaqt21pWXZvhLZF8HiTDcrnLKKas8tR2hHjQonPq59Ur",
+            "timestamp": 1791583907,
+            "event_type": "sell",
+            "token": {
+              "address": "7XG4ortkYTvSa3hAj4oCYGrRTDDccpsXwzoMLsxHpump",
+              "symbol": "OpenWhip",
+              "logo": "https://gmgn.ai/external-res/1289394a713b1c45c56a5b67a99bda2d_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "24658578.271944",
+            "quote_amount": "1.279835287",
+            "cost_usd": "139.19488581412",
+            "buy_cost_usd": "107.68285341715",
+            "price_usd": "0.0000056448869143636996",
+            "price": "0.00000005190223348992",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0016314",
+            "dex_native": "0.015997942",
+            "dex_usd": "1.73993617192",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "4ncKvSM4jAcVu3YrtNKiuqLcvA9hPcA6g9mbC5HjHf94DjWCJtzahctYZsU1MYTZQLfQbtqReUFoyoMzDykq54U",
+            "timestamp": 1791583862,
+            "event_type": "buy",
+            "token": {
+              "address": "7XG4ortkYTvSa3hAj4oCYGrRTDDccpsXwzoMLsxHpump",
+              "symbol": "OpenWhip",
+              "logo": "https://gmgn.ai/external-res/1289394a713b1c45c56a5b67a99bda2d_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "24658578.271944",
+            "quote_amount": "0.989823085",
+            "cost_usd": "107.68285341715",
+            "buy_cost_usd": null,
+            "price_usd": "0.000004366953042855619",
+            "price": "0.00000004014112549734",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00163185",
+            "dex_native": "0.01237279",
+            "dex_usd": "1.3460358241",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "PVUfvY91yfpA8R8g17yZ6W9Y7ZekWdiwsi9kCz92iE2NJPfNerHCxm4ePBxj1JVz8ib1FjGo1x7wDWV3k64miZT",
+            "timestamp": 1791583616,
+            "event_type": "sell",
+            "token": {
+              "address": "GBWxC8zDKtKekQwZCPo9hxEsHyKHjX8mTNwjakwWpump",
+              "symbol": "GOODBYE",
+              "logo": "https://gmgn.ai/external-res/83402716a9d24164aac6c8de1ada3d84_v2.webp",
+              "total_supply": "999999999.999999"
+            },
+            "token_amount": "20313157.097728",
+            "quote_amount": "0.936535324",
+            "cost_usd": "101.8013897188",
+            "buy_cost_usd": null,
+            "price_usd": "0.000005011598602276941",
+            "price": "0.00000004610486294643",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0016305",
+            "dex_native": "0.011706692",
+            "dex_usd": "1.2725174204",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "4uLUPL6JtnWdkVhanJo29g5Ei79LAXRSpdt9yNL37tQeG2VfNyZMfqwQ38Hhgqgk6Ys3Ze39xe1iiTp8t5Hqz69Z",
+            "timestamp": 1791583607,
+            "event_type": "buy",
+            "token": {
+              "address": "GBWxC8zDKtKekQwZCPo9hxEsHyKHjX8mTNwjakwWpump",
+              "symbol": "GOODBYE",
+              "logo": "https://gmgn.ai/external-res/83402716a9d24164aac6c8de1ada3d84_v2.webp",
+              "total_supply": "999999999.999999"
+            },
+            "token_amount": "20313157.097728",
+            "quote_amount": "0.937208994",
+            "cost_usd": "101.88398973774",
+            "buy_cost_usd": null,
+            "price_usd": "0.000005015664933203902",
+            "price": "0.00000004613802716589",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00163065",
+            "dex_native": "0.011715113",
+            "dex_usd": "1.27354993423",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "3vEb8GQvjUVeUTuXMv8sdU1g15qGbSTNXQ3STjF257d7DDUoFbq5vVXWPfbErwcTSdwfNJGRKLh2ao4ygCrgbURd",
+            "timestamp": 1791583013,
+            "event_type": "sell",
+            "token": {
+              "address": "3gd2U7ET2ZmWaGsjBzxF3ECHhUC7XR67vZkPaXzQpump",
+              "symbol": "Aioli",
+              "logo": "https://gmgn.ai/external-res/c7199d426903804d32ae08628552ff34_v2.webp",
+              "total_supply": "999999356.769857"
+            },
+            "token_amount": "13842661.901902",
+            "quote_amount": "0.94251934",
+            "cost_usd": "102.7723088336",
+            "buy_cost_usd": "133.37440200652",
+            "price_usd": "0.000007424316909703896",
+            "price": "0.0000000680880127449",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0016356",
+            "dex_native": "0.011781493",
+            "dex_usd": "1.28465399672",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          }
+        ],
+        "next": "NDU1MDE1NjY4MDA1MDUwMDg6MDo6"
+      },
+      "identityMatches": true,
+      "returned": 20,
+      "unique": 20,
+      "newKeys": [
+        "sol:EwYudQcf96PAGanfLA9q4Q8QSAUk1QzkbiC3jrbppump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:48TbMQLjpYW4W828wa8U8CLpw1mXuikiANmh5mu33kv6ec3vLokwBQ69c34KFxE2XSpahhRZ5aHx4hStNUPndwcN",
+        "sol:EwYudQcf96PAGanfLA9q4Q8QSAUk1QzkbiC3jrbppump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:54V9z55fxgEnyCXkJJrkALREzmx2iiXdL5YcZ5ypkQrxAjmceXjae7kxpvdPp5FcFiZ24FeHQDJaQCMbuyMiW5uT"
+      ],
+      "overlap": 18,
+      "anchorIncluded": true,
+      "rootIdentityFields": "absent",
+      "identityConfirmed": true
+    }
+  ],
+  "newDistinctTransactionHashes": 4,
+  "oneToOneSameSecondPairs": [
+    {
+      "ca": "EwYudQcf96PAGanfLA9q4Q8QSAUk1QzkbiC3jrbppump",
+      "side": "sell",
+      "at": "2026-10-10T05:10:31.000Z",
+      "D": "5frV1Gtf7xVceLH45rXxKq9ThX8dDwb42mbW2nDqXMwSuWiGjJAynXao6wWpTcH6Y7QuXRUj7LFw7xhikRZGa2nR",
+      "E": "48TbMQLjpYW4W828wa8U8CLpw1mXuikiANmh5mu33kv6ec3vLokwBQ69c34KFxE2XSpahhRZ5aHx4hStNUPndwcN"
+    },
+    {
+      "ca": "EwYudQcf96PAGanfLA9q4Q8QSAUk1QzkbiC3jrbppump",
+      "side": "buy",
+      "at": "2026-10-10T05:09:18.000Z",
+      "D": "3Djep24WK2HMMC9MA4h45Ukt7tySiCkdemmk6QtbE2dED1x9DnpDJFMLES4F388Qsu7L5B5riaw8kaNDLZKd1tfz",
+      "E": "54V9z55fxgEnyCXkJJrkALREzmx2iiXdL5YcZ5ypkQrxAjmceXjae7kxpvdPp5FcFiZ24FeHQDJaQCMbuyMiW5uT"
+    }
+  ],
+  "verifiedExit": {
+    "chain": "sol",
+    "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+    "ca": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+    "hash": "2H79D3yC9ApDA7VAs4HAUNE9ALvKiT9dBTkXFEk7g4s8kWjj7jKvRpeicYxmFeqQSZF4TtfJbkQg39ohPUQENhUC",
+    "checkedAt": "2026-10-10T09:22:29.111Z",
+    "at": "2026-10-08T20:12:58.000Z",
+    "slot": 454648159,
+    "version": 1,
+    "commitment": "finalized",
+    "source": "https://api.mainnet-beta.solana.com",
+    "signatureIdentityMatch": true,
+    "ownerSignerMatch": true,
+    "metaError": null,
+    "tokenAccount": "994fu4n8rrbQPbg5hZ24tupkQEtQjWJi6n7okhQCTX55",
+    "preRaw": "17838372165068",
+    "postRaw": "0",
+    "netChangeRaw": "-17838372165068",
+    "decimals": 6,
+    "priorTransferPostRaw": "17838372165068",
+    "matchesPriorTransferPostBalance": true,
+    "classification": "successful_provider_reported_sell_with_full_known_account_token_debit",
+    "currentWholeWalletInventoryVerified": false,
+    "groupFullPnlVerified": false,
+    "report": "docs/operator-reference-followups/2026-10-10-1720-sol-tiktok-exit-verified.md",
+    "evidence": "docs/operator-reference-followups/2026-10-10-1720-sol-tiktok-exit-verified.json"
+  },
+  "rpc": [
+    {
+      "source": "https://api.mainnet-beta.solana.com",
+      "method": "getTransaction",
+      "params": [
+        "2H79D3yC9ApDA7VAs4HAUNE9ALvKiT9dBTkXFEk7g4s8kWjj7jKvRpeicYxmFeqQSZF4TtfJbkQg39ohPUQENhUC",
+        {
+          "encoding": "jsonParsed",
+          "commitment": "finalized",
+          "maxSupportedTransactionVersion": 1
+        }
+      ],
+      "startedAt": "2026-10-10T09:22:28.184Z",
+      "checkedAt": "2026-10-10T09:22:29.111Z",
+      "httpStatus": 200,
+      "responseId": 47,
+      "result": {
+        "slot": 454648159,
+        "blockTime": 1791490378,
+        "version": 1,
+        "transaction": {
+          "message": {
+            "accountKeys": [
+              {
+                "pubkey": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+                "signer": true,
+                "source": "transaction",
+                "writable": true
+              },
+              {
+                "pubkey": "2MsJJKvDjwDvyVk24381yDXZDFDMtEbJWsHZBsrMcqj4",
+                "signer": false,
+                "source": "transaction",
+                "writable": true
+              },
+              {
+                "pubkey": "4iYwtWYW7pJkMyV3DAu58c31u8DEV8p92qmFRQptgLPP",
+                "signer": false,
+                "source": "transaction",
+                "writable": true
+              },
+              {
+                "pubkey": "5L2QKqDn5ukJSWGyqR4RPvFvwnBabKWqAqMzH4heaQNB",
+                "signer": false,
+                "source": "transaction",
+                "writable": true
+              },
+              {
+                "pubkey": "7MnT6wvjSJ3wjdfpDdUJsGDVUAGT22gpyseztuio1kJ7",
+                "signer": false,
+                "source": "transaction",
+                "writable": true
+              },
+              {
+                "pubkey": "8oVHF52gNZ3UhzwnfvCtjPeeNTPTMjetXKG6dukXF8N2",
+                "signer": false,
+                "source": "transaction",
+                "writable": true
+              },
+              {
+                "pubkey": "994fu4n8rrbQPbg5hZ24tupkQEtQjWJi6n7okhQCTX55",
+                "signer": false,
+                "source": "transaction",
+                "writable": true
+              },
+              {
+                "pubkey": "9CysGWo5RwqJ2cgkmm7nirpdALZU5nvezpf7314oxqqi",
+                "signer": false,
+                "source": "transaction",
+                "writable": true
+              },
+              {
+                "pubkey": "AstVt66cb3JZb8KvyRuXafHguQtXSUvdu2TYKdVyVAtP",
+                "signer": false,
+                "source": "transaction",
+                "writable": true
+              },
+              {
+                "pubkey": "BfFX9rUm8qTZiZjmeq9BktWVTNuG3YWMc5AvkrCKJike",
+                "signer": false,
+                "source": "transaction",
+                "writable": true
+              },
+              {
+                "pubkey": "CvVdjtdqmqU5NvnidhHdVCgL6cycqAxKxbctCqkL7Bzw",
+                "signer": false,
+                "source": "transaction",
+                "writable": true
+              },
+              {
+                "pubkey": "CYzKipFcrw1PgqBYDtSBD6hWu3WRWqsN9kBvmNP4gx6L",
+                "signer": false,
+                "source": "transaction",
+                "writable": true
+              },
+              {
+                "pubkey": "F6Hp3RkGv23cNKbA5zMazn9R22KaCVhDVy3vENXxN2aC",
+                "signer": false,
+                "source": "transaction",
+                "writable": true
+              },
+              {
+                "pubkey": "GAFuhgcd328SkkBYHpfadzmef9hTGAFRCi9QoCnsZQug",
+                "signer": false,
+                "source": "transaction",
+                "writable": true
+              },
+              {
+                "pubkey": "MvdNH3vxEdztwCs1PLrUDbS5WNhF5tSPJCKjfJEdN9u",
+                "signer": false,
+                "source": "transaction",
+                "writable": true
+              },
+              {
+                "pubkey": "11111111111111111111111111111111",
+                "signer": false,
+                "source": "transaction",
+                "writable": false
+              },
+              {
+                "pubkey": "5PHirr8joyTMp9JMm6nW7hNDVyEYdkzDqazxPD7RaTjx",
+                "signer": false,
+                "source": "transaction",
+                "writable": false
+              },
+              {
+                "pubkey": "ADyA8hdefvWN2dbGGWFotbzWxrAvLW83WG6QCVXvJKqw",
+                "signer": false,
+                "source": "transaction",
+                "writable": false
+              },
+              {
+                "pubkey": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+                "signer": false,
+                "source": "transaction",
+                "writable": false
+              },
+              {
+                "pubkey": "FLASHX8DrLbgeR8FcfNV1F5krxYcYMUdBkrP1EPBtxB9",
+                "signer": false,
+                "source": "transaction",
+                "writable": false
+              },
+              {
+                "pubkey": "GS4CU59F31iL7aR2Q8zVS8DRrcRnXX1yjQ66TqNVQnaR",
+                "signer": false,
+                "source": "transaction",
+                "writable": false
+              },
+              {
+                "pubkey": "jitodontfrontF1111111TradeWithAxiomDotTrade",
+                "signer": false,
+                "source": "transaction",
+                "writable": false
+              },
+              {
+                "pubkey": "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
+                "signer": false,
+                "source": "transaction",
+                "writable": false
+              },
+              {
+                "pubkey": "So11111111111111111111111111111111111111112",
+                "signer": false,
+                "source": "transaction",
+                "writable": false
+              },
+              {
+                "pubkey": "SysvarRecentB1ockHashes11111111111111111111",
+                "signer": false,
+                "source": "transaction",
+                "writable": false
+              },
+              {
+                "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                "signer": false,
+                "source": "transaction",
+                "writable": false
+              },
+              {
+                "pubkey": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+                "signer": false,
+                "source": "transaction",
+                "writable": false
+              }
+            ],
+            "instructions": [
+              {
+                "parsed": {
+                  "info": {
+                    "nonceAccount": "MvdNH3vxEdztwCs1PLrUDbS5WNhF5tSPJCKjfJEdN9u",
+                    "nonceAuthority": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+                    "recentBlockhashesSysvar": "SysvarRecentB1ockHashes11111111111111111111"
+                  },
+                  "type": "advanceNonce"
+                },
+                "program": "system",
+                "programId": "11111111111111111111111111111111",
+                "stackHeight": 1
+              },
+              {
+                "accounts": [
+                  "CYzKipFcrw1PgqBYDtSBD6hWu3WRWqsN9kBvmNP4gx6L",
+                  "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+                  "So11111111111111111111111111111111111111112",
+                  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                  "11111111111111111111111111111111"
+                ],
+                "data": "4FzkJ37568tVL",
+                "programId": "FLASHX8DrLbgeR8FcfNV1F5krxYcYMUdBkrP1EPBtxB9",
+                "stackHeight": 1
+              },
+              {
+                "accounts": [
+                  "994fu4n8rrbQPbg5hZ24tupkQEtQjWJi6n7okhQCTX55",
+                  "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+                  "5L2QKqDn5ukJSWGyqR4RPvFvwnBabKWqAqMzH4heaQNB",
+                  "11111111111111111111111111111111",
+                  "FLASHX8DrLbgeR8FcfNV1F5krxYcYMUdBkrP1EPBtxB9",
+                  "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
+                  "2MsJJKvDjwDvyVk24381yDXZDFDMtEbJWsHZBsrMcqj4",
+                  "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+                  "ADyA8hdefvWN2dbGGWFotbzWxrAvLW83WG6QCVXvJKqw",
+                  "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+                  "So11111111111111111111111111111111111111112",
+                  "994fu4n8rrbQPbg5hZ24tupkQEtQjWJi6n7okhQCTX55",
+                  "CYzKipFcrw1PgqBYDtSBD6hWu3WRWqsN9kBvmNP4gx6L",
+                  "F6Hp3RkGv23cNKbA5zMazn9R22KaCVhDVy3vENXxN2aC",
+                  "7MnT6wvjSJ3wjdfpDdUJsGDVUAGT22gpyseztuio1kJ7",
+                  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+                  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                  "11111111111111111111111111111111",
+                  "8oVHF52gNZ3UhzwnfvCtjPeeNTPTMjetXKG6dukXF8N2",
+                  "5PHirr8joyTMp9JMm6nW7hNDVyEYdkzDqazxPD7RaTjx",
+                  "GAFuhgcd328SkkBYHpfadzmef9hTGAFRCi9QoCnsZQug",
+                  "GS4CU59F31iL7aR2Q8zVS8DRrcRnXX1yjQ66TqNVQnaR",
+                  "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
+                  "FLASHX8DrLbgeR8FcfNV1F5krxYcYMUdBkrP1EPBtxB9",
+                  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                  "CYzKipFcrw1PgqBYDtSBD6hWu3WRWqsN9kBvmNP4gx6L",
+                  "FLASHX8DrLbgeR8FcfNV1F5krxYcYMUdBkrP1EPBtxB9",
+                  "BfFX9rUm8qTZiZjmeq9BktWVTNuG3YWMc5AvkrCKJike",
+                  "CvVdjtdqmqU5NvnidhHdVCgL6cycqAxKxbctCqkL7Bzw",
+                  "9CysGWo5RwqJ2cgkmm7nirpdALZU5nvezpf7314oxqqi",
+                  "4iYwtWYW7pJkMyV3DAu58c31u8DEV8p92qmFRQptgLPP",
+                  "FLASHX8DrLbgeR8FcfNV1F5krxYcYMUdBkrP1EPBtxB9"
+                ],
+                "data": "1xPgKHmFnU6yyPidu64VZAySeqgv4iF",
+                "programId": "FLASHX8DrLbgeR8FcfNV1F5krxYcYMUdBkrP1EPBtxB9",
+                "stackHeight": 1
+              },
+              {
+                "parsed": {
+                  "info": {
+                    "destination": "AstVt66cb3JZb8KvyRuXafHguQtXSUvdu2TYKdVyVAtP",
+                    "lamports": 10000,
+                    "source": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj"
+                  },
+                  "type": "transfer"
+                },
+                "program": "system",
+                "programId": "11111111111111111111111111111111",
+                "stackHeight": 1
+              }
+            ],
+            "recentBlockhash": "6SeesiRcMAXN62p47EmG51JtfYtXA2zhW873stz9KnU5",
+            "transactionConfig": {
+              "computeUnitLimit": 168374,
+              "heapSize": null,
+              "loadedAccountsDataSizeLimit": 67108864,
+              "priorityFee": 10000
+            }
+          },
+          "signatures": [
+            "2H79D3yC9ApDA7VAs4HAUNE9ALvKiT9dBTkXFEk7g4s8kWjj7jKvRpeicYxmFeqQSZF4TtfJbkQg39ohPUQENhUC"
+          ]
+        },
+        "meta": {
+          "err": null,
+          "fee": 15000,
+          "preTokenBalances": [
+            {
+              "accountIndex": 4,
+              "mint": "So11111111111111111111111111111111111111112",
+              "owner": "2MsJJKvDjwDvyVk24381yDXZDFDMtEbJWsHZBsrMcqj4",
+              "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+              "uiTokenAmount": {
+                "amount": "23728578511",
+                "decimals": 9,
+                "uiAmount": 23.728578511,
+                "uiAmountString": "23.728578511"
+              }
+            },
+            {
+              "accountIndex": 6,
+              "mint": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+              "owner": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+              "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+              "uiTokenAmount": {
+                "amount": "17838372165068",
+                "decimals": 6,
+                "uiAmount": 17838372.165068,
+                "uiAmountString": "17838372.165068"
+              }
+            },
+            {
+              "accountIndex": 12,
+              "mint": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+              "owner": "2MsJJKvDjwDvyVk24381yDXZDFDMtEbJWsHZBsrMcqj4",
+              "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+              "uiTokenAmount": {
+                "amount": "428641849493472",
+                "decimals": 6,
+                "uiAmount": 428641849.493472,
+                "uiAmountString": "428641849.493472"
+              }
+            },
+            {
+              "accountIndex": 13,
+              "mint": "So11111111111111111111111111111111111111112",
+              "owner": "9M4giFFMxmFGXtc3feFzRai56WbBqehoSeRE5GK7gf7",
+              "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+              "uiTokenAmount": {
+                "amount": "1400942263",
+                "decimals": 9,
+                "uiAmount": 1.400942263,
+                "uiAmountString": "1.400942263"
+              }
+            }
+          ],
+          "postTokenBalances": [
+            {
+              "accountIndex": 4,
+              "mint": "So11111111111111111111111111111111111111112",
+              "owner": "2MsJJKvDjwDvyVk24381yDXZDFDMtEbJWsHZBsrMcqj4",
+              "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+              "uiTokenAmount": {
+                "amount": "22097267871",
+                "decimals": 9,
+                "uiAmount": 22.097267871,
+                "uiAmountString": "22.097267871"
+              }
+            },
+            {
+              "accountIndex": 6,
+              "mint": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+              "owner": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+              "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+              "uiTokenAmount": {
+                "amount": "0",
+                "decimals": 6,
+                "uiAmount": null,
+                "uiAmountString": "0"
+              }
+            },
+            {
+              "accountIndex": 12,
+              "mint": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+              "owner": "2MsJJKvDjwDvyVk24381yDXZDFDMtEbJWsHZBsrMcqj4",
+              "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+              "uiTokenAmount": {
+                "amount": "446480221658540",
+                "decimals": 6,
+                "uiAmount": 446480221.65854,
+                "uiAmountString": "446480221.65854"
+              }
+            },
+            {
+              "accountIndex": 13,
+              "mint": "So11111111111111111111111111111111111111112",
+              "owner": "9M4giFFMxmFGXtc3feFzRai56WbBqehoSeRE5GK7gf7",
+              "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+              "uiTokenAmount": {
+                "amount": "1408587876",
+                "decimals": 9,
+                "uiAmount": 1.408587876,
+                "uiAmountString": "1.408587876"
+              }
+            }
+          ],
+          "preBalances": [
+            35941267109,
+            2179320,
+            922736517,
+            54099170,
+            23730066951,
+            1844400,
+            1513840,
+            4717547545,
+            230250035,
+            20240379560,
+            558392240,
+            0,
+            1513840,
+            1402430703,
+            1447680,
+            1,
+            33103977,
+            9272823,
+            2565400,
+            22296546,
+            4641093,
+            0,
+            1260746836,
+            1851009709175,
+            42706560,
+            200654906,
+            70228638
+          ],
+          "postBalances": [
+            37548670486,
+            2179320,
+            922947593,
+            66641984,
+            22098756311,
+            1844400,
+            1513840,
+            4717864159,
+            230260035,
+            20240379560,
+            561558386,
+            0,
+            1513840,
+            1410076316,
+            1447680,
+            1,
+            33103977,
+            9272823,
+            2565400,
+            22296546,
+            4641093,
+            0,
+            1260746836,
+            1851009709175,
+            42706560,
+            200654906,
+            70228638
+          ],
+          "innerInstructions": [
+            {
+              "index": 1,
+              "instructions": [
+                {
+                  "parsed": {
+                    "info": {
+                      "lamports": 2039280,
+                      "newAccount": "CYzKipFcrw1PgqBYDtSBD6hWu3WRWqsN9kBvmNP4gx6L",
+                      "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                      "source": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+                      "space": 165
+                    },
+                    "type": "createAccount"
+                  },
+                  "program": "system",
+                  "programId": "11111111111111111111111111111111",
+                  "stackHeight": 2
+                },
+                {
+                  "parsed": {
+                    "info": {
+                      "account": "CYzKipFcrw1PgqBYDtSBD6hWu3WRWqsN9kBvmNP4gx6L",
+                      "mint": "So11111111111111111111111111111111111111112",
+                      "owner": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj"
+                    },
+                    "type": "initializeAccount3"
+                  },
+                  "program": "spl-token",
+                  "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                  "stackHeight": 2
+                }
+              ]
+            },
+            {
+              "index": 2,
+              "instructions": [
+                {
+                  "accounts": [
+                    "2MsJJKvDjwDvyVk24381yDXZDFDMtEbJWsHZBsrMcqj4",
+                    "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+                    "ADyA8hdefvWN2dbGGWFotbzWxrAvLW83WG6QCVXvJKqw",
+                    "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+                    "So11111111111111111111111111111111111111112",
+                    "994fu4n8rrbQPbg5hZ24tupkQEtQjWJi6n7okhQCTX55",
+                    "CYzKipFcrw1PgqBYDtSBD6hWu3WRWqsN9kBvmNP4gx6L",
+                    "F6Hp3RkGv23cNKbA5zMazn9R22KaCVhDVy3vENXxN2aC",
+                    "7MnT6wvjSJ3wjdfpDdUJsGDVUAGT22gpyseztuio1kJ7",
+                    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+                    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                    "11111111111111111111111111111111",
+                    "8oVHF52gNZ3UhzwnfvCtjPeeNTPTMjetXKG6dukXF8N2",
+                    "5PHirr8joyTMp9JMm6nW7hNDVyEYdkzDqazxPD7RaTjx",
+                    "GAFuhgcd328SkkBYHpfadzmef9hTGAFRCi9QoCnsZQug",
+                    "GS4CU59F31iL7aR2Q8zVS8DRrcRnXX1yjQ66TqNVQnaR",
+                    "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
+                  ],
+                  "data": "9Zq9ZwMbe2c9JHUr5Nse4KG943QebJVG3",
+                  "programId": "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
+                  "stackHeight": 2
+                },
+                {
+                  "parsed": {
+                    "info": {
+                      "authority": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+                      "destination": "F6Hp3RkGv23cNKbA5zMazn9R22KaCVhDVy3vENXxN2aC",
+                      "mint": "BwBU7KVXigH7DKunJynowQCQ3oiEuYv26f4A2F8tABR4",
+                      "source": "994fu4n8rrbQPbg5hZ24tupkQEtQjWJi6n7okhQCTX55",
+                      "tokenAmount": {
+                        "amount": "17838372165068",
+                        "decimals": 6,
+                        "uiAmount": 17838372.165068,
+                        "uiAmountString": "17838372.165068"
+                      }
+                    },
+                    "type": "transferChecked"
+                  },
+                  "program": "spl-token",
+                  "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+                  "stackHeight": 3
+                },
+                {
+                  "parsed": {
+                    "info": {
+                      "authority": "2MsJJKvDjwDvyVk24381yDXZDFDMtEbJWsHZBsrMcqj4",
+                      "destination": "CYzKipFcrw1PgqBYDtSBD6hWu3WRWqsN9kBvmNP4gx6L",
+                      "mint": "So11111111111111111111111111111111111111112",
+                      "source": "7MnT6wvjSJ3wjdfpDdUJsGDVUAGT22gpyseztuio1kJ7",
+                      "tokenAmount": {
+                        "amount": "1623665027",
+                        "decimals": 9,
+                        "uiAmount": 1.623665027,
+                        "uiAmountString": "1.623665027"
+                      }
+                    },
+                    "type": "transferChecked"
+                  },
+                  "program": "spl-token",
+                  "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                  "stackHeight": 3
+                },
+                {
+                  "parsed": {
+                    "info": {
+                      "authority": "2MsJJKvDjwDvyVk24381yDXZDFDMtEbJWsHZBsrMcqj4",
+                      "destination": "GAFuhgcd328SkkBYHpfadzmef9hTGAFRCi9QoCnsZQug",
+                      "mint": "So11111111111111111111111111111111111111112",
+                      "source": "7MnT6wvjSJ3wjdfpDdUJsGDVUAGT22gpyseztuio1kJ7",
+                      "tokenAmount": {
+                        "amount": "7645613",
+                        "decimals": 9,
+                        "uiAmount": 0.007645613,
+                        "uiAmountString": "0.007645613"
+                      }
+                    },
+                    "type": "transferChecked"
+                  },
+                  "program": "spl-token",
+                  "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                  "stackHeight": 3
+                },
+                {
+                  "accounts": [
+                    "GS4CU59F31iL7aR2Q8zVS8DRrcRnXX1yjQ66TqNVQnaR"
+                  ],
+                  "data": "2rerrzSaKmbarSSaQantaMeoj9k4xeLsnUVN1vfNxAa731wtqVikvRaNPxQAe7AK7xjQp5xz5BeU8hSvzRD9RBfTz69MJvGKq4WiAP8vCB47YaNoJD1uLNmsRfeY3NsXYveDq92y3udserdUBNvxQRzFS5dqz4J6WkJcovdsBqLWC7gSR1Kq2tj178jRqhn4iQaMQk39FfC7MdbaV9ZetAaSHnT2Ews7C8N83UM8fyLecHXVuSd359SqpoQuuxYksiVoXz4LrbhujKCpHccBu9NSQVvNLt1Y7kMiSgtRKTjdJtfHo1nmJHFJ9M81MJkhn53uqW7nTVU6vvEWaQjpwDz1gCkkZ8NDQsUfaTnvddCqgM8LdeCMC9RTgd61SNJQtUen4xjWkFQSHodYxxZqKfBvvAD2FbPwat4XTVdCtzro7CV2aj5azpBjt5Nwpx1hgrCHafVzTjVkEafRXKXAyrXkG19FXAqdV6Y8btyY93LfsvFci8GMtQeSTMK9s5GyJGh8brwv8j2jDsFAmrBVnCf9dPiatJZnj6xVw1RMV1TLXfg89xYyjiXnHewBuFKfvnzZvFs6CGT3pxBL7BmAkwijA2pAutsEEq9iCX",
+                  "programId": "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
+                  "stackHeight": 3
+                },
+                {
+                  "parsed": {
+                    "info": {
+                      "account": "CYzKipFcrw1PgqBYDtSBD6hWu3WRWqsN9kBvmNP4gx6L",
+                      "destination": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+                      "owner": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj"
+                    },
+                    "type": "closeAccount"
+                  },
+                  "program": "spl-token",
+                  "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                  "stackHeight": 2
+                },
+                {
+                  "accounts": [],
+                  "data": "2VGa1W1EVzth5Tr981D1GjkFxj62Dyxdm5bG3J2Kb5CbMhWLjhFUXsThd8U4GvttzTipS2kwrtViDjkQwDrZ8kJCYviZMr9YtYLtKXMmYuW6L1K5",
+                  "programId": "FLASHX8DrLbgeR8FcfNV1F5krxYcYMUdBkrP1EPBtxB9",
+                  "stackHeight": 2
+                },
+                {
+                  "parsed": {
+                    "info": {
+                      "destination": "BfFX9rUm8qTZiZjmeq9BktWVTNuG3YWMc5AvkrCKJike",
+                      "lamports": 16236650,
+                      "source": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj"
+                    },
+                    "type": "transfer"
+                  },
+                  "program": "system",
+                  "programId": "11111111111111111111111111111111",
+                  "stackHeight": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "priorEvidence": [
+    "docs/operator-reference-followups/2026-10-10-0117-sol-tiktok-transfer.json",
+    "docs/operator-reference-followups/2026-10-09-1641-sol-tiktok-inventory.json",
+    "docs/operator-reference-followups/2026-10-10-0919-sol-tiktok-exit.json"
+  ],
+  "coverage": {
+    "headAnchorsConnected": true,
+    "historyCursorsPreserved": true,
+    "profilesRefreshed": false,
+    "currentInventoryRefreshed": false,
+    "fullPnlVerified": false,
+    "continuousOnlineVerified": false
+  },
+  "nextGroup": "bsc",
+  "nextQuestion": "下轮BSC优先最旧到期B头页；C FVG余额latest=0但平台四买一卖数量差约599.16万枚，需按哈希核验剩余三买及后续卖出/转仓/余额机制；不能把零余额当盈利清仓。保留A nonce158–161分类、躺平与历史分页缺口。",
+  "pendingSolQuestion": "下轮Sol优先到期头页；TIKTOK D→E转仓及两已知账户在同slot退出已核验，保留当前全钱包库存/成本缺口。预算内优先补旧headPaginationGaps或核验Benny’s负向金额差的回执，不相加组内平台盈亏，getTransaction继续沿用版本1。",
+  "limits": [
+    "版本1为研究请求参数，不改变生产配置。",
+    "仅历史已知代币账户清零，未枚举全部当前账户。",
+    "Benny’s为平台金额差线索，费用/转仓/回执未独立核全，不计完整净盈亏。",
+    "独立一次Sol公开RPC finalized结果，无第二源；头页并非全量活动索引。"
+  ]
+}

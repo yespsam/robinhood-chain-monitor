@@ -1,0 +1,70 @@
+{
+  "schema": "flap_portal_compatibility_evidence_v1",
+  "checkedAt": "2026-10-21T10:13:58.133Z",
+  "chainId": 56,
+  "portal": "0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0",
+  "sources": [
+    "bsc-rpc.publicnode.com",
+    "bsc-dataseed.bnbchain.org"
+  ],
+  "fixedBlock": {
+    "number": 128920137,
+    "hash": "0x3a8a8b7d2f6e7f5395d21a61b4bddb2ca53c149cf5560e7ba6cd99e0e27df7f0",
+    "sameBeforeAfter": true
+  },
+  "proxy": {
+    "runtimeCodeHash": "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3",
+    "runtimeCodeBytes": 2882
+  },
+  "implementation": {
+    "version": "v5.26.0",
+    "address": "0x7a94f37b61a82c395f9812CF266b444783cC5e8c",
+    "runtimeCodeHash": "0x3db27f98826706ac5ddedb919594d4670151874482dff23e31d2186858635194",
+    "runtimeCodeBytes": 20347
+  },
+  "quoteCompatibility": {
+    "token": "0x16d4a9abe0c494263234b9eb312bcbbaa63a7777",
+    "quoteToken": "0x4902C5ebc598265Ed2212b559B042De8a5Eeec3f",
+    "getTokenV8SafeFieldCount": 18,
+    "quoteConfiguration": [1, 50, 50, 7, 0],
+    "nativeInputWei": "1000000000000",
+    "buyTokenOut": "193548545363204546601",
+    "sellNativeOut": "965161664547",
+    "sellQuoteOut": "131495888133605",
+    "normalizedOutputsMatchedAcrossSources": true,
+    "scope": "fixed token, amount, block and time only; not a sellability/security/profit guarantee"
+  },
+  "upgrade": {
+    "activationBlock": 128914179,
+    "blockHash": "0x025425840e296cff96ca378705da73882429d0b8cff3276c81bec26494e07616",
+    "transactionHash": "0x04791db127459ee67718e1ce7610fc87c90483a94411b8c143d97db1bb8cd702",
+    "receiptStatus": 1,
+    "newImplementation": "0x7a94f37b61a82c395f9812CF266b444783cC5e8c",
+    "evidence": {
+      "publicNodeUpgradeLog": true,
+      "bnbDataSeedReceiptAndCanonicalHeader": true,
+      "bnbDataSeedIndependentGetLogs": false
+    },
+    "priorV525AnchorBlock": 128914121,
+    "priorCursorNextBlock": 128914122,
+    "supportedWindows": [
+      {"version": "v5.25.0", "fromBlock": 128501895, "throughBlock": 128914121},
+      {"version": "unknown-gap", "fromBlock": 128914122, "throughBlock": 128914178},
+      {"version": "v5.26.0", "fromBlock": 128914179, "throughBlock": null}
+    ]
+  },
+  "officialSourceLimit": {
+    "deployedAddressDocsCurrentVersion": "v5.23.1",
+    "implementationSourceVerified": false,
+    "sourceToBytecodeEquivalenceVerified": false,
+    "securityAuditCompleted": false
+  },
+  "rpcPolicy": {
+    "sharedCoordinator": true,
+    "priority": "background",
+    "newEndpoints": false,
+    "limitsChanged": false,
+    "cooldownBypassed": false,
+    "signedOrBroadcastCalls": false
+  }
+}

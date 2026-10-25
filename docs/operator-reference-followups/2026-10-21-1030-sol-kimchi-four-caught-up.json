@@ -1,0 +1,1226 @@
+{
+  "at": "2026-10-21T02:34:25.770Z",
+  "scheduledAt": "2026-10-21T02:30:39.244Z",
+  "startedAt": "2026-10-21T02:30:56Z",
+  "round": 91,
+  "group": "sol",
+  "question": "到期D/E最新活动是否增加失败退出样本，并连接上次头页锚点？",
+  "requests": {
+    "configCheck": 1,
+    "gmgnBusinessAttempts": 2,
+    "gmgnSuccessfulBusinessRequests": 1,
+    "gmgnBusyBeforeDispatch": 1,
+    "rpc": 0,
+    "extraModel": 0
+  },
+  "newRows": 2,
+  "pageOverlap": 18,
+  "newAddresses": 0,
+  "headRefreshed": [
+    "E"
+  ],
+  "headIncomplete": [
+    "D"
+  ],
+  "coverageStatus": "partial_head_refresh_provider_freshness_unverified",
+  "report": "docs/operator-reference-followups/2026-10-21-1030-sol-kimchi-four-caught-up.md",
+  "evidence": "docs/operator-reference-followups/2026-10-21-1030-sol-kimchi-four-caught-up.json",
+  "nextQuestion": "轮换BSC最旧到期头页；Sol下次优先D，后续核验Kimchi库存/费用及是否与D同步，不把单钱包退出当组内清仓。",
+  "pair": {
+    "chain": "sol",
+    "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+    "ca": "FJJyKhFNCbE3awMjE9yPw2rXxCyaJM4ZYD9vE54Dpump",
+    "symbol": "Kimchi",
+    "buyHash": "55TgMdWwV4cQTGbtvgXYuExmnbufnUecN7o7RUngrtXj33ZptgRN3dEnS86wJN99UvLiUdeHQuMfi4nUtLWWXGv5",
+    "sellHash": "2grErarUv95BDQJ4srCZncg1sF35jnU3JstsP8jjpqP2VanaEjnbrouNSD28pv7Bwtbg9bRNAoq4xFGMAVNqLfEh",
+    "buyAt": "2026-10-20T23:20:36.000Z",
+    "sellAt": "2026-10-20T23:32:41.000Z",
+    "durationSeconds": 725,
+    "quantityMatched": true,
+    "buyUsd": 174.22458479302,
+    "sellUsd": 120.488780972,
+    "amountDifferenceUsd": -53.73580382102,
+    "netPnlUsd": null,
+    "inventoryAndFeesVerified": false,
+    "independentRpcVerified": false
+  },
+  "gmgn": [
+    {
+      "id": "E",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "startedAt": "2026-10-21T02:31:50.189Z",
+      "checkedAt": "2026-10-21T02:31:57.712Z",
+      "status": "success",
+      "identityVerified": true,
+      "rows": [
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "FJJyKhFNCbE3awMjE9yPw2rXxCyaJM4ZYD9vE54Dpump",
+          "hash": "2grErarUv95BDQJ4srCZncg1sF35jnU3JstsP8jjpqP2VanaEjnbrouNSD28pv7Bwtbg9bRNAoq4xFGMAVNqLfEh",
+          "at": 1792539161000,
+          "side": "sell",
+          "quantity": "18347468.655034",
+          "usd": "120.488780972",
+          "symbol": "Kimchi"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "FJJyKhFNCbE3awMjE9yPw2rXxCyaJM4ZYD9vE54Dpump",
+          "hash": "55TgMdWwV4cQTGbtvgXYuExmnbufnUecN7o7RUngrtXj33ZptgRN3dEnS86wJN99UvLiUdeHQuMfi4nUtLWWXGv5",
+          "at": 1792538436000,
+          "side": "buy",
+          "quantity": "18347468.655034",
+          "usd": "174.22458479302",
+          "symbol": "Kimchi"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "4geHVDMA2pntjmvFKnUjoTfsK1VAAJXA3yFBn8T2pump",
+          "hash": "2ZgrqzbEXRavPojYFqypXsJwfssHToxX6ARNFEVo31ohM66XU5DSkcvYm5mYnvG2xtwrgJghw51ET2a8NzCnoyGf",
+          "at": 1792473934000,
+          "side": "sell",
+          "quantity": "18380640.364519",
+          "usd": "98.36001129834",
+          "symbol": "SNORLAX"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "4geHVDMA2pntjmvFKnUjoTfsK1VAAJXA3yFBn8T2pump",
+          "hash": "4oyDsjZPFVZwDm2Nn3ynNyZ8pbsVj3vNtn8HEM2Aaf7fxo6gyVbYS2KHco1SeYWhN48HA5jMNHFbgSWhqGq8hjy1",
+          "at": 1792473746000,
+          "side": "buy",
+          "quantity": "18380640.364519",
+          "usd": "166.88417893484",
+          "symbol": "SNORLAX"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "3sx3jJq9NofFkR6TEfEuw9rnnMTTimxS2nRLhKMFpump",
+          "hash": "41saUSpJPVM9EMgo6ajtUtx49bBYkxuuHW1hrK5AcGujj5MuZCz5ZvUNSbxaDRH91juwvrvX3SsR5bS5Z8SH3vbs",
+          "at": 1792470922000,
+          "side": "sell",
+          "quantity": "18346724.846211",
+          "usd": "263.5279487217",
+          "symbol": "OAKDOOR"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "3sx3jJq9NofFkR6TEfEuw9rnnMTTimxS2nRLhKMFpump",
+          "hash": "4a51cCYSmuojJekpdjFvqp5cXpmQVQiBQkiLHf9YN3vrAdrkPLeFT8dUJrFAxGfExvbduPrYQYxbDzEiDc5iFdm8",
+          "at": 1792470696000,
+          "side": "buy",
+          "quantity": "7076733.845579",
+          "usd": "121.99686461287",
+          "symbol": "OAKDOOR"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "D7yF3XdY4K25r5LTkvzbLS6Ph3HF8vZR4b2WG27Mpump",
+          "hash": "34sQ69fQtzR7XgszmzG6WfzREUYax6aKfmPGEjpB2kAtNK8v4pWrbmiwYN3mxfvGPDakrZ5guCKfQuh4kqZw3oiK",
+          "at": 1792470341000,
+          "side": "sell",
+          "quantity": "35577018.684849",
+          "usd": "141.1034375456",
+          "symbol": "OAKDOOR"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "D7yF3XdY4K25r5LTkvzbLS6Ph3HF8vZR4b2WG27Mpump",
+          "hash": "2x7XHDJ4UDf2TDj9MoVX79P1L5fePABdrKJFRkTqCE8L52au5Lyu1j3SaXfr3QBLGGrmAJxD7WLBWkdDaEgYfk11",
+          "at": 1792470317000,
+          "side": "buy",
+          "quantity": "35577018.684849",
+          "usd": "142.7915017684",
+          "symbol": "OAKDOOR"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "54bpv6PvXeEgJmcLUypaitEPP2tpyXhrddmAdFsVpump",
+          "hash": "2HHF1GoE299t7cadakLun7RiGeAcDnTdq5d1tfUkT5bjPa4TGL7iey3chZYuvkqH1FSK6NomGQT2K67eTZf8cjR6",
+          "at": 1792469882000,
+          "side": "sell",
+          "quantity": "28817723.360804",
+          "usd": "142.40627401024",
+          "symbol": "Lucia"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "54bpv6PvXeEgJmcLUypaitEPP2tpyXhrddmAdFsVpump",
+          "hash": "5jsyPSg8fKiDbbgptycJiA75yEWJ3WYnEo2Yh7RyhAqKN6EwqGV9Fi2KUkskbvK47DJEyn7gNEufup3XYvJ39V2e",
+          "at": 1792469815000,
+          "side": "buy",
+          "quantity": "28817723.360804",
+          "usd": "137.08915340172",
+          "symbol": "Lucia"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "HsM7vtzwCpoWDNE4zRp91j4JxkLMSv3cK46rggE3pump",
+          "hash": "52hvpbLdhAbhhpeN4aVQDLVXkaCWth4sbfieA9TSrQWZM4kdnr7Afr1NhWVB1i5e5A4m7N5jRUhyPtYLszWQuMw8",
+          "at": 1792467898000,
+          "side": "sell",
+          "quantity": "5713645.074286",
+          "usd": "155.94212885644",
+          "symbol": "Bien"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "HsM7vtzwCpoWDNE4zRp91j4JxkLMSv3cK46rggE3pump",
+          "hash": "5FwNJXh9U415Vv18ZTrgTkz348jhEv32wnKjpN9gVsbQ5gyAAymf1BmYkKmBQYJQFxXUfynQndk9CprWmxsjjqYL",
+          "at": 1792467895000,
+          "side": "sell",
+          "quantity": "5713645.074286",
+          "usd": "159.5844042318",
+          "symbol": "Bien"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "HsM7vtzwCpoWDNE4zRp91j4JxkLMSv3cK46rggE3pump",
+          "hash": "4DycbVesGisR4tqyh3Hwk1i63AuD1yUZ24MDngHvqexWAfMeHbf82AgwkGo9CpKu3r31RE8kRJAtNr5hxhgvpqSQ",
+          "at": 1792467772000,
+          "side": "buy",
+          "quantity": "11427290.148572",
+          "usd": "128.95370603475",
+          "symbol": "Bien"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "Bz1JiVg8td6HXVSdEstfRTCsdUwAiZib55SVHrF1pump",
+          "hash": "391n5iSS9XdpkVzYsdi36QCpC5s4vEapJjpKhnNB3ju8tJCebtC13udR8u1reaLYzRmBS7mFAByxxUGCGxmQEEE3",
+          "at": 1792465524000,
+          "side": "sell",
+          "quantity": "18017975.650485",
+          "usd": "75.5898803168",
+          "symbol": "popdog"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "Bz1JiVg8td6HXVSdEstfRTCsdUwAiZib55SVHrF1pump",
+          "hash": "47qc1BQNnFjZXW5Z6L1u6g3BojMUCcKDRzBi8oYkcL35dVQ9igVshDRsFyKPQjC1CPznnpsjFCuYCNnWpCCCsG6p",
+          "at": 1792465394000,
+          "side": "buy",
+          "quantity": "18017975.650485",
+          "usd": "103.4177878708",
+          "symbol": "popdog"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "7LnnehQRqr3LSzGr8RGXDtrzNaJwvSqzXDQRqikfpump",
+          "hash": "YBikrAJefwFeq3k8hMcUddRvk84KwR28m9enRkcyQzfBmNgsxJhZrUnxymiDKxETef7f7iBm6vuaH545Mi3jBnZ",
+          "at": 1792458880000,
+          "side": "sell",
+          "quantity": "31643588.108914",
+          "usd": "168.94920423924",
+          "symbol": "Movember"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "7LnnehQRqr3LSzGr8RGXDtrzNaJwvSqzXDQRqikfpump",
+          "hash": "5UUqpZo8JHY4PexSnDjThHx7ZVpX39gHB6Pm8tz7TXZ29C9SbeDN9ex2vgLjnkn15mky3p2EhzDQeuM2ecoySqyq",
+          "at": 1792458857000,
+          "side": "buy",
+          "quantity": "31643588.108914",
+          "usd": "166.68477259754",
+          "symbol": "Movember"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "BA9dMJJZ6ht5kj7Zutedtx5RZVckgHUJikVtAxKmpump",
+          "hash": "4EJagpsggorUffHVG4Uvbz4CaDTRXZMuYhrC2A18M1tqiQKfRb3TU2UkrEPGi38SVpHnzHAMtmJBhPmKAkCJzWg1",
+          "at": 1792457689000,
+          "side": "sell",
+          "quantity": "18891242.681306",
+          "usd": "156.4204634174",
+          "symbol": "Degen"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "BA9dMJJZ6ht5kj7Zutedtx5RZVckgHUJikVtAxKmpump",
+          "hash": "2jLpDrJPZgaBPK4GKrQW5Q8ZvVyqXp3XPEnoxJzpDGPLGnLLx2si3iUTqqHNWzSHo6gpmnnddBDRKttjRFitiBDp",
+          "at": 1792457666000,
+          "side": "buy",
+          "quantity": "18891242.681306",
+          "usd": "155.26426427644",
+          "symbol": "Degen"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "CkC9WGxQaFkADYeDdQ76SiEvfh9z9Uz46TAaUpPfpump",
+          "hash": "RKNHGfppzq3dVzy9bodaXP5xVvM7EezrpepAHu7omgmDxqcTpVNhaZZohoNNvQ8FbrYhAuRvh1TURZ3yodNCWJN",
+          "at": 1792448347000,
+          "side": "sell",
+          "quantity": "16063571.504663",
+          "usd": "109.7040294456",
+          "symbol": "Cooper"
+        }
+      ],
+      "newRows": [
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "FJJyKhFNCbE3awMjE9yPw2rXxCyaJM4ZYD9vE54Dpump",
+          "hash": "2grErarUv95BDQJ4srCZncg1sF35jnU3JstsP8jjpqP2VanaEjnbrouNSD28pv7Bwtbg9bRNAoq4xFGMAVNqLfEh",
+          "at": 1792539161000,
+          "side": "sell",
+          "quantity": "18347468.655034",
+          "usd": "120.488780972",
+          "symbol": "Kimchi"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "token": "FJJyKhFNCbE3awMjE9yPw2rXxCyaJM4ZYD9vE54Dpump",
+          "hash": "55TgMdWwV4cQTGbtvgXYuExmnbufnUecN7o7RUngrtXj33ZptgRN3dEnS86wJN99UvLiUdeHQuMfi4nUtLWWXGv5",
+          "at": 1792538436000,
+          "side": "buy",
+          "quantity": "18347468.655034",
+          "usd": "174.22458479302",
+          "symbol": "Kimchi"
+        }
+      ],
+      "newCount": 2,
+      "pageOverlap": 18,
+      "anchorFound": true,
+      "previousAnchor": {
+        "at": "2026-10-20T05:25:34.000Z",
+        "hash": "2ZgrqzbEXRavPojYFqypXsJwfssHToxX6ARNFEVo31ohM66XU5DSkcvYm5mYnvG2xtwrgJghw51ET2a8NzCnoyGf",
+        "ca": "4geHVDMA2pntjmvFKnUjoTfsK1VAAJXA3yFBn8T2pump",
+        "side": "sell"
+      },
+      "next": "NDU4OTk2MjYwMDAxNTAwMDg6MDo6",
+      "latestActivityAt": "2026-10-20T23:32:41.000Z",
+      "earliestActivityAt": "2026-10-19T22:19:07.000Z"
+    },
+    {
+      "id": "D",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "startedAt": "2026-10-21T02:31:57.712Z",
+      "status": "error",
+      "code": "GMGN_REQUEST_BUSY",
+      "retryAt": null,
+      "checkedAt": "2026-10-21T02:32:27.743Z"
+    }
+  ],
+  "configCheck": {
+    "ok": true
+  },
+  "healthSnapshots": [
+    {
+      "at": "2026-10-21T02:32:13.689Z",
+      "four": {
+        "cursor": {
+          "nextBlock": 128858583,
+          "anchorBlock": 128858582,
+          "anchorBlockHash": "0x7e06aa0c6d389c972e05d272b4f8416926d76772fe587e235fad7e0d7cf837b7"
+        },
+        "updatedAt": "2026-10-21T02:32:11.583Z",
+        "outboxCount": 0,
+        "checkpoints": [
+          {
+            "blockNumber": 128858536,
+            "blockHash": "0x46a2449c9b96fda633c70cd83fb83c676ec5404a0efd9bc9069597074368adac"
+          },
+          {
+            "blockNumber": 128858561,
+            "blockHash": "0x7ee17f6dd5c611813e14bb3fb337d2d01ffbec05e3bb9ac3693772dfbbffd2c5"
+          },
+          {
+            "blockNumber": 128858582,
+            "blockHash": "0x7e06aa0c6d389c972e05d272b4f8416926d76772fe587e235fad7e0d7cf837b7"
+          }
+        ]
+      },
+      "flap": {
+        "cursor": {
+          "nextBlock": 128858565,
+          "afterLogIndex": -1,
+          "anchorBlock": 128858564,
+          "anchorBlockHash": "0xb183cb6afc7ed7cd6fc9d39907891a607ee60925f795385991de207359f4e91e",
+          "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+        },
+        "verifiedHead": 128858564,
+        "version": "v5.25.0",
+        "health": {
+          "status": "healthy",
+          "consecutiveFailures": 0,
+          "lastSuccessAt": "2026-10-21T02:31:56.798Z",
+          "lastErrorAt": null,
+          "lastError": null,
+          "lastErrorCode": null,
+          "reorgCount": 0,
+          "lastReorgAt": null,
+          "lastAttemptAt": "2026-10-21T02:31:56.798Z",
+          "nextAttemptAt": null,
+          "failureClass": null
+        },
+        "checkpoints": null
+      },
+      "heartbeats": {
+        "main": {
+          "version": 1,
+          "producer": "main",
+          "pid": 40494,
+          "startedAt": "2026-10-20T20:04:56.297Z",
+          "updatedAt": "2026-10-21T02:32:03.275Z",
+          "sequence": 775
+        },
+        "bsc": {
+          "version": 1,
+          "producer": "bsc",
+          "pid": 40497,
+          "startedAt": "2026-10-20T20:04:56.720Z",
+          "updatedAt": "2026-10-21T02:32:13.594Z",
+          "sequence": 764
+        },
+        "fomo": {
+          "version": 1,
+          "producer": "fomo",
+          "pid": 829,
+          "startedAt": "2026-10-20T13:26:36.401Z",
+          "updatedAt": "2026-10-21T02:31:53.711Z",
+          "sequence": 1571
+        }
+      },
+      "ledger": {
+        "prefix307Hash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437"
+      }
+    },
+    {
+      "at": "2026-10-21T02:32:51.192Z",
+      "four": {
+        "cursor": {
+          "nextBlock": 128858660,
+          "anchorBlock": 128858659,
+          "anchorBlockHash": "0x3f6103d34fb9a4fc21d9bc916e69f973b67e2fff54691b15274b747effa5a43b"
+        },
+        "updatedAt": "2026-10-21T02:32:45.017Z",
+        "outboxCount": 0,
+        "processedCount": 78,
+        "checkpoints": [
+          {
+            "blockNumber": 128858614,
+            "blockHash": "0x0746dd2705c0c96da51029062bd6135ea5d3d9d051d9cbace606b796784ad564"
+          },
+          {
+            "blockNumber": 128858637,
+            "blockHash": "0x7a46e937e81b166ac1af65b661b497d05c47b2dfbfc892bbf3b223356cdf6da3"
+          },
+          {
+            "blockNumber": 128858659,
+            "blockHash": "0x3f6103d34fb9a4fc21d9bc916e69f973b67e2fff54691b15274b747effa5a43b"
+          }
+        ]
+      },
+      "flap": {
+        "cursor": {
+          "nextBlock": 128858643,
+          "afterLogIndex": -1,
+          "anchorBlock": 128858642,
+          "anchorBlockHash": "0x290d436618e7adf3142fa8e7f9070e8fb8cd080f9290bd38c57e7b15b79299ec",
+          "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+        },
+        "verifiedHead": 128858642,
+        "version": "v5.25.0",
+        "health": {
+          "status": "healthy",
+          "consecutiveFailures": 0,
+          "lastSuccessAt": "2026-10-21T02:32:32.874Z",
+          "lastErrorAt": null,
+          "lastError": null,
+          "lastErrorCode": null,
+          "reorgCount": 0,
+          "lastReorgAt": null,
+          "lastAttemptAt": "2026-10-21T02:32:32.874Z",
+          "nextAttemptAt": null,
+          "failureClass": null
+        },
+        "eventRecords": 30,
+        "checkpoints": [
+          {
+            "blockNumber": 128858588,
+            "blockHash": "0x2509d24a36e4794e4174a8f20749bee850449dfaf92d3fe0c096c7f6de9ed49d",
+            "observedAt": "2026-10-21T02:32:08.812Z"
+          },
+          {
+            "blockNumber": 128858618,
+            "blockHash": "0xaf228ea54a8a6d8e838a66c0a537e642798b3221a14e11a5e14aee9a6097cce4",
+            "observedAt": "2026-10-21T02:32:20.872Z"
+          },
+          {
+            "blockNumber": 128858642,
+            "blockHash": "0x290d436618e7adf3142fa8e7f9070e8fb8cd080f9290bd38c57e7b15b79299ec",
+            "observedAt": "2026-10-21T02:32:32.874Z"
+          }
+        ]
+      },
+      "heartbeats": {
+        "main": {
+          "version": 1,
+          "producer": "main",
+          "pid": 40494,
+          "startedAt": "2026-10-20T20:04:56.297Z",
+          "updatedAt": "2026-10-21T02:32:33.275Z",
+          "sequence": 776
+        },
+        "bsc": {
+          "version": 1,
+          "producer": "bsc",
+          "pid": 40497,
+          "startedAt": "2026-10-20T20:04:56.720Z",
+          "updatedAt": "2026-10-21T02:32:43.995Z",
+          "sequence": 765
+        },
+        "fomo": {
+          "version": 1,
+          "producer": "fomo",
+          "pid": 829,
+          "startedAt": "2026-10-20T13:26:36.401Z",
+          "updatedAt": "2026-10-21T02:32:23.713Z",
+          "sequence": 1572
+        }
+      },
+      "ledger": {
+        "prefix307Hash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437"
+      }
+    }
+  ],
+  "healthDelta": {
+    "sincePreviousRound": {
+      "four": 1023121,
+      "flap": 32169
+    },
+    "withinRound": {
+      "four": 77,
+      "flap": 78
+    },
+    "pendingToLocalFlapReference": 0,
+    "previousPendingToLocalFlapReference": 990935,
+    "referenceMeaning": "asynchronous locally verified BSC checkpoints, not independent current chain head or proof of continuous coverage"
+  },
+  "api": {
+    "at": "2026-10-21T02:31:33.674Z",
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "poolFirstThreePolicy": {
+      "version": "paper_quote_asset_first_three_v1",
+      "mode": "paper",
+      "maxUniqueCA": 3,
+      "generationPolicyVersion": "paper_launch_generation_first_three_v2",
+      "supportedSources": [
+        "bsc:flap",
+        "bsc:fourmeme"
+      ],
+      "maxEventAgeMs": 120000,
+      "requiresChart": false,
+      "orderBasis": "链上 TokenCreated 的区块号、交易序号、日志序号；不是发现顺序或热门榜",
+      "coverageNote": "仅接入严格链上证明的 BSC Flap 底池配置与 OpenFour 模板代次；网页模板、无关联 Hook 或缺排序证据仍观察；其他发射台未覆盖，不推测排名"
+    },
+    "exit": {
+      "running": true,
+      "lastError": null
+    },
+    "shadow": {
+      "version": "profit_retention_multiarm_v3",
+      "status": "observing",
+      "error": null,
+      "summaryError": null,
+      "closedPairs": 1,
+      "persistedAt": "2026-10-21T02:31:27.770Z",
+      "cursor": {
+        "tradeCount": 307,
+        "lastTradeId": "1792275648715:306",
+        "tradePrefixHash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437"
+      },
+      "baseline": {
+        "tradeCount": 305,
+        "lastTradeId": "1792250738005:304",
+        "tradePrefixHash": "dd8adde1337cddcf30dfee8f2a526fdfb7cbee2d4852e59ae616188302bce9ce",
+        "establishedAtMs": 1792252219527
+      }
+    },
+    "scheduler": {
+      "version": "evidence_preserving_event_lease_v1",
+      "rememberedEventLeases": 0,
+      "overflowPreemptionSuppressedUntil": null
+    },
+    "coverage": {
+      "version": "launch_update_coverage_v1",
+      "readErrors": [
+        "four"
+      ],
+      "platforms": {
+        "flap": {
+          "onchain": {
+            "status": "adapter_observed_head_unverified",
+            "lastAttemptAt": "2026-10-21T02:30:59.712Z",
+            "lastSuccessAt": "2026-10-21T02:30:59.712Z",
+            "nextAttemptAt": null,
+            "ageMs": 22971,
+            "lastErrorAt": null,
+            "lastErrorCode": null,
+            "adapterHealth": {
+              "status": "fresh",
+              "lastAttemptAt": "2026-10-21T02:30:59.712Z",
+              "lastSuccessAt": "2026-10-21T02:30:59.712Z",
+              "nextAttemptAt": null,
+              "ageMs": 22971,
+              "lastErrorAt": null,
+              "lastErrorCode": null
+            },
+            "checkpointAt": "2026-10-21T02:30:59.712Z",
+            "nextBlock": 128858440,
+            "headLagBlocks": null,
+            "liveHeadVerified": false,
+            "scope": "BSC pinned Portal quote adapter"
+          },
+          "documentBodies": {
+            "version": "official_document_body_v1",
+            "allowedPages": 59,
+            "uncheckedPages": 0,
+            "freshPages": 58,
+            "stalePages": 0,
+            "failedPages": 1,
+            "untrackedPages": 0,
+            "rosterOverflowPages": 0,
+            "pendingChanges": 2,
+            "omittedChangeCount": 0,
+            "nextDueAt": "2026-10-21T02:30:41.677Z",
+            "originNextAttemptAt": null,
+            "rosterDiscovery": {
+              "status": "fresh",
+              "total": 1,
+              "fresh": 1,
+              "unverified": 0,
+              "stale": 0,
+              "source_limited": 0,
+              "degraded": 0,
+              "metadata_only": 0
+            },
+            "status": "partial"
+          },
+          "officialX": {
+            "handle": "flapdotsh",
+            "status": "source_limited",
+            "lastAttemptAt": null,
+            "lastSuccessAt": "2026-10-21T02:30:54.836Z",
+            "nextAttemptAt": null,
+            "ageMs": 27847,
+            "lastErrorAt": null,
+            "lastErrorCode": null
+          },
+          "coverageStatus": "bounded_sources_not_all_future_schemas"
+        },
+        "fourmeme": {
+          "onchain": {
+            "adapterHealth": null,
+            "status": "unverified",
+            "checkpointAt": null,
+            "nextBlock": null,
+            "headLagBlocks": null,
+            "liveHeadVerified": false,
+            "scope": "BSC pinned OpenFour registry adapter"
+          },
+          "documentBodies": {
+            "version": "official_document_body_v1",
+            "allowedPages": 10,
+            "uncheckedPages": 0,
+            "freshPages": 8,
+            "stalePages": 0,
+            "failedPages": 2,
+            "untrackedPages": 0,
+            "rosterOverflowPages": 0,
+            "pendingChanges": 0,
+            "omittedChangeCount": 0,
+            "nextDueAt": "2026-10-21T02:30:33.854Z",
+            "originNextAttemptAt": null,
+            "rosterDiscovery": {
+              "status": "fresh",
+              "total": 1,
+              "fresh": 1,
+              "unverified": 0,
+              "stale": 0,
+              "source_limited": 0,
+              "degraded": 0,
+              "metadata_only": 0
+            },
+            "status": "partial"
+          },
+          "officialX": {
+            "handle": "fourdotmemezh",
+            "status": "source_limited",
+            "lastAttemptAt": null,
+            "lastSuccessAt": "2026-10-21T02:30:52.416Z",
+            "nextAttemptAt": null,
+            "ageMs": 30267,
+            "lastErrorAt": null,
+            "lastErrorCode": null
+          },
+          "coverageStatus": "bounded_sources_not_all_future_schemas"
+        }
+      }
+    }
+  },
+  "forward": {
+    "at": "2026-10-21T02:34:25.770Z",
+    "report": "docs/operator-reference-followups/2026-10-21-1030-sol-kimchi-four-caught-up.md",
+    "entryFrom": "2026-10-10T14:51:42.000Z",
+    "tradeCount": 307,
+    "lastTradeId": "1792275648715:306",
+    "newTrades": 0,
+    "newClosedRounds": 0,
+    "cohorts": {
+      "current": {
+        "closedRounds": 19,
+        "tokens": 17,
+        "netPnlUsd": -2.000968808588111,
+        "modelCostsUsd": 6.517236384155159,
+        "largestCaPositivePnlShare": 0.6317788618023847,
+        "byChainRoute": [
+          {
+            "chain": "bsc",
+            "route": "external_breakout",
+            "closedRounds": 9,
+            "tokens": 8,
+            "netPnlUsd": 2.3019375950953274,
+            "modelCostsUsd": 3.941985574466428
+          },
+          {
+            "chain": "sol",
+            "route": "external_breakout",
+            "closedRounds": 8,
+            "tokens": 7,
+            "netPnlUsd": -2.2624967321577194,
+            "modelCostsUsd": 2.082277977855123
+          },
+          {
+            "chain": "robinhood",
+            "route": "external_pullback",
+            "closedRounds": 1,
+            "tokens": 1,
+            "netPnlUsd": -1.0474852672385744,
+            "modelCostsUsd": 0.25833463440209364
+          },
+          {
+            "chain": "robinhood",
+            "route": "external_breakout",
+            "closedRounds": 1,
+            "tokens": 1,
+            "netPnlUsd": -0.9929244042871446,
+            "modelCostsUsd": 0.23463819743151496
+          }
+        ]
+      },
+      "legacy": {
+        "closedRounds": 0,
+        "tokens": 0,
+        "netPnlUsd": 0,
+        "modelCostsUsd": 0,
+        "largestCaPositivePnlShare": null,
+        "byChainRoute": []
+      },
+      "mixed": {
+        "closedRounds": 0,
+        "tokens": 0,
+        "netPnlUsd": 0,
+        "modelCostsUsd": 0,
+        "largestCaPositivePnlShare": null,
+        "byChainRoute": []
+      }
+    },
+    "crossBoundaryNewClosedRounds": 0,
+    "valuationSnapshot": [
+      {
+        "chain": "bsc",
+        "ca": "0x07bcb8e8226f671300e135b4a61dc157359b7777",
+        "entryId": "1791473723820:238",
+        "enteredAfterBaseline": false,
+        "valuationStatus": "fresh",
+        "markAt": "2026-10-21T02:31:20.692Z",
+        "pnl": -7.075272388765016
+      },
+      {
+        "chain": "sol",
+        "ca": "D7fGMz4E8r8FQyqULpqKr9MCu46izx9stJeStgGfYnJb",
+        "entryId": "1792085285247:297",
+        "enteredAfterBaseline": true,
+        "valuationStatus": "fresh",
+        "markAt": "2026-10-21T02:31:25.534Z",
+        "pnl": -0.3084236542405163
+      },
+      {
+        "chain": "sol",
+        "ca": "9LMZwPNYp2xQE5JpGFTeMVm3b6xtWw8wiDio459Kpump",
+        "entryId": "1792250738005:304",
+        "enteredAfterBaseline": true,
+        "valuationStatus": "fresh",
+        "markAt": "2026-10-21T02:31:23.105Z",
+        "pnl": -0.2227450980392156
+      }
+    ],
+    "health": {
+      "at": "2026-10-21T02:32:51.192Z",
+      "four": {
+        "cursor": {
+          "nextBlock": 128858660,
+          "anchorBlock": 128858659,
+          "anchorBlockHash": "0x3f6103d34fb9a4fc21d9bc916e69f973b67e2fff54691b15274b747effa5a43b"
+        },
+        "updatedAt": "2026-10-21T02:32:45.017Z",
+        "outboxCount": 0,
+        "processedCount": 78,
+        "checkpoints": [
+          {
+            "blockNumber": 128858614,
+            "blockHash": "0x0746dd2705c0c96da51029062bd6135ea5d3d9d051d9cbace606b796784ad564"
+          },
+          {
+            "blockNumber": 128858637,
+            "blockHash": "0x7a46e937e81b166ac1af65b661b497d05c47b2dfbfc892bbf3b223356cdf6da3"
+          },
+          {
+            "blockNumber": 128858659,
+            "blockHash": "0x3f6103d34fb9a4fc21d9bc916e69f973b67e2fff54691b15274b747effa5a43b"
+          }
+        ]
+      },
+      "flap": {
+        "cursor": {
+          "nextBlock": 128858643,
+          "afterLogIndex": -1,
+          "anchorBlock": 128858642,
+          "anchorBlockHash": "0x290d436618e7adf3142fa8e7f9070e8fb8cd080f9290bd38c57e7b15b79299ec",
+          "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+        },
+        "verifiedHead": 128858642,
+        "version": "v5.25.0",
+        "health": {
+          "status": "healthy",
+          "consecutiveFailures": 0,
+          "lastSuccessAt": "2026-10-21T02:32:32.874Z",
+          "lastErrorAt": null,
+          "lastError": null,
+          "lastErrorCode": null,
+          "reorgCount": 0,
+          "lastReorgAt": null,
+          "lastAttemptAt": "2026-10-21T02:32:32.874Z",
+          "nextAttemptAt": null,
+          "failureClass": null
+        },
+        "eventRecords": 30,
+        "checkpoints": [
+          {
+            "blockNumber": 128858588,
+            "blockHash": "0x2509d24a36e4794e4174a8f20749bee850449dfaf92d3fe0c096c7f6de9ed49d",
+            "observedAt": "2026-10-21T02:32:08.812Z"
+          },
+          {
+            "blockNumber": 128858618,
+            "blockHash": "0xaf228ea54a8a6d8e838a66c0a537e642798b3221a14e11a5e14aee9a6097cce4",
+            "observedAt": "2026-10-21T02:32:20.872Z"
+          },
+          {
+            "blockNumber": 128858642,
+            "blockHash": "0x290d436618e7adf3142fa8e7f9070e8fb8cd080f9290bd38c57e7b15b79299ec",
+            "observedAt": "2026-10-21T02:32:32.874Z"
+          }
+        ]
+      },
+      "heartbeats": {
+        "main": {
+          "version": 1,
+          "producer": "main",
+          "pid": 40494,
+          "startedAt": "2026-10-20T20:04:56.297Z",
+          "updatedAt": "2026-10-21T02:32:33.275Z",
+          "sequence": 776
+        },
+        "bsc": {
+          "version": 1,
+          "producer": "bsc",
+          "pid": 40497,
+          "startedAt": "2026-10-20T20:04:56.720Z",
+          "updatedAt": "2026-10-21T02:32:43.995Z",
+          "sequence": 765
+        },
+        "fomo": {
+          "version": 1,
+          "producer": "fomo",
+          "pid": 829,
+          "startedAt": "2026-10-20T13:26:36.401Z",
+          "updatedAt": "2026-10-21T02:32:23.713Z",
+          "sequence": 1572
+        }
+      },
+      "ledger": {
+        "prefix307Hash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437"
+      }
+    },
+    "healthDelta": {
+      "sincePreviousRound": {
+        "four": 1023121,
+        "flap": 32169
+      },
+      "withinRound": {
+        "four": 77,
+        "flap": 78
+      },
+      "pendingToLocalFlapReference": 0,
+      "previousPendingToLocalFlapReference": 990935,
+      "referenceMeaning": "asynchronous locally verified BSC checkpoints, not independent current chain head or proof of continuous coverage"
+    },
+    "launchAcceptance": {
+      "officialInformation": {
+        "platforms": {
+          "flap": {
+            "checkedAt": "2026-10-21T02:32:09.400Z",
+            "changes": [
+              {
+                "id": "77ee37ee1553235b423d4c62e5452e9a6174ec4700f44fe52d291c6de58f6829",
+                "url": "https://docs.flap.sh/flap/developers/flap-token-locker",
+                "observedAt": "2026-10-17T11:36:48.190Z",
+                "status": "pending_verification"
+              },
+              {
+                "id": "06aff81084c83e5e02e05412966922b6068064decfb63d901793a8ba9c5ed04c",
+                "url": "https://docs.flap.sh/flap/developers/flap-token-locker/integration-guide",
+                "observedAt": "2026-10-17T11:36:48.860Z",
+                "status": "pending_verification"
+              }
+            ],
+            "health": {
+              "status": "healthy",
+              "failureKind": null,
+              "consecutiveFailures": 0,
+              "lastAttemptAt": "2026-10-21T02:32:09.400Z",
+              "lastSuccessAt": "2026-10-21T02:32:09.400Z",
+              "lastErrorAt": null,
+              "lastError": null,
+              "lastErrorStatus": null,
+              "backoffMs": 0,
+              "nextAttemptAt": null,
+              "coverageStatus": "complete",
+              "optionalCircuitOpenCount": 0,
+              "optionalCircuitUrls": []
+            }
+          },
+          "fourmeme": {
+            "checkedAt": "2026-10-21T02:30:18.032Z",
+            "changes": [],
+            "health": {
+              "status": "healthy",
+              "failureKind": null,
+              "consecutiveFailures": 0,
+              "lastAttemptAt": "2026-10-21T02:30:18.032Z",
+              "lastSuccessAt": "2026-10-21T02:30:18.032Z",
+              "lastErrorAt": null,
+              "lastError": null,
+              "lastErrorStatus": null,
+              "backoffMs": 0,
+              "nextAttemptAt": null,
+              "coverageStatus": "complete",
+              "optionalCircuitOpenCount": 0,
+              "optionalCircuitUrls": []
+            }
+          }
+        },
+        "twitter": {
+          "flapdotsh": {
+            "latestId": "2112072953655632088",
+            "checkedAt": "2026-10-21T02:31:51.040Z",
+            "status": "source_limited",
+            "lastSuccessAt": "2026-10-21T02:31:51.040Z"
+          },
+          "fourdotmemezh": {
+            "latestId": "2112486153957818723",
+            "checkedAt": "2026-10-21T02:31:53.027Z",
+            "status": "source_limited",
+            "lastSuccessAt": "2026-10-21T02:31:53.027Z"
+          }
+        }
+      },
+      "api": {
+        "version": "launch_update_coverage_v1",
+        "readErrors": [
+          "four"
+        ],
+        "platforms": {
+          "flap": {
+            "onchain": {
+              "status": "adapter_observed_head_unverified",
+              "lastAttemptAt": "2026-10-21T02:30:59.712Z",
+              "lastSuccessAt": "2026-10-21T02:30:59.712Z",
+              "nextAttemptAt": null,
+              "ageMs": 22971,
+              "lastErrorAt": null,
+              "lastErrorCode": null,
+              "adapterHealth": {
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-21T02:30:59.712Z",
+                "lastSuccessAt": "2026-10-21T02:30:59.712Z",
+                "nextAttemptAt": null,
+                "ageMs": 22971,
+                "lastErrorAt": null,
+                "lastErrorCode": null
+              },
+              "checkpointAt": "2026-10-21T02:30:59.712Z",
+              "nextBlock": 128858440,
+              "headLagBlocks": null,
+              "liveHeadVerified": false,
+              "scope": "BSC pinned Portal quote adapter"
+            },
+            "documentBodies": {
+              "version": "official_document_body_v1",
+              "allowedPages": 59,
+              "uncheckedPages": 0,
+              "freshPages": 58,
+              "stalePages": 0,
+              "failedPages": 1,
+              "untrackedPages": 0,
+              "rosterOverflowPages": 0,
+              "pendingChanges": 2,
+              "omittedChangeCount": 0,
+              "nextDueAt": "2026-10-21T02:30:41.677Z",
+              "originNextAttemptAt": null,
+              "rosterDiscovery": {
+                "status": "fresh",
+                "total": 1,
+                "fresh": 1,
+                "unverified": 0,
+                "stale": 0,
+                "source_limited": 0,
+                "degraded": 0,
+                "metadata_only": 0
+              },
+              "status": "partial"
+            },
+            "officialX": {
+              "handle": "flapdotsh",
+              "status": "source_limited",
+              "lastAttemptAt": null,
+              "lastSuccessAt": "2026-10-21T02:30:54.836Z",
+              "nextAttemptAt": null,
+              "ageMs": 27847,
+              "lastErrorAt": null,
+              "lastErrorCode": null
+            },
+            "coverageStatus": "bounded_sources_not_all_future_schemas"
+          },
+          "fourmeme": {
+            "onchain": {
+              "adapterHealth": null,
+              "status": "unverified",
+              "checkpointAt": null,
+              "nextBlock": null,
+              "headLagBlocks": null,
+              "liveHeadVerified": false,
+              "scope": "BSC pinned OpenFour registry adapter"
+            },
+            "documentBodies": {
+              "version": "official_document_body_v1",
+              "allowedPages": 10,
+              "uncheckedPages": 0,
+              "freshPages": 8,
+              "stalePages": 0,
+              "failedPages": 2,
+              "untrackedPages": 0,
+              "rosterOverflowPages": 0,
+              "pendingChanges": 0,
+              "omittedChangeCount": 0,
+              "nextDueAt": "2026-10-21T02:30:33.854Z",
+              "originNextAttemptAt": null,
+              "rosterDiscovery": {
+                "status": "fresh",
+                "total": 1,
+                "fresh": 1,
+                "unverified": 0,
+                "stale": 0,
+                "source_limited": 0,
+                "degraded": 0,
+                "metadata_only": 0
+              },
+              "status": "partial"
+            },
+            "officialX": {
+              "handle": "fourdotmemezh",
+              "status": "source_limited",
+              "lastAttemptAt": null,
+              "lastSuccessAt": "2026-10-21T02:30:52.416Z",
+              "nextAttemptAt": null,
+              "ageMs": 30267,
+              "lastErrorAt": null,
+              "lastErrorCode": null
+            },
+            "coverageStatus": "bounded_sources_not_all_future_schemas"
+          }
+        }
+      },
+      "configured": {
+        "version": "paper_quote_asset_first_three_v1",
+        "mode": "paper",
+        "maxUniqueCA": 3,
+        "generationPolicyVersion": "paper_launch_generation_first_three_v2",
+        "supportedSources": [
+          "bsc:flap",
+          "bsc:fourmeme"
+        ],
+        "maxEventAgeMs": 120000,
+        "requiresChart": false,
+        "orderBasis": "链上 TokenCreated 的区块号、交易序号、日志序号；不是发现顺序或热门榜",
+        "coverageNote": "仅接入严格链上证明的 BSC Flap 底池配置与 OpenFour 模板代次；网页模板、无关联 Hook 或缺排序证据仍观察；其他发射台未覆盖，不推测排名"
+      },
+      "actual": {
+        "allHistoryBuys": 0,
+        "forwardBuys": 0,
+        "forwardDistinctCA": 0,
+        "forwardClosedRounds": 0,
+        "currentVersionForwardClosedRounds": 0,
+        "openPositions": 0
+      },
+      "newVerifiedUpdate": null,
+      "newFirstThreeOrdering": null,
+      "announcementAt": null,
+      "firstDiscoveredAt": null,
+      "verifiedAt": null,
+      "robinhoodFour": "unverified_unadapted"
+    },
+    "gaps": [
+      "D头页实际GMGN_REQUEST_BUSY，本轮停止后续请求，成功时间不更新。",
+      "E仅供应商活动，未独立核验完整库存/转账/费用，provider_freshness_unverified。",
+      "Four coverage readErrors仍存在；本地连续锚点推进不能替代面板读取验收。",
+      "Four/Robinhood公告与链上适配仍未核验。",
+      "X两来源仍source_limited；Flap两个旧正文变更待核实。",
+      "检查点不是全天连续在线证明；此前部署和观察间隙保留。"
+    ],
+    "nextQuestion": "轮换BSC最旧到期头页；Sol下次优先D，后续核验Kimchi库存/费用及是否与D同步，不把单钱包退出当组内清仓。",
+    "safety": {
+      "mode": "paper",
+      "execution": false,
+      "signing": false,
+      "broadcast": false,
+      "codeChanged": false,
+      "ledgerChanged": false,
+      "processRestarted": false,
+      "extraModelCalls": 0
+    }
+  },
+  "profitRetentionMultiarm": {
+    "checkedAt": "2026-10-21T02:34:25.770Z",
+    "savedAt": "2026-10-21T02:31:27.770Z",
+    "version": "profit_retention_multiarm_v3",
+    "baseline": {
+      "tradeCount": 305,
+      "lastTradeId": "1792250738005:304",
+      "tradePrefixHash": "dd8adde1337cddcf30dfee8f2a526fdfb7cbee2d4852e59ae616188302bce9ce",
+      "establishedAtMs": 1792252219527
+    },
+    "cursor": {
+      "tradeCount": 307,
+      "lastTradeId": "1792275648715:306",
+      "tradePrefixHash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437"
+    },
+    "checkpoint": {
+      "tradeCount": 307,
+      "lastTradeId": "1792275648715:306",
+      "tradePrefixHash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437",
+      "accountUpdatedAt": "2026-10-21T02:31:27.360Z"
+    },
+    "reportedIds": [
+      "1792274973724:305"
+    ],
+    "completeIds": [
+      "1792274973724:305"
+    ],
+    "newIds": [],
+    "sameEntries": true,
+    "sameQuotes": true,
+    "cursorConsistent": true,
+    "baselineConsistent": true,
+    "gapCount": 30,
+    "observerCoverage": {
+      "version": "profit_retention_observer_coverage_v1",
+      "interruptionCount": 1,
+      "interruptions": [
+        {
+          "reason": "no_active_pairs_mark_only_gap",
+          "fromAccountUpdatedAt": "2026-10-18T05:08:20.635Z",
+          "toAccountUpdatedAt": "2026-10-19T05:56:27.719Z",
+          "detectedAtMs": 1792389444407,
+          "tradeCount": 307,
+          "tradePrefixHash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437"
+        }
+      ]
+    },
+    "newCompletePairIds": [],
+    "newCompletePairs": 0,
+    "incrementalMetrics": [
+      {
+        "multiple": 2,
+        "netPnlUsd": null,
+        "deltaVsControlUsd": null,
+        "recoveryCount": null,
+        "notTriggeredCount": null,
+        "failureCount": null,
+        "earlySaleLossUsd": null,
+        "closedRoundDrawdownUsd": null,
+        "caConcentration": null,
+        "netExLargestPositiveCAUsd": null
+      },
+      {
+        "multiple": 3,
+        "netPnlUsd": null,
+        "deltaVsControlUsd": null,
+        "recoveryCount": null,
+        "notTriggeredCount": null,
+        "failureCount": null,
+        "earlySaleLossUsd": null,
+        "closedRoundDrawdownUsd": null,
+        "caConcentration": null,
+        "netExLargestPositiveCAUsd": null
+      },
+      {
+        "multiple": 5,
+        "netPnlUsd": null,
+        "deltaVsControlUsd": null,
+        "recoveryCount": null,
+        "notTriggeredCount": null,
+        "failureCount": null,
+        "earlySaleLossUsd": null,
+        "closedRoundDrawdownUsd": null,
+        "caConcentration": null,
+        "netExLargestPositiveCAUsd": null
+      }
+    ],
+    "schedulerVersion": "evidence_preserving_event_lease_v1",
+    "note": "无新完整共同回合，保留历史30条报价缺口和观察中断，不重报历史收益。"
+  },
+  "gaps": [
+    "D头页实际GMGN_REQUEST_BUSY，本轮停止后续请求，成功时间不更新。",
+    "E仅供应商活动，未独立核验完整库存/转账/费用，provider_freshness_unverified。",
+    "Four coverage readErrors仍存在；本地连续锚点推进不能替代面板读取验收。",
+    "Four/Robinhood公告与链上适配仍未核验。",
+    "X两来源仍source_limited；Flap两个旧正文变更待核实。",
+    "检查点不是全天连续在线证明；此前部署和观察间隙保留。"
+  ]
+}

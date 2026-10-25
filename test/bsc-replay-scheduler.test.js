@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createBscReplayScheduler } from "../src/bsc-replay-scheduler.js";
+import { createBscReplayScheduler, isBscReplayResourceWait } from "../src/bsc-replay-scheduler.js";
 import { createRpcPool } from "../src/bsc-launchpad-monitor.js";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -128,4 +128,162 @@ test("object proof retry budget bounds endpoint attempts for transaction, receip
     assert.equal(pool.getObjectReadHealth().active,0);
     pool.destroy();
   }
+});
+
+test("replay resource waits require whole-route typed evidence, not a mixed method failure", () => {
+  assert.equal(isBscReplayResourceWait({ rpcFailureScope: "capacity" }), true);
+  for (const evidence of [{ retryAfterMs: 100 }, { rpcHostRetryAfterMs: 100 },
+    { rpcCircuitAlreadyOpen: true }, { status: 429 }, { code: 429 }]) {
+    assert.equal(isBscReplayResourceWait({ rpcFailureScope: "host", ...evidence }), true);
+    assert.equal(isBscReplayResourceWait({ rpcFailureScope: "method", ...evidence }), false);
+  }
+  assert.equal(isBscReplayResourceWait({ message: "HTTP 429", retryAfterMs: 60_000 }), false);
+  assert.equal(isBscReplayResourceWait({ rpcFailureScope: "host", retryAfterMs: NaN }), false);
+  assert.equal(isBscReplayResourceWait({ rpcFailureScope: "method", rpcBudgetExhausted: true }), true);
+  assert.equal(isBscReplayResourceWait({ rpcFailureScope: "method", rpcBudgetExhausted: "true" }), false);
+});
+
+test("typed capacity and host cooldown refuse queued and new route wakeups without discarding durable work", async (t) => {
+  for (const scope of ["capacity", "host"]) {
+    await t.test(scope, async () => {
+      let clock = 1000, rejectActive;
+      const retryState = new Map(), scheduler = createBscReplayScheduler({ now: () => clock, retryState });
+      const attempts = [];
+      const active = scheduler.run("flap:a", () => new Promise((_resolve, reject) => {
+        attempts.push("a"); rejectActive = reject;
+      }));
+      const failed = assert.rejects(active, /resource unavailable/);
+      const queued = scheduler.run("four:b", () => assert.fail("queued operation bypassed route cooldown"));
+      const another = scheduler.run("flap:c", () => assert.fail("second queued operation bypassed route cooldown"));
+      await Promise.resolve();
+      rejectActive(Object.assign(new Error("resource unavailable"), {
+        rpcFailureScope: scope, retryAfterMs: scope === "capacity" ? 12_000 : 90_000,
+      }));
+      await failed;
+      assert.deepEqual(await Promise.all([queued, another]), [false, false]);
+      await scheduler.idle();
+      assert.deepEqual(attempts, ["a"]);
+      assert.equal(scheduler.snapshot().started, 1);
+      assert.equal(scheduler.snapshot().completed, 0);
+      assert.equal(scheduler.snapshot().pending, 0);
+      assert.equal(retryState.has("four:b"), false, "refused work does not get a fabricated failure or completion");
+      const wait = scope === "capacity" ? 12_000 : 90_000;
+      assert.equal(scheduler.snapshot().routeCooldownRemainingMs, wait);
+      clock += wait - 1;
+      assert.equal(await scheduler.run("four:b", () => assert.fail("new key bypassed route cooldown")), false);
+      clock += 1;
+      assert.equal(await scheduler.run("four:b", async () => { attempts.push("b"); return true; }), true);
+      await scheduler.idle();
+      assert.deepEqual(attempts, ["a", "b"]);
+      assert.equal(retryState.get("flap:a").failures, scope === "capacity" ? 0 : 1);
+    });
+  }
+});
+
+test("capacity preserves genuine failure count and delay while mixed failures retain exponential backoff", async () => {
+  let clock = 1000;
+  const retryState = new Map(), scheduler = createBscReplayScheduler({ now: () => clock, retryState });
+  const fail = async error => {
+    const failedAt = clock;
+    await assert.rejects(scheduler.run("flap:a", async () => { throw error; }));
+    await scheduler.idle();
+    const record = retryState.get("flap:a");
+    clock = record.until;
+    return { failures: record.failures, delay: record.until - failedAt };
+  };
+  const capacity = () => Object.assign(new Error("local admission unavailable"), { rpcFailureScope: "capacity", retryAfterMs: 100 });
+  assert.deepEqual(await fail(capacity()), { failures: 0, delay: 5000 });
+  assert.deepEqual(await fail(capacity()), { failures: 0, delay: 5000 });
+  for (let failures = 1; failures <= 5; failures++) {
+    const actual = await fail(Object.assign(new Error("mixed upstream timeout and capacity"), { rpcFailureScope: "method", retryAfterMs: 100 }));
+    assert.deepEqual(actual, { failures, delay: Math.min(60_000, 5000 * 2 ** (failures - 1)) });
+  }
+  assert.deepEqual(await fail(capacity()), { failures: 5, delay: 60_000 }, "capacity cannot shorten an existing upstream failure delay");
+  assert.deepEqual(await fail(Object.assign(capacity(), { rpcHostRetryAfterMs: 95_000, rpcHostFailure: "HTTP 429" })),
+    { failures: 6, delay: 95_000 }, "mixed host evidence is never relabelled as pure local admission");
+});
+
+test("route cooldown stays local while identical durable keys share retry state across lanes", async () => {
+  let clock = 1000;
+  const retryState = new Map();
+  const maintenance = createBscReplayScheduler({ now: () => clock, retryState });
+  const fresh = createBscReplayScheduler({ now: () => clock, retryState });
+  await assert.rejects(maintenance.run("flap:a", async () => {
+    throw Object.assign(new Error("shared physical capacity wait"), { rpcFailureScope: "capacity", retryAfterMs: 20_000 });
+  }));
+  await maintenance.idle();
+  assert.equal(await maintenance.run("four:b", () => assert.fail("same route was not cooled")), false);
+  assert.equal(await fresh.run("flap:a", () => assert.fail("same durable key bypassed shared cooldown")), false);
+  assert.equal(await fresh.run("flap:c", async () => true), true, "unrelated fresh route is not frozen by maintenance pressure");
+  await fresh.idle();
+  assert.equal(fresh.snapshot().routeCooldownRemainingMs, 0);
+  clock += 20_000;
+  assert.equal(await maintenance.run("four:b", async () => true), true);
+  await maintenance.idle();
+});
+
+test("queued work checks a newly shared key deadline again before entering another lane", async () => {
+  let clock = 1000, release;
+  const retryState = new Map();
+  const maintenance = createBscReplayScheduler({ now: () => clock, retryState });
+  const fresh = createBscReplayScheduler({ now: () => clock, retryState });
+  const running = fresh.run("flap:busy", () => new Promise(resolve => { release = resolve; }));
+  const queued = fresh.run("flap:a", () => assert.fail("prequeued key bypassed newly shared deadline"));
+  await assert.rejects(maintenance.run("flap:a", async () => {
+    throw Object.assign(new Error("typed host wait"), { rpcFailureScope: "host", retryAfterMs: 60_000 });
+  }));
+  await maintenance.idle();
+  release(true);
+  assert.equal(await running, true);
+  assert.equal(await queued, false);
+  await fresh.idle();
+  assert.equal(fresh.snapshot().routeCooldownRemainingMs, 0);
+  assert.equal(retryState.get("flap:a").until, clock + 60_000);
+});
+
+test("exhausted method budgets yield the route without relabelling mixed failures or resetting their exponent", async () => {
+  let clock = 1000;
+  const retryState = new Map(), scheduler = createBscReplayScheduler({ now: () => clock, retryState });
+  for (let failures = 1; failures <= 3; failures++) {
+    let rejectActive;
+    const error = Object.freeze(Object.assign(new Error("mixed upstream timeout and capacity; object budget exhausted"), {
+      rpcFailureScope: "method", rpcBudgetExhausted: true, rpcOperation: "getBlock",
+      retryAfterMs: failures === 3 ? 90_000 : 100,
+    }));
+    const active = scheduler.run("flap:a", () => new Promise((_resolve, reject) => { rejectActive = reject; }));
+    const rejected = assert.rejects(active, reason => reason === error && reason.rpcFailureScope === "method");
+    const queued = scheduler.run("flap:b", () => assert.fail("next window started a new budget before cooldown"));
+    await Promise.resolve();
+    rejectActive(error);
+    await rejected;
+    assert.equal(await queued, false);
+    await scheduler.idle();
+    const wait = failures === 3 ? 90_000 : 5000 * 2 ** (failures - 1);
+    assert.deepEqual(retryState.get("flap:a"), { failures, until: clock + wait });
+    assert.equal(retryState.has("flap:b"), false, "refused wakeup does not consume or complete its durable work");
+    assert.equal(scheduler.snapshot().routeCooldownRemainingMs, wait);
+    clock += wait - 1;
+    assert.equal(await scheduler.run("flap:b", () => assert.fail("budget cooldown shortened")), false);
+    clock += 1;
+    assert.equal(await scheduler.run("flap:b", async () => true), true, "the same preserved window can run after cooldown");
+    await scheduler.idle();
+  }
+  assert.equal(retryState.get("flap:a").failures, 3);
+});
+
+test("method failures without budget exhaustion still permit a queued independent key", async () => {
+  let clock = 1000, rejectActive;
+  const retryState = new Map(), scheduler = createBscReplayScheduler({ now: () => clock, retryState });
+  const active = scheduler.run("flap:a", () => new Promise((_resolve, reject) => { rejectActive = reject; }));
+  const rejected = assert.rejects(active, /one method failed/);
+  const queued = scheduler.run("four:b", async () => true);
+  await Promise.resolve();
+  rejectActive(Object.assign(new Error("one method failed with an alternate host available"), {
+    rpcFailureScope: "method", rpcBudgetExhausted: false, retryAfterMs: 20_000,
+  }));
+  await rejected;
+  assert.equal(await queued, true);
+  await scheduler.idle();
+  assert.deepEqual(retryState.get("flap:a"), { failures: 1, until: clock + 20_000 });
+  assert.equal(scheduler.snapshot().routeCooldownRemainingMs, 0);
 });

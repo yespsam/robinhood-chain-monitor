@@ -36,18 +36,23 @@ import { advanceNarrativeRecall, validNarrativeMemory, freshNarrativeRecall } fr
 import { advanceNarrativeLearning, validNarrativeLearning } from './paper-narrative-learning.js';
 import { advanceNarrativeAcademy, validNarrativeAcademy } from './paper-narrative-academy.js';
 import { readNarrativeLearningSource } from './paper-narrative-learning-source.js';
+import { NARRATIVE_ADMISSION_VERSION } from './paper-narrative-thesis.js';
 import { OPPORTUNITY_VERSION, OPPORTUNITY_ROUTES, canResearchExternal, opportunityChart, MAIN_CHART_WINDOW_VERSION } from './paper-opportunity-policy.js';
-import { MEME_STRUCTURE_ENTRY_VERSION } from './paper-opportunity-review.js';
+import { MEME_STRUCTURE_ENTRY_VERSION, PULLBACK_TARGET_SELECTION_VERSION } from './paper-opportunity-review.js';
 import { STRUCTURE_COST_POLICY_VERSION, STRUCTURE_COST_TEXT, MAIN_STRUCTURE_MAX_COST_RATE, GAS_ACCOUNT_ONLY_TEXT } from './paper-cost-policy.js';
-import { planHotResearch, selectResearchChart, selectQuoteCandidate, quoteCandidatePool, selectQuoteTarget, chartRefreshDue, advanceEntryFocus, RESEARCH_SCHEDULER_VERSION } from './paper-research-scheduler.js';
+import { planHotResearch, selectResearchChart, quoteCandidatePool, selectQuoteTarget, chartRefreshDue, advanceEntryFocus, RESEARCH_SCHEDULER_VERSION } from './paper-research-scheduler.js';
+import { projectQuoteOpportunity, selectQuoteOpportunity, QUOTE_OPPORTUNITY_VERSION } from './paper-quote-opportunity.js';
 import { createReviewComparison, validateReviewComparison, reviewComparisonSummary } from './paper-review-comparison.js';
 import { createExitComparison, validateExitComparison, advanceExitComparison, exitComparisonSummary, activateExitEntrySampling } from './paper-exit-comparison.js';
+import { createProfitRetentionObserver } from './paper-profit-retention-observer.js';
+import { PROFIT_RETENTION_MULTIARM_VERSION } from './paper-profit-retention-multiarm.js';
 import { nextScanDelay } from './paper-runtime-cadence.js';
 import { createTradeReview, advanceTradeReview, validateTradeReview, tradeReviewSummary } from './paper-trade-review.js';
-import { MEME_EXIT_POLICY, MEME_EXIT_TEXT, memeEntryContext, memeExitEvaluation } from './paper-meme-exit.js';
+import { MEME_EXIT_POLICY, MEME_EXIT_TEXT, MEME_EXIT_FLOW_OBSERVATION_VERSION, MEME_EXIT_STRUCTURE_OBSERVATION_VERSION, memeEntryContext, memeExitEvaluation } from './paper-meme-exit.js';
+import { STRUCTURE_ENTRY_PROOF_VERSION } from './paper-structure-entry-proof.js';
 import { buildPaperNewsWire } from './paper-news-wire.js';
 import { historicalTwitterAnchors } from './paper-twitter-event.js';
-import { PAPER_RECOVERY_VERSION, EVIDENCE_GAP_POLICY, RECOVERY_ENTRY_TEXT } from './paper-recovery-policy.js';
+import { PAPER_RECOVERY_VERSION, EVIDENCE_GAP_POLICY, RECOVERY_ENTRY_TEXT, ENTRY_FLOW_VERSION } from './paper-recovery-policy.js';
 import { PAPER_RECOVERY_SIZING_VERSION, PAPER_INTERNAL_DEPTH_SIZING_VERSION } from './paper-position-sizing.js';
 import { createNarrativeResearchIndex, narrativeDeskReport } from './paper-narrative-thesis.js';
 import { walletBuyResearchHint, WALLET_BUY_PRIORITY_VERSION } from './paper-wallet-priority.js';
@@ -91,9 +96,12 @@ async function atomicWrite(file, value) {
 }
 
 export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe = null, internalTradeMonitor = null, gasMonitor = null, jevResearch = null, chainGasAccounting = false, lossRepairMode = false, enforceLossGuards = lossRepairMode, session = null, chain = 'robinhood', chains = [chain], discoveryMode = 'all_sources', now = Date.now, intervalMs = 1000, marketIntervalMs = 1000, twitterNarrativeSnapshot = () => null, learningReportSnapshot = null,
-  evidenceLoader = createPaperEvidenceLoader(dataDir), evaluate = evaluatePaperStrategies, learningLoader = () => null, narrativeSourceReader = readNarrativeLearningSource, allowExploratory = false, compoundEntries = false, fixedEntryUsd = null, upsideMode = false, pvpMode = false, diagnosticMode = false, confirmedMode = false, evidenceHoldMode = false, continuousPaperMode = false, opportunityMode = false, thesisExitExperiment = false, activeEntrySampling = false, tradeReviewEvery = null, higherFrequencyResearch = false, memeExitMode = false, recoveryMode = false, minimalEntryMode = false, evidenceGapExitMode = true } = {}) {
+  evidenceLoader = createPaperEvidenceLoader(dataDir), evaluate = evaluatePaperStrategies, learningLoader = () => null, narrativeSourceReader = readNarrativeLearningSource, allowExploratory = false, compoundEntries = false, fixedEntryUsd = null, upsideMode = false, pvpMode = false, diagnosticMode = false, confirmedMode = false, evidenceHoldMode = false, continuousPaperMode = false, opportunityMode = false, thesisExitExperiment = false, activeEntrySampling = false, tradeReviewEvery = null, higherFrequencyResearch = false, memeExitMode = false, recoveryMode = false, minimalEntryMode = false, evidenceGapExitMode = true, narrativeAdmissionGate = false, profitRetentionShadow = false, ...legacyOptions } = {}) {
   if(typeof recoveryMode!=='boolean'||recoveryMode&&!memeExitMode)throw new TypeError('recovery requires meme paper main');
+  if(typeof narrativeAdmissionGate!=='boolean'||narrativeAdmissionGate&&!recoveryMode)throw new TypeError('narrative admission requires recovered paper main');
   const estimatedFeeMode=session?.costModel===ESTIMATED_COST_VERSION;
+  if(typeof profitRetentionShadow!=='boolean'||profitRetentionShadow&&(!estimatedFeeMode||!confirmedMode||!session))throw new TypeError('profit retention study requires an estimated confirmed paper session');
+  if(['profitRetentionPriceMultiple','profitRetentionPriceMultiples','triggerPriceMultiple','triggerPriceMultiples'].some(key=>Object.hasOwn(legacyOptions,key)))throw new TypeError('profit retention multiarm has fixed multiples 2, 3 and 5; single-multiple options are retired');
   if(typeof lossRepairMode!=='boolean'||lossRepairMode&&(!recoveryMode||!memeExitMode))throw new TypeError('loss repair requires recovered paper main');
   if(estimatedFeeMode&&recoveryMode&&(!lossRepairMode||chainGasAccounting||thesisExitExperiment||activeEntrySampling))throw new TypeError('estimated session requires isolated repair mode without legacy comparisons');
   if(typeof enforceLossGuards!=='boolean'||lossRepairMode&&!enforceLossGuards&&(!estimatedFeeMode||!continuousPaperMode))throw new TypeError('loss guard override requires continuous estimated paper');
@@ -130,6 +138,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     if (!confirmedMode || session.chain !== chain || JSON.stringify(session.chains) !== JSON.stringify(chains)) throw new Error('独立实验只能使用已选择的 V2 策略与链配置');
   }
   const stateFile = path.join(dataDir, session ? paperSessionLedgerFile(session) : 'yesp-atm-strategy-paper.json'), lockFile = `${stateFile}.lock`;
+  const profitRetentionObserver = profitRetentionShadow ? createProfitRetentionObserver({dataDir,sessionId:session.id,sourceLedgerName:path.basename(stateFile),now}) : null;
   const owner = randomUUID();
   const researchReader = createPaperResearchReader({ evidenceLoader, learningLoader, now });
   let account = null, enabled = !lossRepairMode, initialized = false, stopped = false, started = false, lockHeld = false, timer, tail = Promise.resolve(), cycle = null;
@@ -334,6 +343,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
   const fastQuotes = typeof market.quote === 'function';
   let candidateOffset = 0;
   let lastOpportunityChartAt = -Infinity, chartDispatch = 0, hotResearchKeys = [], lastChartDispatch = null, quoteLease = null;
+  let quoteEventLeaseHistory = [], quoteEventPreemptionSuppressedUntil = 0;
   const chartDispatches={holding:0,entry:0,hot:0,wallet:0,discovery:0,proactive:0};
   let entryFocus = null, hotQuoteLease = null;
   const researchDeferrals = { auxiliary: 0, details: 0, learning: 0, discovery: 0 };
@@ -440,6 +450,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       if (thesisExitExperiment && !exitComparison) exitComparison = createExitComparison(account, now());
       if (activeEntrySampling) exitComparison = activateExitEntrySampling(exitComparison, now());
       if (tradeReviewEvery && tradeCountReview == null) tradeCountReview = createTradeReview(account,now());
+      await profitRetentionObserver?.initialize({account,persistedAccount:stored?.account||account});
       initialized = true; publicState = { ...publicState, enabled, account: clone(account), updatedAt: account.updatedAt,
         tradeCountReview: tradeReviewSummary(tradeCountReview,tradeCountReviewError) };
     } catch (error) { errorState(error); await releaseLock(); throw error; }
@@ -1069,7 +1080,8 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
           flow: positionFlow(position,latestEvidence,nowMs) }] : [];
       });
       if (holdings.length && fastQuotes) {
-        const next = advancePaperStrategyAccount(account, { marks: marksFor(account), enabled: false, nowMs, confirmedMode, continuousPaperMode, lossRepairMode, enforceLossGuards, evidenceGapExitMode,
+        const mainMarks = marksFor(account);
+        const next = advancePaperStrategyAccount(account, { marks: mainMarks, enabled: false, nowMs, confirmedMode, continuousPaperMode, lossRepairMode, enforceLossGuards, evidenceGapExitMode,
           ...(recoveryMode?{recoveryMode,memeExitMode,opportunityMode}:{}) });
         next.stats.enabled = enabled;
         const pair = learningShadow ? { ...learningShadow,
@@ -1082,6 +1094,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
         if (lossRepairMode && next.stats.dailyLossGuard) enabled = false;
         next.stats.enabled = enabled;
         await atomicWrite(stateFile, { schema: 'yesp_atm_runtime_v1', session, chain, chains, enabled, account: next, algorithmSignalJournal, learningShadow: pair, narrativeMemory, narrativeLearningMemory, narrativeAcademyMemory, reviewComparison:comparison, exitComparison: exits, tradeCountReview: nextReview });
+        profitRetentionObserver?.observeCommitted({beforeAccount:account,afterAccount:next,marks:mainMarks,nowMs,path:'exit'});
         tradeCountReview = nextReview;
         exitComparison = exits;
         reviewComparison=comparison;
@@ -1108,7 +1121,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     const startedAt=now(),chart=charts.get(keyOf(request));
     // Same evaluator, admission rules and ledger as the periodic main book;
     // only the requested CA is evaluated. No control/shadow entries here.
-    let rows=input ? evaluate({...priced(input,startedAt),nowMs:startedAt,
+    let rows=input ? evaluate({...priced(input,startedAt),nowMs:startedAt,narrativeResearchIndex:input.narrativeResearchIndex||null,narrativeAdmissionGate,
       candles:chart?.candles||[],klineStatus:chart?.status||'unavailable'}).filter(canEnterRow) : [];
     scheduleInternalDepth(input,rows);
     rows=rows.map(row=>{
@@ -1133,13 +1146,14 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     });
     const commitAt=now(),beforeCount=account.trades.length;
     const next=advancePaperStrategyAccount(account,{evaluations:rows,marks,enabled,nowMs:commitAt,
-      diagnosticMode,confirmedMode,continuousPaperMode,opportunityMode,memeExitMode,recoveryMode,minimalEntryMode,chainGasAccounting,lossRepairMode,enforceLossGuards,estimatedFeeMode,evidenceGapExitMode});
+      diagnosticMode,confirmedMode,continuousPaperMode,opportunityMode,memeExitMode,recoveryMode,minimalEntryMode,narrativeAdmissionGate,chainGasAccounting,lossRepairMode,enforceLossGuards,estimatedFeeMode,evidenceGapExitMode});
     if (lossRepairMode && next.stats.dailyLossGuard) enabled = false;
     next.stats.enabled = enabled;
     const nextReview=nextTradeReview(next,commitAt);
     recordAlgorithmDecision(rows,commitAt);
     await atomicWrite(stateFile,{schema:'yesp_atm_runtime_v1',session,chain,chains,enabled,account:next,algorithmSignalJournal,learningShadow,narrativeMemory,
       narrativeLearningMemory,narrativeAcademyMemory,reviewComparison,exitComparison,tradeCountReview:nextReview});
+    profitRetentionObserver?.observeCommitted({beforeAccount:account,afterAccount:next,marks,nowMs:commitAt,path:'targeted_entry'});
     account=next;tradeCountReview=nextReview;
     const row=rows.find(r=>r.decision==='可模拟')||rows[0];
     lastCandidateEvaluation={chain:request.chain,address:request.address,at:new Date(commitAt).toISOString(),
@@ -1427,16 +1441,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
         || decisions.some(readyForPaperQuote)
         || decisions.some(researchReadyForQuote)
         || canPrefetchPaperFlow(input.flow, researchFlowPolicy) && decisions.some(onlyPricingOrFlowWarmupMissing))
-      .map(({ input, decisions, candidateBook }) => ({ input,candidateBook,
-        // A route-level signal may deserve a quote while cost/structure is
-        // still unresolved. It is research, not an admitted confirmation; it
-        // must not seize critical capacity or pause all other discoveries.
-        researchOnly:recoveryMode&&!decisions.some(readyForPaperQuote),
-        // Warmup candidates share the bounded quote lane but remain ordinary
-        // observations until the full evaluator marks them paper-eligible.
-        canQuote: minimalEntryMode && decisions.some(result => result.decision !== '不买' && !result.evidence?.safety?.blocked?.length)
-          || decisions.some(readyForPaperQuote) || decisions.some(researchReadyForQuote),
-        score: Math.max(...decisions.map(result => result.score)) }))
+      .map(row => projectQuoteOpportunity(row, {minimalEntryMode, recoveryMode}))
       .sort((a, b) => Number(!!walletBuyResearchHint(b.input,nowMs))-Number(!!walletBuyResearchHint(a.input,nowMs)) || b.score - a.score);
     // Holdings always get fresh marks first, even when no longer in ranking/trenches.
     const marks = [];
@@ -1482,14 +1487,12 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     const monitorReady=quotePool.filter(r=>r.input.monitorSignal);
     const collectiveReady=quotePool.filter(r=>r.input.collectiveSignal);
     const launchReady=lossRepairMode?monitorReady.filter(r=>launchContext(r.input.token,r.input.monitorSignal,nowMs)):[];
-    // A just-listed official event preempts a normal candidate once. Holdings
-    // retain priority and the event's original clock is never renewed.
-    if(launchReady.length&&!launchReady.some(r=>keyOf(r.input.token)===quoteLease?.key))quoteLease=null;
-    if((alphaReady.some(r=>nowMs-r.input.alphaSignal.listingTime<=300000)||monitorReady.length)
-      &&![...alphaReady,...monitorReady].some(r=>keyOf(r.input.token)===quoteLease?.key))quoteLease=null;
-    if(collectiveReady.length&&!collectiveReady.some(r=>keyOf(r.input.token)===quoteLease?.key))quoteLease=null;
-    const quoteSelection=selectQuoteCandidate([...launchReady,...collectiveReady,...alphaReady,...monitorReady,...narrativeReady,...quotePool],quoteLease,nowMs,{windowMs:entryWindowMs,mainFirst:recoveryMode});
+    const quoteSelection=selectQuoteOpportunity([...launchReady,...collectiveReady,...alphaReady,...monitorReady,...narrativeReady,...quotePool],quoteLease,nowMs,
+      {windowMs:entryWindowMs,mainFirst:recoveryMode,eventLeaseHistory:quoteEventLeaseHistory,
+        eventPreemptionSuppressedUntil:quoteEventPreemptionSuppressedUntil});
     quoteLease=quoteSelection.lease;
+    quoteEventLeaseHistory=quoteSelection.eventLeaseHistory;
+    quoteEventPreemptionSuppressedUntil=quoteSelection.eventPreemptionSuppressedUntil;
     const quoteCandidate=quoteSelection.row;
     if (quoteCandidate && (!recoveryMode||enabled)) admitCandidate(targetMap,{ ...quoteCandidate.input.token, purpose:'candidate',
       ...(recoveryMode?{candidateBook:quoteCandidate.candidateBook,researchOnly:quoteCandidate.researchOnly}:{}) });
@@ -1557,13 +1560,17 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     const finalEvaluate = (input, overrides = {}) => {
       const chart = charts.get(keyOf(input.token));
       const key=keyOf(input.token);
+      const effectiveNarrativeAdmissionGate=narrativeAdmissionGate
+        &&overrides.recoveryMode!==false&&overrides.memeExitMode!==false;
       if(!finalEvidence.has(key))finalEvidence.set(key,{
         collectiveSignal:input.collectiveSignal,
         flow:entryFlow(input.token,input.collectiveSignal,evidence,evidenceIndex,nowMs),
         narrative:evidenceIndex.narrative({chain:input.token.chain,address:input.token.address,token:input.token,nowMs})});
       return evaluate({ ...priced(input, nowMs), nowMs,
         ...finalEvidence.get(key),
-        candles: chart?.candles || [], klineStatus: chart?.status || 'unavailable', ...overrides,
+        ...overrides,
+        narrativeResearchIndex:input.narrativeResearchIndex||narrativeResearchIndex||null,
+        candles: chart?.candles || [], klineStatus: chart?.status || 'unavailable', narrativeAdmissionGate:effectiveNarrativeAdmissionGate,
         ...(overrides.memeExitMode===false?{recoveryMode:false,lossRepairMode:false,estimatedFeeMode:false,fixedEntryUsd}:{}),
         ...(overrides.confirmedMode===false?{fixedEntryUsd:null,minimalEntryMode:false}:{}) });
     };
@@ -1601,7 +1608,8 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     // finishes so a broad snapshot can never overwrite that fill.
     canDrainQuotes=false;
     nowMs=now();
-    const next = advancePaperStrategyAccount(account, { evaluations:evaluations.filter(canEnterRow), marks: marksFor(account), enabled, nowMs, diagnosticMode, confirmedMode, continuousPaperMode, opportunityMode, memeExitMode, recoveryMode, minimalEntryMode, chainGasAccounting,lossRepairMode,enforceLossGuards,estimatedFeeMode,evidenceGapExitMode });
+    const mainMarks = marksFor(account);
+    const next = advancePaperStrategyAccount(account, { evaluations:evaluations.filter(canEnterRow), marks: mainMarks, enabled, nowMs, diagnosticMode, confirmedMode, continuousPaperMode, opportunityMode, memeExitMode, recoveryMode, minimalEntryMode,narrativeAdmissionGate, chainGasAccounting,lossRepairMode,enforceLossGuards,estimatedFeeMode,evidenceGapExitMode });
     if (lossRepairMode && next.stats.dailyLossGuard) enabled = false;
     next.stats.enabled = enabled;
     const controlEvaluations=opportunityMode && reviewComparison ? (await scanMap(inputs, input=>finalEvaluate(input,{opportunityReviewMode:false,memeExitMode:false,
@@ -1620,6 +1628,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     recordAlgorithmDecision(evaluations,nowMs);
     const ledgerWriteStartedAt = now();
     await atomicWrite(stateFile, { schema: 'yesp_atm_runtime_v1', session, chain, chains, enabled, account: next, algorithmSignalJournal, learningShadow: nextShadow, narrativeMemory, narrativeLearningMemory,narrativeAcademyMemory,reviewComparison:nextComparison, exitComparison: nextExits, tradeCountReview: nextReview });
+    profitRetentionObserver?.observeCommitted({beforeAccount:account,afterAccount:next,marks:mainMarks,nowMs,path:'scan'});
     phaseTiming.ledgerWriteMs = Math.max(0, now() - ledgerWriteStartedAt);
     tradeCountReview = nextReview;
     exitComparison = nextExits;
@@ -1755,7 +1764,8 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
         seeds:undefined,hints:undefined,paperSignals:undefined,researchDocuments:undefined},
       narrativeLearning: narrativeLearningState && clone(narrativeLearningState),
       narrativeAcademy: narrativeAcademyState && clone(narrativeAcademyState),
-      narrativeDesk:recoveryMode?{...narrativeDeskReport(evaluations,narrativeResearchIndex,narrativeLearningState?.stageResearch,nowMs),twitter:twitterNarrative}:null,
+      narrativeDesk:recoveryMode?{...narrativeDeskReport(evaluations,narrativeResearchIndex,narrativeLearningState?.stageResearch,nowMs,
+        {admissionGate:narrativeAdmissionGate}),twitter:twitterNarrative}:null,
       entryGuard: confirmedMode ? confirmedAccountGate(account, nowMs, null, null, null, { continuousPaperMode, enforceLossGuards }) : null,
       reviewComparison:reviewComparisonSummary(reviewComparison,account),
       exitComparison: exitComparisonSummary(exitComparison),
@@ -1796,6 +1806,8 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
           note:'热门外盘最多 15 秒普通优先级报价预热，再休息 45 秒；不占已合格入口、不直接授予买入许可'},
         discoveryCandidates:externalResearch.length,hotLimit:scanChains.length*hotPerChain,lastChartDispatch,chartDispatches:{...chartDispatches},
         hotChartDispatchesByChain:{...hotChartDispatchesByChain},quoteLease,
+        quoteOpportunityScheduler:{version:QUOTE_OPPORTUNITY_VERSION,rememberedEventLeases:quoteEventLeaseHistory.length,
+          overflowPreemptionSuppressedUntil:quoteEventPreemptionSuppressedUntil||null},
         entryFocus: entryFocus && { ...entryFocus, active: !!focusedEntry(), maxWindowMs: entryWindowMs, discoveryIntervalMs: 10000 },
         researchDeferrals: { ...researchDeferrals },
         chartDiagnostics:[...charts.entries()].toSorted((a,b)=>b[1].fetchedAt-a[1].fetchedAt).slice(0,10).map(([key,c])=>{
@@ -1885,7 +1897,19 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
   }
   return {
     stateFile,
-    snapshot: () => ({...clone(publicState),...(learningReportSnapshot?{learning:displayLearningReport()}:{}),discoveryScope:discoveryScopeSnapshot(),readonlyRequests:market.diagnostics?.()||null,algorithmSignals:algorithmSignalSnapshot(), scanScope:{version:1,scanChains:[...scanChains],managementChains:[...chains],
+    snapshot: () => ({...clone(publicState),
+      profitRetentionShadow:profitRetentionObserver?.snapshot()||{version:PROFIT_RETENTION_MULTIARM_VERSION,enabled:false,status:'disabled',configuredPriceMultiples:[2,3,5],mode:'multiarm_paired_observation_only',execution:false,signing:false,broadcast:false},
+      ...(recoveryMode&&memeExitMode?{strategyValidationRequirements:{entryFlowVersion:ENTRY_FLOW_VERSION,
+        narrativeAdmissionVersion:NARRATIVE_ADMISSION_VERSION,narrativeAdmissionGate,
+        exitObservationVersion:MEME_EXIT_FLOW_OBSERVATION_VERSION,
+        exitStructureObservationVersion:MEME_EXIT_STRUCTURE_OBSERVATION_VERSION,
+        entryStructureBySetup:Object.fromEntries(['external_breakout','external_pullback','external_trend'].map(id=>[id,STRUCTURE_ENTRY_PROOF_VERSION])),
+        targetSelectionBySetup:{external_pullback:PULLBACK_TARGET_SELECTION_VERSION},
+        ...(estimatedFeeMode?{entryCostVersion:ESTIMATED_COST_VERSION,exitCostVersion:ESTIMATED_COST_VERSION}:{}),
+        note:'仅按已冻结的实际版本比较；缺版本不计作当前修复成绩，不宣称盈利优势'}}:{}),
+      ...(recoveryMode?{narrativeAdmission:{version:NARRATIVE_ADMISSION_VERSION,enabled:narrativeAdmissionGate,
+        note:narrativeAdmissionGate?'新开仓要求新鲜原文、精确 CA 关系、明确催化、资金承接和量价结构；旧仓退出照常':'未启用叙事入场复核'}}:{}),
+      ...(learningReportSnapshot?{learning:displayLearningReport()}:{}),discoveryScope:discoveryScopeSnapshot(),readonlyRequests:market.diagnostics?.()||null,algorithmSignals:algorithmSignalSnapshot(), scanScope:{version:1,scanChains:[...scanChains],managementChains:[...chains],
       retainedExitChains:[...new Set(heldTokens().map(t=>t.chain))].filter(c=>!scanChains.includes(c)),
       newsMonitoring:'unchanged',effectiveOnRestart:true}, ...(lossRepairMode && account ? {lossGuards:paperLossGuard(account, now(), {enforced:enforceLossGuards})} : {}), ...(jevResearch ? {jevResearch:jevResearch.snapshot()} : {})}),
     walletResearchContext: () => ({readOnly:true,
@@ -1926,6 +1950,6 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       return clone(publicState);
     }),
     stop: async () => { stopped = true; clearTimeout(timer); clearTimeout(refreshTimer); clearTimeout(quoteTimer); clearTimeout(exitTimer); clearTimeout(eventTimer);
-      await Promise.allSettled([internalTradeMonitor?.stop(),jevResearch?.stop(),cycle, fastCycle, quoteEvaluationJob, eventRefreshJob, depthJob, ...quotePreparationJobs, exitJob, refreshJob, ...marketJobs.values(), ...auxiliaryJobs.values(), ...[...quoteJobs.values()].map(x=>x.job), detailJob, narrativeLearningJob, ...chartJobs.values()]); await tail; await releaseLock(); },
+      await Promise.allSettled([internalTradeMonitor?.stop(),jevResearch?.stop(),cycle, fastCycle, quoteEvaluationJob, eventRefreshJob, depthJob, ...quotePreparationJobs, exitJob, refreshJob, ...marketJobs.values(), ...auxiliaryJobs.values(), ...[...quoteJobs.values()].map(x=>x.job), detailJob, narrativeLearningJob, ...chartJobs.values()]); await tail; await profitRetentionObserver?.flush(); await releaseLock(); },
   };
 }

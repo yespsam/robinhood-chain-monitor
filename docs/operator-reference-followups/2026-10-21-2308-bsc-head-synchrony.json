@@ -1,0 +1,184 @@
+{
+  "round": 94,
+  "scheduledAt": "2026-10-21T14:55:11.851Z",
+  "completedAt": "2026-10-21T15:13:24.558Z",
+  "durationSecondsApprox": 1085,
+  "group": "bsc",
+  "question": "A/B历史页一对一同步行为与最新头页新鲜度；旁核Four/Flap游标与面板覆盖",
+  "wallets": {
+    "A": {
+      "address": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "providerHeadCheckedAt": null,
+      "providerHeadCheckWindow": ["2026-10-21T14:58:49.346Z", "2026-10-21T15:00:53.990Z"],
+      "providerHeadCheckedAtPrecision": "not-recorded-window-only",
+      "providerLatestActivityAt": "2026-10-02T11:08:09.000Z",
+      "headRows": 20,
+      "headNewRows": 0,
+      "headOverlap": 20,
+      "headAnchor": {
+        "at": "2026-10-02T11:08:09.000Z",
+        "hash": "0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868",
+        "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+        "side": "sell",
+        "found": true
+      },
+      "headNextCursor": "MTI1MjY3MDU2MDAxOTAwMDAwMDowOjo=",
+      "historicalPage": {
+        "checkedAt": "2026-10-21T15:03:29.153Z",
+        "rows": 20,
+        "newRows": 20,
+        "pageOverlap": 0,
+        "replayDedupVerified": true,
+        "oldestAt": "2026-09-23T14:51:11.000Z",
+        "latestAt": "2026-10-02T09:17:15.000Z",
+        "buys": 10,
+        "sells": 10,
+        "uniqueCAs": 8
+      },
+      "lastNewEvidenceAt": "2026-10-21T15:03:29.153Z",
+      "coverageStatus": "provider_coverage_gap_pending_classification",
+      "nextHeadCheckDueAt": "2026-10-21T23:01:00Z"
+    },
+    "B": {
+      "address": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "providerHeadCheckedAt": null,
+      "providerHeadCheckWindow": ["2026-10-21T14:58:49.346Z", "2026-10-21T15:00:53.990Z"],
+      "providerHeadCheckedAtPrecision": "not-recorded-window-only",
+      "providerLatestActivityAt": "2026-10-02T11:08:09.000Z",
+      "headRows": 20,
+      "headNewRows": 0,
+      "headOverlap": 20,
+      "headAnchor": {
+        "at": "2026-10-02T11:08:09.000Z",
+        "hash": "0x276ed1a8787a851f66bf341a62bd62728028d53b19a22ea8a69fa6b3f7857f6d",
+        "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+        "side": "sell",
+        "found": true
+      },
+      "headNextCursor": "MTI1MjY3MDU2MDAyMTcwMDAwMDowOjo=",
+      "historicalPage": {
+        "checkedAt": "2026-10-21T15:03:38.659Z",
+        "rows": 20,
+        "newRows": 20,
+        "pageOverlap": 0,
+        "replayDedupVerified": true,
+        "oldestAt": "2026-09-23T14:51:11.000Z",
+        "latestAt": "2026-10-02T09:17:15.000Z",
+        "buys": 10,
+        "sells": 10,
+        "uniqueCAs": 8
+      },
+      "lastNewEvidenceAt": "2026-10-21T15:03:38.659Z",
+      "coverageStatus": "provider_freshness_unverified",
+      "nextHeadCheckDueAt": "2026-10-21T23:01:00Z"
+    }
+  },
+  "pageComparison": {
+    "distinctPagesPerWallet": 2,
+    "gmgnBusinessRequests": 6,
+    "gmgnSuccessful": 6,
+    "gmgnFailed": 0,
+    "configChecks": 4,
+    "publicRpcRequests": 0,
+    "modelRequests": 0,
+    "historicalReplayRequests": 2,
+    "sameSecondCaSideOneToOnePairs": 20,
+    "distinctMatchedCAs": 8,
+    "matchedPairsUseDifferentTransactionHashes": "verified_for_representative_examples_only",
+    "commonCAs": [
+      "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "0xa161a9cc32e7f2a70e3aa29267503e78506c7777",
+      "0x90d42f789f620cc39fb175dd429f079d90347777",
+      "0x24c5dd9dd26f49413b92cc05f979918503097777",
+      "0xb97882f8def851612e3644f475836051bed57777",
+      "0xe56d61faaea345ef8e1f8a3698665e10d9cb7777",
+      "0x0b2ff17381cb3338345f0f0a6630bea289dc7777",
+      "0x4b4daf725bfe16f59249522faac053f1cbd47777"
+    ],
+    "representativeMatches": [
+      {
+        "at": "2026-10-02T09:17:15.000Z",
+        "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+        "side": "sell",
+        "A": "0xe0f4595182d446f56cf39ae207120a3a228b116a2d727c8207fb84160c998ace",
+        "B": "0xdee5c8605ee8b64ff185afe540246a99f6fdde19d6292406a7f471627595ed23"
+      },
+      {
+        "at": "2026-10-02T09:15:05.000Z",
+        "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+        "side": "buy",
+        "A": "0xb073221348cf86a8af2f565a8b28329e13f053dc0c01baf32b460642103c0981",
+        "B": "0x2dea160a3f2d378a39ba50983a4b285f2e5bf0105327875bb653f657c4d67c2f"
+      },
+      {
+        "at": "2026-10-02T09:13:34.000Z",
+        "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+        "side": "sell",
+        "A": "0xe86ff441732f6c0ef9517d5b6e99b7b084b2eb14f7a645ac50ecaf68749d4fbf",
+        "B": "0x78ab51a054270c1d399f31f6bddaa1e8148a42e8b4ebcd3b9447029004f49c1b"
+      }
+    ],
+    "interpretation": "Repeated same-second same-CA same-side timing in sampled historical pages supports a follow-up coordination/synchrony hypothesis only; different hashes, incomplete history/cost and unknown transfers do not establish common control, collusion, manipulation or profitability."
+  },
+  "localCoverage": {
+    "checkedAt": "2026-10-21T15:08:22.777Z",
+    "paper": {
+      "mode": "paper",
+      "execution": false,
+      "signing": false,
+      "broadcast": false,
+      "sourceTradeCount": 309,
+      "lastTradeId": "1792567338823:308",
+      "newTradesSincePrior": 0,
+      "newCompleteProfitRetentionPairs": 0,
+      "reportedPairIds": ["1792274973724:305", "1792567092580:307"],
+      "liveApiSuccessAt": "2026-10-21T15:00:53.990Z",
+      "liveApiTimeoutAt": "2026-10-21T15:05:52.000Z",
+      "quoteGapCount": 45,
+      "observerInterruptionCount": 1,
+      "schedulerLiveState": "unverified_after_timeout"
+    },
+    "fourFlap": {
+      "fourCursorNextBlock": 128959355,
+      "fourOutbox": 0,
+      "fourPendingConfirmations": 0,
+      "fourProof": {
+        "at": "2026-10-21T15:07:24.279Z",
+        "head": 128959246,
+        "safeHead": 128959243,
+        "sourceTips": [128959246, 128959246],
+        "cursorAtProof": 128959229,
+        "lagBlocksAtProof": 14,
+        "sourceSpread": 0
+      },
+      "flapCursorNextBlock": 128959337,
+      "flapOutbox": 0,
+      "flapPendingConfirmations": 0,
+      "flapHealth": "healthy",
+      "flapVersion": "v5.26.0",
+      "flapProof": {
+        "at": "2026-10-21T15:07:32.027Z",
+        "head": 128959262,
+        "safeHead": 128959259,
+        "sourceTips": [128959262, 128959264],
+        "cursorAtProof": 128959234,
+        "lagBlocksAtProof": 25,
+        "sourceSpread": 2
+      },
+      "currentLagAfterLaterCursorAdvance": null,
+      "fourPanelRead": "timed_out_on_later_read",
+      "robinhoodFour": "unverified_unadapted"
+    }
+  },
+  "safety": {
+    "ledgerChanged": false,
+    "strategyChanged": false,
+    "processRestarted": false,
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "newResearchAddresses": 0
+  },
+  "report": "docs/operator-reference-followups/2026-10-21-2308-bsc-head-synchrony.md",
+  "nextQuestion": "轮换Sol，核对D/E最旧到期头页；下次BSC优先C头页，并继续保留C nonce22/23分类缺口。"
+}

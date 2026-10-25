@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createNarrativeResearchIndex,buildNarrativeThesis,narrativeEventFrame,narrativeSourceKey,
-  classifyNarrativeCase,narrativeStageReport,attachNarrativeThesis,narrativeDeskReport,NARRATIVE_THESIS_VERSION} from '../src/paper-narrative-thesis.js';
+  classifyNarrativeCase,narrativeStageReport,attachNarrativeThesis,narrativeDeskReport,NARRATIVE_THESIS_VERSION,
+  NARRATIVE_ADMISSION_VERSION,AGENTIC_WALLET_BUY_PROOF_VERSION,classifyAgenticWalletClaim,verifyAgenticWalletBuyProof,narrativeAdmissionReview} from '../src/paper-narrative-thesis.js';
 import {renderNarrativeThesis,renderNarrativeDesk} from '../dashboard/narrative-thesis.js';
 import {evaluatePaperStrategies,advancePaperStrategyAccount,createPaperStrategyAccount} from '../src/paper-strategy-engine.js';
 import {normalizePlatformCall,GMGN_SOCIAL_VERSION} from '../src/gmgn-social-monitor.js';
@@ -27,6 +28,41 @@ test('event frames distinguish attention, promised delivery and value claims wit
   assert.equal(narrativeEventFrame('No token, not affiliated with Mooncake').warning,true);
   assert.equal(narrativeEventFrame('gm').kind,'unclassified');
   assert.match(narrativeEventFrame('').mechanism,/不按币名补故事/);
+});
+
+test('Agentic Wallet, Agent ID and AI Pro claims stay separate; only official identity plus a successful exact-CA buy qualifies',()=>{
+  assert.equal(classifyAgenticWalletClaim('Binance Agentic Wallet exclusive').scope,'agentic_wallet_exclusive_claim');
+  assert.equal(classifyAgenticWalletClaim('Only Agent ID .ai wallets can mint').scope,'agent_id_restricted_claim');
+  assert.equal(classifyAgenticWalletClaim('AI Pro subscribers can use the agent').scope,'ai_pro_mentioned');
+  const proof={version:AGENTIC_WALLET_BUY_PROOF_VERSION,verifier:'official_registration_and_public_receipt_v1',
+    chain:'bsc',tokenAddress:CA,verifiedAt:iso(NOW),
+    identity:{authority:'binance',status:'official_registration_verified',address:OTHER,
+      sourceUrl:'https://www.binance.com/en/agentic-wallet',evidenceId:'registry-row-1'},
+    buy:{chain:'bsc',tokenAddress:CA,from:OTHER,direction:'buy',receiptStatus:'success',verifiedBy:'public_chain_receipt_v1',
+      txHash:`0x${'1'.repeat(64)}`,at:iso(NOW-1000),publicReceiptUrl:`https://bscscan.com/tx/0x${'1'.repeat(64)}`}};
+  assert.equal(verifyAgenticWalletBuyProof(proof,token,NOW).qualifyingCandidateBuys,1);
+  assert.equal(verifyAgenticWalletBuyProof(null,token,NOW).qualifyingCandidateBuys,null);
+  assert.equal(verifyAgenticWalletBuyProof({...proof,buy:{...proof.buy,tokenAddress:OTHER}},token,NOW).verified,false);
+  assert.equal(verifyAgenticWalletBuyProof({...proof,identity:{...proof.identity,sourceUrl:'https://binance.com.evil.test/registry'}},token,NOW).verified,false);
+});
+
+test('narrative admission is a fresh source-to-CA-to-demand chain, not a keyword score',()=>{
+  const sourceUrl=url('303');
+  const ready={version:NARRATIVE_THESIS_VERSION,chain:'bsc',address:CA,
+    event:{kind:'product_delivery',warning:false,claimStatus:'原文主张，未独立证实',sourceAt:iso(NOW-10000),sourceUrl},
+    sources:[{url:sourceUrl,binding:'direct_ca'}],relationship:{kind:'direct_ca'},
+    catalyst:{phase:'fresh',ageMs:10000},demand:{status:'buying',observedAt:iso(NOW-1000),recentNetBuyers:2,netBuyUsd:600},
+    market:{ready:true},invalidation:{blockNewNarrativeEntry:false},
+    agenticWallet:{scope:'none',requiresOfficialWalletAndBuyProof:false,proofStatus:'not_required'}};
+  const decision=narrativeAdmissionReview(ready,{token,nowMs:NOW});
+  assert.equal(decision.version,NARRATIVE_ADMISSION_VERSION);assert.equal(decision.ready,true);
+  for(const changed of [
+    {...ready,relationship:{kind:'name_only'}},
+    {...ready,catalyst:{phase:'repeated',ageMs:1000}},
+    {...ready,demand:{...ready.demand,status:'selling'}},
+    {...ready,event:{...ready.event,kind:'unclassified'}},
+    {...ready,agenticWallet:{scope:'agentic_wallet_exclusive_claim',requiresOfficialWalletAndBuyProof:true,proofStatus:'unverified'}},
+  ])assert.equal(narrativeAdmissionReview(changed,{token,nowMs:NOW}).ready,false);
 });
 
 test('explicit CA, community permalink and name-only hypotheses remain distinct, across chains too',()=>{
@@ -145,6 +181,13 @@ test('production evaluator freezes research in new paper buys and rechecks a con
   assert.match(row.evidence.narrativeThesis.conclusion,/没有原文/);
   const a=advancePaperStrategyAccount(createPaperStrategyAccount({nowMs:NOW}),{...modes,evaluations:[row],nowMs:NOW});
   assert.equal(a.trades.length,1);assert.equal(a.trades[0].entryEvidence.narrativeThesis.version,NARRATIVE_THESIS_VERSION);
+  const strict=evaluatePaperStrategies({...input,narrativeAdmissionGate:true})[0];
+  assert.equal(strict.decision,'观察');assert.equal(strict.evidence.narrativeAdmission.ready,false);
+  const forged={...strict,decision:'可模拟',missing:[],evidence:{...strict.evidence,paperEligible:true,
+    narrativeAdmission:{version:NARRATIVE_ADMISSION_VERSION,ready:true}}};
+  const denied=advancePaperStrategyAccount(createPaperStrategyAccount({nowMs:NOW}),
+    {...modes,narrativeAdmissionGate:true,evaluations:[forged],nowMs:NOW});
+  assert.equal(denied.trades.length,0,'the serialized ledger writer recomputes the narrative gate instead of trusting a ready flag');
   const bad=evaluatePaperStrategies({...input,narrativeResearchIndex:index([doc({chain:'bsc',text:`Do not buy Mooncake ${CA}`})])})[0];
   assert.equal(bad.decision,'观察');bad.decision='可模拟';bad.evidence.paperEligible=true;
   assert.equal(advancePaperStrategyAccount(createPaperStrategyAccount({nowMs:NOW}),{...modes,evaluations:[bad],nowMs:NOW}).trades.length,0);
@@ -162,7 +205,8 @@ test('Chinese research views escape source text, label late associations and mak
   const html=renderNarrativeThesis(t);assert.ok(!html.includes('<img'));assert.match(html,/&lt;img/);
   assert.match(html,/买盘承接/);assert.match(html,/CA 对应关系/);
   const desk=narrativeDeskReport([{token,evidence:{narrativeThesis:t}}],index(),narrativeStageReport([episode()],NOW),NOW);
-  assert.equal(desk.candidates,1);assert.match(renderNarrativeDesk(desk),/事后关联/);
+  assert.equal(desk.candidates,1);assert.equal(desk.admission.evaluated,1);assert.equal(desk.admission.blocked,1);
+  assert.match(renderNarrativeDesk(desk),/事后关联/);assert.match(renderNarrativeDesk(desk),/新仓叙事闸门/);
   assert.match(renderNarrativeDesk(desk,new Set([`bsc:${CA}`])),new RegExp(`data-narrative-case="bsc:${CA}" open`));
   assert.doesNotMatch(renderNarrativeDesk(desk,new Set([`base:${CA}`])),/ open>/,'same address on another chain does not open this case');
   assert.match(renderNarrativeThesis({...t,sources:[{url:'javascript:alert(1)'}]}),/出处待核实/);

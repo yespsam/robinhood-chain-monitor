@@ -1,0 +1,76 @@
+{
+  "schema": "verified_kol_learning_review_v1",
+  "checkedAt": "2026-10-10T13:49:34.357Z",
+  "policyVersion": "verified_kol_stability_v1",
+  "purpose": "Strategy-learning eligibility only; no automatic copy trading",
+  "requests": {
+    "configCheck": 1,
+    "gmgnBusiness": 1,
+    "publicRpc": 0
+  },
+  "source": {
+    "method": "portfolio stats",
+    "chain": "bsc",
+    "period": "30d",
+    "transport": "src/gmgn-flow-client.js shared queue, default priority 0"
+  },
+  "providerIdentity": {
+    "checkedAt": "2026-10-10T13:49:34.357Z",
+    "chain": "bsc",
+    "wallet": "0x2ce9d43d1cba6ae31d7f07bfe0098dfa2d833373",
+    "matched": true,
+    "chainReturned": null,
+    "common": {
+      "name": "",
+      "tags": [
+        "kol",
+        "fomo",
+        "gmgn_go",
+        "top_followed",
+        "top_renamed",
+        "gmgn"
+      ],
+      "twitter_username": "rob02643673_rob",
+      "twitter_name": "枯坐p小将",
+      "is_blue_verified": true,
+      "keys": [
+        "avatar",
+        "name",
+        "ens",
+        "tag",
+        "tags",
+        "tag_rank",
+        "nick_name",
+        "created_at",
+        "twitter_name",
+        "twitter_username",
+        "is_blue_verified",
+        "twitter_bind",
+        "twitter_fans_num",
+        "twitter_description",
+        "followers_count",
+        "follow_count",
+        "remark_count",
+        "created_token_count",
+        "fund_from",
+        "fund_from_ts",
+        "fund_tx_hash",
+        "wallet_address",
+        "fund_from_address",
+        "fund_amount"
+      ]
+    }
+  },
+  "qualification": {
+    "approved": false,
+    "status": "pending_evidence",
+    "unverified": [
+      "independently reviewed public person identity",
+      "stable numeric X account id",
+      "first-party public wallet ownership statement",
+      "four adjacent non-overlapping weeks with reconciled trades, costs, transfers and current open-risk valuation"
+    ]
+  },
+  "officialDefinitionUrl": "https://docs.gmgn.ai/cn/te-se-tu-biao-ding-yi",
+  "caution": "Provider KOL/blue verification labels are leads, not sufficient proof of human wallet ownership or stable future profitability."
+}

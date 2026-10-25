@@ -1,0 +1,185 @@
+{
+  "version": "operator_reference_followup_v1",
+  "round": 103,
+  "scheduledAt": "2026-10-23T07:06:50.022Z",
+  "checkedAt": "2026-10-23T07:11:22Z",
+  "group": "sol",
+  "question": "刷新 D/E 到期最新活动头页并核对 D 的新增快速往返是否有直接链上成功证据",
+  "requests": {
+    "gmgnConfigCheckPassed": true,
+    "sharedClientConfigCheckPassed": true,
+    "gmgnBusiness": 2,
+    "gmgnSuccessful": 2,
+    "gmgnFailed": 0,
+    "publicRpc": 1,
+    "publicRpcSuccessful": 0,
+    "model": 0,
+    "pages": {"D": 1, "E": 1},
+    "priority": 0
+  },
+  "wallets": {
+    "D": {
+      "chain": "sol",
+      "address": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "providerHeadCheckedAt": "2026-10-23T07:07Z",
+      "checkedAtPrecision": "approximate",
+      "pageRows": 20,
+      "identityEchoValidated": false,
+      "pageOverlap": null,
+      "newRows": null,
+      "latestActivityAt": "2026-10-23T01:18:18Z",
+      "lastNewEvidenceAt": "2026-10-23T07:07Z",
+      "newEvidence": [
+        {
+          "ca": "6TAtbaZAExDVoC3R3MD7dCKc7jmZvCjwQz23cZ2fpump",
+          "symbol": "Lala",
+          "side": "buy",
+          "at": "2026-10-23T01:18:12Z",
+          "hash": "4pmeUY9efuXhmRLAfQrTW8nrSeXpNznwoMMfVqhbMZ9DxeRSaJM7zTtJszczvdE2jBjy594bdwUSrMgCAdXn4KNo",
+          "costUsd": 140.54424178388,
+          "tokenAmount": "22361218.550721"
+        },
+        {
+          "ca": "6TAtbaZAExDVoC3R3MD7dCKc7jmZvCjwQz23cZ2fpump",
+          "symbol": "Lala",
+          "side": "sell",
+          "at": "2026-10-23T01:18:18Z",
+          "hash": "uykHWdP4XHE7LjqH1ZeJDLZpMor6rcZ7kbQgohNk9tGqP9rgjjpsepN3ahq7yu6rpUrowKJ9BzNjbUtS2MoHUxd",
+          "costUsd": 96.8919945445,
+          "tokenAmount": "22361218.550721"
+        }
+      ],
+      "rpcVerification": {
+        "method": "getTransaction",
+        "commitment": "finalized",
+        "endpoint": "https://api.mainnet-beta.solana.com",
+        "result": null,
+        "errorCode": -32015,
+        "successfulBuyVerified": false,
+        "initiatorVerified": false,
+        "retryStopped": true
+      },
+      "coverageStatus": "provider_activity_new_rows_observed; full_page_dedupe_unknown; no_identity_echo; tx_not_chain_verified"
+    },
+    "E": {
+      "chain": "sol",
+      "address": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "providerHeadCheckedAt": "2026-10-23T07:07Z",
+      "checkedAtPrecision": "approximate",
+      "pageRows": 20,
+      "identityEchoValidated": false,
+      "pageOverlap": null,
+      "newRows": null,
+      "latestActivityAt": null,
+      "lastNewEvidenceAt": "2026-10-22T15:01:37.018Z",
+      "coverageStatus": "head_read_success; summary_capture_incomplete; freshness_unverified"
+    }
+  },
+  "verifiedUniqueEvidenceRows": 2,
+  "newAddresses": 0,
+  "sameWalletRapidRoundTrip": {
+    "wallet": "D",
+    "chain": "sol",
+    "ca": "6TAtbaZAExDVoC3R3MD7dCKc7jmZvCjwQz23cZ2fpump",
+    "buyHash": "4pmeUY9efuXhmRLAfQrTW8nrSeXpNznwoMMfVqhbMZ9DxeRSaJM7zTtJszczvdE2jBjy594bdwUSrMgCAdXn4KNo",
+    "sellHash": "uykHWdP4XHE7LjqH1ZeJDLZpMor6rcZ7kbQgohNk9tGqP9rgjjpsepN3ahq7yu6rpUrowKJ9BzNjbUtS2MoHUxd",
+    "secondsBetween": 6,
+    "tokenAmountEqual": true,
+    "netPnlUsd": null,
+    "interpretation": "快速往返样本；GMGN成本差不是已验证净盈亏；链上交易发起地址和成功状态未核验。"
+  },
+  "fourFlap": {
+    "four": {
+      "proofAt": "2026-10-23T07:08:02.462Z",
+      "sourceTips": [129279205, 129279204],
+      "spread": 1,
+      "safeHeadAtProof": 129279201,
+      "cursorNextBlockAtProof": 129279180,
+      "lagBlocksAtProof": 22,
+      "laterCursorAt": "2026-10-23T07:08:52.332Z",
+      "laterCursorNextBlock": 129279306,
+      "laterSharedProofAt": "2026-10-23T07:08:36.561Z",
+      "laterSharedSafeHead": 129279279,
+      "cursorAheadOfLaterSafeHeadBy": 27,
+      "currentLagBlocks": null,
+      "backlogReductionCurrentVerified": false
+    },
+    "flap": {
+      "version": "v5.26.0",
+      "identityCheckedAt": "2026-10-23T07:08:06.901Z",
+      "proofAt": "2026-10-23T07:08:36.561Z",
+      "sourceTips": [129279282, 129279283],
+      "spread": 1,
+      "safeHeadAtProof": 129279279,
+      "cursorNextBlockAtProof": 129279262,
+      "lagBlocksAtProof": 18,
+      "cursorAtLastSuccess": 129279283,
+      "cursorLastSuccessAt": "2026-10-23T07:08:37.019Z",
+      "cursorAdvanceAfterProof": 21,
+      "lastErrorAt": "2026-10-23T07:09:34.123Z",
+      "lastErrorCode": "FLAP_QUOTE_FINALIZED_LANE_UNAVAILABLE",
+      "cooldownHost": "public-bsc.nownodes.io",
+      "status": "degraded",
+      "currentLagBlocks": null,
+      "capacityWaitResolved": false
+    },
+    "dashboardApiStatus": "timeout_2.5s",
+    "quoteOpportunityScheduler": null
+  },
+  "paperForward": {
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "previousTradeCount": 313,
+    "tradeCount": 317,
+    "previousLastTradeId": "1792717327956:312",
+    "lastTradeId": "1792737997699:316",
+    "newTradeIds": ["1792735289326:313", "1792737150480:314", "1792737270435:315", "1792737997699:316"],
+    "newClosedRounds": [
+      {"entryId": "1792735289326:313", "exitId": "1792737150480:314", "chain": "sol", "route": "external_breakout", "ca": "8idEA8QovsZJka6d9Z35fejE5MbL37BJxvw5k5r6pump", "netPnlUsd": -0.9877571044018678, "modelCostsUsd": 0.17391932279932126},
+      {"entryId": "1792737270435:315", "exitId": "1792737997699:316", "chain": "robinhood", "route": "external_breakout", "ca": "0x60633794df09856b339eea8bd741d749596b5230", "netPnlUsd": -0.4862565649317987, "modelCostsUsd": 0.20056059031151538}
+    ],
+    "totalNewClosedNetUsd": -1.4740136693336665,
+    "openPositions": 3,
+    "freshOpenValuationAt": "2026-10-23T07:10:32.855Z",
+    "unrealizedPnlUsd": -8.980999338472657,
+    "netLiquidationValueUsd": 52.98426239513377,
+    "valuationComplete": true
+  },
+  "profitRetentionMultiarm": {
+    "artifactCheckpointTradeCount": 317,
+    "artifactLastTradeId": "1792737997699:316",
+    "artifactTradePrefixHash": "d633c40279c3a8b569972e80606825d7d5ca097a7da73e4dfab91f1fb0884ec9",
+    "artifactUpdatedAt": "2026-10-23T07:10:46.817Z",
+    "reportedCompletePairIdsPreserved": [
+      "1792274973724:305",
+      "1792567092580:307",
+      "1792645698811:309",
+      "1792716860563:311"
+    ],
+    "newCompletePairIds": [],
+    "observationCount": 0,
+    "quoteGapCount": null,
+    "quoteOpportunityScheduler": null,
+    "coverageStatus": "artifact_cursor_matches_ledger_but_zero_observations; cannot classify new round pairs or quote-gap coverage"
+  },
+  "runtime": {
+    "main": {"pid": 48659, "startedAt": "2026-10-21T10:38:45.834Z", "updatedAt": "2026-10-23T07:06:47.599Z"},
+    "bscWorker": {"pid": 29463, "startedAt": "2026-10-23T05:05:19.956Z", "updatedAt": "2026-10-23T07:06:45.648Z"},
+    "processObserved": true,
+    "checkedAt": "2026-10-23T07:06:49Z",
+    "restartPerformed": false,
+    "continuousUptimeProven": false
+  },
+  "agenticWallet": {
+    "officialSourceReviewPerformed": false,
+    "fullChainScan": false,
+    "qualifyingCandidateBuys": null,
+    "nextScheduledCheckAt": "2026-10-23T07:15:17.000Z",
+    "note": "未刷新官方来源且未进行全链扫描，不推断无合格候选。"
+  },
+  "report": "docs/operator-reference-followups/2026-10-23-0706-sol-de-head-review.md",
+  "evidence": "docs/operator-reference-followups/2026-10-23-0706-sol-de-head-review.json",
+  "nextQuestion": "轮换 BSC；保持 D/E 新增 Lala 快速往返为未链核验样本，关注页级去重与身份回显；继续取得 Four/Flap 新鲜同窗头证，解决面板 quoteOpportunityScheduler 超时，并保留 Flap 共享 RPC 冷却缺口。"
+}

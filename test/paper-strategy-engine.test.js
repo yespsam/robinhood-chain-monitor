@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { STRATEGY_POLICIES, evaluatePaperStrategies, createPaperStrategyAccount, advancePaperStrategyAccount, validatePaperStrategyAccount } from '../src/paper-strategy-engine.js';
 import { breakoutCandles, sourcedNarrative } from './fixtures/paper-strategy-v2.js';
+import { reviewedTeacherSelection } from './fixtures/wallet-learning.js';
 
 const NOW = Date.parse('2026-09-20T10:00:00Z');
 const CA = `0x${'a'.repeat(40)}`;
@@ -186,7 +187,7 @@ test('only realized sale proceeds fund larger subsequent entries; loss shrinks b
 
 test('distilled exits are frozen per entry, never loosen original gates, and remain paper-only', () => {
   const policy = { version: '1234567890abcdef', chain: 'robinhood', group: 'gmgn_fomo', maxHoldMs: 120000, lossCutRate: .06,
-    teacherCount: 3, matchedSells: 30, trainedAt: iso(NOW), trainingEndAt: iso(NOW - 1) };
+    teacherCount: 3, teacherSelection: reviewedTeacherSelection('robinhood', NOW), matchedSells: 30, trainedAt: iso(NOW), trainingEndAt: iso(NOW - 1) };
   const empty = { ...createPaperStrategyAccount({ nowMs: NOW }), variant: 'distilled_shadow' };
   assert.equal(advancePaperStrategyAccount(empty, { evaluations: [evaluation()], nowMs: NOW }).trades.length, 0);
   const unsafe = input(); unsafe.token.isHoneypot = true;
@@ -200,6 +201,21 @@ test('distilled exits are frozen per entry, never loosen original gates, and rem
   assert.throws(() => validatePaperStrategyAccount(damaged), /missing distilled/);
   const expired = advancePaperStrategyAccount(student, { nowMs: NOW + 10000000, marks: [] });
   assert.equal(Object.keys(expired.positions).length, 1); assert.equal(Object.values(expired.positions)[0].markStatus, 'stale');
+});
+test('legacy distilled policy cannot create a new entry but persisted historical positions remain valid and exit normally', () => {
+  const policy = { version: '1234567890abcdef', chain: 'robinhood', group: 'gmgn_fomo', maxHoldMs: 120000, lossCutRate: .06,
+    teacherCount: 3, teacherSelection: reviewedTeacherSelection('robinhood', NOW), matchedSells: 30, trainedAt: iso(NOW), trainingEndAt: iso(NOW - 1) };
+  const legacy = structuredClone(policy); delete legacy.teacherSelection;
+  const empty = { ...createPaperStrategyAccount({ nowMs: NOW }), variant: 'distilled_shadow' };
+  assert.equal(advancePaperStrategyAccount(empty, { evaluations: [evaluation()], distilledPolicy: legacy, nowMs: NOW }).trades.length, 0);
+  const account = advancePaperStrategyAccount(empty, { evaluations: [evaluation()], distilledPolicy: policy, nowMs: NOW });
+  const position = Object.values(account.positions)[0];
+  delete position.distilledHabit.teacherSelection; delete position.entryEvidence.distilledHabit.teacherSelection;
+  assert.equal(validatePaperStrategyAccount(account), true);
+  const beforeTrades = structuredClone(account.trades);
+  const exited = advancePaperStrategyAccount(account, { marks: [mark(.93)], distilledPolicy: legacy, nowMs: NOW + 1000 });
+  assert.equal(Object.keys(exited.positions).length, 0); assert.equal(exited.trades.at(-1).price, .93);
+  assert.deepEqual(exited.trades.slice(0, beforeTrades.length), beforeTrades);
 });
 
 test('four independent strategies accept verified stages, not token names', () => {
@@ -382,9 +398,11 @@ test('stale/future/nonfinite marks never cause exits or update prices', () => {
   }
 });
 
-test('pause stops new entries while a fresh mark still triggers the existing stop loss', () => {
+test('narrative-entry gate leaves existing stop-loss exits active for an open position', () => {
   const account = open(); const nowMs = NOW + 1_000;
-  const result = advancePaperStrategyAccount(account, { evaluations: [evaluation('internal', nowMs)], marks: [mark(.7, nowMs)], nowMs, enabled: false });
+  const result = advancePaperStrategyAccount(account, { evaluations: [evaluation('internal', nowMs)], marks: [mark(.7, nowMs)], nowMs,
+    enabled:false,confirmedMode:true,continuousPaperMode:true,opportunityMode:true,memeExitMode:true,
+    recoveryMode:true,narrativeAdmissionGate:true });
   assert.equal(Object.keys(result.positions).length, 0); assert.equal(result.trades.length, 2);
   assert.equal(result.trades.at(-1).reason, '价格止损');
   const quantity = (5 - .02) / 1.013;

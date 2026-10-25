@@ -102,14 +102,24 @@ test('local wallet proof truncation preserves source aggregate selling without v
   assert.equal(advance(createPaperStrategyAccount({nowMs:NOW}),[forged],NOW,{memeExitMode:true,recoveryMode:true}).trades.length,0);
 });
 
-test('outflow contradiction is route-local, does not modify other chains or legacy control and cannot bypass safety',()=>{
+test('outflow contradiction covers recovered routes and chains, but not legacy control or safety bypasses',()=>{
   const pullback=breakoutFlowInput('pullback');pullback.flow.netBuyUsd=-300;
-  const p=evaluate(pullback);assert.equal(p.decision,'可模拟');assert.equal(p.evidence.opportunity.id,'external_pullback');
+  const p=evaluate(pullback);assert.equal(p.decision,'观察');
   assert.equal(p.evidence.recoveryCheck.breakoutFlow.applicable,false,'route check cache must not leak the breakout veto');
+  assert.equal(p.evidence.recoveryCheck.entryFlow.blocked,true,'the generalized entry check covers pullbacks separately');
   const b=breakoutFlowInput();b.flow.netBuyUsd=-300;
   assert.equal(evaluate({...b,recoveryMode:false}).decision,'可模拟','legacy control is unchanged');
-  b.token.chain='base';b.flow.chain='base';b.quoteHistory.forEach(q=>q.chain='base');
-  assert.equal(evaluate(b).decision,'可模拟');
+  for(const chain of ['base','sol','robinhood']) {
+    const i=breakoutFlowInput(),address=chain==='sol'?'8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj':CA;
+    Object.assign(i.token,{chain,address});Object.assign(i.flow,{chain,address});
+    if(chain==='sol')Object.assign(i.token,{renouncedMint:true,renouncedFreezeAccount:true});
+    i.quoteHistory.forEach(q=>Object.assign(q,{chain,address}));
+    const good=evaluate(i);assert.equal(good.decision,'可模拟',chain);
+    i.flow.netBuyUsd=-300;const bad=evaluate(i);assert.equal(bad.decision,'观察',chain);
+    assert.equal(bad.evidence.recoveryCheck.entryFlow.blocked,true,chain);
+    const forged=structuredClone(good);forged.evidence.recoveryEntry.flow.netBuyUsd=-300;
+    assert.equal(advance(createPaperStrategyAccount({nowMs:NOW}),[forged],NOW,{memeExitMode:true,recoveryMode:true}).trades.length,0,chain);
+  }
   for(const mutate of [i=>i.token.isHoneypot=true,i=>i.token.liquidity=0,i=>i.priceObservedAt=iso(NOW-6000),
     i=>i.token.sellTax=.061,i=>i.candles=[]]) {
     const i=breakoutFlowInput();mutate(i);assert.notEqual(evaluate(i).decision,'可模拟');

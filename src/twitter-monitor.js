@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { readOutboxJson } from "./outbox-json.js";
 import { monitoredLaunchpads } from "./launchpad-catalog.js";
 import { isTerminalAlertSuppression, sendAlerts } from "./alerts.js";
 import { PLATFORM_CAPABILITY_TARGETS } from "./platform-capability-monitor.js";
@@ -1408,7 +1409,7 @@ function updateCriticalSlaStatus(config, project, health, currentTime) {
   health.slaCheckedAt = new Date(currentTime).toISOString();
 }
 
-function targetList(dynamic, siteState, config) {
+export function targetList(dynamic, siteState, config) {
   const targets = new Map();
   const criticalOnly = config.twitterMonitorEnabled === false
     && (config.binanceCriticalXMonitorEnabled === true
@@ -1426,14 +1427,6 @@ function targetList(dynamic, siteState, config) {
   const projects = criticalOnly
     ? OFFICIAL_TWITTER_TARGETS
       .filter((project) => enabledCriticalProfiles.has(project.handle.toLowerCase()))
-      .map((project) => ({
-        ...project,
-        criticalFastLane: true,
-        criticalProfile: enabledCriticalProfiles.get(project.handle.toLowerCase()),
-        priority: true,
-        backfillOnFirstSeen: false,
-        baselineOnFirstSeen: true,
-      }))
     : [
         ...monitoredLaunchpads(),
         ...PLATFORM_CAPABILITY_TARGETS,
@@ -1445,13 +1438,26 @@ function targetList(dynamic, siteState, config) {
     const key = handle.toLowerCase();
     if (DISABLED_TWITTER_HANDLES.has(key)) return;
     const existing = targets.get(key) || {};
+    const criticalProfile = enabledCriticalProfiles.get(key);
+    const criticalOverrides = criticalProfile ? {
+      criticalFastLane: true,
+      criticalProfile,
+      priority: true,
+      backfillOnFirstSeen: false,
+      baselineOnFirstSeen: true,
+    } : {};
     targets.set(key, {
       ...existing,
       ...project,
       ...overrides,
+      ...criticalOverrides,
       handle,
-      priority: Boolean(existing.priority || project.priority || overrides.priority),
-      backfillOnFirstSeen: Boolean(existing.backfillOnFirstSeen || project.backfillOnFirstSeen || overrides.backfillOnFirstSeen),
+      priority: criticalProfile
+        ? true
+        : Boolean(existing.priority || project.priority || overrides.priority),
+      backfillOnFirstSeen: criticalProfile
+        ? false
+        : Boolean(existing.backfillOnFirstSeen || project.backfillOnFirstSeen || overrides.backfillOnFirstSeen),
       fallbackOfficialSources: project.fallbackOfficialSources || existing.fallbackOfficialSources || [],
     });
   };
@@ -2081,7 +2087,9 @@ export function createTwitterMonitor(config, dependencies = {}) {
     if (classification === "accepted") return true;
     if (classification === "semantic_duplicate" && (result?.persisted === true || result?.terminal === true)) return true;
     if (!result?.eventId || String(result.status || "").toLowerCase() !== "suppressed") return false;
-    const outbox = await readJson(path.join(config.dataDir, "alert-outbox.json"), null);
+    const outbox = await readOutboxJson(path.join(config.dataDir, "alert-outbox.json"), {
+      eventIds: [result.eventId],
+    }).catch(error => { if (error.code === "ENOENT") return null; throw error; });
     const entry = outbox?.events?.[result.eventId];
     if (!entry || entry.status !== "suppressed") return false;
     const destinations = Object.values(entry.destinations || {});

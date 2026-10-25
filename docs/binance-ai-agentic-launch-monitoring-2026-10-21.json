@@ -1,0 +1,80 @@
+{
+  "version": "binance_agentic_launch_monitoring_v1",
+  "checkedAt": "2026-10-21T15:40:32Z",
+  "nextReviewAt": "2026-10-21T18:55:11.851Z",
+  "cadence": "existing_four_hour_heartbeat_no_new_automation",
+  "scope": [
+    "Binance AI Pro",
+    "Binance Agent OS",
+    "Agentic Wallet",
+    "Agent ID / .ai",
+    "Four.Meme wallet-gated and new issuance models",
+    "Flap wallet-gated launches and campaigns"
+  ],
+  "hypothesisStatus": "agentic_wallet_gate_signal_found_unverified_as_official_launch_model",
+  "conclusion": "有第三方把 Agent ID (.ai) / Agentic Wallet 用作 Flap 发射准入的线索；尚无证据证明 Four.Meme 或 Flap 官方设定只有 Binance AI Pro 钱包可参与。",
+  "evidence": [
+    {
+      "topic": "Binance AI Pro",
+      "sourceType": "official",
+      "source": "https://www.binance.com/en/square/post/378961974502219",
+      "finding": "2026-10-19 起全球推出的 finance-focused AI agent/strategy product；不是链上钱包资格本身。"
+    },
+    {
+      "topic": "Agentic Wallet",
+      "sourceType": "official",
+      "source": "https://www.binance.com/en/square/post/315968775419586",
+      "finding": "独立 keyless 钱包，有独立余额与权限；AI Pro 用户内置相应 Skills；官方列出 BNB Smart Chain、Solana、Ethereum、Base。"
+    },
+    {
+      "topic": "Agent ID",
+      "sourceType": "official_binance_wallet_profile",
+      "source": "https://www.binance.com/en/square/profile/binancewallet",
+      "finding": "官方 Wallet 页面称 Agentic Wallet 可使用 .ai 人类可读身份；当前内容与 AI Pro 发布关联推广。"
+    },
+    {
+      "topic": "Four.Meme Binance Wallet Exclusive / Meme Rush",
+      "sourceType": "official",
+      "source": "https://www.binance.com/en/square/post/10-09-2025-binance-wallet-launches-meme-rush-exclusive-to-keyless-users-unlocking-early-access-to-high-potential-meme-tokens-30775657895250",
+      "finding": "Keyless 用户可参与早期 New/Finalizing 阶段，迁移阶段开放交易；不是 AI Pro 专属。"
+    },
+    {
+      "topic": "Four.Meme new launch modes",
+      "sourceType": "official_fourmeme",
+      "source": "https://www.binance.com/en/square/profile/four_meme",
+      "finding": "官方近期公告包括 TapeFour mining-token launch 与 4Stock/bStock 机制；本次核对内容未出现 AI Pro/Agent ID 独占资格。"
+    },
+    {
+      "topic": "Flap bStocks Booster",
+      "sourceType": "official_flap",
+      "source": "https://flap.sh/event/bstocks?lang=en",
+      "finding": "页面活动期 2026-10-19 至 2026-11-02 UTC；资格要求 Binance Wallet MPC 和至少 2 Alpha Points，并要求同钱包完成符合条件的任务。这是活动/奖励门槛，不是 AI Pro 独占。"
+    },
+    {
+      "topic": "DOTAI Agent ID-gated Flap launch",
+      "sourceType": "third_party_project_claim",
+      "source": "https://dotaibsc.com/",
+      "finding": "项目页声称限定 Binance Agent ID (.ai) 钱包、100 次 mint 后合约调用 Flap 发射并购买曲线；不代表 Binance、Four.Meme 或 Flap 官方合作/政策。",
+      "claimedContract": "0xB9324424Fe969840c090f8a72edF2fb47D730354",
+      "onchainStatus": "not_confirmed",
+      "gap": "BscScan 读取 403；项目页实时 counters 空白/无 inscriptions，而索引摘要曾显示 100/100。"
+    }
+  ],
+  "gaps": [
+    "没有官方证据表明 Four.Meme/Flap 平台规则是只有 AI Pro 钱包可参与。",
+    "DOTAI 合约是否强制查询 Agent ID registry、是否实际调用 Flap 尚未链上复核。",
+    "第三方页面的动态发行状态有冲突，不能确认为已发行/已毕业。"
+  ],
+  "nextQuestion": "下个既有四小时复核周期检查官方新增规则与 Agent ID-gated 项目的链上创建交易、allowlist 校验和最早三个不同 CA；不扩大到未经验证的第三方推广。",
+  "safety": {
+    "mode": "paper",
+    "buySell": false,
+    "signing": false,
+    "broadcast": false,
+    "strategyChanged": false,
+    "ledgerChanged": false,
+    "newAutomation": false,
+    "additionalRpc": false
+  },
+  "report": "docs/binance-ai-agentic-launch-monitoring-2026-10-21.md"
+}

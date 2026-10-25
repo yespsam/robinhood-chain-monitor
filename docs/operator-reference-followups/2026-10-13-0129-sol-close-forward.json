@@ -1,0 +1,923 @@
+{
+  "version": 1,
+  "group": "sol",
+  "report": "docs/operator-reference-followups/2026-10-13-0129-sol-close-forward.md",
+  "evidence": "docs/operator-reference-followups/2026-10-13-0129-sol-close-forward.json",
+  "question": "D另一笔待分类签名是否为买卖或非交易账户维护？",
+  "triggeredAt": "2026-10-12T17:29:24.454Z",
+  "startedAt": "2026-10-12T17:29:26Z",
+  "completedAt": "2026-10-12T17:32:57Z",
+  "configChecked": false,
+  "configCheckNotRequiredReason": "no_GMGN_request_this_round",
+  "gmgnConfigChecks": 0,
+  "gmgnBusinessRequests": 0,
+  "gmgnBusinessDispatched": 0,
+  "gmgnSucceeded": 0,
+  "gmgnFailed": 0,
+  "rpcRequests": 1,
+  "rpcSucceeded": 1,
+  "rpcFailed": 0,
+  "returnedRows": 0,
+  "repeatedRows": 0,
+  "newRows": 0,
+  "newIndependentActivityVerifications": 1,
+  "newAddresses": 0,
+  "status": "historical_zero_balance_closure_classified_new_paper_losses",
+  "summary": "D一笔旧签名被核实为空Token-2022账户关闭，租金返还不是交易利润。D/E头页在选取时未到8小时；无GMGN或历史分页。模拟盘新增3回合净-1.595618U。",
+  "elapsedFromHeartbeatSeconds": 213,
+  "method": {
+    "skills": [
+      "gmgn-portfolio",
+      "web3-security-trading"
+    ],
+    "readOnly": true,
+    "baselineSummariesReused": true,
+    "headSelectionAt": "2026-10-12T17:29:45Z",
+    "profilesRefreshed": false,
+    "historyPagesFetched": 0,
+    "rosterCount": 5,
+    "sameSecondMatchingPerformed": false
+  },
+  "headReuse": [
+    {
+      "id": "D",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "providerHeadCheckedAt": "2026-10-12T09:33:06.129Z",
+      "providerLatestActivityAt": "2026-10-12T05:17:31.000Z",
+      "lastNewEvidenceAt": "2026-10-12T17:30:14.162Z",
+      "nextHeadCheckDueAt": "2026-10-12T17:33:06.129Z",
+      "selectedAt": "2026-10-12T17:29:45Z",
+      "headRequested": false,
+      "reason": "not_due_at_round_selection",
+      "pageOverlap": null,
+      "newRows": 0,
+      "coverageStatus": "provider_coverage_gap_pending_classification"
+    },
+    {
+      "id": "E",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "providerHeadCheckedAt": "2026-10-12T09:33:19.651Z",
+      "providerLatestActivityAt": "2026-10-12T05:17:31.000Z",
+      "lastNewEvidenceAt": "2026-10-12T09:33:19.651Z",
+      "nextHeadCheckDueAt": "2026-10-12T17:33:19.651Z",
+      "selectedAt": "2026-10-12T17:29:45Z",
+      "headRequested": false,
+      "reason": "not_due_at_round_selection",
+      "pageOverlap": null,
+      "newRows": 0,
+      "coverageStatus": "provider_coverage_gap_pending_classification"
+    }
+  ],
+  "rpc": {
+    "source": "https://api.mainnet-beta.solana.com",
+    "method": "getTransaction",
+    "signature": "5AzpsLjsdXhHPRaC4zA7AfDCGB8QrdXagYDufvfi4uEEMK7pqEv9Fhp1LdG44vVpnTdN4MHb1kcJVTRr5nDJUvv",
+    "startedAt": "2026-10-12T17:30:13.040Z",
+    "httpStatus": 200,
+    "response": {
+      "jsonrpc": "2.0",
+      "result": {
+        "blockTime": 1791761383,
+        "meta": {
+          "computeUnitsConsumed": 1914,
+          "costUnits": 4604,
+          "err": null,
+          "fee": 13684,
+          "innerInstructions": [],
+          "logMessages": [
+            "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+            "Program ComputeBudget111111111111111111111111111111 success",
+            "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+            "Program ComputeBudget111111111111111111111111111111 success",
+            "Program TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb invoke [1]",
+            "Program log: Instruction: CloseAccount",
+            "Program TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb consumed 1464 of 3384 compute units",
+            "Program TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb success",
+            "Program 11111111111111111111111111111111 invoke [1]",
+            "Program 11111111111111111111111111111111 success"
+          ],
+          "postBalances": [
+            616427354950,
+            55716105461,
+            0,
+            1,
+            1,
+            70228638
+          ],
+          "postTokenBalances": [],
+          "preBalances": [
+            616427348242,
+            55714612013,
+            1513840,
+            1,
+            1,
+            70228638
+          ],
+          "preTokenBalances": [
+            {
+              "accountIndex": 2,
+              "mint": "26CQ6yMadADmTSZb5q7iyFvs5EjvUrNzA4TovrL9pump",
+              "owner": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+              "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+              "uiTokenAmount": {
+                "amount": "0",
+                "decimals": 6,
+                "uiAmount": null,
+                "uiAmountString": "0"
+              }
+            }
+          ],
+          "rewards": [],
+          "status": {
+            "Ok": null
+          }
+        },
+        "slot": 455832668,
+        "transaction": {
+          "message": {
+            "accountKeys": [
+              {
+                "pubkey": "AxiomRYAid8ZDhS1bJUAzEaNSr69aTWB9ATfdDLfUbnc",
+                "signer": true,
+                "source": "transaction",
+                "writable": true
+              },
+              {
+                "pubkey": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+                "signer": true,
+                "source": "transaction",
+                "writable": true
+              },
+              {
+                "pubkey": "BamcJs7pQUswFYg1NVjqekUvoAF2wMbMW94Hi1xffK5u",
+                "signer": false,
+                "source": "transaction",
+                "writable": true
+              },
+              {
+                "pubkey": "11111111111111111111111111111111",
+                "signer": false,
+                "source": "transaction",
+                "writable": false
+              },
+              {
+                "pubkey": "ComputeBudget111111111111111111111111111111",
+                "signer": false,
+                "source": "transaction",
+                "writable": false
+              },
+              {
+                "pubkey": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+                "signer": false,
+                "source": "transaction",
+                "writable": false
+              }
+            ],
+            "addressTableLookups": [],
+            "instructions": [
+              {
+                "accounts": [],
+                "data": "GeQ8D5",
+                "programId": "ComputeBudget111111111111111111111111111111",
+                "stackHeight": 1
+              },
+              {
+                "accounts": [],
+                "data": "3QCwqmHZ4mdq",
+                "programId": "ComputeBudget111111111111111111111111111111",
+                "stackHeight": 1
+              },
+              {
+                "parsed": {
+                  "info": {
+                    "account": "BamcJs7pQUswFYg1NVjqekUvoAF2wMbMW94Hi1xffK5u",
+                    "destination": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+                    "owner": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp"
+                  },
+                  "type": "closeAccount"
+                },
+                "program": "spl-token",
+                "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+                "stackHeight": 1
+              },
+              {
+                "parsed": {
+                  "info": {
+                    "destination": "AxiomRYAid8ZDhS1bJUAzEaNSr69aTWB9ATfdDLfUbnc",
+                    "lamports": 20392,
+                    "source": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp"
+                  },
+                  "type": "transfer"
+                },
+                "program": "system",
+                "programId": "11111111111111111111111111111111",
+                "stackHeight": 1
+              }
+            ],
+            "recentBlockhash": "GCv3oQYK9iPXnKPHs213fMJwCQ6BHDXBKPMErCA1zs9S"
+          },
+          "signatures": [
+            "5AzpsLjsdXhHPRaC4zA7AfDCGB8QrdXagYDufvfi4uEEMK7pqEv9Fhp1LdG44vVpnTdN4MHb1kcJVTRr5nDJUvv",
+            "5WjHTJYy41NyKCtfGHUuAtT7n2PRSx7K3oUMUKQKdAzsdq9f9tLNjm4mFkZ6WYDWCnAzUJERJrtkLyhJj6Q4ywyq"
+          ]
+        },
+        "transactionIndex": 58,
+        "version": 0
+      },
+      "id": 1
+    },
+    "checkedAt": "2026-10-12T17:30:14.162Z"
+  },
+  "classification": {
+    "chain": "sol",
+    "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+    "signature": "5AzpsLjsdXhHPRaC4zA7AfDCGB8QrdXagYDufvfi4uEEMK7pqEv9Fhp1LdG44vVpnTdN4MHb1kcJVTRr5nDJUvv",
+    "checkedAt": "2026-10-12T17:30:14.162Z",
+    "blockTime": "2026-10-11T23:29:43.000Z",
+    "slot": 455832668,
+    "success": true,
+    "classification": "signed_zero_balance_token2022_account_closure_not_swap",
+    "walletAccount": {
+      "pubkey": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "signer": true,
+      "source": "transaction",
+      "writable": true
+    },
+    "ca": "26CQ6yMadADmTSZb5q7iyFvs5EjvUrNzA4TovrL9pump",
+    "tokenAccount": "BamcJs7pQUswFYg1NVjqekUvoAF2wMbMW94Hi1xffK5u",
+    "preTokenAmount": "0",
+    "postTokenAccountClosed": true,
+    "tokenAccountRentLamports": 1513840,
+    "walletNativeBefore": 55714612013,
+    "walletNativeAfter": 55716105461,
+    "walletNativeDeltaLamports": 1493448,
+    "feePayer": "AxiomRYAid8ZDhS1bJUAzEaNSr69aTWB9ATfdDLfUbnc",
+    "transactionFeeLamports": 13684,
+    "systemTransfers": [
+      {
+        "destination": "AxiomRYAid8ZDhS1bJUAzEaNSr69aTWB9ATfdDLfUbnc",
+        "lamports": 20392,
+        "source": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp"
+      }
+    ],
+    "programLogLabels": [
+      "Program log: Instruction: CloseAccount"
+    ],
+    "interpretation": "D签名关闭零余额Token-2022账户，租金返还减去对第三方的原生转账；不是新增买卖或盈利。链上交易费由第一签名账户支付，不重复记到D。仅该账户关闭，不证明全钱包持仓为零。",
+    "newResearchAddresses": 0
+  },
+  "paperForward": {
+    "generatedAt": "2026-10-12T17:29:45.107Z",
+    "entryFrom": "2026-10-10T14:51:42.000Z",
+    "mode": "read_only_local_review",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "history": {
+      "tradeCount": 279,
+      "sourceUpdatedAt": "2026-10-12T17:29:44.725Z",
+      "integrity": "read_only_inventory_cash_and_realized_reconciled"
+    },
+    "account": {
+      "initialCashUsd": 100,
+      "cashUsd": 64.61407186469509,
+      "cashAdjustmentUsd": 99.6684734885994,
+      "totalContributedUsd": 199.6684734885994,
+      "cashAdjustments": [
+        {
+          "id": "user_refill_20260930_repair_01",
+          "kind": "manual_paper_cash_reset",
+          "amountUsd": 99.6684734885994,
+          "cashBefore": 0.33152651140059874,
+          "cashAfter": 100,
+          "tradeCount": 204,
+          "at": "2026-09-30T04:46:53.549Z"
+        }
+      ],
+      "modelCostsAllFillsUsd": 56.16371265555413,
+      "remainingCostBasisUsd": 8.7,
+      "realizedPnlUsd": -126.35440162390428,
+      "unrealizedPnlUsd": -6.095401551537166,
+      "totalPnlIncludingOpenUsd": -132.44980317544145,
+      "netLiquidationValueUsd": 67.21867031315793,
+      "valuationComplete": true,
+      "note": "补款不是利润；总已实现含未平仓头寸的部分卖出，不混入当前版本完整回合成绩。"
+    },
+    "currentVersion": {
+      "closedRounds": 6,
+      "tokens": 5,
+      "spanMs": 152261234,
+      "wins": 3,
+      "losses": 3,
+      "breakeven": 0,
+      "netPnlUsd": 5.843543474847228,
+      "modelCostsUsd": 2.2882605270964222,
+      "grossPricePnlUsd": 8.13180400194365,
+      "winRate": 0.5,
+      "averageNetUsd": 0.9739239124745379,
+      "averageWinUsd": 2.899779234284107,
+      "averageLossUsd": 0.9519314093350312,
+      "profitFactor": 3.046206066789769,
+      "payoffRatio": 3.046206066789769,
+      "averageNetR": 1.3063062628978883,
+      "riskKnownRounds": 6,
+      "closedRoundDrawdownUsd": 1.9903010936275631,
+      "costOnlyLosses": 0,
+      "priceLosses": 3,
+      "stopShortfalls": 0,
+      "stopExitsWithoutQuotePath": 0,
+      "sampleStatus": "collecting",
+      "byChainRoute": [
+        {
+          "chain": "bsc",
+          "route": "external_breakout",
+          "closedRounds": 3,
+          "tokens": 2,
+          "spanMs": 151670074,
+          "wins": 1,
+          "losses": 2,
+          "breakeven": 0,
+          "netPnlUsd": 4.5272558237443254,
+          "modelCostsUsd": 1.4198608991627495,
+          "grossPricePnlUsd": 5.947116722907075,
+          "winRate": 0.3333333333333333,
+          "averageNetUsd": 1.5090852745814418,
+          "averageWinUsd": 6.3355647845108445,
+          "averageLossUsd": 0.9041544803832595,
+          "profitFactor": 3.503585350716439,
+          "payoffRatio": 7.007170701432878,
+          "averageNetR": 1.9731329266993287,
+          "riskKnownRounds": 3,
+          "closedRoundDrawdownUsd": 0.9428158263889888,
+          "costOnlyLosses": 0,
+          "priceLosses": 2,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        },
+        {
+          "chain": "sol",
+          "route": "external_breakout",
+          "closedRounds": 2,
+          "tokens": 2,
+          "spanMs": 53440473,
+          "wins": 2,
+          "losses": 0,
+          "breakeven": 0,
+          "netPnlUsd": 2.3637729183414766,
+          "modelCostsUsd": 0.6100649935315788,
+          "grossPricePnlUsd": 2.9738379118730554,
+          "winRate": 1,
+          "averageNetUsd": 1.1818864591707383,
+          "averageWinUsd": 1.1818864591707383,
+          "averageLossUsd": null,
+          "profitFactor": null,
+          "payoffRatio": null,
+          "averageNetR": 1.268561992069897,
+          "riskKnownRounds": 2,
+          "closedRoundDrawdownUsd": 0,
+          "costOnlyLosses": 0,
+          "priceLosses": 0,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        },
+        {
+          "chain": "robinhood",
+          "route": "external_pullback",
+          "closedRounds": 1,
+          "tokens": 1,
+          "spanMs": 868622,
+          "wins": 0,
+          "losses": 1,
+          "breakeven": 0,
+          "netPnlUsd": -1.0474852672385744,
+          "modelCostsUsd": 0.25833463440209364,
+          "grossPricePnlUsd": -0.7891506328364808,
+          "winRate": 0,
+          "averageNetUsd": -1.0474852672385744,
+          "averageWinUsd": null,
+          "averageLossUsd": 1.0474852672385744,
+          "profitFactor": 0,
+          "payoffRatio": null,
+          "averageNetR": -0.6186851868504517,
+          "riskKnownRounds": 1,
+          "closedRoundDrawdownUsd": 1.0474852672385744,
+          "costOnlyLosses": 0,
+          "priceLosses": 1,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        }
+      ],
+      "concentration": {
+        "caCount": 5,
+        "largestCaRoundShare": 0.3333333333333333,
+        "largestCaPositivePnlShare": 0.7282812785200364,
+        "denominator": "sum_of_positive_round_pnl_not_total_net_pnl",
+        "byCA": [
+          {
+            "chain": "bsc",
+            "address": "0x5e066411ca15adaa15d3c16edfea3fbb92987777",
+            "rounds": 2,
+            "netPnlUsd": 5.470071650133314,
+            "positivePnlUsd": 6.3355647845108445
+          },
+          {
+            "chain": "sol",
+            "address": "t9bnCGiZVUYsRKvx4d5dPcoDCSyuBM9C33ZNGNULARP",
+            "rounds": 1,
+            "netPnlUsd": 1.9690897303963517,
+            "positivePnlUsd": 1.9690897303963517
+          },
+          {
+            "chain": "sol",
+            "address": "33jENUQnjoitkMFpvNJcSHyLAHFWJuHwT6E3E8CNpump",
+            "rounds": 1,
+            "netPnlUsd": 0.3946831879451249,
+            "positivePnlUsd": 0.3946831879451249
+          },
+          {
+            "chain": "bsc",
+            "address": "0x0699c83f715271da83c4d2191194d12d61417777",
+            "rounds": 1,
+            "netPnlUsd": -0.9428158263889888,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "robinhood",
+            "address": "0xb1da35ddb716a2f66c612d15e6d3ce5b90afb447",
+            "rounds": 1,
+            "netPnlUsd": -1.0474852672385744,
+            "positivePnlUsd": 0
+          }
+        ]
+      },
+      "cohorts": [
+        {
+          "cohortVersion": "frozen_entry_actual_exit_v3",
+          "exitExecutionKind": "sale",
+          "chain": "bsc",
+          "hypothesis": "external_breakout",
+          "selectionPolicy": "eligible_algorithm_catalyst_v3",
+          "entryFlowVersion": "paper_entry_observed_outflow_v1",
+          "entryFlowVersionEvidence": "recorded",
+          "targetSelectionVersion": "legacy_unversioned",
+          "entryStructureVersion": "reconstructed_ohlcv_entry_v1",
+          "entryCostVersion": "isolated_estimated_cost_v1",
+          "exitCostVersion": "isolated_estimated_cost_v1",
+          "exitCostVersionEvidence": "recorded",
+          "exitObservationVersion": "entry_cohort_sell_retention_v1",
+          "exitObservationVersionEvidence": "recorded",
+          "exitStructureObservationVersion": "independent_confirmed_trail_v1",
+          "exitStructureObservationVersionEvidence": "recorded",
+          "entryExitVersion": "meme_evidence_exit_v2",
+          "exitVersion": "meme_evidence_exit_v2",
+          "exitVersionEvidence": "recorded",
+          "recoveryEntryVersion": "paper_recovery_v1",
+          "routeSelectionVersion": "recovery_per_route_v1",
+          "chartWindowPolicy": "contiguous_tail_v1",
+          "narrativeAnalysisVersion": "narrative_evidence_chain_v1",
+          "entryVersion": "meme_structure_entry_v1",
+          "accountPolicyVersion": "continuous_paper_v1",
+          "opportunityVersion": "multi_setup_v2",
+          "setupId": "external_breakout",
+          "sizingVersion": "cash_tenth_cap_ten_v1",
+          "quoteVersion": "structure_quotes_v1",
+          "lossResponseVersion": "review_without_pause_v1",
+          "reasoningVersion": "evidence_first_v1",
+          "closedRounds": 3,
+          "tokens": 2,
+          "spanMs": 151670074,
+          "wins": 1,
+          "losses": 2,
+          "breakeven": 0,
+          "netPnlUsd": 4.5272558237443254,
+          "modelCostsUsd": 1.4198608991627495,
+          "grossPricePnlUsd": 5.947116722907075,
+          "winRate": 0.3333333333333333,
+          "averageNetUsd": 1.5090852745814418,
+          "averageWinUsd": 6.3355647845108445,
+          "averageLossUsd": 0.9041544803832595,
+          "profitFactor": 3.503585350716439,
+          "payoffRatio": 7.007170701432878,
+          "averageNetR": 1.9731329266993287,
+          "riskKnownRounds": 3,
+          "closedRoundDrawdownUsd": 0.9428158263889888,
+          "costOnlyLosses": 0,
+          "priceLosses": 2,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        },
+        {
+          "cohortVersion": "frozen_entry_actual_exit_v3",
+          "exitExecutionKind": "sale",
+          "chain": "sol",
+          "hypothesis": "external_breakout",
+          "selectionPolicy": "eligible_algorithm_catalyst_v3",
+          "entryFlowVersion": "paper_entry_observed_outflow_v1",
+          "entryFlowVersionEvidence": "recorded",
+          "targetSelectionVersion": "legacy_unversioned",
+          "entryStructureVersion": "reconstructed_ohlcv_entry_v1",
+          "entryCostVersion": "isolated_estimated_cost_v1",
+          "exitCostVersion": "isolated_estimated_cost_v1",
+          "exitCostVersionEvidence": "recorded",
+          "exitObservationVersion": "entry_cohort_sell_retention_v1",
+          "exitObservationVersionEvidence": "recorded",
+          "exitStructureObservationVersion": "independent_confirmed_trail_v1",
+          "exitStructureObservationVersionEvidence": "recorded",
+          "entryExitVersion": "meme_evidence_exit_v2",
+          "exitVersion": "meme_evidence_exit_v2",
+          "exitVersionEvidence": "recorded",
+          "recoveryEntryVersion": "paper_recovery_v1",
+          "routeSelectionVersion": "recovery_per_route_v1",
+          "chartWindowPolicy": "contiguous_tail_v1",
+          "narrativeAnalysisVersion": "narrative_evidence_chain_v1",
+          "entryVersion": "meme_structure_entry_v1",
+          "accountPolicyVersion": "continuous_paper_v1",
+          "opportunityVersion": "multi_setup_v2",
+          "setupId": "external_breakout",
+          "sizingVersion": "cash_tenth_cap_ten_v1",
+          "quoteVersion": "structure_quotes_v1",
+          "lossResponseVersion": "review_without_pause_v1",
+          "reasoningVersion": "evidence_first_v1",
+          "closedRounds": 2,
+          "tokens": 2,
+          "spanMs": 53440473,
+          "wins": 2,
+          "losses": 0,
+          "breakeven": 0,
+          "netPnlUsd": 2.3637729183414766,
+          "modelCostsUsd": 0.6100649935315788,
+          "grossPricePnlUsd": 2.9738379118730554,
+          "winRate": 1,
+          "averageNetUsd": 1.1818864591707383,
+          "averageWinUsd": 1.1818864591707383,
+          "averageLossUsd": null,
+          "profitFactor": null,
+          "payoffRatio": null,
+          "averageNetR": 1.268561992069897,
+          "riskKnownRounds": 2,
+          "closedRoundDrawdownUsd": 0,
+          "costOnlyLosses": 0,
+          "priceLosses": 0,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        },
+        {
+          "cohortVersion": "frozen_entry_actual_exit_v3",
+          "exitExecutionKind": "sale",
+          "chain": "robinhood",
+          "hypothesis": "external_pullback",
+          "selectionPolicy": "eligible_algorithm_catalyst_v3",
+          "entryFlowVersion": "paper_entry_observed_outflow_v1",
+          "entryFlowVersionEvidence": "recorded",
+          "targetSelectionVersion": "pullback_nearest_observed_level_v1",
+          "entryStructureVersion": "reconstructed_ohlcv_entry_v1",
+          "entryCostVersion": "isolated_estimated_cost_v1",
+          "exitCostVersion": "isolated_estimated_cost_v1",
+          "exitCostVersionEvidence": "recorded",
+          "exitObservationVersion": "entry_cohort_sell_retention_v1",
+          "exitObservationVersionEvidence": "recorded",
+          "exitStructureObservationVersion": "independent_confirmed_trail_v1",
+          "exitStructureObservationVersionEvidence": "recorded",
+          "entryExitVersion": "meme_evidence_exit_v2",
+          "exitVersion": "meme_evidence_exit_v2",
+          "exitVersionEvidence": "recorded",
+          "recoveryEntryVersion": "paper_recovery_v1",
+          "routeSelectionVersion": "recovery_per_route_v1",
+          "chartWindowPolicy": "contiguous_tail_v1",
+          "narrativeAnalysisVersion": "narrative_evidence_chain_v1",
+          "entryVersion": "meme_structure_entry_v1",
+          "accountPolicyVersion": "continuous_paper_v1",
+          "opportunityVersion": "multi_setup_v2",
+          "setupId": "external_pullback",
+          "sizingVersion": "cash_tenth_cap_ten_v1",
+          "quoteVersion": "structure_quotes_v1",
+          "lossResponseVersion": "review_without_pause_v1",
+          "reasoningVersion": "evidence_first_v1",
+          "closedRounds": 1,
+          "tokens": 1,
+          "spanMs": 868622,
+          "wins": 0,
+          "losses": 1,
+          "breakeven": 0,
+          "netPnlUsd": -1.0474852672385744,
+          "modelCostsUsd": 0.25833463440209364,
+          "grossPricePnlUsd": -0.7891506328364808,
+          "winRate": 0,
+          "averageNetUsd": -1.0474852672385744,
+          "averageWinUsd": null,
+          "averageLossUsd": 1.0474852672385744,
+          "profitFactor": 0,
+          "payoffRatio": null,
+          "averageNetR": -0.6186851868504517,
+          "riskKnownRounds": 1,
+          "closedRoundDrawdownUsd": 1.0474852672385744,
+          "costOnlyLosses": 0,
+          "priceLosses": 1,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        }
+      ],
+      "automaticPromotion": false
+    },
+    "versionCohorts": {
+      "legacyForwardClosedRounds": 0,
+      "mixedOrMissingForwardClosedRounds": 0,
+      "carriedInClosedAfterBaseline": 0,
+      "crossBoundaryOpenPositions": [
+        {
+          "chain": "bsc",
+          "address": "0x07bcb8e8226f671300e135b4a61dc157359b7777",
+          "entryId": "1791473723820:238",
+          "openedAt": "2026-10-08T15:35:23.820Z"
+        }
+      ]
+    },
+    "firstThreeRoute": {
+      "configuredLastVerified": {
+        "observed": true,
+        "version": "paper_quote_asset_first_three_v1",
+        "maxUniqueCA": 3,
+        "mode": "paper",
+        "lastVerifiedAt": "2026-10-12T06:04:32.310Z",
+        "recheckedThisRound": false
+      },
+      "actual": {
+        "allHistoryBuys": 0,
+        "forwardBuys": 0,
+        "forwardDistinctCA": 0,
+        "forwardClosedRounds": 0,
+        "currentVersionForwardClosedRounds": 0,
+        "openPositions": 0
+      }
+    },
+    "openPositions": [
+      {
+        "key": "bsc:0x07bcb8e8226f671300e135b4a61dc157359b7777",
+        "chain": "bsc",
+        "address": "0x07bcb8e8226f671300e135b4a61dc157359b7777",
+        "route": "external_pullback",
+        "entryId": "1791473723820:238",
+        "openedAt": "2026-10-08T15:35:23.820Z",
+        "enteredAfterBaseline": false,
+        "quantity": 5993.959722058011,
+        "costBasisUsd": 8.7,
+        "valuationStatus": "fresh",
+        "markAt": "2026-10-12T17:29:38.968Z",
+        "valuationAgeMs": 6139,
+        "maxValuationAgeMs": 15000,
+        "lastRecorded": {
+          "markPrice": 0.00046443219,
+          "markValueUsd": 2.783787840487193,
+          "unrealizedPnlUsd": -6.095401551537166
+        },
+        "currentMarkValueUsd": 2.783787840487193,
+        "currentNetLiquidationUsd": 2.6045984484628333,
+        "currentUnrealizedPnlUsd": -6.095401551537166
+      }
+    ],
+    "newFills": [
+      {
+        "id": "1791822801917:273",
+        "side": "buy",
+        "chain": "sol",
+        "address": "33jENUQnjoitkMFpvNJcSHyLAHFWJuHwT6E3E8CNpump",
+        "symbol": "DOPE",
+        "quantity": 8370.572579765367,
+        "grossUsd": 6.480392156862745,
+        "costsUsd": 0.13960784313725494,
+        "netUsd": -6.62,
+        "costBasisUsd": 6.62,
+        "realizedPnl": 0,
+        "atMs": 1791822801917,
+        "observedAt": "2026-10-12T16:33:19.553Z"
+      },
+      {
+        "id": "1791824469858:274",
+        "side": "sell",
+        "chain": "sol",
+        "address": "33jENUQnjoitkMFpvNJcSHyLAHFWJuHwT6E3E8CNpump",
+        "symbol": "DOPE",
+        "quantity": 8370.572579765367,
+        "grossUsd": 7.16804406933176,
+        "costsUsd": 0.1533608813866352,
+        "netUsd": 7.014683187945125,
+        "costBasisUsd": 6.62,
+        "realizedPnl": 0.3946831879451249,
+        "atMs": 1791824469858,
+        "observedAt": "2026-10-12T17:01:08.246Z",
+        "exitReason": "放量长上影后收盘跌破前低，派发形态确认，退出"
+      },
+      {
+        "id": "1791824948667:275",
+        "side": "buy",
+        "chain": "bsc",
+        "address": "0x0699c83f715271da83c4d2191194d12d61417777",
+        "symbol": "okt",
+        "quantity": 29974.35191602487,
+        "grossUsd": 6.427184466019417,
+        "costsUsd": 0.23281553398058286,
+        "netUsd": -6.66,
+        "costBasisUsd": 6.66,
+        "realizedPnl": 0,
+        "atMs": 1791824948667,
+        "observedAt": "2026-10-12T17:09:06.638Z"
+      },
+      {
+        "id": "1791824986934:276",
+        "side": "buy",
+        "chain": "robinhood",
+        "address": "0xb1da35ddb716a2f66c612d15e6d3ce5b90afb447",
+        "symbol": "SI",
+        "quantity": 5848.067981421671,
+        "grossUsd": 5.852941176470589,
+        "costsUsd": 0.13705882352941146,
+        "netUsd": -5.99,
+        "costBasisUsd": 5.99,
+        "realizedPnl": 0,
+        "atMs": 1791824986934,
+        "observedAt": "2026-10-12T17:09:44.816Z"
+      },
+      {
+        "id": "1791825264396:277",
+        "side": "sell",
+        "chain": "bsc",
+        "address": "0x0699c83f715271da83c4d2191194d12d61417777",
+        "symbol": "okt",
+        "quantity": 29974.35191602487,
+        "grossUsd": 5.874677728174501,
+        "costsUsd": 0.15749355456349004,
+        "netUsd": 5.717184173611011,
+        "costBasisUsd": 6.66,
+        "realizedPnl": -0.9428158263889888,
+        "atMs": 1791825264396,
+        "observedAt": "2026-10-12T17:14:22.098Z",
+        "exitReason": "连续收盘失守关键位，未见可核实承接；按已确认结构失效退出，不是按亏损百分比"
+      },
+      {
+        "id": "1791825855556:278",
+        "side": "sell",
+        "chain": "robinhood",
+        "address": "0xb1da35ddb716a2f66c612d15e6d3ce5b90afb447",
+        "symbol": "SI",
+        "quantity": 5848.067981421671,
+        "grossUsd": 5.063790543634108,
+        "costsUsd": 0.12127581087268217,
+        "netUsd": 4.942514732761426,
+        "costBasisUsd": 5.99,
+        "realizedPnl": -1.0474852672385744,
+        "atMs": 1791825855556,
+        "observedAt": "2026-10-12T17:24:12.256Z",
+        "exitReason": "连续收盘失守关键位，未见可核实承接；按已确认结构失效退出，不是按亏损百分比"
+      }
+    ],
+    "delta": {
+      "since": "2026-10-12T13:32:59Z",
+      "newFills": 6,
+      "newCurrentVersionClosedRounds": 3,
+      "currentVersionNetPnlDeltaUsd": -1.5956179056824382,
+      "currentVersionModelCostsDeltaUsd": 0.9416124474700567,
+      "newRounds": [
+        {
+          "entryId": "1791822801917:273",
+          "exitIds": [
+            "1791824469858:274"
+          ],
+          "chain": "sol",
+          "address": "33jENUQnjoitkMFpvNJcSHyLAHFWJuHwT6E3E8CNpump",
+          "route": "external_breakout",
+          "openedAt": "2026-10-12T16:33:21.917Z",
+          "closedAt": "2026-10-12T17:01:09.858Z",
+          "netPnlUsd": 0.3946831879451249,
+          "status": "current",
+          "reasons": [],
+          "symbol": "DOPE",
+          "modelCostsUsd": 0.2929687245238901,
+          "exitReason": "放量长上影后收盘跌破前低，派发形态确认，退出"
+        },
+        {
+          "entryId": "1791824948667:275",
+          "exitIds": [
+            "1791825264396:277"
+          ],
+          "chain": "bsc",
+          "address": "0x0699c83f715271da83c4d2191194d12d61417777",
+          "route": "external_breakout",
+          "openedAt": "2026-10-12T17:09:08.667Z",
+          "closedAt": "2026-10-12T17:14:24.396Z",
+          "netPnlUsd": -0.9428158263889888,
+          "status": "current",
+          "reasons": [],
+          "symbol": "okt",
+          "modelCostsUsd": 0.39030908854407287,
+          "exitReason": "连续收盘失守关键位，未见可核实承接；按已确认结构失效退出，不是按亏损百分比"
+        },
+        {
+          "entryId": "1791824986934:276",
+          "exitIds": [
+            "1791825855556:278"
+          ],
+          "chain": "robinhood",
+          "address": "0xb1da35ddb716a2f66c612d15e6d3ce5b90afb447",
+          "route": "external_pullback",
+          "openedAt": "2026-10-12T17:09:46.934Z",
+          "closedAt": "2026-10-12T17:24:15.556Z",
+          "netPnlUsd": -1.0474852672385744,
+          "status": "current",
+          "reasons": [],
+          "symbol": "SI",
+          "modelCostsUsd": 0.25833463440209364,
+          "exitReason": "连续收盘失守关键位，未见可核实承接；按已确认结构失效退出，不是按亏损百分比"
+        }
+      ],
+      "fourCursorAdvance": 23807,
+      "flapCursorAdvance": 35176,
+      "mainPidChanged": false,
+      "bscPidChanged": false,
+      "flapPreviousSuccessAt": "2026-10-12T12:43:07.189Z",
+      "flapSuccessAt": "2026-10-12T17:07:07.447Z"
+    },
+    "inputs": {
+      "ledger": {
+        "path": "/Users/qohfq/Documents/Playground/robinhood-chain-monitor/data/yesp-atm-confirmed-pvp-v2-estimated-20260928.json",
+        "sha256": "51b33134f04e048cd6cef1a14ba1fc924a3963919a85fded13d2832e5b06612c"
+      },
+      "snapshot": null
+    }
+  },
+  "health": {
+    "at": "2026-10-12T17:29:44.840Z",
+    "heartbeats": {
+      "main": {
+        "version": 1,
+        "producer": "main",
+        "pid": 83916,
+        "startedAt": "2026-10-12T06:01:24.038Z",
+        "updatedAt": "2026-10-12T17:29:31.770Z",
+        "sequence": 1377
+      },
+      "bsc": {
+        "version": 1,
+        "producer": "bsc",
+        "pid": 83919,
+        "startedAt": "2026-10-12T06:01:24.292Z",
+        "updatedAt": "2026-10-12T17:29:44.247Z",
+        "sequence": 1344
+      },
+      "fomo": {
+        "version": 1,
+        "producer": "fomo",
+        "pid": 7258,
+        "startedAt": "2026-10-10T04:56:33.184Z",
+        "updatedAt": "2026-10-12T17:29:36.778Z",
+        "sequence": 7264
+      }
+    },
+    "flap": {
+      "cursor": {
+        "nextBlock": 127248022,
+        "afterLogIndex": -1,
+        "anchorBlock": 127248021,
+        "anchorBlockHash": "0x2778b79ea0470a0486c872a8cdcef04b752b09d0e42031ea28649aabb1043548",
+        "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+      },
+      "checkedAt": "2026-10-12T17:27:06.378Z",
+      "health": {
+        "status": "degraded",
+        "consecutiveFailures": 10,
+        "lastSuccessAt": "2026-10-12T17:07:07.447Z",
+        "lastErrorAt": "2026-10-12T17:27:06.378Z",
+        "lastErrorCode": "FLAP_QUOTE_GET_LOGS_FAILED",
+        "reorgCount": 0,
+        "lastReorgAt": null,
+        "lastAttemptAt": "2026-10-12T17:27:06.378Z",
+        "nextAttemptAt": "2026-10-12T17:32:15.616Z",
+        "failureClass": "chain"
+      }
+    },
+    "four": {
+      "updatedAt": "2026-10-12T16:27:25.889Z",
+      "cursor": {
+        "nextBlock": 127242718,
+        "anchorBlock": 127242717,
+        "anchorBlockHash": "0x81c07fe24c4124d57e9940f0aca33364c6fd30858619db2f2e74602ef0f9909d"
+      }
+    },
+    "lastTrade": {
+      "id": "1791825855556:278"
+    }
+  },
+  "limitations": [
+    "新增的是历史签名分类证据，不是当前时间新发生的买卖。",
+    "D只关闭一只零余额token account；不证明整个钱包无仓位或完整成本已核对。",
+    "fee payer不同于D，不重复将RPC meta.fee计入D；租金返还不是利润。",
+    "本轮无GMGN调用，故无config检查；未来GMGN调用仍须先检查并走共享默认优先级。",
+    "头页到期时间保留，不把本地复用算作头页成功刷新。",
+    "只研究播报，不修改源码策略账本、进程或模型频率。"
+  ]
+}

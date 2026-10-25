@@ -1,0 +1,403 @@
+{
+  "schemaVersion": 1,
+  "investigatedAt": "2026-10-20T17:06:30.000Z",
+  "localDate": "2026-10-21",
+  "scope": "read_only_implementation_bound_interface_and_type7_quote_compatibility",
+  "status": "exact_identity_and_read_call_compatibility_verified_activation_unknown",
+  "chainId": 56,
+  "portal": "0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0",
+  "fixedBlock": {
+    "number": 128782994,
+    "tag": "0x7ad1292",
+    "hash": "0x856db3146470b28410d177aa419ff4655205e1efedbe623f6c7806aa72f6fda4",
+    "timestamp": "2026-10-20T17:05:06.000Z"
+  },
+  "identity": {
+    "version": "v5.25.0",
+    "implementation": "0xE13227370996f892a56d2Ff4a30f6026887B48Fb",
+    "implementationRuntimeCodeHash": "0xf8d56fe09f2ec5e3eeaabdbfeeb0faf55e4ed8996a55bc1b69a78e62dbb792e4",
+    "implementationRuntimeBytes": 20347,
+    "proxyRuntimeCodeHash": "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3",
+    "proxyRuntimeBytes": 2882
+  },
+  "independentIdentityChecks": [
+    {
+      "at": "2026-10-20T17:05:17.575Z",
+      "block": 128782994,
+      "tag": "0x7ad1292",
+      "sources": [
+        {
+          "host": "bsc-rpc.publicnode.com",
+          "chain": "0x38",
+          "blockHash": "0x856db3146470b28410d177aa419ff4655205e1efedbe623f6c7806aa72f6fda4",
+          "timestamp": 1792515906,
+          "implementation": "0xE13227370996f892a56d2Ff4a30f6026887B48Fb",
+          "version": "v5.25.0",
+          "proxyHash": "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3",
+          "proxyBytes": 2882,
+          "implementationHash": "0xf8d56fe09f2ec5e3eeaabdbfeeb0faf55e4ed8996a55bc1b69a78e62dbb792e4",
+          "implementationBytes": 20347,
+          "blockHashAfter": "0x856db3146470b28410d177aa419ff4655205e1efedbe623f6c7806aa72f6fda4"
+        }
+      ]
+    },
+    {
+      "at": "2026-10-20T17:06:28.577Z",
+      "block": 128782994,
+      "tag": "0x7ad1292",
+      "sources": [
+        {
+          "host": "bsc-mainnet.nodereal.io",
+          "chain": "0x38",
+          "blockHash": "0x856db3146470b28410d177aa419ff4655205e1efedbe623f6c7806aa72f6fda4",
+          "timestamp": 1792515906,
+          "implementation": "0xE13227370996f892a56d2Ff4a30f6026887B48Fb",
+          "version": "v5.25.0",
+          "proxyHash": "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3",
+          "proxyBytes": 2882,
+          "implementationHash": "0xf8d56fe09f2ec5e3eeaabdbfeeb0faf55e4ed8996a55bc1b69a78e62dbb792e4",
+          "implementationBytes": 20347,
+          "blockHashAfter": "0x856db3146470b28410d177aa419ff4655205e1efedbe623f6c7806aa72f6fda4"
+        }
+      ]
+    }
+  ],
+  "earlierCurrentIdentityCheck": {
+    "at": "2026-10-20T17:02:00.087Z",
+    "block": 128782536,
+    "tag": "0x7ad10c8",
+    "sources": [
+      {
+        "host": "bsc-dataseed.bnbchain.org",
+        "chain": "0x38",
+        "blockHash": "0xfe3edc0c6d156a3078bb05f1710022b29857150107e3fd5cdcf71795be244e9c",
+        "timestamp": 1792515699,
+        "implementation": "0xE13227370996f892a56d2Ff4a30f6026887B48Fb",
+        "version": "v5.25.0",
+        "proxyHash": "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3",
+        "proxyBytes": 2882,
+        "implementationHash": "0xf8d56fe09f2ec5e3eeaabdbfeeb0faf55e4ed8996a55bc1b69a78e62dbb792e4",
+        "implementationBytes": 20347,
+        "blockHashAfter": "0xfe3edc0c6d156a3078bb05f1710022b29857150107e3fd5cdcf71795be244e9c"
+      },
+      {
+        "host": "bsc.rpc.sentio.xyz",
+        "error": {
+          "code": "SERVER_ERROR",
+          "message": "eth_chainId failed on every BSC RPC: bsc.rpc.sentio.xyz: shared RPC coordinator: capacity wait deadline",
+          "retryAfterMs": 1
+        }
+      }
+    ]
+  },
+  "officialInterface": {
+    "url": "https://raw.githubusercontent.com/flap-sh/FlapVaultExample/f4bf1d9d19483915dd9970447158cd3f26a3827b/src/flap/IPortal.sol",
+    "commit": "f4bf1d9d19483915dd9970447158cd3f26a3827b",
+    "sha256": "6de1991040667e4bf6e31db1d96d50b81a1e072378fed91beaca131f8683dcd9",
+    "tokenStateV8SafeFields": 18,
+    "quoteConfigurationFields": 5,
+    "quoteInputFields": 3,
+    "officialType7Name": null,
+    "officialEnumTypes": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "eventSignatures": [
+      "TokenCreated(uint256,address,uint256,address,string,string,string)",
+      "TokenBought(uint256,address,address,uint256,uint256,uint256,uint256)",
+      "TokenSold(uint256,address,address,uint256,uint256,uint256,uint256)",
+      "QuoteTokenConfigurationSet(address,(uint8,uint8,uint8,uint8,uint8))"
+    ],
+    "verifiedImplementationSourceAvailable": false,
+    "verifiedImplementationAbiAvailable": false,
+    "compatibilityBasis": "Exact on-chain runtime code hash + matching method selectors + successful fixed-block decoding and quote calls using the commit-pinned official ABI. This is not source-to-bytecode equivalence or an exhaustive economic/security audit.",
+    "eventLayoutLimit": "Official declarations match local event decoders. These topic literals were not found in the primary runtime bytecode. No fresh event receipt was independently acquired in this review; strict address/topic/data-size decoding and canonical receipt checks must remain."
+  },
+  "capability": {
+    "at": "2026-10-20T17:05:36.806Z",
+    "host": "bsc-rpc.publicnode.com",
+    "block": 128782994,
+    "tag": "0x7ad1292",
+    "token": "0x16d4a9abe0c494263234b9eb312bcbbaa63a7777",
+    "blockHashBefore": "0x856db3146470b28410d177aa419ff4655205e1efedbe623f6c7806aa72f6fda4",
+    "selectors": {
+      "version": {
+        "selector": "0x54fd4d50",
+        "presentInPinnedRuntime": true
+      },
+      "getTokenV8Safe": {
+        "selector": "0x62fafcca",
+        "presentInPinnedRuntime": true
+      },
+      "getQuoteTokenConfiguration": {
+        "selector": "0x26ef20d5",
+        "presentInPinnedRuntime": true
+      },
+      "quoteExactInput": {
+        "selector": "0xfc847c2b",
+        "presentInPinnedRuntime": true
+      }
+    },
+    "eventTopics": {
+      "TokenCreated(uint256,address,uint256,address,string,string,string)": {
+        "topic": "0x504e7f360b2e5fe33cbaaae4c593bc55305328341bf79009e43e0e3b7f699603",
+        "presentInPinnedRuntime": false
+      },
+      "TokenBought(uint256,address,address,uint256,uint256,uint256,uint256)": {
+        "topic": "0xa800a2038683844fac66747f771bfdfae862eb28b16bcfa387afa9fbacce8ff7",
+        "presentInPinnedRuntime": false
+      },
+      "TokenSold(uint256,address,address,uint256,uint256,uint256,uint256)": {
+        "topic": "0x03a4693e592f5e75dc7c136acb39b146d2b4966c0e509c34f362dee02b3b861a",
+        "presentInPinnedRuntime": false
+      },
+      "QuoteTokenConfigurationSet(address,(uint8,uint8,uint8,uint8,uint8))": {
+        "topic": "0x9a1f38e55c729ebf0c45d240a00b09f0a79a715df7cfd6e8942bd3f8da839199",
+        "presentInPinnedRuntime": false
+      }
+    },
+    "version": {
+      "raw": "0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000776352e32352e3000000000000000000000000000000000000000000000000000",
+      "value": "v5.25.0"
+    },
+    "state": {
+      "raw": "0x0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000007295e586033c230000000000000000000000000000000000000000000009da27cc24c9b0cc7225000000000000000000000000000000000000000000000000000000a16986fd73000000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000002999d07a23fac400000000000000000000000000000000000000000000005889e9e604102da7dc0000000000000000000000000000000000000000000ab9030513fa31b5d60a7c000000000000000000000000000000000000000000000295be96e6406697200000000000000000000000000000004902c5ebc598265ed2212b559b042de8a5eeec3f0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000064000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000eabad75f28f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "value": [
+        "1",
+        "32252960373423139",
+        "46525556261406890553893",
+        "693260189043",
+        "6",
+        "767400000000000000000",
+        "107036751000000000000000000",
+        "849540002717400000000000000000",
+        "800000000000000000000000000",
+        "0x4902C5ebc598265Ed2212b559B042De8a5Eeec3f",
+        true,
+        "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "0",
+        "100",
+        "0x0000000000000000000000000000000000000000",
+        "16130512384655",
+        "0",
+        "0"
+      ]
+    },
+    "quote": "0x4902C5ebc598265Ed2212b559B042De8a5Eeec3f",
+    "config": {
+      "raw": "0x00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000032000000000000000000000000000000000000000000000000000000000000003200000000000000000000000000000000000000000000000000000000000000070000000000000000000000000000000000000000000000000000000000000000",
+      "value": [
+        "1",
+        "50",
+        "50",
+        "7",
+        "0"
+      ]
+    },
+    "amount": "1000000000000",
+    "buy": {
+      "raw": "0x00000000000000000000000000000000000000000000000b1bc9ebdaeae452bf",
+      "value": "204916575645624193727"
+    },
+    "buyLessThanCirculation": true,
+    "sellQuote": {
+      "raw": "0x00000000000000000000000000000000000000000000000000007e9e8305acb8",
+      "value": "139219268119736"
+    },
+    "sellNative": {
+      "raw": "0x000000000000000000000000000000000000000000000000000000e0b81df193",
+      "value": "965161644435"
+    },
+    "blockHashAfter": "0x856db3146470b28410d177aa419ff4655205e1efedbe623f6c7806aa72f6fda4"
+  },
+  "failedLargeAmountCounterexample": {
+    "at": "2026-10-20T17:02:34.730Z",
+    "host": "bsc-dataseed.bnbchain.org",
+    "block": 128782536,
+    "token": "0x16d4a9abe0c494263234b9eb312bcbbaa63a7777",
+    "blockHashBefore": "0xfe3edc0c6d156a3078bb05f1710022b29857150107e3fd5cdcf71795be244e9c",
+    "version": {
+      "raw": "0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000776352e32352e3000000000000000000000000000000000000000000000000000",
+      "value": "v5.25.0"
+    },
+    "state": {
+      "raw": "0x0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000007295e586033c230000000000000000000000000000000000000000000009da27cc24c9b0cc7225000000000000000000000000000000000000000000000000000000a16986fd73000000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000002999d07a23fac400000000000000000000000000000000000000000000005889e9e604102da7dc0000000000000000000000000000000000000000000ab9030513fa31b5d60a7c000000000000000000000000000000000000000000000295be96e6406697200000000000000000000000000000004902c5ebc598265ed2212b559b042de8a5eeec3f0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000064000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000eabad75f28f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "value": [
+        "1",
+        "32252960373423139",
+        "46525556261406890553893",
+        "693260189043",
+        "6",
+        "767400000000000000000",
+        "107036751000000000000000000",
+        "849540002717400000000000000000",
+        "800000000000000000000000000",
+        "0x4902C5ebc598265Ed2212b559B042De8a5Eeec3f",
+        true,
+        "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "0",
+        "100",
+        "0x0000000000000000000000000000000000000000",
+        "16130512384655",
+        "0",
+        "0"
+      ]
+    },
+    "quote": "0x4902C5ebc598265Ed2212b559B042De8a5Eeec3f",
+    "config": {
+      "raw": "0x00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000032000000000000000000000000000000000000000000000000000000000000003200000000000000000000000000000000000000000000000000000000000000070000000000000000000000000000000000000000000000000000000000000000",
+      "value": [
+        "1",
+        "50",
+        "50",
+        "7",
+        "0"
+      ]
+    },
+    "amount": "10000000000000000",
+    "buy": {
+      "raw": "0x00000000000000000000000000000000000000000001b0dbd4bf39730fb95475",
+      "value": "2044117487586652064404597"
+    },
+    "error": {
+      "code": "CALL_EXCEPTION",
+      "message": "execution reverted: Panic due to OVERFLOW(17); execution reverted: Panic due to OVERFLOW(17) (action=\"call\", data=\"0x4e487b710000000000000000000000000000000000000000000000000000000000000011\", reason=\"Panic due to OVERFLOW(17)\", transaction={ \"data\": \"0xfc847c2b00000000000000000000000016d4a9abe0c494263234b9eb312bcbbaa63a77770000000000000000000000004902c5ebc598265ed2212b559b042de8a5eeec3f00000000000000000000000000000000000000000001b0dbd4bf39730fb95475\", \"to\": \"0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0\" }, invocation=null, revert={ \"args\": [ 17 ], \"name\": \"Panic\", \"signature\": \"Panic(uint256)\" }"
+    }
+  },
+  "failedArchiveSmallAmountProbe": {
+    "at": "2026-10-20T17:02:49.156Z",
+    "host": "bsc-dataseed.bnbchain.org",
+    "block": 128782536,
+    "token": "0x16d4a9abe0c494263234b9eb312bcbbaa63a7777",
+    "quote": "0x4902c5ebc598265ed2212b559b042de8a5eeec3f",
+    "blockHashBefore": "0xfe3edc0c6d156a3078bb05f1710022b29857150107e3fd5cdcf71795be244e9c",
+    "amount": "1000000000000",
+    "error": {
+      "code": "CALL_EXCEPTION",
+      "message": "missing revert data; missing revert data (action=\"call\", data=null, reason=null, transaction={ \"data\": \"0xfc847c2b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000016d4a9abe0c494263234b9eb312bcbbaa63a7777000000000000000000000000000000000000000000000000000000e8d4a51000\", \"to\": \"0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0\" }, invocation=null, revert=null, code=CALL_EXCEPTION, version=6.17.0); missing trie node"
+    }
+  },
+  "otherFailedIdentityProbes": [
+    {
+      "at": "2026-10-20T17:05:07.203Z",
+      "sources": [
+        {
+          "host": "bsc-dataseed.bnbchain.org",
+          "chain": "0x38",
+          "blockHashBefore": "0x856db3146470b28410d177aa419ff4655205e1efedbe623f6c7806aa72f6fda4",
+          "timestamp": 1792515906,
+          "version": {
+            "raw": "0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000776352e32352e3000000000000000000000000000000000000000000000000000",
+            "value": "v5.25.0"
+          },
+          "error": {
+            "code": "SERVER_ERROR",
+            "message": "eth_getStorageAt failed on every BSC RPC: bsc-dataseed.bnbchain.org: shared RPC coordinator: host/method cooling down",
+            "retryAfterMs": 1632099
+          }
+        }
+      ],
+      "block": 128782994,
+      "blockTag": "0x7ad1292"
+    },
+    {
+      "at": "2026-10-20T17:06:14.649Z",
+      "block": 128782994,
+      "tag": "0x7ad1292",
+      "sources": [
+        {
+          "host": "rpc.48.club",
+          "chain": "0x38",
+          "blockHash": "0x856db3146470b28410d177aa419ff4655205e1efedbe623f6c7806aa72f6fda4",
+          "timestamp": 1792515906,
+          "error": {
+            "code": "SERVER_ERROR",
+            "message": "eth_getStorageAt failed on every BSC RPC: rpc.48.club: not supported",
+            "retryAfterMs": 4998
+          }
+        }
+      ]
+    }
+  ],
+  "activation": {
+    "activationBlock": null,
+    "activationTransaction": null,
+    "canonicalUpgradeReceipt": null,
+    "firstObservedNewImplementationBlock": 128501895,
+    "firstObservedAt": "2026-10-19T05:56:14.808Z",
+    "firstObservedSource": "docs/flap-portal-v5.25.0-investigation-2026-10-19.json",
+    "interpretation": "Implementation v5.25.0 was already present by block 128501895. This observation is an upper bound on the activation time/block, not its exact activation block and not a lower bound.",
+    "oldCursorPreserved": 128103371,
+    "oldAnchorPreserved": 128103370
+  },
+  "upgradeLogProbes": [
+    {
+      "at": "2026-10-20T17:04:27.974Z",
+      "host": "bsc.rpc.sentio.xyz",
+      "fromBlock": 128103371,
+      "toBlock": 128501895,
+      "status": "locally_excluded_no_log_capable_standard_provider",
+      "upstreamCallEstablished": false
+    },
+    {
+      "at": "2026-10-20T17:05:56.691Z",
+      "host": "bsc-rpc.publicnode.com",
+      "fromBlock": 128103371,
+      "toBlock": 128108370,
+      "status": "shared_method_cooling_down",
+      "retryAfterMs": 1004,
+      "upstreamCallEstablished": false
+    }
+  ],
+  "sourceAccessGaps": [
+    {
+      "source": "BscScan implementation page",
+      "httpStatus": 403
+    },
+    {
+      "source": "Sourcify v2 implementation lookup",
+      "httpStatus": 404,
+      "match": null
+    },
+    {
+      "source": "GitHub commits API",
+      "httpStatus": 403,
+      "resolvedVia": "Official GitHub HTML commit history and immutable raw source"
+    }
+  ],
+  "methodology": {
+    "client": "createRpcPool from src/bsc-launchpad-monitor.js",
+    "coordinatorDataDir": "data",
+    "priorityLane": "background",
+    "standardConcurrency": 1,
+    "totalConcurrency": 1,
+    "gateOverrides": false,
+    "transportRequestCount": null,
+    "logicalRpcMethodInvocations": 53,
+    "logicalSuccessfulResults": 45,
+    "logicalFailuresOrLocalRejections": 8,
+    "countCaveat": "Logical invocations reconstructed from bounded probes, including coordinator/local rejections; ethers transport/network-detection calls are not counted as exact physical requests. No GMGN, model, signing, broadcast or order API calls.",
+    "attemptPolicy": "No forced cooldown reset. Unsupported historical reads, capacity waits, method cooling and reverts were retained as failures. Later distinct bounded probes used standard shared gates after the relevant advertised wait; no repeated long-running collector was started."
+  },
+  "safety": {
+    "realTrading": false,
+    "signing": false,
+    "broadcast": false,
+    "ledgerMutation": false,
+    "sourceMutation": false,
+    "stateMutation": false,
+    "note": "The shared RPC coordinator can maintain its own normal leases/cooldowns. No manual lock or throttle mutation."
+  },
+  "limitations": [
+    "The successful 1e12 wei type 7 route sample is capability evidence, not liquidity approval, actual execution, sellability proof or PnL.",
+    "The 1e16 wei counterexample reverted when quoting an output larger than existing circulation; per-CA, per-budget same-block admission limits and reverse quotes remain mandatory.",
+    "New implementation event emission was not directly observed in this audit; unknown/malformed events must remain fail-closed.",
+    "Exact activation receipt/block is unknown; preserve the old cursor and label catch-up as backfill, never real-time recovery.",
+    "This report is not deployment acceptance; process reload, persisted identity/cursor movement and paper-only checks are the parent task."
+  ]
+}

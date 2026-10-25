@@ -8,6 +8,9 @@ import { createRpcPool } from "../src/bsc-launchpad-monitor.js";
 const address = `0x${"1".repeat(40)}`;
 const budgetFailure = error => error.rpcBudgetExhausted === true
   && error.rpcFailureScope === "method" && error.rpcCircuitAlreadyOpen === true;
+const capacityBudgetFailure = error => error.rpcBudgetExhausted === true
+  && error.rpcFailureScope === "capacity" && error.rpcCircuitAlreadyOpen === true
+  && error.code === "RPC_COORDINATOR_UNAVAILABLE" && error.retryAfterMs > 0;
 
 test('state source affinity is short-lived, scope-specific and never orders object/log reads', () => {
   let clock=1000;
@@ -82,7 +85,7 @@ test('capacity hints cannot bypass authoritative RPC admission after a racing le
       rpcCircuitAlreadyOpen:true,rpcFailureScope:'capacity',code:'RPC_COORDINATOR_UNAVAILABLE'});}},
     providerFactory:()=>({getCode:async()=>{physical++;return '0x6000';}}),
   });
-  await assert.rejects(pool.getCode(address,100),budgetFailure);
+  await assert.rejects(pool.getCode(address,100),capacityBudgetFailure);
   assert.equal(attempted,2);assert.equal(physical,0);pool.destroy();
 });
 
@@ -146,7 +149,7 @@ test("budgeted retries rotate past locally busy archive hosts without inventing 
     },
     providerFactory: () => ({ getCode: async () => "0x6000" }),
   });
-  await assert.rejects(pool.getCode(address, 100), budgetFailure);
+  await assert.rejects(pool.getCode(address, 100), capacityBudgetFailure);
   assert.equal(await pool.getCode(address, 100), "0x6000");
   assert.deepEqual(attempted, ["a.test", "b.test", "c.test", "d.test"]);
   pool.destroy();

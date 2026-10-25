@@ -11,6 +11,7 @@ import { discoverPaperFlowCandidates } from '../src/paper-candidate-discovery.js
 import { breakoutCandles } from './fixtures/paper-strategy-v2.js';
 import { NOW as BINANCE_NOW, row as binanceRow, warmFeed, stateFor, profilesFor } from './fixtures/binance-flow.js';
 import { normalizePlatformCall, GMGN_SOCIAL_VERSION } from '../src/gmgn-social-monitor.js';
+import { reviewedTeacherSelection } from './fixtures/wallet-learning.js';
 
 const NOW = Date.parse('2026-09-20T10:00:00Z'), CA = `0x${'a'.repeat(40)}`;
 const iso = value => new Date(value).toISOString();
@@ -31,6 +32,7 @@ test('BSC scan overlay rejects other-chain cached/event candidates without rewri
   try {
     for(let i=0;i<6;i++)await runtime.runOnce();await runtime.refreshDetails();
     const s=runtime.snapshot();assert.deepEqual(s.scanScope.scanChains,['bsc']);assert.deepEqual(s.chains,chains);
+    assert.equal(s.strategyValidationRequirements, undefined, 'non-recovery control does not claim main repair versions');
     assert.equal(s.cadence.marketChains,1);assert.ok(s.evaluations.length>0);
     assert.ok(s.evaluations.every(e=>e.token.chain==='bsc'));assert.ok(calls.every(c=>c[1]==='bsc'));
     assert.equal(s.chainCoverage.base.scanning,false);assert.equal(s.chainCoverage.bsc.scanning,true);
@@ -347,7 +349,7 @@ test('multi-chain control/student comparisons never acquire a foreign-chain posi
   const dataDir = await directory(t), chains = ['robinhood', 'base'];
   const feed = { ...market(), trenches: async ({ chain }) => ({ status: 'ok', observedAt: iso(NOW), tokens: [{ ...token, chain }] }) };
   const policy = { version: '1234567890abcdef', chain: 'robinhood', group: 'gmgn_fomo', maxHoldMs: 120000, lossCutRate: .08,
-    teacherCount: 3, matchedSells: 30, trainedAt: iso(NOW), trainingEndAt: iso(NOW - 1000) };
+    teacherCount: 3, teacherSelection: reviewedTeacherSelection('robinhood', NOW), matchedSells: 30, trainedAt: iso(NOW), trainingEndAt: iso(NOW - 1000) };
   const runtime = createPaperStrategyRuntime({ dataDir, market: feed, chains, now: () => NOW, evidenceLoader: () => multiSources(chains), learningLoader: () => ({ policies: [policy] }) });
   try {
     await runtime.runOnce(); await runtime.runOnce(); const s = runtime.snapshot();
@@ -557,7 +559,7 @@ test('upside runtime freezes new exits, keeps learning controls unchanged, and r
   const dataDir = await directory(t); let clock = NOW, price = 1;
   const feed = { ...market(() => clock), trenches: async () => ({ status: 'ok', observedAt: iso(clock), tokens: [{ ...token, price }] }) };
   const learned = { version: '1234567890abcdef', chain: 'robinhood', group: 'gmgn_fomo', maxHoldMs: 120000, lossCutRate: .08,
-    teacherCount: 3, matchedSells: 30, trainedAt: iso(NOW), trainingEndAt: iso(NOW - 1000) };
+    teacherCount: 3, teacherSelection: reviewedTeacherSelection('robinhood', NOW), matchedSells: 30, trainedAt: iso(NOW), trainingEndAt: iso(NOW - 1000) };
   const options = { dataDir, market: feed, now: () => clock, evidenceLoader: () => sources(clock),
     learningLoader: () => ({ policies: [learned] }), compoundEntries: true };
   const runtime = createPaperStrategyRuntime({ ...options, upsideMode: true });
@@ -587,7 +589,7 @@ test('learning waits for evidence, then runs isolated paired forward accounts wi
   const dataDir = await directory(t); let clock = NOW, ready = false;
   const feed = market(() => clock);
   const learned = { version: '1234567890abcdef', chain: 'robinhood', group: 'gmgn_fomo', maxHoldMs: 120000, lossCutRate: .08,
-    teacherCount: 3, matchedSells: 30, trainedAt: iso(NOW), trainingEndAt: iso(NOW - 1000) };
+    teacherCount: 3, teacherSelection: reviewedTeacherSelection('robinhood', NOW), matchedSells: 30, trainedAt: iso(NOW), trainingEndAt: iso(NOW - 1000) };
   const options = { dataDir, market: feed, now: () => clock, evidenceLoader: async () => sources(clock), learningLoader: () => ({ policies: ready ? [learned] : [] }) };
   const runtime = createPaperStrategyRuntime(options);
   try {
@@ -644,7 +646,7 @@ test('opt-in v2 researches a single smart buyer at $200, waits for a real quote,
   evidence.flowState.profiles = {};
   evidence.flowState.trades.robinhood = evidence.flowState.trades.robinhood.slice(0, 1).map(r => ({ ...r, amountUsd: 200 }));
   const learned = { version: '1234567890abcdef', chain: 'robinhood', group: 'gmgn_fomo', maxHoldMs: 120000, lossCutRate: .08,
-    teacherCount: 3, matchedSells: 30, trainedAt: iso(NOW), trainingEndAt: iso(NOW - 1000) };
+    teacherCount: 3, teacherSelection: reviewedTeacherSelection('robinhood', NOW), matchedSells: 30, trainedAt: iso(NOW), trainingEndAt: iso(NOW - 1000) };
   const feed = { ...market(), trenches: async () => ({ status: 'ok', tokens: [], observedAt: iso(NOW) }),
     details: async () => { calls++; return { status: 'ok', token, observedAt: iso(NOW) }; },
     quote: async ({ chain, address }) => ({ chain, address, price: 1, status: 'ok', observedAt: iso(NOW - (staleQuote ? 16000 : 0)) }) };
@@ -693,7 +695,7 @@ test('v2 research does not turn dust, KOL-only or unverified flow into smart-mon
 test('compounding preview follows cash, retains fixed-size shadow experiments and restores the same ledger', async t => {
   const dataDir = await directory(t), chains = ['robinhood', 'base'];
   const learned = { version: '1234567890abcdef', chain: 'robinhood', group: 'gmgn_fomo', maxHoldMs: 120000, lossCutRate: .08,
-    teacherCount: 3, matchedSells: 30, trainedAt: iso(NOW), trainingEndAt: iso(NOW - 1000) };
+    teacherCount: 3, teacherSelection: reviewedTeacherSelection('robinhood', NOW), matchedSells: 30, trainedAt: iso(NOW), trainingEndAt: iso(NOW - 1000) };
   const feed = { ...market(), trenches: async ({ chain }) => ({ status: 'ok', observedAt: iso(NOW), tokens: [{ ...token, chain }] }) };
   const options = { dataDir, market: feed, chains, now: () => NOW, evidenceLoader: () => multiSources(chains),
     compoundEntries: true, allowExploratory: true, learningLoader: () => ({ policies: [learned] }) };
@@ -718,7 +720,7 @@ test('compounding preview follows cash, retains fixed-size shadow experiments an
 test('fixed-ten runtime exposes the active budget, passes cash and isolates learning budgets after restart', async t => {
   const dataDir = await directory(t), seen = [];
   const learned = { version: '1234567890abcdef', chain: 'robinhood', group: 'gmgn_fomo', maxHoldMs: 120000, lossCutRate: .08,
-    teacherCount: 3, matchedSells: 30, trainedAt: iso(NOW), trainingEndAt: iso(NOW - 1000) };
+    teacherCount: 3, teacherSelection: reviewedTeacherSelection('robinhood', NOW), matchedSells: 30, trainedAt: iso(NOW), trainingEndAt: iso(NOW - 1000) };
   const options = { dataDir, market: { ...market(), quote: async () => ({ status: 'unavailable' }) }, now: () => NOW,
     evidenceLoader: () => sources(), allowExploratory: true, confirmedMode: true, pvpMode: true, fixedEntryUsd: 10,
     compoundEntries: false, learningLoader: () => ({ policies: [learned] }), evaluate: input => { seen.push(input); return []; } };
@@ -755,6 +757,23 @@ test('server-side cycle opens from real-shaped evidence once, persists costs, an
   const restored = createPaperStrategyRuntime({ market: feed, dataDir, now: () => NOW + 1000, evidenceLoader: async () => sources() });
   try { await restored.runOnce(); assert.equal(restored.snapshot().enabled, false); assert.equal(restored.snapshot().account.cash, 96); assert.equal(restored.snapshot().account.trades.length, 1); }
   finally { await restored.stop(); }
+});
+
+test('recovery runtime wires the narrative admission gate into decisions and keeps it paper-only',async t=>{
+  const seen=[],runtime=createPaperStrategyRuntime({dataDir:await directory(t),market:{...market(),quote:async()=>({status:'unavailable'})},now:()=>NOW,
+    evidenceLoader:()=>sources(),allowExploratory:true,pvpMode:true,confirmedMode:true,evidenceHoldMode:true,
+    continuousPaperMode:true,opportunityMode:true,memeExitMode:true,recoveryMode:true,narrativeAdmissionGate:true,
+    evaluate:input=>{seen.push(input);return evaluatePaperStrategies(input);}});
+  try{
+    await runtime.runOnce();
+    const snapshot=runtime.snapshot();
+    assert.ok(seen.some(input=>input.narrativeAdmissionGate===true));
+    assert.ok(seen.some(input=>input.narrativeAdmissionGate===true&&input.narrativeResearchIndex),
+      'entry evaluation must receive the same recovered narrative evidence index used by the current cycle');
+    assert.equal(snapshot.narrativeAdmission.enabled,true);
+    assert.equal(snapshot.account.trades.length,0,'no source-bound narrative means observe, not open a new position');
+    for(const key of ['execution','signing','broadcast'])assert.equal(snapshot[key],false);
+  }finally{await runtime.stop();}
 });
 
 test('existing malformed, null or false account files fail closed without reset', async t => {
@@ -1248,7 +1267,7 @@ test('main diagnostic mode quotes and trades without candles or smart tags, reco
 
 test('PVP changes main-account rules without contaminating paired learning controls', async t => {
   const learned = { version: '1234567890abcdef', chain: 'robinhood', group: 'gmgn_fomo', maxHoldMs: 120000, lossCutRate: .08,
-    teacherCount: 3, matchedSells: 30, trainedAt: iso(NOW), trainingEndAt: iso(NOW - 1000) };
+    teacherCount: 3, teacherSelection: reviewedTeacherSelection('robinhood', NOW), matchedSells: 30, trainedAt: iso(NOW), trainingEndAt: iso(NOW - 1000) };
   const runtime = createPaperStrategyRuntime({ dataDir: await directory(t), market: market(), now: () => NOW, pvpMode: true,
     evidenceLoader: () => sources(), learningLoader: () => ({ policies: [learned] }) });
   try {
@@ -1616,7 +1635,7 @@ test('surge learning automatically retrieves the provider-linked tweet without a
 test('independent exit management also closes paired learning positions with their own frozen rules', async t => {
   let clock = NOW, price = 1;
   const learned = { version: '1234567890abcdef', chain: 'robinhood', group: 'gmgn_fomo', maxHoldMs: 120000, lossCutRate: .08,
-    teacherCount: 3, matchedSells: 30, trainedAt: iso(NOW), trainingEndAt: iso(NOW - 1000) };
+    teacherCount: 3, teacherSelection: reviewedTeacherSelection('robinhood', NOW), matchedSells: 30, trainedAt: iso(NOW), trainingEndAt: iso(NOW - 1000) };
   const feed = market(() => clock);
   feed.quote = async ({ chain, address }) => ({ chain, address, price, status: 'ok', observedAt: iso(clock) });
   const runtime = createPaperStrategyRuntime({ dataDir: await directory(t), market: feed, now: () => clock, pvpMode: true,

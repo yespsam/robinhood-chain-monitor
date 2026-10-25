@@ -10,6 +10,7 @@ import { GMGN_FLOW_CHAINS } from '../src/gmgn-flow-signal.js';
 import { createWalletLearningMonitor } from '../src/wallet-learning-monitor.js';
 import { NOW, teacher, raw } from './fixtures/wallet-learning.js';
 import { renderBrainTelemetry } from '../dashboard/brain-desk.js';
+import { createPaperStrategyRuntime } from '../src/paper-strategy-runtime.js';
 
 const ALL=Object.keys(GMGN_FLOW_CHAINS),CA=`0x${'a'.repeat(40)}`;
 async function directory(t) {
@@ -75,6 +76,55 @@ test('Binance both scheduling modes stay BSC-only and do not evade BSC cooldown 
     }finally{await monitor.stop();}
   }
   assert.equal(selectBinanceFlowSlot({chains:{bsc:{feeds:{smartmoney:{nextAttemptAt:NOW+1},kol:{nextAttemptAt:NOW+1}}}}},NOW,['bsc']),null);
+});
+
+test('expanded BSC, Solana and Robinhood scope rotates both flow providers without querying Base or ETH',async t=>{
+  const selected=['bsc','sol','robinhood'];
+  for(const provider of ['gmgn','binance'])for(const adaptive of [true,false])await t.test(`${provider}:${adaptive}`,async t=>{
+    const dir=await directory(t);await scope(dir,selected);let clock=NOW;const calls=[];
+    const client={trades:async(chain,kind)=>{calls.push([chain,kind]);return provider==='gmgn'?{code:0,data:{list:[]}}:{code:'000000',data:[]};},
+      hotSearches:async()=>{throw Error('unrequested hot discovery');},stop:async()=>{}};
+    const dependencies={autoStart:false,now:()=>clock,client,logger:{error(){}}};
+    const monitor=provider==='gmgn'?createGmgnFlowMonitor({dataDir:dir,gmgnFlowMonitorEnabled:true,
+      gmgnFlowAdaptiveSchedulingEnabled:adaptive,gmgnFlowResearchDecoupled:true,gmgnFlowParallelFeedReads:true},dependencies):
+      createBinanceFlowMonitor({dataDir:dir,binanceFlowFocusSchedulingEnabled:adaptive},dependencies);
+    try{
+      for(let i=0;i<12;i++){clock+=15000;await monitor.check();}
+      const state=monitor.state();assert.deepEqual(state.scanScope.scanChains,selected);
+      assert.deepEqual([...new Set(calls.map(([chain])=>chain))].sort(),[...selected].sort());
+      assert.ok(calls.every(([chain])=>selected.includes(chain)),'excluded chains receive no new flow requests');
+      for(const chain of selected){
+        const chainCalls=calls.filter(([c])=>c===chain);assert.ok(chainCalls.length>=4,`${chain} is revisited`);
+        assert.deepEqual([...new Set(chainCalls.map(([,kind])=>kind))].sort(),['kol','smartmoney']);
+      }
+    }finally{await monitor.stop();}
+  });
+});
+
+test('expanded focused market scope queries all three chains and rejects excluded-chain response rows',async t=>{
+  const dir=await directory(t),selected=['bsc','sol','robinhood'],calls=[];await scope(dir,selected);
+  const tokens=ALL.map(chain=>({chain,address:chain==='sol'?'So11111111111111111111111111111111111111112':CA,
+    symbol:'SAME_SYMBOL',price:1,liquidity:60000,volume:5000,volumeWindow:'5m',marketCategory:'completed',marketStage:'external'}));
+  const runtime=createPaperStrategyRuntime({dataDir:dir,chain:'robinhood',chains:ALL,discoveryMode:'gmgn_three_lists_v1',now:()=>NOW,
+    evidenceLoader:()=>({}),market:{
+      trending:async q=>{calls.push(['ranking',q.chain]);return {status:'ok',interval:q.interval,observedAt:new Date(NOW).toISOString(),tokens};},
+      trenches:async q=>{calls.push(['trenches',q.chain]);return {status:'ok',observedAt:new Date(NOW).toISOString(),tokens};},
+      details:async q=>{calls.push(['detail',q.chain]);return {status:'unavailable'};},
+      quote:async q=>{calls.push(['quote',q.chain]);return {status:'unavailable'};},
+      kline:async q=>{calls.push(['chart',q.chain]);return {status:'unavailable',candles:[]};}}});
+  try{
+    await runtime.setEnabled(false);await runtime.runOnce();await runtime.refreshDetails();
+    const snapshot=runtime.snapshot();assert.deepEqual(snapshot.scanScope.scanChains,selected);
+    assert.deepEqual(snapshot.chains,ALL,'management universe is not rewritten');
+    for(const kind of ['ranking','trenches'])assert.deepEqual(calls.filter(([k])=>k===kind).map(([,chain])=>chain),selected);
+    assert.ok(calls.every(([,chain])=>selected.includes(chain)));
+    assert.deepEqual([...new Set(snapshot.evaluations.map(e=>e.token.chain))].sort(),[...selected].sort());
+    assert.equal(snapshot.discoveryScope.uniqueCandidates,3,'same symbol and EVM address remain chain-separated');
+    assert.ok(snapshot.evaluations.filter(e=>e.token.chain==='sol').every(e=>e.token.address===tokens.find(t=>t.chain==='sol').address));
+    assert.equal(snapshot.account.trades.length,0,'unknown safety never becomes an order');
+    assert.equal(snapshot.chainCoverage.eth.scanning,false);assert.equal(snapshot.chainCoverage.base.scanning,false);
+    assert.equal(snapshot.execution,false);assert.equal(snapshot.signing,false);assert.equal(snapshot.broadcast,false);
+  }finally{await runtime.stop();}
 });
 
 test('wallet learner stops out-of-scope activity, profile and chart requests without deleting checkpoints',async t=>{

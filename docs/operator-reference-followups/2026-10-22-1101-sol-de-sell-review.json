@@ -1,0 +1,160 @@
+{
+  "checkedAt": "2026-10-22T03:11:20.000Z",
+  "scheduledAt": "2026-10-22T03:01:44.538Z",
+  "round": 97,
+  "group": "sol",
+  "question": "D/E头页新增同秒卖出是否能由双源核验；旁核Four/Flap链头及Agentic Wallet限定发射触发条件",
+  "gmgn": {
+    "configCheckPassedBeforeBusinessRequests": true,
+    "sharedClient": "src/gmgn-flow-client.js",
+    "priority": 0,
+    "businessRequests": 2,
+    "successful": 2,
+    "failed": 0,
+    "pages": 2,
+    "pageSize": 20,
+    "identityEcho": true,
+    "wallets": [
+      {
+        "id": "D",
+        "chain": "sol",
+        "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+        "providerHeadCheckedAt": "2026-10-22T03:04:28.481Z",
+        "providerLatestActivityAt": "2026-10-21T22:57:10.000Z",
+        "lastNewEvidenceAt": "2026-10-22T03:04:28.481Z",
+        "previousAnchorFound": true,
+        "latest": {
+          "at": "2026-10-21T22:57:10.000Z",
+          "ca": "4Kee4JuLWTGFR9r9N4iZ9E9K4B297uDgbYt2psy7pump",
+          "side": "sell",
+          "hash": "Kgnexit28xqnr4ANkZQjFqJ5LqnCCSupAaam3XmoXZPwHZUhvcB91FqcT3fuT9r8RyXSywrqR2WANK2WobRHRQv"
+        },
+        "rowsNewInPage": null,
+        "pageOverlap": null,
+        "nextCursor": "NDU5NTM5Mzg3MDA5NDQwOTY6MDo6"
+      },
+      {
+        "id": "E",
+        "chain": "sol",
+        "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+        "providerHeadCheckedAt": "2026-10-22T03:04:40.173Z",
+        "providerLatestActivityAt": "2026-10-21T22:57:10.000Z",
+        "lastNewEvidenceAt": "2026-10-22T03:04:40.173Z",
+        "previousAnchorFound": true,
+        "latest": {
+          "at": "2026-10-21T22:57:10.000Z",
+          "ca": "4Kee4JuLWTGFR9r9N4iZ9E9K4B297uDgbYt2psy7pump",
+          "side": "sell",
+          "hash": "HY7s4f1WdhMDcSTaVADasDMFdTPWPizYfWvm3JcXBHT8EpCyViCjf8x2rBB12bb5fhRaeFbmqHiQRfdAFxqraiN"
+        },
+        "rowsNewInPage": null,
+        "pageOverlap": null,
+        "nextCursor": "NDU5NTMwNjY0MDAwMzEwNDQ6MDo6"
+      }
+    ],
+    "deduplicatedNewActivityKeys": 2,
+    "oneToOneSameSecondPairs": 1,
+    "distinctMatchedCa": 1,
+    "interpretation": "provider-sourced sell synchrony candidate only; not proof of common control, confirmed chain sale, or profit"
+  },
+  "publicRpc": {
+    "budget": 2,
+    "attempted": 2,
+    "successfulTransactionReads": 0,
+    "results": [
+      {
+        "hash": "Kgnexit28xqnr4ANkZQjFqJ5LqnCCSupAaam3XmoXZPwHZUhvcB91FqcT3fuT9r8RyXSywrqR2WANK2WobRHRQv",
+        "httpStatus": 200,
+        "rpcErrorCode": -32015,
+        "classification": "transaction_version_unsupported",
+        "receiptSuccess": null,
+        "signerIdentityVerified": null,
+        "tokenBalanceDelta": null
+      },
+      {
+        "hash": "HY7s4f1WdhMDcSTaVADasDMFdTPWPizYfWvm3JcXBHT8EpCyViCjf8x2rBB12bb5fhRaeFbmqHiQRfdAFxqraiN",
+        "httpStatus": 200,
+        "rpcErrorCode": -32015,
+        "classification": "transaction_version_unsupported",
+        "receiptSuccess": null,
+        "signerIdentityVerified": null,
+        "tokenBalanceDelta": null
+      }
+    ],
+    "retry": false,
+    "reason": "round budget exhausted; do not bypass provider controls"
+  },
+  "fourFlap": {
+    "snapshotAt": "2026-10-22T03:05:57.610Z",
+    "overallCoverage": "coverage_limited",
+    "four": {
+      "cursorNextBlock": 129055001,
+      "observedHead": 129054958,
+      "safeHead": 129054955,
+      "liveHeadVerified": false,
+      "currentLagBlocks": null,
+      "currentBacklogBlocks": null,
+      "lastObservationOnlyLagBlocks": 16,
+      "lastObservationOnlyBacklogBlocks": 13,
+      "status": "checkpoint_only_unverified_cursor_ahead_of_observation"
+    },
+    "flap": {
+      "version": "v5.26.0",
+      "cursorNextBlock": 129054938,
+      "observedHead": 129054976,
+      "safeHead": 129054973,
+      "proofAt": "2026-10-22T03:05:40.467Z",
+      "liveHeadVerified": true,
+      "headLagBlocks": 39,
+      "scanBacklogBlocks": 36,
+      "statusAtLaterSnapshot": "degraded",
+      "lastSuccessfulObservationAt": "2026-10-22T03:05:20.867Z",
+      "errorAt": "2026-10-22T03:05:49.225Z",
+      "errorCode": "FLAP_QUOTE_REORG_CHECK_FAILED",
+      "nextAttemptAt": "2026-10-22T03:06:18.780Z"
+    },
+    "quoteOpportunityScheduler": null,
+    "officialWeb": {"fourmemeFreshPages": 12, "fourmemeAllowedPages": 13, "flapFreshPages": 5, "flapAllowedPages": 5},
+    "officialDocumentBodies": {"fourmemeFreshPages": 8, "fourmemeAllowedPages": 10, "fourmemeFailedPages": 2, "flapFreshPages": 58, "flapAllowedPages": 59, "flapFailedPages": 1, "flapPendingChanges": 2}
+  },
+  "agenticWalletMonitoring": {
+    "checkedAt": "2026-10-22T03:06:03.062Z",
+    "qualifyingCandidateBuys": 0,
+    "triggerFired": false,
+    "criteria": "successful on-chain first-token buy AND initiating address officially verified as Binance Agentic Wallet",
+    "officialAiProExclusiveRuleFound": false,
+    "officialSources": [
+      "https://www.binance.com/en/support/faq/detail/3ff00e2d488a41c4aaa4aabb6fc36763",
+      "https://www.binance.com/en/support/announcement/detail/c50ffc85804f45f08d0d7727ea508157",
+      "https://four.meme/",
+      "https://flap.sh/event/bstocks?lang=en"
+    ],
+    "interpretation": "AI Pro product, Agentic Wallet identity, and activity eligibility remain distinct; no official source checked states AI Pro-exclusive Four/Flap participation",
+    "walletConnected": false,
+    "signing": false,
+    "broadcast": false,
+    "buySell": false,
+    "strategyChanged": false,
+    "ledgerChanged": false
+  },
+  "paperForward": {
+    "checkedAt": "2026-10-22T03:05:57.610Z",
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "tradeCount": 309,
+    "lastTradeId": "1792567338823:308",
+    "newTrades": 0,
+    "closedShadowPairs": 2,
+    "newCompleteShadowPairs": 0,
+    "quoteOpportunityScheduler": null,
+    "latestKnownQuoteGapCount": 45,
+    "latestKnownQuoteGapAsOf": "2026-10-21T23:00:17.985Z",
+    "runtimePids": {"main": 48659, "bsc": 55241, "checkedAt": "2026-10-22T03:06:57.000Z"},
+    "continuousUptimeProven": false
+  },
+  "durationSecondsApprox": 560,
+  "durationExceededTargetFiveMinutes": true,
+  "nextQuestion": "轮换BSC；优先A/B到期头页与nonce缺口；继续保留D/E卖出候选待链上交易版本、成功状态、签名者和token balance delta核验。"
+}

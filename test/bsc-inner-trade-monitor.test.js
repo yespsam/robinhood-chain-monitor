@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {mkdtemp,rm} from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import {ZeroAddress} from 'ethers';
+import {createRpcHostCoordinator} from '../src/rpc-host-coordinator.js';
 import {createInnerTradeMonitor,createInnerTradeRpcReader} from '../src/bsc-inner-trade-monitor.js';
 import {INNER_TRADE_EMITTERS,INNER_TRADE_ORACLE,INNER_TRADE_ORACLE_ABI,INNER_TRADE_ERC20_ABI,normalizeInnerTradeWindow} from '../src/bsc-inner-trade-events.js';
 import {buildInnerTradeFixture,buildInnerTradeLog,innerTradeTestHash as hash,INNER_TRADE_TEST_NOW as BASE,INNER_TRADE_TEST_CA as CA} from './helpers/inner-trade-fixture.js';
@@ -281,7 +285,61 @@ test('true endpoint timeout shares a bounded cooldown, but a local shutdown is n
   const gate={run:async(_host,_method,_lane,fn)=>fn(),persistCooldown:async(...args)=>cooldowns.push(args)};
   const m=createInnerTradeMonitor({reader:f.reader,coordinator:gate,now:f.now});await m.refresh({tokens:[f.tokens[0]]});
   assert.equal(cooldowns.length,1);assert.equal(cooldowns[0][2],BASE+30000);assert.equal(m.snapshot().status,'unavailable');
+  assert.equal(cooldowns[0][3],'method');
   await m.stop();assert.equal(cooldowns.length,1);
+});
+
+for(const host of ['bsc.rpc.sentio.xyz','public-bsc.nownodes.io'])
+test(`inner ${host} fast sequential reads complete through SQLite within the unchanged round budget`,async t=>{
+  const dir=await mkdtemp(path.join(os.tmpdir(),'inner-fast-shared-'));
+  const f=fixture(),gate=createRpcHostCoordinator({file:path.join(dir,'rpc.sqlite'),now:f.now}),calls=[];
+  t.after(async()=>{gate.close();await rm(dir,{recursive:true,force:true});});
+  const coordinator={...gate,run:(h,method,lane,fn,options)=>{
+    calls.push({h,method,lane,waitMs:options.waitMs});return gate.run(h,method,lane,fn,options);
+  }};
+  const m=createInnerTradeMonitor({reader:f.reader,coordinator,now:f.now,rpcEndpoints:[{host,url:`https://${host}`}]});
+  t.after(()=>m.stop());
+  const started=Date.now();
+  await m.refresh({tokens:f.tokens});
+  const state=m.snapshot();
+  assert.equal(state.status,'warming_up',JSON.stringify(state.lastError));
+  assert.equal(state.windows.length,2);assert.equal(state.lastError,null);
+  assert.equal(state.limits.taskMs,10000);assert.equal(state.limits.queueWaitMs,1000);
+  assert.ok(Date.now()-started<10000,'the existing ten-second round budget is not enlarged');
+  assert.ok(calls.length>3);assert.equal(calls.length,state.lastRound.physicalRequests);
+  assert.ok(calls.every(c=>c.h===host&&c.lane==='background'&&c.waitMs===1000));
+  assert.ok(state.lastRound.physicalRequests<=32);assert.ok(state.lastRound.rpcItems<=64);
+  assert.deepEqual(gate.snapshot().circuits,[]);
+  assert.equal(gate.snapshot().leases.length,0);assert.equal(gate.snapshot().waiters.length,0);
+});
+
+for(const [error,scope] of [
+  ...['RPC_TIMEOUT','TIMEOUT','ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT'].map(code=>[{code},'method']),
+  [{status:429,code:'RPC_TIMEOUT'},'host'],[{status:503,code:'TIMEOUT'},'host'],
+  [{code:'ECONNRESET'},'host'],[{code:'ECONNREFUSED'},'host'],[{name:'TypeError'},'host'],
+])test(`inner ${JSON.stringify(error)} persists ${scope} cooldown without cross-method timeout pollution`,async t=>{
+  const dir=await mkdtemp(path.join(os.tmpdir(),'inner-cooldown-scope-'));
+  const gate=createRpcHostCoordinator({file:path.join(dir,'rpc.sqlite'),now:()=>BASE});
+  t.after(async()=>{gate.close();await rm(dir,{recursive:true,force:true});});
+  const f=fixture();f.reader.getBlockNumber=async()=>{throw Object.assign(Error('fixture'),error);};
+  const m=createInnerTradeMonitor({reader:f.reader,coordinator:gate,now:f.now});
+  t.after(()=>m.stop());
+  await m.refresh({tokens:[f.tokens[0]]});
+  const state=m.snapshot(),host=state.lastRound.host;
+  assert.equal(state.status,'unavailable');assert.equal(state.lastRound.physicalRequests,2);
+  assert.deepEqual(state.windows,[]);
+  assert.deepEqual(gate.snapshot().circuits.map(({operation,until_ms})=>({operation,until_ms})),
+    [{operation:scope==='method'?'eth_blockNumber':'*',until_ms:BASE+30000}]);
+  let dispatched=0;
+  await assert.rejects(gate.run(host,'eth_blockNumber','background',()=>{dispatched++;},{waitMs:200}),
+    e=>e.code==='RPC_COORDINATOR_UNAVAILABLE'&&e.rpcFailureScope===scope);
+  for(const method of ['eth_chainId','eth_getLogs']) {
+    if(scope==='host')await assert.rejects(gate.run(host,method,'background',()=>{dispatched++;},{waitMs:200}),
+      e=>e.rpcFailureScope==='host');
+    else assert.equal(await gate.run(host,method,'background',()=>{dispatched++;return 'read-only fixture';},{waitMs:200}),'read-only fixture');
+  }
+  assert.equal(dispatched,scope==='method'?2:0);
+  assert.equal(gate.snapshot().leases.length,0);assert.equal(gate.snapshot().waiters.length,0);
 });
 
 for(const offset of [-31000,1000])test(`stale/future confirmed head (${offset} ms) reports timing and cools read methods without retry`,async()=>{

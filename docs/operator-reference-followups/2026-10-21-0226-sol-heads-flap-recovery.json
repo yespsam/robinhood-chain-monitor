@@ -1,0 +1,1839 @@
+{
+  "round": 89,
+  "checkedAt": "2026-10-20T18:30:22.218Z",
+  "scheduledAt": "2026-10-20T18:26:37.207Z",
+  "source": "gmgn-cli via src/gmgn-flow-client.js; local saved state/API",
+  "requests": {
+    "configChecks": 1,
+    "gmgnBusinessAttempts": 2,
+    "gmgnSuccessful": 2,
+    "gmgnBusy": 0,
+    "publicRpc": 0,
+    "modelRequests": 0
+  },
+  "pages": [
+    {
+      "id": "E",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "attemptAt": "2026-10-20T18:29:28.629Z",
+      "checkedAt": "2026-10-20T18:29:40.797Z",
+      "rows": [
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "4geHVDMA2pntjmvFKnUjoTfsK1VAAJXA3yFBn8T2pump",
+          "symbol": "SNORLAX",
+          "hash": "2ZgrqzbEXRavPojYFqypXsJwfssHToxX6ARNFEVo31ohM66XU5DSkcvYm5mYnvG2xtwrgJghw51ET2a8NzCnoyGf",
+          "at": "2026-10-20T05:25:34.000Z",
+          "timestamp": 1792473934,
+          "type": "sell",
+          "quantity": "18380640.364519",
+          "amountUsd": "98.36001129834",
+          "buyCostUsd": "166.88417893484",
+          "gasUsd": "0.0015741",
+          "dexUsd": "1.22950023174",
+          "key": "sol:4geHVDMA2pntjmvFKnUjoTfsK1VAAJXA3yFBn8T2pump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:2ZgrqzbEXRavPojYFqypXsJwfssHToxX6ARNFEVo31ohM66XU5DSkcvYm5mYnvG2xtwrgJghw51ET2a8NzCnoyGf"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "4geHVDMA2pntjmvFKnUjoTfsK1VAAJXA3yFBn8T2pump",
+          "symbol": "SNORLAX",
+          "hash": "4oyDsjZPFVZwDm2Nn3ynNyZ8pbsVj3vNtn8HEM2Aaf7fxo6gyVbYS2KHco1SeYWhN48HA5jMNHFbgSWhqGq8hjy1",
+          "at": "2026-10-20T05:22:26.000Z",
+          "timestamp": 1792473746,
+          "type": "buy",
+          "quantity": "18380640.364519",
+          "amountUsd": "166.88417893484",
+          "buyCostUsd": null,
+          "gasUsd": "0.00157485",
+          "dexUsd": "2.08605229443",
+          "key": "sol:4geHVDMA2pntjmvFKnUjoTfsK1VAAJXA3yFBn8T2pump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:4oyDsjZPFVZwDm2Nn3ynNyZ8pbsVj3vNtn8HEM2Aaf7fxo6gyVbYS2KHco1SeYWhN48HA5jMNHFbgSWhqGq8hjy1"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "3sx3jJq9NofFkR6TEfEuw9rnnMTTimxS2nRLhKMFpump",
+          "symbol": "OAKDOOR",
+          "hash": "41saUSpJPVM9EMgo6ajtUtx49bBYkxuuHW1hrK5AcGujj5MuZCz5ZvUNSbxaDRH91juwvrvX3SsR5bS5Z8SH3vbs",
+          "at": "2026-10-20T04:35:22.000Z",
+          "timestamp": 1792470922,
+          "type": "sell",
+          "quantity": "18346724.846211",
+          "amountUsd": "263.5279487217",
+          "buyCostUsd": "288.8035280736022",
+          "gasUsd": "0.0015795",
+          "dexUsd": "3.2940994788",
+          "key": "sol:3sx3jJq9NofFkR6TEfEuw9rnnMTTimxS2nRLhKMFpump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:41saUSpJPVM9EMgo6ajtUtx49bBYkxuuHW1hrK5AcGujj5MuZCz5ZvUNSbxaDRH91juwvrvX3SsR5bS5Z8SH3vbs"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "3sx3jJq9NofFkR6TEfEuw9rnnMTTimxS2nRLhKMFpump",
+          "symbol": "OAKDOOR",
+          "hash": "4a51cCYSmuojJekpdjFvqp5cXpmQVQiBQkiLHf9YN3vrAdrkPLeFT8dUJrFAxGfExvbduPrYQYxbDzEiDc5iFdm8",
+          "at": "2026-10-20T04:31:36.000Z",
+          "timestamp": 1792470696,
+          "type": "buy",
+          "quantity": "7076733.845579",
+          "amountUsd": "121.99686461287",
+          "buyCostUsd": null,
+          "gasUsd": "0.00157755",
+          "dexUsd": "1.52496089837",
+          "key": "sol:3sx3jJq9NofFkR6TEfEuw9rnnMTTimxS2nRLhKMFpump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:4a51cCYSmuojJekpdjFvqp5cXpmQVQiBQkiLHf9YN3vrAdrkPLeFT8dUJrFAxGfExvbduPrYQYxbDzEiDc5iFdm8"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "D7yF3XdY4K25r5LTkvzbLS6Ph3HF8vZR4b2WG27Mpump",
+          "symbol": "OAKDOOR",
+          "hash": "34sQ69fQtzR7XgszmzG6WfzREUYax6aKfmPGEjpB2kAtNK8v4pWrbmiwYN3mxfvGPDakrZ5guCKfQuh4kqZw3oiK",
+          "at": "2026-10-20T04:25:41.000Z",
+          "timestamp": 1792470341,
+          "type": "sell",
+          "quantity": "35577018.684849",
+          "amountUsd": "141.1034375456",
+          "buyCostUsd": "142.7915017684",
+          "gasUsd": "0.0015783",
+          "dexUsd": "1.76379307454",
+          "key": "sol:D7yF3XdY4K25r5LTkvzbLS6Ph3HF8vZR4b2WG27Mpump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:34sQ69fQtzR7XgszmzG6WfzREUYax6aKfmPGEjpB2kAtNK8v4pWrbmiwYN3mxfvGPDakrZ5guCKfQuh4kqZw3oiK"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "D7yF3XdY4K25r5LTkvzbLS6Ph3HF8vZR4b2WG27Mpump",
+          "symbol": "OAKDOOR",
+          "hash": "2x7XHDJ4UDf2TDj9MoVX79P1L5fePABdrKJFRkTqCE8L52au5Lyu1j3SaXfr3QBLGGrmAJxD7WLBWkdDaEgYfk11",
+          "at": "2026-10-20T04:25:17.000Z",
+          "timestamp": 1792470317,
+          "type": "buy",
+          "quantity": "35577018.684849",
+          "amountUsd": "142.7915017684",
+          "buyCostUsd": null,
+          "gasUsd": "0.001578",
+          "dexUsd": "1.7848938944",
+          "key": "sol:D7yF3XdY4K25r5LTkvzbLS6Ph3HF8vZR4b2WG27Mpump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:2x7XHDJ4UDf2TDj9MoVX79P1L5fePABdrKJFRkTqCE8L52au5Lyu1j3SaXfr3QBLGGrmAJxD7WLBWkdDaEgYfk11"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "54bpv6PvXeEgJmcLUypaitEPP2tpyXhrddmAdFsVpump",
+          "symbol": "Lucia",
+          "hash": "2HHF1GoE299t7cadakLun7RiGeAcDnTdq5d1tfUkT5bjPa4TGL7iey3chZYuvkqH1FSK6NomGQT2K67eTZf8cjR6",
+          "at": "2026-10-20T04:18:02.000Z",
+          "timestamp": 1792469882,
+          "type": "sell",
+          "quantity": "28817723.360804",
+          "amountUsd": "142.40627401024",
+          "buyCostUsd": "137.08915340172",
+          "gasUsd": "0.0015801",
+          "dexUsd": "1.7800785094",
+          "key": "sol:54bpv6PvXeEgJmcLUypaitEPP2tpyXhrddmAdFsVpump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:2HHF1GoE299t7cadakLun7RiGeAcDnTdq5d1tfUkT5bjPa4TGL7iey3chZYuvkqH1FSK6NomGQT2K67eTZf8cjR6"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "54bpv6PvXeEgJmcLUypaitEPP2tpyXhrddmAdFsVpump",
+          "symbol": "Lucia",
+          "hash": "5jsyPSg8fKiDbbgptycJiA75yEWJ3WYnEo2Yh7RyhAqKN6EwqGV9Fi2KUkskbvK47DJEyn7gNEufup3XYvJ39V2e",
+          "at": "2026-10-20T04:16:55.000Z",
+          "timestamp": 1792469815,
+          "type": "buy",
+          "quantity": "28817723.360804",
+          "amountUsd": "137.08915340172",
+          "buyCostUsd": null,
+          "gasUsd": "0.00158145",
+          "dexUsd": "1.71361462311",
+          "key": "sol:54bpv6PvXeEgJmcLUypaitEPP2tpyXhrddmAdFsVpump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:5jsyPSg8fKiDbbgptycJiA75yEWJ3WYnEo2Yh7RyhAqKN6EwqGV9Fi2KUkskbvK47DJEyn7gNEufup3XYvJ39V2e"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "HsM7vtzwCpoWDNE4zRp91j4JxkLMSv3cK46rggE3pump",
+          "symbol": "Bien",
+          "hash": "52hvpbLdhAbhhpeN4aVQDLVXkaCWth4sbfieA9TSrQWZM4kdnr7Afr1NhWVB1i5e5A4m7N5jRUhyPtYLszWQuMw8",
+          "at": "2026-10-20T03:44:58.000Z",
+          "timestamp": 1792467898,
+          "type": "sell",
+          "quantity": "5713645.074286",
+          "amountUsd": "155.94212885644",
+          "buyCostUsd": "64.476853017375",
+          "gasUsd": "0.00157845",
+          "dexUsd": "1.94927673172",
+          "key": "sol:HsM7vtzwCpoWDNE4zRp91j4JxkLMSv3cK46rggE3pump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:52hvpbLdhAbhhpeN4aVQDLVXkaCWth4sbfieA9TSrQWZM4kdnr7Afr1NhWVB1i5e5A4m7N5jRUhyPtYLszWQuMw8"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "HsM7vtzwCpoWDNE4zRp91j4JxkLMSv3cK46rggE3pump",
+          "symbol": "Bien",
+          "hash": "5FwNJXh9U415Vv18ZTrgTkz348jhEv32wnKjpN9gVsbQ5gyAAymf1BmYkKmBQYJQFxXUfynQndk9CprWmxsjjqYL",
+          "at": "2026-10-20T03:44:55.000Z",
+          "timestamp": 1792467895,
+          "type": "sell",
+          "quantity": "5713645.074286",
+          "amountUsd": "159.5844042318",
+          "buyCostUsd": "64.47685301712228",
+          "gasUsd": "0.0015786",
+          "dexUsd": "1.99480515156",
+          "key": "sol:HsM7vtzwCpoWDNE4zRp91j4JxkLMSv3cK46rggE3pump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:5FwNJXh9U415Vv18ZTrgTkz348jhEv32wnKjpN9gVsbQ5gyAAymf1BmYkKmBQYJQFxXUfynQndk9CprWmxsjjqYL"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "HsM7vtzwCpoWDNE4zRp91j4JxkLMSv3cK46rggE3pump",
+          "symbol": "Bien",
+          "hash": "4DycbVesGisR4tqyh3Hwk1i63AuD1yUZ24MDngHvqexWAfMeHbf82AgwkGo9CpKu3r31RE8kRJAtNr5hxhgvpqSQ",
+          "at": "2026-10-20T03:42:52.000Z",
+          "timestamp": 1792467772,
+          "type": "buy",
+          "quantity": "11427290.148572",
+          "amountUsd": "128.95370603475",
+          "buyCostUsd": null,
+          "gasUsd": "0.00157875",
+          "dexUsd": "1.611921432",
+          "key": "sol:HsM7vtzwCpoWDNE4zRp91j4JxkLMSv3cK46rggE3pump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:4DycbVesGisR4tqyh3Hwk1i63AuD1yUZ24MDngHvqexWAfMeHbf82AgwkGo9CpKu3r31RE8kRJAtNr5hxhgvpqSQ"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "Bz1JiVg8td6HXVSdEstfRTCsdUwAiZib55SVHrF1pump",
+          "symbol": "popdog",
+          "hash": "391n5iSS9XdpkVzYsdi36QCpC5s4vEapJjpKhnNB3ju8tJCebtC13udR8u1reaLYzRmBS7mFAByxxUGCGxmQEEE3",
+          "at": "2026-10-20T03:05:24.000Z",
+          "timestamp": 1792465524,
+          "type": "sell",
+          "quantity": "18017975.650485",
+          "amountUsd": "75.5898803168",
+          "buyCostUsd": "103.4177878708",
+          "gasUsd": "0.001578",
+          "dexUsd": "0.9448735776",
+          "key": "sol:Bz1JiVg8td6HXVSdEstfRTCsdUwAiZib55SVHrF1pump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:391n5iSS9XdpkVzYsdi36QCpC5s4vEapJjpKhnNB3ju8tJCebtC13udR8u1reaLYzRmBS7mFAByxxUGCGxmQEEE3"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "Bz1JiVg8td6HXVSdEstfRTCsdUwAiZib55SVHrF1pump",
+          "symbol": "popdog",
+          "hash": "47qc1BQNnFjZXW5Z6L1u6g3BojMUCcKDRzBi8oYkcL35dVQ9igVshDRsFyKPQjC1CPznnpsjFCuYCNnWpCCCsG6p",
+          "at": "2026-10-20T03:03:14.000Z",
+          "timestamp": 1792465394,
+          "type": "buy",
+          "quantity": "18017975.650485",
+          "amountUsd": "103.4177878708",
+          "buyCostUsd": null,
+          "gasUsd": "0.00157755",
+          "dexUsd": "1.29272240097",
+          "key": "sol:Bz1JiVg8td6HXVSdEstfRTCsdUwAiZib55SVHrF1pump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:47qc1BQNnFjZXW5Z6L1u6g3BojMUCcKDRzBi8oYkcL35dVQ9igVshDRsFyKPQjC1CPznnpsjFCuYCNnWpCCCsG6p"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "7LnnehQRqr3LSzGr8RGXDtrzNaJwvSqzXDQRqikfpump",
+          "symbol": "Movember",
+          "hash": "YBikrAJefwFeq3k8hMcUddRvk84KwR28m9enRkcyQzfBmNgsxJhZrUnxymiDKxETef7f7iBm6vuaH545Mi3jBnZ",
+          "at": "2026-10-20T01:14:40.000Z",
+          "timestamp": 1792458880,
+          "type": "sell",
+          "quantity": "31643588.108914",
+          "amountUsd": "168.94920423924",
+          "buyCostUsd": null,
+          "gasUsd": "0.00155655",
+          "dexUsd": "2.11186519308",
+          "key": "sol:7LnnehQRqr3LSzGr8RGXDtrzNaJwvSqzXDQRqikfpump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:YBikrAJefwFeq3k8hMcUddRvk84KwR28m9enRkcyQzfBmNgsxJhZrUnxymiDKxETef7f7iBm6vuaH545Mi3jBnZ"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "7LnnehQRqr3LSzGr8RGXDtrzNaJwvSqzXDQRqikfpump",
+          "symbol": "Movember",
+          "hash": "5UUqpZo8JHY4PexSnDjThHx7ZVpX39gHB6Pm8tz7TXZ29C9SbeDN9ex2vgLjnkn15mky3p2EhzDQeuM2ecoySqyq",
+          "at": "2026-10-20T01:14:17.000Z",
+          "timestamp": 1792458857,
+          "type": "buy",
+          "quantity": "31643588.108914",
+          "amountUsd": "166.68477259754",
+          "buyCostUsd": null,
+          "gasUsd": "0.0015567",
+          "dexUsd": "2.08355982222",
+          "key": "sol:7LnnehQRqr3LSzGr8RGXDtrzNaJwvSqzXDQRqikfpump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:5UUqpZo8JHY4PexSnDjThHx7ZVpX39gHB6Pm8tz7TXZ29C9SbeDN9ex2vgLjnkn15mky3p2EhzDQeuM2ecoySqyq"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "BA9dMJJZ6ht5kj7Zutedtx5RZVckgHUJikVtAxKmpump",
+          "symbol": "Degen",
+          "hash": "4EJagpsggorUffHVG4Uvbz4CaDTRXZMuYhrC2A18M1tqiQKfRb3TU2UkrEPGi38SVpHnzHAMtmJBhPmKAkCJzWg1",
+          "at": "2026-10-20T00:54:49.000Z",
+          "timestamp": 1792457689,
+          "type": "sell",
+          "quantity": "18891242.681306",
+          "amountUsd": "156.4204634174",
+          "buyCostUsd": "155.26426427644",
+          "gasUsd": "0.00156975",
+          "dexUsd": "1.9552559026",
+          "key": "sol:BA9dMJJZ6ht5kj7Zutedtx5RZVckgHUJikVtAxKmpump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:4EJagpsggorUffHVG4Uvbz4CaDTRXZMuYhrC2A18M1tqiQKfRb3TU2UkrEPGi38SVpHnzHAMtmJBhPmKAkCJzWg1"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "BA9dMJJZ6ht5kj7Zutedtx5RZVckgHUJikVtAxKmpump",
+          "symbol": "Degen",
+          "hash": "2jLpDrJPZgaBPK4GKrQW5Q8ZvVyqXp3XPEnoxJzpDGPLGnLLx2si3iUTqqHNWzSHo6gpmnnddBDRKttjRFitiBDp",
+          "at": "2026-10-20T00:54:26.000Z",
+          "timestamp": 1792457666,
+          "type": "buy",
+          "quantity": "18891242.681306",
+          "amountUsd": "155.26426427644",
+          "buyCostUsd": null,
+          "gasUsd": "0.00156945",
+          "dexUsd": "1.94080342378",
+          "key": "sol:BA9dMJJZ6ht5kj7Zutedtx5RZVckgHUJikVtAxKmpump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:2jLpDrJPZgaBPK4GKrQW5Q8ZvVyqXp3XPEnoxJzpDGPLGnLLx2si3iUTqqHNWzSHo6gpmnnddBDRKttjRFitiBDp"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "CkC9WGxQaFkADYeDdQ76SiEvfh9z9Uz46TAaUpPfpump",
+          "symbol": "Cooper",
+          "hash": "RKNHGfppzq3dVzy9bodaXP5xVvM7EezrpepAHu7omgmDxqcTpVNhaZZohoNNvQ8FbrYhAuRvh1TURZ3yodNCWJN",
+          "at": "2026-10-19T22:19:07.000Z",
+          "timestamp": 1792448347,
+          "type": "sell",
+          "quantity": "16063571.504663",
+          "amountUsd": "109.7040294456",
+          "buyCostUsd": "102.88243748592",
+          "gasUsd": "0.0015828",
+          "dexUsd": "1.3713004604",
+          "key": "sol:CkC9WGxQaFkADYeDdQ76SiEvfh9z9Uz46TAaUpPfpump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:RKNHGfppzq3dVzy9bodaXP5xVvM7EezrpepAHu7omgmDxqcTpVNhaZZohoNNvQ8FbrYhAuRvh1TURZ3yodNCWJN"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "CkC9WGxQaFkADYeDdQ76SiEvfh9z9Uz46TAaUpPfpump",
+          "symbol": "Cooper",
+          "hash": "5smtCqbYD4BaipbnobckQcbD6wqApsacFK476a8oAEgspgTpsCZiwTT66yzsakFyPqiXSPbXstGrJwt4ftps2ABP",
+          "at": "2026-10-19T22:17:54.000Z",
+          "timestamp": 1792448274,
+          "type": "buy",
+          "quantity": "16063571.504663",
+          "amountUsd": "102.88243748592",
+          "buyCostUsd": null,
+          "gasUsd": "0.0015828",
+          "dexUsd": "1.28603059256",
+          "key": "sol:CkC9WGxQaFkADYeDdQ76SiEvfh9z9Uz46TAaUpPfpump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:5smtCqbYD4BaipbnobckQcbD6wqApsacFK476a8oAEgspgTpsCZiwTT66yzsakFyPqiXSPbXstGrJwt4ftps2ABP"
+        },
+        {
+          "chain": "sol",
+          "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+          "ca": "7NtRozKnJTV4RzrZEJ9u6fYJRQikVAcs5XhxMMA3pump",
+          "symbol": "USDC",
+          "hash": "44HYaetbV4E3J2yJakr4m7hZKdtkyyWas1YDskaJrnXXLbbxsMYpwYByrPiCi7Ng623BbSBQhKkCkKYZEEqLzuq7",
+          "at": "2026-10-19T22:06:13.000Z",
+          "timestamp": 1792447573,
+          "type": "sell",
+          "quantity": "18276697.808815",
+          "amountUsd": "77.84743072303",
+          "buyCostUsd": null,
+          "gasUsd": "0.00157785",
+          "dexUsd": "0.97309291428",
+          "key": "sol:7NtRozKnJTV4RzrZEJ9u6fYJRQikVAcs5XhxMMA3pump:8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj:44HYaetbV4E3J2yJakr4m7hZKdtkyyWas1YDskaJrnXXLbbxsMYpwYByrPiCi7Ng623BbSBQhKkCkKYZEEqLzuq7"
+        }
+      ],
+      "next": "NDU4OTkyNzExMDE0MDgwMDg6MDo6",
+      "overlap": 0,
+      "newRows": 20,
+      "anchorFound": false,
+      "previousAnchor": {
+        "at": "2026-10-18T18:10:02.000Z",
+        "hash": "5s1mabfXNZCNK5i57UkKP29x5ddt7DcUKCiGvjhF8riiE9dXGZmj2MNigtrg9jvMvMv658cNfJhZ5Czrirj5vTJ",
+        "ca": "D5ZBbWW6dq9h8mGrGe1aymP239LbXyx9m7DbtTUKpump",
+        "side": "sell"
+      }
+    },
+    {
+      "id": "D",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "attemptAt": "2026-10-20T18:29:40.798Z",
+      "checkedAt": "2026-10-20T18:29:54.283Z",
+      "rows": [
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "4geHVDMA2pntjmvFKnUjoTfsK1VAAJXA3yFBn8T2pump",
+          "symbol": "SNORLAX",
+          "hash": "24nZM9g6f5ggzSuEeDSTmUn9MXPDnXKE4xp7zLB8nr4w74JswVQuYfEqssXWtnnHNjtQLAoLDPxMDk8poNCnuvC8",
+          "at": "2026-10-20T05:25:34.000Z",
+          "timestamp": 1792473934,
+          "type": "sell",
+          "quantity": "16197651.956123",
+          "amountUsd": "80.4726046377",
+          "buyCostUsd": "139.0629758456",
+          "gasUsd": "0.0015741",
+          "dexUsd": "1.005907617",
+          "key": "sol:4geHVDMA2pntjmvFKnUjoTfsK1VAAJXA3yFBn8T2pump:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:24nZM9g6f5ggzSuEeDSTmUn9MXPDnXKE4xp7zLB8nr4w74JswVQuYfEqssXWtnnHNjtQLAoLDPxMDk8poNCnuvC8"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "4geHVDMA2pntjmvFKnUjoTfsK1VAAJXA3yFBn8T2pump",
+          "symbol": "SNORLAX",
+          "hash": "JGWSDct8EmuiAUjscbJpgQygZK847Jqd1a4RJM153jhGsF6v7nmfN4RdbjYJA6RxuXQ8w84oj8xGGHBKe5inxDu",
+          "at": "2026-10-20T05:22:26.000Z",
+          "timestamp": 1792473746,
+          "type": "buy",
+          "quantity": "16197651.956123",
+          "amountUsd": "139.0629758456",
+          "buyCostUsd": null,
+          "gasUsd": "0.00157485",
+          "dexUsd": "1.73828730306",
+          "key": "sol:4geHVDMA2pntjmvFKnUjoTfsK1VAAJXA3yFBn8T2pump:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:JGWSDct8EmuiAUjscbJpgQygZK847Jqd1a4RJM153jhGsF6v7nmfN4RdbjYJA6RxuXQ8w84oj8xGGHBKe5inxDu"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "3sx3jJq9NofFkR6TEfEuw9rnnMTTimxS2nRLhKMFpump",
+          "symbol": "OAKDOOR",
+          "hash": "2KkMrS7daWCpNwkLdnuX1VJQ8B5hBr7jCQhjTNyQxDDD4d99i6S1F9FgYQ4ENjTipaapXELkLFir3H4XbjxsduA9",
+          "at": "2026-10-20T04:31:36.000Z",
+          "timestamp": 1792470696,
+          "type": "buy",
+          "quantity": "6438033.018844",
+          "amountUsd": "105.39988174287",
+          "buyCostUsd": null,
+          "gasUsd": "0.00157755",
+          "dexUsd": "1.31749866508",
+          "key": "sol:3sx3jJq9NofFkR6TEfEuw9rnnMTTimxS2nRLhKMFpump:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:2KkMrS7daWCpNwkLdnuX1VJQ8B5hBr7jCQhjTNyQxDDD4d99i6S1F9FgYQ4ENjTipaapXELkLFir3H4XbjxsduA9"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "D7yF3XdY4K25r5LTkvzbLS6Ph3HF8vZR4b2WG27Mpump",
+          "symbol": "OAKDOOR",
+          "hash": "jG35W5vjeWYXz3vLRkcRyVc54Qoo8BLSvPXrXFAHxR2akq4QjH6bHCrjjLcTdnfRnyTq8b7JHbgWygpkKAKrhgj",
+          "at": "2026-10-20T04:25:41.000Z",
+          "timestamp": 1792470341,
+          "type": "sell",
+          "quantity": "33226548.308527",
+          "amountUsd": "151.15838953488",
+          "buyCostUsd": "153.0984495712",
+          "gasUsd": "0.0015783",
+          "dexUsd": "1.88948004806",
+          "key": "sol:D7yF3XdY4K25r5LTkvzbLS6Ph3HF8vZR4b2WG27Mpump:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:jG35W5vjeWYXz3vLRkcRyVc54Qoo8BLSvPXrXFAHxR2akq4QjH6bHCrjjLcTdnfRnyTq8b7JHbgWygpkKAKrhgj"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "D7yF3XdY4K25r5LTkvzbLS6Ph3HF8vZR4b2WG27Mpump",
+          "symbol": "OAKDOOR",
+          "hash": "4XnTWuiih13eCKSwyKdJQWPn3Ph8mi94Z44QZEfvP2F2bBB7iDsxnrFGxAS6Ke5zuYDX6W5ARbGi3gRgnsUx6EYV",
+          "at": "2026-10-20T04:25:17.000Z",
+          "timestamp": 1792470317,
+          "type": "buy",
+          "quantity": "33226548.308527",
+          "amountUsd": "153.0984495712",
+          "buyCostUsd": null,
+          "gasUsd": "0.001578",
+          "dexUsd": "1.9137307564",
+          "key": "sol:D7yF3XdY4K25r5LTkvzbLS6Ph3HF8vZR4b2WG27Mpump:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:4XnTWuiih13eCKSwyKdJQWPn3Ph8mi94Z44QZEfvP2F2bBB7iDsxnrFGxAS6Ke5zuYDX6W5ARbGi3gRgnsUx6EYV"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "54bpv6PvXeEgJmcLUypaitEPP2tpyXhrddmAdFsVpump",
+          "symbol": "Lucia",
+          "hash": "3eQ8PnPJ3oarZndBubY56KMgjzfRufeeVLYETBRqNau3oKPGnchCjCK2TPiQPqUsFhwAgUjX5AdAMaybqRbZtbXv",
+          "at": "2026-10-20T04:18:02.000Z",
+          "timestamp": 1792469882,
+          "type": "sell",
+          "quantity": "22953341.488039",
+          "amountUsd": "120.84930110988",
+          "buyCostUsd": "116.19308101323",
+          "gasUsd": "0.0015801",
+          "dexUsd": "1.51061636658",
+          "key": "sol:54bpv6PvXeEgJmcLUypaitEPP2tpyXhrddmAdFsVpump:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:3eQ8PnPJ3oarZndBubY56KMgjzfRufeeVLYETBRqNau3oKPGnchCjCK2TPiQPqUsFhwAgUjX5AdAMaybqRbZtbXv"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "54bpv6PvXeEgJmcLUypaitEPP2tpyXhrddmAdFsVpump",
+          "symbol": "Lucia",
+          "hash": "24HGasC7NpUnG2VCgAj4MssYZ9dEsMfSrTaJoWwSP4tvtBywoysjpowh7W9QT7wXwwUe29sNf3d4YpqqdzKrMYEE",
+          "at": "2026-10-20T04:16:55.000Z",
+          "timestamp": 1792469815,
+          "type": "buy",
+          "quantity": "22953341.488039",
+          "amountUsd": "116.19308101323",
+          "buyCostUsd": null,
+          "gasUsd": "0.00158145",
+          "dexUsd": "1.45241359042",
+          "key": "sol:54bpv6PvXeEgJmcLUypaitEPP2tpyXhrddmAdFsVpump:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:24HGasC7NpUnG2VCgAj4MssYZ9dEsMfSrTaJoWwSP4tvtBywoysjpowh7W9QT7wXwwUe29sNf3d4YpqqdzKrMYEE"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "HsM7vtzwCpoWDNE4zRp91j4JxkLMSv3cK46rggE3pump",
+          "symbol": "Bien",
+          "hash": "Tt7bCxjpGVKtXX1318B7at1HrWafnPZgWEFcwYP2vEvbapdzJCbvavnBuk1U2e4S3fN2nqsdZkYLWFQmYPah8nD",
+          "at": "2026-10-20T03:46:21.000Z",
+          "timestamp": 1792467981,
+          "type": "sell",
+          "quantity": "14646150.389614",
+          "amountUsd": "296.92423342958",
+          "buyCostUsd": "157.69501586925",
+          "gasUsd": "0.00157935",
+          "dexUsd": "3.71155304685",
+          "key": "sol:HsM7vtzwCpoWDNE4zRp91j4JxkLMSv3cK46rggE3pump:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:Tt7bCxjpGVKtXX1318B7at1HrWafnPZgWEFcwYP2vEvbapdzJCbvavnBuk1U2e4S3fN2nqsdZkYLWFQmYPah8nD"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "HsM7vtzwCpoWDNE4zRp91j4JxkLMSv3cK46rggE3pump",
+          "symbol": "Bien",
+          "hash": "2dBywci2M6sMDcF8DbZ3W4h6vboPEHPAzeHjuQAUadBBPpmgvmuUAbiLjKbAGDQe85CKkeU6ijdYNGhYxwxSkAr6",
+          "at": "2026-10-20T03:42:52.000Z",
+          "timestamp": 1792467772,
+          "type": "buy",
+          "quantity": "14646150.389614",
+          "amountUsd": "157.69501586925",
+          "buyCostUsd": null,
+          "gasUsd": "0.00157875",
+          "dexUsd": "1.97118778125",
+          "key": "sol:HsM7vtzwCpoWDNE4zRp91j4JxkLMSv3cK46rggE3pump:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:2dBywci2M6sMDcF8DbZ3W4h6vboPEHPAzeHjuQAUadBBPpmgvmuUAbiLjKbAGDQe85CKkeU6ijdYNGhYxwxSkAr6"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "TTWofwAge91oFhZs7kpQdyrVRkmevgM88xijGvQFbKo",
+          "symbol": "TTWO",
+          "hash": "55HHtqK47yGWyaG2EdEVMsWar4nZTBdu5AwzQrFW4ztvNWQzq38hQ4UYt6HHCGBP9jXZYGE9ZzC5d9HbjRQS9ARd",
+          "at": "2026-10-20T03:22:29.000Z",
+          "timestamp": 1792466549,
+          "type": "sell",
+          "quantity": "0.243621",
+          "amountUsd": "50.051051",
+          "buyCostUsd": "50.20370875888224",
+          "gasUsd": "0.000787125",
+          "dexUsd": "0",
+          "key": "sol:TTWofwAge91oFhZs7kpQdyrVRkmevgM88xijGvQFbKo:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:55HHtqK47yGWyaG2EdEVMsWar4nZTBdu5AwzQrFW4ztvNWQzq38hQ4UYt6HHCGBP9jXZYGE9ZzC5d9HbjRQS9ARd"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "FgHZVNk6XD6nyQe8oLpX617yv2uo2GLe4eNRV66upump",
+          "symbol": "dacity",
+          "hash": "55HHtqK47yGWyaG2EdEVMsWar4nZTBdu5AwzQrFW4ztvNWQzq38hQ4UYt6HHCGBP9jXZYGE9ZzC5d9HbjRQS9ARd",
+          "at": "2026-10-20T03:22:29.000Z",
+          "timestamp": 1792466549,
+          "type": "sell",
+          "quantity": "11418935.121517",
+          "amountUsd": "50.77675031949588",
+          "buyCostUsd": "52.73742200912985",
+          "gasUsd": "0.000787125",
+          "dexUsd": "0.6349512161667928",
+          "key": "sol:FgHZVNk6XD6nyQe8oLpX617yv2uo2GLe4eNRV66upump:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:55HHtqK47yGWyaG2EdEVMsWar4nZTBdu5AwzQrFW4ztvNWQzq38hQ4UYt6HHCGBP9jXZYGE9ZzC5d9HbjRQS9ARd"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "FgHZVNk6XD6nyQe8oLpX617yv2uo2GLe4eNRV66upump",
+          "symbol": "dacity",
+          "hash": "23jGtgvjScbXeNzMSKPbqXpM2dBDQLHDhgimWDJSNPH9jN8KqrXSQ8ADjnyr84vVpqj3y2J5sfLdp1g54SEMcrRZ",
+          "at": "2026-10-20T03:22:29.000Z",
+          "timestamp": 1792466549,
+          "type": "buy",
+          "quantity": "11418935.121517",
+          "amountUsd": "50.7769561383666",
+          "buyCostUsd": null,
+          "gasUsd": "0.000787125",
+          "dexUsd": "0.6349512161667928",
+          "key": "sol:FgHZVNk6XD6nyQe8oLpX617yv2uo2GLe4eNRV66upump:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:23jGtgvjScbXeNzMSKPbqXpM2dBDQLHDhgimWDJSNPH9jN8KqrXSQ8ADjnyr84vVpqj3y2J5sfLdp1g54SEMcrRZ"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "TTWofwAge91oFhZs7kpQdyrVRkmevgM88xijGvQFbKo",
+          "symbol": "TTWO",
+          "hash": "23jGtgvjScbXeNzMSKPbqXpM2dBDQLHDhgimWDJSNPH9jN8KqrXSQ8ADjnyr84vVpqj3y2J5sfLdp1g54SEMcrRZ",
+          "at": "2026-10-20T03:22:29.000Z",
+          "timestamp": 1792466549,
+          "type": "buy",
+          "quantity": "0.249792",
+          "amountUsd": "51.524882",
+          "buyCostUsd": null,
+          "gasUsd": "0.000787125",
+          "dexUsd": "0",
+          "key": "sol:TTWofwAge91oFhZs7kpQdyrVRkmevgM88xijGvQFbKo:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:23jGtgvjScbXeNzMSKPbqXpM2dBDQLHDhgimWDJSNPH9jN8KqrXSQ8ADjnyr84vVpqj3y2J5sfLdp1g54SEMcrRZ"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "TTWofwAge91oFhZs7kpQdyrVRkmevgM88xijGvQFbKo",
+          "symbol": "TTWO",
+          "hash": "3jgzngMgv8AGgjSmXsKLgpd2pMLeKd5MHpqvP7scRLPXyyX7K9Cux9aRJdkGeWUDPXuhUZBjWnytTGvtpdKXzKP1",
+          "at": "2026-10-20T03:22:29.000Z",
+          "timestamp": 1792466549,
+          "type": "sell",
+          "quantity": "0.975029",
+          "amountUsd": "200.316416",
+          "buyCostUsd": "200.92714481700753",
+          "gasUsd": "0.000787125",
+          "dexUsd": "0",
+          "key": "sol:TTWofwAge91oFhZs7kpQdyrVRkmevgM88xijGvQFbKo:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:3jgzngMgv8AGgjSmXsKLgpd2pMLeKd5MHpqvP7scRLPXyyX7K9Cux9aRJdkGeWUDPXuhUZBjWnytTGvtpdKXzKP1"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "FgHZVNk6XD6nyQe8oLpX617yv2uo2GLe4eNRV66upump",
+          "symbol": "dacity",
+          "hash": "3jgzngMgv8AGgjSmXsKLgpd2pMLeKd5MHpqvP7scRLPXyyX7K9Cux9aRJdkGeWUDPXuhUZBjWnytTGvtpdKXzKP1",
+          "at": "2026-10-20T03:22:29.000Z",
+          "timestamp": 1792466549,
+          "type": "sell",
+          "quantity": "44019626.743519",
+          "amountUsd": "203.21999583800803",
+          "buyCostUsd": "203.30106157303547",
+          "gasUsd": "0.000787125",
+          "dexUsd": "2.5406281401500457",
+          "key": "sol:FgHZVNk6XD6nyQe8oLpX617yv2uo2GLe4eNRV66upump:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:3jgzngMgv8AGgjSmXsKLgpd2pMLeKd5MHpqvP7scRLPXyyX7K9Cux9aRJdkGeWUDPXuhUZBjWnytTGvtpdKXzKP1"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "FgHZVNk6XD6nyQe8oLpX617yv2uo2GLe4eNRV66upump",
+          "symbol": "dacity",
+          "hash": "2qwVMML3tTFQnT8LH9mSjq3d4ApawVZHsMdhWejtKQSecCc14Zhd47MAC8FxLWFE9JeMJGbzrqMqQDeYfdQsSnFX",
+          "at": "2026-10-20T03:22:28.000Z",
+          "timestamp": 1792466548,
+          "type": "buy",
+          "quantity": "10595169.715097",
+          "amountUsd": "50.82541989221893",
+          "buyCostUsd": null,
+          "gasUsd": "0.000787125",
+          "dexUsd": "0.6355057223874785",
+          "key": "sol:FgHZVNk6XD6nyQe8oLpX617yv2uo2GLe4eNRV66upump:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:2qwVMML3tTFQnT8LH9mSjq3d4ApawVZHsMdhWejtKQSecCc14Zhd47MAC8FxLWFE9JeMJGbzrqMqQDeYfdQsSnFX"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "TTWofwAge91oFhZs7kpQdyrVRkmevgM88xijGvQFbKo",
+          "symbol": "TTWO",
+          "hash": "2qwVMML3tTFQnT8LH9mSjq3d4ApawVZHsMdhWejtKQSecCc14Zhd47MAC8FxLWFE9JeMJGbzrqMqQDeYfdQsSnFX",
+          "at": "2026-10-20T03:22:28.000Z",
+          "timestamp": 1792466548,
+          "type": "buy",
+          "quantity": "0.249812",
+          "amountUsd": "51.529521",
+          "buyCostUsd": null,
+          "gasUsd": "0.000787125",
+          "dexUsd": "0",
+          "key": "sol:TTWofwAge91oFhZs7kpQdyrVRkmevgM88xijGvQFbKo:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:2qwVMML3tTFQnT8LH9mSjq3d4ApawVZHsMdhWejtKQSecCc14Zhd47MAC8FxLWFE9JeMJGbzrqMqQDeYfdQsSnFX"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "FgHZVNk6XD6nyQe8oLpX617yv2uo2GLe4eNRV66upump",
+          "symbol": "dacity",
+          "hash": "5XNRrBzGqQPmpbmEeQU38AbkyU2P33yJdypRj6F2UT41DPJWwFNo8LoiWbswnNhnYBCob8VFXU4Az4SJmR4oa8vi",
+          "at": "2026-10-20T03:22:28.000Z",
+          "timestamp": 1792466548,
+          "type": "buy",
+          "quantity": "10861440.015528",
+          "amountUsd": "50.825213893605515",
+          "buyCostUsd": null,
+          "gasUsd": "0.000787125",
+          "dexUsd": "0.6355057223874785",
+          "key": "sol:FgHZVNk6XD6nyQe8oLpX617yv2uo2GLe4eNRV66upump:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:5XNRrBzGqQPmpbmEeQU38AbkyU2P33yJdypRj6F2UT41DPJWwFNo8LoiWbswnNhnYBCob8VFXU4Az4SJmR4oa8vi"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "TTWofwAge91oFhZs7kpQdyrVRkmevgM88xijGvQFbKo",
+          "symbol": "TTWO",
+          "hash": "5XNRrBzGqQPmpbmEeQU38AbkyU2P33yJdypRj6F2UT41DPJWwFNo8LoiWbswnNhnYBCob8VFXU4Az4SJmR4oa8vi",
+          "at": "2026-10-20T03:22:28.000Z",
+          "timestamp": 1792466548,
+          "type": "buy",
+          "quantity": "0.249811",
+          "amountUsd": "51.529521",
+          "buyCostUsd": null,
+          "gasUsd": "0.000787125",
+          "dexUsd": "0",
+          "key": "sol:TTWofwAge91oFhZs7kpQdyrVRkmevgM88xijGvQFbKo:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:5XNRrBzGqQPmpbmEeQU38AbkyU2P33yJdypRj6F2UT41DPJWwFNo8LoiWbswnNhnYBCob8VFXU4Az4SJmR4oa8vi"
+        },
+        {
+          "chain": "sol",
+          "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+          "ca": "FgHZVNk6XD6nyQe8oLpX617yv2uo2GLe4eNRV66upump",
+          "symbol": "dacity",
+          "hash": "4iHbevV7eKdjoCMtK8q6SwRJ3a8V46tG2GXGtkod74HC1DknpqjxY3izvuxXvU3JZSyefxLzfGEDyP3cW3Uj7qbV",
+          "at": "2026-10-20T03:22:28.000Z",
+          "timestamp": 1792466548,
+          "type": "buy",
+          "quantity": "11137921.34898",
+          "amountUsd": "50.825213893605515",
+          "buyCostUsd": null,
+          "gasUsd": "0.000787125",
+          "dexUsd": "0.6355057223874785",
+          "key": "sol:FgHZVNk6XD6nyQe8oLpX617yv2uo2GLe4eNRV66upump:9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp:4iHbevV7eKdjoCMtK8q6SwRJ3a8V46tG2GXGtkod74HC1DknpqjxY3izvuxXvU3JZSyefxLzfGEDyP3cW3Uj7qbV"
+        }
+      ],
+      "next": "NDU5MDc5NjE3MDAyMjYwNTY6MDo6",
+      "overlap": 0,
+      "newRows": 20,
+      "anchorFound": false,
+      "previousAnchor": {
+        "at": "2026-10-19T10:10:07.000Z",
+        "hash": "38xBXbZuUtBXwaLUVf7PPRn4iFJL9VcbxxitbPbHMUCLet1irJL6qT8Psm6s2xfpiYJUtxkE9QvfFW6qYvYLgmid",
+        "ca": "2uY9mo7mgqu5CM4UUzAXRLnk8RX7C4iNY9YjJoAupump",
+        "side": "sell"
+      }
+    }
+  ],
+  "synchrony": {
+    "method": "one_to_one_same_second_ca_direction",
+    "pairs": [
+      {
+        "ca": "4geHVDMA2pntjmvFKnUjoTfsK1VAAJXA3yFBn8T2pump",
+        "type": "sell",
+        "at": "2026-10-20T05:25:34.000Z",
+        "d": "24nZM9g6f5ggzSuEeDSTmUn9MXPDnXKE4xp7zLB8nr4w74JswVQuYfEqssXWtnnHNjtQLAoLDPxMDk8poNCnuvC8",
+        "e": "2ZgrqzbEXRavPojYFqypXsJwfssHToxX6ARNFEVo31ohM66XU5DSkcvYm5mYnvG2xtwrgJghw51ET2a8NzCnoyGf"
+      },
+      {
+        "ca": "4geHVDMA2pntjmvFKnUjoTfsK1VAAJXA3yFBn8T2pump",
+        "type": "buy",
+        "at": "2026-10-20T05:22:26.000Z",
+        "d": "JGWSDct8EmuiAUjscbJpgQygZK847Jqd1a4RJM153jhGsF6v7nmfN4RdbjYJA6RxuXQ8w84oj8xGGHBKe5inxDu",
+        "e": "4oyDsjZPFVZwDm2Nn3ynNyZ8pbsVj3vNtn8HEM2Aaf7fxo6gyVbYS2KHco1SeYWhN48HA5jMNHFbgSWhqGq8hjy1"
+      },
+      {
+        "ca": "3sx3jJq9NofFkR6TEfEuw9rnnMTTimxS2nRLhKMFpump",
+        "type": "buy",
+        "at": "2026-10-20T04:31:36.000Z",
+        "d": "2KkMrS7daWCpNwkLdnuX1VJQ8B5hBr7jCQhjTNyQxDDD4d99i6S1F9FgYQ4ENjTipaapXELkLFir3H4XbjxsduA9",
+        "e": "4a51cCYSmuojJekpdjFvqp5cXpmQVQiBQkiLHf9YN3vrAdrkPLeFT8dUJrFAxGfExvbduPrYQYxbDzEiDc5iFdm8"
+      },
+      {
+        "ca": "D7yF3XdY4K25r5LTkvzbLS6Ph3HF8vZR4b2WG27Mpump",
+        "type": "sell",
+        "at": "2026-10-20T04:25:41.000Z",
+        "d": "jG35W5vjeWYXz3vLRkcRyVc54Qoo8BLSvPXrXFAHxR2akq4QjH6bHCrjjLcTdnfRnyTq8b7JHbgWygpkKAKrhgj",
+        "e": "34sQ69fQtzR7XgszmzG6WfzREUYax6aKfmPGEjpB2kAtNK8v4pWrbmiwYN3mxfvGPDakrZ5guCKfQuh4kqZw3oiK"
+      },
+      {
+        "ca": "D7yF3XdY4K25r5LTkvzbLS6Ph3HF8vZR4b2WG27Mpump",
+        "type": "buy",
+        "at": "2026-10-20T04:25:17.000Z",
+        "d": "4XnTWuiih13eCKSwyKdJQWPn3Ph8mi94Z44QZEfvP2F2bBB7iDsxnrFGxAS6Ke5zuYDX6W5ARbGi3gRgnsUx6EYV",
+        "e": "2x7XHDJ4UDf2TDj9MoVX79P1L5fePABdrKJFRkTqCE8L52au5Lyu1j3SaXfr3QBLGGrmAJxD7WLBWkdDaEgYfk11"
+      },
+      {
+        "ca": "54bpv6PvXeEgJmcLUypaitEPP2tpyXhrddmAdFsVpump",
+        "type": "sell",
+        "at": "2026-10-20T04:18:02.000Z",
+        "d": "3eQ8PnPJ3oarZndBubY56KMgjzfRufeeVLYETBRqNau3oKPGnchCjCK2TPiQPqUsFhwAgUjX5AdAMaybqRbZtbXv",
+        "e": "2HHF1GoE299t7cadakLun7RiGeAcDnTdq5d1tfUkT5bjPa4TGL7iey3chZYuvkqH1FSK6NomGQT2K67eTZf8cjR6"
+      },
+      {
+        "ca": "54bpv6PvXeEgJmcLUypaitEPP2tpyXhrddmAdFsVpump",
+        "type": "buy",
+        "at": "2026-10-20T04:16:55.000Z",
+        "d": "24HGasC7NpUnG2VCgAj4MssYZ9dEsMfSrTaJoWwSP4tvtBywoysjpowh7W9QT7wXwwUe29sNf3d4YpqqdzKrMYEE",
+        "e": "5jsyPSg8fKiDbbgptycJiA75yEWJ3WYnEo2Yh7RyhAqKN6EwqGV9Fi2KUkskbvK47DJEyn7gNEufup3XYvJ39V2e"
+      },
+      {
+        "ca": "HsM7vtzwCpoWDNE4zRp91j4JxkLMSv3cK46rggE3pump",
+        "type": "buy",
+        "at": "2026-10-20T03:42:52.000Z",
+        "d": "2dBywci2M6sMDcF8DbZ3W4h6vboPEHPAzeHjuQAUadBBPpmgvmuUAbiLjKbAGDQe85CKkeU6ijdYNGhYxwxSkAr6",
+        "e": "4DycbVesGisR4tqyh3Hwk1i63AuD1yUZ24MDngHvqexWAfMeHbf82AgwkGo9CpKu3r31RE8kRJAtNr5hxhgvpqSQ"
+      }
+    ],
+    "uniqueCAs": 5
+  },
+  "health": {
+    "capturedAt": "2026-10-20T18:30:22.218Z",
+    "heartbeats": {
+      "main": {
+        "version": 1,
+        "producer": "main",
+        "pid": 97224,
+        "startedAt": "2026-10-20T18:08:11.560Z",
+        "updatedAt": "2026-10-20T18:30:11.803Z",
+        "sequence": 45
+      },
+      "bsc": {
+        "version": 1,
+        "producer": "bsc",
+        "pid": 97226,
+        "startedAt": "2026-10-20T18:08:12.170Z",
+        "updatedAt": "2026-10-20T18:30:13.131Z",
+        "sequence": 44
+      },
+      "fomo": {
+        "version": 1,
+        "producer": "fomo",
+        "pid": 829,
+        "startedAt": "2026-10-20T13:26:36.401Z",
+        "updatedAt": "2026-10-20T18:30:11.375Z",
+        "sequence": 608
+      }
+    },
+    "flap": {
+      "cursor": {
+        "nextBlock": 128286371,
+        "afterLogIndex": -1,
+        "anchorBlock": 128286370,
+        "anchorBlockHash": "0x04af047fdeef15684a3db03efb7ccc39114022b880add93d66c6eb3578db2631",
+        "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+      },
+      "identity": {
+        "chainId": 56,
+        "portal": "0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0",
+        "portalRuntimeCodeHash": "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3",
+        "version": "v5.25.0",
+        "implementation": "0xE13227370996f892a56d2Ff4a30f6026887B48Fb",
+        "implementationCodeHash": "0xf8d56fe09f2ec5e3eeaabdbfeeb0faf55e4ed8996a55bc1b69a78e62dbb792e4",
+        "verifiedBlock": 128793942,
+        "verifiedBlockHash": "0x004d9093aec0a53fa03144506428db6ffca1a1891e93f19c9833eb23de0dcaec",
+        "portalRuntimeCodeBytes": 2882,
+        "implementationCodeBytes": 20347
+      },
+      "health": {
+        "status": "healthy",
+        "consecutiveFailures": 0,
+        "lastSuccessAt": "2026-10-20T18:27:13.301Z",
+        "lastErrorAt": null,
+        "lastError": null,
+        "lastErrorCode": null,
+        "reorgCount": 0,
+        "lastReorgAt": null,
+        "lastAttemptAt": "2026-10-20T18:27:13.301Z",
+        "nextAttemptAt": null,
+        "failureClass": null
+      }
+    },
+    "four": {
+      "cursor": {
+        "nextBlock": 127417539,
+        "anchorBlock": 127417538,
+        "anchorBlockHash": "0x142378383160b8dc3e8f4808739d82e84a7eef6426b3e3a6bc19149216956398"
+      }
+    },
+    "localPlatforms": {
+      "flap": {
+        "checkedAt": "2026-10-18T21:45:57.045Z",
+        "observedChains": [
+          {
+            "name": "Base",
+            "chainId": null,
+            "environment": "unknown",
+            "stage": "deployed",
+            "evidence": "deployed_contract",
+            "sources": [
+              {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+              }
+            ],
+            "source": {
+              "kind": "docs",
+              "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+            }
+          },
+          {
+            "name": "BNB Chain",
+            "chainId": 56,
+            "environment": "mainnet",
+            "stage": "deployed",
+            "evidence": "deployed_contract,deployed_contract,deployed_contract,network_config,supported_network,network_config,supported_network",
+            "sources": [
+              {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+              },
+              {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/vault-developers/vault-and-vaultfactory-specification"
+              }
+            ],
+            "source": {
+              "kind": "docs",
+              "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+            }
+          },
+          {
+            "name": "BNB Chain",
+            "chainId": 97,
+            "environment": "testnet",
+            "stage": "deployed",
+            "evidence": "deployed_contract,deployed_contract,deployed_contract,network_config,supported_network,network_config,supported_network",
+            "sources": [
+              {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+              },
+              {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/vault-developers/vault-and-vaultfactory-specification"
+              }
+            ],
+            "source": {
+              "kind": "docs",
+              "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+            }
+          },
+          {
+            "name": "Morph",
+            "chainId": 2818,
+            "environment": "mainnet",
+            "stage": "deployed",
+            "evidence": "deployed_contract",
+            "sources": [
+              {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+              }
+            ],
+            "source": {
+              "kind": "docs",
+              "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+            }
+          },
+          {
+            "name": "Robinhood Chain",
+            "chainId": null,
+            "environment": "testnet",
+            "stage": "deployed",
+            "evidence": "deployed_contract",
+            "sources": [
+              {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+              }
+            ],
+            "source": {
+              "kind": "docs",
+              "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+            }
+          },
+          {
+            "name": "Robinhood Chain",
+            "chainId": 4663,
+            "environment": "mainnet",
+            "stage": "deployed",
+            "evidence": "deployed_contract,deployed_contract,deployed_contract,network_config,supported_network,network_config,supported_network",
+            "sources": [
+              {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+              },
+              {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/vault-developers/vault-and-vaultfactory-specification"
+              }
+            ],
+            "source": {
+              "kind": "docs",
+              "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+            }
+          }
+        ],
+        "health": {
+          "status": "degraded",
+          "failureKind": "transport",
+          "consecutiveFailures": 741,
+          "lastAttemptAt": "2026-10-19T02:15:56.070Z",
+          "lastSuccessAt": "2026-10-18T21:45:57.045Z",
+          "lastErrorAt": "2026-10-19T02:15:56.070Z",
+          "lastError": "The operation was aborted due to timeout",
+          "lastErrorStatus": null,
+          "backoffMs": 0,
+          "nextAttemptAt": null,
+          "coverageStatus": "partial",
+          "optionalCircuitOpenCount": 0,
+          "optionalCircuitUrls": []
+        }
+      },
+      "fourmeme": {
+        "checkedAt": "2026-10-18T21:45:58.542Z",
+        "observedChains": [
+          {
+            "name": "BNB Chain",
+            "chainId": 56,
+            "environment": "mainnet",
+            "stage": "supported",
+            "evidence": "published_network_config",
+            "sources": [
+              {
+                "kind": "api",
+                "url": "https://four.meme/meme-api/v1/public/config"
+              }
+            ],
+            "source": {
+              "kind": "api",
+              "url": "https://four.meme/meme-api/v1/public/config"
+            }
+          }
+        ],
+        "health": {
+          "status": "partial",
+          "failureKind": "transport",
+          "consecutiveFailures": 555,
+          "lastAttemptAt": "2026-10-19T02:16:01.044Z",
+          "lastSuccessAt": "2026-10-18T21:45:58.542Z",
+          "lastErrorAt": "2026-10-19T02:16:01.044Z",
+          "lastError": "The operation was aborted due to timeout",
+          "lastErrorStatus": null,
+          "backoffMs": 0,
+          "nextAttemptAt": null,
+          "coverageStatus": "partial",
+          "optionalCircuitOpenCount": 0,
+          "optionalCircuitUrls": []
+        }
+      }
+    },
+    "localTwitter": {
+      "flapdotsh": {
+        "checkedAt": "2026-10-18T21:37:04.519Z",
+        "latestId": "2111775260785946796",
+        "health": {
+          "status": "error",
+          "checkedAt": "2026-10-19T02:15:44.767Z",
+          "lastSuccessAt": "2026-10-18T21:37:04.519Z",
+          "gapSince": "2026-10-18T21:37:36.574Z",
+          "lastErrorAt": "2026-10-19T02:15:44.767Z",
+          "lastError": "https://api.fxtwitter.com/2/profile/id:{userId}/statuses?count=40: The operation was aborted due to timeout",
+          "slaStatus": "source_limited",
+          "slaStatusReason": "public_discovery_limited:x_direct_profile,jina_twitter_profile;numeric_identity_timeline:error",
+          "retryAfter": "2026-10-19T02:16:44.761Z",
+          "activeSourceId": "fxtwitter_numeric_id"
+        }
+      },
+      "fourdotmemezh": {
+        "checkedAt": "2026-10-18T21:37:04.522Z",
+        "latestId": "2111769228101751192",
+        "health": {
+          "status": "backoff",
+          "checkedAt": "2026-10-19T02:16:14.959Z",
+          "lastSuccessAt": "2026-10-18T21:37:04.522Z",
+          "gapSince": "2026-10-18T21:37:08.273Z",
+          "lastErrorAt": "2026-10-18T21:37:08.273Z",
+          "lastError": "all X sources are in backoff",
+          "slaStatus": "source_limited",
+          "slaStatusReason": "public_discovery_limited:x_direct_profile,jina_twitter_profile",
+          "retryAfter": "2026-10-18T21:42:04.522Z",
+          "activeSourceId": "fxtwitter_numeric_id"
+        }
+      }
+    },
+    "lastTrade": {
+      "id": "1792275648715:306",
+      "at": "2026-10-17T22:20:48.715Z"
+    },
+    "log": {
+      "checkedThisRound": false,
+      "lastVerifiedObservation": {
+        "fromOffset": 37290927,
+        "endOffset": 37484543,
+        "inspectedBytes": 193616,
+        "through": "2026-10-12T06:07:35.621Z",
+        "newOomCount": 0
+      }
+    },
+    "exitMonitor": {
+      "running": true,
+      "intervalMs": 1000,
+      "lastCheckedAt": "2026-10-20T14:28:57.412Z",
+      "checks": 1292,
+      "staleQuotes": 0,
+      "entriesEnabled": true,
+      "lastError": null
+    },
+    "apiOnchain": {
+      "flap": {
+        "officialX": {
+          "handle": "flapdotsh",
+          "status": "stale",
+          "lastAttemptAt": null,
+          "lastSuccessAt": "2026-10-20T14:23:28.154Z",
+          "nextAttemptAt": null,
+          "ageMs": 326973,
+          "lastErrorAt": null,
+          "lastErrorCode": null
+        },
+        "officialWeb": {
+          "status": "fresh",
+          "total": 5,
+          "fresh": 5,
+          "unverified": 0,
+          "stale": 0,
+          "source_limited": 0,
+          "degraded": 0,
+          "metadata_only": 0
+        },
+        "documentBodies": {
+          "version": "official_document_body_v1",
+          "allowedPages": 59,
+          "uncheckedPages": 0,
+          "freshPages": 18,
+          "stalePages": 0,
+          "failedPages": 41,
+          "untrackedPages": 0,
+          "rosterOverflowPages": 0,
+          "pendingChanges": 2,
+          "omittedChangeCount": 0,
+          "nextDueAt": "2026-10-20T12:47:28.671Z",
+          "originNextAttemptAt": null,
+          "rosterDiscovery": {
+            "status": "fresh",
+            "total": 1,
+            "fresh": 1,
+            "unverified": 0,
+            "stale": 0,
+            "source_limited": 0,
+            "degraded": 0,
+            "metadata_only": 0
+          },
+          "status": "partial"
+        },
+        "onchain": {
+          "status": "stale",
+          "lastAttemptAt": "2026-10-20T14:27:35.469Z",
+          "lastSuccessAt": "2026-10-17T04:05:48.028Z",
+          "nextAttemptAt": "2026-10-20T14:32:39.123Z",
+          "ageMs": 296587099,
+          "lastErrorAt": "2026-10-20T14:27:35.469Z",
+          "lastErrorCode": "FLAP_QUOTE_PORTAL_VERSION_MISMATCH",
+          "adapterHealth": {
+            "status": "stale",
+            "lastAttemptAt": "2026-10-20T14:27:35.469Z",
+            "lastSuccessAt": "2026-10-17T04:05:48.028Z",
+            "nextAttemptAt": "2026-10-20T14:32:39.123Z",
+            "ageMs": 296587099,
+            "lastErrorAt": "2026-10-20T14:27:35.469Z",
+            "lastErrorCode": "FLAP_QUOTE_PORTAL_VERSION_MISMATCH"
+          },
+          "checkpointAt": "2026-10-20T14:27:35.469Z",
+          "nextBlock": 128103371,
+          "headLagBlocks": null,
+          "liveHeadVerified": false,
+          "scope": "BSC pinned Portal quote adapter"
+        },
+        "githubSummary": {
+          "status": "fresh",
+          "fresh": 4,
+          "stale": 0,
+          "metadata_only": 0
+        }
+      },
+      "fourmeme": {
+        "officialX": {
+          "handle": "fourdotmemezh",
+          "status": "stale",
+          "lastAttemptAt": null,
+          "lastSuccessAt": "2026-10-20T14:23:27.634Z",
+          "nextAttemptAt": null,
+          "ageMs": 327493,
+          "lastErrorAt": null,
+          "lastErrorCode": null
+        },
+        "officialWeb": {
+          "status": "fresh",
+          "total": 13,
+          "fresh": 13,
+          "unverified": 0,
+          "stale": 0,
+          "source_limited": 0,
+          "degraded": 0,
+          "metadata_only": 0
+        },
+        "documentBodies": {
+          "version": "official_document_body_v1",
+          "allowedPages": 10,
+          "uncheckedPages": 0,
+          "freshPages": 8,
+          "stalePages": 0,
+          "failedPages": 2,
+          "untrackedPages": 0,
+          "rosterOverflowPages": 0,
+          "pendingChanges": 0,
+          "omittedChangeCount": 0,
+          "nextDueAt": "2026-10-20T13:52:59.921Z",
+          "originNextAttemptAt": null,
+          "rosterDiscovery": {
+            "status": "fresh",
+            "total": 1,
+            "fresh": 1,
+            "unverified": 0,
+            "stale": 0,
+            "source_limited": 0,
+            "degraded": 0,
+            "metadata_only": 0
+          },
+          "status": "partial"
+        },
+        "onchain": {
+          "adapterHealth": null,
+          "status": "checkpoint_only_unverified",
+          "checkpointAt": "2026-10-20T14:15:57.996Z",
+          "nextBlock": 127417539,
+          "headLagBlocks": null,
+          "liveHeadVerified": false,
+          "scope": "BSC pinned OpenFour registry adapter"
+        },
+        "githubSummary": {
+          "status": "partial",
+          "fresh": 4,
+          "stale": 0,
+          "metadata_only": 2
+        }
+      }
+    },
+    "processChange": {
+      "observedAt": "2026-10-20T14:29:08.149Z",
+      "changes": [
+        {
+          "producer": "main",
+          "previousPid": 18534,
+          "currentPid": 815,
+          "startedAt": "2026-10-20T13:26:36.944Z",
+          "cause": "not_investigated",
+          "initiatedByReview": false
+        },
+        {
+          "producer": "bsc",
+          "previousPid": 18573,
+          "currentPid": 1048,
+          "startedAt": "2026-10-20T13:26:38.145Z",
+          "cause": "not_investigated",
+          "initiatedByReview": false
+        },
+        {
+          "producer": "fomo",
+          "previousPid": 7258,
+          "currentPid": 829,
+          "startedAt": "2026-10-20T13:26:36.401Z",
+          "cause": "not_investigated",
+          "initiatedByReview": false
+        }
+      ],
+      "initiatedByReview": false
+    },
+    "observationNote": "本轮仅离散只读快照。此前用户授权修复涉及main两次维护重载；不宣称连续在线或历史断档补齐。",
+    "processComparison": {
+      "mainChanged": true,
+      "bscChanged": true,
+      "fomoChanged": false,
+      "reason": "此前用户授权部署，非本心跳重启",
+      "evidence": "docs/flap-rpc-recovery-2026-10-21.json"
+    },
+    "openQuoteCoverage": {
+      "at": "2026-10-20T18:30:22.218Z",
+      "valuationComplete": true,
+      "unrealizedPnlUsd": -7.243304346972106,
+      "positions": [
+        {
+          "key": "bsc:0x07bcb8e8226f671300e135b4a61dc157359b7777",
+          "chain": "bsc",
+          "address": "0x07bcb8e8226f671300e135b4a61dc157359b7777",
+          "route": "external_pullback",
+          "entryId": "1791473723820:238",
+          "openedAt": "2026-10-08T15:35:23.820Z",
+          "enteredAfterBaseline": false,
+          "quantity": 5993.959722058011,
+          "costBasisUsd": 8.7,
+          "valuationStatus": "fresh",
+          "markAt": "2026-10-20T18:30:16.058Z",
+          "valuationAgeMs": 6160,
+          "maxValuationAgeMs": 15000,
+          "lastRecorded": {
+            "markPrice": 0.0003561242,
+            "markValueUsd": 2.1345941108501316,
+            "unrealizedPnlUsd": -6.712135594692374
+          },
+          "currentMarkValueUsd": 2.1345941108501316,
+          "currentNetLiquidationUsd": 1.987864405307625,
+          "currentUnrealizedPnlUsd": -6.712135594692374
+        },
+        {
+          "key": "sol:D7fGMz4E8r8FQyqULpqKr9MCu46izx9stJeStgGfYnJb",
+          "chain": "sol",
+          "address": "D7fGMz4E8r8FQyqULpqKr9MCu46izx9stJeStgGfYnJb",
+          "route": "monitored_event",
+          "entryId": "1792085285247:297",
+          "openedAt": "2026-10-15T17:28:05.247Z",
+          "enteredAfterBaseline": true,
+          "quantity": 1891406.2626126807,
+          "costBasisUsd": 5.97,
+          "valuationStatus": "fresh",
+          "markAt": "2026-10-20T18:30:17.040Z",
+          "valuationAgeMs": 5178,
+          "maxValuationAgeMs": 15000,
+          "lastRecorded": {
+            "markPrice": 0.0000030597989,
+            "markValueUsd": 5.7873228017953915,
+            "unrealizedPnlUsd": -0.3084236542405163
+          },
+          "currentMarkValueUsd": 5.7873228017953915,
+          "currentNetLiquidationUsd": 5.661576345759483,
+          "currentUnrealizedPnlUsd": -0.3084236542405163
+        },
+        {
+          "key": "sol:9LMZwPNYp2xQE5JpGFTeMVm3b6xtWw8wiDio459Kpump",
+          "chain": "sol",
+          "address": "9LMZwPNYp2xQE5JpGFTeMVm3b6xtWw8wiDio459Kpump",
+          "route": "monitored_event",
+          "entryId": "1792250738005:304",
+          "openedAt": "2026-10-17T15:25:38.005Z",
+          "enteredAfterBaseline": true,
+          "quantity": 1550586.5652434053,
+          "costBasisUsd": 5.18,
+          "valuationStatus": "fresh",
+          "markAt": "2026-10-20T18:30:17.690Z",
+          "valuationAgeMs": 4528,
+          "maxValuationAgeMs": 15000,
+          "lastRecorded": {
+            "markPrice": 0.0000032688452,
+            "markValueUsd": 5.068627450980392,
+            "unrealizedPnlUsd": -0.2227450980392156
+          },
+          "currentMarkValueUsd": 5.068627450980392,
+          "currentNetLiquidationUsd": 4.957254901960784,
+          "currentUnrealizedPnlUsd": -0.2227450980392156
+        }
+      ]
+    }
+  },
+  "launchUpdateCoverage": {
+    "version": "launch_update_coverage_v1",
+    "checkedAt": "2026-10-20T18:29:28.960Z",
+    "readOnly": true,
+    "status": "coverage_limited",
+    "platforms": {
+      "flap": {
+        "officialX": {
+          "handle": "flapdotsh",
+          "status": "source_limited",
+          "lastAttemptAt": null,
+          "lastSuccessAt": "2026-10-20T18:29:11.831Z",
+          "nextAttemptAt": null,
+          "ageMs": 17129,
+          "lastErrorAt": null,
+          "lastErrorCode": null
+        },
+        "officialWeb": {
+          "status": "fresh",
+          "total": 5,
+          "fresh": 5,
+          "unverified": 0,
+          "stale": 0,
+          "source_limited": 0,
+          "degraded": 0,
+          "metadata_only": 0
+        },
+        "documentBodies": {
+          "version": "official_document_body_v1",
+          "allowedPages": 59,
+          "uncheckedPages": 0,
+          "freshPages": 58,
+          "stalePages": 0,
+          "failedPages": 1,
+          "untrackedPages": 0,
+          "rosterOverflowPages": 0,
+          "pendingChanges": 2,
+          "omittedChangeCount": 0,
+          "nextDueAt": "2026-10-20T17:12:18.344Z",
+          "originNextAttemptAt": null,
+          "rosterDiscovery": {
+            "status": "fresh",
+            "total": 1,
+            "fresh": 1,
+            "unverified": 0,
+            "stale": 0,
+            "source_limited": 0,
+            "degraded": 0,
+            "metadata_only": 0
+          },
+          "status": "partial"
+        },
+        "github": {
+          "status": "fresh",
+          "total": 4,
+          "fresh": 4,
+          "unverified": 0,
+          "stale": 0,
+          "source_limited": 0,
+          "degraded": 0,
+          "metadata_only": 0,
+          "repositories": [
+            {
+              "repository": "flap-sh/flap-vault-component-template",
+              "status": "fresh",
+              "lastAttemptAt": "2026-10-20T18:28:43.429Z",
+              "lastSuccessAt": "2026-10-20T18:28:43.429Z",
+              "nextAttemptAt": null,
+              "ageMs": 45531,
+              "lastErrorAt": null,
+              "lastErrorCode": null,
+              "metadataHealth": {
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-20T18:28:43.429Z",
+                "lastSuccessAt": "2026-10-20T18:28:43.429Z",
+                "nextAttemptAt": null,
+                "ageMs": 45531,
+                "lastErrorAt": null,
+                "lastErrorCode": null
+              },
+              "lastCommitReadAt": "2026-10-20T18:28:43.429Z",
+              "observationBasis": "commit_poll"
+            },
+            {
+              "repository": "flap-sh/FlapVaultExample",
+              "status": "fresh",
+              "lastAttemptAt": "2026-10-20T18:28:43.416Z",
+              "lastSuccessAt": "2026-10-20T18:28:43.416Z",
+              "nextAttemptAt": null,
+              "ageMs": 45544,
+              "lastErrorAt": null,
+              "lastErrorCode": null,
+              "metadataHealth": {
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-20T18:28:43.416Z",
+                "lastSuccessAt": "2026-10-20T18:28:43.416Z",
+                "nextAttemptAt": null,
+                "ageMs": 45544,
+                "lastErrorAt": null,
+                "lastErrorCode": null
+              },
+              "lastCommitReadAt": "2026-10-20T18:28:43.416Z",
+              "observationBasis": "commit_poll"
+            },
+            {
+              "repository": "flap-sh/flap-skills",
+              "status": "fresh",
+              "lastAttemptAt": "2026-10-20T18:28:43.452Z",
+              "lastSuccessAt": "2026-10-20T18:28:43.452Z",
+              "nextAttemptAt": null,
+              "ageMs": 45508,
+              "lastErrorAt": null,
+              "lastErrorCode": null,
+              "metadataHealth": {
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-20T18:28:43.452Z",
+                "lastSuccessAt": "2026-10-20T18:28:43.452Z",
+                "nextAttemptAt": null,
+                "ageMs": 45508,
+                "lastErrorAt": null,
+                "lastErrorCode": null
+              },
+              "lastCommitReadAt": "2026-10-20T18:28:43.452Z",
+              "observationBasis": "commit_poll"
+            }
+          ],
+          "organizations": [
+            {
+              "organization": "flap-sh",
+              "status": "fresh",
+              "lastAttemptAt": null,
+              "lastSuccessAt": "2026-10-20T18:28:15.085Z",
+              "nextAttemptAt": null,
+              "ageMs": 73875,
+              "lastErrorAt": null,
+              "lastErrorCode": null
+            }
+          ],
+          "repositoryCount": 3,
+          "candidateRepositories": 0
+        },
+        "onchain": {
+          "status": "stale",
+          "lastAttemptAt": "2026-10-20T18:27:13.301Z",
+          "lastSuccessAt": "2026-10-20T18:27:13.301Z",
+          "nextAttemptAt": null,
+          "ageMs": 135659,
+          "lastErrorAt": null,
+          "lastErrorCode": null,
+          "adapterHealth": {
+            "status": "stale",
+            "lastAttemptAt": "2026-10-20T18:27:13.301Z",
+            "lastSuccessAt": "2026-10-20T18:27:13.301Z",
+            "nextAttemptAt": null,
+            "ageMs": 135659,
+            "lastErrorAt": null,
+            "lastErrorCode": null
+          },
+          "checkpointAt": "2026-10-20T18:27:13.301Z",
+          "nextBlock": 128274371,
+          "headLagBlocks": null,
+          "liveHeadVerified": false,
+          "scope": "BSC pinned Portal quote adapter"
+        },
+        "coverageStatus": "bounded_sources_not_all_future_schemas"
+      },
+      "fourmeme": {
+        "officialX": {
+          "handle": "fourdotmemezh",
+          "status": "source_limited",
+          "lastAttemptAt": null,
+          "lastSuccessAt": "2026-10-20T18:29:10.530Z",
+          "nextAttemptAt": null,
+          "ageMs": 18430,
+          "lastErrorAt": null,
+          "lastErrorCode": null
+        },
+        "officialWeb": {
+          "status": "fresh",
+          "total": 13,
+          "fresh": 13,
+          "unverified": 0,
+          "stale": 0,
+          "source_limited": 0,
+          "degraded": 0,
+          "metadata_only": 0
+        },
+        "documentBodies": {
+          "version": "official_document_body_v1",
+          "allowedPages": 10,
+          "uncheckedPages": 0,
+          "freshPages": 8,
+          "stalePages": 0,
+          "failedPages": 2,
+          "untrackedPages": 0,
+          "rosterOverflowPages": 0,
+          "pendingChanges": 0,
+          "omittedChangeCount": 0,
+          "nextDueAt": "2026-10-20T17:56:41.259Z",
+          "originNextAttemptAt": null,
+          "rosterDiscovery": {
+            "status": "fresh",
+            "total": 1,
+            "fresh": 1,
+            "unverified": 0,
+            "stale": 0,
+            "source_limited": 0,
+            "degraded": 0,
+            "metadata_only": 0
+          },
+          "status": "partial"
+        },
+        "github": {
+          "status": "partial",
+          "total": 6,
+          "fresh": 4,
+          "unverified": 0,
+          "stale": 0,
+          "source_limited": 0,
+          "degraded": 0,
+          "metadata_only": 2,
+          "repositories": [
+            {
+              "repository": "four-meme-community/openfour-docs",
+              "status": "fresh",
+              "lastAttemptAt": "2026-10-20T18:28:43.404Z",
+              "lastSuccessAt": "2026-10-20T18:28:43.404Z",
+              "nextAttemptAt": null,
+              "ageMs": 45556,
+              "lastErrorAt": null,
+              "lastErrorCode": null,
+              "metadataHealth": {
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-20T18:28:43.404Z",
+                "lastSuccessAt": "2026-10-20T18:28:43.404Z",
+                "nextAttemptAt": null,
+                "ageMs": 45556,
+                "lastErrorAt": null,
+                "lastErrorCode": null
+              },
+              "lastCommitReadAt": "2026-10-20T18:28:43.404Z",
+              "observationBasis": "commit_poll"
+            },
+            {
+              "repository": "four-meme-community/four-meme-ai",
+              "status": "fresh",
+              "lastAttemptAt": "2026-10-20T18:28:44.168Z",
+              "lastSuccessAt": "2026-10-20T18:28:44.168Z",
+              "nextAttemptAt": null,
+              "ageMs": 44792,
+              "lastErrorAt": null,
+              "lastErrorCode": null,
+              "metadataHealth": {
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-20T18:28:44.168Z",
+                "lastSuccessAt": "2026-10-20T18:28:44.168Z",
+                "nextAttemptAt": null,
+                "ageMs": 44792,
+                "lastErrorAt": null,
+                "lastErrorCode": null
+              },
+              "lastCommitReadAt": "2026-10-20T18:28:44.168Z",
+              "observationBasis": "commit_poll"
+            },
+            {
+              "repository": "four-meme-community/fourmeme-docs",
+              "status": "metadata_only",
+              "lastAttemptAt": "2026-10-20T18:26:13.767Z",
+              "lastSuccessAt": "2026-09-11T07:48:05.561Z",
+              "nextAttemptAt": "2026-10-20T18:31:13.767Z",
+              "ageMs": 3408083399,
+              "lastErrorAt": null,
+              "lastErrorCode": null,
+              "metadataHealth": {
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-20T18:26:13.767Z",
+                "lastSuccessAt": "2026-10-20T18:26:13.767Z",
+                "nextAttemptAt": "2026-10-20T18:31:13.767Z",
+                "ageMs": 195193,
+                "lastErrorAt": null,
+                "lastErrorCode": null
+              },
+              "lastCommitReadAt": "2026-09-11T07:48:05.561Z",
+              "observationBasis": "organization_metadata_unchanged"
+            },
+            {
+              "repository": "four-meme-community/openfour-boost-launchpad",
+              "status": "metadata_only",
+              "lastAttemptAt": "2026-10-20T18:26:13.767Z",
+              "lastSuccessAt": "2026-10-13T02:37:09.236Z",
+              "nextAttemptAt": "2026-10-20T18:31:13.767Z",
+              "ageMs": 661939724,
+              "lastErrorAt": null,
+              "lastErrorCode": null,
+              "metadataHealth": {
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-20T18:26:13.767Z",
+                "lastSuccessAt": "2026-10-20T18:26:13.767Z",
+                "nextAttemptAt": "2026-10-20T18:31:13.767Z",
+                "ageMs": 195193,
+                "lastErrorAt": null,
+                "lastErrorCode": null
+              },
+              "lastCommitReadAt": "2026-10-13T02:37:09.236Z",
+              "observationBasis": "organization_metadata_unchanged"
+            }
+          ],
+          "organizations": [
+            {
+              "organization": "four-meme-community",
+              "status": "fresh",
+              "lastAttemptAt": null,
+              "lastSuccessAt": "2026-10-20T18:28:14.720Z",
+              "nextAttemptAt": null,
+              "ageMs": 74240,
+              "lastErrorAt": null,
+              "lastErrorCode": null
+            },
+            {
+              "organization": "four-meme",
+              "status": "fresh",
+              "lastAttemptAt": null,
+              "lastSuccessAt": "2026-10-20T18:28:14.102Z",
+              "nextAttemptAt": null,
+              "ageMs": 74858,
+              "lastErrorAt": null,
+              "lastErrorCode": null
+            }
+          ],
+          "repositoryCount": 4,
+          "candidateRepositories": 1
+        },
+        "onchain": {
+          "adapterHealth": null,
+          "status": "checkpoint_only_unverified",
+          "checkpointAt": "2026-10-20T18:21:50.055Z",
+          "nextBlock": 127417539,
+          "headLagBlocks": null,
+          "liveHeadVerified": false,
+          "scope": "BSC pinned OpenFour registry adapter"
+        },
+        "coverageStatus": "bounded_sources_not_all_future_schemas"
+      }
+    },
+    "readErrors": [],
+    "executionBoundary": "更新正文仅作待核实观察；仅已绑定受支持链上版本且顺序核实的最早三个不同 CA 进入模拟评估，不补第四名，仍须通过时效、可卖性及仓位检查。",
+    "remainingGaps": [
+      "未知合约地址、事件 ABI 和同地址 Hook 新版本仍需核实适配",
+      "链上检查点不等于已追平链头；网站正常不等于狙击完整覆盖",
+      "X 上游来源受限或电脑离线时不保证连续覆盖"
+    ],
+    "unadapted": [
+      {
+        "platform": "fourmeme",
+        "chain": "robinhood",
+        "status": "announcement_and_chain_identity_unverified_not_adapted",
+        "announcementAt": null,
+        "verifiedAt": null,
+        "adaptedAt": null
+      }
+    ],
+    "firstThreeActual": {
+      "allHistoryBuys": 0,
+      "forwardBuys": 0,
+      "forwardDistinctCA": 0,
+      "forwardClosedRounds": 0,
+      "currentVersionForwardClosedRounds": 0,
+      "openPositions": 0
+    },
+    "latestAcceptance": {
+      "officialCollected": "Flap正文58/59新鲜、Four8/10；X仍source_limited。",
+      "newVerifiedUpdates": [
+        {
+          "platform": "flap",
+          "chain": "bsc",
+          "version": "v5.25.0",
+          "evidence": "docs/flap-v525-compatibility-evidence-2026-10-21.json"
+        }
+      ],
+      "newAdaptedUpdates": [
+        {
+          "platform": "flap",
+          "chain": "bsc",
+          "version": "v5.25.0",
+          "evidence": "docs/flap-v525-deployment-2026-10-21.json",
+          "scope": "pinned Portal quote adapter, not all future schemas",
+          "announcementAt": null,
+          "verifiedAt": null,
+          "adaptedAt": null
+        }
+      ],
+      "earliestThreeNewCA": null,
+      "newEntryOrRejection": null,
+      "actualFirstThree": {
+        "allHistoryBuys": 0,
+        "forwardBuys": 0,
+        "forwardDistinctCA": 0,
+        "forwardClosedRounds": 0,
+        "currentVersionForwardClosedRounds": 0,
+        "openPositions": 0
+      }
+    }
+  },
+  "paper": {
+    "tradeCount": 307,
+    "lastTradeId": "1792275648715:306",
+    "delta": {
+      "newTrades": 0,
+      "newClosedRounds": 0,
+      "netPnlUsd": null
+    },
+    "entryFrom": "2026-10-10T14:51:42.000Z",
+    "valuation": {
+      "initialCashUsd": 100,
+      "cashUsd": 45.619559581259765,
+      "cashAdjustmentUsd": 99.6684734885994,
+      "totalContributedUsd": 199.6684734885994,
+      "cashAdjustments": [
+        {
+          "id": "user_refill_20260930_repair_01",
+          "kind": "manual_paper_cash_reset",
+          "amountUsd": 99.6684734885994,
+          "cashBefore": 0.33152651140059874,
+          "cashAfter": 100,
+          "tradeCount": 204,
+          "at": "2026-09-30T04:46:53.549Z"
+        }
+      ],
+      "modelCostsAllFillsUsd": 60.6309238067305,
+      "remainingCostBasisUsd": 19.849999999999998,
+      "realizedPnlUsd": -134.1989139073396,
+      "unrealizedPnlUsd": -7.243304346972106,
+      "totalPnlIncludingOpenUsd": -141.4422182543117,
+      "netLiquidationValueUsd": 58.226255234287656,
+      "valuationComplete": true,
+      "note": "补款不是利润；总已实现含未平仓头寸的部分卖出，不混入当前版本完整回合成绩。"
+    },
+    "firstThree": {
+      "allHistoryBuys": 0,
+      "forwardBuys": 0,
+      "forwardDistinctCA": 0,
+      "forwardClosedRounds": 0,
+      "currentVersionForwardClosedRounds": 0,
+      "openPositions": 0
+    }
+  },
+  "multiarm": {
+    "checkedAt": "2026-10-20T18:30:22.218Z",
+    "persistedAt": "2026-10-20T18:30:20.966Z",
+    "version": "profit_retention_multiarm_v3",
+    "checkpoint": {
+      "tradeCount": 307,
+      "lastTradeId": "1792275648715:306",
+      "tradePrefixHash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437",
+      "accountUpdatedAt": "2026-10-20T18:30:20.356Z"
+    },
+    "baseline": {
+      "tradeCount": 305,
+      "lastTradeId": "1792250738005:304",
+      "tradePrefixHash": "dd8adde1337cddcf30dfee8f2a526fdfb7cbee2d4852e59ae616188302bce9ce",
+      "establishedAtMs": 1792252219527
+    },
+    "cursor": {
+      "tradeCount": 307,
+      "lastTradeId": "1792275648715:306",
+      "tradePrefixHash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437"
+    },
+    "sameEntries": true,
+    "sameRecordedQuotes": true,
+    "armCursorConsistent": true,
+    "baselineConsistent": true,
+    "reportedCompletePairIds": [
+      "1792274973724:305"
+    ],
+    "newCompletePairIds": [],
+    "newCompletePairs": 0,
+    "incrementalMetrics": [
+      {
+        "multiple": 2,
+        "netPnlUsd": null,
+        "deltaVsControlUsd": null,
+        "recoveryCount": null,
+        "notTriggeredCount": null,
+        "failureCount": null,
+        "earlySaleLossUsd": null,
+        "closedRoundDrawdownUsd": null,
+        "caConcentration": null,
+        "netExLargestPositiveCAUsd": null
+      },
+      {
+        "multiple": 3,
+        "netPnlUsd": null,
+        "deltaVsControlUsd": null,
+        "recoveryCount": null,
+        "notTriggeredCount": null,
+        "failureCount": null,
+        "earlySaleLossUsd": null,
+        "closedRoundDrawdownUsd": null,
+        "caConcentration": null,
+        "netExLargestPositiveCAUsd": null
+      },
+      {
+        "multiple": 5,
+        "netPnlUsd": null,
+        "deltaVsControlUsd": null,
+        "recoveryCount": null,
+        "notTriggeredCount": null,
+        "failureCount": null,
+        "earlySaleLossUsd": null,
+        "closedRoundDrawdownUsd": null,
+        "caConcentration": null,
+        "netExLargestPositiveCAUsd": null
+      }
+    ],
+    "schedulerVersion": "evidence_preserving_event_lease_v1",
+    "observerCoverage": {
+      "version": "profit_retention_observer_coverage_v1",
+      "interruptionCount": 1,
+      "interruptions": [
+        {
+          "reason": "no_active_pairs_mark_only_gap",
+          "fromAccountUpdatedAt": "2026-10-18T05:08:20.635Z",
+          "toAccountUpdatedAt": "2026-10-19T05:56:27.719Z",
+          "detectedAtMs": 1792389444407,
+          "tradeCount": 307,
+          "tradePrefixHash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437"
+        }
+      ]
+    },
+    "note": "无新增完整共同回合；保留既有30条报价缺口及观察中断，增量指标null，不重报历史成绩。"
+  }
+}

@@ -1,0 +1,171 @@
+{
+  "version": "operator_reference_followup_v1",
+  "round": 102,
+  "scheduledAt": "2026-10-23T03:06:50.022Z",
+  "checkedAt": "2026-10-23T03:11:44Z",
+  "completedAt": "2026-10-23T03:11:44Z",
+  "group": "bsc",
+  "question": "刷新 A/B 最新活动头页，确认是否有新增交易及最新页是否推进至旧 PairLab 卖出锚点之后",
+  "requests": {
+    "configChecks": 2,
+    "gmgnBusiness": 2,
+    "gmgnSuccessful": 2,
+    "gmgnFailed": 0,
+    "publicRpc": 0,
+    "model": 0
+  },
+  "wallets": {
+    "A": {
+      "chain": "bsc",
+      "address": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "headCheckedAt": "2026-10-23T03:08:52Z",
+      "checkedAtPrecision": "approximate",
+      "pageRows": 20,
+      "anchorHash": "0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868",
+      "anchorFound": true,
+      "identityEchoValidated": false,
+      "responseFields": ["activities", "next"],
+      "nextCursorReturned": true,
+      "nextCursorRetained": false,
+      "pageOverlap": null,
+      "newRows": null,
+      "latestActivityAt": "2026-10-02T11:08:09Z",
+      "latestActivityCA": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "latestSide": "sell",
+      "coverageStatus": "provider_coverage_gap_pending_classification; head_anchor_found; full_page_dedupe_unknown"
+    },
+    "B": {
+      "chain": "bsc",
+      "address": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "headCheckedAt": "2026-10-23T03:08:52Z",
+      "checkedAtPrecision": "approximate",
+      "pageRows": 20,
+      "anchorHash": "0x276ed1a8787a851f66bf341a62bd62728028d53b19a22ea8a69fa6b3f7857f6d",
+      "anchorFound": true,
+      "identityEchoValidated": false,
+      "responseFields": ["activities", "next"],
+      "nextCursorReturned": true,
+      "nextCursorRetained": false,
+      "pageOverlap": null,
+      "newRows": null,
+      "latestActivityAt": "2026-10-02T11:08:09Z",
+      "latestActivityCA": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "latestSide": "sell",
+      "coverageStatus": "provider_freshness_unverified; head_anchor_found; full_page_dedupe_unknown"
+    }
+  },
+  "verifiedUniqueEvidenceRows": 0,
+  "headRefreshed": ["A", "B"],
+  "coverageStatus": "A_B_head_anchor_repeated_old_rows_full_page_dedupe_unknown; Four_proof_lag26_then_cursor_advanced75_current_lag_unknown; Flap_v5_26_identity_verified_but_capacity_and_identity_error_degraded_cursor_stalled_current_lag_unknown; paper_closed_one_loss",
+  "sameSecondOneToOnePairs": 20,
+  "distinctMatchedCAs": 1,
+  "matchedCA": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+  "matchedSide": "sell",
+  "matchedWindow": ["2026-10-02T09:18:04Z", "2026-10-02T11:08:09Z"],
+  "interpretation": "历史页重读；20对同秒签名，交易哈希不同。无新增交易、无直接资金关系证据、成本/库存未配平，不得推断共同控制或盈亏。",
+  "fourFlap": {
+    "four": {
+      "headProofAt": "2026-10-23T03:10:19.855Z",
+      "sourceTips": [129247521, 129247521],
+      "headSpread": 0,
+      "safeHead": 129247518,
+      "cursorAtProofNextBlock": 129247493,
+      "lagAtProofBlocks": 26,
+      "laterCursorAt": "2026-10-23T03:10:52.676Z",
+      "laterCursorNextBlock": 129247568,
+      "cursorAdvanceAfterProof": 75,
+      "currentLagBlocks": null,
+      "backlogReductionVerified": false,
+      "processedEventCount": 79,
+      "outboxCount": 0
+    },
+    "flap": {
+      "version": "v5.26.0",
+      "identityCheckedAt": "2026-10-23T03:10:14.164Z",
+      "headProofAt": "2026-10-23T03:09:26.301Z",
+      "sourceTips": [129247401, 129247402],
+      "headSpread": 1,
+      "safeHead": 129247398,
+      "cursorAtProofNextBlock": 129247385,
+      "lagAtProofBlocks": 14,
+      "lastSuccessAt": "2026-10-23T03:09:30.491Z",
+      "lastSuccessCursorNextBlock": 129247417,
+      "currentCursorNextBlock": 129247417,
+      "checkedAt": "2026-10-23T03:11:32.278Z",
+      "healthStatus": "degraded",
+      "lastErrorCode": "FLAP_QUOTE_PORTAL_IDENTITY_UNAVAILABLE",
+      "priorCapacityErrorAt": "2026-10-23T03:10:32.147Z",
+      "currentLagBlocks": null,
+      "capacityWaitResolved": false
+    }
+  },
+  "paperForward": {
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "previousTradeCount": 311,
+    "tradeCount": 313,
+    "previousLastTradeId": "1792647072099:310",
+    "lastTradeId": "1792717327956:312",
+    "newTradeIds": ["1792716860563:311", "1792717327956:312"],
+    "newClosedRoundIds": ["1792716860563:311"],
+    "newClosedRoundNetUsd": -0.7597157865501378,
+    "newRoundCA": "0xfa4f58fd46fae74490a9d4cd69ed3eaf1b7d7777",
+    "newRoundChain": "bsc",
+    "newRoundRoute": "external_breakout",
+    "freshOpenPositionValuation": {
+      "checkedAt": "2026-10-23T03:20:09.469Z",
+      "unrealizedPnlUsd": -8.944710861867836,
+      "netLiquidationValueUsd": 54.49456454107226,
+      "valuationComplete": true,
+      "positions": 3,
+      "source": "final local read-only review-paper-forward.js snapshot; paper model marks"
+    },
+    "quoteSchedulerLiveSnapshot": null
+  },
+  "profitRetentionMultiarm": {
+    "baselineTradeCount": 305,
+    "previousReportedCompletePairIds": [
+      "1792274973724:305",
+      "1792567092580:307",
+      "1792645698811:309"
+    ],
+    "newCompletePairIds": ["1792716860563:311"],
+    "arms": {
+      "2x": {"netPnlUsd": -0.7597157865501378, "deltaVsControlUsd": 0, "recoveryCount": 0, "notTriggeredCount": 1, "failureCount": 1, "costsUsd": 0.19459517556041092, "closedRoundDrawdownUsd": 0.7597157865501378, "caConcentration": {"distinctCAs": 1, "largestLossCAShare": 1, "largestPositiveCAShare": null}, "netExLargestPositiveCAUsd": null, "earlySaleLossUsd": null, "quoteGaps": 22},
+      "3x": {"netPnlUsd": -0.7597157865501378, "deltaVsControlUsd": 0, "recoveryCount": 0, "notTriggeredCount": 1, "failureCount": 1, "costsUsd": 0.19459517556041092, "closedRoundDrawdownUsd": 0.7597157865501378, "caConcentration": {"distinctCAs": 1, "largestLossCAShare": 1, "largestPositiveCAShare": null}, "netExLargestPositiveCAUsd": null, "earlySaleLossUsd": null, "quoteGaps": 22},
+      "5x": {"netPnlUsd": -0.7597157865501378, "deltaVsControlUsd": 0, "recoveryCount": 0, "notTriggeredCount": 1, "failureCount": 1, "costsUsd": 0.19459517556041092, "closedRoundDrawdownUsd": 0.7597157865501378, "caConcentration": {"distinctCAs": 1, "largestLossCAShare": 1, "largestPositiveCAShare": null}, "netExLargestPositiveCAUsd": null, "earlySaleLossUsd": null, "quoteGaps": 22}
+    },
+    "quoteCoverage": {
+      "previousGapCount": 105,
+      "newPairGapCount": 22,
+      "cumulativeGapCount": 127,
+      "reasons": {"missing_quote": 67, "pre_entry_quote": 9, "out_of_order_quote": 49, "stale_quote": 2}
+    },
+    "observerInterruptionCount": 1,
+    "artifactCursorMatchesLedger": true,
+    "quoteOpportunityScheduler": null,
+    "agenticWalletTriggerObserved": null,
+    "note": "新增一个有报价缺口的完整亏损回合；各倍数本样本与原退出相同。该单样本不可作为稳定性结论。"
+  },
+  "runtime": {
+    "checkedAt": "2026-10-23T03:11:44Z",
+    "mainPid": 48659,
+    "mainStartedAt": "2026-10-21T10:38:45.834Z",
+    "bscPid": 60608,
+    "bscStartedAt": "2026-10-22T21:12:45.718Z",
+    "restartPerformed": false,
+    "continuousUptimeProven": false
+  },
+  "binanceAiLaunchMonitoring": {
+    "officialSourceReviewPerformed": false,
+    "fullChainScan": false,
+    "qualifyingCandidateBuys": null,
+    "previousOfficialCheckpointAt": "2026-10-22T23:15:17.000Z",
+    "nextScheduledCheckAt": "2026-10-23T07:15:17.000Z",
+    "interpretation": "本轮未刷新官方来源/全链；上一检查点沿用，不据此推断无新候选。"
+  },
+  "report": "docs/operator-reference-followups/2026-10-23-0306-bsc-ab-head-review.md",
+  "nextQuestion": "轮换Solana；按8小时规则优先检查到期的D/E头页；保持Four当前lag未知，等新的同窗双源头证据；继续核对Flap v5.26.0身份/容量错误与面板报价调度字段。"
+}

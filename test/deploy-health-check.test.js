@@ -593,7 +593,7 @@ test("Flap quote integrity mismatch is operational while transport backoff is co
 test('Flap quote recovery progress is operational but never counted as complete live coverage',async t=>{
  const {dataDir,configDir}=await makeWorkspace(t);await installStack(dataDir,BASE_NOW);
  const state=JSON.parse(await fs.readFile(path.join(dataDir,'flap-quote-state.json'),'utf8'));
- state.identity.verifiedBlock=1400;
+ state.identity.verifiedBlock=state.cursor.nextBlock+999;
  await writeJson(dataDir,'flap-quote-state.json',state,BASE_NOW);
  const report=await runHealthCheck({env:healthEnv({dataDir,configDir}),nowMs:BASE_NOW,serviceStateImpl:activeService});
  assert.equal(report.lanes.flapQuote.operationalHealthy,true);

@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "investigatedAt": "2026-10-19T05:58:26.000Z",
+  "status": "blocked_evidence",
+  "scope": "read_only_identity_and_interface_investigation",
+  "decision": "Do not change the v5.24.0 pin or migrate persisted state until the remaining upgrade and implementation compatibility evidence is verified.",
+  "chainId": 56,
+  "portal": "0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0",
+  "identityVerifiedAt": "2026-10-19T05:56:14.808Z",
+  "fixedBlock": {
+    "number": 128501895,
+    "tag": "0x7a8c887",
+    "hash": "0x52cdebb172266fec725d0a78a5b31a5826663f96816fcb32330fc973066a766b",
+    "timestamp": "2026-10-19T05:55:38.000Z"
+  },
+  "observedIdentity": {
+    "version": "v5.25.0",
+    "implementationStorageSlot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+    "implementation": "0xE13227370996f892a56d2Ff4a30f6026887B48Fb",
+    "proxyRuntimeCodeHash": "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3",
+    "proxyRuntimeCodeBytes": 2882,
+    "implementationRuntimeCodeHash": "0xf8d56fe09f2ec5e3eeaabdbfeeb0faf55e4ed8996a55bc1b69a78e62dbb792e4",
+    "implementationRuntimeCodeBytes": 20347
+  },
+  "independentProviders": [
+    {
+      "url": "https://bsc-dataseed.bnbchain.org",
+      "chainId": 56,
+      "agreedOnAllObservedIdentityFields": true,
+      "sameBlockHashBeforeAndAfter": true
+    },
+    {
+      "url": "https://bsc-rpc.publicnode.com",
+      "chainId": 56,
+      "agreedOnAllObservedIdentityFields": true,
+      "sameBlockHashBeforeAndAfter": true
+    }
+  ],
+  "methodology": {
+    "client": "createRpcPool from src/bsc-launchpad-monitor.js",
+    "sharedCoordinator": true,
+    "priorityLane": "background",
+    "standardConcurrencyPerPool": 1,
+    "totalConcurrencyPerPool": 1,
+    "gateOrCooldownOverrides": false,
+    "logicalSuccessfulMethodCalls": 16,
+    "countNote": "Two initial chain/head calls and seven fixed-block calls per provider. Logical invocations are not an exact transport request count.",
+    "fixedBlockMethodsPerProvider": [
+      "eth_chainId",
+      "eth_getBlockByNumber",
+      "eth_getStorageAt",
+      "eth_getCode:proxy",
+      "eth_call:version",
+      "eth_getCode:implementation",
+      "eth_getBlockByNumber:recheck"
+    ]
+  },
+  "upgradeReceipt": null,
+  "upgradeLogProbe": {
+    "at": "2026-10-19T05:56:50.343Z",
+    "fromBlock": 128103371,
+    "toBlock": 128108370,
+    "topic": "0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b",
+    "rangeCoversEntireUnscannedGap": false,
+    "poolAttempts": 2,
+    "officialBnbEndpoint": "no log-capable standard providers configured; excluded locally",
+    "publicNodeEndpoint": "server response 403 Forbidden",
+    "retryAfterMs": 59999,
+    "action": "Stopped further RPC investigation; no alternate-channel bypass or retry loop.",
+    "absenceOfLogsEstablished": false
+  },
+  "officialSources": [
+    {
+      "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses",
+      "observed": "Lists the same BSC Portal address, but the published version label remains v5.23.1; not evidence for v5.25 implementation compatibility."
+    },
+    {
+      "url": "https://raw.githubusercontent.com/flap-sh/FlapVaultExample/main/src/flap/IPortal.sol",
+      "observed": "Current official interface has five uint8-compatible quote configuration fields, the existing TokenCreated/TokenBought/TokenSold signatures, an 18-field TokenStateV8Safe tuple, and quoteExactInput(address,address,uint256) tuple input returning uint256.",
+      "immutableCommit": null,
+      "boundToObservedImplementationBytecode": false,
+      "nativeToQuoteSwapType7SemanticsVerified": false
+    }
+  ],
+  "explorerProbe": {
+    "url": "https://bscscan.com/address/0xE13227370996f892a56d2Ff4a30f6026887B48Fb#code",
+    "result": "Page inaccessible through the browser research tool; no verified source or upgrade transaction was obtained."
+  },
+  "persistedStatePreserved": {
+    "file": "data/flap-quote-state.json",
+    "version": "v5.24.0",
+    "implementation": "0x27a0f9Da7F5BEAd616fe0bf02bf0c793bece4e20",
+    "implementationRuntimeCodeHash": "0xb191694f7248773f714234aeb150149a2b9af5d1ab483a53d31c19ec3132b230",
+    "nextBlock": 128103371,
+    "afterLogIndex": -1,
+    "anchorBlock": 128103370,
+    "anchorBlockHash": "0xc0f5445175a135ce2db493a3eaa88a011e47e29c3a423d37183c6eac8e6ed395",
+    "baselineEstablishedAt": "2026-09-03T09:53:09.737Z",
+    "mutatedByInvestigation": false
+  },
+  "missingEvidence": [
+    "Canonical successful Upgraded receipt and transaction inclusion identifying the exact v5.24.0 to v5.25.0 activation block and implementation.",
+    "Verified implementation source/ABI or equivalent reproducible implementation-bound compatibility evidence, including quote configuration, token creation/trade events, and getTokenV8Safe layout.",
+    "Fresh fixed-block capability validation for existing quoteExactInput buy/sell paths and nativeToQuoteSwapType 7; the old v5.24.0 check does not authorize the new implementation.",
+    "Explicit predecessor migration tests preserving baseline, cursor, event journals and old v5.23.1 to v5.24.0 evidence, rejecting unknown versions and failed persistence."
+  ],
+  "nextStep": "After independent canonical receipt and implementation-bound compatibility evidence become available, implement the exact v5.24.0 predecessor migration and run regressions before a separately controlled main reload. Resume scanning from the preserved cursor, retaining backfill and freshness labels.",
+  "prohibitedShortcuts": [
+    "Changing only the version string or accepting any implementation with version v5.25.0",
+    "Skipping unscanned blocks, resetting baseline, or treating backfilled events as real-time discovery",
+    "Reusing a v5.24.0 capability proof as approval for v5.25.0",
+    "Deleting locks, bypassing shared cooldown, or restoring excluded sources"
+  ]
+}

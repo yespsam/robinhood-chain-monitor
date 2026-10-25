@@ -2,7 +2,7 @@
 import { opportunityChart, MAIN_CHART_WINDOW_VERSION } from './paper-opportunity-policy.js';
 import { memeEntryContext } from './paper-meme-exit.js';
 import {launchContext,launchQuote,verifiedLaunchContext,LAUNCH_ENTRY_TEXT} from './paper-launch-policy.js';
-import {validCollectiveSignal,collectiveQuote,internalOnlySignal} from './paper-collective-signal.js';
+import {validCollectiveSignal,collectiveQuote,internalOnlySignal,walletSignalRoute} from './paper-collective-signal.js';
 
 export const PAPER_RECOVERY_VERSION = 'paper_recovery_v1';
 export const EVIDENCE_GAP_EXIT_VERSION = 'evidence_gap_exit_v1';
@@ -16,6 +16,35 @@ const key = x => `${x?.chain}:${x?.address}`;
 const fresh = (x,now,age) => Number.isFinite(time(x))&&time(x)<=now&&now-time(x)<=age;
 
 export const BREAKOUT_FLOW_VERSION = 'bsc_breakout_observed_outflow_v1';
+export const ENTRY_FLOW_VERSION = 'paper_entry_observed_outflow_v1';
+const flowChains=new Set(['bsc','sol','base','eth','robinhood']);
+// A veto only: a complete, identity-bound observed outflow cannot be ignored
+// by the launch/cohort fast lanes. Missing data still grants no entry authority.
+// A cohort may describe a newer short window than the aggregate flow: only a
+// strictly later source observation can contradict that frozen signal.
+export function entryFlowCheck(flow,token,nowMs,{afterObservedAt=null}={}) {
+  const applicable=flowChains.has(token?.chain);
+  const addressValid=typeof token?.address==='string'&&(token.chain==='sol'
+    ?/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(token.address):/^0x[\da-f]{40}$/i.test(token.address));
+  const matches=flow?.chain===token?.chain&&addressValid&&typeof flow?.address==='string'
+    &&(token.chain==='sol'?flow.address===token.address:flow.address.toLowerCase()===token.address.toLowerCase());
+  const coverage=flow?.coverageGap==='proof_wallets_truncated'&&flow.preTruncationCoverage?.version==='source_flow_coverage_v1'
+    ?flow.preTruncationCoverage:flow;
+  const sourceKnown=['gmgn','binance_smartmoney','binance_kol'].includes(flow?.provider)
+    &&typeof flow?.scope==='string'&&flow.scope.trim().length>0;
+  const after=time(afterObservedAt),temporallyRelevant=afterObservedAt===null
+    ||Number.isFinite(after)&&time(flow?.observedAt)>after;
+  const usable=applicable&&matches&&sourceKnown&&flow.fresh===true&&coverage.complete===true
+    &&['ok','healthy'].includes(flow.status)&&!coverage.coverageGap&&fresh(flow.observedAt,nowMs,120000)
+    &&temporallyRelevant&&typeof flow.netBuyUsd==='number'&&Number.isFinite(flow.netBuyUsd);
+  const blocked=usable&&flow.netBuyUsd<0;
+  return {version:ENTRY_FLOW_VERSION,applicable,blocked,usable,
+    status:!applicable?'not_applicable':!usable?'unknown':blocked?'observed_net_outflow':'no_observed_net_outflow',
+    provider:flow?.provider||null,scope:flow?.scope||null,observedAt:flow?.observedAt??null,
+    afterObservedAt,netBuyUsd:usable?flow.netBuyUsd:null,maxAgeMs:120000,
+    reason:blocked?'此 CA 已有新鲜、完整的已观测净流出，先观察，不让旧买入信号或新盘事件覆盖卖压':null,
+    note:'只检查绑定此 CA 的已采集来源窗口；不是全市场净流量；未知、过期、部分覆盖和非负数据均不授予买入许可'};
+}
 // A contradiction filter for the recovered BSC breakout lane, not a new buy
 // signal. Public tagged-wallet coverage is not the whole market; missing,
 // stale, partial and zero flows must never be described as selling.
@@ -46,21 +75,30 @@ export function recoveryEntryCheck(proof, token, event, nowMs, opportunity = nul
   const missing=[],reasons=[];
   if(proof?.version!==PAPER_RECOVERY_VERSION||key(proof)!==key(token)||!fresh(proof.observedAt,nowMs,120000))
     return {ready:false,missing:['恢复期绑定此 CA 的入场证据'],reasons,exitObservable:false};
+  // The comparison clock is an authority boundary: an arbitrary attached
+  // future cohort timestamp must not turn real launch selling into "unknown".
+  const collectiveValid=!proof.newLaunch&&!!proof.collectiveSignal
+    &&opportunity?.basis==='wallet_signal'&&opportunity.id===walletSignalRoute(proof.collectiveSignal)
+    &&opportunity.signalId===proof.collectiveSignal.id&&validCollectiveSignal(proof.collectiveSignal,token,nowMs);
+  const entryFlow=entryFlowCheck(proof.flow,token,nowMs,{afterObservedAt:collectiveValid?proof.collectiveSignal.sourceObservedAt:null});
+  const breakoutFlow=breakoutFlowCheck(proof.flow,token,opportunity,nowMs);
+  if(entryFlow.blocked)reasons.push(entryFlow.reason);
   if(proof.newLaunch) {
+    if(proof.collectiveSignal)reasons.push('新盘与钱包路线证明不能混用；不接受附加钱包时钟覆盖卖压');
     const context=verifiedLaunchContext(proof,token,event,nowMs),quote=launchQuote(proof,token,event,nowMs);
-    return {ready:!!context&&quote.ready,missing:context&&quote.ready?[]:[quote.reason],reasons:[],
+    return {ready:!!context&&quote.ready&&!reasons.length,missing:context&&quote.ready?[]:[quote.reason],reasons,entryFlow,breakoutFlow,
       exitObservable:quote.ready,chartReady:false,requiresChart:false,
       basis:'新盘按已核实事件与真实报价入场；资金行为与后续结构持续采集，不把缺失当健康'};
   }
   if(proof.collectiveSignal) {
-    const valid=validCollectiveSignal(proof.collectiveSignal,token,nowMs),quote=collectiveQuote(proof.quotes,token,proof.collectiveSignal,nowMs);
+    const valid=collectiveValid,quote=collectiveQuote(proof.quotes,token,proof.collectiveSignal,nowMs);
     const internal=['internal','near_completion'].includes(proof.marketStage);
     if(internalOnlySignal(proof.collectiveSignal.version)&&!internal)missing.push('地址/放量快线仅允许已核实内盘');
     const chart=internal?null:opportunityChart(proof.candles,proof.klineStatus,nowMs,{contiguousTail:true});
     if(!valid)missing.push('三组已核实盈利钱包的新鲜净买共振');
     if(!quote.ready)missing.push(quote.reason);
     if(!internal&&(proof.marketStage!=='external'||!chart?.ready||chart.rows.length<24))missing.push('新鲜且足够的 K 线');
-    return {ready:!missing.length,missing,reasons:[],exitObservable:valid,requiresChart:!internal,
+    return {ready:!missing.length&&!reasons.length,missing,reasons,entryFlow,breakoutFlow,exitObservable:valid,requiresChart:!internal,
       chartReady:!!chart?.ready,basis:'同源净买群体作为入场依据；内盘不等 K 线，外盘保留真实结构检查'};
   }
   if(proof.chartWindowPolicy!=null&&proof.chartWindowPolicy!==MAIN_CHART_WINDOW_VERSION)
@@ -75,8 +113,6 @@ export function recoveryEntryCheck(proof, token, event, nowMs, opportunity = nul
   });
   const buying=context.cohortKnown&&postEventBuyers.length>=2&&proof.flow.netBuyUsd>=300;
   const exitObservable=chart.ready&&chart.rows.length>=24||context.cohortKnown&&buyers>=2;
-  const breakoutFlow=breakoutFlowCheck(proof.flow,token,opportunity,nowMs);
-  if(breakoutFlow.blocked)reasons.push(breakoutFlow.reason);
   if(!exitObservable)missing.push('可持续取得的退出量价或地址行为证据');
   if(event) {
     if(!buying)reasons.push('恢复期监控事件需要近期双地址净买入及至少 300U 净流入');
@@ -89,7 +125,7 @@ export function recoveryEntryCheck(proof, token, event, nowMs, opportunity = nul
       ||last.price<=rows[0].price||last.price<rows.at(-2)?.price)missing.push('触发后两次独立走强报价');
   }
   return {ready:!missing.length&&!reasons.length,missing,reasons,exitObservable,
-    breakoutFlow,
+    entryFlow,breakoutFlow,
     chartReady:chart.ready&&chart.rows.length>=24,netBuyers:buyers,recentNetBuyers:postEventBuyers.length,
     basis:event?.source==='gmgn_platform_call'?'平台提示＋真实买盘，不代表叙事已核实':event?'原帖关联＋真实买盘':'原路线＋退出数据检查'};
 }
@@ -136,10 +172,11 @@ function checkedRecoveryEntry(row,proof,check) {
   return {...row,decision:row.decision==='不买'?'不买':eligible?'可模拟':'观察',
     missing,reasons,score:Math.max(0,row.score-(missing.length-row.missing.length)*10-check.reasons.length*15),
     entryLogic:(proof.newLaunch||proof.collectiveSignal?row.entryLogic:`${RECOVERY_ENTRY_TEXT} ${row.entryLogic}`)
-      +(check.breakoutFlow?.applicable?' BSC 突破净流出过滤试验：已采集来源窗口存在新鲜完整净流出时先观察；未知不当作卖出，仍须通过全部原有条件。':''),
+      +(check.entryFlow?.applicable?' 入场净流出检查：已采集来源窗口存在新鲜完整净流出时先观察；钱包信号只接受其后更新的来源窗口作矛盾证据。未知不当作卖出，仍须通过全部原有条件。':''),
     evidence:{...row.evidence,paperEligible:eligible,recoveryEntry:proof,recoveryCheck:check,
-      ...(check.breakoutFlow?.applicable?{opportunity:{...row.evidence.opportunity,breakoutFlow:check.breakoutFlow,
-        signalReady:row.evidence.opportunity.signalReady===true&&!check.breakoutFlow.blocked}}:{}),
+      ...(check.entryFlow?.applicable&&row.evidence.opportunity?{opportunity:{...row.evidence.opportunity,entryFlow:check.entryFlow,
+        ...(check.breakoutFlow?.applicable?{breakoutFlow:check.breakoutFlow}:{}),
+        signalReady:row.evidence.opportunity.signalReady===true&&!check.entryFlow.blocked}}:{}),
       entryPlan:row.evidence.entryPlan?{...row.evidence.entryPlan,eligible,summary:proof.newLaunch||proof.collectiveSignal?row.entryLogic:RECOVERY_ENTRY_TEXT}:row.evidence.entryPlan}};
 }
 

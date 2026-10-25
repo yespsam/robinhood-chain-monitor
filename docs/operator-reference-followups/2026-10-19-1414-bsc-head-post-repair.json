@@ -1,0 +1,1031 @@
+{
+  "version": 1,
+  "checkedAt": "2026-10-19T06:19:31.113Z",
+  "round": 80,
+  "group": "bsc",
+  "question": "A/B到期头页是否产生新记录，A账户nonce是否继续推进",
+  "requests": {
+    "configChecks": 3,
+    "configCheckNote": "1 explicit config --check plus each of two fresh shared clients automatic prerequisite check",
+    "gmgnBusinessRequests": 2,
+    "gmgnSuccessful": 2,
+    "rpcRequests": 2,
+    "modelRequests": 0
+  },
+  "wallets": [
+    {
+      "id": "A",
+      "startedAt": "2026-10-19T06:16:15.081Z",
+      "checkedAt": "2026-10-19T06:16:34.121Z",
+      "success": true,
+      "next": "MTI1MjY3MDU2MDAxOTAwMDAwMDowOjo=",
+      "rows": 20,
+      "identityVerified": true,
+      "pageOverlap": 20,
+      "newRows": 0
+    },
+    {
+      "id": "B",
+      "success": true,
+      "startedAt": "2026-10-19T06:17:12.113Z",
+      "checkedAt": "2026-10-19T06:17:27.279Z",
+      "next": "MTI1MjY3MDU2MDAyMTcwMDAwMDowOjo=",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "chain": "bsc",
+      "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "hashes": [
+        "0x276ed1a8787a851f66bf341a62bd62728028d53b19a22ea8a69fa6b3f7857f6d",
+        "0xf21c768f9d08702bbdcbcacd8211d997056c5e8d06ba01a595a75cc72b413a5b",
+        "0xacb32cc30d9f432b2cbb678063bc1bd970bdefc6c72c48cca7b5d34a9665bb27",
+        "0x5db83af0f80e8d7d9cd1f56029356ad921d7e4c16015bb93fd2fe434983acdfd",
+        "0xb28715ac2228aa8d83c46fea544497fad601d1ef66e613e3c53732dc08749f3b",
+        "0xc3f8e6c5cbe00f9487f8fc6886ccbbbb503985152898da8ea92abb6a7de27696",
+        "0x99ca4abb08a390c46765b76d039711ba5893fead20ac0596e5b177b4fbbb406c",
+        "0x603c938f2bbb7e48f40b0d6687be914ceb7f90126161473962ab1bcaa46b7c95",
+        "0x848201ba92c46036de75a35e8141d7ce17451bcc5019f345b278c0afa93e4175",
+        "0x3e29ea056bc18a1bb1da17cee5a16e1d34a1f7e5eae4ad03628a6c713d6d090d",
+        "0x0931fda0e076501f12c1b99c2d87c0af9f568cf9149a1f1dc89c9746eaec25a1",
+        "0x746a90098371e7309cc9cc98cff377b91de2a7d37567b2d246fb3e56d20cd37f",
+        "0xb3547c0aac9fbd227d0ffad01b4936e9ca1ae5bec3510127ef43b4048b0f166e",
+        "0xe00666690dd7e03aed0ca3fc017c86047341c50890af223e966fe39a6aed9ad2",
+        "0x69f1785263e656d2572cd6c2c6c2fb998877ffdfc177800acb82dca6bb5f9f90",
+        "0x081247889dd0662729ab14c07a83073d5e3bb99aa356334844494f78041280c3",
+        "0xe2eb7b749d0604472287132df7763121a676f1d7cc9d4fe02d574fd4e7b2886f",
+        "0x04b7b1e461c560789313c9e7c561665a64caa22d209f2b6587da2136a068cf64",
+        "0xf2fb530c98551eece8a50ad4260f63c8086cc7270593188e79cea79363cf5d9e",
+        "0x3d58035f695dbc52b0fab614c644734bb464267a02d3bee4e721208a78e812e7"
+      ],
+      "identityVerified": true,
+      "rows": 20,
+      "pageOverlap": 20,
+      "newRows": 0
+    }
+  ],
+  "nonce": {
+    "startedAt": "2026-10-19T06:18:12.072Z",
+    "checkedAt": "2026-10-19T06:18:13.010Z",
+    "source": "https://bsc-dataseed-public.bnbchain.org",
+    "logicalRequests": 2,
+    "chain": "0x38",
+    "nonce": "0xa2",
+    "value": 162,
+    "knownNonce": 157,
+    "laterNonceCount": 4,
+    "success": true
+  },
+  "newRows": 0,
+  "newAddresses": 0,
+  "coverageStatus": "provider_freshness_unverified_with_A_prior_gap_pending_classification",
+  "lastNewEvidenceAtUnchanged": true,
+  "forward": {
+    "generatedAt": "2026-10-19T06:16:54.408Z",
+    "entryFrom": "2026-10-10T14:51:42.000Z",
+    "tradeCount": 307,
+    "current": {
+      "closedRounds": 19,
+      "tokens": 17,
+      "netPnlUsd": -2.000968808588111,
+      "modelCostsUsd": 6.517236384155159,
+      "byChainRoute": [
+        {
+          "chain": "bsc",
+          "route": "external_breakout",
+          "closedRounds": 9,
+          "tokens": 8,
+          "netPnlUsd": 2.3019375950953274,
+          "modelCostsUsd": 3.941985574466428
+        },
+        {
+          "chain": "sol",
+          "route": "external_breakout",
+          "closedRounds": 8,
+          "tokens": 7,
+          "netPnlUsd": -2.2624967321577194,
+          "modelCostsUsd": 2.082277977855123
+        },
+        {
+          "chain": "robinhood",
+          "route": "external_pullback",
+          "closedRounds": 1,
+          "tokens": 1,
+          "netPnlUsd": -1.0474852672385744,
+          "modelCostsUsd": 0.25833463440209364
+        },
+        {
+          "chain": "robinhood",
+          "route": "external_breakout",
+          "closedRounds": 1,
+          "tokens": 1,
+          "netPnlUsd": -0.9929244042871446,
+          "modelCostsUsd": 0.23463819743151496
+        }
+      ],
+      "concentration": {
+        "caCount": 17,
+        "largestCaPositivePnlShare": 0.6317788618023847
+      }
+    },
+    "cohortKeys": [
+      "fills",
+      "buys",
+      "sells",
+      "writeoffs",
+      "realizedInWindowUsd",
+      "modelCostsForWindowFillsUsd",
+      "currentVersion",
+      "legacyVersion",
+      "mixedOrMissingVersion",
+      "classifications"
+    ],
+    "cohorts": {
+      "legacyVersion": {
+        "closedRounds": 0,
+        "tokens": 0,
+        "netPnlUsd": 0,
+        "modelCostsUsd": 0,
+        "byChainRoute": [],
+        "concentration": {
+          "caCount": 0,
+          "largestCaPositivePnlShare": null
+        }
+      },
+      "mixedOrMissingVersion": {
+        "closedRounds": 0,
+        "tokens": 0,
+        "netPnlUsd": 0,
+        "modelCostsUsd": 0,
+        "byChainRoute": [],
+        "concentration": {
+          "caCount": 0,
+          "largestCaPositivePnlShare": null
+        }
+      }
+    },
+    "newRoundIds": [],
+    "firstThreeRoute": {
+      "source": "new_pool_first_three",
+      "configured": {
+        "observed": false,
+        "version": null,
+        "maxUniqueCA": null,
+        "mode": null
+      },
+      "actual": {
+        "allHistoryBuys": 0,
+        "forwardBuys": 0,
+        "forwardDistinctCA": 0,
+        "forwardClosedRounds": 0,
+        "currentVersionForwardClosedRounds": 0,
+        "openPositions": 0
+      },
+      "note": "配置前三 CA 上限不等于产生三笔成交；只按冻结买入事件来源计数，不能用已配置代替实绩。"
+    },
+    "openPositions": [
+      {
+        "chain": "bsc",
+        "address": "0x07bcb8e8226f671300e135b4a61dc157359b7777",
+        "valuationStatus": "fresh",
+        "markAt": "2026-10-19T06:16:48.614Z",
+        "currentUnrealizedPnlUsd": -6.2871540502743155
+      },
+      {
+        "chain": "sol",
+        "address": "D7fGMz4E8r8FQyqULpqKr9MCu46izx9stJeStgGfYnJb",
+        "valuationStatus": "fresh",
+        "markAt": "2026-10-19T06:16:49.980Z",
+        "currentUnrealizedPnlUsd": -0.3084236542405163
+      },
+      {
+        "chain": "sol",
+        "address": "9LMZwPNYp2xQE5JpGFTeMVm3b6xtWw8wiDio459Kpump",
+        "valuationStatus": "fresh",
+        "markAt": "2026-10-19T06:16:51.728Z",
+        "currentUnrealizedPnlUsd": -0.2227450980392156
+      }
+    ],
+    "account": {
+      "initialCashUsd": 100,
+      "cashUsd": 45.619559581259765,
+      "cashAdjustmentUsd": 99.6684734885994,
+      "totalContributedUsd": 199.6684734885994,
+      "cashAdjustments": [
+        {
+          "id": "user_refill_20260930_repair_01",
+          "kind": "manual_paper_cash_reset",
+          "amountUsd": 99.6684734885994,
+          "cashBefore": 0.33152651140059874,
+          "cashAfter": 100,
+          "tradeCount": 204,
+          "at": "2026-09-30T04:46:53.549Z"
+        }
+      ],
+      "modelCostsAllFillsUsd": 60.6309238067305,
+      "remainingCostBasisUsd": 19.849999999999998,
+      "realizedPnlUsd": -134.1989139073396,
+      "unrealizedPnlUsd": -6.818322802554047,
+      "totalPnlIncludingOpenUsd": -141.01723670989364,
+      "netLiquidationValueUsd": 58.651236778705716,
+      "valuationComplete": true,
+      "note": "补款不是利润；总已实现含未平仓头寸的部分卖出，不混入当前版本完整回合成绩。"
+    }
+  },
+  "profitRetentionMultiarm": {
+    "savedAt": "2026-10-19T06:16:53.572Z",
+    "checkpoint": {
+      "tradeCount": 307,
+      "lastTradeId": "1792275648715:306",
+      "tradePrefixHash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437",
+      "accountUpdatedAt": "2026-10-19T06:16:53.176Z"
+    },
+    "baseline": {
+      "tradeCount": 305,
+      "lastTradeId": "1792250738005:304",
+      "tradePrefixHash": "dd8adde1337cddcf30dfee8f2a526fdfb7cbee2d4852e59ae616188302bce9ce",
+      "establishedAtMs": 1792252219527
+    },
+    "observerCoverage": {
+      "version": "profit_retention_observer_coverage_v1",
+      "interruptionCount": 1,
+      "interruptions": [
+        {
+          "reason": "no_active_pairs_mark_only_gap",
+          "fromAccountUpdatedAt": "2026-10-18T05:08:20.635Z",
+          "toAccountUpdatedAt": "2026-10-19T05:56:27.719Z",
+          "detectedAtMs": 1792389444407,
+          "tradeCount": 307,
+          "tradePrefixHash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437"
+        }
+      ]
+    },
+    "closedPairs": 1,
+    "openPairs": 0,
+    "arms": [
+      {
+        "multiple": 2,
+        "performance": {
+          "pairs": 1,
+          "controlNetUsd": -1.0574250763370574,
+          "treatmentNetUsd": -1.0574250763370574,
+          "deltaNetUsd": 0,
+          "controlCostsUsd": 0.18490248943849943,
+          "treatmentCostsUsd": 0.18490248943849943,
+          "extraCostsUsd": 0,
+          "controlGrossPricePnlUsd": -0.8725225868985587,
+          "treatmentGrossPricePnlUsd": -0.8725225868985587,
+          "winsControl": 0,
+          "winsTreatment": 0,
+          "distinctCAs": 1,
+          "byChainRoute": {
+            "sol:external_breakout": {
+              "pairs": 1,
+              "controlNetUsd": -1.0574250763370574,
+              "treatmentNetUsd": -1.0574250763370574,
+              "deltaNetUsd": 0,
+              "controlCostsUsd": 0.18490248943849943,
+              "treatmentCostsUsd": 0.18490248943849943,
+              "extraCostsUsd": 0,
+              "controlGrossPricePnlUsd": -0.8725225868985587,
+              "treatmentGrossPricePnlUsd": -0.8725225868985587
+            }
+          },
+          "concentration": {
+            "control": {
+              "positiveNetUsd": 0,
+              "negativeNetUsd": -1.0574250763370574,
+              "largestPositiveCAShare": null,
+              "largestLossCAShare": 1
+            },
+            "treatment": {
+              "positiveNetUsd": 0,
+              "negativeNetUsd": -1.0574250763370574,
+              "largestPositiveCAShare": null,
+              "largestLossCAShare": 1
+            }
+          },
+          "completedRounds": 1,
+          "recoveries": 0,
+          "unrecoveredRounds": 1,
+          "neverTriggeredRounds": 1,
+          "recoveryRate": 0,
+          "observedNeverTriggeredRounds": 1,
+          "completedWithCoverageGaps": 1,
+          "coverageMeaning": "Never-triggered counts mean no trigger in observed quotes only. Completed exit does not establish continuous quote coverage; gaps are not backfilled.",
+          "foregoneUpsideRounds": 0,
+          "foregoneUpsideUsd": 0,
+          "foregoneUpsideMeaning": "Net shortfall versus the same actual main exit after early principal recovery; includes cost differences, not peak-price hindsight.",
+          "closedRoundDrawdown": {
+            "controlMaxDrawdownUsd": 1.0574250763370574,
+            "treatmentMaxDrawdownUsd": 1.0574250763370574,
+            "definition": "Cumulative completed-round net P&L from zero, ordered by actual completion; simultaneous completions grouped. Not mark-to-market or account drawdown."
+          },
+          "caRobustness": {
+            "control": {
+              "distinctCAs": 1,
+              "positiveNetUsd": 0,
+              "largestPositiveCA": null,
+              "largestPositiveNetUsd": null,
+              "largestPositiveCAShare": null,
+              "netExcludingLargestPositiveCAUsd": null
+            },
+            "treatment": {
+              "distinctCAs": 1,
+              "positiveNetUsd": 0,
+              "largestPositiveCA": null,
+              "largestPositiveNetUsd": null,
+              "largestPositiveCAShare": null,
+              "netExcludingLargestPositiveCAUsd": null
+            }
+          }
+        },
+        "coverage": {
+          "gapCount": 30,
+          "reasons": {
+            "missing_quote": 16,
+            "pre_entry_quote": 1,
+            "out_of_order_quote": 12,
+            "stale_quote": 1
+          }
+        }
+      },
+      {
+        "multiple": 3,
+        "performance": {
+          "pairs": 1,
+          "controlNetUsd": -1.0574250763370574,
+          "treatmentNetUsd": -1.0574250763370574,
+          "deltaNetUsd": 0,
+          "controlCostsUsd": 0.18490248943849943,
+          "treatmentCostsUsd": 0.18490248943849943,
+          "extraCostsUsd": 0,
+          "controlGrossPricePnlUsd": -0.8725225868985587,
+          "treatmentGrossPricePnlUsd": -0.8725225868985587,
+          "winsControl": 0,
+          "winsTreatment": 0,
+          "distinctCAs": 1,
+          "byChainRoute": {
+            "sol:external_breakout": {
+              "pairs": 1,
+              "controlNetUsd": -1.0574250763370574,
+              "treatmentNetUsd": -1.0574250763370574,
+              "deltaNetUsd": 0,
+              "controlCostsUsd": 0.18490248943849943,
+              "treatmentCostsUsd": 0.18490248943849943,
+              "extraCostsUsd": 0,
+              "controlGrossPricePnlUsd": -0.8725225868985587,
+              "treatmentGrossPricePnlUsd": -0.8725225868985587
+            }
+          },
+          "concentration": {
+            "control": {
+              "positiveNetUsd": 0,
+              "negativeNetUsd": -1.0574250763370574,
+              "largestPositiveCAShare": null,
+              "largestLossCAShare": 1
+            },
+            "treatment": {
+              "positiveNetUsd": 0,
+              "negativeNetUsd": -1.0574250763370574,
+              "largestPositiveCAShare": null,
+              "largestLossCAShare": 1
+            }
+          },
+          "completedRounds": 1,
+          "recoveries": 0,
+          "unrecoveredRounds": 1,
+          "neverTriggeredRounds": 1,
+          "recoveryRate": 0,
+          "observedNeverTriggeredRounds": 1,
+          "completedWithCoverageGaps": 1,
+          "coverageMeaning": "Never-triggered counts mean no trigger in observed quotes only. Completed exit does not establish continuous quote coverage; gaps are not backfilled.",
+          "foregoneUpsideRounds": 0,
+          "foregoneUpsideUsd": 0,
+          "foregoneUpsideMeaning": "Net shortfall versus the same actual main exit after early principal recovery; includes cost differences, not peak-price hindsight.",
+          "closedRoundDrawdown": {
+            "controlMaxDrawdownUsd": 1.0574250763370574,
+            "treatmentMaxDrawdownUsd": 1.0574250763370574,
+            "definition": "Cumulative completed-round net P&L from zero, ordered by actual completion; simultaneous completions grouped. Not mark-to-market or account drawdown."
+          },
+          "caRobustness": {
+            "control": {
+              "distinctCAs": 1,
+              "positiveNetUsd": 0,
+              "largestPositiveCA": null,
+              "largestPositiveNetUsd": null,
+              "largestPositiveCAShare": null,
+              "netExcludingLargestPositiveCAUsd": null
+            },
+            "treatment": {
+              "distinctCAs": 1,
+              "positiveNetUsd": 0,
+              "largestPositiveCA": null,
+              "largestPositiveNetUsd": null,
+              "largestPositiveCAShare": null,
+              "netExcludingLargestPositiveCAUsd": null
+            }
+          }
+        },
+        "coverage": {
+          "gapCount": 30,
+          "reasons": {
+            "missing_quote": 16,
+            "pre_entry_quote": 1,
+            "out_of_order_quote": 12,
+            "stale_quote": 1
+          }
+        }
+      },
+      {
+        "multiple": 5,
+        "performance": {
+          "pairs": 1,
+          "controlNetUsd": -1.0574250763370574,
+          "treatmentNetUsd": -1.0574250763370574,
+          "deltaNetUsd": 0,
+          "controlCostsUsd": 0.18490248943849943,
+          "treatmentCostsUsd": 0.18490248943849943,
+          "extraCostsUsd": 0,
+          "controlGrossPricePnlUsd": -0.8725225868985587,
+          "treatmentGrossPricePnlUsd": -0.8725225868985587,
+          "winsControl": 0,
+          "winsTreatment": 0,
+          "distinctCAs": 1,
+          "byChainRoute": {
+            "sol:external_breakout": {
+              "pairs": 1,
+              "controlNetUsd": -1.0574250763370574,
+              "treatmentNetUsd": -1.0574250763370574,
+              "deltaNetUsd": 0,
+              "controlCostsUsd": 0.18490248943849943,
+              "treatmentCostsUsd": 0.18490248943849943,
+              "extraCostsUsd": 0,
+              "controlGrossPricePnlUsd": -0.8725225868985587,
+              "treatmentGrossPricePnlUsd": -0.8725225868985587
+            }
+          },
+          "concentration": {
+            "control": {
+              "positiveNetUsd": 0,
+              "negativeNetUsd": -1.0574250763370574,
+              "largestPositiveCAShare": null,
+              "largestLossCAShare": 1
+            },
+            "treatment": {
+              "positiveNetUsd": 0,
+              "negativeNetUsd": -1.0574250763370574,
+              "largestPositiveCAShare": null,
+              "largestLossCAShare": 1
+            }
+          },
+          "completedRounds": 1,
+          "recoveries": 0,
+          "unrecoveredRounds": 1,
+          "neverTriggeredRounds": 1,
+          "recoveryRate": 0,
+          "observedNeverTriggeredRounds": 1,
+          "completedWithCoverageGaps": 1,
+          "coverageMeaning": "Never-triggered counts mean no trigger in observed quotes only. Completed exit does not establish continuous quote coverage; gaps are not backfilled.",
+          "foregoneUpsideRounds": 0,
+          "foregoneUpsideUsd": 0,
+          "foregoneUpsideMeaning": "Net shortfall versus the same actual main exit after early principal recovery; includes cost differences, not peak-price hindsight.",
+          "closedRoundDrawdown": {
+            "controlMaxDrawdownUsd": 1.0574250763370574,
+            "treatmentMaxDrawdownUsd": 1.0574250763370574,
+            "definition": "Cumulative completed-round net P&L from zero, ordered by actual completion; simultaneous completions grouped. Not mark-to-market or account drawdown."
+          },
+          "caRobustness": {
+            "control": {
+              "distinctCAs": 1,
+              "positiveNetUsd": 0,
+              "largestPositiveCA": null,
+              "largestPositiveNetUsd": null,
+              "largestPositiveCAShare": null,
+              "netExcludingLargestPositiveCAUsd": null
+            },
+            "treatment": {
+              "distinctCAs": 1,
+              "positiveNetUsd": 0,
+              "largestPositiveCA": null,
+              "largestPositiveNetUsd": null,
+              "largestPositiveCAShare": null,
+              "netExcludingLargestPositiveCAUsd": null
+            }
+          }
+        },
+        "coverage": {
+          "gapCount": 30,
+          "reasons": {
+            "missing_quote": 16,
+            "pre_entry_quote": 1,
+            "out_of_order_quote": 12,
+            "stale_quote": 1
+          }
+        }
+      }
+    ],
+    "armStateKeys": [
+      "0",
+      "1",
+      "2"
+    ],
+    "reportedIds": [
+      "1792274973724:305"
+    ]
+  },
+  "runtime": {
+    "at": "2026-10-19T06:16:22.229Z",
+    "status": 200,
+    "elapsedMs": 5996,
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "study": {
+      "status": "observing",
+      "error": null,
+      "summaryError": null,
+      "persistedAt": "2026-10-19T06:16:14.394Z",
+      "checkpoint": {
+        "tradeCount": 307,
+        "lastTradeId": "1792275648715:306",
+        "tradePrefixHash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437",
+        "accountUpdatedAt": "2026-10-19T06:16:13.711Z"
+      },
+      "baseline": {
+        "tradeCount": 305,
+        "lastTradeId": "1792250738005:304",
+        "tradePrefixHash": "dd8adde1337cddcf30dfee8f2a526fdfb7cbee2d4852e59ae616188302bce9ce",
+        "establishedAtMs": 1792252219527
+      },
+      "cursor": {
+        "tradeCount": 307,
+        "lastTradeId": "1792275648715:306",
+        "tradePrefixHash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437"
+      },
+      "closedPairs": 1,
+      "openPairs": 0
+    },
+    "exitMonitor": {
+      "running": true,
+      "intervalMs": 1000,
+      "lastCheckedAt": "2026-10-19T06:16:13.711Z",
+      "checks": 243,
+      "staleQuotes": 0,
+      "entriesEnabled": true,
+      "lastError": null
+    },
+    "quoteScheduler": {
+      "version": "evidence_preserving_event_lease_v1",
+      "rememberedEventLeases": 0,
+      "overflowPreemptionSuppressedUntil": null
+    },
+    "firstThree": {
+      "version": "paper_quote_asset_first_three_v1",
+      "mode": "paper",
+      "maxUniqueCA": 3,
+      "generationPolicyVersion": "paper_launch_generation_first_three_v2",
+      "supportedSources": [
+        "bsc:flap",
+        "bsc:fourmeme"
+      ],
+      "maxEventAgeMs": 120000,
+      "requiresChart": false,
+      "orderBasis": "链上 TokenCreated 的区块号、交易序号、日志序号；不是发现顺序或热门榜",
+      "coverageNote": "仅接入严格链上证明的 BSC Flap 底池配置与 OpenFour 模板代次；网页模板、无关联 Hook 或缺排序证据仍观察；其他发射台未覆盖，不推测排名"
+    },
+    "coverage": {
+      "version": "launch_update_coverage_v1",
+      "checkedAt": "2026-10-19T06:16:15.729Z",
+      "readOnly": true,
+      "status": "coverage_limited",
+      "platforms": {
+        "flap": {
+          "officialX": {
+            "handle": "flapdotsh",
+            "status": "stale",
+            "lastAttemptAt": null,
+            "lastSuccessAt": "2026-10-19T05:58:58.398Z",
+            "nextAttemptAt": null,
+            "ageMs": 1037331,
+            "lastErrorAt": "2026-10-19T06:15:48.176Z",
+            "lastErrorCode": null
+          },
+          "officialWeb": {
+            "status": "partial",
+            "total": 5,
+            "fresh": 0,
+            "unverified": 0,
+            "stale": 5,
+            "source_limited": 0,
+            "degraded": 0,
+            "metadata_only": 0
+          },
+          "documentBodies": {
+            "version": "official_document_body_v1",
+            "allowedPages": 59,
+            "uncheckedPages": 0,
+            "freshPages": 2,
+            "stalePages": 0,
+            "failedPages": 57,
+            "untrackedPages": 0,
+            "rosterOverflowPages": 0,
+            "pendingChanges": 2,
+            "omittedChangeCount": 0,
+            "nextDueAt": "2026-10-19T05:46:27.374Z",
+            "originNextAttemptAt": null,
+            "rosterDiscovery": {
+              "status": "partial",
+              "total": 1,
+              "fresh": 0,
+              "unverified": 0,
+              "stale": 1,
+              "source_limited": 0,
+              "degraded": 0,
+              "metadata_only": 0
+            },
+            "status": "partial"
+          },
+          "github": {
+            "status": "partial",
+            "total": 4,
+            "fresh": 0,
+            "unverified": 0,
+            "stale": 3,
+            "source_limited": 0,
+            "degraded": 1,
+            "metadata_only": 0,
+            "repositories": [
+              {
+                "repository": "flap-sh/flap-vault-component-template",
+                "status": "stale",
+                "lastAttemptAt": "2026-10-19T06:15:52.008Z",
+                "lastSuccessAt": "2026-10-19T05:58:44.725Z",
+                "nextAttemptAt": "2026-10-19T06:16:52.008Z",
+                "ageMs": 1051004,
+                "lastErrorAt": "2026-10-19T06:15:52.008Z",
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "stale",
+                  "lastAttemptAt": "2026-10-19T06:15:52.008Z",
+                  "lastSuccessAt": "2026-10-19T05:58:44.725Z",
+                  "nextAttemptAt": "2026-10-19T06:16:52.008Z",
+                  "ageMs": 1051004,
+                  "lastErrorAt": "2026-10-19T06:15:52.008Z",
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-10-19T05:58:44.725Z",
+                "observationBasis": "commit_poll"
+              },
+              {
+                "repository": "flap-sh/FlapVaultExample",
+                "status": "stale",
+                "lastAttemptAt": "2026-10-19T06:15:52.006Z",
+                "lastSuccessAt": "2026-10-19T05:58:44.685Z",
+                "nextAttemptAt": "2026-10-19T06:16:52.006Z",
+                "ageMs": 1051044,
+                "lastErrorAt": "2026-10-19T06:15:52.006Z",
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "stale",
+                  "lastAttemptAt": "2026-10-19T06:15:52.006Z",
+                  "lastSuccessAt": "2026-10-19T05:58:44.685Z",
+                  "nextAttemptAt": "2026-10-19T06:16:52.006Z",
+                  "ageMs": 1051044,
+                  "lastErrorAt": "2026-10-19T06:15:52.006Z",
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-10-19T05:58:44.685Z",
+                "observationBasis": "commit_poll"
+              },
+              {
+                "repository": "flap-sh/flap-skills",
+                "status": "stale",
+                "lastAttemptAt": "2026-10-19T06:15:52.009Z",
+                "lastSuccessAt": "2026-10-19T05:58:44.688Z",
+                "nextAttemptAt": "2026-10-19T06:16:52.009Z",
+                "ageMs": 1051041,
+                "lastErrorAt": "2026-10-19T06:15:52.009Z",
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "stale",
+                  "lastAttemptAt": "2026-10-19T06:15:52.009Z",
+                  "lastSuccessAt": "2026-10-19T05:58:44.688Z",
+                  "nextAttemptAt": "2026-10-19T06:16:52.009Z",
+                  "ageMs": 1051041,
+                  "lastErrorAt": "2026-10-19T06:15:52.009Z",
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-10-19T05:58:44.688Z",
+                "observationBasis": "commit_poll"
+              }
+            ],
+            "organizations": [
+              {
+                "organization": "flap-sh",
+                "status": "degraded",
+                "lastAttemptAt": null,
+                "lastSuccessAt": "2026-10-19T05:58:48.041Z",
+                "nextAttemptAt": null,
+                "ageMs": 1047688,
+                "lastErrorAt": "2026-10-19T06:09:07.678Z",
+                "lastErrorCode": null
+              }
+            ],
+            "repositoryCount": 3,
+            "candidateRepositories": 0
+          },
+          "onchain": {
+            "status": "stale",
+            "lastAttemptAt": "2026-10-19T06:13:08.961Z",
+            "lastSuccessAt": "2026-10-17T04:05:48.028Z",
+            "nextAttemptAt": "2026-10-19T06:18:15.733Z",
+            "ageMs": 180627701,
+            "lastErrorAt": "2026-10-19T06:13:08.961Z",
+            "lastErrorCode": null,
+            "adapterHealth": {
+              "status": "stale",
+              "lastAttemptAt": "2026-10-19T06:13:08.961Z",
+              "lastSuccessAt": "2026-10-17T04:05:48.028Z",
+              "nextAttemptAt": "2026-10-19T06:18:15.733Z",
+              "ageMs": 180627701,
+              "lastErrorAt": "2026-10-19T06:13:08.961Z",
+              "lastErrorCode": null
+            },
+            "checkpointAt": "2026-10-19T06:13:08.961Z",
+            "nextBlock": 128103371,
+            "headLagBlocks": null,
+            "liveHeadVerified": false,
+            "scope": "BSC pinned Portal quote adapter"
+          },
+          "coverageStatus": "bounded_sources_not_all_future_schemas"
+        },
+        "fourmeme": {
+          "officialX": {
+            "handle": "fourdotmemezh",
+            "status": "stale",
+            "lastAttemptAt": null,
+            "lastSuccessAt": "2026-10-19T05:58:53.303Z",
+            "nextAttemptAt": null,
+            "ageMs": 1042426,
+            "lastErrorAt": "2026-10-19T05:58:59.664Z",
+            "lastErrorCode": null
+          },
+          "officialWeb": {
+            "status": "partial",
+            "total": 13,
+            "fresh": 0,
+            "unverified": 0,
+            "stale": 13,
+            "source_limited": 0,
+            "degraded": 0,
+            "metadata_only": 0
+          },
+          "documentBodies": {
+            "version": "official_document_body_v1",
+            "allowedPages": 10,
+            "uncheckedPages": 0,
+            "freshPages": 0,
+            "stalePages": 0,
+            "failedPages": 10,
+            "untrackedPages": 0,
+            "rosterOverflowPages": 0,
+            "pendingChanges": 0,
+            "omittedChangeCount": 0,
+            "nextDueAt": "2026-10-19T06:12:59.016Z",
+            "originNextAttemptAt": null,
+            "rosterDiscovery": {
+              "status": "partial",
+              "total": 1,
+              "fresh": 0,
+              "unverified": 0,
+              "stale": 1,
+              "source_limited": 0,
+              "degraded": 0,
+              "metadata_only": 0
+            },
+            "status": "partial"
+          },
+          "github": {
+            "status": "partial",
+            "total": 6,
+            "fresh": 0,
+            "unverified": 0,
+            "stale": 2,
+            "source_limited": 0,
+            "degraded": 2,
+            "metadata_only": 2,
+            "repositories": [
+              {
+                "repository": "four-meme-community/openfour-docs",
+                "status": "stale",
+                "lastAttemptAt": "2026-10-19T06:15:52.009Z",
+                "lastSuccessAt": "2026-10-19T05:58:44.563Z",
+                "nextAttemptAt": "2026-10-19T06:16:48.360Z",
+                "ageMs": 1051166,
+                "lastErrorAt": "2026-10-19T06:15:52.009Z",
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "stale",
+                  "lastAttemptAt": "2026-10-19T06:15:52.009Z",
+                  "lastSuccessAt": "2026-10-19T05:58:44.563Z",
+                  "nextAttemptAt": "2026-10-19T06:16:48.360Z",
+                  "ageMs": 1051166,
+                  "lastErrorAt": "2026-10-19T06:15:52.009Z",
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-10-19T05:58:44.563Z",
+                "observationBasis": "commit_poll"
+              },
+              {
+                "repository": "four-meme-community/four-meme-ai",
+                "status": "stale",
+                "lastAttemptAt": "2026-10-19T06:16:08.107Z",
+                "lastSuccessAt": "2026-10-19T05:58:44.889Z",
+                "nextAttemptAt": "2026-10-19T06:17:00.378Z",
+                "ageMs": 1050840,
+                "lastErrorAt": "2026-10-19T06:16:08.107Z",
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "stale",
+                  "lastAttemptAt": "2026-10-19T06:16:08.107Z",
+                  "lastSuccessAt": "2026-10-19T05:58:44.889Z",
+                  "nextAttemptAt": "2026-10-19T06:17:00.378Z",
+                  "ageMs": 1050840,
+                  "lastErrorAt": "2026-10-19T06:16:08.107Z",
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-10-19T05:58:44.889Z",
+                "observationBasis": "commit_poll"
+              },
+              {
+                "repository": "four-meme-community/fourmeme-docs",
+                "status": "metadata_only",
+                "lastAttemptAt": "2026-10-19T06:13:15.918Z",
+                "lastSuccessAt": "2026-09-11T07:48:05.561Z",
+                "nextAttemptAt": "2026-10-19T06:18:15.918Z",
+                "ageMs": 3277690168,
+                "lastErrorAt": null,
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "fresh",
+                  "lastAttemptAt": "2026-10-19T06:13:15.918Z",
+                  "lastSuccessAt": "2026-10-19T06:13:15.918Z",
+                  "nextAttemptAt": "2026-10-19T06:18:15.918Z",
+                  "ageMs": 179811,
+                  "lastErrorAt": null,
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-09-11T07:48:05.561Z",
+                "observationBasis": "organization_metadata_unchanged"
+              },
+              {
+                "repository": "four-meme-community/openfour-boost-launchpad",
+                "status": "metadata_only",
+                "lastAttemptAt": "2026-10-19T06:13:32.035Z",
+                "lastSuccessAt": "2026-10-13T02:37:09.236Z",
+                "nextAttemptAt": "2026-10-19T06:18:32.035Z",
+                "ageMs": 531546493,
+                "lastErrorAt": null,
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "fresh",
+                  "lastAttemptAt": "2026-10-19T06:13:32.035Z",
+                  "lastSuccessAt": "2026-10-19T06:13:32.035Z",
+                  "nextAttemptAt": "2026-10-19T06:18:32.035Z",
+                  "ageMs": 163694,
+                  "lastErrorAt": null,
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-10-13T02:37:09.236Z",
+                "observationBasis": "organization_metadata_unchanged"
+              }
+            ],
+            "organizations": [
+              {
+                "organization": "four-meme-community",
+                "status": "degraded",
+                "lastAttemptAt": null,
+                "lastSuccessAt": "2026-10-19T05:58:47.590Z",
+                "nextAttemptAt": null,
+                "ageMs": 1048139,
+                "lastErrorAt": "2026-10-19T06:08:59.661Z",
+                "lastErrorCode": null
+              },
+              {
+                "organization": "four-meme",
+                "status": "degraded",
+                "lastAttemptAt": null,
+                "lastSuccessAt": "2026-10-19T05:58:45.396Z",
+                "nextAttemptAt": null,
+                "ageMs": 1050333,
+                "lastErrorAt": "2026-10-19T06:08:51.651Z",
+                "lastErrorCode": null
+              }
+            ],
+            "repositoryCount": 4,
+            "candidateRepositories": 1
+          },
+          "onchain": {
+            "adapterHealth": null,
+            "status": "checkpoint_only_unverified",
+            "checkpointAt": "2026-10-18T21:27:33.961Z",
+            "nextBlock": 127417539,
+            "headLagBlocks": null,
+            "liveHeadVerified": false,
+            "scope": "BSC pinned OpenFour registry adapter"
+          },
+          "coverageStatus": "bounded_sources_not_all_future_schemas"
+        }
+      },
+      "readErrors": [],
+      "executionBoundary": "更新正文仅作待核实观察；仅已绑定受支持链上版本且顺序核实的最早三个不同 CA 进入模拟评估，不补第四名，仍须通过时效、可卖性及仓位检查。",
+      "remainingGaps": [
+        "未知合约地址、事件 ABI 和同地址 Hook 新版本仍需核实适配",
+        "链上检查点不等于已追平链头；网站正常不等于狙击完整覆盖",
+        "X 上游来源受限或电脑离线时不保证连续覆盖"
+      ]
+    }
+  },
+  "health": {
+    "checkedAt": "2026-10-19T06:16:53.958Z",
+    "heartbeats": [
+      {
+        "version": 1,
+        "producer": "main",
+        "pid": 47058,
+        "startedAt": "2026-10-19T05:58:42.605Z",
+        "updatedAt": "2026-10-19T06:16:42.952Z",
+        "sequence": 37
+      },
+      {
+        "version": 1,
+        "producer": "bsc",
+        "pid": 47065,
+        "startedAt": "2026-10-19T05:58:43.497Z",
+        "updatedAt": "2026-10-19T06:16:45.571Z",
+        "sequence": 36
+      },
+      {
+        "version": 1,
+        "producer": "fomo",
+        "pid": 7258,
+        "startedAt": "2026-10-10T04:56:33.184Z",
+        "updatedAt": "2026-10-19T06:16:49.706Z",
+        "sequence": 26073
+      }
+    ],
+    "four": {
+      "cursor": {
+        "nextBlock": 127417539,
+        "anchorBlock": 127417538,
+        "anchorBlockHash": "0x142378383160b8dc3e8f4808739d82e84a7eef6426b3e3a6bc19149216956398"
+      },
+      "updatedAt": "2026-10-18T21:27:33.961Z",
+      "pending": 7,
+      "headAttempts": 1469
+    },
+    "flap": {
+      "cursor": {
+        "nextBlock": 128103371,
+        "afterLogIndex": -1,
+        "anchorBlock": 128103370,
+        "anchorBlockHash": "0xc0f5445175a135ce2db493a3eaa88a011e47e29c3a423d37183c6eac8e6ed395",
+        "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+      },
+      "health": {
+        "status": "degraded",
+        "consecutiveFailures": 591,
+        "lastSuccessAt": "2026-10-17T04:05:48.028Z",
+        "lastErrorAt": "2026-10-19T06:13:08.961Z",
+        "lastError": "primary BSC chain ID lookup failed: eth_chainId failed on every BSC RPC: bsc-mainnet.core.chainstack.com: request timed out after 6750ms",
+        "lastErrorCode": "FLAP_QUOTE_CHAIN_ID_UNAVAILABLE",
+        "reorgCount": 0,
+        "lastReorgAt": null,
+        "lastAttemptAt": "2026-10-19T06:13:08.961Z",
+        "nextAttemptAt": "2026-10-19T06:18:15.733Z",
+        "failureClass": "chain"
+      },
+      "identity": {
+        "chainId": 56,
+        "portal": "0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0",
+        "portalRuntimeCodeHash": "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3",
+        "version": "v5.24.0",
+        "implementation": "0x27a0f9Da7F5BEAd616fe0bf02bf0c793bece4e20",
+        "implementationCodeHash": "0xb191694f7248773f714234aeb150149a2b9af5d1ab483a53d31c19ec3132b230",
+        "verifiedBlock": 128103370,
+        "verifiedBlockHash": "0xc0f5445175a135ce2db493a3eaa88a011e47e29c3a423d37183c6eac8e6ed395",
+        "portalRuntimeCodeBytes": 2882,
+        "implementationCodeBytes": 20475
+      }
+    }
+  },
+  "nextGroup": "sol",
+  "nextReviewAt": "2026-10-19T10:14:53.001Z",
+  "remainingGaps": [
+    "A nonce158–161 transaction types unresolved; unchanged nonce not full activity coverage",
+    "Four cursor unchanged and seven queued events remain; repaired code not proof of runtime catch-up",
+    "Flap v5.24 pin vs independently observed v5.25 still unadapted, RPC failures ongoing",
+    "Four Robinhood deployment unverified/unadapted",
+    "Official X stale; Flap documents fresh2/59, Four0/10; two Flap content changes pending verification"
+  ],
+  "note": "No additional paper close or multiarm completed pair. Existing losing/untriggered pair and 30 quote gaps retained; no profit claim."
+}

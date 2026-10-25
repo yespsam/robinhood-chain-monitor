@@ -73,7 +73,7 @@ test('Four manager identity/phase and Flap fixed version/phase/extensions fail c
   for(const [i,value] of [[0,1],[1,OTHER],[11,true]]){const p=structuredClone(four),r=[...raw];r[i]=value;p.metadata.raw.info=spec.metadataAbi.encodeFunctionResult(spec.metadataMethod,r);assert.equal(normalizeInnerTradeWindow(p,NOW).ready,false);}
   const f=fixture('flap'),s=INNER_TRADE_EMITTERS.flap,state=s.metadataAbi.decodeFunctionResult(s.metadataMethod,f.metadata.raw.info)[0];
   for(const [i,value] of [[0,4],[4,8],[11,h(1)],[14,OTHER]]){const p=structuredClone(f),r=[...state];r[i]=value;p.metadata.raw.info=s.metadataAbi.encodeFunctionResult(s.metadataMethod,[r]);assert.equal(normalizeInnerTradeWindow(p,NOW).ready,false);}
-  f.metadata.raw.portalVersion=s.metadataAbi.encodeFunctionResult('version',['v5.25.0']);assert.equal(normalizeInnerTradeWindow(f,NOW).ready,false);
+  f.metadata.raw.portalVersion=s.metadataAbi.encodeFunctionResult('version',['v5.27.0']);assert.equal(normalizeInnerTradeWindow(f,NOW).ready,false);
 });
 
 test('Flap timestamp must equal real block header; zero volume and stale/future oracle fail',()=>{

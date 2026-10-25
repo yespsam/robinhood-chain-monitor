@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { evaluatePaperStrategies, createPaperStrategyAccount, advancePaperStrategyAccount, validatePaperStrategyAccount } from '../src/paper-strategy-engine.js';
-import { EVIDENCE_GAP_POLICY, applyEvidenceGapExit, recoveryEntryCheck } from '../src/paper-recovery-policy.js';
+import { EVIDENCE_GAP_POLICY, applyEvidenceGapExit, recoveryEntryCheck, entryFlowCheck, ENTRY_FLOW_VERSION } from '../src/paper-recovery-policy.js';
 import { paperPositionSize, validPaperPositionSize, PAPER_RECOVERY_SIZING_VERSION } from '../src/paper-position-sizing.js';
 import { normalizePlatformCall, GMGN_SOCIAL_VERSION } from '../src/gmgn-social-monitor.js';
 import { buildPaperNewsWire } from '../src/paper-news-wire.js';
@@ -35,6 +35,34 @@ const input=(address=CA)=>({...modes,token:token(address),nowMs:NOW,marketStatus
 const evaluate=i=>evaluatePaperStrategies(i)[0];
 const oldAccount=(address=CA)=>advancePaperStrategyAccount(createPaperStrategyAccount({nowMs:NOW}),{
   ...modes,evaluations:[evaluate(input(address))],nowMs:NOW});
+
+test('entry outflow veto binds supported chains and exact CA without inventing source coverage',()=>{
+  const sol='8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj';
+  for(const chain of ['bsc','sol','base','eth','robinhood']) {
+    const t={chain,address:chain==='sol'?sol:CA};
+    const f={...t,provider:'gmgn',scope:'public_tagged_wallets_not_full_market',status:'healthy',
+      fresh:true,complete:true,coverageGap:null,observedAt:iso(NOW),netBuyUsd:-10};
+    const check=entryFlowCheck(f,t,NOW);
+    assert.equal(check.version,ENTRY_FLOW_VERSION);assert.equal(check.blocked,true,chain);
+    for(const patch of [{netBuyUsd:0},{netBuyUsd:1},{netBuyUsd:null},{netBuyUsd:'-10'},
+      {fresh:false},{complete:false},{status:'partial'},{coverageGap:'page_missing'},
+      {observedAt:iso(NOW-120001)},{observedAt:iso(NOW+1)},{scope:null},
+      {provider:'unknown'},{provider:'bsc_portal_logs'},{chain:'unknown'},{address:OTHER}])
+      assert.equal(entryFlowCheck({...f,...patch},t,NOW).blocked,false,`${chain}: ${JSON.stringify(patch)}`);
+    assert.equal(entryFlowCheck(f,t,NOW,{afterObservedAt:iso(NOW)}).usable,false,'same snapshot is not newer cohort evidence');
+    assert.equal(entryFlowCheck(f,t,NOW,{afterObservedAt:iso(NOW+1)}).usable,false,'pre-signal aggregate is not later selling');
+    assert.equal(entryFlowCheck(f,t,NOW,{afterObservedAt:iso(NOW-1)}).blocked,true);
+    assert.equal(entryFlowCheck(f,t,NOW,{afterObservedAt:'invalid'}).usable,false);
+    const truncated={...f,complete:false,coverageGap:'proof_wallets_truncated',
+      preTruncationCoverage:{version:'source_flow_coverage_v1',complete:true,coverageGap:null}};
+    assert.equal(entryFlowCheck(truncated,t,NOW).blocked,true,'source aggregate survives local cohort truncation');
+    truncated.preTruncationCoverage.coverageGap='source_missing';
+    assert.equal(entryFlowCheck(truncated,t,NOW).usable,false);
+    if(chain==='sol')assert.equal(entryFlowCheck({...f,address:sol.toLowerCase()},t,NOW).usable,false,'Sol CA is case-sensitive');
+    else assert.equal(entryFlowCheck({...f,address:CA.toUpperCase().replace('0X','0x')},t,NOW).blocked,true);
+  }
+  assert.equal(entryFlowCheck({},{chain:'unknown',address:CA},NOW).applicable,false);
+});
 
 test('recovery distinguishes a fresh feed from actual new buying and two independent rising quotes',()=>{
   const good={...input(),recoveryMode:true};

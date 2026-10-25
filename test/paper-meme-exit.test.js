@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import {MEME_EXIT_VERSION,MEME_EXIT_POLICY,LEGACY_MEME_EXIT_POLICY,assessMemeExit,memeEntryContext,memeExitEvaluation} from '../src/paper-meme-exit.js';
+import {MEME_EXIT_VERSION,MEME_EXIT_FLOW_OBSERVATION_VERSION,MEME_EXIT_STRUCTURE_OBSERVATION_VERSION,MEME_EXIT_POLICY,LEGACY_MEME_EXIT_POLICY,assessMemeExit,memeEntryContext,memeExitEvaluation} from '../src/paper-meme-exit.js';
 import {createPaperStrategyAccount,advancePaperStrategyAccount,evaluatePaperStrategies,validatePaperStrategyAccount} from '../src/paper-strategy-engine.js';
 import {createPaperStrategyRuntime} from '../src/paper-strategy-runtime.js';
 import {createExitComparison,advanceExitComparison} from '../src/paper-exit-comparison.js';
@@ -153,6 +153,131 @@ test('continued selling needs new sell amounts from two same-source addresses, n
   }
   const rotating={...m,flow:flow(NOW+32000,[wallet(3,0,300),wallet(4,0,300)])};
   assert.equal(assessMemeExit(p,rotating,NOW+32000).exit,false,'unrelated wallets do not prove continued selling by the same group');
+});
+
+function frozenExitFixture(){
+  const addresses=['a','b'].map(x=>`0x${x.repeat(40)}`);
+  const rows=(amount,buy=false)=>addresses.map((address,i)=>({...wallet(i+1,buy?amount:0,buy?0:amount),wallet:address,
+    tags:buy?['smart_money']:[],highProfit:false}));
+  const p=pos();
+  p.entryEvidence.memeExitContext=memeEntryContext(token,{flow:flow(NOW,rows(300,true))},NOW);
+  return {p,addresses,first:{...quote(NOW+1000),flow:flow(NOW+1000,rows(400))},
+    second:{...quote(NOW+32000),flow:flow(NOW+32000,rows(500))}};
+}
+
+test('flow observation version identifies the algorithm without qualifying unknown evidence or mutating history',()=>{
+  assert.equal(MEME_EXIT_FLOW_OBSERVATION_VERSION,'entry_cohort_sell_retention_v1');
+  assert.equal(MEME_EXIT_STRUCTURE_OBSERVATION_VERSION,'independent_confirmed_trail_v1');
+  const {p,first}=frozenExitFixture(),original=structuredClone(p);
+  const known=assessMemeExit(p,first,NOW+1000);
+  assert.equal(known.flow.observationVersion,MEME_EXIT_FLOW_OBSERVATION_VERSION);
+  assert.equal(known.structureObservationVersion,MEME_EXIT_STRUCTURE_OBSERVATION_VERSION);
+  assert.equal(known.flow.usable,true);assert.equal(known.exit,false);
+  assert.equal(Object.hasOwn(known,'structure'),false,'missing-chart decisions retain their JSON-stable absent structure');
+  for(const change of [
+    (_p,m)=>delete m.flow,
+    (_p,m)=>m.flow.complete=false,
+    (_p,m)=>m.flow.provider='binance_kol',
+    (_p,m)=>m.flow.observedAt=iso(NOW-120001),
+    (_p,m)=>m.observedAt=iso(NOW-16000),
+    (position)=>position.memeExitPolicy.version='invalid_policy',
+  ]){
+    const position=structuredClone(p),m=structuredClone(first);change(position,m);
+    const before=structuredClone(position),d=assessMemeExit(position,m,NOW+1000);
+    assert.equal(d.flow.observationVersion,MEME_EXIT_FLOW_OBSERVATION_VERSION);
+    assert.equal(d.structureObservationVersion,MEME_EXIT_STRUCTURE_OBSERVATION_VERSION);
+    assert.equal(d.flow.usable,false);assert.equal(d.exit,false);
+    assert.deepEqual(position,before,'version diagnostics never backfill the entry or position');
+  }
+  assert.deepEqual(p,original);
+});
+
+test('ordinary frozen entry buyers remain exit-relevant after current smart tags expire',()=>{
+  const {p,addresses,first,second}=frozenExitFixture(),original=structuredClone(p.entryEvidence);
+  assert.equal(p.entryEvidence.collectiveSignal,undefined,'regression is outside the already retained algorithm cohort');
+  let d=assessMemeExit(p,first,NOW+1000);
+  assert.equal(d.flow.sellerCount,2);assert.equal(d.flowWatch.count,1);assert.equal(d.exit,false);
+  assert.equal(d.flow.frozenEntryCohortCount,2);assert.deepEqual(d.flow.retainedEntrySellers,addresses);
+  assert.match(d.flow.summary,/仅保留冻结入场身份，当前未获聪明钱资格/);
+  assert.deepEqual(d.flow.cohortSellers,addresses);p.thesisFlowWatch=d.flowWatch;
+  const unchanged=structuredClone(first);unchanged.observedAt=second.observedAt;unchanged.flow.observedAt=second.observedAt;
+  assert.equal(assessMemeExit(p,unchanged,NOW+32000).exit,false,'advancing the timestamp is still not new selling');
+  d=assessMemeExit(p,second,NOW+32000);assert.equal(d.exit,true);assert.equal(d.flow.confirmed,true);
+  assert.match(d.reason,/含冻结入场地址，不代表当前聪明钱资格/);
+  assert.deepEqual(p.entryEvidence,original,'frozen evidence is not refreshed or requalified');
+  assert.ok(second.flow.wallets.every(w=>!w.highProfit&&w.tags.length===0),'exit observation never manufactures current profit tags');
+  assert.deepEqual(memeEntryContext(token,{flow:second.flow},NOW+32000).smartBuyers,[],'retention does not grant a new entry qualification');
+  const buying=structuredClone(second);
+  buying.flow.netBuyUsd=1000;
+  buying.flow.wallets.forEach(w=>Object.assign(w,{buyUsd:500,sellUsd:0,netBuyUsd:500,lastBuyAt:NOW+32000,lastSellAt:null}));
+  const hold=assessMemeExit(p,buying,NOW+32000);
+  assert.equal(hold.flow.buyerCount,0);assert.equal(hold.flow.absorption,false,'expired labels cannot become new bullish absorption');
+});
+
+test('frozen exit cohort rejects unknown, truncated, malformed, stale-at-entry or conflicting provenance',()=>{
+  const changes=[
+    p=>p.entryEvidence.memeExitContext.cohortKnown=false,
+    p=>delete p.entryEvidence.memeExitContext.cohortKnown,
+    p=>p.entryEvidence.memeExitContext.cohortTruncated=true,
+    p=>delete p.entryEvidence.memeExitContext.cohortTruncated,
+    p=>p.entryEvidence.memeExitContext.smartBuyers='not an array',
+    p=>p.entryEvidence.memeExitContext.smartBuyers.push('invalid wallet'),
+    p=>p.entryEvidence.memeExitContext.smartBuyers.push(`0x${'A'.repeat(40)}`),
+    p=>p.entryEvidence.memeExitContext.smartBuyers.push(`0x${'0'.repeat(40)}`),
+    p=>p.entryEvidence.memeExitContext.observedAt=iso(NOW+1),
+    p=>p.entryEvidence.memeExitContext.observedAt=iso(NOW-120001),
+    p=>delete p.entryEvidence.memeExitContext.observedAt,
+    p=>p.entryEvidence.memeExitContext.provider='binance_kol',
+    p=>p.entryEvidence.flowDiagnostics.provider='binance_kol',
+    p=>delete p.entryEvidence.flowDiagnostics.provider,
+    p=>p.entryEvidence.memeExitContext.chain='bsc',
+    p=>p.entryEvidence.memeExitContext.address=`0x${'c'.repeat(40)}`,
+  ];
+  for(const change of changes){
+    const {p,first,second}=frozenExitFixture();change(p);
+    const firstDecision=assessMemeExit(p,first,NOW+1000);p.thesisFlowWatch=firstDecision.flowWatch;
+    const d=assessMemeExit(p,second,NOW+32000);
+    assert.equal(d.exit,false);assert.equal(d.flow.sellerCount,0);assert.equal(d.flowWatch,null);
+  }
+});
+
+test('retained cohort still needs bound fresh complete flow and recent incremental sells',()=>{
+  for(const change of [
+    m=>m.flow.complete=false,m=>m.flow.fresh=false,m=>m.flow.status='unknown',
+    m=>m.flow.coverageGap='missing_page',m=>m.flow.provider='binance_kol',
+    m=>m.flow.address=`0x${'c'.repeat(40)}`,m=>m.flow.chain='bsc',
+    m=>m.flow.observedAt=iso(NOW-90000),m=>m.flow.observedAt=iso(NOW+32001),
+    m=>m.flow.wallets.push(m.flow.wallets[0]),m=>m.flow.wallets.forEach(w=>w.lastSellAt=NOW),
+    m=>m.observedAt=iso(NOW+16000),
+  ]){
+    const {p,first,second}=frozenExitFixture();p.thesisFlowWatch=assessMemeExit(p,first,NOW+1000).flowWatch;
+    change(second);assert.equal(assessMemeExit(p,second,NOW+32000).exit,false);
+  }
+  const {p,first,second}=frozenExitFixture();
+  p.entryEvidence.memeExitContext.smartBuyers=p.entryEvidence.memeExitContext.smartBuyers.map(w=>`0x${w.slice(2).toUpperCase()}`);
+  p.thesisFlowWatch=assessMemeExit(p,first,NOW+1000).flowWatch;
+  const normalized=assessMemeExit(p,second,NOW+32000);
+  assert.equal(normalized.exit,true,'EVM case canonicalizes without duplicating wallet identities');
+  assert.deepEqual(normalized.flow.cohortSellers,second.flow.wallets.map(w=>w.wallet));
+});
+
+test('frozen exit cohort keeps chain identity, including case-sensitive Solana addresses',()=>{
+  for(const chain of ['bsc','sol','robinhood']){
+    const fixture=frozenExitFixture(),address=chain==='sol'?'C'.repeat(32):CA;
+    const identities=chain==='sol'?['A'.repeat(32),'B'.repeat(32)]:fixture.addresses;
+    const p={...fixture.p,chain,address};
+    const remap=m=>({...m,chain,address,flow:{...m.flow,chain,address,
+      wallets:m.flow.wallets.map((w,i)=>({...w,wallet:identities[i]}))}});
+    const first=remap(fixture.first),second=remap(fixture.second);
+    p.entryEvidence.memeExitContext.smartBuyers=[...identities];
+    p.thesisFlowWatch=assessMemeExit(p,first,NOW+1000).flowWatch;
+    assert.equal(assessMemeExit(p,second,NOW+32000).exit,true,chain);
+    if(chain==='sol'){
+      const differentCase=structuredClone(second);differentCase.flow.wallets.forEach(w=>w.wallet=w.wallet.toLowerCase());
+      const d=assessMemeExit(p,differentCase,NOW+32000);
+      assert.equal(d.flow.sellerCount,0);assert.equal(d.exit,false,'lowercasing would incorrectly merge different Solana accounts');
+    }
+  }
 });
 
 test('Binance smartmoney source has no tags; KOL does not become smart money and cohort silence is unknown',()=>{

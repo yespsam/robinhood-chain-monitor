@@ -1,0 +1,241 @@
+{
+  "version": "monitor_repair_audit_v1",
+  "checkedAt": "2026-10-19T06:04:29.952Z",
+  "request": "为什么会这样 修复他",
+  "status": "partially_repaired_residual_provider_and_identity_gaps",
+  "report": "docs/monitor-repair-2026-10-19.md",
+  "backup": "data/backups/monitor-repair-20261019-h1dM9n",
+  "repaired": [
+    {
+      "component": "profitRetentionObserver",
+      "status": "deployed_observing",
+      "cause": "summary exception permanently poisoned observer; exact historical triggering exception unavailable",
+      "reproduction": "snapshot clock earlier than persisted state, including 1 ms",
+      "scope": "transient invalid snapshot time no longer destroys write queue; strict no-active-pair unchanged-trade recovery only"
+    },
+    {
+      "component": "fourRegistryTerminalReceipt",
+      "status": "code_deployed_runtime_acceptance_blocked",
+      "cause": "durably policy-suppressed exact event incorrectly treated as retryable",
+      "pending": 7,
+      "headAttempts": 1469,
+      "receiptSemantics": "exact persisted terminal suppression is retained, not called delivered"
+    },
+    {
+      "component": "launchCoverageHealth",
+      "status": "deployed",
+      "cause": "historical lastError permanently degraded later healthy success",
+      "scope": "time-ordered display only; genuine newer/unknown failures remain degraded"
+    }
+  ],
+  "tests": [
+    {
+      "suite": "retention and coverage selected regression batch",
+      "passed": 63,
+      "failed": 0
+    },
+    {
+      "suite": "retention runtime and three Four suites",
+      "passed": 106,
+      "failed": 0
+    },
+    {
+      "suite": "final coverage health tests",
+      "passed": 9,
+      "failed": 0
+    }
+  ],
+  "processes": {
+    "dashboard": {
+      "originalPid": 36673,
+      "intermediatePid": 46547,
+      "pid": 48679,
+      "stopAt": "2026-10-19T05:56:48.440Z",
+      "startAt": "2026-10-19T05:57:22.593Z",
+      "displayStopAt": "2026-10-19T06:02:23.673Z",
+      "displayStartAt": "2026-10-19T06:03:09.685Z"
+    },
+    "main": {
+      "originalPid": 18883,
+      "pid": 47058,
+      "stopAt": "2026-10-19T05:58:24.208Z",
+      "startAt": "2026-10-19T05:58:41.801Z"
+    },
+    "bsc": {
+      "originalPid": 18951,
+      "pid": 47065
+    },
+    "gmgnX": {
+      "pid": 7258,
+      "restarted": false
+    }
+  },
+  "preservation": {
+    "sourceTradeCountBefore": 307,
+    "sourceTradeCountAfter": 307,
+    "lastTradeId": "1792275648715:306",
+    "tradeHashBefore": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437",
+    "tradeHashAfter": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437",
+    "baselineUnchanged": true,
+    "pairHistoryUnchanged": [
+      true,
+      true,
+      true
+    ],
+    "rebuiltStudy": false,
+    "modifiedStrategyParameters": false,
+    "manuallyDeletedLocks": false
+  },
+  "studyObservationGap": {
+    "version": "profit_retention_observer_coverage_v1",
+    "interruptionCount": 1,
+    "interruptions": [
+      {
+        "reason": "no_active_pairs_mark_only_gap",
+        "fromAccountUpdatedAt": "2026-10-18T05:08:20.635Z",
+        "toAccountUpdatedAt": "2026-10-19T05:56:27.719Z",
+        "detectedAtMs": 1792389444407,
+        "tradeCount": 307,
+        "tradePrefixHash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437"
+      }
+    ]
+  },
+  "verifiedRuntime": {
+    "at": "2026-10-19T06:03:43.797Z",
+    "status": 200,
+    "elapsedMs": 5457,
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "study": {
+      "status": "observing",
+      "error": null,
+      "persistedAt": "2026-10-19T06:03:37.340Z",
+      "keys": [
+        "version",
+        "sessionId",
+        "mode",
+        "execution",
+        "signing",
+        "broadcast",
+        "pairedCohort",
+        "status",
+        "policy",
+        "baseline",
+        "cursor",
+        "startedAtMs",
+        "updatedAtMs",
+        "closedPairs",
+        "openPairs",
+        "excludedPairs",
+        "ineligibleEntries",
+        "admissionStopped",
+        "sharedCoverage",
+        "arms",
+        "note",
+        "enabled",
+        "error",
+        "summaryError",
+        "configuredPriceMultiples",
+        "checkpoint",
+        "persistedAt",
+        "pendingWrite",
+        "lastCommitPath",
+        "observerCoverage"
+      ]
+    },
+    "exitMonitor": {
+      "running": true,
+      "intervalMs": 1000,
+      "lastCheckedAt": "2026-10-19T06:03:31.244Z",
+      "checks": 7,
+      "staleQuotes": 0,
+      "entriesEnabled": true,
+      "lastError": null
+    },
+    "quoteScheduler": {
+      "version": "evidence_preserving_event_lease_v1",
+      "rememberedEventLeases": 0,
+      "overflowPreemptionSuppressedUntil": null
+    },
+    "coverage": {
+      "flap": {
+        "web": {
+          "status": "partial",
+          "total": 5,
+          "fresh": 0,
+          "unverified": 0,
+          "stale": 2,
+          "source_limited": 0,
+          "degraded": 3,
+          "metadata_only": 0
+        },
+        "x": "stale",
+        "onchain": "stale"
+      },
+      "fourmeme": {
+        "web": {
+          "status": "partial",
+          "total": 13,
+          "fresh": 0,
+          "unverified": 0,
+          "stale": 7,
+          "source_limited": 0,
+          "degraded": 6,
+          "metadata_only": 0
+        },
+        "x": "stale",
+        "onchain": "checkpoint_only_unverified"
+      }
+    }
+  },
+  "remainingGaps": [
+    {
+      "component": "Four scan",
+      "status": "provider_blocked",
+      "nextBlock": 127417539,
+      "pending": 7,
+      "note": "canonical RPC checks precede queue drain; timeout/cooldown prevented live acceptance of terminal-receipt fix"
+    },
+    {
+      "component": "Flap",
+      "status": "blocked_evidence_and_rpc",
+      "pinnedVersion": "v5.24.0",
+      "observedVersion": "v5.25.0",
+      "nextBlock": 128103371,
+      "evidence": "docs/flap-portal-v5.25.0-investigation-2026-10-19.json",
+      "missing": [
+        "canonical upgrade receipt and activation block",
+        "new implementation bound ABI/code evidence",
+        "type7 buy/sell capability proof",
+        "explicit predecessor-preserving migration tests"
+      ]
+    },
+    {
+      "component": "sources",
+      "status": "intermittent_timeout",
+      "note": "individual post-reload successes do not close all document/X coverage gaps; latest coverage remains partial"
+    },
+    {
+      "component": "performance",
+      "status": "not_fully_resolved",
+      "note": "API responded in 5.457 seconds at final check; ~724 MiB alert outbox full parsing/serialization and DNS waits are observed risks, not proven unique root cause"
+    }
+  ],
+  "safety": {
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "additionalJevCalls": 0,
+    "restoredFomoPlatform": false,
+    "changedRateLimits": false
+  },
+  "nextChecks": [
+    "verify Four canonical RPC and cursor progression without bypassing shared cooldown",
+    "obtain Flap upgrade and ABI/quote compatibility evidence before any pin migration",
+    "confirm study persistedAt advances with unchanged baseline and report only new complete IDs",
+    "separately profile large alert outbox storage without deleting audit history or weakening validation"
+  ]
+}

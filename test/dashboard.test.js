@@ -8,6 +8,7 @@ import { createDashboardServer } from '../scripts/dashboard-server.js';
 import { renderTradeCountReview } from '../dashboard/trade-count-review.js';
 import { renderNewsWire } from '../dashboard/news-wire.js';
 import { entryStatus } from '../dashboard/entry-status.js';
+import { strategyCohortSummary } from '../dashboard/strategy-cohorts.js';
 
 test('recovery lane budget shows current capped cash fraction, not the retired two-percent label',()=>{
   const app=fs.readFileSync(new URL('../dashboard/app.js',import.meta.url),'utf8');
@@ -159,7 +160,7 @@ test('evidence-hold strategy card has no fixed duration and accurately retains t
     document: { querySelectorAll: () => [] }, $: key => nodes[key] ||= { nextElementSibling: exitNote, querySelectorAll:()=>[] },
     num: n => Number(n) || 0, finite: n => typeof n === 'number' && Number.isFinite(n),
     STRATEGY_LABELS: { smart_money: '聪明钱跟踪' }, statusLabel: String, humanText: String, money: String,
-    escapeHtml: String, renderStrategyDetails: () => '', renderTradeCountReview, renderNewsWire, signedMoney: String, shortAddress: String };
+    escapeHtml: String, renderStrategyDetails: () => '', renderTradeCountReview, renderNewsWire, strategyCohortSummary, signedMoney: String, shortAddress: String };
   vm.runInNewContext(`${source}\nrenderStrategies();`, context);
   assert.match(nodes['#strategyLanes'].innerHTML, /按行情，无固定时限/);
   assert.match(nodes['#strategyLanes'].innerHTML, /固定单笔 10 U/);
@@ -173,12 +174,16 @@ test('evidence-hold strategy card has no fixed duration and accurately retains t
   assert.match(nodes['#strategyObjective'].textContent, /无开仓次数、固定冷却或持仓个数上限/);
   assert.doesNotMatch(nodes['#strategyObjective'].textContent, /每小时最多|每日最多|日亏损和总亏损保护保持/);
   context.state.snapshot.lossGuards={enforced:true,triggered:true};
-  context.state.snapshot.entryGuard={lossReview:{completedRounds:15},traderReview:{overall:{closedRounds:15}}};
+  context.state.snapshot.entryGuard={lossReview:{completedRounds:15},traderReview:{overall:{closedRounds:15},
+    cohorts:[{closedRounds:15,reasoningVersion:'evidence_first_v1',exitVersion:'evidence_hold_v1'}]}};
   vm.runInNewContext(`${source}\nrenderStrategies();`, context);
   for(const key of ['#strategyObjective','#tradeReviewNote','#traderReasoningNote']){
     assert.match(nodes[key].textContent,/达到本金 10% 会暂停新仓/);
     assert.doesNotMatch(nodes[key].textContent,/亏损及次数只记录|不因日亏损或总亏损停机|连亏不暂停/);
   }
+  assert.match(nodes['#traderReasoningNote'].textContent,/历史全部完整平仓 15 笔/);
+  assert.match(nodes['#traderReasoningNote'].textContent,/当前已声明规则同版本已平仓 0 笔/);
+  assert.match(nodes['#traderReasoningNote'].textContent,/版本证据不足 15 笔/,'missing runtime/version proofs are not presented as current-version performance');
   context.state.snapshot.newsWire={};context.state.snapshot.narrativeDesk={cases:[{chain:'bsc',address:'0x1',symbol:'demo'}]};
   nodes['#newsWireContent'].querySelectorAll=selector=>{assert.equal(selector,'details[data-narrative-case][open]');return [{dataset:{narrativeCase:'bsc:0x1'}}];};
   vm.runInNewContext(`${source}\nrenderStrategies();`,context);
@@ -194,7 +199,7 @@ test('multi-setup dashboard shows independent Chinese routes, not six copies of 
       observedCount:3,eligibleCount:1,reasons:[],exitPolicy:{version:'evidence_hold_v1'},stopLoss:.06}] } },
     document:{querySelectorAll:()=>[]}, $:key=>nodes[key] ||= {nextElementSibling:exitNote,querySelectorAll:()=>[]},num:n=>Number(n)||0,
     finite:n=>typeof n==='number'&&Number.isFinite(n),STRATEGY_LABELS:{smart_money:'聪明钱跟踪'},statusLabel:String,humanText:String,
-    money:String,escapeHtml:String,renderStrategyDetails:()=>'',renderTradeCountReview,renderNewsWire,signedMoney:String,shortAddress:String };
+    money:String,escapeHtml:String,renderStrategyDetails:()=>'',renderTradeCountReview,renderNewsWire,strategyCohortSummary,signedMoney:String,shortAddress:String };
   vm.runInNewContext(`${source}\nrenderStrategies();`,context);
   assert.match(nodes['#strategyLanes'].innerHTML,/外盘放量突破/);
   assert.match(nodes['#strategyLanes'].innerHTML,/真实收盘突破压力位/);

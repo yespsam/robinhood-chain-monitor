@@ -6,6 +6,8 @@ import { advanceStructureTrail } from './paper-structure-trail.js';
 
 export const LEGACY_MEME_EXIT_VERSION = 'meme_evidence_exit_v1';
 export const MEME_EXIT_VERSION = 'meme_evidence_exit_v2';
+export const MEME_EXIT_FLOW_OBSERVATION_VERSION = 'entry_cohort_sell_retention_v1';
+export const MEME_EXIT_STRUCTURE_OBSERVATION_VERSION = 'independent_confirmed_trail_v1';
 export const MEME_EXIT_POLICY = Object.freeze({version:MEME_EXIT_VERSION,mode:'paper_main_forward',
   fixedStop:false,fixedProfitTiers:false,trailingPercent:false,timeExit:false,
   exitQuoteMaxAgeMs:15000,flowMaxAgeMs:120000,flowConfirmationMs:30000,
@@ -27,6 +29,23 @@ function onchainCohort(token,evidence) {
   const wallets=s.buyers.map(w=>gmgnFlowAddress('bsc',w?.wallet));
   if(wallets.some(w=>!/^0x[\da-f]{40}$/.test(w||''))||new Set(wallets).size!==wallets.length)return null;
   return wallets;
+}
+// Frozen entry observations remain exit-relevant after a performance cache or
+// current feed tag expires. This is lot-local provenance, not a new smart-money
+// qualification. The ledger binds the context to its position; reject any
+// supplied conflicting identity rather than borrowing another lot's cohort.
+function frozenSmartCohort(position,provider) {
+  const entry=position.entryEvidence,context=entry?.memeExitContext;
+  const address=gmgnFlowAddress(position.chain,position.address),opened=at(position.openedAt);
+  if(!address||!['gmgn','binance_smartmoney','binance_kol'].includes(provider)
+    ||entry?.flowDiagnostics?.provider!==provider||context?.provider!==provider
+    ||context.cohortKnown!==true||context.cohortTruncated!==false
+    ||!fresh(context.observedAt,opened,MEME_EXIT_POLICY.flowMaxAgeMs)
+    ||context.chain!==undefined&&context.chain!==position.chain
+    ||context.address!==undefined&&gmgnFlowAddress(position.chain,context.address)!==address
+    ||!Array.isArray(context.smartBuyers)||context.smartBuyers.length>200)return null;
+  const wallets=context.smartBuyers.map(w=>typeof w==='string'?gmgnFlowAddress(position.chain,w):null);
+  return wallets.some(w=>!w)||new Set(wallets).size!==wallets.length?null:wallets;
 }
 const identity = s => s.sourceId || s.sourceUrl;
 export const validMemeExitPolicy = p => [MEME_EXIT_POLICY,LEGACY_MEME_EXIT_POLICY].some(policy=>!!p
@@ -91,27 +110,38 @@ export function memeExitEvaluation(row,context) {
 
 export function assessMemeExit(position,mark,nowMs) {
   if (!validMemeExitPolicy(position.memeExitPolicy)) return {version:MEME_EXIT_VERSION,status:'unavailable',exit:false,
-    flowWatch:null,reason:'持仓退出版本异常，不能生成卖出'};
+    structureObservationVersion:MEME_EXIT_STRUCTURE_OBSERVATION_VERSION,
+    flow:{observationVersion:MEME_EXIT_FLOW_OBSERVATION_VERSION,usable:false},flowWatch:null,reason:'持仓退出版本异常，不能生成卖出'};
   // Reuse audited closed-bar analysis, not its aggregate-flow confirmation rule.
   const version=position.memeExitPolicy.version;
-  let base=assessThesisExit({...position,exitExperiment:{...THESIS_EXIT_POLICY}}, {...mark,flow:null}, nowMs);
-  if (!base.sentiment) return {...base,version};
+  const originalBase=assessThesisExit({...position,exitExperiment:{...THESIS_EXIT_POLICY}}, {...mark,flow:null}, nowMs);
+  if (!originalBase.sentiment) return {...originalBase,version,structureObservationVersion:MEME_EXIT_STRUCTURE_OBSERVATION_VERSION,
+    flow:{observationVersion:MEME_EXIT_FLOW_OBSERVATION_VERSION,usable:false}};
   const dynamic=version===MEME_EXIT_VERSION;
   const structureTrail=dynamic?advanceStructureTrail(position,mark):null;
-  const raised=structureTrail && base.structure && structureTrail.level>base.structure.referenceLevel;
-  if(raised)base=assessThesisExit({...position,exitExperiment:{...THESIS_EXIT_POLICY}}, {...mark,flow:null}, nowMs,
-    {referenceLevel:structureTrail.level,referenceKind:'入场后已确认的抬高低点'});
+  // The confirmed swing low is independent evidence. A higher fallback EMA
+  // must not hide two closed bars below it on routes without a frozen anchor.
+  // Keep the original breakdown/distribution assessment as a parallel guard.
+  const trailAssessment=structureTrail?assessThesisExit({...position,exitExperiment:{...THESIS_EXIT_POLICY}}, {...mark,flow:null}, nowMs,
+    {referenceLevel:structureTrail.level,referenceKind:'入场后已确认的抬高低点'}):null;
+  const trailStructure=trailAssessment?.structure||null;
+  const raised=trailStructure && originalBase.structure && structureTrail.level>originalBase.structure.referenceLevel;
+  const base=raised?trailAssessment:originalBase;
   const opened=at(position.openedAt), observed=at(mark.observedAt),p=MEME_EXIT_POLICY;
   const entry=position.entryEvidence?.memeExitContext;
   const provider=entry?.provider||position.entryEvidence?.flowDiagnostics?.provider||'gmgn';
   const f=walletFlow(mark.flow,position,observed,provider);
   if(f.usable && at(f.observedAt)<=opened){f.usable=false;f.reason='等待入场后的资金流窗口';}
-  // A frozen algorithm entry cohort remains observable when its performance
-  // cache expires. Expiring profit tags must not hide those buyers' new sales.
+  // Frozen entry cohorts remain observable when their performance cache or
+  // feed tags expire, without promoting ordinary onchain wallets to smart money.
   const onchain=provider===onchainProvider;
   const entryWallets=onchain?(onchainCohort(position,position.entryEvidence)||[]):position.entryEvidence?.collectiveSignal?.buyers?.map(w=>w.wallet)||[];
+  const frozenCohort=onchain?null:frozenSmartCohort(position,provider),frozenBuyers=frozenCohort||[];
   const relevant=w=>onchain?entryWallets.includes(w.wallet):smart(w)||entryWallets.includes(w.wallet);
-  const sellers=f.usable?f.wallets.filter(w=>relevant(w)&&w.netBuyUsd<=-p.minWalletNetUsd):[];
+  // Retention only reveals their sales; expired labels do not become fresh
+  // bullish absorption that could suppress an otherwise valid structure exit.
+  const sellers=f.usable?f.wallets.filter(w=>(relevant(w)||frozenBuyers.includes(w.wallet))&&w.netBuyUsd<=-p.minWalletNetUsd):[];
+  const retainedEntrySellers=sellers.filter(w=>frozenBuyers.includes(w.wallet)&&!smart(w)).map(w=>w.wallet);
   const buyers=f.usable?f.wallets.filter(w=>relevant(w)&&w.netBuyUsd>=p.minWalletNetUsd):[];
   const threshold=Math.max(p.minNetFlowUsd,Math.max(0,position.entryEvidence?.flow?.netBuyUsd||0)*p.entryFlowReversalFraction);
   const reversed=f.usable&&f.netBuyUsd<=-threshold&&sellers.length>=p.minSmartWallets;
@@ -133,26 +163,29 @@ export function assessMemeExit(position,mark,nowMs) {
   const followups=narrative.sources.filter(s=>at(s.sourceAt)>opened&&!s.contentConflict&&!entry?.narrativeSourceIds?.includes(identity(s)));
   const narrativeState=contested?'待复核':narrative.eligible&&followups.length?'出现后续原文':narrative.sources.length?'只有背景文案':'缺少原文';
   const narrativeSummary=`${narrativeState}；${narrative.quality}。${followups.length} 条入场后新出处，不等于 ${followups.length} 个独立利好。${contested?'否认/争议词仅提示复核，不能单独触发卖出。':'不把旧文案、热度或沉默当作后续发展已确认。'}`;
-  const cohortBuyers=onchain?entry?.cohortBuyers:entry?.smartBuyers;
+  const cohortBuyers=onchain?entry?.cohortBuyers:frozenCohort;
   const cohortSellers=entry?.cohortKnown&&Array.isArray(cohortBuyers)?sellers.filter(w=>cohortBuyers.includes(w.wallet)).map(w=>w.wallet):null;
   const structure=base.structure;
-  let exit=false,status='observing',reason='继续观察，尚无确认的退出证据；不代表叙事或趋势已获验证';
-  if(flowWatch?.count===2){exit=true;reason=onchain?'同源已核链上窗口中至少两个入场普通地址出现持续新增卖出，资金依据失效；不代表聪明钱或同控':'同源完整窗口中至少两个聪明钱地址出现持续新增卖出，资金依据失效';}
-  else if(structure?.heavyBreak||structure?.distribution){exit=true;reason=base.reason;}
+  const strongBreak=[originalBase,trailAssessment].find(d=>d?.structure?.heavyBreak||d?.structure?.distribution);
+  let exit=false,exitStructure=null,status='observing',reason='继续观察，尚无确认的退出证据；不代表叙事或趋势已获验证';
+  if(flowWatch?.count===2){exit=true;reason=onchain?'同源已核链上窗口中至少两个入场普通地址出现持续新增卖出，资金依据失效；不代表聪明钱或同控':retainedEntrySellers.length?'同源完整窗口中至少两个退出观察地址出现持续新增卖出，资金依据失效；含冻结入场地址，不代表当前聪明钱资格':'同源完整窗口中至少两个聪明钱地址出现持续新增卖出，资金依据失效';}
+  else if(strongBreak){exit=true;exitStructure=strongBreak.structure;reason=strongBreak.reason;}
   else if(contested&&structure?.twoBelow&&reversed){exit=true;reason='叙事争议信号伴随关键位失守和多地址净卖出，联合依据失效；非仅按文案词语卖出';}
-  else if(raised&&structure?.twoBelow&&!absorption){exit=true;reason='上涨后确认的抬高低点连续两根收盘失守，未见有效买盘承接；按动态结构退出，非固定回撤比例';}
+  else if(trailStructure?.twoBelow&&!absorption){exit=true;exitStructure=trailStructure;reason='上涨后确认的抬高低点连续两根收盘失守，未见有效买盘承接；按动态结构退出，非固定回撤比例';}
   else if(structure?.threeBelow&&!absorption){exit=true;reason='连续收盘失守关键位，未见可核实承接；按已确认结构失效退出，不是按亏损百分比';}
   else if(structure?.twoBelow&&absorption){status='supported_pullback';reason='回踩期间可见多地址净买入承接，尚未确认放量破位或持续卖出；继续观察，不认定庄家洗盘';}
   else if(!structure){status='unavailable';reason='量价结构待补；叙事和资金证据分别展示，缺失不等于趋势健康';}
-  const flowSummary=f.usable?`同源窗口净流入 ${f.netBuyUsd.toFixed(2)} U，${onchain?'冻结入场普通地址群':'聪明钱标签'}净买 ${buyers.length} / 净卖 ${sellers.length} 个地址（入场后近期买入 ${newBuyers.length} 个）；${cohortSellers===null?'入场地址群未知':`入场买家中 ${cohortSellers.length} 个转为净卖出`}。无活动不能证明未减仓。`:f.reason;
+  const flowSummary=f.usable?`同源窗口净流入 ${f.netBuyUsd.toFixed(2)} U，${onchain?'冻结入场普通地址群':'当前标签/画像及冻结入场地址的退出观察范围'}净买 ${buyers.length} / 净卖 ${sellers.length} 个地址（入场后近期买入 ${newBuyers.length} 个）；${cohortSellers===null?'入场地址群未知':`入场买家中 ${cohortSellers.length} 个转为净卖出`}。${retainedEntrySellers.length?`${retainedEntrySellers.length} 个卖出地址仅保留冻结入场身份，当前未获聪明钱资格；不作为新买盘承接。`:''}无活动不能证明未减仓。`:f.reason;
   const holders=holderEvidence(position,mark.holderSnapshot,observed);
   const legacy=dynamic?assessMemeExit({...position,memeExitPolicy:LEGACY_MEME_EXIT_POLICY,structureTrail:undefined},mark,nowMs):null;
-  return {...base,version,status:exit?'invalidated':status,exit,reason,flowWatch,
-    ...(dynamic?{structureTrail,comparison:{version:LEGACY_MEME_EXIT_VERSION,exit:legacy.exit,reason:legacy.reason,
+  return {...base,version,structureObservationVersion:MEME_EXIT_STRUCTURE_OBSERVATION_VERSION,status:exit?'invalidated':status,exit,reason,flowWatch,
+    ...(exitStructure?{structure:exitStructure}:{}),
+    ...(dynamic?{structureTrail,baseStructure:originalBase.structure||null,trailStructure,comparison:{version:LEGACY_MEME_EXIT_VERSION,exit:legacy.exit,reason:legacy.reason,
       meaning:'同一当前观测下的旧规则判断，仅决策对照；不虚构卖价或对照收益'}}:{}),
     sentiment:{...base.sentiment,meaning:narrativeSummary},
     narrative:{state:narrativeState,summary:narrativeSummary,followups:followups.slice(0,3).map(s=>({sourceUrl:s.sourceUrl,sourceAt:s.sourceAt,text:s.text})),gaps:narrative.gaps},
-    flow:{usable:f.usable,provider,netBuyUsd:f.usable?f.netBuyUsd:null,buyerCount:buyers.length,sellerCount:sellers.length,
+    flow:{observationVersion:MEME_EXIT_FLOW_OBSERVATION_VERSION,usable:f.usable,provider,netBuyUsd:f.usable?f.netBuyUsd:null,buyerCount:buyers.length,sellerCount:sellers.length,
+      frozenEntryCohortCount:frozenBuyers.length,retainedEntrySellers,
       cohortSellers,absorption,reversed,confirmed:flowWatch?.count===2,summary:flowSummary,scope:f.scope||null},
     operator:{status:'unverified',holders,summary:holders.summary+' '+(structure?.distribution?'观察到放量长上影后跌破的派发形态；不能据此确认庄家身份或意图。':'庄家身份、共同控制与完整持仓变化未核实；不输出“庄家吸筹/洗盘”确定结论。')},
     evidenceScope:'基于可见行情和已采集来源的规则判断；不是 AI 预测，不自动进化参数'};

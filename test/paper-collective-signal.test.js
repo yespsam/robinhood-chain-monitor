@@ -233,6 +233,28 @@ test('single writer rechecks exact wallet proof and source expiry, not the UI re
   assert.equal(advance(original,{nowMs:NOW+6000}).trades.length,0);
 });
 
+test('newer complete selling vetoes an old collective buy signal at evaluation and single writer',()=>{
+  const i=input(),later=NOW+1000;
+  i.nowMs=later;i.observedAt=iso(later);i.priceObservedAt=iso(later);
+  i.quoteHistory=[{...i.token,status:'ok',observedAt:iso(later)}];
+  const good=evaluate(i);assert.equal(good.decision,'可模拟');
+  const outflow={...i.flow,observedAt:iso(later),netBuyUsd:-5400,uniqueBuyerCount:0,smartMoneyCount:0,highProfitCount:0,
+    wallets:i.flow.wallets.map(w=>({...w,buyUsd:200,sellUsd:2000,netBuyUsd:-1800,lastSellAt:iso(later)}))};
+  const bad=evaluate({...i,flow:outflow});
+  assert.equal(bad.decision,'观察');assert.equal(bad.evidence.recoveryCheck.entryFlow.blocked,true);
+  assert.equal(bad.evidence.opportunity.signalReady,false);
+  assert.equal(advance(bad,{nowMs:later}).trades.length,0);
+  const forged=structuredClone(good);forged.evidence.recoveryEntry.flow=structuredClone(outflow);
+  assert.equal(advance(forged,{nowMs:later}).trades.length,0,'ready UI flags cannot bypass newer raw outflow');
+  for(const patch of [{observedAt:iso(NOW-1)},{observedAt:iso(NOW)},{complete:false},
+    {coverageGap:'missing_page'},{observedAt:iso(NOW-120001)},{address:address(99)}]) {
+    const row=evaluate({...i,flow:{...outflow,...patch}});
+    assert.equal(row.evidence.recoveryCheck.entryFlow.blocked,false,JSON.stringify(patch));
+    assert.equal(row.decision,'可模拟',JSON.stringify(patch));
+    assert.equal(advance(row,{nowMs:later}).trades.length,1,'all original valid cohort/quote/safety gates still apply');
+  }
+});
+
 test('external collective entry retains a closed-chart anchor rather than pretending to be a new launch',()=>{
   const i=input();i.token.marketStage='external';i.klineStatus='ok';
   i.candles=Array.from({length:30},(_,n)=>({time:NOW-(30-n)*60000,open:.98,close:.99,low:.97,high:1,volume:1000}));

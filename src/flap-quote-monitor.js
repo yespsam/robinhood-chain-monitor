@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createChainHeadObserver } from "./chain-head-observation.js";
 import {setTimeout as delay} from 'node:timers/promises';
 import { Interface, getAddress, keccak256 } from "ethers";
 import { cancelPendingFlapQuoteActivation, sendAlerts } from "./alerts.js";
@@ -24,11 +25,23 @@ export const FLAP_PORTAL_IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db9
 // These values are deliberately not configurable: an arbitrary predecessor
 // would turn a local-state edit into authority to cross an implementation
 // boundary without first proving which monitor produced the cursor.
-export const FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION = "v5.23.1";
-export const FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION = "0xAb8Ec926b6e113c2212aF152b086eA62d1FDced9";
-export const FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH = "0x78653cdd7296d940ae531c86bc6700ae163f1f9dec002c2af3143c9ae6696a15";
-// Canonical EIP-1967 Upgraded(address) evidence for the currently pinned
-// implementation. The block and transaction were independently reproduced
+export const FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION = "v5.25.0";
+export const FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION = "0xE13227370996f892a56d2Ff4a30f6026887B48Fb";
+export const FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH = "0xf8d56fe09f2ec5e3eeaabdbfeeb0faf55e4ed8996a55bc1b69a78e62dbb792e4";
+// v5.24 is immutable historical evidence, not a direct predecessor accepted
+// by the v5.26 in-place state migration. v5.23.1 remains separately historical.
+export const FLAP_PORTAL_HISTORICAL_V524_VERSION = "v5.24.0";
+export const FLAP_PORTAL_HISTORICAL_V524_IMPLEMENTATION = "0x27a0f9Da7F5BEAd616fe0bf02bf0c793bece4e20";
+export const FLAP_PORTAL_HISTORICAL_V524_IMPLEMENTATION_HASH = "0xb191694f7248773f714234aeb150149a2b9af5d1ab483a53d31c19ec3132b230";
+// Historical evidence is retained verbatim, not re-labelled as proof of the
+// current implementation. This older tuple is NOT permission for a direct
+// v5.23.1 -> current in-place migration; only the exact predecessor above is.
+export const FLAP_PORTAL_HISTORICAL_V5231_VERSION = "v5.23.1";
+export const FLAP_PORTAL_HISTORICAL_V5231_IMPLEMENTATION = "0xAb8Ec926b6e113c2212aF152b086eA62d1FDced9";
+export const FLAP_PORTAL_HISTORICAL_V5231_IMPLEMENTATION_HASH = "0x78653cdd7296d940ae531c86bc6700ae163f1f9dec002c2af3143c9ae6696a15";
+// Canonical EIP-1967 Upgraded(address) evidence for the historical v5.24.0
+// implementation, NOT the new v5.25.0 implementation. The legacy constant
+// names remain stable for historical references. The block and transaction were independently reproduced
 // from BlockMachine, Blast and BNB Chain (receipt status 1, transaction
 // included in the same canonical block, and identical Portal upgrade log).
 // BlockMachine and 48.club agreed on version, EIP-1967 slot, proxy hash and
@@ -36,6 +49,7 @@ export const FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH = "0x78653cdd7296
 // 0xd059ab4872d92c42b8691520def5c74816cf72b00128d3a8acf78692273f38de.
 // Official deployed-address documentation still lists the predecessor; this
 // upgrade is pinned from canonical chain evidence, not an inferred doc change.
+export const FLAP_PORTAL_UPGRADE_VERSION = "v5.24.0";
 export const FLAP_PORTAL_UPGRADE_BLOCK = 123_307_497;
 export const FLAP_PORTAL_UPGRADE_BLOCK_HASH = "0x736aaf4d42db2f599694dc4fd17458926e24202b34f06b0f1eae04824b89a5f0";
 export const FLAP_PORTAL_UPGRADE_TRANSACTION = "0xca80914e6f43449a24a5cbf17c43ba23d99aca5579a0c658e6360640f3d502b8";
@@ -84,11 +98,26 @@ const PRIOR_ARCHIVE_UNAVAILABLE_ATTEMPTS = 3;
 const PRIOR_ARCHIVE_RETRY_BASE_MS = 50;
 const SOURCE_TRUST = "official_docs_bound_fingerprinted_portal_receipt";
 const QUOTE_SYMBOL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_$.-]{0,23}$/;
+const LOG_PROVIDER_MAX_BLOCK_SPAN = {
+  "bsc.blockrazor.xyz": 25,
+  "bsc.rpc.blxrbdn.com": 512,
+  "bsc.rpc.sentio.xyz": 1_000,
+  "public-bsc.nownodes.io": 10_000,
+};
+const PACED_LOG_HOSTS = new Set([
+  "bsc.blockrazor.xyz", "bsc.rpc.sentio.xyz", "public-bsc.nownodes.io",
+]);
 
 function monitorError(source, code, message, details = {}) {
   const error = Object.assign(new Error(message), { source, code, details });
   const retryAfterMs = Number(details?.retryAfterMs);
   if (Number.isFinite(retryAfterMs) && retryAfterMs > 0) error.retryAfterMs = retryAfterMs;
+  if (["capacity", "host", "method"].includes(details?.rpcFailureScope)) {
+    error.rpcFailureScope = details.rpcFailureScope;
+  }
+  if (typeof details?.rpcOperation === "string") error.rpcOperation = details.rpcOperation;
+  if (details?.rpcCircuitAlreadyOpen === true) error.rpcCircuitAlreadyOpen = true;
+  if (Number(details?.rpcHostRetryAfterMs) > 0) error.rpcHostRetryAfterMs = Number(details.rpcHostRetryAfterMs);
   return error;
 }
 
@@ -99,7 +128,28 @@ function retryDetails(error) {
   const body=error?.info?.responseBody;
   if(typeof body==='string'&&body.length<16000)try{rpcError=JSON.parse(body)?.error||rpcError;}catch{}
   const retryAfterMs = Math.max(Number(error?.retryAfterMs)||0,Number(rpcError?.data?.retry_after_ms)||0);
-  return Number.isFinite(retryAfterMs) && retryAfterMs > 0 ? { retryAfterMs } : {};
+  const details = Number.isFinite(retryAfterMs) && retryAfterMs > 0 ? { retryAfterMs } : {};
+  if (["capacity", "host", "method"].includes(error?.rpcFailureScope)) {
+    details.rpcFailureScope = error.rpcFailureScope;
+  }
+  if (typeof error?.rpcOperation === "string") details.rpcOperation = error.rpcOperation;
+  if (error?.rpcCircuitAlreadyOpen === true) details.rpcCircuitAlreadyOpen = true;
+  if (Number(error?.rpcHostRetryAfterMs) > 0) details.rpcHostRetryAfterMs = Number(error.rpcHostRetryAfterMs);
+  return details;
+}
+
+function quorumFailure(settled) {
+  const failures = settled.filter((result) => result.status === "rejected");
+  const longestWaitFirst = (left, right) => (
+    (Number(right.reason?.retryAfterMs) || 0) - (Number(left.reason?.retryAfterMs) || 0)
+  );
+  // A local admission refusal cannot hide a simultaneous upstream or proof
+  // failure. Wait for both readers; retain the longest advertised wait within
+  // the selected class without ever accepting a partial quorum.
+  return failures.find((result) => result.reason?.code === "FLAP_QUOTE_STOPPED")
+    || failures.filter((result) => result.reason?.rpcFailureScope !== "capacity")
+      .sort(longestWaitFirst)[0]
+    || failures.sort(longestWaitFirst)[0];
 }
 
 export function flapQuoteScheduleInterval(state,pollIntervalMs=3000,catchUpIntervalMs=30000) {
@@ -603,7 +653,7 @@ function stateHealth(value) {
     && stateTimestamp(value.lastReorgAt, true)
     && stateTimestamp(value.lastAttemptAt, true)
     && stateTimestamp(value.nextAttemptAt, true)
-    && (value.failureClass === null || ["chain", "delivery", "schema", "state", "unknown"].includes(value.failureClass));
+    && (value.failureClass === null || ["capacity", "chain", "delivery", "schema", "state", "unknown"].includes(value.failureClass));
 }
 
 function normalizeState(parsed, expectedRuntimeHash, pinOverrides = {}) {
@@ -780,7 +830,7 @@ function normalizeState(parsed, expectedRuntimeHash, pinOverrides = {}) {
       ? 0
       : Date.parse(health.nextAttemptAt) - Date.parse(health.lastAttemptAt || "");
     const degradedClosed = health.status === "degraded"
-      && health.consecutiveFailures >= 1
+      && (health.consecutiveFailures >= 1 || health.failureClass === "capacity")
       && health.lastErrorAt === parsed.checkedAt
       && health.lastAttemptAt === parsed.checkedAt
       && typeof health.lastError === "string"
@@ -1535,6 +1585,17 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
   if (enabled && stateReaders.length !== 2) {
     throw new Error("createFlapQuoteMonitor requires exactly two stateVerificationProviders");
   }
+  const pageBlockSpanFor = (reader) => Math.min(
+    LOG_PROVIDER_MAX_BLOCK_SPAN[reader.physicalHost] || logMaxBlockSpan,
+    logMaxBlockSpan,
+  );
+  // A durable segment fits one page on every fixed reader. A later 429 must
+  // not discard an earlier, fully agreed prefix of the configured chunk.
+  // Smaller endpoint limits constrain both readers; no history is skipped.
+  const durableChunkSize = Math.min(chunkSize, ...logReaders.map(pageBlockSpanFor));
+  // Retain pacing across segment and cycle boundaries. The shared physical
+  // coordinator remains authoritative for admission, priority and cooldown.
+  const nextLogRequestAtByHost = new Map();
 
   let cycleController = null;
   const provider = rawProvider ? new Proxy(rawProvider, {
@@ -1563,25 +1624,20 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
   let stopPromise = null;
   let writeQueue = Promise.resolve();
   let pendingCommitSnapshot = null;
+  const headObserver = dependencies.headObservationFile ? createChainHeadObserver({
+    file: dependencies.headObservationFile, producer: "flap", providers: stateReaders,
+    confirmations: requiredConfirmations, now: clock, getCursor: () => structuredClone(state.cursor),
+    isStopped: () => stopped, writeSnapshot: dependencies.writeHeadObservation,
+  }) : null;
 
   async function initialize() {
     if (initialized) return;
     const loaded = await readState(stateFile, fsImpl, expectedRuntimeHash, portalPins);
     state = loaded.state;
     portalIdentityMigrationRequired = loaded.portalIdentityMigrationRequired;
-    if (!portalIdentityMigrationRequired
-      && state.initialized
-      && state._health.status === "degraded"
-      && state._health.nextAttemptAt) {
-      const persistedNextMs = Date.parse(state._health.nextAttemptAt);
-      const lastAttemptMs = Date.parse(state._health.lastAttemptAt || "");
-      const configuredNextMs = lastAttemptMs + backoffMaxMs;
-      if (Number.isFinite(persistedNextMs)
-        && Number.isFinite(configuredNextMs)
-        && persistedNextMs > configuredNextMs) {
-        state._health.nextAttemptAt = iso(configuredNextMs);
-      }
-    }
+    // A durable retry may include an upstream-advertised cooldown, not just
+    // this monitor's exponential delay. Its schema already bounds it to one
+    // hour; lowering local backoffMax must not shorten that existing wait.
     trimEventJournal(state, processedLimit);
     state.reorgOrphanedEventKeys = state.reorgOrphanedEventKeys.slice(-orphanedEventLimit);
     state.finalizedCheckpoints = state.finalizedCheckpoints.slice(-checkpointLimit);
@@ -1642,7 +1698,7 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
       }
     };
     const settled = await Promise.allSettled(readers.map(readFrom));
-    const failed = settled.find((result) => result.status === "rejected");
+    const failed = quorumFailure(settled);
     if (failed) throw failed.reason;
     const values = settled.map((result) => result.value);
     const canonical = JSON.stringify(values[0]);
@@ -1698,7 +1754,7 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
       }
     };
     const settled = await Promise.allSettled(readers.map(readFrom));
-    const failed = settled.find((result) => result.status === "rejected");
+    const failed = quorumFailure(settled);
     if (failed) throw failed.reason;
     const blocks = settled.map((result) => result.value);
     const canonical = JSON.stringify(blocks[0]);
@@ -1720,17 +1776,21 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
     readFixedBlockFrom(stateReaders, blockNumber, errorCode, label)
   );
 
-  async function requireFixedBlockHash(blockNumber, expectedHash, errorCode, message, details = {}) {
+  async function requireFixedBlockHash(blockNumber, expectedHash, errorCode, message, details = {}, unavailable = {}) {
+    const readErrorCode = unavailable.code || errorCode;
+    const readMessage = unavailable.message || message;
     let block;
     try {
-      block = await readFixedBlock(blockNumber, errorCode, message);
+      block = await readFixedBlock(blockNumber, readErrorCode, readMessage);
     } catch (error) {
       if (error?.code === "FLAP_QUOTE_STOPPED"
         || error?.code === "FLAP_QUOTE_LOG_CHAIN_ID_MISMATCH") throw error;
       // Transport and availability failures are not evidence of a reorg.  In
       // particular, never attach `reorgScope` here: doing so would let a
       // post-delivery timeout incorrectly orphan a still-canonical alert.
-      throw monitorError("chain", errorCode, `${message}: ${error.message}`, retryDetails(error));
+      const disagreement = error?.code === `${readErrorCode}_MISMATCH`;
+      throw monitorError("chain", disagreement ? errorCode : readErrorCode,
+        `${disagreement ? message : readMessage}: ${error.message}`, retryDetails(error));
     }
     if (block.hash !== String(expectedHash).toLowerCase()) {
       throw monitorError("chain", errorCode, message, details);
@@ -1754,17 +1814,34 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
   }
 
   async function verifyIdentityQuorum(finalizedBlock) {
+    const signal = cycleController?.signal;
     const settled = await Promise.allSettled(stateReaders.map(async (reader) => {
+      // Stop the logical proof promptly without releasing a physical RPC
+      // lease early. Its transport still settles independently; a late result
+      // must never start the next identity read or reach a durable commit.
+      const identityProvider = new Proxy(reader.provider, {
+        get(target, property, receiver) {
+          const value = Reflect.get(target, property, receiver);
+          if (typeof value !== "function") return value;
+          return (...args) => {
+            if (signal?.aborted) return Promise.reject(stoppedError());
+            return abortable(Promise.resolve().then(() => {
+              if (signal?.aborted) throw stoppedError();
+              return value.apply(target, args);
+            }), signal);
+          };
+        },
+      });
       // verifyFlapPortalIdentity already checks getNetwork AND a fresh
       // eth_chainId on this exact reader. Avoid a third identical chain call.
       return verifyFlapPortalIdentity(
-        reader.provider,
+        identityProvider,
         finalizedBlock,
         expectedRuntimeHash,
         portalPins,
       );
     }));
-    const failed = settled.find((result) => result.status === "rejected");
+    const failed = quorumFailure(settled);
     if (failed) throw failed.reason;
     const identities = settled.map((result) => result.value);
     const canonical = JSON.stringify(identities[0]);
@@ -1946,7 +2023,7 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
       }
     };
     const settled = await Promise.allSettled(stateReaders.map(readFrom));
-    const failed = settled.find((result) => result.status === "rejected");
+    const failed = quorumFailure(settled);
     if (failed) throw failed.reason;
     await requireStateBlockHash(
       priorBlock,
@@ -2087,16 +2164,13 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
     };
     const readRange = async (reader) => {
       // Public archive endpoints have different bounds. The indexed readers
-      // reproduced both historical quote logs and the pinned upgrade log;
-      // Sentio explicitly caps a range at 10,000 blocks. NOWNodes 65k reads
-      // time out, so use the same verified 10k bound. Older fallbacks retain
-      // their smaller tested bounds.
+      // reproduced historical quote logs and pinned identity evidence. Sentio
+      // now explicitly caps public reads at 1,000 blocks (HTTP 429 above it);
+      // its old 10k capability is no longer valid. NOWNodes retains its tested
+      // 10k bound. A 429 still observes the shared cooldown, never an immediate
+      // smaller-range retry. Older fallbacks retain their tested bounds.
       // Compare the entire contiguous range after paging, never a partial set.
-      const providerSpan = {
-        'bsc.blockrazor.xyz':25, 'bsc.rpc.blxrbdn.com':512,
-        'bsc.rpc.sentio.xyz':10000, 'public-bsc.nownodes.io':10000,
-      }[reader.physicalHost];
-      const pageBlockSpan = Math.min(providerSpan||logMaxBlockSpan,logMaxBlockSpan);
+      const pageBlockSpan = pageBlockSpanFor(reader);
       const pages = [];
       for (let pageStart = fromBlock; pageStart <= toBlock; pageStart += pageBlockSpan) {
         pages.push({
@@ -2107,7 +2181,6 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
       const pageResults = new Array(pages.length);
       let nextPage = 0;
       let firstError = null;
-      let nextRequestAt=0;
       try {
         await requireLogReaderChain(reader);
         const worker = async () => {
@@ -2117,8 +2190,9 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
             if (pageIndex >= pages.length) return;
             const page = pages[pageIndex];
             try {
-              if(['bsc.blockrazor.xyz','bsc.rpc.sentio.xyz','public-bsc.nownodes.io'].includes(reader.physicalHost)){
-                const at=Math.max(Date.now(),nextRequestAt);nextRequestAt=at+publicLogIntervalMs;
+              if (PACED_LOG_HOSTS.has(reader.physicalHost)) {
+                const at = Math.max(Date.now(), nextLogRequestAtByHost.get(reader.physicalHost) || 0);
+                nextLogRequestAtByHost.set(reader.physicalHost, at + publicLogIntervalMs);
                 if(at>Date.now())await abortable(delay(at-Date.now(),undefined,{signal:cycleController?.signal}),cycleController?.signal);
                 if(firstError)return;
               }
@@ -2159,7 +2233,7 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
       return orderedResult;
     };
     const settled = await Promise.allSettled(logReaders.map(readRange));
-    const failed = settled.find((result) => result.status === "rejected");
+    const failed = quorumFailure(settled);
     if (failed) throw failed.reason;
     const replicas = settled.map((result) => result.value);
     const canonicalReplica = JSON.stringify(replicas[0]);
@@ -2220,6 +2294,14 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
         priorStateRead,
         asset,
       });
+    }
+    if (prepared.length === 0) {
+      // No event can be delivered between this return and the mandatory
+      // pre-commit canonical check in runCycle. Keep the initial dual-reader
+      // anchor and that fresh terminal check, without reading the same end
+      // block twice consecutively for an empty range. Never reuse this result
+      // as the terminal proof or skip the distinct finalized-snapshot check.
+      return { prepared, endBlockHash: normalizedHash(fixedEnd.hash, "scan end block hash") };
     }
     let finalEnd;
     try { finalEnd = await readFixedBlock(toBlock, "FLAP_QUOTE_SCAN_ANCHOR_CHANGED", `scan end block ${toBlock} recheck`); }
@@ -3016,6 +3098,11 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
         identity.verifiedBlockHash,
         "FLAP_QUOTE_FINALIZED_LANE_MISMATCH",
         `state and log RPC lanes disagree on finalized block ${finalizedBlock}`,
+        {},
+        {
+          code: "FLAP_QUOTE_FINALIZED_LANE_UNAVAILABLE",
+          message: `Flap finalized log-lane block ${finalizedBlock} could not be verified`,
+        },
       );
       const context = {
         latestHead,
@@ -3090,9 +3177,7 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
         if (stopped) throw stoppedError();
         const toBlock = Math.min(
           finalizedBlock,
-          // Public archival pages need durable intermediate checkpoints;
-          // don't discard thousands of already-read blocks after one 429.
-          nextBlock + Math.min(chunkSize,logReaders.some(r=>r.physicalHost==='bsc.blockrazor.xyz')?500:chunkSize) - 1,
+          nextBlock + durableChunkSize - 1,
           nextBlock + maxBlocksPerCycle - scannedBlocks - 1,
         );
         const result = await prepareRange(nextBlock, toBlock, context);
@@ -3159,36 +3244,42 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
         : state._health.nextAttemptAt;
       if (initialized && error?.source !== "state") {
         const durableFailureState = state.initialized && !portalIdentityMigrationRequired;
-        const consecutiveFailures = durableFailureState
-          ? Number(state._health.consecutiveFailures || 0) + 1
-          : preBaselineFailures + 1;
-        const exponent = Math.min(10, Math.max(0, consecutiveFailures - 1));
+        const capacityWait = error?.rpcFailureScope === "capacity";
+        const previousFailures = durableFailureState
+          ? Number(state._health.consecutiveFailures || 0)
+          : preBaselineFailures;
+        // A request not admitted to the transport is not a new upstream
+        // outage. Preserve prior failures, but never inflate their exponent.
+        const consecutiveFailures = previousFailures + (capacityWait ? 0 : 1);
+        const exponent = capacityWait ? 0 : Math.min(10, Math.max(0, consecutiveFailures - 1));
         const randomValue = Math.max(0, Math.min(1, Number(random()) || 0));
         const jitteredBackoffMs = backoffBaseMs === 0
           ? 0
           : Math.min(backoffMaxMs, Math.round(backoffBaseMs * (2 ** exponent) * (0.8 + randomValue * 0.4)));
-        const retryAfterMs = Math.min(backoffMaxMs, Math.max(0, Number(error?.retryAfterMs) || 0));
+        const retryAfterMs = Math.min(MAX_PERSISTED_BACKOFF_MS, Math.max(0, Number(error?.retryAfterMs) || 0));
         const delayMs = Math.max(jitteredBackoffMs, retryAfterMs);
         // A backfill cycle may run for minutes. A server cooldown starts when
         // it rejects the request, not at the now-stale cycle start timestamp.
-        returnedNextAttemptAt = delayMs > 0 ? iso(Math.max(observedMs, nowMs(clock)) + delayMs) : null;
+        const failedMs = Math.max(observedMs, nowMs(clock));
+        const failedAt = iso(failedMs);
+        returnedNextAttemptAt = delayMs > 0 ? iso(failedMs + delayMs) : null;
         if (durableFailureState) {
           // If the failed operation was an ambiguous state commit, carry its
           // full intended cursor/journal forward into the degraded retry
           // snapshot. Never overwrite it with health fields based on the old
           // in-memory cursor.
           const next = structuredClone(pendingCommitSnapshot || state);
-          next.checkedAt = observedAt;
+          next.checkedAt = failedAt;
           next._health = {
             ...next._health,
             status: "degraded",
             consecutiveFailures,
-            lastErrorAt: observedAt,
+            lastErrorAt: failedAt,
             lastError: String(error?.message || error).slice(0, 500),
             lastErrorCode: stableErrorCode,
-            lastAttemptAt: observedAt,
+            lastAttemptAt: failedAt,
             nextAttemptAt: returnedNextAttemptAt,
-            failureClass: ["chain", "delivery", "schema", "state"].includes(error?.source)
+            failureClass: capacityWait ? "capacity" : ["chain", "delivery", "schema", "state"].includes(error?.source)
               ? error.source
               : "unknown",
           };
@@ -3206,6 +3297,7 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
         initialized: state.initialized,
         error: String(error?.message || error),
         errorCode: stableErrorCode,
+        ...retryDetails(error),
         nextAttemptAt: returnedNextAttemptAt,
         cursor: structuredClone(state.cursor),
       };
@@ -3218,7 +3310,14 @@ export function createFlapQuoteMonitor(config = {}, dependencies = {}) {
     if (activeCheck) return activeCheck;
     const controller = new AbortController();
     cycleController = controller;
-    activeCheck = runCycle().finally(() => {
+    activeCheck = runCycle().then(async result => {
+      // Separate panel telemetry, never an entry/exit proof or retry bypass.
+      if (!stopped && ["healthy", "baseline"].includes(result.status)) {
+        const headResult = await headObserver?.observe();
+        if (headResult?.persistenceErrorCode) logger.error?.("[flap-quote] CHAIN_HEAD_WRITE_FAILED (display only)");
+      }
+      return result;
+    }).finally(() => {
       if (cycleController === controller) cycleController = null;
       activeCheck = null;
     });

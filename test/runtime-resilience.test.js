@@ -15,7 +15,7 @@ test("independent update monitors start before fallible chain initialization", a
   assert.match(independentBody, /createFlapQuoteMonitor/);
   assert.match(independentBody, /createFourRegistryMonitor/);
   assert.match(independentBody, /if \(config\.fourRegistryMonitorEnabled\) startMonitor\("four-registry"/);
-  assert.match(independentBody, /onEvent: \(event\) => deliverAlert\(config, event\)/);
+  assert.match(independentBody, /onEvent: \(event\) => deliverAlert\(\{ \.\.\.config, alertFourRegistryDurableHandoff: true \}, event\)/);
   assert.match(source, /async function deliverAlert\(runtimeConfig, event\)/);
   assert.match(source, /narrativeSniperRuntime\.sendAlert\(runtimeConfig, event\)/);
   assert.match(independentBody, /cancelPendingEvent: \(evidence\) => cancelPendingFourRegistryEvent\(config, evidence\)/);

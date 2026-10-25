@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { gmgnFlowAddress, gmgnFlowData, gmgnFlowTags, qualifiesGmgnFlowWallet } from './gmgn-flow-signal.js';
 import { PERSONA_CATALOG, classifyWalletPersonas } from './wallet-personas.js';
+import { KOL_TEACHER_POLICY_VERSION, assessKolLearningTeacher, validKolTeacherSelection } from './kol-learning-teachers.js';
 
 export const LEARNING_SCHEMA = 'yesp_wallet_learning_v1';
 export const LEARNING_MINIMUMS = Object.freeze({ teachers: 3, matchedSells: 30, tokens: 10, spanMs: 3 * 86400_000, copyableHoldMs: 30_000 });
@@ -146,26 +147,35 @@ export function analyzeWalletHabits(rows = []) {
     unknown: ['交易前真实总仓位', '场外及跨链头寸', '可复制净收益', '动机与因果', '买入前价格路径'] };
 }
 
-export function buildLearningReport(state, nowMs = Date.now(), habitCache = null) {
+export function buildLearningReport(state, nowMs = Date.now(), habitCache = null, reviews = {}) {
   const wallets = Object.values(state?.wallets || {}).map(w => {
     const cached = habitCache?.get(w.key), habits = cached?.rows === w.rows ? cached.habits : analyzeWalletHabits(w.rows);
     habitCache?.set(w.key, { rows: w.rows, habits });
-    return { ...w, habits, role: learningWalletRole(w, nowMs), persona: classifyWalletPersonas(habits, w) };
+    return { ...w, habits, role: learningWalletRole(w, nowMs), persona: classifyWalletPersonas(habits, w),
+      strategyTeacherEligibility: assessKolLearningTeacher(w, reviews, nowMs) };
   });
   const policies = [], groups = [], personaPolicies = [], personaGroups = [];
   for (const chain of ['robinhood', 'sol', 'bsc', 'base', 'eth']) for (const group of ['gmgn_smartmoney', 'gmgn_fomo']) {
     const teachers = wallets.filter(w => w.chain === chain && w.groups.includes(group) && w.role === 'teacher');
     // Equal-weight teachers (not trade count or wallet wealth); do not let a
     // single high-frequency wallet determine the student's risk preferences.
-    const usable = teachers.filter(w => !w.historyGap && !w.lastError && Date.parse(w.checkedAt) <= nowMs
+    const identities = new Set();
+    const usable = teachers.filter(w => w.strategyTeacherEligibility.eligible && !w.historyGap && !w.lastError && Date.parse(w.checkedAt) <= nowMs
       && Date.parse(w.checkedAt) >= nowMs - 6 * 3600_000 && w.habits.copyableMatchedSells >= 5
-      && !w.persona.labels.some(p => ['ultrafast', 'average_down'].includes(p.id)));
+      && !w.persona.labels.some(p => ['ultrafast', 'average_down'].includes(p.id)))
+      .sort((a, b) => a.key.localeCompare(b.key)).filter(w => {
+        const identity = w.strategyTeacherEligibility.identityId;
+        if (identities.has(identity)) return false;
+        identities.add(identity); return true;
+      });
     const matches = usable.flatMap(w => w.habits.matches.filter(x => x.holdMs >= LEARNING_MINIMUMS.copyableHoldMs && x.at <= nowMs));
     const distinctTokens = new Set(matches.map(x => x.token)).size;
     const spanMs = matches.length ? Math.max(...matches.map(x => x.at)) - Math.min(...matches.map(x => x.at)) : 0;
     const ready = usable.length >= LEARNING_MINIMUMS.teachers && matches.length >= LEARNING_MINIMUMS.matchedSells
       && distinctTokens >= LEARNING_MINIMUMS.tokens && spanMs >= LEARNING_MINIMUMS.spanMs;
-    const summary = { chain, group, teacherCount: teachers.length, usableTeachers: usable.length, matchedSells: matches.length,
+    const summary = { chain, group, teacherCount: teachers.length,
+      verifiedKolWallets: teachers.filter(w => w.strategyTeacherEligibility.eligible).length,
+      usableTeachers: usable.length, matchedSells: matches.length,
       tokens: distinctTokens, spanMs, ready, minimums: LEARNING_MINIMUMS };
     groups.push(summary);
     for (const persona of PERSONA_CATALOG) {
@@ -184,11 +194,23 @@ export function buildLearningReport(state, nowMs = Date.now(), habitCache = null
     if (!ready) continue;
     policies.push(makePolicy(usable, matches, chain, group, nowMs));
   }
+  const strictTeachers = wallets.filter(w => w.role === 'teacher' && w.strategyTeacherEligibility.eligible);
+  const blockedReasons = {};
+  for (const w of wallets.filter(w => w.role === 'teacher' && !w.strategyTeacherEligibility.eligible)) {
+    for (const reason of w.strategyTeacherEligibility.reasons || []) blockedReasons[reason] = (blockedReasons[reason] || 0) + 1;
+  }
   return { schema: LEARNING_SCHEMA, updatedAt: iso(nowMs), status: policies.length ? 'shadow_ready' : 'collecting',
     mode: 'paper_learning', execution: false, signing: false, broadcast: false,
     walletCount: wallets.length, qualifiedNow: wallets.filter(w => w.role === 'teacher').length,
     candidateCount: Object.keys(state?.universe || {}).length,
     roles: Object.fromEntries(['teacher', 'comparison', 'unverified', 'excluded'].map(role => [role, wallets.filter(w => w.role === role).length])),
+    teacherSelection: { version: KOL_TEACHER_POLICY_VERSION, required: true,
+      profitableCandidates: wallets.filter(w => w.role === 'teacher').length,
+      eligibleWallets: strictTeachers.length,
+      eligibleIdentities: new Set(strictTeachers.map(w => w.strategyTeacherEligibility.identityId)).size,
+      blockedCandidates: wallets.filter(w => w.role === 'teacher').length - strictTeachers.length,
+      blockedReasons, registryError: reviews?.error || null,
+      note: '仅已核验公开 KOL 身份与稳定盈利证据可进入策略学习；双周期盈利候选和描述案例仍保留，不直接跟单' },
     chainCoverage: ['robinhood', 'sol', 'bsc', 'base', 'eth'].map(chain => ({ chain, candidates: Object.values(state?.universe || {}).filter(w => w.chain === chain).length,
       deepWallets: wallets.filter(w => w.chain === chain).length, sampledWallets: wallets.filter(w => w.chain === chain && w.checkedAt).length })),
     personaCatalog: PERSONA_CATALOG, personaGroups, personaPolicies,
@@ -201,7 +223,8 @@ export function buildLearningReport(state, nowMs = Date.now(), habitCache = null
         return [period, p?.chain === w.chain && p.wallet === w.wallet && p.period === period
           ? { checkedAt: p.checkedAt, realizedProfitUsd: p.realizedProfitUsd, winRate: p.winRate, realizedRoi: p.realizedRoi, tokenCount: p.tokenCount } : null];
       })),
-      habits: { ...w.habits, matches: undefined, actions: undefined }, role: w.role, persona: w.persona, qualifiedNow: w.role === 'teacher' })),
+      habits: { ...w.habits, matches: undefined, actions: undefined }, role: w.role, persona: w.persona, qualifiedNow: w.role === 'teacher',
+      strategyTeacherEligibility: w.strategyTeacherEligibility })),
     groups, policies, promotion: '不自动替换原策略；先累计同时间、同报价、同成本的独立模拟对照' };
 }
 
@@ -210,9 +233,13 @@ function makePolicy(teachers, matches, chain, group, nowMs, personaId = null) {
   const losses = teachers.map(w => w.habits.medianLosingExit).filter(x => x !== null && x < 0);
   const lossCutRate = losses.length >= 3 ? Math.min(.15, Math.max(.06, Math.abs(quantile(losses)))) : null;
   const maxHoldMs = Math.round(Math.min(3600_000, Math.max(120_000, quantile(holds))));
-  const version = createHash('sha256').update(JSON.stringify({ chain, group, personaId, maxHoldMs, lossCutRate, teachers: teachers.map(w => w.key).sort(), records: matches.map(x => x.sellHash).sort() })).digest('hex').slice(0, 16);
+  const teacherSelection = { version: KOL_TEACHER_POLICY_VERSION, teachers: teachers.map(w => {
+    const { identityId, reviewId, reviewedAt, validUntil, evidenceDigest } = w.strategyTeacherEligibility;
+    return { key: w.key, identityId, reviewId, reviewedAt, validUntil, evidenceDigest };
+  }).sort((a, b) => a.key.localeCompare(b.key)) };
+  const version = createHash('sha256').update(JSON.stringify({ chain, group, personaId, maxHoldMs, lossCutRate, teacherSelection, records: matches.map(x => x.sellHash).sort() })).digest('hex').slice(0, 16);
   return { version, chain, group, ...(personaId ? { personaId } : {}), maxHoldMs, lossCutRate, trainedAt: iso(nowMs), trainingEndAt: iso(Math.max(...matches.map(x => x.at))),
-    teacherCount: teachers.length, matchedSells: matches.length, scope: '仅向前模拟；只测试持仓期限和亏损退出，不复制加仓或仓位规模' };
+    teacherCount: teachers.length, teacherSelection, matchedSells: matches.length, scope: '仅向前模拟；只测试持仓期限和亏损退出，不复制加仓或仓位规模' };
 }
 
 export function validLearningPolicy(p, chain, nowMs = Date.now()) {
@@ -223,4 +250,12 @@ export function validLearningPolicy(p, chain, nowMs = Date.now()) {
     && Number.isSafeInteger(p.teacherCount) && p.teacherCount >= 3 && Number.isSafeInteger(p.matchedSells) && p.matchedSells >= 30
     && Date.parse(p.trainingEndAt) > 0 && Date.parse(p.trainingEndAt) <= Date.parse(p.trainedAt)
     && Date.parse(p.trainedAt) <= nowMs && Date.parse(p.trainedAt) >= nowMs - 2 * 3600_000;
+}
+
+// Historical frozen policies retain their original structural validation. New
+// entries require the current, independently identified KOL teacher evidence.
+export function validNewLearningPolicy(p, chain, nowMs = Date.now()) {
+  return !!validLearningPolicy(p, chain, nowMs) && validKolTeacherSelection(p.teacherSelection, chain, nowMs)
+    && p.teacherCount === p.teacherSelection.teachers.length
+    && p.teacherSelection.teachers.every(t => Date.parse(t.reviewedAt) <= Date.parse(p.trainedAt));
 }

@@ -1,0 +1,24 @@
+{
+  "round": 110,
+  "scheduledAt": "2026-10-24T15:05:26.376Z",
+  "checkedAt": "2026-10-24T15:10:12Z",
+  "group": "bsc",
+  "question": "BSC A/B 头页是否到 8 小时刷新时点，以及未留存新键的覆盖缺口。",
+  "requests": {"gmgnConfigCheck": 0, "gmgnBusiness": 0, "publicRpc": 0, "model": 0, "reasonNoGmgn": "上次头页成功检查距本轮不足 8 小时，未提前调用 GMGN CLI。"},
+  "wallets": [
+    {"id":"A","chain":"bsc","wallet":"0x452b8fd1edd95184fa7f9123da2e441d323a9fd7","providerHeadCheckedAt":"2026-10-24T07:11:25.186Z","providerLatestActivityAt":"2026-10-02T11:08:09.000Z","lastNewEvidenceAt":"2026-10-24T07:11:25.186Z","returnedRows":20,"newRows":8,"pageOverlap":12,"identityEchoValidated":true,"anchorHash":"0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868","newRowHashesIndividuallyRetained":false,"nextHeadCheckDueAt":"2026-10-24T15:11:25.186Z","coverageStatus":"provider_coverage_gap_pending_classification; latest activity remains Oct 02 anchor; 8 new-to-retained keys lack individually retained hashes/CA/side"},
+    {"id":"B","chain":"bsc","wallet":"0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c","providerHeadCheckedAt":"2026-10-24T07:11:40.593Z","providerLatestActivityAt":"2026-10-02T11:08:09.000Z","lastNewEvidenceAt":"2026-10-24T07:11:40.593Z","returnedRows":20,"newRows":8,"pageOverlap":12,"identityEchoValidated":true,"anchorHash":"0x276ed1a8787a851f66bf341a62bd62728028d53b19a22ea8a69fa6b3f7857f6d","newRowHashesIndividuallyRetained":false,"nextHeadCheckDueAt":"2026-10-24T15:11:40.593Z","coverageStatus":"provider_freshness_unverified; latest activity remains Oct 02 anchor; 8 new-to-retained keys lack individually retained hashes/CA/side"}
+  ],
+  "newVerifiedWalletEvidenceRows": 0,
+  "agenticWallet": {"officialSourcesLastCheckedAt":"2026-10-24T11:10:00Z","officialExclusiveRuleFound":false,"fourPhase3IdentityMode":"planned_not_verified_live","flapLastRecordedError":"FLAP_QUOTE_CHAIN_ID_UNAVAILABLE","flapErrorLastCheckedAt":"2026-10-24T11:09:49.072Z","currentLag":null,"qualifyingCandidateBuys":null,"fullChainScan":false,"triggerFired":false,"giwaInspected":false},
+  "paperForward": {
+    "sourceReportGeneratedAt":"2026-10-24T15:08:54.892Z","tradeCount":327,"lastTradeId":"1792848985601:326",
+    "newCompletePairs":[{"entryId":"1792848441411:325","exitId":"1792848985601:326","chain":"sol","ca":"AKotzk1dhcNangAJBtvNKtT9bhbSVZc2mMhRFgkFpump","route":"external_breakout","netPnlUsd":-0.3765088435692294,"modelCostsIncluded":true}],
+    "multiarm":{"cursorMatchesMainLedger":true,"cursorTradeCount":327,"lastTradeId":"1792848985601:326","closedPairsSinceBaseline":11,"openPairs":0,"arms":{"2x":{"status":"completed_no_trigger","netPnlUsd":-0.3765088435692294,"deltaToActualExitUsd":0,"recoveryCount":0,"failureCount":1,"peakFullLiquidationNetUsd":-0.049945081196119734},"3x":{"status":"completed_no_trigger","netPnlUsd":-0.3765088435692294,"deltaToActualExitUsd":0,"recoveryCount":0,"failureCount":1,"peakFullLiquidationNetUsd":-0.049945081196119734},"5x":{"status":"completed_no_trigger","netPnlUsd":-0.3765088435692294,"deltaToActualExitUsd":0,"recoveryCount":0,"failureCount":1,"peakFullLiquidationNetUsd":-0.049945081196119734}},"newPairQuoteGaps":{"count":30,"missing_quote":15,"pre_entry_quote":1,"stale_quote":7,"out_of_order_quote":7},"cumulativeQuoteGaps":386,"schedulerLiveState":null},
+    "history":{"closedRounds":162,"wins":32,"losses":130,"netPnlUsd":-141.0683529099913,"modelCostsUsd":62.52874668680395,"profitFactor":0.41722629132507855,"closedRoundDrawdownUsd":151.76679171130857},
+    "currentVersion":{"closedRounds":29,"wins":5,"losses":24,"netPnlUsd":-8.870407811239778,"modelCostsUsd":9.105675510727167,"grossPricePnlUsd":0.23526769948738924,"profitFactor":0.537446444333769}
+  },
+  "coverage":{"strategyStateEndpoint":"oversized (~7 MB); 2-second read timed out before JSON parse; not retried","continuousOnlineProven":false,"codeChanged":false,"strategyChanged":false,"ledgerChanged":false,"processRestarted":false,"giwaInspected":false},
+  "finalHeadRefreshStatus":"A/B 头页于 15:11:25Z、15:11:40Z 到期；截至 15:13:20Z 未发起刷新，本轮五分钟有界窗口已过。",
+  "nextQuestion":"下一既定轮次轮换 Solana D/E；A/B 已到期头页留待后续共享客户端有界刷新并逐条保留哈希/CA/方向。"
+}

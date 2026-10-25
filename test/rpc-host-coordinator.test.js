@@ -6,6 +6,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
+import { DatabaseSync } from "node:sqlite";
 import { createRpcHostCoordinator } from "../src/rpc-host-coordinator.js";
 import { createRpcPool } from "../src/bsc-launchpad-monitor.js";
 
@@ -219,4 +220,126 @@ test("timed-out waiters and upstream cooldown failures leave no queue obstacle",
   gate.cooldown("rpc.test", "getBlock", Date.now() + 10_000, "method");
   await assert.rejects(gate.run("rpc.test", "getBlock", "background", () => assert.fail("cooling")), /cooling down/);
   assert.equal(await gate.run("rpc.test", "getCode", "background", () => 2), 2);
+});
+
+for (const host of ["bsc.rpc.sentio.xyz", "public-bsc.nownodes.io", "bsc-mainnet.nodereal.io"]) {
+  test(`${host} ignores legacy start timestamps without deleting them or weakening shared limits`, async (t) => {
+    const { gate, file } = await fixture(t, { now: () => 10_000 });
+    const legacy = new DatabaseSync(file);
+    t.after(() => legacy.close());
+    legacy.exec("CREATE TABLE rpc_host_starts (host TEXT PRIMARY KEY, next_start_ms INTEGER NOT NULL)");
+    legacy.prepare("INSERT INTO rpc_host_starts VALUES (?, ?)").run(host, 999_999);
+    const other = createRpcHostCoordinator({ file, now: () => 10_000 });
+    t.after(() => other.close());
+    const background = gate.tryAcquire(host, "eth_call", "background");
+    assert.ok(background, "legacy start-gap state cannot prevent an eligible read");
+    assert.equal(other.tryAcquire(host, "eth_chainId", "background"), null);
+    const realtime = other.tryAcquire(host, "eth_getLogs", "realtime");
+    assert.ok(realtime);
+    assert.equal(other.tryAcquire(host, "getCode", "realtime"), null, "two physical slots remain the maximum");
+    gate.release(background, true); other.release(realtime, true);
+    for (const method of ["eth_chainId", "eth_blockNumber", "eth_getBlockByNumber", "eth_call"])
+      assert.equal(await other.run(host, method, "background", () => method, { waitMs: 200 }), method);
+    gate.cooldown(host, "eth_getLogs", 70_000, "host");
+    await assert.rejects(other.run(host, "eth_call", "background", () => assert.fail("429 cooldown is still shared")),
+      error => error.rpcFailureScope === "host" && error.rpcHostRetryAfterMs === 60_000);
+    assert.equal(legacy.prepare("SELECT next_start_ms FROM rpc_host_starts WHERE host=?").get(host).next_start_ms, 999_999);
+    assert.equal(gate.snapshot().leases.length, 0);
+    assert.equal(gate.snapshot().waiters.length, 0);
+  });
+}
+
+for (const mode of ["standard", "archive", "combined"]) {
+  test(`${mode} pool preserves local capacity and retry delay without recording an upstream circuit`, async (t) => {
+    const registry = new Map();
+    let calls = 0;
+    const coordinator = {
+      snapshot: () => ({ leases: [], circuits: [] }),
+      run: async () => { throw Object.assign(new Error("capacity wait deadline"), {
+        code: "RPC_COORDINATOR_UNAVAILABLE", rpcFailureScope: "capacity",
+        rpcCircuitAlreadyOpen: true, retryAfterMs: 750,
+      }); },
+      persistCooldown: () => assert.fail("local admission is not an upstream failure"),
+    };
+    const pool = createRpcPool(mode === "archive" ? [] : ["https://standard.test"],
+      mode === "standard" ? [] : ["https://archive.test"], 1, {
+        hostCoordinator: coordinator, hostCircuitRegistry: registry, now: () => 10_000,
+        providerFactory: () => ({ getBlock: async () => { calls++; return { number: 99 }; } }),
+      });
+    t.after(() => pool.destroy());
+    for (let iteration = 0; iteration < 2; iteration++) {
+      await assert.rejects(mode === "standard" ? pool.getBlock(99) : pool.getHistoricalBlock(99),
+        error => error.code === "RPC_COORDINATOR_UNAVAILABLE" && error.rpcFailureScope === "capacity"
+          && error.rpcCircuitAlreadyOpen === true && error.retryAfterMs === 750);
+    }
+    assert.equal(calls, 0);
+    assert.ok([...registry.values()].every(circuit => circuit.globalFailures === 0 && circuit.methods.size === 0));
+  });
+}
+
+test("mixed local capacity and genuine 429 retain host cooldown evidence", async (t) => {
+  const registry = new Map();
+  let failures = 0;
+  const pool = createRpcPool(["https://busy.test"], ["https://limited.test"], 1, {
+    hostCircuitRegistry: registry, now: () => 10_000,
+    hostCoordinator: {
+      snapshot: () => ({ leases: [], circuits: [] }),
+      run: async (host, _method, _lane, callback) => {
+        if (host === "busy.test") throw Object.assign(new Error("capacity wait deadline"), {
+          code: "RPC_COORDINATOR_UNAVAILABLE", rpcFailureScope: "capacity",
+          rpcCircuitAlreadyOpen: true, retryAfterMs: 750,
+        });
+        return callback();
+      },
+      persistCooldown: async () => { failures++; },
+    },
+    providerFactory: () => ({ getBlock: async () => { throw Object.assign(new Error("HTTP 429"), { status: 429, retryAfterMs: 60_000 }); } }),
+  });
+  t.after(() => pool.destroy());
+  await assert.rejects(pool.getHistoricalBlock(99), error => error.rpcFailureScope !== "capacity"
+    && error.rpcHostRetryAfterMs === 60_000 && error.code === "SERVER_ERROR");
+  assert.equal(failures, 1);
+  assert.equal(registry.get("busy.test").globalFailures, 0);
+  assert.equal(registry.get("limited.test").globalFailures, 1);
+});
+
+test("local capacity during half-open recovery does not add another probe cooldown", async (t) => {
+  let current = 10_000, blocked = true;
+  const registry = new Map([["recovering.test", {
+    host: "recovering.test", globalUntil: 9_999, globalFailures: 1, globalGeneration: 1, methods: new Map(),
+  }]]);
+  const pool = createRpcPool(["https://recovering.test"], [], 1, {
+    hostCircuitRegistry: registry, now: () => current,
+    hostCoordinator: {
+      snapshot: () => ({ leases: [], circuits: [] }),
+      run: async (_host, _method, _lane, callback) => {
+        if (blocked) throw Object.assign(new Error("capacity wait deadline"), {
+          code: "RPC_COORDINATOR_UNAVAILABLE", rpcFailureScope: "capacity",
+          rpcCircuitAlreadyOpen: true, retryAfterMs: 100,
+        });
+        return callback();
+      },
+      persistCooldown: () => assert.fail("no upstream failure"),
+    },
+    providerFactory: () => ({ getBlockNumber: async () => 123 }),
+  });
+  t.after(() => pool.destroy());
+  await assert.rejects(pool.getBlockNumber(), error => error.rpcFailureScope === "capacity" && error.retryAfterMs === 100);
+  assert.equal(registry.get("recovering.test").globalUntil, 9_999);
+  current += 100; blocked = false;
+  assert.equal(await pool.getBlockNumber(), 123);
+});
+
+test("Sentio public log capability admits 1000 blocks and rejects 1001 before dispatch", async (t) => {
+  for (const archive of [false, true]) {
+    const calls = [];
+    const url = "https://bsc.rpc.sentio.xyz";
+    const pool = createRpcPool(archive ? [] : [url], archive ? [url] : [], 1, {
+      providerFactory: () => ({ send: async (...args) => { calls.push(args); return []; } }),
+    });
+    t.after(() => pool.destroy());
+    assert.deepEqual(await pool.send("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x3e8" }]), []);
+    await assert.rejects(pool.send("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x3e9" }]), /no.*capable/i);
+    assert.equal(calls.length, 1, "oversized requests must not dispatch or immediately split-retry");
+  }
 });

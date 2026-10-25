@@ -8,6 +8,8 @@ import { validAlphaSignal } from './binance-alpha-catalog.js';
 import { narrativeNameMatch } from './narrative-name-match.js';
 
 export const NARRATIVE_THESIS_VERSION='narrative_evidence_chain_v1';
+export const NARRATIVE_ADMISSION_VERSION='narrative_admission_v1';
+export const AGENTIC_WALLET_BUY_PROOF_VERSION='binance_agentic_wallet_buy_proof_v1';
 const HOUR=3600000,DAY=24*HOUR;
 const stamp=v=>typeof v==='number'?v:Date.parse(v||'');
 const clean=v=>typeof v==='string'?v.normalize('NFKC').replace(/\s+/gu,' ').trim():'';
@@ -101,6 +103,85 @@ function relation(doc,token,links,terms) {
 const bindingLabels={onchain_pool:'链上新底池与前三 CA 创建顺序已核对；不是推文背书',direct_ca:'原文明确提及同链 CA；不等于作者发行',official_catalog:'官方目录确认同链 CA；不等于盈利承诺',
   community_link:'名称与项目所引原帖一致：社区题材关联，非作者认领',project_link:'项目资料引用原帖：关系待核实',name_only:'仅名称相符，不能认定为该叙事承接币',unverified:'缺少可核实的叙事与 CA 关系'};
 const bindingRank={onchain_pool:4,official_catalog:4,direct_ca:3,community_link:2,project_link:1,name_only:0,unverified:-1};
+
+function officialBinanceUrl(value) {
+  try {const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&!u.port
+    &&(u.hostname==='binance.com'||u.hostname.endsWith('.binance.com'));}catch{return false;}
+}
+function publicHttpsUrl(value) {
+  try {const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&!u.port;}catch{return false;}
+}
+function sameAddress(chain,a,b) {
+  const x=gmgnFlowAddress(chain,a),y=gmgnFlowAddress(chain,b);return !!x&&x===y;
+}
+
+// A .ai identity, an AI Pro subscription, and an Agentic Wallet are separate
+// claims. Text can classify a claim, but only a versioned identity + receipt
+// attestation can establish the wallet and its successful candidate-CA buy.
+export function classifyAgenticWalletClaim(text='') {
+  const body=clean(text),hasWallet=/\b(?:binance\s+)?agentic\s+wallet\b|\bagenticwallet\b/iu.test(body);
+  const hasAgentId=/\bagent\s*id\b|binance\s*\.ai|\.ai\b/iu.test(body);
+  const hasAiPro=/\bai\s*pro\b/iu.test(body);
+  const restricted=/\b(?:only|exclusive(?:ly)?|restricted\s+to)\b|仅限|专属|限定|只允许|白名单/iu.test(body);
+  const scope=hasWallet&&restricted?'agentic_wallet_exclusive_claim':hasWallet?'agentic_wallet_mentioned'
+    :hasAgentId&&restricted?'agent_id_restricted_claim':hasAgentId?'agent_id_mentioned'
+      :hasAiPro?'ai_pro_mentioned':'none';
+  return {scope,hasAgenticWalletMention:hasWallet,hasAgentIdMention:hasAgentId,hasAiProMention:hasAiPro,
+    restricted,requiresOfficialWalletAndBuyProof:['agentic_wallet_exclusive_claim','agent_id_restricted_claim'].includes(scope),
+    explanation:scope==='agentic_wallet_exclusive_claim'?'文本声称 Agentic Wallet 限定；必须验证官方钱包身份和该钱包对精确 CA 的成功买入'
+      :scope==='agent_id_restricted_claim'?'文本只声称 Agent ID / .ai 资格；这不等于 Agentic Wallet 身份，不能作为合格买入'
+        :scope==='ai_pro_mentioned'?'AI Pro 是产品/订阅线索，不证明 Agentic Wallet 身份或链上买入'
+          :scope==='agent_id_mentioned'?'Agent ID / .ai 是身份线索，不证明 Agentic Wallet 所有权或链上买入'
+            :scope==='agentic_wallet_mentioned'?'提及 Agentic Wallet，不等于钱包身份或买入已核实':'未检测到上述资格主张'};
+}
+
+export function verifyAgenticWalletBuyProof(proof,token,nowMs=Date.now()) {
+  const reasons=[],chain=token?.chain,address=clean(token?.address),identity=proof?.identity,buy=proof?.buy;
+  if(proof?.version!==AGENTIC_WALLET_BUY_PROOF_VERSION)reasons.push('缺少受信版本化的 Agentic Wallet 身份与买入证明');
+  if(proof?.verifier!=='official_registration_and_public_receipt_v1')reasons.push('身份和链上回执未由指定核验器确认');
+  if(!chain||proof?.chain!==chain||!address||!sameAddress(chain,proof?.tokenAddress,address))reasons.push('证明的链或 CA 与当前候选不一致');
+  if(identity?.authority!=='binance'||identity?.status!=='official_registration_verified'
+    ||!officialBinanceUrl(identity?.sourceUrl)||!identity?.evidenceId||!sameAddress(chain,identity?.address,buy?.from))
+    reasons.push('缺少 Binance 官方注册证据，或交易发起人不匹配');
+  const txHash=clean(buy?.txHash),hashOk=chain==='sol'?/^[1-9A-HJ-NP-Za-km-z]{32,90}$/.test(txHash):/^0x[\da-f]{64}$/i.test(txHash);
+  if(buy?.chain!==chain||!sameAddress(chain,buy?.tokenAddress,address)||buy?.direction!=='buy'
+    ||buy?.receiptStatus!=='success'||buy?.verifiedBy!=='public_chain_receipt_v1'||!hashOk
+    ||!publicHttpsUrl(buy?.publicReceiptUrl)||!Number.isFinite(stamp(buy?.at))||stamp(buy.at)>nowMs)
+    reasons.push('缺少该地址针对精确 CA 的成功链上买入回执');
+  if(!fresh(proof?.verifiedAt,nowMs,DAY))reasons.push('身份 / 买入证明未在最近 24 小时复核');
+  return {version:AGENTIC_WALLET_BUY_PROOF_VERSION,verified:reasons.length===0,
+    qualifyingCandidateBuys:reasons.length===0?1:null,reasons};
+}
+
+export function narrativeAdmissionReview(thesis,{token=null,nowMs=Date.now()}={}) {
+  const failures=[],bound=['direct_ca','official_catalog'].includes(thesis?.relationship?.kind);
+  if(thesis?.version!==NARRATIVE_THESIS_VERSION)failures.push('缺少本轮可验证的叙事分析');
+  if(!token||key(token)!==key({chain:thesis?.chain,address:thesis?.address}))failures.push('叙事链 / CA 未与当前候选精确匹配');
+  const sourceAt=stamp(thesis?.event?.sourceAt),source=thesis?.sources?.find(s=>s.url===thesis?.event?.sourceUrl);
+  if(!source||!publicHttpsUrl(source.url)||!Number.isFinite(sourceAt)||sourceAt>nowMs||nowMs-sourceAt>HOUR)
+    failures.push('缺少一小时内的新鲜原文');
+  if(!bound||!['direct_ca','official_catalog'].includes(source?.binding))failures.push('事件原文未与精确 CA 直接绑定或列入官方目录');
+  if(!thesis?.event?.kind||thesis.event.kind==='unclassified')failures.push('事件机制仍未分类，不能编造叙事');
+  if(thesis?.event?.warning||/计划|传闻|未确认/iu.test(thesis?.event?.claimStatus||''))
+    failures.push('事件仍有争议、属于计划 / 传闻或尚未独立确认');
+  if(!['fresh','follow_through','reactivated'].includes(thesis?.catalyst?.phase)
+    ||!Number.isFinite(thesis?.catalyst?.ageMs)||thesis.catalyst.ageMs<0||thesis.catalyst.ageMs>HOUR)
+    failures.push('催化已过新鲜 / 跟随窗口或时间无法核实');
+  const demandAt=stamp(thesis?.demand?.observedAt);
+  if(thesis?.demand?.status!=='buying'||!Number.isFinite(demandAt)||demandAt>nowMs||nowMs-demandAt>90000
+    ||!Number.isFinite(thesis?.demand?.recentNetBuyers)||thesis.demand.recentNetBuyers<2
+    ||!Number.isFinite(thesis?.demand?.netBuyUsd)||thesis.demand.netBuyUsd<300)
+    failures.push('九十秒内未见至少两个近期净买地址及 300U 净买入承接');
+  if(thesis?.market?.ready!==true)failures.push('缺少可用的入场量价结构确认');
+  if(thesis?.invalidation?.blockNewNarrativeEntry===true)failures.push('原文争议或资金流失效，新增仓位被否决');
+  if(thesis?.agenticWallet?.requiresOfficialWalletAndBuyProof&&thesis.agenticWallet.proofStatus!=='verified_registered_and_bought')
+    failures.push('Agentic Wallet / .ai 限定主张缺少官方身份与成功买入双重证明');
+  return {version:NARRATIVE_ADMISSION_VERSION,ready:failures.length===0,checkedAt:iso(nowMs),
+    checks:{exactCaBinding:bound,eventClassified:thesis?.event?.kind!=='unclassified',freshCatalyst:['fresh','follow_through','reactivated'].includes(thesis?.catalyst?.phase),
+      buyingDemand:thesis?.demand?.status==='buying',marketStructure:thesis?.market?.ready===true,
+      agenticWalletProof:!thesis?.agenticWallet?.requiresOfficialWalletAndBuyProof||thesis.agenticWallet.proofStatus==='verified_registered_and_bought'},
+    blockers:unique(failures),policy:'新开仓闸门；不影响已有仓位的退出和监控'};
+}
 
 // A later related original can renew research attention, not the clock of the
 // old post. Names alone, copied text, URL aliases and price action cannot do so.
@@ -201,7 +282,9 @@ export function buildNarrativeThesis({token,narrative={},monitorSignal,alphaSign
   const conclusion=relevantWarnings.length?'原文有争议，暂不新增叙事仓位':!lead?'没有原文，只能评估资金 / 量价动量':
     ['name_only','project_link'].includes(binding)?'代币关系未确认，仅研究':demand!=='buying'?'有叙事关联，买盘承接未确认':
       ['old','background','repeated'].includes(catalystPhase)?'已有买盘，但催化偏旧 / 重复，只作当前行情研究':'叙事关联与近期买盘同时可见，仍须完整开仓检查';
-  return {version:NARRATIVE_THESIS_VERSION,chain:token.chain,address:token.address,symbol:token.symbol||'',observedAt:iso(nowMs),
+  const agenticClaim=classifyAgenticWalletClaim([token.symbol,token.name,...docs.map(d=>d.text)].filter(Boolean).join('\n'));
+  const agenticProof=verifyAgenticWalletBuyProof(token.agenticWalletProof,token,nowMs);
+  const thesis={version:NARRATIVE_THESIS_VERSION,chain:token.chain,address:token.address,symbol:token.symbol||'',observedAt:iso(nowMs),
     method:'规则辅助、证据约束；不声称通用语义理解或自动训练',researchOnly:true,authorEndorsement:false,
     event:{...frame,sourceUrl:lead?.url||null,sourceAt:lead?iso(lead.at):null,sourceId:lead?.id||null},
     relationship:{kind:binding,label:bindingLabels[binding],issuerIdentity:'未核实发行者身份或同一控制关系'},
@@ -212,28 +295,48 @@ export function buildNarrativeThesis({token,narrative={},monitorSignal,alphaSign
     demand:{status:demand,provider:flow.provider||null,observedAt:usable?flow.observedAt:null,netBuyUsd:usable?flow.netBuyUsd:null,
       recentNetBuyers:usable?recentBuyers.length:null,netSellers:usable?sellers.length:null,
       summary:usable?`可见窗口净流入 ${flow.netBuyUsd.toFixed(2)}U，事件后近期标签净买 ${recentBuyers.length} / 净卖 ${sellers.length} 个地址；非全链、不能证明独立控制`:'资金证据缺失 / 过期 / 不完整，不能认定聪明钱正在进入'},
-    market:{ready:chart.ready,summary:chart.ready?`可用收盘结构，最近一根相对量 ${chart.relativeVolume===null?'未知':chart.relativeVolume.toFixed(2)} 倍；${chart.rising?'最近收盘走高':'最近收盘未走高'}，不是未来走势预测`:chart.reason},
+    market:{ready:chart.ready,rising:chart.rising,relativeVolume:chart.relativeVolume,summary:chart.ready?`可用收盘结构，最近一根相对量 ${chart.relativeVolume===null?'未知':chart.relativeVolume.toFixed(2)} 倍；${chart.rising?'最近收盘走高':'最近收盘未走高'}，不是未来走势预测`:chart.reason},
     history:historyView,invalidation:{observed:invalidation,blockNewNarrativeEntry:relevantWarnings.length>0,
       conditions:['原帖否认或 CA 对应关系被推翻','重复旧消息且没有新增实质事件','连续新增卖盘 / 已收盘结构失效，由持仓规则确认','退出证据持续中断，按已授权断流规则处理，不编造卖价']},
+    agenticWallet:{...agenticClaim,proofStatus:agenticProof.verified?'verified_registered_and_bought':agenticClaim.requiresOfficialWalletAndBuyProof?'unverified':'not_required',
+      qualifyingCandidateBuys:agenticProof.qualifyingCandidateBuys,proofVersion:agenticProof.version,proofReasons:agenticProof.reasons,
+      note:'AI Pro 订阅、Agent ID / .ai 资格、mint 或创建事件均不等于 Agentic Wallet 身份和成功买入。'},
+    thesisCard:{event:frame.label,mechanism:frame.mechanism,
+      tokenValueCapture:frame.kind==='token_value'?'原文提出代币权益 / 供给主张，执行与受益 CA 尚须链上核实':'未证明代币现金流 / 权益捕获；仅把新买盘视作短线注意力承接',
+      relationship:bindingLabels[binding],marketConfirmation:usable?`近期净买地址 ${recentBuyers.length}，净流入 ${flow.netBuyUsd.toFixed(2)}U`:'资金流不可用或过期',
+      counterevidence:invalidation,interpretation:'事件、CA 关联、买盘承接、价格结构分开核验；相关性不作为因果或目标价。'},
     conclusion,summary:`${frame.label}；${bindingLabels[binding]}；${catalystLabel}。${conclusion}。`,
     sources:docs.slice(0,4).map(d=>({url:d.url,at:iso(d.at),text:d.text.slice(0,300),binding:d.binding})),
     gaps:[...(!lead?['缺少关联原文']:[]),...(['unverified','name_only','project_link'].includes(binding)?['事件与 CA 关系待核实']:[]),
       ...(demand!=='buying'?['新增真实买盘待确认']:[]),...(!chart.ready?['量价结构待补']:[]),...(!authors?['可用作者身份不足']:[])]};
+  thesis.admission=narrativeAdmissionReview(thesis,{token,nowMs});
+  return thesis;
 }
 
-export function attachNarrativeThesis(row,thesis) {
+export function attachNarrativeThesis(row,thesis,{requireAdmission=false,nowMs=Date.now()}={}) {
   const block=thesis.invalidation.blockNewNarrativeEntry;
-  return {...row,decision:block&&row.decision!=='不买'?'观察':row.decision,
-    reasons:block?unique([...row.reasons,'叙事原文含否认或争议，等待复核']):row.reasons,
-    evidence:{...row.evidence,narrativeThesis:thesis,paperEligible:block?false:row.evidence.paperEligible}};
+  const admission=requireAdmission?narrativeAdmissionReview(thesis,{token:row.token,nowMs}):thesis.admission||null;
+  const denied=block||!!(requireAdmission&&!admission?.ready);
+  return {...row,decision:denied&&row.decision!=='不买'?'观察':row.decision,
+    reasons:denied?unique([...row.reasons,...(block?['叙事原文含否认或争议，等待复核']:[]),
+      ...(requireAdmission&&!admission?.ready?['叙事入场闸门未通过：'+(admission?.blockers||['缺少叙事证据']).join('；')]:[])]):row.reasons,
+    missing:denied?unique([...(row.missing||[]),...(requireAdmission&&!admission?.ready?admission.blockers:[])]):row.missing,
+    evidence:{...row.evidence,narrativeThesis:thesis,...(admission?{narrativeAdmission:admission}:{}),paperEligible:denied?false:row.evidence.paperEligible}};
 }
 
-export function narrativeDeskReport(evaluations,index,stageReport,nowMs) {
+export function narrativeDeskReport(evaluations,index,stageReport,nowMs,{admissionGate=false}={}) {
   const rows=[...new Map(evaluations.filter(e=>e.evidence?.narrativeThesis).map(e=>[key(e.token),e.evidence.narrativeThesis])).values()];
+  const blockerCounts=new Map();
+  for(const thesis of rows)for(const blocker of thesis.admission?.blockers||[])blockerCounts.set(blocker,(blockerCounts.get(blocker)||0)+1);
+  const admitted=rows.filter(t=>t.admission?.ready===true).length;
   return {version:NARRATIVE_THESIS_VERSION,updatedAt:iso(nowMs),method:'证据链规则辅助研究，不是自动训练模型',
     candidates:rows.length,withSources:rows.filter(r=>r.sources.length).length,
     directCa:rows.filter(r=>['direct_ca','official_catalog'].includes(r.relationship.kind)).length,
     communityLinked:rows.filter(r=>r.relationship.kind==='community_link').length,
+    admission:{version:NARRATIVE_ADMISSION_VERSION,enabled:admissionGate,evaluated:rows.length,ready:admitted,blocked:rows.length-admitted,
+      topBlockers:[...blockerCounts].map(([reason,count])=>({reason,count})).sort((a,b)=>b.count-a.count||a.reason.localeCompare(b.reason,'zh-CN')).slice(0,5),
+      agenticClaims:rows.filter(r=>r.agenticWallet?.requiresOfficialWalletAndBuyProof).length,
+      verifiedAgenticWalletBuys:rows.reduce((n,r)=>n+(r.agenticWallet?.qualifyingCandidateBuys===1?1:0),0)},
     sourceConflicts:index?.conflicts||0,stageReport,
     cases:rows.filter(r=>r.sources.length).sort((a,b)=>bindingRank[b.relationship.kind]-bindingRank[a.relationship.kind]
       ||stamp(b.event.sourceAt)-stamp(a.event.sourceAt)).slice(0,8),

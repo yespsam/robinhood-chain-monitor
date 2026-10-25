@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { selectLearningTeachers, parseWalletActivity, mergeLearningActivity, analyzeWalletHabits, buildLearningReport, validLearningPolicy } from '../src/wallet-learning.js';
+import { selectLearningTeachers, parseWalletActivity, mergeLearningActivity, analyzeWalletHabits, buildLearningReport, validLearningPolicy, validNewLearningPolicy } from '../src/wallet-learning.js';
 import { renderWalletLearning } from '../dashboard/wallet-learning.js';
 
 test('collection compatibility and per-wallet failures are visible even when the last request succeeded', () => {
@@ -9,7 +9,7 @@ test('collection compatibility and per-wallet failures are visible even when the
   assert.match(html, /统计异常 4 个，接口漏回待补 2 个/);
   assert.match(html, /采集缺失不代表钱包亏损/);
 });
-import { NOW, address, teacher, row, raw, trainingState } from './fixtures/wallet-learning.js';
+import { NOW, address, teacher, row, raw, trainingState, reviewedTeacherRegistry } from './fixtures/wallet-learning.js';
 
 test('teachers need fresh dual-window profit evidence and explicit tags, not roster claims', () => {
   const w = teacher();
@@ -47,20 +47,50 @@ test('three-second profitable trades remain descriptive and cannot train exit po
   assert.equal(h.tooFastSells, 1); assert.equal(h.copyableMatchedSells, 0); assert.equal(h.medianWinningExit, null);
 });
 test('minimum teachers, records, token breadth, time span and chain separation gate readiness', () => {
-  const s = trainingState(), report = buildLearningReport(s, NOW);
+  const s = trainingState(), reviews = reviewedTeacherRegistry(), report = buildLearningReport(s, NOW, null, reviews);
   assert.equal(report.policies.length, 2); const p = report.policies[0];
   assert.equal(p.maxHoldMs, 120000); assert.ok(Math.abs(p.lossCutRate - .1) < 1e-10); assert.ok(validLearningPolicy(p, 'robinhood', NOW));
   assert.equal(validLearningPolicy(p, 'bsc', NOW), false); assert.equal(validLearningPolicy(p, 'robinhood', NOW + 7200001), false);
-  delete s.wallets[teacher(3).key]; assert.equal(buildLearningReport(s, NOW).policies.length, 0);
+  delete s.wallets[teacher(3).key]; assert.equal(buildLearningReport(s, NOW, null, reviews).policies.length, 0);
   for (const mutate of [s => { Object.values(s.wallets)[2].chain = 'bsc'; }, s => { for (const w of Object.values(s.wallets)) w.rows = w.rows.slice(0, 10); }, s => { for (const w of Object.values(s.wallets)) w.rows = w.rows.map(r => ({ ...r, at: NOW - 120000 + r.at % 100000 })); }]) {
-    const state = trainingState(); mutate(state); assert.equal(buildLearningReport(state, NOW).policies.length, 0);
+    const state = trainingState(); mutate(state); assert.equal(buildLearningReport(state, NOW, null, reviews).policies.length, 0);
   }
 });
 test('policy numeric bounds and no lookahead, and Chinese UI escapes source text', () => {
-  const report = buildLearningReport(trainingState(), NOW), p = report.policies[0];
+  const report = buildLearningReport(trainingState(), NOW, null, reviewedTeacherRegistry()), p = report.policies[0];
   for (const patch of [{ lossCutRate: .5 }, { maxHoldMs: 86400000 }, { teacherCount: Infinity }, { trainedAt: new Date(NOW + 1).toISOString() }, { trainingEndAt: new Date(NOW + 1).toISOString() }]) assert.equal(!!validLearningPolicy({ ...p, ...patch }, 'robinhood', NOW), false);
   report.wallets[0].wallet = '<script>alert(1)</script>';
   const html = renderWalletLearning(report); assert.equal(html.includes('<script>'), false); assert.match(html, /不代表已确认官方身份/); assert.match(html, /尚未启动/);
   report.wallets[0].checkedAt = null; report.wallets[0].lastError = 'GMGN_REQUEST_BUSY';
   assert.match(renderWalletLearning(report), /上次请求未完成，等待轮询重试/);
+});
+test('profitable candidates stay observable but cannot train without separately reviewed KOL evidence', () => {
+  const state = trainingState(), before = structuredClone(state), report = buildLearningReport(state, NOW);
+  assert.equal(report.qualifiedNow, 3); assert.equal(report.roles.teacher, 3);
+  assert.equal(report.teacherSelection.eligibleWallets, 0); assert.equal(report.teacherSelection.blockedCandidates, 3);
+  assert.equal(report.teacherSelection.blockedReasons.review_missing, 3);
+  assert.equal(report.policies.length, 0); assert.equal(report.personaPolicies.length, 0);
+  assert.ok(report.wallets.every(w => w.strategyTeacherEligibility.eligible === false));
+  assert.deepEqual(state, before);
+  const html = renderWalletLearning(report);
+  assert.match(html, /双周期盈利候选 3 个/); assert.match(html, /已核验 KOL 策略学习教师 0 个钱包/);
+});
+test('independent identity dedup blocks one KOL from supplying multiple strategy teachers', () => {
+  const state = trainingState(), reviews = reviewedTeacherRegistry();
+  const records = Object.values(reviews.entries); records[1].identity.subjectId = records[0].identity.subjectId;
+  const report = buildLearningReport(state, NOW, null, reviews);
+  assert.equal(report.teacherSelection.eligibleWallets, 3); assert.equal(report.teacherSelection.eligibleIdentities, 2);
+  assert.equal(report.groups.find(g => g.chain === 'robinhood').usableTeachers, 2);
+  assert.equal(report.policies.length, 0); assert.equal(report.personaPolicies.length, 0);
+});
+test('policy proof participates in version and only current teacher evidence enables new entries', () => {
+  const state = trainingState(), reviews = reviewedTeacherRegistry(), report = buildLearningReport(state, NOW, null, reviews);
+  const policy = report.policies[0]; assert.equal(validNewLearningPolicy(policy, 'robinhood', NOW), true);
+  const legacy = structuredClone(policy); delete legacy.teacherSelection;
+  assert.equal(!!validLearningPolicy(legacy, 'robinhood', NOW), true);
+  assert.equal(validNewLearningPolicy(legacy, 'robinhood', NOW), false);
+  Object.values(reviews.entries)[0].reviewId += '-updated';
+  assert.notEqual(buildLearningReport(state, NOW, null, reviews).policies[0].version, policy.version);
+  const spoof = structuredClone(policy); spoof.teacherSelection.teachers[1].identityId = spoof.teacherSelection.teachers[0].identityId;
+  assert.equal(validNewLearningPolicy(spoof, 'robinhood', NOW), false);
 });

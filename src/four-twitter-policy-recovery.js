@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import fs from "node:fs/promises";
 import path from "node:path";
+import { readOutboxJson } from "./outbox-json.js";
 
 const HOUR_MS = 60 * 60 * 1_000;
 const DAY_MS = 24 * HOUR_MS;
@@ -345,7 +345,9 @@ function durableRecoveryEntry(entry, spec, signalShapes = FOUR_TWITTER_POLICY_RE
 
 async function defaultLoadOutbox(config) {
   try {
-    return JSON.parse(await fs.readFile(path.join(config.dataDir, "alert-outbox.json"), "utf8"));
+    return await readOutboxJson(path.join(config.dataDir, "alert-outbox.json"), {
+      eventIds: FOUR_TWITTER_POLICY_RECOVERY_SPECS.flatMap(spec => [spec.originalEventKey, spec.derivedEventKey]),
+    });
   } catch (error) {
     if (error?.code === "ENOENT") return { version: 2, events: {} };
     throw error;

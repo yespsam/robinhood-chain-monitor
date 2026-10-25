@@ -1,0 +1,123 @@
+{
+  "checkedAt": "2026-10-24T11:10:00Z",
+  "scheduledAt": "2026-10-24T11:06:25.447Z",
+  "workDurationMinutesApprox": 11,
+  "round": 109,
+  "walletGroup": "sol",
+  "requestCounts": {
+    "configCheckPassedBeforeRequests": true,
+    "gmgnBusinessRequests": 2,
+    "gmgnSuccessful": 2,
+    "gmgnFailed": 0,
+    "publicRpc": 0,
+    "model": 0
+  },
+  "wallets": [
+    {
+      "id": "D",
+      "chain": "sol",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "providerHeadCheckedAt": "2026-10-24T11:08:15.958Z",
+      "providerLatestActivityAt": "2026-10-24T05:15:15Z",
+      "lastNewEvidenceAt": "2026-10-23T19:09:25.981Z",
+      "returnedRows": 20,
+      "identityEchoValidated": false,
+      "pageOverlap": null,
+      "newRows": null,
+      "anchorFound": false,
+      "latestReturnedActivity": {
+        "at": "2026-10-24T05:15:15Z",
+        "side": "sell",
+        "ca": "5yGCQQqAaqYXdaJWP1v5McD3mPntvXM9hMCSsZpspump",
+        "hash": "41xFD7xhrmmFtLgZVo292ndu6iaptSK6g57X5q9F2annbErq2mAN59kbK9iaXhWiaH6BDptWjac4Jh2Rab7Mkq81"
+      },
+      "nextHeadCursor": "NDYwNzA5Mzg3MDAyNzgwMzI6MDo6",
+      "historicalGapPreserved": true,
+      "nextHeadCheckDueAt": "2026-10-24T19:08:15.958Z"
+    },
+    {
+      "id": "E",
+      "chain": "sol",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "providerHeadCheckedAt": "2026-10-24T11:08:32.187Z",
+      "providerLatestActivityAt": "2026-10-24T05:15:15Z",
+      "lastNewEvidenceAt": "2026-10-23T19:09:25.981Z",
+      "returnedRows": 20,
+      "identityEchoValidated": false,
+      "pageOverlap": null,
+      "newRows": null,
+      "anchorFound": false,
+      "latestReturnedActivity": {
+        "at": "2026-10-24T05:15:15Z",
+        "side": "sell",
+        "ca": "5yGCQQqAaqYXdaJWP1v5McD3mPntvXM9hMCSsZpspump",
+        "hash": "Lhoti8ytrrTyDBe8F14XCsqbGwUKwAkhJPt1xJJfRXrAEvp4CQiYTBRgcXD3ryCqHGFk8fBmUeCmv7ix8Af1pvh"
+      },
+      "nextHeadCursor": "NDYwNzE5ODU2MDAwNTYwMDg6MDo6",
+      "historicalGapPreserved": true,
+      "nextHeadCheckDueAt": "2026-10-24T19:08:32.187Z"
+    }
+  ],
+  "oneToOneSameSecondCandidates": [
+    {
+      "at": "2026-10-24T05:15:06Z",
+      "ca": "5yGCQQqAaqYXdaJWP1v5McD3mPntvXM9hMCSsZpspump",
+      "D": {"side":"buy","hash":"42Z8mRKEptM7eFfML565tJg1seifUVjbBneQPTRHxheHhLfuFGCvnCvWUheCT1b4Y7R8ApNpnEYHdzBmC5hfuDQh"},
+      "E": {"side":"buy","hash":"8FjMorP53mmkBom8gnsFEdhV8DpQ7sbqM9ReH4TujMswLFdVLEhqfEkUTVEhCTk5bAXz5LchDgiKRLJDNg6nSj9"},
+      "classification":"candidate_only; provider wallet identity echo absent; not same-control proof"
+    },
+    {
+      "at": "2026-10-24T05:15:15Z",
+      "ca": "5yGCQQqAaqYXdaJWP1v5McD3mPntvXM9hMCSsZpspump",
+      "D": {"side":"sell","hash":"41xFD7xhrmmFtLgZVo292ndu6iaptSK6g57X5q9F2annbErq2mAN59kbK9iaXhWiaH6BDptWjac4Jh2Rab7Mkq81"},
+      "E": {"side":"sell","hash":"Lhoti8ytrrTyDBe8F14XCsqbGwUKwAkhJPt1xJJfRXrAEvp4CQiYTBRgcXD3ryCqHGFk8fBmUeCmv7ix8Af1pvh"},
+      "classification":"candidate_only; provider wallet identity echo absent; not same-control proof"
+    }
+  ],
+  "fourFlapOfficialReview": {
+    "fourAgentSkillGeneralAgent": true,
+    "fourRoadmapPhase3AgenticModeAndIdentity": "planned_not_verified_as_launched",
+    "flapBstocksMpcAndAlphaPointsIsAgenticWalletExclusive": false,
+    "agenticWalletOfficialExclusiveRuleFound": false,
+    "qualifyingCandidateBuys": null,
+    "fullChainScan": false,
+    "triggerFired": false,
+    "sources": [
+      "https://www.four.meme/en/agentic",
+      "https://www.binance.com/en/square/post/297600375569202",
+      "https://developers.binance.com/en/docs/products/agentic-wallet/welcome",
+      "https://flap.sh/event/bstocks?lang=en"
+    ],
+    "giwaInspected": false
+  },
+  "paperLedger": {
+    "mode":"paper",
+    "execution":false,
+    "signing":false,
+    "broadcast":false,
+    "tradeCount":325,
+    "lastTradeId":"1792839982698:324",
+    "newTrades":2,
+    "newClosedRounds":1,
+    "newRoundId":"1792839465753:323",
+    "newRoundCA":"3w67qwokqjcS6KbZhzNonhmFNGjYbWneB7g5HTXwpump",
+    "newRoundNetUsd":-0.5934032667372953,
+    "multiarmNewCompletePairIds":["1792839465753:323"],
+    "multiarmArmsNoTrigger":{"2x":true,"3x":true,"5x":true},
+    "multiarmCoverageGapsPrevious":334,
+    "multiarmCoverageGapsCurrent":356,
+    "quoteOpportunityScheduler":null
+  },
+  "coverage": {
+    "fourCurrentLag":null,
+    "fourRegistryCursorNextBlock":129326094,
+    "fourLastHeadVerifiedAt":"2026-10-23T13:00:05.562Z",
+    "flapStatus":"degraded",
+    "flapConsecutiveFailures":242,
+    "flapLastSuccessAt":"2026-10-23T13:11:24.781Z",
+    "flapErrorCode":"FLAP_QUOTE_CHAIN_ID_UNAVAILABLE",
+    "flapCurrentLag":null,
+    "runtimeContinuousUptimeProven":false
+  },
+  "nextQuestion":"轮换BSC；核对 Four.Meme Phase 3/Agentic Mode 是否正式上线及 Flap 链 ID 超时是否恢复，并继续要求 Agentic Wallet 官方身份与候选 CA 成功买入双证据。GIWA 不检查、不恢复。"
+}

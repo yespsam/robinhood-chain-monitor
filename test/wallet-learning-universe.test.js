@@ -4,7 +4,7 @@ import { discoverLearningUniverse, balancedLearningSelection, walletResearchRole
 import { buildLearningReport, validLearningPolicy } from '../src/wallet-learning.js';
 import { classifyWalletPersonas } from '../src/wallet-personas.js';
 import { advanceLearningShadow } from '../src/wallet-learning-shadow.js';
-import { NOW, teacher, address, trainingState } from './fixtures/wallet-learning.js';
+import { NOW, teacher, address, trainingState, reviewedTeacherRegistry } from './fixtures/wallet-learning.js';
 
 test('candidate discovery expands to bounded diverse research including unsuccessful controls', () => {
   const profiles = {};
@@ -52,16 +52,16 @@ test('personas describe overlapping observed habits and conditional weaknesses, 
   const lossy = classifyWalletPersonas({ ...base, medianLosingExit: -.8 }); assert.ok(lossy.drawbacks.some(s => s.includes('亏损退出幅度偏大')));
 });
 test('only qualified clean multi-teacher persona groups can produce bounded forward policies', () => {
-  const s = trainingState(); const good = buildLearningReport(s, NOW);
+  const s = trainingState(), reviews = reviewedTeacherRegistry(); const good = buildLearningReport(s, NOW, null, reviews);
   assert.equal(good.personaPolicies.length, 2); assert.equal(good.personaPolicies[0].personaId, 'short_cycle');
   assert.ok(validLearningPolicy(good.personaPolicies[0], 'robinhood', NOW));
   assert.equal(validLearningPolicy({ ...good.personaPolicies[0], personaId: 'average_down' }, 'robinhood', NOW), false);
   for (const change of [w => { w.historyGap = true; }, w => { w.statsError = 'bad'; }, w => { w.profile['7d'].realizedProfitUsd = -1; }]) {
-    const copy = trainingState(); change(Object.values(copy.wallets)[0]); assert.equal(buildLearningReport(copy, NOW).personaPolicies.length, 0);
+    const copy = trainingState(); change(Object.values(copy.wallets)[0]); assert.equal(buildLearningReport(copy, NOW, null, reviews).personaPolicies.length, 0);
   }
 });
 test('persona candidate selection is chain bound, keeps independent paper controls and no automatic promotion', () => {
-  const report = buildLearningReport(trainingState(), NOW);
+  const report = buildLearningReport(trainingState(), NOW, null, reviewedTeacherRegistry());
   const pair = advanceLearningShadow(null, { report, chain: 'robinhood', evaluations: [], marksFor: () => [], enabled: true, nowMs: NOW });
   assert.equal(pair.latestPolicy.personaId, 'short_cycle'); assert.equal(pair.control.cash, 100); assert.equal(pair.student.execution, false);
   assert.equal(advanceLearningShadow(null, { report, chain: 'bsc', evaluations: [], marksFor: () => [], enabled: true, nowMs: NOW }), null);

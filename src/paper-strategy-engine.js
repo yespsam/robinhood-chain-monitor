@@ -1,6 +1,6 @@
 /** Deterministic paper decisions and an isolated, cost-aware simulated ledger. */
 import { STRATEGY_ANALYSIS_VERSION, CHART_MISSING, assessPaperNarrative, analyzePaperChart, buildPaperEntryPlan, priceText } from './paper-strategy-analysis.js';
-import { validLearningPolicy } from './wallet-learning.js';
+import { validLearningPolicy, validNewLearningPolicy } from './wallet-learning.js';
 import { paperPositionSize, paperInternalDepthPositionSize, validPaperPositionSize, paperSizingText, PAPER_FIXED_ENTRY_USD, PAPER_FIXED_SIZING_VERSION, PAPER_RECOVERY_SIZING_VERSION, PAPER_INTERNAL_DEPTH_SIZING_VERSION } from './paper-position-sizing.js';
 import { PAPER_RECOVERY_VERSION, EVIDENCE_GAP_POLICY, validEvidenceGapPolicy, applyEvidenceGapExit, createRecoveryEntryFinalizer, recoveryEntryCheck } from './paper-recovery-policy.js';
 import { UPSIDE_EXIT_POLICY, validUpsideExitPolicy, upsidePositionPolicy, upsideExitText } from './paper-upside-policy.js';
@@ -14,13 +14,14 @@ import { traderDecision, compareConfirmedCandidates } from './paper-trader-reaso
 import { multiOpportunityEntry, OPPORTUNITY_VERSION } from './paper-opportunity-policy.js';
 import { externalEntryCandles } from './paper-hot-research.js';
 import { REFERENCE_COST_VERSION, OPPORTUNITY_REVIEW_VERSION, MEME_STRUCTURE_ENTRY_VERSION, structureEconomics, assessStructureHold } from './paper-opportunity-review.js';
+import { reconstructStructureEntry } from './paper-structure-entry-proof.js';
 import { THESIS_EXIT_VERSION, THESIS_EXIT_POLICY, THESIS_EXIT_TEXT, validThesisPolicy, assessThesisExit } from './paper-thesis-exit.js';
 import { MEME_EXIT_VERSION, LEGACY_MEME_EXIT_VERSION, MEME_EXIT_POLICY, MEME_EXIT_TEXT, validMemeExitPolicy, assessMemeExit } from './paper-meme-exit.js';
 import { validStructureTrail } from './paper-structure-trail.js';
 import {ALPHA_ENTRY_VERSION,validAlphaSignal} from './binance-alpha-catalog.js';
 import {confirmAlphaQuotes} from './paper-alpha-entry.js';
 import {MONITOR_ENTRY_VERSION,validMonitorSignal,confirmMonitorQuote} from './paper-monitor-signal.js';
-import { buildNarrativeThesis, attachNarrativeThesis, NARRATIVE_THESIS_VERSION } from './paper-narrative-thesis.js';
+import { buildNarrativeThesis, attachNarrativeThesis, narrativeAdmissionReview, NARRATIVE_THESIS_VERSION } from './paper-narrative-thesis.js';
 import { paperCostGate, admissionCosts } from './paper-cost-policy.js';
 import { ethGasUsd } from './paper-eth-gas.js';
 import { chainGasUsd, GAS_ACCOUNT_ONLY } from './paper-chain-gas.js';
@@ -133,13 +134,14 @@ function safety(token, chain) {
 }
 
 export function evaluatePaperStrategies({ token = {}, marketStatus, observedAt, priceObservedAt = observedAt, requireFastQuote = false, narrativeResearchIndex = null, gasEstimate = null, chainGasAccounting = false, lossRepairMode = false, enforceLossGuards = lossRepairMode, estimatedFeeMode = false, internalDepth = null,
-  flow = {}, narrative = {}, narrativeRecall = null, alphaSignal = null, monitorSignal = null, collectiveSignal = null, candles = [], klineStatus, allowExploratory = false, compoundingCash = null, fixedEntryUsd = null, upsideMode = false, pvpMode = false, diagnosticMode = false, confirmedMode = false, evidenceHoldMode = false, continuousPaperMode = false, opportunityMode = false, opportunityReviewMode = true, memeExitMode = false, recoveryMode = false, minimalEntryMode = false, opportunityAccount = null, quoteHistory = [], nowMs = Date.now() } = {}) {
+  flow = {}, narrative = {}, narrativeRecall = null, alphaSignal = null, monitorSignal = null, collectiveSignal = null, candles = [], klineStatus, allowExploratory = false, compoundingCash = null, fixedEntryUsd = null, upsideMode = false, pvpMode = false, diagnosticMode = false, confirmedMode = false, evidenceHoldMode = false, continuousPaperMode = false, opportunityMode = false, opportunityReviewMode = true, memeExitMode = false, recoveryMode = false, minimalEntryMode = false, narrativeAdmissionGate = false, opportunityAccount = null, quoteHistory = [], nowMs = Date.now() } = {}) {
   assertNow(nowMs);
   const chartSelection=memeExitMode?externalEntryCandles(token,candles):{candles,selection:null};
   candles=chartSelection.candles;
   if(typeof lossRepairMode!=='boolean'||lossRepairMode&&(!recoveryMode||!memeExitMode))throw new TypeError('loss repair requires recovered paper main');
   if(estimatedFeeMode&&(!lossRepairMode||chainGasAccounting))throw new TypeError('estimated experiment requires isolated repair evaluation');
   if(typeof recoveryMode!=='boolean'||recoveryMode&&!memeExitMode)throw new TypeError('recovery requires meme paper main');
+  if(typeof narrativeAdmissionGate!=='boolean'||narrativeAdmissionGate&&(!recoveryMode||!narrativeResearchIndex))throw new TypeError('narrative admission requires the recovered-paper evidence index');
   if (typeof upsideMode !== 'boolean') throw new TypeError('invalid upside mode');
   if (typeof pvpMode !== 'boolean' || pvpMode && upsideMode) throw new TypeError('invalid pvp mode');
   if (typeof diagnosticMode !== 'boolean' || diagnosticMode && (!pvpMode || !allowExploratory)) throw new TypeError('diagnostic entries require exploratory paper PVP');
@@ -252,11 +254,11 @@ export function evaluatePaperStrategies({ token = {}, marketStatus, observedAt, 
         narrativeFresh, narrativeSource: narrativeFresh ? sourceUrl : null, narrativeText: narrativeFresh ? clean(narrative.text) : null, launchAgeMs, safety: safetyResult, costAssumptions: costs },
     };
     const recoveryFinalizer = recoveryMode ? createRecoveryEntryFinalizer({observedAt,flow,candles,klineStatus,quoteHistory,nowMs,memeExitMode,lossRepairMode,sourceToken:token}) : null;
-    const thesis=!minimalEntryMode&&recoveryMode&&narrativeResearchIndex?buildNarrativeThesis({token,narrative,monitorSignal,alphaSignal,
+    const thesis=recoveryMode&&narrativeResearchIndex?buildNarrativeThesis({token,narrative,monitorSignal,alphaSignal,
       index:narrativeResearchIndex,flow,candles,klineStatus,nowMs}):null;
     const finishRoute=row=>{
       const recovered=recoveryFinalizer?recoveryFinalizer(row):row;
-      const researched=thesis?attachNarrativeThesis(recovered,thesis):recovered;
+      const researched=thesis?attachNarrativeThesis(recovered,thesis,{requireAdmission:narrativeAdmissionGate,nowMs}):recovered;
       return lossRepairMode?applyLossRepair(researched,opportunityAccount,nowMs,{estimatedFees:estimatedFeeMode}):researched;
     };
     // Select the winner only AFTER every route has passed its own repair gates.
@@ -270,7 +272,8 @@ export function evaluatePaperStrategies({ token = {}, marketStatus, observedAt, 
     const evaluated = minimalEntryMode ? minimalPaperEntry(result, { sourceSafety, token, nowMs })
       : opportunityMode ? multiOpportunityEntry(result, { token, candles, klineStatus, sourceSafety, pulse:flow.pulse, quoteHistory, narrativeRecall, alphaSignal, monitorSignal, collectiveSignal, internalDepth, internalDepthProposal, continuousPaperMode, opportunityReviewMode, memeExitMode, opportunityAccount, nowMs, finalizeRoute, lossRepairMode })
       : confirmedMode ? confirmedPaperEntry(result, { sourceSafety, pulse: flow.pulse, quoteHistory, narrativeRecall, continuousPaperMode, lossRepairMode, memeExitMode, nowMs }) : diagnosticMode ? diagnosticPaperEntry(result, sourceSafety) : result;
-    const final = !minimalEntryMode&&!opportunityMode&&finalizeRoute?finalizeRoute(evaluated):evaluated;
+    const final = minimalEntryMode&&narrativeAdmissionGate?attachNarrativeThesis(evaluated,thesis,{requireAdmission:true,nowMs})
+      :!minimalEntryMode&&!opportunityMode&&finalizeRoute?finalizeRoute(evaluated):evaluated;
     if (final.evidence?.accountPolicy) final.evidence.accountPolicy = paperOperatingPolicy(continuousPaperMode, enforceLossGuards);
     return final;
   });
@@ -551,13 +554,14 @@ function structuralExit(position, mark, policy, nowMs) {
 }
 
 /** New entries can pause independently; fresh-price exits are always evaluated. */
-export function advancePaperStrategyAccount(account, { evaluations = [], marks = [], nowMs = Date.now(), enabled = true, distilledPolicy = null, diagnosticMode = false, confirmedMode = false, continuousPaperMode = false, opportunityMode = false, opportunityReviewMode = true, memeExitMode = false, recoveryMode = false, minimalEntryMode = false, chainGasAccounting = false, lossRepairMode = false, enforceLossGuards = lossRepairMode, estimatedFeeMode = false, evidenceGapExitMode = true } = {}) {
+export function advancePaperStrategyAccount(account, { evaluations = [], marks = [], nowMs = Date.now(), enabled = true, distilledPolicy = null, diagnosticMode = false, confirmedMode = false, continuousPaperMode = false, opportunityMode = false, opportunityReviewMode = true, memeExitMode = false, recoveryMode = false, minimalEntryMode = false, narrativeAdmissionGate = false, chainGasAccounting = false, lossRepairMode = false, enforceLossGuards = lossRepairMode, estimatedFeeMode = false, evidenceGapExitMode = true } = {}) {
   assertNow(nowMs);
   validatePaperStrategyAccount(account);
   if(typeof lossRepairMode!=='boolean'||lossRepairMode&&(!recoveryMode||!memeExitMode||account.variant))throw new TypeError('loss repair is paper-main only');
   if(typeof enforceLossGuards!=='boolean'||lossRepairMode&&!enforceLossGuards&&(!continuousPaperMode||account.estimatedCostModel!==ESTIMATED_COST_VERSION))throw new TypeError('loss guard override requires continuous estimated paper');
   if(estimatedFeeMode&&(!lossRepairMode||chainGasAccounting||account.estimatedCostModel!==ESTIMATED_COST_VERSION))throw new TypeError('estimated experiment cannot write original main');
   if(typeof recoveryMode!=='boolean'||recoveryMode&&(!memeExitMode||account.variant||account.exitExperimentVersion))throw new TypeError('recovery is paper-main only');
+  if(typeof narrativeAdmissionGate!=='boolean'||narrativeAdmissionGate&&!recoveryMode)throw new TypeError('narrative admission requires recovered paper');
   if (typeof diagnosticMode !== 'boolean' || diagnosticMode && account.variant) throw new TypeError('diagnostic mode is paper-main only');
   if (typeof confirmedMode !== 'boolean' || confirmedMode && (account.variant || diagnosticMode)) throw new TypeError('confirmed mode is paper-main only');
   if (typeof minimalEntryMode !== 'boolean' || minimalEntryMode && (!confirmedMode || account.variant || diagnosticMode)) throw new TypeError('minimal entry is paper-main only');
@@ -708,8 +712,9 @@ export function advancePaperStrategyAccount(account, { evaluations = [], marks =
     const token = evaluation.token || {};
     const chain = chainName(token.chain), address = clean(token.address), key = keyOf(token);
     const price = positive(token.price);
-    if (account.variant === 'distilled_shadow' && !validLearningPolicy(distilledPolicy, chain, nowMs)) continue;
+    if (account.variant === 'distilled_shadow' && !validNewLearningPolicy(distilledPolicy, chain, nowMs)) continue;
     if (!policy || !chain || !validAddress(chain, address) || !price || evaluation.evidence?.paperEligible !== true || evaluation.missing?.length || !fresh(evaluation.observedAt, nowMs) || next.positions[key] || !continuousPaperMode && (next.cooldowns[key] || 0) > nowMs) continue;
+    if(narrativeAdmissionGate&&!narrativeAdmissionReview(evaluation.evidence?.narrativeThesis,{token,nowMs}).ready)continue;
     // Recheck authority at the single ledger writer. A forged ready row or a
     // stale in-flight quote cannot bypass the unavailable order-fee adapter.
     if(account.estimatedCostModel&&!estimatedFeeMode)continue;
@@ -788,7 +793,14 @@ export function advancePaperStrategyAccount(account, { evaluations = [], marks =
       ||!confirmMonitorQuote((evaluation.evidence.confirmedPolicy?.confirmation?.rows||[]).map(q=>({...q,chain,address,status:'ok'})),
         token,evaluation.evidence.opportunity.event,nowMs,{newLaunch:!!verifiedLaunchContext(evaluation.evidence.recoveryEntry,token,evaluation.evidence.opportunity.event,nowMs)}).ready))continue;
     const reviewedStructure=evaluation.evidence.opportunity?.reviewVersion === OPPORTUNITY_REVIEW_VERSION && evaluation.evidence.opportunity.basis === 'ohlcv';
-    const economics=reviewedStructure ? structureEconomics({...evaluation.evidence.opportunity.pattern,support:plan?.stopPrice,targetPrice:plan?.targetPrice},price,costs,budget) : null;
+    // Forward entries only. The proposal cannot manufacture cost space by
+    // replacing a target/support or keeping stale shape/quote ready flags.
+    const mainStructureEntry=recoveryMode&&memeExitMode&&(reviewedStructure||memeStructureEntry
+      ||['external_breakout','external_pullback','external_trend'].includes(evaluation.evidence.opportunity?.id));
+    const structureValidation=mainStructureEntry?reconstructStructureEntry(evaluation,nowMs):null;
+    if(structureValidation&&!structureValidation.ready)continue;
+    const economics=reviewedStructure ? structureEconomics(structureValidation?.pattern
+      ||{...evaluation.evidence.opportunity.pattern,support:plan?.stopPrice,targetPrice:plan?.targetPrice},price,costs,budget) : null;
     // Recompute with the serialized actual cash budget; a proposed row cannot
     // grant relaxed costs to a comparison book or bypass net economics.
     const internalDepthReady=collectiveEntry&&['internal','near_completion'].includes(evaluation.evidence.marketStage)
@@ -809,6 +821,11 @@ export function advancePaperStrategyAccount(account, { evaluations = [], marks =
     if (!(diagnostic || confirmed) && proposedSize && (!Number.isFinite(actualRewardRisk) || actualRewardRisk < 1.5)) continue;
     const qualifiedStrategyIds = unique(qualifiedByToken.get(key).map(item => item.strategyId));
     const position = { chain, address, symbol: clean(token.symbol) || '未知', strategyId: policy.id, strategyLabel: diagnostic ? '诊断试仓' : policy.label, qualifiedStrategyIds, quantity, initialQuantity: quantity, entryPrice: price, entryUsd: budget, entryCostsUsd: budget - costs.notionalUsd, costBasisUsd: budget, costAssumptions: costs, entryLogic: evaluation.entryLogic, entryReasons: [...(evaluation.reasons || [])], entryEvidence: structuredClone(evaluation.evidence), exitLogic: evaluation.exitLogic, openedAt: iso(nowMs), markAt: iso(time(evaluation.observedAt)), markPrice: price, markStatus: 'ok', peakPrice: price, profitTiersTaken: [], realizedPnl: 0 };
+    if(structureValidation) {
+      const {pattern,...validation}=structureValidation;
+      position.entryEvidence.structureValidation=validation;
+      position.entryEvidence.entryPlan={...position.entryEvidence.entryPlan,economics};
+    } else delete position.entryEvidence.structureValidation;
     // Freeze the actual engine mode, never infer authority from a candidate row.
     if (continuousPaperMode) position.entryEvidence.accountPolicy = paperOperatingPolicy(true, enforceLossGuards);
     if (positionSizing) {

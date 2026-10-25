@@ -346,23 +346,23 @@
     "initialized": true,
     "initializedAt": "__OLD__",
     "cursor": {
-      "nextBlock": 401,
+      "nextBlock": 128920138,
       "afterLogIndex": -1,
-      "anchorBlock": 400,
-      "anchorBlockHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "anchorBlock": 128920137,
+      "anchorBlockHash": "0x3a8a8b7d2f6e7f5395d21a61b4bddb2ca53c149cf5560e7ba6cd99e0e27df7f0",
       "baselineEstablishedAt": "__OLD__"
     },
     "identity": {
       "chainId": 56,
       "portal": "0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0",
       "portalRuntimeCodeHash": "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3",
-      "version": "v5.24.0",
-      "implementation": "0x27a0f9Da7F5BEAd616fe0bf02bf0c793bece4e20",
-      "implementationCodeHash": "0xb191694f7248773f714234aeb150149a2b9af5d1ab483a53d31c19ec3132b230",
-      "verifiedBlock": 400,
-      "verifiedBlockHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "version": "v5.26.0",
+      "implementation": "0x7a94f37b61a82c395f9812CF266b444783cC5e8c",
+      "implementationCodeHash": "0x3db27f98826706ac5ddedb919594d4670151874482dff23e31d2186858635194",
+      "verifiedBlock": 128920137,
+      "verifiedBlockHash": "0x3a8a8b7d2f6e7f5395d21a61b4bddb2ca53c149cf5560e7ba6cd99e0e27df7f0",
       "portalRuntimeCodeBytes": 2882,
-      "implementationCodeBytes": 20475
+      "implementationCodeBytes": 20347
     },
     "quoteAssets": {},
     "pendingEnableCandidates": {},

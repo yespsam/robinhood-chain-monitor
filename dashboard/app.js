@@ -5,9 +5,11 @@ import { createCaDesk } from './ca-desk.js';
 import { createBrainDesk } from './brain-desk.js';
 import { entryStatus } from './entry-status.js';
 import { renderExitComparison } from './exit-comparison.js';
+import { renderProfitRetention, profitRetentionStatus } from './profit-retention-multiarm.js';
 import { revealHashSection } from './navigation.js';
 import { renderWalletLearning } from './wallet-learning.js';
 import { marketCoverageStatus, flowCoverageStatus, tradingDataHealth } from './coverage-status.js';
+import { strategyCohortSummary } from './strategy-cohorts.js';
 const openSectionAnchor = () => revealHashSection(document, location.hash);
 window.addEventListener('hashchange', openSectionAnchor);
 openSectionAnchor();
@@ -76,6 +78,23 @@ function archiveSummary() {
   } catch { /* An unreadable archive stays untouched. */ }
 }
 
+function chainHeadNotice(onchain, {available=true,now=Date.now(),coverageCheckedAt=null}={}) {
+  const p=onchain||{};
+  const integer=value=>Number.isSafeInteger(value)&&value>=0;
+  const reason={unverified:'链头待核验',error:'链头核验失败',stale:'链头证据过期',cursor_unverified:'游标关联待核验',cursor_ahead_of_observation:'游标已超过上次链头，等待新核验'};
+  if(!integer(p.headBlock)||!p.headVerifiedAt) return '链头待核验；落后块数未知';
+  const sample=`双源共同链头 ${p.headBlock}（核验 ${clock(p.headVerifiedAt)}，两源高度差 ${integer(p.headSpreadBlocks)?p.headSpreadBlocks:'未知'}）`;
+  const age=now-Date.parse(p.headVerifiedAt),sinceCoverage=coverageCheckedAt?now-Date.parse(coverageCheckedAt):0;
+  const fresh=available&&Number.isFinite(age)&&age>=0&&age<=120000&&Number.isFinite(sinceCoverage)&&sinceCoverage>=0
+    &&Number.isFinite(p.headAgeMs)&&p.headAgeMs+sinceCoverage<=120000;
+  if(fresh&&p.liveHeadVerified===true&&integer(p.headLagBlocks)&&integer(p.scanBacklogBlocks)) {
+    return `${sample}；相对该链头落后 ${p.headLagBlocks} 块；扣除 ${p.confirmationDepth} 块确认深度后待扫 ${p.scanBacklogBlocks} 块`;
+  }
+  const historical=integer(p.observedHeadLagBlocks)&&integer(p.observedScanBacklogBlocks)&&integer(p.observationNextBlock)
+    ? `；上次核验快照：下一区块 ${p.observationNextBlock}，落后 ${p.observedHeadLagBlocks} 块／待扫 ${p.observedScanBacklogBlocks} 块` : '';
+  return `${sample}；${!available?'面板连接异常':!fresh?'链头证据过期':reason[p.headVerificationStatus]||'链头待核验'}；当前落后块数未知${historical}`;
+}
+
 function renderStatus() {
   const data = state.snapshot;
   const recent = data?.updatedAt && Date.now() - Date.parse(data.updatedAt) >= 0 && Date.now() - Date.parse(data.updatedAt) <= 120000;
@@ -96,13 +115,23 @@ function renderStatus() {
   $('#controlNote').textContent = data?.lossGuards?.enforced ? '持续扫描；本轮累计或 UTC 当日已实现亏损达到本金 10% 时暂停新仓。持仓按结构和资金证据复核退出。'
     : data?.enabled === false ? '持仓退出和监控继续运行' : continuous ? '持续扫描，满足买点且余额足够时模拟交易。电脑与网络需保持运行。' : '后台持续监控，页面关闭后仍运行';
   if(data?.newLaunchPolicy?.version==='new_launch_narrative_v1') $('#controlNote').textContent += ' 新盘叙事快线：内盘/临毕业＋创建十五分钟内＋原文事件两分钟内，不等 K 线和三秒报价；外盘保留 K 线检查。数据齐备后目标一秒本地决策，上游延迟另计。';
-  if(data?.poolFirstThreePolicy?.version==='paper_quote_asset_first_three_v1') $('#controlNote').textContent += ` 新底池前三 CA 自动模拟：目前接入 BSC Flap，以链上创建顺序为准，不等 K 线；每个底池资产最多三个不同 CA，不重复、不补第四名。当前有效信号 ${data.newsWire?.poolFirstThree?.readySignals??0} 个；其他发射台尚无完整排序接入。`;
+  const launchSources = (data?.poolFirstThreePolicy?.supportedSources || []).map(s=>({'bsc:flap':'BSC Flap','bsc:fourmeme':'BSC Four.meme'})[s]||s).join(' / ') || '接入范围待核实';
+  if(data?.poolFirstThreePolicy?.version==='paper_quote_asset_first_three_v1') $('#controlNote').textContent += ` 新模板／底池前三 CA 模拟评估：已接入 ${launchSources} 的受支持版本，以链上创建顺序为准；每次已核实更新最多三个不同 CA，不重复、不补第四名，仍需安全与时效检查。当前有效信号 ${data.newsWire?.poolFirstThree?.readySignals??0} 个。`;
   if(data?.newsWire?.poolFirstThree?.sourceHealth?.note) $('#controlNote').textContent += ` ${data.newsWire.poolFirstThree.sourceHealth.note}。`;
   const poolReport=data?.newsWire?.poolFirstThree,poolHealth=poolReport?.sourceHealth;
-  $('#newPoolNotice').hidden=!data?.poolFirstThreePolicy;
+  $('#newPoolNotice').hidden=!(data?.poolFirstThreePolicy || data?.launchUpdateCoverage);
   $('#newPoolNotice').textContent=data?.poolFirstThreePolicy
-    ? `新底池前三 CA 自动模拟已接入 BSC Flap：按链上创建顺序，不等 K 线；不重复、不补第四名。当前新鲜信号 ${poolReport?.readySignals??0} 个。${poolHealth?.lastErrorCode?.includes('MISMATCH')?'来源区块或合约证据尚未完成核验；尚不能保证新底池实时覆盖。':poolHealth?.note||'来源状态待核实。'} 其他发射台尚未接入此排序规则。`
+    ? `新模板／底池前三 CA 模拟评估：${launchSources} 的受支持版本；按链上创建顺序，不重复、不补第四名。当前新鲜信号 ${poolReport?.readySignals??0} 个。${poolHealth?.lastErrorCode?.includes('MISMATCH')?'来源区块或合约证据尚未完成核验；尚不能保证新底池实时覆盖。':poolHealth?.note||'来源状态待核实。'} 未绑定 CA 或未知 ABI 的更新只观察。`
     : '';
+  if(data?.launchUpdateCoverage) {
+    const coverage=data.launchUpdateCoverage, labels={fresh:'新鲜',partial:'部分覆盖',degraded:'降级',stale:'过期',unverified:'待核验',source_limited:'来源受限',checkpoint_only_unverified:'仅本地检查点',adapter_observed_head_unverified:'适配器有更新，链头未核实',verified_backlog:'双源链头已核验，有待扫积压',verified_confirmed_head:'已扫描至本次核验的确认链头'};
+    if(!connected) {labels.verified_backlog='连接异常，链头需重验';labels.verified_confirmed_head='连接异常，链头需重验';}
+    const parts=Object.entries(coverage.platforms||{}).map(([id,p])=>`${id==='flap'?'Flap':'Four.meme'}：X ${labels[p.officialX?.status]||'待核验'}；网站 ${labels[p.officialWeb?.status]||'待核验'}；正文 ${p.documentBodies?.freshPages??0}/${p.documentBodies?.allowedPages??0} 页新鲜、${p.documentBodies?.uncheckedPages??0} 页未读、${p.documentBodies?.pendingChanges??0} 项变更待核实${p.documentBodies?.omittedChangeCount?`（另 ${p.documentBodies.omittedChangeCount} 项超出留存上限）`:''}；GitHub ${labels[p.github?.status]||'待核验'}；链上 ${labels[p.onchain?.status]||'待核验'}；下一区块 ${Number.isSafeInteger(p.onchain?.nextBlock)&&p.onchain.nextBlock>=0?p.onchain.nextBlock:'待核验'}；检查点 ${p.onchain?.checkpointAt?clock(p.onchain.checkpointAt):'—'}`);
+    parts.forEach((part,index)=>{parts[index]=`${part}；${chainHeadNotice(Object.values(coverage.platforms||{})[index]?.onchain,{available:connected,coverageCheckedAt:coverage.checkedAt})}`;});
+    const readReasons={size_limit:'文件超出读取上限',snapshot_changed:'快照写入中',invalid_json:'JSON损坏',invalid_state:'格式无效',not_regular_file:'非普通文件',missing:'文件缺失',io_error:'读取异常'};
+    const readFailures=(coverage.readErrors||[]).map(key=>`${({four:'Four',flap:'Flap',platform:'网站',twitter:'X',github:'GitHub'})[key]||'来源'}：${readReasons[coverage.readDiagnostics?.[key]?.errorCode]||'读取异常'}`);
+    $('#newPoolNotice').textContent += ` 更新覆盖（${coverage.checkedAt?clock(coverage.checkedAt):'—'}）：${parts.join('。')||'读取暂不可用'}。${readFailures.length?`部分本地来源快照读取失败（${readFailures.join('；')}）。`:''}网站正常不代表已追平链头或能捕捉所有新版本。`;
+  }
   if(Number.isFinite(poolReport?.expiredOnArrivalEvents)) $('#newPoolNotice').textContent += ` 保留的 ${poolReport.uniqueEvents} 个去重事件中，${poolReport.expiredOnArrivalEvents} 个形成时已超过两分钟；这是历史延迟统计，不是今日全链统计。`;
   const launchTiming=data?.cadence?.lastCandidateEvaluation;
   if(launchTiming?.entryLane==='new_launch_narrative_v1') $('#controlNote').textContent += ` 最近新盘报价返回至判断 ${launchTiming.receivedToDecisionMs} 毫秒（${launchTiming.decisionTargetMet?'达到一秒目标':'超过一秒目标'}）；原文发布至判断 ${launchTiming.sourceToDecisionMs} 毫秒。`;
@@ -191,8 +220,8 @@ function renderStrategies() {
   const traderNode = $('#traderReasoningNote');
   if (traderNode) {
     const s = trader?.overall;
-    const current = trader?.cohorts?.filter(c => c.reasoningVersion === 'evidence_first_v1' && (!multi || c.opportunityVersion === state.snapshot.opportunityMode) && (state.snapshot?.mainExitPolicy ? c.exitVersion===state.snapshot.mainExitPolicy.version : !evidenceHold || ['evidence_hold_v1','structure_hold_v2'].includes(c.exitVersion)) && (!continuous || c.accountPolicyVersion === 'continuous_paper_v1')) || [];
-    traderNode.textContent = s ? `交易决策四问 · 为什么现在买 / 哪里判错 / 成本后是否值得 / 凭什么继续持有。完整平仓 ${num(s.closedRounds)} 笔，平均净收益 ${finite(s.averageNetUsd) ? signedMoney(s.averageNetUsd) : '待采样'}；价格亏损 ${num(s.priceLosses)} 笔，费用转亏 ${num(s.costOnlyLosses)} 笔。${continuous ? '全天候模拟版本' : evidenceHold ? '按证据持仓版本' : '新决策版本'}已平仓 ${current.reduce((n,c) => n + num(c.closedRounds), 0)} 笔，旧成交不混作新版成绩。按链与规则版本复核，未验证净期望。${lossPolicyNote}` : '交易决策与成本归因初始化中…';
+    const versions = strategyCohortSummary(trader?.cohorts, state.snapshot);
+    traderNode.textContent = s ? `交易决策四问 · 为什么现在买 / 哪里判错 / 成本后是否值得 / 凭什么继续持有。历史全部完整平仓 ${num(s.closedRounds)} 笔，平均净收益 ${finite(s.averageNetUsd) ? signedMoney(s.averageNetUsd) : '待采样'}；价格亏损 ${num(s.priceLosses)} 笔，费用转亏 ${num(s.costOnlyLosses)} 笔。当前已声明规则同版本已平仓 ${versions.currentRounds} 笔，已知旧版或混合版本 ${versions.legacyRounds} 笔，版本证据不足 ${versions.unknownRounds} 笔；入场卖压、实际退出观察及成本版本不完整，不算新版成绩。按链与冻结规则版本复核，未验证净期望。${lossPolicyNote}` : '交易决策与成本归因初始化中…';
   }
   const learner = state.snapshot?.narrativeLearning;
   const learningNote = $('#narrativeLearningNote');
@@ -217,6 +246,7 @@ function renderStrategies() {
   if(state.snapshot?.mainExitPolicy)$('#strategyObjective').textContent+=' 后续主盘新仓已切换「叙事＋资金行为退出」，取消固定价格、倍数和时间触发；旧仓和独立对照规则不变。';
   if(state.snapshot?.mainEntryPolicy)$('#strategyObjective').textContent+=` ${state.snapshot.mainEntryPolicy.text}`;
   if(state.snapshot?.recovery)$('#strategyObjective').textContent=`恢复期 · ${state.snapshot.enabled?'新开仓已手动启用':'新开仓暂停；持仓退出和监控继续'}。${state.snapshot.recovery.entryText} ${state.snapshot.recovery.exitText} 当前主仓新鲜报价 ${state.snapshot.cadence?.mainFreshQuotes??0}/${state.snapshot.cadence?.mainQuoteTargets??0}；本地每秒检查不代表每币每秒收到新行情。`;
+  if(state.snapshot?.narrativeAdmission?.enabled)$('#strategyObjective').textContent+=' 新开仓另需通过叙事证据闸门：新鲜原文、精确 CA 关系、催化、真实买盘和量价；Agentic Wallet 限定需官方身份＋该 CA 成功买入双证据。未满足只观察，已有仓位退出照常。';
   if (exitNote?.classList.contains('section-note')) exitNote.textContent = state.snapshot?.mainExitPolicy ? state.snapshot.mainExitPolicy.text : reviewed
     ? '外盘新仓：真实结构＋波动缓冲止损；连续两根入场后收盘线确认买入依据失效则退出。历史结构参考位且扣成本盈利时兑现 20%，2 / 3 倍各兑现 30%，留 20% 尾仓；保护线只上调。资金流路线沿用证据持有。报价缺失不虚构成交；GMGN 单边 1% 费用参考，滑点与 gas 为估算。'
     : evidenceHold
@@ -312,6 +342,8 @@ function renderResearchArchive() {
   renderStrategies(); renderCoverage();
   $('#exitComparisonContent').innerHTML = renderExitComparison(state.snapshot?.exitComparison,state.snapshot?.mainExitPolicy,state.snapshot?.recovery);
   $('#exitComparisonStatus').textContent = state.snapshot?.exitComparison ? '独立运行 · 尚未验证盈利' : '等待实验启动';
+  $('#profitRetentionContent').innerHTML = renderProfitRetention(state.snapshot?.profitRetentionShadow);
+  $('#profitRetentionStatus').textContent = profitRetentionStatus(state.snapshot?.profitRetentionShadow);
   $('#walletLearningContent').innerHTML = renderWalletLearning(state.snapshot?.learning, state.snapshot?.learningComparison);
   $('#walletLearningStatus').textContent = state.snapshot?.learning?.lastError ? '采集待恢复' : state.snapshot?.learningComparison?.student ? '向前模拟对照中' : '真实样本学习中';
 }

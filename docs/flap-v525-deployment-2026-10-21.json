@@ -1,0 +1,123 @@
+{
+  "schema": "flap_version_deployment_review_v1",
+  "checkedAt": "2026-10-20T17:22:23.849Z",
+  "localDate": "2026-10-21",
+  "status": "version_adapted_and_deployed_collection_recovery_blocked",
+  "collectionRecoveryVerified": false,
+  "evidence": "docs/flap-v525-compatibility-evidence-2026-10-21.json",
+  "backupDirectory": "data/backups/flap-v525-20261021-u7wdN4",
+  "tests": {
+    "command": "node --test --test-concurrency=2 --test-reporter=spec",
+    "tests": 4185,
+    "pass": 4185,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "durationMs": 301213.760375,
+    "diffCheckPassed": true
+  },
+  "sourceSha256": {
+    "src/flap-portal-pins.js": "4b851a56623b2ebfdaa8f41ac3dff1e89429c66121ba4fcfb0554d6667547a67",
+    "src/flap-quote-monitor.js": "be012f623ca922e87dbfe2f34de97457e3eb9a8f61fdec47fef610cc30ea3302",
+    "src/source-controls.js": "82881f7d0dad88a6751e3f6c5fc6772ac5c5a62aac9be15cc37f29fb9eaf8673",
+    "src/paper-internal-depth.js": "bee73741d0ed79c15b3668c3b23060e6fb3139d91f446e90d5036dff2797ac4b"
+  },
+  "processes": {
+    "main": {
+      "label": "gui/501/com.qohfq.robinhood-launchpad-monitor",
+      "oldPid": 815,
+      "signal": "SIGTERM",
+      "signalAt": "2026-10-20T17:12:22.199Z",
+      "drainCompletedAt": "2026-10-20T17:13:52.607Z",
+      "newPid": 76849,
+      "heartbeatStartedAt": "2026-10-20T17:13:53.218Z"
+    },
+    "bscChild": {"oldPid": 1048, "newPid": 76850, "parentPid": 76849},
+    "paperDashboard": {
+      "label": "gui/501/com.qohfq.yesp-atm-dashboard",
+      "oldPid": 814,
+      "signal": "SIGTERM",
+      "signalAt": "2026-10-20T17:15:25Z",
+      "newPid": 77576,
+      "processStartedAt": "2026-10-20T17:16:10Z"
+    },
+    "independentGmgnX": {"pid": 829, "restarted": false},
+    "forcedKillUsed": false
+  },
+  "identityMigration": {
+    "fromVersion": "v5.24.0",
+    "toVersion": "v5.25.0",
+    "verifiedAtCycle": "2026-10-20T17:14:38.284Z",
+    "chainId": 56,
+    "portal": "0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0",
+    "implementation": "0xE13227370996f892a56d2Ff4a30f6026887B48Fb",
+    "implementationCodeHash": "0xf8d56fe09f2ec5e3eeaabdbfeeb0faf55e4ed8996a55bc1b69a78e62dbb792e4",
+    "verifiedBlock": 128784266,
+    "verifiedBlockHash": "0xb395f4373de24362e2f6a9dd5917c0c0467732e5805c2815987c11ab7c380836",
+    "preservationCheckedAt": "2026-10-20T17:16:15.623Z",
+    "preservedExactly": [
+      "cursor",
+      "quoteAssets",
+      "pendingEnableCandidates",
+      "processedEventKeys",
+      "reorgOrphanedEventKeys",
+      "eventRecords",
+      "finalizedCheckpoints",
+      "auditTrail"
+    ],
+    "manuallyEditedState": false
+  },
+  "collection": {
+    "initialNextBlock": 128103371,
+    "finalNextBlock": 128103371,
+    "newVerifiedScannedBlocks": 0,
+    "baselineEstablishedAt": "2026-09-03T09:53:09.737Z",
+    "consecutiveFailuresAfterMigration": 7,
+    "lastAttemptAt": "2026-10-20T17:21:15.749Z",
+    "lastErrorCode": "FLAP_QUOTE_GET_LOGS_FAILED",
+    "lastErrorSummary": "bsc.rpc.sentio.xyz eth_getLogs HTTP 429",
+    "nextAttemptAt": "2026-10-20T17:25:08.403Z",
+    "otherObservedBlockers": [
+      "bsc-mainnet.nodereal.io shared capacity wait deadline",
+      "public-bsc.nownodes.io shared host/method cooldown",
+      "bsc.rpc.sentio.xyz fixed-block timeout"
+    ],
+    "identityMigrationSuccessIsNotScanRecovery": true,
+    "historicalGapFilled": false,
+    "continuousOnlineClaim": false
+  },
+  "paperAndLedger": {
+    "checkedAt": "2026-10-20T17:21:27.934Z",
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "tradeCount": 307,
+    "lastTradeId": "1792275648715:306",
+    "original307TradesSha256": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437",
+    "originalTradePrefixUnchanged": true,
+    "legacyLedger": "data/yesp-atm-confirmed-pvp-v2-20260923.json",
+    "legacyLedgerSha256": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36",
+    "legacyLedgerUnchanged": true,
+    "manuallyModifiedLedgerOrStrategyParameters": false
+  },
+  "runtimeApi": {
+    "checkedAt": "2026-10-20T17:18:04.212Z",
+    "httpStatus": 200,
+    "exitMonitorRunning": true,
+    "exitMonitorLastError": null,
+    "quoteOpportunityScheduler": "evidence_preserving_event_lease_v1",
+    "profitRetentionVersion": "profit_retention_multiarm_v3",
+    "profitRetentionStatus": "observing",
+    "profitRetentionError": null,
+    "profitRetentionBaselineTradeCount": 305,
+    "profitRetentionCursorTradeCount": 307,
+    "profitRetentionPendingWrite": false
+  },
+  "remainingEvidenceGaps": [
+    "exact v5.25 upgrade transaction and activation block",
+    "independently verified new-version configuration event receipt",
+    "successful production scan cursor advancement after deployment"
+  ],
+  "nextAction": "Resolve collection RPC availability/capacity while preserving independent-source verification, shared cooling and realtime priority; do not infer restored collection from process or identity health alone."
+}

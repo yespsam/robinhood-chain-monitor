@@ -1,0 +1,88 @@
+{
+  "version": "jev_principal_strategy_review_result_v1",
+  "requestedAt": "2026-10-17T15:10:33.166Z",
+  "requestFingerprint": "6a51c4f2729ad1b119401cfa18f94966f4b6436ab5be646e0fabe750084986c4",
+  "requestedModel": "jev-latest",
+  "status": "evaluated",
+  "apiCalls": 1,
+  "model": "jev-1.13.0",
+  "answers": {
+    "supported_multiplier": {
+      "type": "choice",
+      "choice": "none_supported",
+      "confidence": 0.99,
+      "probabilities": {
+        "two": 0,
+        "three": 0,
+        "five": 0,
+        "none_supported": 0.99,
+        "unknown": 0.01
+      }
+    },
+    "giveback_coverage": {
+      "type": "choice",
+      "choice": "none_in_recorded_observations",
+      "confidence": 0.97,
+      "probabilities": {
+        "all": 0.01,
+        "some": 0.01,
+        "none_in_recorded_observations": 0.98,
+        "unknown": 0
+      }
+    },
+    "comparison_design": {
+      "type": "choice",
+      "choice": "paired_preregistered",
+      "confidence": 0.83,
+      "probabilities": {
+        "paired_preregistered": 0.87,
+        "sequential_periods": 0,
+        "historical_peak_replay": 0,
+        "unknown": 0.13
+      }
+    },
+    "cash_risk": {
+      "type": "choice",
+      "choice": "cash_only",
+      "confidence": 1,
+      "probabilities": {
+        "both_guaranteed": 0,
+        "cash_only": 1,
+        "profit_only": 0,
+        "unknown": 0
+      }
+    },
+    "tail_scope": {
+      "type": "choice",
+      "choice": "same_exit_partial_recovery",
+      "confidence": 1,
+      "probabilities": {
+        "same_exit_partial_recovery": 1,
+        "independent_long_tail": 0,
+        "unlimited_hold": 0,
+        "unknown": 0
+      }
+    },
+    "two_vs_five_tradeoff": {
+      "type": "choice",
+      "choice": "earlier_recovery_vs_more_residual",
+      "confidence": 1,
+      "probabilities": {
+        "earlier_recovery_vs_more_residual": 1,
+        "five_always_better": 0,
+        "two_always_better": 0,
+        "unknown": 0
+      }
+    }
+  },
+  "usage": {
+    "input_tokens": 2120,
+    "output_tokens": 361
+  },
+  "execution": false,
+  "signing": false,
+  "broadcast": false,
+  "automaticStrategyChange": false,
+  "completedAt": "2026-10-17T15:10:34.529Z",
+  "latencyMs": 1360
+}

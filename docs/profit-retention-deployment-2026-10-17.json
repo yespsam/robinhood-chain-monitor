@@ -1,0 +1,454 @@
+{
+  "version": "profit_retention_deployment_v1",
+  "status": "deployed_verified_paper_only",
+  "authorization": "User explicitly approved deploying pending fixes together with 2/3/5 shadow; paper only.",
+  "before": {
+    "at": "2026-10-17T15:48:35.097Z",
+    "sessionId": "confirmed-pvp-v2-estimated-20260928",
+    "ledgerKeys": [
+      "schema",
+      "session",
+      "chain",
+      "chains",
+      "enabled",
+      "account",
+      "algorithmSignalJournal",
+      "learningShadow",
+      "narrativeMemory",
+      "narrativeLearningMemory",
+      "narrativeAcademyMemory",
+      "reviewComparison",
+      "exitComparison",
+      "tradeCountReview"
+    ],
+    "enabled": true,
+    "account": {
+      "mode": "paper",
+      "execution": false,
+      "signing": false,
+      "broadcast": false,
+      "cash": 46.67698465759682,
+      "realizedPnl": -133.14148883100253,
+      "tradeCount": 305,
+      "lastTradeId": "1792250738005:304",
+      "tradePrefixHash": "dd8adde1337cddcf30dfee8f2a526fdfb7cbee2d4852e59ae616188302bce9ce",
+      "positions": [
+        "bsc:0x07bcb8e8226f671300e135b4a61dc157359b7777",
+        "sol:D7fGMz4E8r8FQyqULpqKr9MCu46izx9stJeStgGfYnJb",
+        "sol:9LMZwPNYp2xQE5JpGFTeMVm3b6xtWw8wiDio459Kpump"
+      ],
+      "cashAdjustmentsHash": "68e2aacf2f8f7308a1988f1e1ce2a57d65d646a2207445f1e3ebe100fd37539b"
+    },
+    "files": [
+      {
+        "name": "bsc-runtime-heartbeat.json",
+        "sha256": "cadd2d26dfb9ad7c57a35f83679c19763a20880212c1e94189a160bd485e2cfa"
+      },
+      {
+        "name": "fomo-runtime-heartbeat.json",
+        "sha256": "0e8cfaf762a7d994b047ea124eeda80871e01a4b6e628df614c4fbed6c5dd93d"
+      },
+      {
+        "name": "jev-research-pilot.json",
+        "sha256": "496acafa6498cd196c45d59c859a634f2ce241137afaadefc669ad665d108f2a"
+      },
+      {
+        "name": "main-runtime-heartbeat.json",
+        "sha256": "dc8c431de41fe9f1dccf916ede0a7f3a3ea475307c8f866d0aeefef97f2cbf02"
+      },
+      {
+        "name": "yesp-atm-active-estimated-session.json",
+        "sha256": "59b61930181ab43f5ed4f53f871c03930a3df6c72bf4716c7829ecf73949f315"
+      },
+      {
+        "name": "yesp-atm-active-paper-session.json",
+        "sha256": "a205d40c1e0c8305b9228d4b4eb2e7d0bcaf05240a598dbff8f2ec5df37f75ef"
+      }
+    ]
+  },
+  "runtimeBefore": {
+    "at": "2026-10-17T15:49:23.683Z",
+    "apiMs": 4955,
+    "flags": {
+      "mode": "paper",
+      "execution": false,
+      "signing": false,
+      "broadcast": false,
+      "enabled": true,
+      "evidenceGapExitMode": false
+    },
+    "sessionId": "confirmed-pvp-v2-estimated-20260928",
+    "scanChains": [
+      "bsc",
+      "sol",
+      "robinhood"
+    ],
+    "review": {
+      "version": "paper_trade_batch_v1",
+      "evidenceReviewVersion": "entry_evidence_review_v1",
+      "status": "collecting",
+      "mode": "local_statistics",
+      "batchSize": 100,
+      "startedAt": "2026-09-28T05:11:26.768Z",
+      "baselineTradeCount": 0,
+      "pendingFills": 5,
+      "remainingFills": 95,
+      "completedBatches": 3,
+      "countedFills": 305,
+      "aiAutomatic": false,
+      "automaticParameterChanges": false
+    },
+    "positionSizing": {
+      "mode": "cash_fraction_cap",
+      "version": "cash_tenth_cap_ten_v1",
+      "fixedEntryUsd": null,
+      "exactTicket": false,
+      "cashBasis": 46.67698465759682,
+      "includesUnrealizedPnl": false,
+      "entryFraction": 0.1,
+      "maxEntryUsd": 10,
+      "maxLiquidityShare": 0.001,
+      "maxPositions": null,
+      "positionLimitBasis": "available_cash"
+    },
+    "entryGuard": {
+      "version": "confirmed_pvp_v2",
+      "lossResponseVersion": "review_without_pause_v1",
+      "allowed": true,
+      "dailyPnl": -0.15741760952461625,
+      "dailyEntries": 2
+    },
+    "operatingPolicy": {
+      "version": "continuous_paper_v1",
+      "mode": "paper",
+      "continuous": true,
+      "execution": false,
+      "signing": false,
+      "broadcast": false,
+      "enforceLossGuards": false,
+      "label": "全天候模拟 · 不按亏损或次数停机",
+      "note": "全天候是持续评估，不是保证每时每刻成交；电脑及网络需保持运行，不自动补充虚拟本金。"
+    },
+    "exitMonitor": {
+      "running": true,
+      "intervalMs": 1000,
+      "lastCheckedAt": "2026-10-17T15:49:18.330Z",
+      "checks": 290712,
+      "staleQuotes": 0,
+      "entriesEnabled": true,
+      "lastError": null
+    },
+    "cadence": {
+      "lastTickAt": "2026-10-17T15:49:15.290Z",
+      "lastTickDurationMs": 2992,
+      "actualTickGapMs": 3316,
+      "phaseTiming": {
+        "newsWireMs": 111,
+        "narrativeRecallMs": 70,
+        "narrativeLearningMs": 31,
+        "casebookMs": 1170,
+        "ledgerWriteMs": 348
+      },
+      "quoteInFlight": [
+        {
+          "purpose": "exit",
+          "chain": "sol",
+          "address": "9LMZwPNYp2xQE5JpGFTeMVm3b6xtWw8wiDio459Kpump",
+          "candidateBook": null
+        },
+        {
+          "purpose": "exit",
+          "chain": "bsc",
+          "address": "0x07bcb8e8226f671300e135b4a61dc157359b7777",
+          "candidateBook": null
+        },
+        {
+          "purpose": "exit",
+          "chain": "sol",
+          "address": "D7fGMz4E8r8FQyqULpqKr9MCu46izx9stJeStgGfYnJb",
+          "candidateBook": null
+        }
+      ]
+    },
+    "validation": {
+      "entryFlowVersion": "paper_entry_observed_outflow_v1",
+      "exitObservationVersion": "entry_cohort_sell_retention_v1",
+      "exitStructureObservationVersion": "independent_confirmed_trail_v1",
+      "entryStructureBySetup": {
+        "external_breakout": "reconstructed_ohlcv_entry_v1",
+        "external_pullback": "reconstructed_ohlcv_entry_v1",
+        "external_trend": "reconstructed_ohlcv_entry_v1"
+      },
+      "targetSelectionBySetup": {
+        "external_pullback": "pullback_nearest_observed_level_v1"
+      },
+      "entryCostVersion": "isolated_estimated_cost_v1",
+      "exitCostVersion": "isolated_estimated_cost_v1",
+      "note": "仅按已冻结的实际版本比较；缺版本不计作当前修复成绩，不宣称盈利优势"
+    },
+    "quoteScheduler": null,
+    "shadow": null,
+    "jev": {
+      "status": "expired",
+      "reservedCalls": 1,
+      "evaluated": 1
+    },
+    "lastError": null
+  },
+  "backupDirectory": "/Users/qohfq/Documents/Playground/robinhood-chain-monitor/data/backups/profit-multiarm-deploy-20261017-4jOmE9",
+  "tests": {
+    "passed": 387,
+    "failed": 0,
+    "files": 20,
+    "concurrency": 2
+  },
+  "oldDashboardPid": 28196,
+  "otherWorkerPids": {
+    "main": 83916,
+    "bsc": 6435,
+    "fomo": 7258
+  },
+  "flag": "PAPER_PROFIT_RETENTION_MULTIARM_SHADOW",
+  "flagValue": "1",
+  "sourceBackupIs": "Current disk deployment candidate, not a proven copy of old running code.",
+  "deployedAt": "2026-10-17T15:50:19.527Z",
+  "newDashboardPid": 36673,
+  "stopRequestedAt": "2026-10-17T15:50:04Z",
+  "bootstrapAt": "2026-10-17T15:50:18Z",
+  "firstVerifiedRuntime": {
+    "at": "2026-10-17T15:50:40.855Z",
+    "http": 200,
+    "apiMs": 2968,
+    "status": "ok",
+    "mode": "paper",
+    "enabled": true,
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "sessionId": "confirmed-pvp-v2-estimated-20260928",
+    "account": {
+      "trades": 305,
+      "lastTradeId": "1792250738005:304",
+      "cash": 46.67698465759682,
+      "realizedPnl": -133.14148883100253,
+      "positions": [
+        "bsc:0x07bcb8e8226f671300e135b4a61dc157359b7777",
+        "sol:D7fGMz4E8r8FQyqULpqKr9MCu46izx9stJeStgGfYnJb",
+        "sol:9LMZwPNYp2xQE5JpGFTeMVm3b6xtWw8wiDio459Kpump"
+      ]
+    },
+    "quoteScheduler": {
+      "version": "evidence_preserving_event_lease_v1",
+      "rememberedEventLeases": 0,
+      "overflowPreemptionSuppressedUntil": null
+    },
+    "exitMonitor": {
+      "running": true,
+      "intervalMs": 1000,
+      "lastCheckedAt": "2026-10-17T15:50:36.488Z",
+      "checks": 13,
+      "staleQuotes": 0,
+      "entriesEnabled": true,
+      "lastError": null
+    },
+    "shadow": {
+      "version": "profit_retention_multiarm_v3",
+      "enabled": true,
+      "status": "observing",
+      "error": null,
+      "configuredPriceMultiples": [
+        2,
+        3,
+        5
+      ],
+      "baseline": {
+        "tradeCount": 305,
+        "lastTradeId": "1792250738005:304",
+        "tradePrefixHash": "dd8adde1337cddcf30dfee8f2a526fdfb7cbee2d4852e59ae616188302bce9ce",
+        "establishedAtMs": 1792252219527
+      },
+      "checkpoint": {
+        "tradeCount": 305,
+        "lastTradeId": "1792250738005:304",
+        "tradePrefixHash": "dd8adde1337cddcf30dfee8f2a526fdfb7cbee2d4852e59ae616188302bce9ce",
+        "accountUpdatedAt": "2026-10-17T15:50:36.488Z"
+      },
+      "persistedAt": "2026-10-17T15:50:36.831Z",
+      "pendingWrite": false,
+      "closedPairs": 0,
+      "openPairs": 0,
+      "excludedPairs": 0,
+      "arms": [
+        {
+          "multiple": 2,
+          "closedPairs": 0,
+          "openPairs": 0
+        },
+        {
+          "multiple": 3,
+          "closedPairs": 0,
+          "openPairs": 0
+        },
+        {
+          "multiple": 5,
+          "closedPairs": 0,
+          "openPairs": 0
+        }
+      ]
+    },
+    "jev": {
+      "status": "expired",
+      "reservedCalls": 1
+    },
+    "lastError": null
+  },
+  "integrityAfter": {
+    "at": "2026-10-17T15:52:08.342Z",
+    "source": {
+      "tradeCount": 305,
+      "lastTradeId": "1792250738005:304",
+      "original305Hash": "dd8adde1337cddcf30dfee8f2a526fdfb7cbee2d4852e59ae616188302bce9ce",
+      "cash": 46.67698465759682,
+      "realizedPnl": -133.14148883100253,
+      "positions": [
+        "bsc:0x07bcb8e8226f671300e135b4a61dc157359b7777",
+        "sol:D7fGMz4E8r8FQyqULpqKr9MCu46izx9stJeStgGfYnJb",
+        "sol:9LMZwPNYp2xQE5JpGFTeMVm3b6xtWw8wiDio459Kpump"
+      ],
+      "cashAdjustmentsHash": "68e2aacf2f8f7308a1988f1e1ce2a57d65d646a2207445f1e3ebe100fd37539b"
+    },
+    "preservedLegacy": {
+      "file": "yesp-atm-confirmed-pvp-v2-20260923.json",
+      "matchesSessionHash": true
+    },
+    "sessionHashes": [
+      {
+        "name": "yesp-atm-active-estimated-session.json",
+        "sha256": "59b61930181ab43f5ed4f53f871c03930a3df6c72bf4716c7829ecf73949f315"
+      },
+      {
+        "name": "yesp-atm-active-paper-session.json",
+        "sha256": "a205d40c1e0c8305b9228d4b4eb2e7d0bcaf05240a598dbff8f2ec5df37f75ef"
+      },
+      {
+        "name": "jev-research-pilot.json",
+        "sha256": "496acafa6498cd196c45d59c859a634f2ce241137afaadefc669ad665d108f2a"
+      }
+    ],
+    "heartbeats": [
+      {
+        "name": "main",
+        "pid": 83916,
+        "startedAt": "2026-10-12T06:01:24.038Z",
+        "updatedAt": "2026-10-17T15:51:57.188Z"
+      },
+      {
+        "name": "bsc",
+        "pid": 6435,
+        "startedAt": "2026-10-16T15:49:20.816Z",
+        "updatedAt": "2026-10-17T15:51:40.564Z"
+      },
+      {
+        "name": "fomo",
+        "pid": 7258,
+        "startedAt": "2026-10-10T04:56:33.184Z",
+        "updatedAt": "2026-10-17T15:51:38.743Z"
+      }
+    ]
+  },
+  "finalSample": {
+    "at": "2026-10-17T15:52:33.795Z",
+    "apiMs": 4231,
+    "tradeCount": 305,
+    "exitChecks": 84,
+    "exitLastCheckedAt": "2026-10-17T15:52:29.040Z",
+    "exitError": null,
+    "lastTickDurationMs": 1423,
+    "tickGapMs": 3155,
+    "phaseTiming": {
+      "newsWireMs": 70,
+      "narrativeRecallMs": 53,
+      "narrativeLearningMs": 23,
+      "casebookMs": 0,
+      "ledgerWriteMs": 211
+    },
+    "shadow": {
+      "status": "observing",
+      "error": null,
+      "persistedAt": "2026-10-17T15:52:29.271Z",
+      "pendingWrite": false,
+      "lastCommitPath": "exit",
+      "openPairs": 0,
+      "closedPairs": 0,
+      "coverage": {
+        "gapCount": 0,
+        "pairGapCount": 0,
+        "reasons": {},
+        "latest": [],
+        "byPair": []
+      }
+    },
+    "lastError": null
+  },
+  "sampleSummary": {
+    "count": 4,
+    "from": "2026-10-17T15:51:37.892Z",
+    "to": "2026-10-17T15:52:33.795Z",
+    "apiMs": [
+      4734,
+      3430,
+      3236,
+      4231
+    ],
+    "exitChecks": [
+      44,
+      56,
+      71,
+      84
+    ],
+    "lastTickDurationMs": [
+      1057,
+      719,
+      1163,
+      1423
+    ],
+    "tickGapMs": [
+      1639,
+      1620,
+      1963,
+      3155
+    ],
+    "errors": 0,
+    "openPairs": 0,
+    "closedPairs": 0,
+    "limitations": "Short empty-study observation only; no causal latency claim, no profit evidence, no full-session coverage guarantee."
+  },
+  "sourceArchiveSha256": "be7bc0207acc62d89c09ca7a4712cb5c9ec353b95817a569038d0fb8a23846b3",
+  "invariants": {
+    "tradePrefixPreserved": true,
+    "fundingPreserved": true,
+    "legacyLedgerPreserved": true,
+    "sessionAndJevHashesPreserved": true,
+    "realExecution": false,
+    "automaticParameterChanges": false,
+    "mainEntryAndExitVersionDeclarationsUnchanged": true
+  },
+  "preservedSettings": {
+    "evidenceGapExitMode": false,
+    "enforceLossGuards": false,
+    "continuous": true,
+    "maxPositions": null,
+    "entryFraction": 0.1,
+    "maxEntryUsd": 10,
+    "tradeReviewEvery": 100
+  },
+  "followup": {
+    "automationId": "automation",
+    "updated": true,
+    "intervalHours": 4,
+    "noNewAutomation": true,
+    "extraBusinessOrModelRequests": false,
+    "autoChangeStrategies": false
+  },
+  "rollbackLimit": "Removing the v3 flag and controlled restart disables only the shadow, not accompanying code changes. Preserve checkpoint; later source advancement may cause fail-closed coverage error. Do not delete/rebase it or roll back source ledger."
+}

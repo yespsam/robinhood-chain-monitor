@@ -1,0 +1,1477 @@
+{
+  "at": "2026-10-21T06:36:50.000Z",
+  "scheduledAt": "2026-10-21T06:30:39.727Z",
+  "startedAt": "2026-10-21T06:30:50.000Z",
+  "round": 92,
+  "group": "bsc",
+  "question": "最旧到期B/C头页有无新增活动；重复时抽查B nonce有无进一步进展？",
+  "requests": {
+    "configChecks": 1,
+    "gmgnBusiness": 2,
+    "gmgnSuccessful": 2,
+    "publicRpc": 2,
+    "model": 0
+  },
+  "newRows": 0,
+  "pageOverlap": 36,
+  "newAddresses": 0,
+  "headRefreshed": [
+    "B",
+    "C"
+  ],
+  "headIncomplete": [],
+  "coverageStatus": "provider_freshness_unverified_and_existing_classification_gaps",
+  "report": "docs/operator-reference-followups/2026-10-21-1430-bsc-head-four-flap-progress.md",
+  "evidence": "docs/operator-reference-followups/2026-10-21-1430-bsc-head-four-flap-progress.json",
+  "nextQuestion": "轮换Sol，优先D最旧到期头页；BSC下次优先A；继续保留C nonce22/23分类缺口，核对Four面板读取缺口与本地游标差异。",
+  "gmgn": {
+    "config": {
+      "ok": true
+    },
+    "results": [
+      {
+        "id": "B",
+        "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+        "startedAt": "2026-10-21T06:34:28.839Z",
+        "status": "success",
+        "checkedAt": "2026-10-21T06:34:55.518Z",
+        "rows": [
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0x276ed1a8787a851f66bf341a62bd62728028d53b19a22ea8a69fa6b3f7857f6d",
+            "at": 1790939289000,
+            "side": "sell",
+            "quantity": "2438440.135282079",
+            "usd": "145.27041106513246",
+            "price": "0.00005957960790633211",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0xf21c768f9d08702bbdcbcacd8211d997056c5e8d06ba01a595a75cc72b413a5b",
+            "at": 1790939288000,
+            "side": "sell",
+            "quantity": "348348.5907545827",
+            "usd": "20.513695441865305",
+            "price": "0.00005889282927765583",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0xacb32cc30d9f432b2cbb678063bc1bd970bdefc6c72c48cca7b5d34a9665bb27",
+            "at": 1790939287000,
+            "side": "sell",
+            "quantity": "348348.5907545827",
+            "usd": "20.71131448803073",
+            "price": "0.000059460174385260453",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0x5db83af0f80e8d7d9cd1f56029356ad921d7e4c16015bb93fd2fe434983acdfd",
+            "at": 1790939287000,
+            "side": "sell",
+            "quantity": "348348.5907545827",
+            "usd": "20.776506294757507",
+            "price": "0.00005964733373715502",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0xb28715ac2228aa8d83c46fea544497fad601d1ef66e613e3c53732dc08749f3b",
+            "at": 1790939285000,
+            "side": "sell",
+            "quantity": "435435.7384432284",
+            "usd": "26.14753307269023",
+            "price": "0.00006005362439530426",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0xc3f8e6c5cbe00f9487f8fc6886ccbbbb503985152898da8ea92abb6a7de27696",
+            "at": 1790939285000,
+            "side": "sell",
+            "quantity": "435435.7384432284",
+            "usd": "26.357656932292276",
+            "price": "0.00006053622056626819",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0x99ca4abb08a390c46765b76d039711ba5893fead20ac0596e5b177b4fbbb406c",
+            "at": 1790938713000,
+            "side": "sell",
+            "quantity": "544294.6730540355",
+            "usd": "33.10233728073745",
+            "price": "0.00006082150309591877",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0x603c938f2bbb7e48f40b0d6687be914ceb7f90126161473962ab1bcaa46b7c95",
+            "at": 1790938713000,
+            "side": "sell",
+            "quantity": "544294.6730540355",
+            "usd": "33.26884529795768",
+            "price": "0.00006112744124762593",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0x848201ba92c46036de75a35e8141d7ce17451bcc5019f345b278c0afa93e4175",
+            "at": 1790938711000,
+            "side": "sell",
+            "quantity": "680368.3413175443",
+            "usd": "41.31317634138607",
+            "price": "0.000060726333888502344",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0x3e29ea056bc18a1bb1da17cee5a16e1d34a1f7e5eae4ad03628a6c713d6d090d",
+            "at": 1790938710000,
+            "side": "sell",
+            "quantity": "680368.3413175443",
+            "usd": "42.34532770629426",
+            "price": "0.00006224349557781305",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0x0931fda0e076501f12c1b99c2d87c0af9f568cf9149a1f1dc89c9746eaec25a1",
+            "at": 1790938708000,
+            "side": "sell",
+            "quantity": "755964.8236861604",
+            "usd": "49.91092763423954",
+            "price": "0.00006602776964038245",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0x746a90098371e7309cc9cc98cff377b91de2a7d37567b2d246fb3e56d20cd37f",
+            "at": 1790938708000,
+            "side": "sell",
+            "quantity": "839960.9152068449",
+            "usd": "56.527975745673",
+            "price": "0.00006730338833435633",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0xb3547c0aac9fbd227d0ffad01b4936e9ca1ae5bec3510127ef43b4048b0f166e",
+            "at": 1790937078000,
+            "side": "sell",
+            "quantity": "933289.9057853832",
+            "usd": "151.6017625087465",
+            "price": "0.0001624502017582338",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0xe00666690dd7e03aed0ca3fc017c86047341c50890af223e966fe39a6aed9ad2",
+            "at": 1790935459000,
+            "side": "sell",
+            "quantity": "1036988.7842059813",
+            "usd": "163.5482219540606",
+            "price": "0.0001577263818875077",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0x69f1785263e656d2572cd6c2c6c2fb998877ffdfc177800acb82dca6bb5f9f90",
+            "at": 1790933263000,
+            "side": "sell",
+            "quantity": "1152209.760228868",
+            "usd": "139.65808057037248",
+            "price": "0.00012121799392179071",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0x081247889dd0662729ab14c07a83073d5e3bb99aa356334844494f78041280c3",
+            "at": 1790933107000,
+            "side": "sell",
+            "quantity": "1440262.2002860853",
+            "usd": "112.88950675206141",
+            "price": "0.00007838709790321062",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0xe2eb7b749d0604472287132df7763121a676f1d7cc9d4fe02d574fd4e7b2886f",
+            "at": 1790933106000,
+            "side": "sell",
+            "quantity": "1440262.2002860853",
+            "usd": "114.74048349300506",
+            "price": "0.00007967236080481566",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0x04b7b1e461c560789313c9e7c561665a64caa22d209f2b6587da2136a068cf64",
+            "at": 1790932951000,
+            "side": "sell",
+            "quantity": "1600291.3336512058",
+            "usd": "95.19636295687529",
+            "price": "0.00005949135711583314",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0xf2fb530c98551eece8a50ad4260f63c8086cc7270593188e79cea79363cf5d9e",
+            "at": 1790932686000,
+            "side": "sell",
+            "quantity": "1778101.481834673",
+            "usd": "48.42306456163243",
+            "price": "0.000027233015132335836",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0x3d58035f695dbc52b0fab614c644734bb464267a02d3bee4e721208a78e812e7",
+            "at": 1790932684000,
+            "side": "sell",
+            "quantity": "1975668.3131496368",
+            "usd": "54.78755272715135",
+            "price": "0.000027731149182530694",
+            "symbol": "PairLab"
+          }
+        ],
+        "next": "MTI1MjY3MDU2MDAyMTcwMDAwMDowOjo=",
+        "identityVerified": true,
+        "previousAnchor": {
+          "at": "2026-10-02T11:08:09.000Z",
+          "hash": "0x276ed1a8787a851f66bf341a62bd62728028d53b19a22ea8a69fa6b3f7857f6d",
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "side": "sell"
+        },
+        "anchorFound": true,
+        "newRows": 0,
+        "pageOverlap": 20,
+        "newKeys": []
+      },
+      {
+        "id": "C",
+        "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+        "startedAt": "2026-10-21T06:34:55.518Z",
+        "status": "success",
+        "checkedAt": "2026-10-21T06:35:23.586Z",
+        "rows": [
+          {
+            "chain": "bsc",
+            "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+            "token": "0xfcaab8a2b629dbe59a2ec8632a50288e0e837777",
+            "hash": "0x764070b3bef3dec495963a881a946fa92dc7730f42b5f1828c797d2abc722d86",
+            "at": 1791517152000,
+            "side": "sell",
+            "quantity": "9267503.347256081",
+            "usd": "299.7553515749038",
+            "price": "0.00003234477942364653",
+            "symbol": "FVG"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+            "token": "0xfcaab8a2b629dbe59a2ec8632a50288e0e837777",
+            "hash": "0x56b488017ab5ef13f1943b8cc3a88a6b01124299b69b475f88046a2c7455515f",
+            "at": 1791515712000,
+            "side": "buy",
+            "quantity": "1237563.9729650605",
+            "usd": "27.422455685779287",
+            "price": "0.000022158414663670473",
+            "symbol": "FVG"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+            "token": "0xfcaab8a2b629dbe59a2ec8632a50288e0e837777",
+            "hash": "0x06da0ec65b3776b6422fb9ffe91ea118c19323f549e3e69befb49834b8614a5a",
+            "at": 1791515710000,
+            "side": "buy",
+            "quantity": "1459010.9970749642",
+            "usd": "31.116794163411857",
+            "price": "0.000021327319825412577",
+            "symbol": "FVG"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+            "token": "0xfcaab8a2b629dbe59a2ec8632a50288e0e837777",
+            "hash": "0x70eb4bf397dc990ed4caf98e550c45c309c9eff785f7e6790b588d2f770cac30",
+            "at": 1791515707000,
+            "side": "buy",
+            "quantity": "1437569.1374161018",
+            "usd": "31.367444402067203",
+            "price": "0.00002181978145304879",
+            "symbol": "FVG"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+            "token": "0xfcaab8a2b629dbe59a2ec8632a50288e0e837777",
+            "hash": "0x12991dc3eb897a8a9ad10bd74e00cccb4bdf7dbe7a1b935378fa6f2d02b1986a",
+            "at": 1791515704000,
+            "side": "buy",
+            "quantity": "11124986.176143596",
+            "usd": "202.2233301254005",
+            "price": "0.00001817740057592592",
+            "symbol": "FVG"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+            "token": "0xf5da176cbd13d1f4a7a5ba62fb2a59be423d7777",
+            "hash": "0x8b2761461b614098e528f19111521c262bdff5251ab09307e88fe0bbf7d794d6",
+            "at": 1791450947000,
+            "side": "buy",
+            "quantity": "12937496.885040155",
+            "usd": "303.3162690022342",
+            "price": "0.000023444741413075347",
+            "symbol": "躺平"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0xc3a7ebb2d547698991357823e1206146ff0765475a00081c7fd2e077a954b63f",
+            "at": 1791208866000,
+            "side": "sell",
+            "quantity": "14245139.184253467",
+            "usd": "82.16843476994579",
+            "price": "0.000005768606175194216",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0x0bc6f1a15f6d6a076ae1821aadbd476e2f2ae3ccc83d89923c563b1acf5f912a",
+            "at": 1790954875000,
+            "side": "buy",
+            "quantity": "4914860.493939693",
+            "usd": "74.19025481175",
+            "price": "0.000015095088640507878",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0xe648bb521329e0b222a89b46ff98da04098592c65e283269a0945adc0e22846c",
+            "at": 1790933177000,
+            "side": "sell",
+            "quantity": "1234696.5431529004",
+            "usd": "120.29278538485158",
+            "price": "0.00009743431184576936",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0x60a7cb8efc32bfbf37701ca9e12d3c7c5609dd5b9bb72220375585928b39355b",
+            "at": 1790933173000,
+            "side": "sell",
+            "quantity": "1320621.9041833344",
+            "usd": "127.3556329175123",
+            "price": "0.00009644333847784558",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0x78b32218757ec0d2ef176562d92d1847081ad3de8bc61d5f678f7912b4ed72b5",
+            "at": 1790933173000,
+            "side": "sell",
+            "quantity": "1320621.9041833344",
+            "usd": "129.75441798239072",
+            "price": "0.0000982598803507717",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0x52e27a7bfe4b33bf3ce7de6248d7998291e124bef949e5fa75408060917e7425",
+            "at": 1790932689000,
+            "side": "buy",
+            "quantity": "2820673.030817244",
+            "usd": "73.865088",
+            "price": "0.000026187043727857668",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0xf3e515bcf20d36767ced5199ddea78b9a819ce0588be4b6066e338f88f7927e3",
+            "at": 1790932689000,
+            "side": "buy",
+            "quantity": "2856437.8020988856",
+            "usd": "73.865088",
+            "price": "0.000025859162046421797",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0x57e1a9bc2d33af564a5bf3c38b9ae0696f041e80da68faf87eb65cc3aff03949",
+            "at": 1790932655000,
+            "side": "buy",
+            "quantity": "2480885.8720830115",
+            "usd": "73.836576",
+            "price": "0.000029762181658926953",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0x80be55370ef28e5d43f9b80cab182a49ea95f9bdc2feeff2341d1362106a2362",
+            "at": 1790932654000,
+            "side": "buy",
+            "quantity": "2510369.445064848",
+            "usd": "73.836576",
+            "price": "0.000029412633325806216",
+            "symbol": "PairLab"
+          },
+          {
+            "chain": "bsc",
+            "wallet": "0x6ac1d33ecdaf26b6092e010bca251d2917af6e01",
+            "token": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+            "hash": "0x2b3d24dd6bf70d26ec913719ac31336d20d760d5b216c78ea551b234fc546f0f",
+            "at": 1790932654000,
+            "side": "buy",
+            "quantity": "2537852.8917693547",
+            "usd": "73.836576",
+            "price": "0.00002909411189256214",
+            "symbol": "PairLab"
+          }
+        ],
+        "next": "",
+        "identityVerified": true,
+        "previousAnchor": {
+          "at": "2026-10-09T03:39:12.000Z",
+          "hash": "0x764070b3bef3dec495963a881a946fa92dc7730f42b5f1828c797d2abc722d86",
+          "ca": "0xfcaab8a2b629dbe59a2ec8632a50288e0e837777",
+          "side": "sell"
+        },
+        "anchorFound": true,
+        "newRows": 0,
+        "pageOverlap": 16,
+        "newKeys": []
+      }
+    ],
+    "dedupSources": [
+      "docs/operator-reference-followups/2026-10-19-1414-bsc-head-post-repair.json",
+      "docs/operator-reference-followups/2026-10-20-1423-bsc-head-quotes-fresh.json",
+      "docs/operator-reference-followups/2026-10-20-2223-bsc-heads-flap-version-gap.json"
+    ]
+  },
+  "rpc": {
+    "startedAt": "2026-10-21T06:35:51.237Z",
+    "endpoint": "https://bsc-dataseed-public.bnbchain.org",
+    "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+    "requests": [
+      {
+        "method": "eth_chainId",
+        "http": 200,
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": "0x38"
+      },
+      {
+        "method": "eth_getTransactionCount",
+        "http": 200,
+        "jsonrpc": "2.0",
+        "id": 2,
+        "result": "0xa2"
+      }
+    ],
+    "checkedAt": "2026-10-21T06:35:52.500Z",
+    "chainIdentityVerified": true,
+    "currentCount": 162,
+    "knownNonce": 157,
+    "previousValue": 162,
+    "incrementSincePreviousCheck": 0,
+    "laterNonceCount": 4,
+    "knownSubsequentClassification": {
+      "approvals": 1,
+      "failedSwaps": 1,
+      "nativeTransfers": 2
+    },
+    "newActivityEvidence": false,
+    "scope": "latest nonce snapshot only; not exact successful trade count or transaction-type evidence"
+  },
+  "forward": {
+    "at": "2026-10-21T06:36:50.000Z",
+    "report": "docs/operator-reference-followups/2026-10-21-1430-bsc-head-four-flap-progress.md",
+    "entryFrom": "2026-10-10T14:51:42.000Z",
+    "reportGeneratedAt": "2026-10-21T06:34:49.586Z",
+    "tradeCount": 307,
+    "lastTradeId": "1792275648715:306",
+    "newTrades": 0,
+    "newClosedRounds": 0,
+    "cohorts": {
+      "current": {
+        "closedRounds": 19,
+        "tokens": 17,
+        "netPnlUsd": -2.000968808588111,
+        "modelCostsUsd": 6.517236384155159,
+        "largestCaPositivePnlShare": 0.6317788618023847,
+        "byChainRoute": [
+          {
+            "chain": "bsc",
+            "route": "external_breakout",
+            "closedRounds": 9,
+            "tokens": 8,
+            "netPnlUsd": 2.3019375950953274,
+            "modelCostsUsd": 3.941985574466428
+          },
+          {
+            "chain": "sol",
+            "route": "external_breakout",
+            "closedRounds": 8,
+            "tokens": 7,
+            "netPnlUsd": -2.2624967321577194,
+            "modelCostsUsd": 2.082277977855123
+          },
+          {
+            "chain": "robinhood",
+            "route": "external_pullback",
+            "closedRounds": 1,
+            "tokens": 1,
+            "netPnlUsd": -1.0474852672385744,
+            "modelCostsUsd": 0.25833463440209364
+          },
+          {
+            "chain": "robinhood",
+            "route": "external_breakout",
+            "closedRounds": 1,
+            "tokens": 1,
+            "netPnlUsd": -0.9929244042871446,
+            "modelCostsUsd": 0.23463819743151496
+          }
+        ]
+      },
+      "legacy": {
+        "closedRounds": 0,
+        "tokens": 0,
+        "netPnlUsd": 0,
+        "modelCostsUsd": 0,
+        "largestCaPositivePnlShare": null,
+        "byChainRoute": []
+      },
+      "mixed": {
+        "closedRounds": 0,
+        "tokens": 0,
+        "netPnlUsd": 0,
+        "modelCostsUsd": 0,
+        "largestCaPositivePnlShare": null,
+        "byChainRoute": []
+      }
+    },
+    "crossBoundaryNewClosedRounds": 0,
+    "valuationSnapshot": [
+      {
+        "chain": "bsc",
+        "ca": "0x07bcb8e8226f671300e135b4a61dc157359b7777",
+        "entryId": "1791473723820:238",
+        "enteredAfterBaseline": false,
+        "valuationStatus": "stale",
+        "markAt": "2026-10-21T06:34:27.309Z",
+        "pnl": null
+      },
+      {
+        "chain": "sol",
+        "ca": "D7fGMz4E8r8FQyqULpqKr9MCu46izx9stJeStgGfYnJb",
+        "entryId": "1792085285247:297",
+        "enteredAfterBaseline": true,
+        "valuationStatus": "stale",
+        "markAt": "2026-10-21T06:34:26.259Z",
+        "pnl": null
+      },
+      {
+        "chain": "sol",
+        "ca": "9LMZwPNYp2xQE5JpGFTeMVm3b6xtWw8wiDio459Kpump",
+        "entryId": "1792250738005:304",
+        "enteredAfterBaseline": true,
+        "valuationStatus": "stale",
+        "markAt": "2026-10-21T06:34:29.071Z",
+        "pnl": null
+      }
+    ],
+    "integrity": "read_only_inventory_cash_and_realized_reconciled",
+    "health": {
+      "at": "2026-10-21T06:35:05.517Z",
+      "four": {
+        "cursor": {
+          "nextBlock": 128890940,
+          "anchorBlock": 128890939,
+          "anchorBlockHash": "0xf024cfbc0faa2d63431d5438850abbed88c8e0e069618313a52ae8e9afc15437"
+        },
+        "updatedAt": "2026-10-21T06:34:58.658Z",
+        "outboxCount": 0,
+        "processedCount": 78,
+        "checkpoints": [
+          {
+            "blockNumber": 128890868,
+            "blockHash": "0xc80e2ed1857f94d0ebae7fa6b886c21faf4c6f7c2ee2ae2171b0efa21d1f8145"
+          },
+          {
+            "blockNumber": 128890900,
+            "blockHash": "0x248738f2d91d6cad3333c694b11528c308ce676b417fcd2a2068117aea587503"
+          },
+          {
+            "blockNumber": 128890939,
+            "blockHash": "0xf024cfbc0faa2d63431d5438850abbed88c8e0e069618313a52ae8e9afc15437"
+          }
+        ]
+      },
+      "flap": {
+        "cursor": {
+          "nextBlock": 128890908,
+          "afterLogIndex": -1,
+          "anchorBlock": 128890907,
+          "anchorBlockHash": "0xca9a3f68da62aa65ae8d81243aa4916ccfa93c3492ae92405461d398b1f1464f",
+          "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+        },
+        "verifiedHead": 128890907,
+        "version": "v5.25.0",
+        "health": {
+          "status": "healthy",
+          "consecutiveFailures": 0,
+          "lastSuccessAt": "2026-10-21T06:34:31.926Z",
+          "lastErrorAt": null,
+          "lastError": null,
+          "lastErrorCode": null,
+          "reorgCount": 0,
+          "lastReorgAt": null,
+          "lastAttemptAt": "2026-10-21T06:34:31.926Z",
+          "nextAttemptAt": null,
+          "failureClass": null
+        },
+        "eventRecords": 30,
+        "checkpoints": [
+          {
+            "blockNumber": 128890835,
+            "blockHash": "0x4b1cf60a93d31c75db94b45e7e8eb145b337df1ddf8a5f7108a89bec3ea25742",
+            "observedAt": "2026-10-21T06:34:04.862Z"
+          },
+          {
+            "blockNumber": 128890871,
+            "blockHash": "0x8ba0d5cb0d043ff28998e1744b42806125d79ee6d16b3572fe8ad75794b42e8b",
+            "observedAt": "2026-10-21T06:34:16.864Z"
+          },
+          {
+            "blockNumber": 128890907,
+            "blockHash": "0xca9a3f68da62aa65ae8d81243aa4916ccfa93c3492ae92405461d398b1f1464f",
+            "observedAt": "2026-10-21T06:34:31.926Z"
+          }
+        ]
+      },
+      "heartbeats": {
+        "main": {
+          "version": 1,
+          "producer": "main",
+          "pid": 40494,
+          "startedAt": "2026-10-20T20:04:56.297Z",
+          "updatedAt": "2026-10-21T06:34:39.492Z",
+          "sequence": 1260
+        },
+        "bsc": {
+          "version": 1,
+          "producer": "bsc",
+          "pid": 40497,
+          "startedAt": "2026-10-20T20:04:56.720Z",
+          "updatedAt": "2026-10-21T06:34:38.001Z",
+          "sequence": 1235
+        },
+        "fomo": {
+          "version": 1,
+          "producer": "fomo",
+          "pid": 829,
+          "startedAt": "2026-10-20T13:26:36.401Z",
+          "updatedAt": "2026-10-21T06:35:04.057Z",
+          "sequence": 2057
+        }
+      },
+      "ledger": {
+        "count": 307,
+        "lastTradeId": "1792275648715:306",
+        "prefix307Hash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437"
+      }
+    },
+    "healthDelta": {
+      "sincePreviousRound": {
+        "four": 32280,
+        "flap": 32265
+      },
+      "withinRound": {
+        "four": 71,
+        "flap": 72
+      },
+      "pendingToLocalFlapReference": 0,
+      "referenceMeaning": "异步本地已验证检查点，不是独立当前链头，不能证明全天在线或零漏报"
+    },
+    "launchAcceptance": {
+      "officialInformation": {
+        "platforms": {
+          "flap": {
+            "checkedAt": "2026-10-21T06:34:14.273Z",
+            "health": {
+              "status": "healthy",
+              "failureKind": null,
+              "consecutiveFailures": 0,
+              "lastAttemptAt": "2026-10-21T06:34:14.273Z",
+              "lastSuccessAt": "2026-10-21T06:34:14.273Z",
+              "lastErrorAt": null,
+              "lastError": null,
+              "lastErrorStatus": null,
+              "backoffMs": 0,
+              "nextAttemptAt": null,
+              "coverageStatus": "complete",
+              "optionalCircuitOpenCount": 0,
+              "optionalCircuitUrls": []
+            },
+            "watchKeys": [
+              "version",
+              "pages",
+              "changes",
+              "omittedChangeCount",
+              "maxTrackedPages",
+              "refreshIntervalMs",
+              "staleAfterMs",
+              "observationOnly"
+            ],
+            "changes": [
+              {
+                "id": "77ee37ee1553235b423d4c62e5452e9a6174ec4700f44fe52d291c6de58f6829",
+                "url": "https://docs.flap.sh/flap/developers/flap-token-locker",
+                "observedAt": "2026-10-17T11:36:48.190Z",
+                "status": "pending_verification",
+                "beforeFingerprint": "81fdefdd4aba1c50336042ba3305bbe2fa6b84909e24583d1991860129a0deb3",
+                "afterFingerprint": "f8ba614e47cad72cf75fdb7a4e4fc2e7f3a492327d0dc7f28137e51e0c3f66a1",
+                "removed": [],
+                "added": [],
+                "summaryIncomplete": true,
+                "meaning": "官方页面正文变化待核实；不代表新部署、新代次、具体 CA 或首三名交易资格"
+              },
+              {
+                "id": "06aff81084c83e5e02e05412966922b6068064decfb63d901793a8ba9c5ed04c",
+                "url": "https://docs.flap.sh/flap/developers/flap-token-locker/integration-guide",
+                "observedAt": "2026-10-17T11:36:48.860Z",
+                "status": "pending_verification",
+                "beforeFingerprint": "f206cf74382c09df98a4cce05978c6166f62434b0d42d13e2a629a8047f61a62",
+                "afterFingerprint": "37d68a9f5bb488ae284212268708682e0d0b3351f389b8057cdba4eb768970db",
+                "removed": [],
+                "added": [],
+                "summaryIncomplete": true,
+                "meaning": "官方页面正文变化待核实；不代表新部署、新代次、具体 CA 或首三名交易资格"
+              }
+            ]
+          },
+          "fourmeme": {
+            "checkedAt": "2026-10-21T06:34:15.108Z",
+            "health": {
+              "status": "healthy",
+              "failureKind": null,
+              "consecutiveFailures": 0,
+              "lastAttemptAt": "2026-10-21T06:34:15.108Z",
+              "lastSuccessAt": "2026-10-21T06:34:15.108Z",
+              "lastErrorAt": null,
+              "lastError": null,
+              "lastErrorStatus": null,
+              "backoffMs": 0,
+              "nextAttemptAt": null,
+              "coverageStatus": "complete",
+              "optionalCircuitOpenCount": 0,
+              "optionalCircuitUrls": []
+            },
+            "watchKeys": [
+              "version",
+              "pages",
+              "changes",
+              "omittedChangeCount",
+              "maxTrackedPages",
+              "refreshIntervalMs",
+              "staleAfterMs",
+              "observationOnly"
+            ],
+            "changes": []
+          }
+        },
+        "twitter": {
+          "flapdotsh": {
+            "latestId": "2112072953655632088",
+            "checkedAt": "2026-10-21T06:34:35.262Z",
+            "status": "source_limited",
+            "lastSuccessAt": "2026-10-21T06:34:35.262Z"
+          },
+          "fourdotmemezh": {
+            "latestId": "2112486153957818723",
+            "checkedAt": "2026-10-21T06:34:37.621Z",
+            "status": "source_limited",
+            "lastSuccessAt": "2026-10-21T06:34:37.621Z"
+          }
+        }
+      },
+      "api": {
+        "version": "launch_update_coverage_v1",
+        "readErrors": [
+          "four"
+        ],
+        "platforms": {
+          "flap": {
+            "onchain": {
+              "status": "adapter_observed_head_unverified",
+              "lastAttemptAt": "2026-10-21T06:34:04.862Z",
+              "lastSuccessAt": "2026-10-21T06:34:04.862Z",
+              "nextAttemptAt": null,
+              "ageMs": 24293,
+              "lastErrorAt": null,
+              "lastErrorCode": null,
+              "adapterHealth": {
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-21T06:34:04.862Z",
+                "lastSuccessAt": "2026-10-21T06:34:04.862Z",
+                "nextAttemptAt": null,
+                "ageMs": 24293,
+                "lastErrorAt": null,
+                "lastErrorCode": null
+              },
+              "checkpointAt": "2026-10-21T06:34:04.862Z",
+              "nextBlock": 128890836,
+              "headLagBlocks": null,
+              "liveHeadVerified": false,
+              "scope": "BSC pinned Portal quote adapter"
+            },
+            "documentBodies": {
+              "version": "official_document_body_v1",
+              "allowedPages": 59,
+              "uncheckedPages": 0,
+              "freshPages": 58,
+              "stalePages": 0,
+              "failedPages": 1,
+              "untrackedPages": 0,
+              "rosterOverflowPages": 0,
+              "pendingChanges": 2,
+              "omittedChangeCount": 0,
+              "nextDueAt": "2026-10-21T05:55:59.601Z",
+              "originNextAttemptAt": null,
+              "rosterDiscovery": {
+                "status": "fresh",
+                "total": 1,
+                "fresh": 1,
+                "unverified": 0,
+                "stale": 0,
+                "source_limited": 0,
+                "degraded": 0,
+                "metadata_only": 0
+              },
+              "status": "partial"
+            },
+            "officialX": {
+              "handle": "flapdotsh",
+              "status": "source_limited",
+              "lastAttemptAt": null,
+              "lastSuccessAt": "2026-10-21T06:34:08.326Z",
+              "nextAttemptAt": null,
+              "ageMs": 20829,
+              "lastErrorAt": null,
+              "lastErrorCode": null
+            },
+            "coverageStatus": "bounded_sources_not_all_future_schemas"
+          },
+          "fourmeme": {
+            "onchain": {
+              "adapterHealth": null,
+              "status": "unverified",
+              "checkpointAt": null,
+              "nextBlock": null,
+              "headLagBlocks": null,
+              "liveHeadVerified": false,
+              "scope": "BSC pinned OpenFour registry adapter"
+            },
+            "documentBodies": {
+              "version": "official_document_body_v1",
+              "allowedPages": 10,
+              "uncheckedPages": 0,
+              "freshPages": 8,
+              "stalePages": 0,
+              "failedPages": 2,
+              "untrackedPages": 0,
+              "rosterOverflowPages": 0,
+              "pendingChanges": 0,
+              "omittedChangeCount": 0,
+              "nextDueAt": "2026-10-21T06:36:12.952Z",
+              "originNextAttemptAt": null,
+              "rosterDiscovery": {
+                "status": "fresh",
+                "total": 1,
+                "fresh": 1,
+                "unverified": 0,
+                "stale": 0,
+                "source_limited": 0,
+                "degraded": 0,
+                "metadata_only": 0
+              },
+              "status": "partial"
+            },
+            "officialX": {
+              "handle": "fourdotmemezh",
+              "status": "source_limited",
+              "lastAttemptAt": null,
+              "lastSuccessAt": "2026-10-21T06:34:09.864Z",
+              "nextAttemptAt": null,
+              "ageMs": 19291,
+              "lastErrorAt": null,
+              "lastErrorCode": null
+            },
+            "coverageStatus": "bounded_sources_not_all_future_schemas"
+          }
+        }
+      },
+      "configured": {
+        "version": "paper_quote_asset_first_three_v1",
+        "mode": "paper",
+        "maxUniqueCA": 3,
+        "generationPolicyVersion": "paper_launch_generation_first_three_v2",
+        "supportedSources": [
+          "bsc:flap",
+          "bsc:fourmeme"
+        ],
+        "maxEventAgeMs": 120000,
+        "requiresChart": false,
+        "orderBasis": "链上 TokenCreated 的区块号、交易序号、日志序号；不是发现顺序或热门榜",
+        "coverageNote": "仅接入严格链上证明的 BSC Flap 底池配置与 OpenFour 模板代次；网页模板、无关联 Hook 或缺排序证据仍观察；其他发射台未覆盖，不推测排名"
+      },
+      "actual": {
+        "allHistoryBuys": 0,
+        "forwardBuys": 0,
+        "forwardDistinctCA": 0,
+        "forwardClosedRounds": 0,
+        "currentVersionForwardClosedRounds": 0,
+        "openPositions": 0
+      },
+      "newVerifiedUpdate": null,
+      "newFirstThreeOrdering": null,
+      "announcementAt": null,
+      "firstDiscoveredAt": null,
+      "verifiedAt": null,
+      "robinhoodFour": "unverified_unadapted"
+    },
+    "gaps": [
+      "B重复20条、C重复16条；成功重读不更新lastNewEvidenceAt，也不证明不活跃。",
+      "B nonce仍162，旧158–161已分类；当前快照不能证明入账/内部交易/待确认活动完整覆盖。",
+      "C nonce22/23的交易类型仍待按哈希核验。",
+      "Four面板launchUpdateCoverage.readErrors仍含four，不能凭本地游标推进宣称面板覆盖已修复。",
+      "Four/Robinhood未核验未适配；Flap两个旧正文变更待核实；两官方X来源source_limited。",
+      "三项持仓在06:34:49快照估值过期，浮动损益为null；不是零。",
+      "检查点间是否持续在线未知，保留既有部署及观察中断；本轮略超五分钟，未补跑历史轮次。"
+    ],
+    "nextQuestion": "轮换Sol，优先D最旧到期头页；BSC下次优先A；继续保留C nonce22/23分类缺口，核对Four面板读取缺口与本地游标差异。",
+    "safety": {
+      "mode": "paper",
+      "execution": false,
+      "signing": false,
+      "broadcast": false,
+      "codeChanged": false,
+      "ledgerChanged": false,
+      "processRestarted": false,
+      "extraModelCalls": 0
+    }
+  },
+  "profitRetentionMultiarm": {
+    "version": "profit_retention_multiarm_v3",
+    "savedAt": "2026-10-21T06:34:49.122Z",
+    "checkpoint": {
+      "tradeCount": 307,
+      "lastTradeId": "1792275648715:306",
+      "tradePrefixHash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437",
+      "accountUpdatedAt": "2026-10-21T06:34:42.484Z"
+    },
+    "baseline": {
+      "tradeCount": 305,
+      "lastTradeId": "1792250738005:304",
+      "tradePrefixHash": "dd8adde1337cddcf30dfee8f2a526fdfb7cbee2d4852e59ae616188302bce9ce",
+      "establishedAtMs": 1792252219527
+    },
+    "cursor": {
+      "tradeCount": 307,
+      "lastTradeId": "1792275648715:306",
+      "tradePrefixHash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437"
+    },
+    "armKeys": [
+      {
+        "multiple": 2,
+        "studyKeys": [
+          "version",
+          "sessionId",
+          "mode",
+          "execution",
+          "signing",
+          "broadcast",
+          "policy",
+          "baseline",
+          "cursor",
+          "updatedAtMs",
+          "pairs",
+          "ineligible",
+          "ineligibleCount",
+          "admissionStopped",
+          "coverage"
+        ],
+        "pairs": [
+          {
+            "id": "1792274973724:305",
+            "status": "completed",
+            "observationCount": 116,
+            "gapCount": 30
+          }
+        ]
+      },
+      {
+        "multiple": 3,
+        "studyKeys": [
+          "version",
+          "sessionId",
+          "mode",
+          "execution",
+          "signing",
+          "broadcast",
+          "policy",
+          "baseline",
+          "cursor",
+          "updatedAtMs",
+          "pairs",
+          "ineligible",
+          "ineligibleCount",
+          "admissionStopped",
+          "coverage"
+        ],
+        "pairs": [
+          {
+            "id": "1792274973724:305",
+            "status": "completed",
+            "observationCount": 116,
+            "gapCount": 30
+          }
+        ]
+      },
+      {
+        "multiple": 5,
+        "studyKeys": [
+          "version",
+          "sessionId",
+          "mode",
+          "execution",
+          "signing",
+          "broadcast",
+          "policy",
+          "baseline",
+          "cursor",
+          "updatedAtMs",
+          "pairs",
+          "ineligible",
+          "ineligibleCount",
+          "admissionStopped",
+          "coverage"
+        ],
+        "pairs": [
+          {
+            "id": "1792274973724:305",
+            "status": "completed",
+            "observationCount": 116,
+            "gapCount": 30
+          }
+        ]
+      }
+    ],
+    "completeIds": [
+      "1792274973724:305"
+    ],
+    "newIds": [],
+    "sameEntries": true,
+    "sameQuotes": true,
+    "observerCoverage": {
+      "version": "profit_retention_observer_coverage_v1",
+      "interruptionCount": 1,
+      "interruptions": [
+        {
+          "reason": "no_active_pairs_mark_only_gap",
+          "fromAccountUpdatedAt": "2026-10-18T05:08:20.635Z",
+          "toAccountUpdatedAt": "2026-10-19T05:56:27.719Z",
+          "detectedAtMs": 1792389444407,
+          "tradeCount": 307,
+          "tradePrefixHash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437"
+        }
+      ]
+    },
+    "checkedAt": "2026-10-21T06:36:50.000Z",
+    "baselineConsistent": true,
+    "cursorConsistent": true,
+    "newCompletePairIds": [],
+    "newCompletePairs": 0,
+    "incrementalMetrics": [
+      {
+        "multiple": 2,
+        "netPnlUsd": null,
+        "deltaVsControlUsd": null,
+        "recoveryCount": null,
+        "notTriggeredCount": null,
+        "failureCount": null,
+        "earlySaleLossUsd": null,
+        "closedRoundDrawdownUsd": null,
+        "caConcentration": null,
+        "netExLargestPositiveCAUsd": null
+      },
+      {
+        "multiple": 3,
+        "netPnlUsd": null,
+        "deltaVsControlUsd": null,
+        "recoveryCount": null,
+        "notTriggeredCount": null,
+        "failureCount": null,
+        "earlySaleLossUsd": null,
+        "closedRoundDrawdownUsd": null,
+        "caConcentration": null,
+        "netExLargestPositiveCAUsd": null
+      },
+      {
+        "multiple": 5,
+        "netPnlUsd": null,
+        "deltaVsControlUsd": null,
+        "recoveryCount": null,
+        "notTriggeredCount": null,
+        "failureCount": null,
+        "earlySaleLossUsd": null,
+        "closedRoundDrawdownUsd": null,
+        "caConcentration": null,
+        "netExLargestPositiveCAUsd": null
+      }
+    ],
+    "schedulerVersion": "evidence_preserving_event_lease_v1",
+    "note": "无新完整共同回合；保留30条报价缺口与既有观察中断，三组不相加、不自动选择赢家。"
+  },
+  "healthComparison": {
+    "sincePreviousRound": {
+      "four": 32280,
+      "flap": 32265
+    },
+    "withinRound": {
+      "four": 71,
+      "flap": 72
+    },
+    "pendingToLocalFlapReference": 0,
+    "referenceMeaning": "异步本地已验证检查点，不是独立当前链头，不能证明全天在线或零漏报"
+  },
+  "launchAcceptance": {
+    "officialInformation": {
+      "platforms": {
+        "flap": {
+          "checkedAt": "2026-10-21T06:34:14.273Z",
+          "health": {
+            "status": "healthy",
+            "failureKind": null,
+            "consecutiveFailures": 0,
+            "lastAttemptAt": "2026-10-21T06:34:14.273Z",
+            "lastSuccessAt": "2026-10-21T06:34:14.273Z",
+            "lastErrorAt": null,
+            "lastError": null,
+            "lastErrorStatus": null,
+            "backoffMs": 0,
+            "nextAttemptAt": null,
+            "coverageStatus": "complete",
+            "optionalCircuitOpenCount": 0,
+            "optionalCircuitUrls": []
+          },
+          "watchKeys": [
+            "version",
+            "pages",
+            "changes",
+            "omittedChangeCount",
+            "maxTrackedPages",
+            "refreshIntervalMs",
+            "staleAfterMs",
+            "observationOnly"
+          ],
+          "changes": [
+            {
+              "id": "77ee37ee1553235b423d4c62e5452e9a6174ec4700f44fe52d291c6de58f6829",
+              "url": "https://docs.flap.sh/flap/developers/flap-token-locker",
+              "observedAt": "2026-10-17T11:36:48.190Z",
+              "status": "pending_verification",
+              "beforeFingerprint": "81fdefdd4aba1c50336042ba3305bbe2fa6b84909e24583d1991860129a0deb3",
+              "afterFingerprint": "f8ba614e47cad72cf75fdb7a4e4fc2e7f3a492327d0dc7f28137e51e0c3f66a1",
+              "removed": [],
+              "added": [],
+              "summaryIncomplete": true,
+              "meaning": "官方页面正文变化待核实；不代表新部署、新代次、具体 CA 或首三名交易资格"
+            },
+            {
+              "id": "06aff81084c83e5e02e05412966922b6068064decfb63d901793a8ba9c5ed04c",
+              "url": "https://docs.flap.sh/flap/developers/flap-token-locker/integration-guide",
+              "observedAt": "2026-10-17T11:36:48.860Z",
+              "status": "pending_verification",
+              "beforeFingerprint": "f206cf74382c09df98a4cce05978c6166f62434b0d42d13e2a629a8047f61a62",
+              "afterFingerprint": "37d68a9f5bb488ae284212268708682e0d0b3351f389b8057cdba4eb768970db",
+              "removed": [],
+              "added": [],
+              "summaryIncomplete": true,
+              "meaning": "官方页面正文变化待核实；不代表新部署、新代次、具体 CA 或首三名交易资格"
+            }
+          ]
+        },
+        "fourmeme": {
+          "checkedAt": "2026-10-21T06:34:15.108Z",
+          "health": {
+            "status": "healthy",
+            "failureKind": null,
+            "consecutiveFailures": 0,
+            "lastAttemptAt": "2026-10-21T06:34:15.108Z",
+            "lastSuccessAt": "2026-10-21T06:34:15.108Z",
+            "lastErrorAt": null,
+            "lastError": null,
+            "lastErrorStatus": null,
+            "backoffMs": 0,
+            "nextAttemptAt": null,
+            "coverageStatus": "complete",
+            "optionalCircuitOpenCount": 0,
+            "optionalCircuitUrls": []
+          },
+          "watchKeys": [
+            "version",
+            "pages",
+            "changes",
+            "omittedChangeCount",
+            "maxTrackedPages",
+            "refreshIntervalMs",
+            "staleAfterMs",
+            "observationOnly"
+          ],
+          "changes": []
+        }
+      },
+      "twitter": {
+        "flapdotsh": {
+          "latestId": "2112072953655632088",
+          "checkedAt": "2026-10-21T06:34:35.262Z",
+          "status": "source_limited",
+          "lastSuccessAt": "2026-10-21T06:34:35.262Z"
+        },
+        "fourdotmemezh": {
+          "latestId": "2112486153957818723",
+          "checkedAt": "2026-10-21T06:34:37.621Z",
+          "status": "source_limited",
+          "lastSuccessAt": "2026-10-21T06:34:37.621Z"
+        }
+      }
+    },
+    "api": {
+      "version": "launch_update_coverage_v1",
+      "readErrors": [
+        "four"
+      ],
+      "platforms": {
+        "flap": {
+          "onchain": {
+            "status": "adapter_observed_head_unverified",
+            "lastAttemptAt": "2026-10-21T06:34:04.862Z",
+            "lastSuccessAt": "2026-10-21T06:34:04.862Z",
+            "nextAttemptAt": null,
+            "ageMs": 24293,
+            "lastErrorAt": null,
+            "lastErrorCode": null,
+            "adapterHealth": {
+              "status": "fresh",
+              "lastAttemptAt": "2026-10-21T06:34:04.862Z",
+              "lastSuccessAt": "2026-10-21T06:34:04.862Z",
+              "nextAttemptAt": null,
+              "ageMs": 24293,
+              "lastErrorAt": null,
+              "lastErrorCode": null
+            },
+            "checkpointAt": "2026-10-21T06:34:04.862Z",
+            "nextBlock": 128890836,
+            "headLagBlocks": null,
+            "liveHeadVerified": false,
+            "scope": "BSC pinned Portal quote adapter"
+          },
+          "documentBodies": {
+            "version": "official_document_body_v1",
+            "allowedPages": 59,
+            "uncheckedPages": 0,
+            "freshPages": 58,
+            "stalePages": 0,
+            "failedPages": 1,
+            "untrackedPages": 0,
+            "rosterOverflowPages": 0,
+            "pendingChanges": 2,
+            "omittedChangeCount": 0,
+            "nextDueAt": "2026-10-21T05:55:59.601Z",
+            "originNextAttemptAt": null,
+            "rosterDiscovery": {
+              "status": "fresh",
+              "total": 1,
+              "fresh": 1,
+              "unverified": 0,
+              "stale": 0,
+              "source_limited": 0,
+              "degraded": 0,
+              "metadata_only": 0
+            },
+            "status": "partial"
+          },
+          "officialX": {
+            "handle": "flapdotsh",
+            "status": "source_limited",
+            "lastAttemptAt": null,
+            "lastSuccessAt": "2026-10-21T06:34:08.326Z",
+            "nextAttemptAt": null,
+            "ageMs": 20829,
+            "lastErrorAt": null,
+            "lastErrorCode": null
+          },
+          "coverageStatus": "bounded_sources_not_all_future_schemas"
+        },
+        "fourmeme": {
+          "onchain": {
+            "adapterHealth": null,
+            "status": "unverified",
+            "checkpointAt": null,
+            "nextBlock": null,
+            "headLagBlocks": null,
+            "liveHeadVerified": false,
+            "scope": "BSC pinned OpenFour registry adapter"
+          },
+          "documentBodies": {
+            "version": "official_document_body_v1",
+            "allowedPages": 10,
+            "uncheckedPages": 0,
+            "freshPages": 8,
+            "stalePages": 0,
+            "failedPages": 2,
+            "untrackedPages": 0,
+            "rosterOverflowPages": 0,
+            "pendingChanges": 0,
+            "omittedChangeCount": 0,
+            "nextDueAt": "2026-10-21T06:36:12.952Z",
+            "originNextAttemptAt": null,
+            "rosterDiscovery": {
+              "status": "fresh",
+              "total": 1,
+              "fresh": 1,
+              "unverified": 0,
+              "stale": 0,
+              "source_limited": 0,
+              "degraded": 0,
+              "metadata_only": 0
+            },
+            "status": "partial"
+          },
+          "officialX": {
+            "handle": "fourdotmemezh",
+            "status": "source_limited",
+            "lastAttemptAt": null,
+            "lastSuccessAt": "2026-10-21T06:34:09.864Z",
+            "nextAttemptAt": null,
+            "ageMs": 19291,
+            "lastErrorAt": null,
+            "lastErrorCode": null
+          },
+          "coverageStatus": "bounded_sources_not_all_future_schemas"
+        }
+      }
+    },
+    "configured": {
+      "version": "paper_quote_asset_first_three_v1",
+      "mode": "paper",
+      "maxUniqueCA": 3,
+      "generationPolicyVersion": "paper_launch_generation_first_three_v2",
+      "supportedSources": [
+        "bsc:flap",
+        "bsc:fourmeme"
+      ],
+      "maxEventAgeMs": 120000,
+      "requiresChart": false,
+      "orderBasis": "链上 TokenCreated 的区块号、交易序号、日志序号；不是发现顺序或热门榜",
+      "coverageNote": "仅接入严格链上证明的 BSC Flap 底池配置与 OpenFour 模板代次；网页模板、无关联 Hook 或缺排序证据仍观察；其他发射台未覆盖，不推测排名"
+    },
+    "actual": {
+      "allHistoryBuys": 0,
+      "forwardBuys": 0,
+      "forwardDistinctCA": 0,
+      "forwardClosedRounds": 0,
+      "currentVersionForwardClosedRounds": 0,
+      "openPositions": 0
+    },
+    "newVerifiedUpdate": null,
+    "newFirstThreeOrdering": null,
+    "announcementAt": null,
+    "firstDiscoveredAt": null,
+    "verifiedAt": null,
+    "robinhoodFour": "unverified_unadapted"
+  },
+  "limitations": [
+    "B重复20条、C重复16条；成功重读不更新lastNewEvidenceAt，也不证明不活跃。",
+    "B nonce仍162，旧158–161已分类；当前快照不能证明入账/内部交易/待确认活动完整覆盖。",
+    "C nonce22/23的交易类型仍待按哈希核验。",
+    "Four面板launchUpdateCoverage.readErrors仍含four，不能凭本地游标推进宣称面板覆盖已修复。",
+    "Four/Robinhood未核验未适配；Flap两个旧正文变更待核实；两官方X来源source_limited。",
+    "三项持仓在06:34:49快照估值过期，浮动损益为null；不是零。",
+    "检查点间是否持续在线未知，保留既有部署及观察中断；本轮略超五分钟，未补跑历史轮次。"
+  ],
+  "safety": {
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "codeChanged": false,
+    "ledgerChanged": false,
+    "processRestarted": false,
+    "extraModelCalls": 0
+  }
+}

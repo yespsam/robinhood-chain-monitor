@@ -1,0 +1,220 @@
+{
+  "checkedAt": "2026-10-21T11:09:22.108Z",
+  "scheduledAt": "2026-10-21T10:57:10.810Z",
+  "round": 93,
+  "group": "sol",
+  "question": "D/E 新头页是否出现共同 CA 活动，并核对新增模拟退出配对",
+  "requests": {
+    "configChecks": 5,
+    "gmgnBusiness": 3,
+    "gmgnSuccessful": 3,
+    "publicRpc": 0,
+    "models": 0
+  },
+  "wallets": [
+    {
+      "id": "D",
+      "chain": "sol",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "role": "unverified_research_reference",
+      "rows": 20,
+      "headCheckedAt": "2026-10-21T10:59:12.975Z",
+      "continuationCheckedAt": "2026-10-21T11:01:44.245Z",
+      "latestActivityAt": "2026-10-21T10:36:10.000Z",
+      "lastNewEvidenceAt": "2026-10-21T11:01:44.245Z",
+      "headNewRows": 20,
+      "headOverlap": 0,
+      "continuationRows": 20,
+      "continuationNewRows": 20,
+      "continuationOverlap": 0,
+      "headNextCursor": "NDU5NDA2MDc0MDAxOTQwNDA6MDo6",
+      "continuationNextCursor": "NDU5MDg2MTkwMDAwNDkwMDg6MDo6",
+      "identityVerified": true,
+      "connectionAnchor": {
+        "at": "2026-10-20T05:25:34.000Z",
+        "hash": "24nZM9g6f5ggzSuEeDSTmUn9MXPDnXKE4xp7zLB8nr4w74JswVQuYfEqssXWtnnHNjtQLAoLDPxMDk8poNCnuvC8",
+        "ca": "4geHVDMA2pntjmvFKnUjoTfsK1VAAJXA3yFBn8T2pump",
+        "side": "sell",
+        "found": false
+      },
+      "coverageStatus": "provider_coverage_gap_pending_classification",
+      "nextCheckDueAt": "2026-10-21T18:59:12.975Z"
+    },
+    {
+      "id": "E",
+      "chain": "sol",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "role": "unverified_research_reference",
+      "rows": 20,
+      "headCheckedAt": "2026-10-21T10:59:37.937Z",
+      "latestActivityAt": "2026-10-21T10:36:10.000Z",
+      "lastNewEvidenceAt": "2026-10-21T10:59:37.937Z",
+      "headNewRows": 14,
+      "headOverlap": 6,
+      "identityVerified": true,
+      "connectionAnchor": {
+        "at": "2026-10-20T23:32:41.000Z",
+        "hash": "2grErarUv95BDQJ4srCZncg1sF35jnU3JstsP8jjpqP2VanaEjnbrouNSD28pv7Bwtbg9bRNAoq4xFGMAVNqLfEh",
+        "ca": "FJJyKhFNCbE3awMjE9yPw2rXxCyaJM4ZYD9vE54Dpump",
+        "side": "sell",
+        "found": true
+      },
+      "coverageStatus": "latest_head_connected_historical_gap_pending",
+      "nextCheckDueAt": "2026-10-21T18:59:37.937Z"
+    }
+  ],
+  "totals": {
+    "newRows": 54,
+    "pageOverlap": 6,
+    "newAddresses": 0,
+    "identityMismatches": 0
+  },
+  "sameCaTimingSamples": [
+    {
+      "ca": "7cMb9wn3QwCsMtMwYNiq9oJZwoakW8cEAQ7Cz6qMpump",
+      "symbol": "LARPMAS",
+      "buyAt": "2026-10-21T10:00:30Z",
+      "sellAt": "2026-10-21T10:01:53Z",
+      "providerCostDeltaUsd": { "D": -16.37877648148, "E": 8.87668154852 }
+    },
+    {
+      "ca": "6mKg8AQCU4U32mxguTzy1uhRjxVcmV4GS6e8Xj6epump",
+      "symbol": "SHMÜNK",
+      "buyAt": "2026-10-21T09:55:25Z",
+      "sellAt": "2026-10-21T09:55:35Z",
+      "providerCostDeltaUsd": { "D": -36.3810912, "E": -5.13473983488 }
+    },
+    {
+      "ca": "trenwBK2XLodJFJJHKgnsRd3L371UriwZkX9zWvBK1j",
+      "symbol": "Trencher",
+      "buyAt": "2026-10-21T10:25:19Z",
+      "sellAt": "2026-10-21T10:25:29Z",
+      "providerCostDeltaUsd": { "D": 52.8182817335, "E": 17.1894449876 }
+    },
+    {
+      "ca": "DtXVXXE2APKQ6mHA5AoepfvZW8QKVBfvMecz7QYrabcd",
+      "symbol": "DtXV",
+      "buyAt": "2026-10-21T10:32:14Z",
+      "sellAt": "2026-10-21T10:36:10Z",
+      "providerCostDeltaUsd": { "D": -48.49276478842, "E": -61.29201792788 },
+      "sellHashes": {
+        "D": "2cTPMmhZ4Ygo2SKta6FPU178z2k3fP7iuRCLkC8HiqD2QHPdrTMp7RocvdxknH5SdkXKt5Guufm9zQoLyKv7fxQf",
+        "E": "232MFf5dJv2rpjT5u4CVMo8ymf6aMiLGwwKdP6WAFeQCGBmLBneb7EpagAUUUktmqtG9KhdBUgKY6QaDaMmi83r4"
+      }
+    }
+  ],
+  "attributionLimits": [
+    "Cost deltas are provider-returned USD observations, not full wallet net P&L.",
+    "No direct funding or inventory-transfer evidence was newly found.",
+    "No public RPC receipt verification was performed this round.",
+    "Shared exchange/router sources, same CA timing, and matching platform tags do not establish common control."
+  ],
+  "paperForward": {
+    "generatedAt": "2026-10-21T11:06:21.691Z",
+    "tradeCount": 309,
+    "lastTradeId": "1792567338823:308",
+    "previousCheckpoint": {
+      "tradeCount": 307,
+      "lastTradeId": "1792275648715:306"
+    },
+    "newFills": [
+      "1792567092580:307",
+      "1792567338823:308"
+    ],
+    "newClosedRoundIds": ["1792567092580:307"],
+    "round": {
+      "chain": "sol",
+      "route": "external_breakout",
+      "ca": "Cbkg5w7V7W2J2sUmecnyN825CbvwvXwasfhduVtNpump",
+      "symbol": "PHP",
+      "openedAt": "2026-10-21T07:18:12.580Z",
+      "closedAt": "2026-10-21T07:22:18.823Z",
+      "netPnlUsd": -0.9336117914283819,
+      "modelCostsUsd": 0.18342769053107342
+    },
+    "multiarm": {
+      "version": "profit_retention_multiarm_v3",
+      "baselineTradeCount": 305,
+      "cursorTradeCount": 309,
+      "closedPairs": 2,
+      "newPairId": "1792567092580:307",
+      "arms": [
+        { "multiple": 2, "netPnlUsd": -0.9336117914283819, "deltaVsControlUsd": 0, "notTriggered": 1, "failed": 0 },
+        { "multiple": 3, "netPnlUsd": -0.9336117914283819, "deltaVsControlUsd": 0, "notTriggered": 1, "failed": 0 },
+        { "multiple": 5, "netPnlUsd": -0.9336117914283819, "deltaVsControlUsd": 0, "notTriggered": 1, "failed": 0 }
+      ],
+      "sharedCoverageGaps": {
+        "gapCount": 45,
+        "reasons": { "missing_quote": 20, "pre_entry_quote": 3, "out_of_order_quote": 21, "stale_quote": 1 },
+        "newPairGapCount": 15,
+        "newPairReasons": { "missing_quote": 4, "pre_entry_quote": 2, "out_of_order_quote": 9 }
+      },
+      "pendingWriteAtApiRead": true,
+      "apiPersistedAt": "2026-10-21T11:09:21.834Z",
+      "followupArtifactSnapshot": {
+        "checkedAt": "2026-10-21T11:15:30.466Z",
+        "tradeCount": 309,
+        "lastTradeId": "1792567338823:308",
+        "tradePrefixHash": "806a982c95c465aae2568fc44797e1e989752fabfcf92271b996ab7a20d1da20",
+        "persisted": true,
+        "liveApiCheckAt": "2026-10-21T11:15:55Z",
+        "liveApiStatus": "unavailable_connection_refused",
+        "processIntervention": false
+      }
+    },
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "firstThreeActualBuys": 0,
+    "openPositionValuationAtApiRead": {
+      "checkedAt": "2026-10-21T11:09:22.108Z",
+      "status": "stale_or_unverified",
+      "unrealizedPnlUsd": null,
+      "meaning": "No fresh mark confirmed at the API snapshot; null is not zero."
+    }
+  },
+  "runtime": {
+    "apiCheckedAt": "2026-10-21T11:09:22.108Z",
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "quoteOpportunityScheduler": null,
+    "exitMonitor": { "running": true, "entriesEnabled": true, "lastError": null, "staleQuotes": 0, "checks": 4293 }
+  },
+  "fourFlap": {
+    "checkedAt": "2026-10-21T11:08:22.828Z",
+    "four": {
+      "cursorNextBlock": 128927383,
+      "processedKeys": 78,
+      "outbox": 0,
+      "headVerificationStatus": "cursor_ahead_of_observation",
+      "headLagBlocks": null,
+      "observedAt": "2026-10-21T11:07:40.226Z",
+      "observedCursorNextBlock": 128927282,
+      "observedSafeHead": 128927291
+    },
+    "flap": {
+      "cursorNextBlock": 128927385,
+      "version": "v5.26.0",
+      "headVerificationStatus": "cursor_ahead_of_observation",
+      "headLagBlocks": null,
+      "observedAt": "2026-10-21T11:08:17.959Z",
+      "observedCursorNextBlock": 128927360,
+      "observedSafeHead": 128927373,
+      "observedHeadLagBlocks": 17,
+      "observedScanBacklogBlocks": 14
+    },
+    "readErrors": []
+  },
+  "remainingGaps": [
+    "D head page does not connect to previous anchor; preserve continuation cursor and classify the approximately one-hour gap.",
+    "Older pagination gaps for both D and E remain.",
+    "Observed cost deltas cannot be treated as complete wallet P&L.",
+    "Flap and Four current lag is unknown while their processing cursors are ahead of head observation cursors.",
+    "quoteOpportunityScheduler is null; multiarm write was pending at the instant of the API read.",
+    "Only local snapshots show process health; continuity between heartbeats is unverified."
+  ],
+  "nextQuestion": "Rotate to BSC; refresh A's oldest due head and compare Four/Flap actual cursors with time-aligned verified head observations."
+}

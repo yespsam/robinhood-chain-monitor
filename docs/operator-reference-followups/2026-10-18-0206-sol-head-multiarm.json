@@ -1,0 +1,3192 @@
+{
+  "version": 1,
+  "triggerAt": "2026-10-17T18:06:45.534Z",
+  "checkedAt": "2026-10-17T18:15:36.346Z",
+  "group": "sol",
+  "question": "D/E到期头页的新交易和同秒退出反例；附本地前向与独立对照健康",
+  "requests": {
+    "configChecks": 1,
+    "gmgnBusinessRequests": 2,
+    "gmgnSuccessful": 2,
+    "rpcRequests": 0,
+    "modelRequests": 0
+  },
+  "newRows": 40,
+  "newAddresses": 0,
+  "pages": [
+    {
+      "id": "D",
+      "identityValid": true,
+      "newRows": 20,
+      "overlap": 0,
+      "span": [
+        "2026-10-17T05:00:48.000Z",
+        "2026-10-17T06:32:17.000Z"
+      ],
+      "buys": 10,
+      "sells": 10,
+      "cas": [
+        "8q8k8fCTtTQbqqeQfrxpmkPtyRw8UqiSb8gArcpspump",
+        "HD2PBPnDDDfh8JuvZxGsmdyRzLLwmHrNpPS9AgJUpump",
+        "EFhQbv3xZS1Tcy4zxxuYqZaGxzSuECHUkX4xcvtApump",
+        "Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu",
+        "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+        "4egapru4zMUtjNuNqr66gn9CukWqPoeyeWbxH1Jxpump",
+        "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+        "3683pVbDgm3ohnuGRdbsxopkCseunThz2nqRXtwHpump"
+      ]
+    },
+    {
+      "id": "E",
+      "identityValid": true,
+      "newRows": 20,
+      "overlap": 0,
+      "span": [
+        "2026-10-17T05:02:41.000Z",
+        "2026-10-17T06:32:17.000Z"
+      ],
+      "buys": 10,
+      "sells": 10,
+      "cas": [
+        "8q8k8fCTtTQbqqeQfrxpmkPtyRw8UqiSb8gArcpspump",
+        "HD2PBPnDDDfh8JuvZxGsmdyRzLLwmHrNpPS9AgJUpump",
+        "EFhQbv3xZS1Tcy4zxxuYqZaGxzSuECHUkX4xcvtApump",
+        "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+        "4egapru4zMUtjNuNqr66gn9CukWqPoeyeWbxH1Jxpump",
+        "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+        "3683pVbDgm3ohnuGRdbsxopkCseunThz2nqRXtwHpump"
+      ]
+    }
+  ],
+  "samples": [
+    {
+      "id": "D",
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "startedAt": "2026-10-17T18:10:24.227Z",
+      "page": {
+        "activities": [
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "2cVimfJg9rrJwU6D5LfofLZkcWTudEUXzFYA24yFHSQj5c87AGPiH4B5N8MYiYnufPakrFsQk8dbMwZ6RSX4tXfF",
+            "timestamp": 1792218737,
+            "event_type": "sell",
+            "token": {
+              "address": "8q8k8fCTtTQbqqeQfrxpmkPtyRw8UqiSb8gArcpspump",
+              "symbol": "ber",
+              "logo": "https://gmgn.ai/external-res/3af511fa5779ecc7809b0d436f78a6da_v2.webp",
+              "total_supply": "770874460.380462"
+            },
+            "token_amount": "23983516.403511",
+            "quote_amount": "1.587951633",
+            "cost_usd": "166.52848775271",
+            "buy_cost_usd": "169.38781776696",
+            "price_usd": "0.000006943455869896551",
+            "price": "0.00000006621012558307",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00157305",
+            "dex_native": "0.019849396",
+            "dex_usd": "2.08160615852",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "2WRNncPWBtoKKjCSMoRMY1afAmZnKKrs5Q2ZQMPwTAswKqgGQZgFA8kgL51JaPyg5zwMAPCUsSmRAet2V18S3oi7",
+            "timestamp": 1792218227,
+            "event_type": "buy",
+            "token": {
+              "address": "8q8k8fCTtTQbqqeQfrxpmkPtyRw8UqiSb8gArcpspump",
+              "symbol": "ber",
+              "logo": "https://gmgn.ai/external-res/3af511fa5779ecc7809b0d436f78a6da_v2.webp",
+              "total_supply": "770874460.380462"
+            },
+            "token_amount": "23983516.403511",
+            "quote_amount": "1.614601256",
+            "cost_usd": "169.38781776696",
+            "buy_cost_usd": null,
+            "price_usd": "0.000007062676503190745",
+            "price": "0.00000006732128970728",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00157365",
+            "dex_native": "0.020182516",
+            "dex_usd": "2.11734775356",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "35vxJB1VFw5W3YmqmLCXi3SU4LwoNwoCoasucjkopbVqYNvna8xhdr5faaymGZpdWQwkN8zUN4W1GeKwiMdsYp34",
+            "timestamp": 1792217441,
+            "event_type": "sell",
+            "token": {
+              "address": "HD2PBPnDDDfh8JuvZxGsmdyRzLLwmHrNpPS9AgJUpump",
+              "symbol": "Optimistic",
+              "logo": "https://gmgn.ai/external-res/453bd10b105c3ca874bdf8ce5c1427c4_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "25815292.113097",
+            "quote_amount": "0.881770266",
+            "cost_usd": "92.46243009276",
+            "buy_cost_usd": "172.22078667697",
+            "price_usd": "0.0000035816921880133814",
+            "price": "0.00000003415689670049",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0015729",
+            "dex_native": "0.011022129",
+            "dex_usd": "1.15578044694",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "5dFJPJ2aBW6mv1FztfhszHmAwuU9okjJYHPbdN5XnwxNk5b2eRpXpK7W1xLf1rypm7wXZ8Q2fCoehUVdZ65q9ihv",
+            "timestamp": 1792217413,
+            "event_type": "buy",
+            "token": {
+              "address": "HD2PBPnDDDfh8JuvZxGsmdyRzLLwmHrNpPS9AgJUpump",
+              "symbol": "Optimistic",
+              "logo": "https://gmgn.ai/external-res/453bd10b105c3ca874bdf8ce5c1427c4_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "25815292.113097",
+            "quote_amount": "1.641918073",
+            "cost_usd": "172.22078667697",
+            "buy_cost_usd": null,
+            "price_usd": "0.00000667127011085039",
+            "price": "0.00000006360253704691",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00157335",
+            "dex_native": "0.020523977",
+            "dex_usd": "2.15275994753",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "5QDi5cJ3hPDmDQsheY1fz4nYYrKkwPkfq33UuFf6zTdk7DjpvRDr7p7LoSfxT55owkKwo5bHUom2r9TACR5snLvk",
+            "timestamp": 1792217293,
+            "event_type": "sell",
+            "token": {
+              "address": "EFhQbv3xZS1Tcy4zxxuYqZaGxzSuECHUkX4xcvtApump",
+              "symbol": "Optimistic",
+              "logo": "https://gmgn.ai/external-res/453bd10b105c3ca874bdf8ce5c1427c4_v2.webp",
+              "total_supply": "999960614.683443"
+            },
+            "token_amount": "18788198.212812",
+            "quote_amount": "1.134598229",
+            "cost_usd": "118.96262431065",
+            "buy_cost_usd": "108.6457895412",
+            "price_usd": "0.000006331773965931671",
+            "price": "0.00000006038887902653",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00157275",
+            "dex_native": "0.014182479",
+            "dex_usd": "1.48703292315",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "QrmVKX4A5UXzqpiiAiUH94WBUijcgos7oGJgo9ozpZGfG5uqtAafF2r9DxcKQ1V2bFWE6rFY6gUr27jdbCcF9Pp",
+            "timestamp": 1792217250,
+            "event_type": "buy",
+            "token": {
+              "address": "EFhQbv3xZS1Tcy4zxxuYqZaGxzSuECHUkX4xcvtApump",
+              "symbol": "Optimistic",
+              "logo": "https://gmgn.ai/external-res/453bd10b105c3ca874bdf8ce5c1427c4_v2.webp",
+              "total_supply": "999960614.683443"
+            },
+            "token_amount": "18788198.212812",
+            "quote_amount": "1.03649866",
+            "cost_usd": "108.6457895412",
+            "buy_cost_usd": null,
+            "price_usd": "0.000005782661451118139",
+            "price": "0.00000005516753912534",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0015723",
+            "dex_native": "0.012956234",
+            "dex_usd": "1.35807244788",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "3qQ68WevBdoRvh4Z9akRfCAfDTd1gYkuQWAPiFZDfp5fNDMTmP91LMcCd8jiJxjtaFXLS8JTBx457yqu6TDWdgGz",
+            "timestamp": 1792217049,
+            "event_type": "sell",
+            "token": {
+              "address": "Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu",
+              "symbol": "METAx",
+              "logo": "https://gmgn.ai/external-res/5ff5dec792205e1b3cb6012418631eea_v2.webp",
+              "total_supply": "72376.983844"
+            },
+            "token_amount": "0.00273511",
+            "quote_amount": "1.934572",
+            "cost_usd": "1.934572",
+            "buy_cost_usd": "2.0786666144501527",
+            "price_usd": "707.3104920825854",
+            "price": "707.3104920825854",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+              "name": "USD Coin",
+              "symbol": "USDC",
+              "decimals": 6,
+              "logo": "https://gmgn.ai/external-res/4f16b3a2e75ccf0e01bf47ad742b9507_v2.webp"
+            },
+            "quote_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00157215",
+            "dex_native": "0",
+            "dex_usd": "0",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "xstocks",
+            "launchpad_platform": ""
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "3fxh3kBary8GQbSXMq56qY8YwFbtwZmZnJroy9t3YYwgL2hgBwFyVAAxZ2jaXXLpgJKJ2Ko8YWhXN8CaQ6ALrEcF",
+            "timestamp": 1792217014,
+            "event_type": "sell",
+            "token": {
+              "address": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+              "symbol": "TSLAx",
+              "logo": "https://gmgn.ai/external-res/4cbce33ae7bd1fcb0a1becccab614d3a_v2.webp",
+              "total_supply": "229634.995944"
+            },
+            "token_amount": "0.04538313",
+            "quote_amount": "16.016158",
+            "cost_usd": "16.016158",
+            "buy_cost_usd": "16.13200385874799",
+            "price_usd": "352.9099469340259",
+            "price": "352.9099469340259",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+              "name": "USD Coin",
+              "symbol": "USDC",
+              "decimals": 6,
+              "logo": "https://gmgn.ai/external-res/4f16b3a2e75ccf0e01bf47ad742b9507_v2.webp"
+            },
+            "quote_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0015723",
+            "dex_native": "0",
+            "dex_usd": "0",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "xstocks",
+            "launchpad_platform": ""
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "4crKuXuGXbFMGitdjnTaseaB4UQ4oERGzGAZMSZDcCthcEdxy2k7bHRQGk1BaFmJfY9hMWVcNNdtgzEzdB6r8hon",
+            "timestamp": 1792216811,
+            "event_type": "sell",
+            "token": {
+              "address": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+              "symbol": "TSLAx",
+              "logo": "https://gmgn.ai/external-res/4cbce33ae7bd1fcb0a1becccab614d3a_v2.webp",
+              "total_supply": "229634.995944"
+            },
+            "token_amount": "0.24672272",
+            "quote_amount": "87.06179",
+            "cost_usd": "87.06179",
+            "buy_cost_usd": "87.70069122779324",
+            "price_usd": "352.8730146943905",
+            "price": "352.8730146943905",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+              "name": "USD Coin",
+              "symbol": "USDC",
+              "decimals": 6,
+              "logo": "https://gmgn.ai/external-res/4f16b3a2e75ccf0e01bf47ad742b9507_v2.webp"
+            },
+            "quote_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.0000075",
+            "gas_usd": "0.00078675",
+            "dex_native": "0",
+            "dex_usd": "0",
+            "priority_fee": "0.000005",
+            "tip_fee": "0",
+            "launchpad": "xstocks",
+            "launchpad_platform": ""
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "4crKuXuGXbFMGitdjnTaseaB4UQ4oERGzGAZMSZDcCthcEdxy2k7bHRQGk1BaFmJfY9hMWVcNNdtgzEzdB6r8hon",
+            "timestamp": 1792216811,
+            "event_type": "sell",
+            "token": {
+              "address": "4egapru4zMUtjNuNqr66gn9CukWqPoeyeWbxH1Jxpump",
+              "symbol": "OPTIMUS",
+              "logo": "https://gmgn.ai/external-res/9aaa7a1570d403bc2dda04e61309762c_v2.webp",
+              "total_supply": "999999789.362255"
+            },
+            "token_amount": "6857033.974377",
+            "quote_amount": "0.2498458",
+            "cost_usd": "88.27629668544496",
+            "buy_cost_usd": "140.20201458200017",
+            "price_usd": "0.000012873831020132882",
+            "price": "0.00000003643642439772",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+              "name": "Tesla xStock",
+              "symbol": "TSLAx",
+              "decimals": 8,
+              "logo": "https://gmgn.ai/external-res/4cbce33ae7bd1fcb0a1becccab614d3a_v2.webp"
+            },
+            "quote_address": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.0000075",
+            "gas_usd": "0.00078675",
+            "dex_native": "0.00312308",
+            "dex_usd": "1.1034563584914354",
+            "priority_fee": "0.000005",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "2YAzMuNhEJjpHoK8o3KAzuw3wHp5PWqdkhWLmyfLAS9PsGoB9MHQweb2EzVBDWbAt9meFdD9hXMwySvnafBvrVyi",
+            "timestamp": 1792216493,
+            "event_type": "buy",
+            "token": {
+              "address": "4egapru4zMUtjNuNqr66gn9CukWqPoeyeWbxH1Jxpump",
+              "symbol": "OPTIMUS",
+              "logo": "https://gmgn.ai/external-res/9aaa7a1570d403bc2dda04e61309762c_v2.webp",
+              "total_supply": "999999789.362255"
+            },
+            "token_amount": "6857033.974377",
+            "quote_amount": "0.39673792",
+            "cost_usd": "140.1699643585111",
+            "buy_cost_usd": null,
+            "price_usd": "0.0000204417777252225",
+            "price": "0.00000005785853205373",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+              "name": "Tesla xStock",
+              "symbol": "TSLAx",
+              "decimals": 8,
+              "logo": "https://gmgn.ai/external-res/4cbce33ae7bd1fcb0a1becccab614d3a_v2.webp"
+            },
+            "quote_address": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.0000075",
+            "gas_usd": "0.000786675",
+            "dex_native": "0.00495924",
+            "dex_usd": "1.7521302073804859",
+            "priority_fee": "0.000005",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "2YAzMuNhEJjpHoK8o3KAzuw3wHp5PWqdkhWLmyfLAS9PsGoB9MHQweb2EzVBDWbAt9meFdD9hXMwySvnafBvrVyi",
+            "timestamp": 1792216493,
+            "event_type": "buy",
+            "token": {
+              "address": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+              "symbol": "TSLAx",
+              "logo": "https://gmgn.ai/external-res/4cbce33ae7bd1fcb0a1becccab614d3a_v2.webp",
+              "total_supply": "229634.995944"
+            },
+            "token_amount": "0.40169716",
+            "quote_amount": "142.046414",
+            "cost_usd": "142.046414",
+            "buy_cost_usd": null,
+            "price_usd": "353.6156790354206",
+            "price": "353.6156790354206",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+              "name": "USD Coin",
+              "symbol": "USDC",
+              "decimals": 6,
+              "logo": "https://gmgn.ai/external-res/4f16b3a2e75ccf0e01bf47ad742b9507_v2.webp"
+            },
+            "quote_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.0000075",
+            "gas_usd": "0.000786675",
+            "dex_native": "0",
+            "dex_usd": "0",
+            "priority_fee": "0.000005",
+            "tip_fee": "0",
+            "launchpad": "xstocks",
+            "launchpad_platform": ""
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "53xs4uTTzZgG4oeKU4bGDNsZteW2Xid2C1aMgTuLwB6S68MJb8UajmjjEv4ee7sSE8QKrBuUvmyBxcJvMnKg1Jjs",
+            "timestamp": 1792215450,
+            "event_type": "sell",
+            "token": {
+              "address": "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+              "symbol": "PRIME",
+              "logo": "https://gmgn.ai/external-res/f930f02aad9b47f2e96553400b1f4c72_v2.webp",
+              "total_supply": "962318062.465342"
+            },
+            "token_amount": "11499493.771693",
+            "quote_amount": "2.414925626",
+            "cost_usd": "253.30154891114",
+            "buy_cost_usd": "219.9573898985",
+            "price_usd": "0.000022027191278164333",
+            "price": "0.00000021000277698698",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00157335",
+            "dex_native": "0.03056868",
+            "dex_usd": "3.2063488452",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "34yxm5WpeoYdjC5GvRfymLXyWQsEh5516E94wgJM88QgVmFNQaKJzsAFu25H1b6DjXr3yiRkrQHZNgH7Sjzm4j6e",
+            "timestamp": 1792215405,
+            "event_type": "buy",
+            "token": {
+              "address": "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+              "symbol": "PRIME",
+              "logo": "https://gmgn.ai/external-res/f930f02aad9b47f2e96553400b1f4c72_v2.webp",
+              "total_supply": "962318062.465342"
+            },
+            "token_amount": "4570548.344892",
+            "quote_amount": "0.900967145",
+            "cost_usd": "94.5114535105",
+            "buy_cost_usd": null,
+            "price_usd": "0.000020678362064833184",
+            "price": "0.00000019712451920718",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0015735",
+            "dex_native": "0.011174371",
+            "dex_usd": "1.1721915179",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "2ZW4ESoW9WUyYoBcVFwKTRMcwS6vp3hydZMuYhfXdNbWeTRayNi9jzCx33Uy1vpR2GqPxfJXv71dF5A7fD26G751",
+            "timestamp": 1792215405,
+            "event_type": "buy",
+            "token": {
+              "address": "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+              "symbol": "PRIME",
+              "logo": "https://gmgn.ai/external-res/f930f02aad9b47f2e96553400b1f4c72_v2.webp",
+              "total_supply": "962318062.465342"
+            },
+            "token_amount": "6928945.426801",
+            "quote_amount": "1.19586212",
+            "cost_usd": "125.445936388",
+            "buy_cost_usd": null,
+            "price_usd": "0.00001810462179464924",
+            "price": "0.00000017258934027311",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0015735",
+            "dex_native": "0.014831848",
+            "dex_usd": "1.5558608552",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "2WQ1WjvoHiSPauCERGogFCoVdLzv13vTZWD7JaquhsRvqn53V7sGThWx4Awfjby45baJDYbjVFgwU7DA1VjdCQop",
+            "timestamp": 1792215395,
+            "event_type": "sell",
+            "token": {
+              "address": "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+              "symbol": "PRIME",
+              "logo": "https://gmgn.ai/external-res/f930f02aad9b47f2e96553400b1f4c72_v2.webp",
+              "total_supply": "962318062.465342"
+            },
+            "token_amount": "5860471.852019",
+            "quote_amount": "1.394049693",
+            "cost_usd": "146.2358127957",
+            "buy_cost_usd": "282.28502988872",
+            "price_usd": "0.000024952907630692156",
+            "price": "0.00000023787328532595",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0015735",
+            "dex_native": "0.0176462",
+            "dex_usd": "1.85108638",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "4t1ZEWmzVxfGFFjnYjBtpjxAEHo9YEcu2X25QinpcdMCXQvXxjmguJTCcA9NFzac66CqJMFR1tz6gzvdvBLWB23x",
+            "timestamp": 1792215391,
+            "event_type": "buy",
+            "token": {
+              "address": "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+              "symbol": "PRIME",
+              "logo": "https://gmgn.ai/external-res/f930f02aad9b47f2e96553400b1f4c72_v2.webp",
+              "total_supply": "962318062.465342"
+            },
+            "token_amount": "2069784.361002",
+            "quote_amount": "0.661770677",
+            "cost_usd": "69.4197440173",
+            "buy_cost_usd": null,
+            "price_usd": "0.00003353960215628158",
+            "price": "0.00000031972928652318",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0015735",
+            "dex_native": "0.008207705",
+            "dex_usd": "0.8609882545",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "2fjtpZj7qBoi3zjnxKxxB47ibgBYNceucWD7NDk3BNfmt6MyyaqndCArZmCd7dtzWsxUaALJCYroR1vWbu2YP9Nh",
+            "timestamp": 1792215289,
+            "event_type": "buy",
+            "token": {
+              "address": "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+              "symbol": "PRIME",
+              "logo": "https://gmgn.ai/external-res/f930f02aad9b47f2e96553400b1f4c72_v2.webp",
+              "total_supply": "962318062.465342"
+            },
+            "token_amount": "3790687.491017",
+            "quote_amount": "2.029995097",
+            "cost_usd": "212.86528587142",
+            "buy_cost_usd": null,
+            "price_usd": "0.00005615479682138395",
+            "price": "0.00000053552161759855",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000505",
+            "gas_usd": "0.0529543",
+            "dex_native": "0.024077037",
+            "dex_usd": "2.52471809982",
+            "priority_fee": "0.0005",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "3jAFpZXPgvSRG6C4Pmc4iLTPsaxqeP9Km2vrxzWy3yH4tiPmFZJ2MZtJnet4xh6CE5khxDvYbhJJmrxsY9aVVyuV",
+            "timestamp": 1792213807,
+            "event_type": "sell",
+            "token": {
+              "address": "3683pVbDgm3ohnuGRdbsxopkCseunThz2nqRXtwHpump",
+              "symbol": "LORIA",
+              "logo": "https://gmgn.ai/external-res/081a38fb616841232c8a1afddad078ae_v2.webp",
+              "total_supply": "999922752.951888"
+            },
+            "token_amount": "20973684.244725",
+            "quote_amount": "2.549693916",
+            "cost_usd": "267.79435199748",
+            "buy_cost_usd": "161.83430979936",
+            "price_usd": "0.000012768112119587764",
+            "price": "0.00000012156633456715",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00157545",
+            "dex_native": "0.031871175",
+            "dex_usd": "3.34742951025",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+            "chain": "sol",
+            "tx_hash": "5zPRKddySf5QU5A4tSf4gYfz8AxY2cr4g6nb6Jp8QURNjj9M3uYCcaDVBuQmGbdKHQhM2TSpAJGjDCHEocMmSxwm",
+            "timestamp": 1792213248,
+            "event_type": "buy",
+            "token": {
+              "address": "3683pVbDgm3ohnuGRdbsxopkCseunThz2nqRXtwHpump",
+              "symbol": "LORIA",
+              "logo": "https://gmgn.ai/external-res/081a38fb616841232c8a1afddad078ae_v2.webp",
+              "total_supply": "999922752.951888"
+            },
+            "token_amount": "20973684.244725",
+            "quote_amount": "1.543778592",
+            "cost_usd": "161.83430979936",
+            "buy_cost_usd": null,
+            "price_usd": "0.000007716064946484756",
+            "price": "0.00000007360550363908",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00157245",
+            "dex_native": "0.019297233",
+            "dex_usd": "2.02292893539",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          }
+        ],
+        "next": "NDU3OTEyNjk4MDA0MTcwMzI6MDo6"
+      },
+      "checkedAt": "2026-10-17T18:10:37.933Z"
+    },
+    {
+      "id": "E",
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "startedAt": "2026-10-17T18:10:37.933Z",
+      "page": {
+        "activities": [
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "3XQgYEeqENNoyxDBRfN1rwJh9Uac8yuTRBkv5ARRoh3KZsbLu8S3VnmXBKbSa3dKo9F6qSNRGNGC4SWdhZ1CMfDp",
+            "timestamp": 1792218737,
+            "event_type": "sell",
+            "token": {
+              "address": "8q8k8fCTtTQbqqeQfrxpmkPtyRw8UqiSb8gArcpspump",
+              "symbol": "ber",
+              "logo": "https://gmgn.ai/external-res/3af511fa5779ecc7809b0d436f78a6da_v2.webp",
+              "total_supply": "770874460.380462"
+            },
+            "token_amount": "16987642.611479",
+            "quote_amount": "1.061309898",
+            "cost_usd": "111.29956900326",
+            "buy_cost_usd": "127.39681477224",
+            "price_usd": "0.000006551796005411958",
+            "price": "0.00000006247540769917",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00157305",
+            "dex_native": "0.013266375",
+            "dex_usd": "1.39124474625",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "3t3hRFpSYLopjAgHbUJ7u3dRuaAfiZtXvbD93SnYMJWg7o8tFZ2JcuiBxGTBkGKqMinnHXugsP3cZK5MmYZwRkPW",
+            "timestamp": 1792218227,
+            "event_type": "buy",
+            "token": {
+              "address": "8q8k8fCTtTQbqqeQfrxpmkPtyRw8UqiSb8gArcpspump",
+              "symbol": "ber",
+              "logo": "https://gmgn.ai/external-res/3af511fa5779ecc7809b0d436f78a6da_v2.webp",
+              "total_supply": "770874460.380462"
+            },
+            "token_amount": "16987642.611479",
+            "quote_amount": "1.214343864",
+            "cost_usd": "127.39681477224",
+            "buy_cost_usd": null,
+            "price_usd": "0.000007499381620269891",
+            "price": "0.00000007148395405843",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00157365",
+            "dex_native": "0.015179299",
+            "dex_usd": "1.59246025809",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "2dKx7Y7aM37xyMyNgxmK1yMxyUqruDW1CSeqtLe4vYva12b2o3ibg7BoaPi6XABXufADeE2mLQkJUfgYf2NH3J9X",
+            "timestamp": 1792217441,
+            "event_type": "sell",
+            "token": {
+              "address": "HD2PBPnDDDfh8JuvZxGsmdyRzLLwmHrNpPS9AgJUpump",
+              "symbol": "Optimistic",
+              "logo": "https://gmgn.ai/external-res/453bd10b105c3ca874bdf8ce5c1427c4_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "19124209.036312",
+            "quote_amount": "0.603523704",
+            "cost_usd": "63.28549560144",
+            "buy_cost_usd": "119.87192413092",
+            "price_usd": "0.0000033091823814133715",
+            "price": "0.00000003155810014699",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0015729",
+            "dex_native": "0.007544048",
+            "dex_usd": "0.79106887328",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "2ytu6yzGj4NjQKhgYQ8BozSd6EXvTGvZZH4fqGSYawgQAmDuR8z9jXMAWJwX65MS4DTXCQWHvwaBkYvLpVKJGtjn",
+            "timestamp": 1792217413,
+            "event_type": "buy",
+            "token": {
+              "address": "HD2PBPnDDDfh8JuvZxGsmdyRzLLwmHrNpPS9AgJUpump",
+              "symbol": "Optimistic",
+              "logo": "https://gmgn.ai/external-res/453bd10b105c3ca874bdf8ce5c1427c4_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "19124209.036312",
+            "quote_amount": "1.142834628",
+            "cost_usd": "119.87192413092",
+            "buy_cost_usd": null,
+            "price_usd": "0.000006268072258743165",
+            "price": "0.0000000597585304485",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00157335",
+            "dex_native": "0.014285433",
+            "dex_usd": "1.49839906737",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "5ueLxpdvbXXV7zYtkpJWCqwMFx4iseNfCpbgfhcKLaGCR4XD7xHuSBjtZyrAXTJg7vjkvDPtA64R5uMUC18DhKtF",
+            "timestamp": 1792217293,
+            "event_type": "sell",
+            "token": {
+              "address": "EFhQbv3xZS1Tcy4zxxuYqZaGxzSuECHUkX4xcvtApump",
+              "symbol": "Optimistic",
+              "logo": "https://gmgn.ai/external-res/453bd10b105c3ca874bdf8ce5c1427c4_v2.webp",
+              "total_supply": "999960614.683443"
+            },
+            "token_amount": "23143060.348879",
+            "quote_amount": "1.223096157",
+            "cost_usd": "128.24163206145",
+            "buy_cost_usd": "141.50100031284",
+            "price_usd": "0.000005541256434033873",
+            "price": "0.00000005284936990018",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00157275",
+            "dex_native": "0.015288703",
+            "dex_usd": "1.60302050955",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "2DVLfWD68NQQLYresEARDz3Wf62tXq72hiM8yWvovZRXej7cvm7RMdsorhYRegjCgxkx71a8TYjiqY1eAnZv6wW9",
+            "timestamp": 1792217250,
+            "event_type": "buy",
+            "token": {
+              "address": "EFhQbv3xZS1Tcy4zxxuYqZaGxzSuECHUkX4xcvtApump",
+              "symbol": "Optimistic",
+              "logo": "https://gmgn.ai/external-res/453bd10b105c3ca874bdf8ce5c1427c4_v2.webp",
+              "total_supply": "999960614.683443"
+            },
+            "token_amount": "23143060.348879",
+            "quote_amount": "1.349942762",
+            "cost_usd": "141.50100031284",
+            "buy_cost_usd": null,
+            "price_usd": "0.000006114187068594952",
+            "price": "0.00000005833034791638",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0015723",
+            "dex_native": "0.016874286",
+            "dex_usd": "1.76876265852",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "4xP8hWsN4MpXHSoC5vaaNMuMtAe7mXx9VZV8MYVkYeLPLNFcbQJtntLQi3WqUEfGbsVUcztYgLQLHxaxz57bbD8Q",
+            "timestamp": 1792217014,
+            "event_type": "sell",
+            "token": {
+              "address": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+              "symbol": "TSLAx",
+              "logo": "https://gmgn.ai/external-res/4cbce33ae7bd1fcb0a1becccab614d3a_v2.webp",
+              "total_supply": "229634.995944"
+            },
+            "token_amount": "0.05194156",
+            "quote_amount": "18.330723",
+            "cost_usd": "18.330723",
+            "buy_cost_usd": "18.41634423127902",
+            "price_usd": "352.9105209778066",
+            "price": "352.9105209778066",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+              "name": "USD Coin",
+              "symbol": "USDC",
+              "decimals": 6,
+              "logo": "https://gmgn.ai/external-res/4f16b3a2e75ccf0e01bf47ad742b9507_v2.webp"
+            },
+            "quote_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0015723",
+            "dex_native": "0",
+            "dex_usd": "0",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "xstocks",
+            "launchpad_platform": ""
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "3D55675ENS7saNJpPrFFEd3V9CdfBZSxumePT7qyrL4TvcASFmHwAHuR375vKaSbPJgroBtk4va3884cF2C9iy5u",
+            "timestamp": 1792216811,
+            "event_type": "sell",
+            "token": {
+              "address": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+              "symbol": "TSLAx",
+              "logo": "https://gmgn.ai/external-res/4cbce33ae7bd1fcb0a1becccab614d3a_v2.webp",
+              "total_supply": "229634.995944"
+            },
+            "token_amount": "0.27564103",
+            "quote_amount": "97.266971",
+            "cost_usd": "97.266971",
+            "buy_cost_usd": "97.73099022717662",
+            "price_usd": "352.87551711731743",
+            "price": "352.87551711731743",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+              "name": "USD Coin",
+              "symbol": "USDC",
+              "decimals": 6,
+              "logo": "https://gmgn.ai/external-res/4f16b3a2e75ccf0e01bf47ad742b9507_v2.webp"
+            },
+            "quote_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.0000075",
+            "gas_usd": "0.00078675",
+            "dex_native": "0",
+            "dex_usd": "0",
+            "priority_fee": "0.000005",
+            "tip_fee": "0",
+            "launchpad": "xstocks",
+            "launchpad_platform": ""
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "3D55675ENS7saNJpPrFFEd3V9CdfBZSxumePT7qyrL4TvcASFmHwAHuR375vKaSbPJgroBtk4va3884cF2C9iy5u",
+            "timestamp": 1792216811,
+            "event_type": "sell",
+            "token": {
+              "address": "4egapru4zMUtjNuNqr66gn9CukWqPoeyeWbxH1Jxpump",
+              "symbol": "OPTIMUS",
+              "logo": "https://gmgn.ai/external-res/9aaa7a1570d403bc2dda04e61309762c_v2.webp",
+              "total_supply": "999999789.362255"
+            },
+            "token_amount": "7292995.000818",
+            "quote_amount": "0.27913017",
+            "cost_usd": "98.62314155682701",
+            "buy_cost_usd": "154.32868376213924",
+            "price_usd": "0.000013522995908508585",
+            "price": "0.000000038273736643",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+              "name": "Tesla xStock",
+              "symbol": "TSLAx",
+              "decimals": 8,
+              "logo": "https://gmgn.ai/external-res/4cbce33ae7bd1fcb0a1becccab614d3a_v2.webp"
+            },
+            "quote_address": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.0000075",
+            "gas_usd": "0.00078675",
+            "dex_native": "0.00348914",
+            "dex_usd": "1.2327938184954617",
+            "priority_fee": "0.000005",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "Xh5J3oE6WfHzRtdafjbxkqhBy4MKtRQv1eLGGNmwAjrVuozSH8mh1Z4vYPwXscFeDkCuSANH5ErFRAX1rrK94iC",
+            "timestamp": 1792216493,
+            "event_type": "buy",
+            "token": {
+              "address": "4egapru4zMUtjNuNqr66gn9CukWqPoeyeWbxH1Jxpump",
+              "symbol": "OPTIMUS",
+              "logo": "https://gmgn.ai/external-res/9aaa7a1570d403bc2dda04e61309762c_v2.webp",
+              "total_supply": "999999789.362255"
+            },
+            "token_amount": "7292995.000818",
+            "quote_amount": "0.43671299",
+            "cost_usd": "154.2934041777474",
+            "buy_cost_usd": null,
+            "price_usd": "0.000021156384196126893",
+            "price": "0.00000005988115855708",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+              "name": "Tesla xStock",
+              "symbol": "TSLAx",
+              "decimals": 8,
+              "logo": "https://gmgn.ai/external-res/4cbce33ae7bd1fcb0a1becccab614d3a_v2.webp"
+            },
+            "quote_address": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.0000075",
+            "gas_usd": "0.000786675",
+            "dex_native": "0.00545892",
+            "dex_usd": "1.9286702461815683",
+            "priority_fee": "0.000005",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "Xh5J3oE6WfHzRtdafjbxkqhBy4MKtRQv1eLGGNmwAjrVuozSH8mh1Z4vYPwXscFeDkCuSANH5ErFRAX1rrK94iC",
+            "timestamp": 1792216493,
+            "event_type": "buy",
+            "token": {
+              "address": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+              "symbol": "TSLAx",
+              "logo": "https://gmgn.ai/external-res/4cbce33ae7bd1fcb0a1becccab614d3a_v2.webp",
+              "total_supply": "229634.995944"
+            },
+            "token_amount": "0.44217191",
+            "quote_amount": "156.359909",
+            "cost_usd": "156.359909",
+            "buy_cost_usd": null,
+            "price_usd": "353.61791525834377",
+            "price": "353.61791525834377",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+              "name": "USD Coin",
+              "symbol": "USDC",
+              "decimals": 6,
+              "logo": "https://gmgn.ai/external-res/4f16b3a2e75ccf0e01bf47ad742b9507_v2.webp"
+            },
+            "quote_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.0000075",
+            "gas_usd": "0.000786675",
+            "dex_native": "0",
+            "dex_usd": "0",
+            "priority_fee": "0.000005",
+            "tip_fee": "0",
+            "launchpad": "xstocks",
+            "launchpad_platform": ""
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "5p6XwftBKURuRPfnUUQsXAKVdz6WFnpJeY4qWR3RJVY4v1CAXNzrVrYd8HS8h9nZzZwne56jKTvXmoBaux886QVV",
+            "timestamp": 1792215447,
+            "event_type": "sell",
+            "token": {
+              "address": "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+              "symbol": "PRIME",
+              "logo": "https://gmgn.ai/external-res/f930f02aad9b47f2e96553400b1f4c72_v2.webp",
+              "total_supply": "962318062.465342"
+            },
+            "token_amount": "8861786.849863",
+            "quote_amount": "2.04663086",
+            "cost_usd": "214.691577214",
+            "buy_cost_usd": "177.8732982337",
+            "price_usd": "0.000024226669051210238",
+            "price": "0.00000023095013394862",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0015735",
+            "dex_native": "0.025906721",
+            "dex_usd": "2.7176150329",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "Tiaob2NZUZvm8azxMMGKm34A5FFrHK7fR4Vq1xv22KqopT4x1arEkXRhYTiZ2AN5eZaPyJH6wvtvKKQRL5pwCDa",
+            "timestamp": 1792215405,
+            "event_type": "buy",
+            "token": {
+              "address": "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+              "symbol": "PRIME",
+              "logo": "https://gmgn.ai/external-res/f930f02aad9b47f2e96553400b1f4c72_v2.webp",
+              "total_supply": "962318062.465342"
+            },
+            "token_amount": "4574714.562259",
+            "quote_amount": "0.929559967",
+            "cost_usd": "97.5108405383",
+            "buy_cost_usd": null,
+            "price_usd": "0.000021315174796424234",
+            "price": "0.00000020319518395066",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0015735",
+            "dex_native": "0.011528998",
+            "dex_usd": "1.2093918902",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "2qsUeNWT2ebeKptD9ZoKYtpBxnDpK358WveEx8NhdPKoqqGhUAU9ELnVxJgn1oYBjqPf3yRcPM7stn24XLSR5L9K",
+            "timestamp": 1792215405,
+            "event_type": "buy",
+            "token": {
+              "address": "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+              "symbol": "PRIME",
+              "logo": "https://gmgn.ai/external-res/f930f02aad9b47f2e96553400b1f4c72_v2.webp",
+              "total_supply": "962318062.465342"
+            },
+            "token_amount": "4287072.287604",
+            "quote_amount": "0.766086346",
+            "cost_usd": "80.3624576954",
+            "buy_cost_usd": null,
+            "price_usd": "0.000018745300359821007",
+            "price": "0.00000017869685757694",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0015735",
+            "dex_native": "0.009501494",
+            "dex_usd": "0.9967067206",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "UPqPD1J6sjh2sGprckGNiNYW3bJjw1p7ocYhFNHSu6ZRJ2geSEjfEdf1n3XtxRceqioiH68yomPTyQ8jTieo6y9",
+            "timestamp": 1792215395,
+            "event_type": "sell",
+            "token": {
+              "address": "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+              "symbol": "PRIME",
+              "logo": "https://gmgn.ai/external-res/f930f02aad9b47f2e96553400b1f4c72_v2.webp",
+              "total_supply": "962318062.465342"
+            },
+            "token_amount": "8094882.814249",
+            "quote_amount": "1.728084362",
+            "cost_usd": "181.2760495738",
+            "buy_cost_usd": null,
+            "price_usd": "0.000022393906586851083",
+            "price": "0.00000021347861379267",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0015735",
+            "dex_native": "0.021874487",
+            "dex_usd": "2.2946336863",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "2mzPhUXouPkaR87JKhYUjFxmcLt6PsJK7vwj8nKJ2PyXM4RbJKgB7Sv1nQJtwJkHtRqBtcGdo6s8YUP4hd7HtFdp",
+            "timestamp": 1792215391,
+            "event_type": "buy",
+            "token": {
+              "address": "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+              "symbol": "PRIME",
+              "logo": "https://gmgn.ai/external-res/f930f02aad9b47f2e96553400b1f4c72_v2.webp",
+              "total_supply": "962318062.465342"
+            },
+            "token_amount": "2086728.422249",
+            "quote_amount": "0.678968364",
+            "cost_usd": "71.2237813836",
+            "buy_cost_usd": null,
+            "price_usd": "0.00003413179243844163",
+            "price": "0.00000032537457043319",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0015735",
+            "dex_native": "0.008421",
+            "dex_usd": "0.8833629",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "4Sx2GpD1RXPG9M9WmrCUZmhziuLV2YwGAWgYeHp4vTKqRNcEtscxR7YsK9YaT8H6Dhz6jaKhzHz3DR2YvqD5Qbib",
+            "timestamp": 1792215381,
+            "event_type": "buy",
+            "token": {
+              "address": "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+              "symbol": "PRIME",
+              "logo": "https://gmgn.ai/external-res/f930f02aad9b47f2e96553400b1f4c72_v2.webp",
+              "total_supply": "962318062.465342"
+            },
+            "token_amount": "1764685.343767",
+            "quote_amount": "0.543893595",
+            "cost_usd": "57.0435602436",
+            "buy_cost_usd": null,
+            "price_usd": "0.000032325060354289925",
+            "price": "0.00000030820995761146",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.0015732",
+            "dex_native": "0.006745717",
+            "dex_usd": "0.70749079896",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "3ukBESMCWVnvVw3Jy3atrZzeyFzBS9gv9TrbZuVWQWXZ1F5h4vdS1LHpNXe3XawzxK76kWafnXeoJrk6uytxycXz",
+            "timestamp": 1792215289,
+            "event_type": "buy",
+            "token": {
+              "address": "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+              "symbol": "PRIME",
+              "logo": "https://gmgn.ai/external-res/f930f02aad9b47f2e96553400b1f4c72_v2.webp",
+              "total_supply": "962318062.465342"
+            },
+            "token_amount": "4243469.048233",
+            "quote_amount": "2.374983605",
+            "cost_usd": "249.0407808203",
+            "buy_cost_usd": null,
+            "price_usd": "0.00005868801633512594",
+            "price": "0.00000055967972854402",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000505",
+            "gas_usd": "0.0529543",
+            "dex_native": "0.028168821",
+            "dex_usd": "2.95378257006",
+            "priority_fee": "0.0005",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "3c2LBGfM8McGDpmHpApx7cCZKxm8aGaH1f2aZEH8UH5UhsuYdvzcxY4J7imYzKRa4NbHvJrfQdCRRMARCDiHttfe",
+            "timestamp": 1792213363,
+            "event_type": "sell",
+            "token": {
+              "address": "3683pVbDgm3ohnuGRdbsxopkCseunThz2nqRXtwHpump",
+              "symbol": "LORIA",
+              "logo": "https://gmgn.ai/external-res/081a38fb616841232c8a1afddad078ae_v2.webp",
+              "total_supply": "999922752.951888"
+            },
+            "token_amount": "6240455.380199",
+            "quote_amount": "1.153516427",
+            "cost_usd": "121.08461934219",
+            "buy_cost_usd": "50.674992977734064",
+            "price_usd": "0.000019403170436309685",
+            "price": "0.00000018484491222549",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00157455",
+            "dex_native": "0.014418957",
+            "dex_usd": "1.51355791629",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          },
+          {
+            "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+            "chain": "sol",
+            "tx_hash": "4iqemcxskGTV9Cd5qnrFXiyvvhZ5Q6AkTj6Fx6WjoVrCvwGbSeR5V2rG5GjsxYQz7izZVbf7y29TnUUwzpBPdSmL",
+            "timestamp": 1792213361,
+            "event_type": "sell",
+            "token": {
+              "address": "3683pVbDgm3ohnuGRdbsxopkCseunThz2nqRXtwHpump",
+              "symbol": "LORIA",
+              "logo": "https://gmgn.ai/external-res/081a38fb616841232c8a1afddad078ae_v2.webp",
+              "total_supply": "999922752.951888"
+            },
+            "token_amount": "6240455.380198",
+            "quote_amount": "1.235100558",
+            "cost_usd": "129.64850557326",
+            "buy_cost_usd": "50.67499297759876",
+            "price_usd": "0.00002077548795311561",
+            "price": "0.00000019791833812628",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "So11111111111111111111111111111111111111112",
+              "name": "Wrapped SOL",
+              "symbol": "WSOL",
+              "decimals": 9,
+              "logo": "https://gmgn.ai/external-res/6e2204e89a7b3704476a44f3ffccde58_v2.webp"
+            },
+            "quote_address": "So11111111111111111111111111111111111111112",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.000015",
+            "gas_usd": "0.00157455",
+            "dex_native": "0.015438758",
+            "dex_usd": "1.62060642726",
+            "priority_fee": "0.00001",
+            "tip_fee": "0",
+            "launchpad": "pump",
+            "launchpad_platform": "Pump.fun"
+          }
+        ],
+        "next": "NDU3OTEzMjI1MDA5MTMwMDg6MDo6"
+      },
+      "checkedAt": "2026-10-17T18:10:47.903Z"
+    }
+  ],
+  "pairs": [
+    {
+      "ca": "8q8k8fCTtTQbqqeQfrxpmkPtyRw8UqiSb8gArcpspump",
+      "symbol": "ber",
+      "side": "sell",
+      "at": "2026-10-17T06:32:17.000Z",
+      "d": "2cVimfJg9rrJwU6D5LfofLZkcWTudEUXzFYA24yFHSQj5c87AGPiH4B5N8MYiYnufPakrFsQk8dbMwZ6RSX4tXfF",
+      "e": "3XQgYEeqENNoyxDBRfN1rwJh9Uac8yuTRBkv5ARRoh3KZsbLu8S3VnmXBKbSa3dKo9F6qSNRGNGC4SWdhZ1CMfDp"
+    },
+    {
+      "ca": "8q8k8fCTtTQbqqeQfrxpmkPtyRw8UqiSb8gArcpspump",
+      "symbol": "ber",
+      "side": "buy",
+      "at": "2026-10-17T06:23:47.000Z",
+      "d": "2WRNncPWBtoKKjCSMoRMY1afAmZnKKrs5Q2ZQMPwTAswKqgGQZgFA8kgL51JaPyg5zwMAPCUsSmRAet2V18S3oi7",
+      "e": "3t3hRFpSYLopjAgHbUJ7u3dRuaAfiZtXvbD93SnYMJWg7o8tFZ2JcuiBxGTBkGKqMinnHXugsP3cZK5MmYZwRkPW"
+    },
+    {
+      "ca": "HD2PBPnDDDfh8JuvZxGsmdyRzLLwmHrNpPS9AgJUpump",
+      "symbol": "Optimistic",
+      "side": "sell",
+      "at": "2026-10-17T06:10:41.000Z",
+      "d": "35vxJB1VFw5W3YmqmLCXi3SU4LwoNwoCoasucjkopbVqYNvna8xhdr5faaymGZpdWQwkN8zUN4W1GeKwiMdsYp34",
+      "e": "2dKx7Y7aM37xyMyNgxmK1yMxyUqruDW1CSeqtLe4vYva12b2o3ibg7BoaPi6XABXufADeE2mLQkJUfgYf2NH3J9X"
+    },
+    {
+      "ca": "HD2PBPnDDDfh8JuvZxGsmdyRzLLwmHrNpPS9AgJUpump",
+      "symbol": "Optimistic",
+      "side": "buy",
+      "at": "2026-10-17T06:10:13.000Z",
+      "d": "5dFJPJ2aBW6mv1FztfhszHmAwuU9okjJYHPbdN5XnwxNk5b2eRpXpK7W1xLf1rypm7wXZ8Q2fCoehUVdZ65q9ihv",
+      "e": "2ytu6yzGj4NjQKhgYQ8BozSd6EXvTGvZZH4fqGSYawgQAmDuR8z9jXMAWJwX65MS4DTXCQWHvwaBkYvLpVKJGtjn"
+    },
+    {
+      "ca": "EFhQbv3xZS1Tcy4zxxuYqZaGxzSuECHUkX4xcvtApump",
+      "symbol": "Optimistic",
+      "side": "sell",
+      "at": "2026-10-17T06:08:13.000Z",
+      "d": "5QDi5cJ3hPDmDQsheY1fz4nYYrKkwPkfq33UuFf6zTdk7DjpvRDr7p7LoSfxT55owkKwo5bHUom2r9TACR5snLvk",
+      "e": "5ueLxpdvbXXV7zYtkpJWCqwMFx4iseNfCpbgfhcKLaGCR4XD7xHuSBjtZyrAXTJg7vjkvDPtA64R5uMUC18DhKtF"
+    },
+    {
+      "ca": "EFhQbv3xZS1Tcy4zxxuYqZaGxzSuECHUkX4xcvtApump",
+      "symbol": "Optimistic",
+      "side": "buy",
+      "at": "2026-10-17T06:07:30.000Z",
+      "d": "QrmVKX4A5UXzqpiiAiUH94WBUijcgos7oGJgo9ozpZGfG5uqtAafF2r9DxcKQ1V2bFWE6rFY6gUr27jdbCcF9Pp",
+      "e": "2DVLfWD68NQQLYresEARDz3Wf62tXq72hiM8yWvovZRXej7cvm7RMdsorhYRegjCgxkx71a8TYjiqY1eAnZv6wW9"
+    },
+    {
+      "ca": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+      "symbol": "TSLAx",
+      "side": "sell",
+      "at": "2026-10-17T06:03:34.000Z",
+      "d": "3fxh3kBary8GQbSXMq56qY8YwFbtwZmZnJroy9t3YYwgL2hgBwFyVAAxZ2jaXXLpgJKJ2Ko8YWhXN8CaQ6ALrEcF",
+      "e": "4xP8hWsN4MpXHSoC5vaaNMuMtAe7mXx9VZV8MYVkYeLPLNFcbQJtntLQi3WqUEfGbsVUcztYgLQLHxaxz57bbD8Q"
+    },
+    {
+      "ca": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+      "symbol": "TSLAx",
+      "side": "sell",
+      "at": "2026-10-17T06:00:11.000Z",
+      "d": "4crKuXuGXbFMGitdjnTaseaB4UQ4oERGzGAZMSZDcCthcEdxy2k7bHRQGk1BaFmJfY9hMWVcNNdtgzEzdB6r8hon",
+      "e": "3D55675ENS7saNJpPrFFEd3V9CdfBZSxumePT7qyrL4TvcASFmHwAHuR375vKaSbPJgroBtk4va3884cF2C9iy5u"
+    },
+    {
+      "ca": "4egapru4zMUtjNuNqr66gn9CukWqPoeyeWbxH1Jxpump",
+      "symbol": "OPTIMUS",
+      "side": "sell",
+      "at": "2026-10-17T06:00:11.000Z",
+      "d": "4crKuXuGXbFMGitdjnTaseaB4UQ4oERGzGAZMSZDcCthcEdxy2k7bHRQGk1BaFmJfY9hMWVcNNdtgzEzdB6r8hon",
+      "e": "3D55675ENS7saNJpPrFFEd3V9CdfBZSxumePT7qyrL4TvcASFmHwAHuR375vKaSbPJgroBtk4va3884cF2C9iy5u"
+    },
+    {
+      "ca": "4egapru4zMUtjNuNqr66gn9CukWqPoeyeWbxH1Jxpump",
+      "symbol": "OPTIMUS",
+      "side": "buy",
+      "at": "2026-10-17T05:54:53.000Z",
+      "d": "2YAzMuNhEJjpHoK8o3KAzuw3wHp5PWqdkhWLmyfLAS9PsGoB9MHQweb2EzVBDWbAt9meFdD9hXMwySvnafBvrVyi",
+      "e": "Xh5J3oE6WfHzRtdafjbxkqhBy4MKtRQv1eLGGNmwAjrVuozSH8mh1Z4vYPwXscFeDkCuSANH5ErFRAX1rrK94iC"
+    },
+    {
+      "ca": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+      "symbol": "TSLAx",
+      "side": "buy",
+      "at": "2026-10-17T05:54:53.000Z",
+      "d": "2YAzMuNhEJjpHoK8o3KAzuw3wHp5PWqdkhWLmyfLAS9PsGoB9MHQweb2EzVBDWbAt9meFdD9hXMwySvnafBvrVyi",
+      "e": "Xh5J3oE6WfHzRtdafjbxkqhBy4MKtRQv1eLGGNmwAjrVuozSH8mh1Z4vYPwXscFeDkCuSANH5ErFRAX1rrK94iC"
+    },
+    {
+      "ca": "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+      "symbol": "PRIME",
+      "side": "buy",
+      "at": "2026-10-17T05:36:45.000Z",
+      "d": "34yxm5WpeoYdjC5GvRfymLXyWQsEh5516E94wgJM88QgVmFNQaKJzsAFu25H1b6DjXr3yiRkrQHZNgH7Sjzm4j6e",
+      "e": "Tiaob2NZUZvm8azxMMGKm34A5FFrHK7fR4Vq1xv22KqopT4x1arEkXRhYTiZ2AN5eZaPyJH6wvtvKKQRL5pwCDa"
+    },
+    {
+      "ca": "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+      "symbol": "PRIME",
+      "side": "buy",
+      "at": "2026-10-17T05:36:45.000Z",
+      "d": "2ZW4ESoW9WUyYoBcVFwKTRMcwS6vp3hydZMuYhfXdNbWeTRayNi9jzCx33Uy1vpR2GqPxfJXv71dF5A7fD26G751",
+      "e": "2qsUeNWT2ebeKptD9ZoKYtpBxnDpK358WveEx8NhdPKoqqGhUAU9ELnVxJgn1oYBjqPf3yRcPM7stn24XLSR5L9K"
+    },
+    {
+      "ca": "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+      "symbol": "PRIME",
+      "side": "sell",
+      "at": "2026-10-17T05:36:35.000Z",
+      "d": "2WQ1WjvoHiSPauCERGogFCoVdLzv13vTZWD7JaquhsRvqn53V7sGThWx4Awfjby45baJDYbjVFgwU7DA1VjdCQop",
+      "e": "UPqPD1J6sjh2sGprckGNiNYW3bJjw1p7ocYhFNHSu6ZRJ2geSEjfEdf1n3XtxRceqioiH68yomPTyQ8jTieo6y9"
+    },
+    {
+      "ca": "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+      "symbol": "PRIME",
+      "side": "buy",
+      "at": "2026-10-17T05:36:31.000Z",
+      "d": "4t1ZEWmzVxfGFFjnYjBtpjxAEHo9YEcu2X25QinpcdMCXQvXxjmguJTCcA9NFzac66CqJMFR1tz6gzvdvBLWB23x",
+      "e": "2mzPhUXouPkaR87JKhYUjFxmcLt6PsJK7vwj8nKJ2PyXM4RbJKgB7Sv1nQJtwJkHtRqBtcGdo6s8YUP4hd7HtFdp"
+    },
+    {
+      "ca": "DcMwUYnPrwz3QH9ZwafFWgVLtuCieHHcphZnD8iJhKUA",
+      "symbol": "PRIME",
+      "side": "buy",
+      "at": "2026-10-17T05:34:49.000Z",
+      "d": "2fjtpZj7qBoi3zjnxKxxB47ibgBYNceucWD7NDk3BNfmt6MyyaqndCArZmCd7dtzWsxUaALJCYroR1vWbu2YP9Nh",
+      "e": "3ukBESMCWVnvVw3Jy3atrZzeyFzBS9gv9TrbZuVWQWXZ1F5h4vdS1LHpNXe3XawzxK76kWafnXeoJrk6uytxycXz"
+    }
+  ],
+  "coverage": {
+    "headConnected": false,
+    "providerFreshness": "provider_freshness_unverified",
+    "oldHistoryPreserved": true,
+    "continuousOnlineProven": false,
+    "rpcNotDoneReason": "本地检查耗时超过约五分钟目标，停止新增采集；本轮不补历史或RPC",
+    "latestReturnedAt": "2026-10-17T06:32:17.000Z"
+  },
+  "learning": {
+    "oneToOnePairs": 16,
+    "pairedCA": 6,
+    "ber": {
+      "chain": "sol",
+      "ca": "8q8k8fCTtTQbqqeQfrxpmkPtyRw8UqiSb8gArcpspump",
+      "buyAt": "2026-10-17T06:23:47.000Z",
+      "sellAt": "2026-10-17T06:32:17.000Z",
+      "holdingSeconds": 510,
+      "dGrossCashflowDifferenceUsd": -2.85933001425,
+      "eGrossCashflowDifferenceUsd": -16.09724576898,
+      "note": "页内各自买卖数量相等；供应商成交额卖减买为负，不是经链上费用/转账/期初库存核验的完整净盈亏，不合并收益。"
+    },
+    "hypothesis": "同步入退不保证盈利，也不证明同控或合格教师。"
+  },
+  "paper": {
+    "generatedAt": "2026-10-17T18:11:23.297Z",
+    "tradeCount": 305,
+    "lastTradeId": "1792250738005:304",
+    "newFills": 1,
+    "newCompletedRounds": 0,
+    "currentVersion": {
+      "closedRounds": 18,
+      "tokens": 16,
+      "spanMs": 568250094,
+      "wins": 4,
+      "losses": 14,
+      "breakeven": 0,
+      "netPnlUsd": -0.9435437322510536,
+      "modelCostsUsd": 6.33233389471666,
+      "grossPricePnlUsd": 5.3887901624656065,
+      "winRate": 0.2222222222222222,
+      "averageNetUsd": -0.052419096236169645,
+      "averageWinUsd": 2.5070341726994014,
+      "averageLossUsd": 0.78369145878919,
+      "profitFactor": 0.9140018943434669,
+      "payoffRatio": 3.1990066302021343,
+      "averageNetR": -0.09768189243184029,
+      "riskKnownRounds": 18,
+      "closedRoundDrawdownUsd": 8.777388300725844,
+      "costOnlyLosses": 2,
+      "priceLosses": 12,
+      "stopShortfalls": 0,
+      "stopExitsWithoutQuotePath": 0,
+      "sampleStatus": "collecting",
+      "byChainRoute": [
+        {
+          "chain": "bsc",
+          "route": "external_breakout",
+          "closedRounds": 9,
+          "tokens": 8,
+          "spanMs": 568250094,
+          "wins": 2,
+          "losses": 7,
+          "breakeven": 0,
+          "netPnlUsd": 2.3019375950953274,
+          "modelCostsUsd": 3.941985574466428,
+          "grossPricePnlUsd": 6.243923169561755,
+          "winRate": 0.2222222222222222,
+          "averageNetUsd": 0.2557708438994808,
+          "averageWinUsd": 3.832181886228065,
+          "averageLossUsd": 0.7660608824801146,
+          "profitFactor": 1.4292716615500822,
+          "payoffRatio": 5.002450815425288,
+          "averageNetR": 0.39491389486270934,
+          "riskKnownRounds": 9,
+          "closedRoundDrawdownUsd": 3.5541172165942836,
+          "costOnlyLosses": 1,
+          "priceLosses": 6,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        },
+        {
+          "chain": "sol",
+          "route": "external_breakout",
+          "closedRounds": 7,
+          "tokens": 6,
+          "spanMs": 251200299,
+          "wins": 2,
+          "losses": 5,
+          "breakeven": 0,
+          "netPnlUsd": -1.205071655820662,
+          "modelCostsUsd": 1.897375488416624,
+          "grossPricePnlUsd": 0.6923038325959621,
+          "winRate": 0.2857142857142857,
+          "averageNetUsd": -0.172153093688666,
+          "averageWinUsd": 1.1818864591707383,
+          "averageLossUsd": 0.7137689148324278,
+          "profitFactor": 0.6623356297034656,
+          "payoffRatio": 1.655839074258664,
+          "averageNetR": -0.4187210403901932,
+          "riskKnownRounds": 7,
+          "closedRoundDrawdownUsd": 3.5688445741621386,
+          "costOnlyLosses": 1,
+          "priceLosses": 4,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        },
+        {
+          "chain": "robinhood",
+          "route": "external_pullback",
+          "closedRounds": 1,
+          "tokens": 1,
+          "spanMs": 868622,
+          "wins": 0,
+          "losses": 1,
+          "breakeven": 0,
+          "netPnlUsd": -1.0474852672385744,
+          "modelCostsUsd": 0.25833463440209364,
+          "grossPricePnlUsd": -0.7891506328364808,
+          "winRate": 0,
+          "averageNetUsd": -1.0474852672385744,
+          "averageWinUsd": null,
+          "averageLossUsd": 1.0474852672385744,
+          "profitFactor": 0,
+          "payoffRatio": null,
+          "averageNetR": -0.6186851868504517,
+          "riskKnownRounds": 1,
+          "closedRoundDrawdownUsd": 1.0474852672385744,
+          "costOnlyLosses": 0,
+          "priceLosses": 1,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        },
+        {
+          "chain": "robinhood",
+          "route": "external_breakout",
+          "closedRounds": 1,
+          "tokens": 1,
+          "spanMs": 447747,
+          "wins": 0,
+          "losses": 1,
+          "breakeven": 0,
+          "netPnlUsd": -0.9929244042871446,
+          "modelCostsUsd": 0.23463819743151496,
+          "grossPricePnlUsd": -0.7582862068556296,
+          "winRate": 0,
+          "averageNetUsd": -0.9929244042871446,
+          "averageWinUsd": null,
+          "averageLossUsd": 0.9929244042871446,
+          "profitFactor": 0,
+          "payoffRatio": null,
+          "averageNetR": -1.7627666479557074,
+          "riskKnownRounds": 1,
+          "closedRoundDrawdownUsd": 0.9929244042871446,
+          "costOnlyLosses": 0,
+          "priceLosses": 1,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        }
+      ],
+      "concentration": {
+        "caCount": 16,
+        "largestCaRoundShare": 0.1111111111111111,
+        "largestCaPositivePnlShare": 0.6317788618023847,
+        "denominator": "sum_of_positive_round_pnl_not_total_net_pnl",
+        "byCA": [
+          {
+            "chain": "bsc",
+            "address": "0x5e066411ca15adaa15d3c16edfea3fbb92987777",
+            "rounds": 2,
+            "netPnlUsd": 5.470071650133314,
+            "positivePnlUsd": 6.3355647845108445
+          },
+          {
+            "chain": "sol",
+            "address": "t9bnCGiZVUYsRKvx4d5dPcoDCSyuBM9C33ZNGNULARP",
+            "rounds": 1,
+            "netPnlUsd": 1.9690897303963517,
+            "positivePnlUsd": 1.9690897303963517
+          },
+          {
+            "chain": "sol",
+            "address": "33jENUQnjoitkMFpvNJcSHyLAHFWJuHwT6E3E8CNpump",
+            "rounds": 2,
+            "netPnlUsd": 0.30164873097769895,
+            "positivePnlUsd": 0.3946831879451249
+          },
+          {
+            "chain": "bsc",
+            "address": "0x0699c83f715271da83c4d2191194d12d61417777",
+            "rounds": 1,
+            "netPnlUsd": -0.9428158263889888,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "robinhood",
+            "address": "0xb1da35ddb716a2f66c612d15e6d3ce5b90afb447",
+            "rounds": 1,
+            "netPnlUsd": -1.0474852672385744,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "sol",
+            "address": "Cy1GS2FqefgaMbi45UunrUzin1rfEmTUYnomddzBpump",
+            "rounds": 1,
+            "netPnlUsd": -0.67126794341557,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "sol",
+            "address": "6x4Z2dr5DgHUBCKvta8T8GNsFTxJhsBZxNrycWQ8pump",
+            "rounds": 1,
+            "netPnlUsd": -1.2609886090806928,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "bsc",
+            "address": "0x794ac64f70ebee4cae3b116154d3def76ba37777",
+            "rounds": 1,
+            "netPnlUsd": 1.3287989879452855,
+            "positivePnlUsd": 1.3287989879452855
+          },
+          {
+            "chain": "bsc",
+            "address": "0x8dceff98285b93013ab708d65e0206880c167777",
+            "rounds": 1,
+            "netPnlUsd": -0.957701324589527,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "sol",
+            "address": "EVD9rS4kGfSnwEzsQWxBnQAgM8ha3iCfbbe6GFNMpump",
+            "rounds": 1,
+            "netPnlUsd": -1.061495913201151,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "sol",
+            "address": "8TiMkgvsrat9tM2esko8zVTt99LZLpefUM4SnZaziXaQ",
+            "rounds": 1,
+            "netPnlUsd": -0.48205765149729896,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "bsc",
+            "address": "0x5ce033b2bfca3af30b3e8c8457deaf776a8b695a",
+            "rounds": 1,
+            "netPnlUsd": -0.6111732076900607,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "bsc",
+            "address": "0x9e8187936953420bf3b6b9e36b7568b21b807777",
+            "rounds": 1,
+            "netPnlUsd": -1.0652944417839807,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "robinhood",
+            "address": "0xf9e990ccb47806ac9268922bd21dc9a91c8e8899",
+            "rounds": 1,
+            "netPnlUsd": -0.9929244042871446,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "bsc",
+            "address": "0x097dd7ee96b36444ad3439b32a8518e682ff7777",
+            "rounds": 1,
+            "netPnlUsd": -0.762530633006099,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "bsc",
+            "address": "0xa96402db0112ed21a6613b43cdfb766d9e5c7777",
+            "rounds": 1,
+            "netPnlUsd": -0.15741760952461625,
+            "positivePnlUsd": 0
+          }
+        ]
+      },
+      "cohorts": [
+        {
+          "cohortVersion": "frozen_entry_actual_exit_v3",
+          "exitExecutionKind": "sale",
+          "chain": "bsc",
+          "hypothesis": "external_breakout",
+          "selectionPolicy": "eligible_algorithm_catalyst_v3",
+          "entryFlowVersion": "paper_entry_observed_outflow_v1",
+          "entryFlowVersionEvidence": "recorded",
+          "targetSelectionVersion": "legacy_unversioned",
+          "entryStructureVersion": "reconstructed_ohlcv_entry_v1",
+          "entryCostVersion": "isolated_estimated_cost_v1",
+          "exitCostVersion": "isolated_estimated_cost_v1",
+          "exitCostVersionEvidence": "recorded",
+          "exitObservationVersion": "entry_cohort_sell_retention_v1",
+          "exitObservationVersionEvidence": "recorded",
+          "exitStructureObservationVersion": "independent_confirmed_trail_v1",
+          "exitStructureObservationVersionEvidence": "recorded",
+          "entryExitVersion": "meme_evidence_exit_v2",
+          "exitVersion": "meme_evidence_exit_v2",
+          "exitVersionEvidence": "recorded",
+          "recoveryEntryVersion": "paper_recovery_v1",
+          "routeSelectionVersion": "recovery_per_route_v1",
+          "chartWindowPolicy": "contiguous_tail_v1",
+          "narrativeAnalysisVersion": "narrative_evidence_chain_v1",
+          "entryVersion": "meme_structure_entry_v1",
+          "accountPolicyVersion": "continuous_paper_v1",
+          "opportunityVersion": "multi_setup_v2",
+          "setupId": "external_breakout",
+          "sizingVersion": "cash_tenth_cap_ten_v1",
+          "quoteVersion": "structure_quotes_v1",
+          "lossResponseVersion": "review_without_pause_v1",
+          "reasoningVersion": "evidence_first_v1",
+          "closedRounds": 9,
+          "tokens": 8,
+          "spanMs": 568250094,
+          "wins": 2,
+          "losses": 7,
+          "breakeven": 0,
+          "netPnlUsd": 2.3019375950953274,
+          "modelCostsUsd": 3.941985574466428,
+          "grossPricePnlUsd": 6.243923169561755,
+          "winRate": 0.2222222222222222,
+          "averageNetUsd": 0.2557708438994808,
+          "averageWinUsd": 3.832181886228065,
+          "averageLossUsd": 0.7660608824801146,
+          "profitFactor": 1.4292716615500822,
+          "payoffRatio": 5.002450815425288,
+          "averageNetR": 0.39491389486270934,
+          "riskKnownRounds": 9,
+          "closedRoundDrawdownUsd": 3.5541172165942836,
+          "costOnlyLosses": 1,
+          "priceLosses": 6,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        },
+        {
+          "cohortVersion": "frozen_entry_actual_exit_v3",
+          "exitExecutionKind": "sale",
+          "chain": "sol",
+          "hypothesis": "external_breakout",
+          "selectionPolicy": "eligible_algorithm_catalyst_v3",
+          "entryFlowVersion": "paper_entry_observed_outflow_v1",
+          "entryFlowVersionEvidence": "recorded",
+          "targetSelectionVersion": "legacy_unversioned",
+          "entryStructureVersion": "reconstructed_ohlcv_entry_v1",
+          "entryCostVersion": "isolated_estimated_cost_v1",
+          "exitCostVersion": "isolated_estimated_cost_v1",
+          "exitCostVersionEvidence": "recorded",
+          "exitObservationVersion": "entry_cohort_sell_retention_v1",
+          "exitObservationVersionEvidence": "recorded",
+          "exitStructureObservationVersion": "independent_confirmed_trail_v1",
+          "exitStructureObservationVersionEvidence": "recorded",
+          "entryExitVersion": "meme_evidence_exit_v2",
+          "exitVersion": "meme_evidence_exit_v2",
+          "exitVersionEvidence": "recorded",
+          "recoveryEntryVersion": "paper_recovery_v1",
+          "routeSelectionVersion": "recovery_per_route_v1",
+          "chartWindowPolicy": "contiguous_tail_v1",
+          "narrativeAnalysisVersion": "narrative_evidence_chain_v1",
+          "entryVersion": "meme_structure_entry_v1",
+          "accountPolicyVersion": "continuous_paper_v1",
+          "opportunityVersion": "multi_setup_v2",
+          "setupId": "external_breakout",
+          "sizingVersion": "cash_tenth_cap_ten_v1",
+          "quoteVersion": "structure_quotes_v1",
+          "lossResponseVersion": "review_without_pause_v1",
+          "reasoningVersion": "evidence_first_v1",
+          "closedRounds": 7,
+          "tokens": 6,
+          "spanMs": 251200299,
+          "wins": 2,
+          "losses": 5,
+          "breakeven": 0,
+          "netPnlUsd": -1.205071655820662,
+          "modelCostsUsd": 1.897375488416624,
+          "grossPricePnlUsd": 0.6923038325959621,
+          "winRate": 0.2857142857142857,
+          "averageNetUsd": -0.172153093688666,
+          "averageWinUsd": 1.1818864591707383,
+          "averageLossUsd": 0.7137689148324278,
+          "profitFactor": 0.6623356297034656,
+          "payoffRatio": 1.655839074258664,
+          "averageNetR": -0.4187210403901932,
+          "riskKnownRounds": 7,
+          "closedRoundDrawdownUsd": 3.5688445741621386,
+          "costOnlyLosses": 1,
+          "priceLosses": 4,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        },
+        {
+          "cohortVersion": "frozen_entry_actual_exit_v3",
+          "exitExecutionKind": "sale",
+          "chain": "robinhood",
+          "hypothesis": "external_pullback",
+          "selectionPolicy": "eligible_algorithm_catalyst_v3",
+          "entryFlowVersion": "paper_entry_observed_outflow_v1",
+          "entryFlowVersionEvidence": "recorded",
+          "targetSelectionVersion": "pullback_nearest_observed_level_v1",
+          "entryStructureVersion": "reconstructed_ohlcv_entry_v1",
+          "entryCostVersion": "isolated_estimated_cost_v1",
+          "exitCostVersion": "isolated_estimated_cost_v1",
+          "exitCostVersionEvidence": "recorded",
+          "exitObservationVersion": "entry_cohort_sell_retention_v1",
+          "exitObservationVersionEvidence": "recorded",
+          "exitStructureObservationVersion": "independent_confirmed_trail_v1",
+          "exitStructureObservationVersionEvidence": "recorded",
+          "entryExitVersion": "meme_evidence_exit_v2",
+          "exitVersion": "meme_evidence_exit_v2",
+          "exitVersionEvidence": "recorded",
+          "recoveryEntryVersion": "paper_recovery_v1",
+          "routeSelectionVersion": "recovery_per_route_v1",
+          "chartWindowPolicy": "contiguous_tail_v1",
+          "narrativeAnalysisVersion": "narrative_evidence_chain_v1",
+          "entryVersion": "meme_structure_entry_v1",
+          "accountPolicyVersion": "continuous_paper_v1",
+          "opportunityVersion": "multi_setup_v2",
+          "setupId": "external_pullback",
+          "sizingVersion": "cash_tenth_cap_ten_v1",
+          "quoteVersion": "structure_quotes_v1",
+          "lossResponseVersion": "review_without_pause_v1",
+          "reasoningVersion": "evidence_first_v1",
+          "closedRounds": 1,
+          "tokens": 1,
+          "spanMs": 868622,
+          "wins": 0,
+          "losses": 1,
+          "breakeven": 0,
+          "netPnlUsd": -1.0474852672385744,
+          "modelCostsUsd": 0.25833463440209364,
+          "grossPricePnlUsd": -0.7891506328364808,
+          "winRate": 0,
+          "averageNetUsd": -1.0474852672385744,
+          "averageWinUsd": null,
+          "averageLossUsd": 1.0474852672385744,
+          "profitFactor": 0,
+          "payoffRatio": null,
+          "averageNetR": -0.6186851868504517,
+          "riskKnownRounds": 1,
+          "closedRoundDrawdownUsd": 1.0474852672385744,
+          "costOnlyLosses": 0,
+          "priceLosses": 1,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        },
+        {
+          "cohortVersion": "frozen_entry_actual_exit_v3",
+          "exitExecutionKind": "sale",
+          "chain": "robinhood",
+          "hypothesis": "external_breakout",
+          "selectionPolicy": "eligible_algorithm_catalyst_v3",
+          "entryFlowVersion": "paper_entry_observed_outflow_v1",
+          "entryFlowVersionEvidence": "recorded",
+          "targetSelectionVersion": "legacy_unversioned",
+          "entryStructureVersion": "reconstructed_ohlcv_entry_v1",
+          "entryCostVersion": "isolated_estimated_cost_v1",
+          "exitCostVersion": "isolated_estimated_cost_v1",
+          "exitCostVersionEvidence": "recorded",
+          "exitObservationVersion": "entry_cohort_sell_retention_v1",
+          "exitObservationVersionEvidence": "recorded",
+          "exitStructureObservationVersion": "independent_confirmed_trail_v1",
+          "exitStructureObservationVersionEvidence": "recorded",
+          "entryExitVersion": "meme_evidence_exit_v2",
+          "exitVersion": "meme_evidence_exit_v2",
+          "exitVersionEvidence": "recorded",
+          "recoveryEntryVersion": "paper_recovery_v1",
+          "routeSelectionVersion": "recovery_per_route_v1",
+          "chartWindowPolicy": "contiguous_tail_v1",
+          "narrativeAnalysisVersion": "narrative_evidence_chain_v1",
+          "entryVersion": "meme_structure_entry_v1",
+          "accountPolicyVersion": "continuous_paper_v1",
+          "opportunityVersion": "multi_setup_v2",
+          "setupId": "external_breakout",
+          "sizingVersion": "cash_tenth_cap_ten_v1",
+          "quoteVersion": "structure_quotes_v1",
+          "lossResponseVersion": "review_without_pause_v1",
+          "reasoningVersion": "evidence_first_v1",
+          "closedRounds": 1,
+          "tokens": 1,
+          "spanMs": 447747,
+          "wins": 0,
+          "losses": 1,
+          "breakeven": 0,
+          "netPnlUsd": -0.9929244042871446,
+          "modelCostsUsd": 0.23463819743151496,
+          "grossPricePnlUsd": -0.7582862068556296,
+          "winRate": 0,
+          "averageNetUsd": -0.9929244042871446,
+          "averageWinUsd": null,
+          "averageLossUsd": 0.9929244042871446,
+          "profitFactor": 0,
+          "payoffRatio": null,
+          "averageNetR": -1.7627666479557074,
+          "riskKnownRounds": 1,
+          "closedRoundDrawdownUsd": 0.9929244042871446,
+          "costOnlyLosses": 0,
+          "priceLosses": 1,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        }
+      ],
+      "automaticPromotion": false
+    },
+    "account": {
+      "initialCashUsd": 100,
+      "cashUsd": 46.67698465759682,
+      "cashAdjustmentUsd": 99.6684734885994,
+      "totalContributedUsd": 199.6684734885994,
+      "cashAdjustments": [
+        {
+          "id": "user_refill_20260930_repair_01",
+          "kind": "manual_paper_cash_reset",
+          "amountUsd": 99.6684734885994,
+          "cashBefore": 0.33152651140059874,
+          "cashAfter": 100,
+          "tradeCount": 204,
+          "at": "2026-09-30T04:46:53.549Z"
+        }
+      ],
+      "modelCostsAllFillsUsd": 60.446021317292,
+      "remainingCostBasisUsd": 19.849999999999998,
+      "realizedPnlUsd": -133.14148883100253,
+      "unrealizedPnlUsd": -7.099662779527276,
+      "totalPnlIncludingOpenUsd": -140.2411516105298,
+      "netLiquidationValueUsd": 59.42732187806954,
+      "valuationComplete": true,
+      "note": "补款不是利润；总已实现含未平仓头寸的部分卖出，不混入当前版本完整回合成绩。"
+    },
+    "cohorts": {
+      "legacy": 0,
+      "mixed": 0,
+      "carried": 0
+    },
+    "openPositions": [
+      {
+        "key": "bsc:0x07bcb8e8226f671300e135b4a61dc157359b7777",
+        "chain": "bsc",
+        "address": "0x07bcb8e8226f671300e135b4a61dc157359b7777",
+        "route": "external_pullback",
+        "entryId": "1791473723820:238",
+        "openedAt": "2026-10-08T15:35:23.820Z",
+        "enteredAfterBaseline": false,
+        "quantity": 5993.959722058011,
+        "costBasisUsd": 8.7,
+        "valuationStatus": "fresh",
+        "markAt": "2026-10-17T18:11:18.448Z",
+        "valuationAgeMs": 4849,
+        "maxValuationAgeMs": 15000,
+        "lastRecorded": {
+          "markPrice": 0.00038134987,
+          "markValueUsd": 2.2857957607920585,
+          "unrealizedPnlUsd": -6.568494027247544
+        },
+        "currentMarkValueUsd": 2.2857957607920585,
+        "currentNetLiquidationUsd": 2.1315059727524557,
+        "currentUnrealizedPnlUsd": -6.568494027247544
+      },
+      {
+        "key": "sol:D7fGMz4E8r8FQyqULpqKr9MCu46izx9stJeStgGfYnJb",
+        "chain": "sol",
+        "address": "D7fGMz4E8r8FQyqULpqKr9MCu46izx9stJeStgGfYnJb",
+        "route": "monitored_event",
+        "entryId": "1792085285247:297",
+        "openedAt": "2026-10-15T17:28:05.247Z",
+        "enteredAfterBaseline": true,
+        "quantity": 1891406.2626126807,
+        "costBasisUsd": 5.97,
+        "valuationStatus": "fresh",
+        "markAt": "2026-10-17T18:11:19.348Z",
+        "valuationAgeMs": 3949,
+        "maxValuationAgeMs": 15000,
+        "lastRecorded": {
+          "markPrice": 0.0000030597989,
+          "markValueUsd": 5.7873228017953915,
+          "unrealizedPnlUsd": -0.3084236542405163
+        },
+        "currentMarkValueUsd": 5.7873228017953915,
+        "currentNetLiquidationUsd": 5.661576345759483,
+        "currentUnrealizedPnlUsd": -0.3084236542405163
+      },
+      {
+        "key": "sol:9LMZwPNYp2xQE5JpGFTeMVm3b6xtWw8wiDio459Kpump",
+        "chain": "sol",
+        "address": "9LMZwPNYp2xQE5JpGFTeMVm3b6xtWw8wiDio459Kpump",
+        "route": "monitored_event",
+        "entryId": "1792250738005:304",
+        "openedAt": "2026-10-17T15:25:38.005Z",
+        "enteredAfterBaseline": true,
+        "quantity": 1550586.5652434053,
+        "costBasisUsd": 5.18,
+        "valuationStatus": "fresh",
+        "markAt": "2026-10-17T18:11:16.705Z",
+        "valuationAgeMs": 6592,
+        "maxValuationAgeMs": 15000,
+        "lastRecorded": {
+          "markPrice": 0.0000032688452,
+          "markValueUsd": 5.068627450980392,
+          "unrealizedPnlUsd": -0.2227450980392156
+        },
+        "currentMarkValueUsd": 5.068627450980392,
+        "currentNetLiquidationUsd": 4.957254901960784,
+        "currentUnrealizedPnlUsd": -0.2227450980392156
+      }
+    ],
+    "firstThree": {
+      "source": "new_pool_first_three",
+      "configured": {
+        "observed": true,
+        "version": "paper_quote_asset_first_three_v1",
+        "mode": "paper",
+        "maxUniqueCA": 3,
+        "generationPolicyVersion": "paper_launch_generation_first_three_v2",
+        "supportedSources": [
+          "bsc:flap",
+          "bsc:fourmeme"
+        ],
+        "maxEventAgeMs": 120000,
+        "requiresChart": false,
+        "orderBasis": "链上 TokenCreated 的区块号、交易序号、日志序号；不是发现顺序或热门榜",
+        "coverageNote": "仅接入严格链上证明的 BSC Flap 底池配置与 OpenFour 模板代次；网页模板、无关联 Hook 或缺排序证据仍观察；其他发射台未覆盖，不推测排名"
+      },
+      "actual": {
+        "allHistoryBuys": 0,
+        "forwardBuys": 0,
+        "forwardDistinctCA": 0,
+        "forwardClosedRounds": 0,
+        "currentVersionForwardClosedRounds": 0,
+        "openPositions": 0
+      },
+      "note": "配置前三 CA 上限不等于产生三笔成交；只按冻结买入事件来源计数，不能用已配置代替实绩。"
+    },
+    "safety": {
+      "mode": "paper",
+      "execution": false,
+      "signing": false,
+      "broadcast": false
+    }
+  },
+  "health": {
+    "main": {
+      "version": 1,
+      "producer": "main",
+      "pid": 83916,
+      "startedAt": "2026-10-12T06:01:24.038Z",
+      "updatedAt": "2026-10-17T18:10:57.987Z",
+      "sequence": 15856
+    },
+    "bsc": {
+      "version": 1,
+      "producer": "bsc",
+      "pid": 6435,
+      "startedAt": "2026-10-16T15:49:20.816Z",
+      "updatedAt": "2026-10-17T18:11:12.800Z",
+      "sequence": 3109
+    },
+    "flap": {
+      "cursor": {
+        "nextBlock": 128103371,
+        "afterLogIndex": -1,
+        "anchorBlock": 128103370,
+        "anchorBlockHash": "0xc0f5445175a135ce2db493a3eaa88a011e47e29c3a423d37183c6eac8e6ed395",
+        "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+      },
+      "checkedAt": "2026-10-17T18:06:27.036Z",
+      "health": {
+        "status": "degraded",
+        "consecutiveFailures": 170,
+        "lastSuccessAt": "2026-10-17T04:05:48.028Z",
+        "lastErrorAt": "2026-10-17T18:06:27.036Z",
+        "lastError": "Flap Portal identity lookup failed: getBlock failed on every BSC RPC: bsc.rpc.sentio.xyz: shared RPC coordinator: capacity wait deadline",
+        "lastErrorCode": "FLAP_QUOTE_PORTAL_IDENTITY_UNAVAILABLE",
+        "reorgCount": 0,
+        "lastReorgAt": null,
+        "lastAttemptAt": "2026-10-17T18:06:27.036Z",
+        "nextAttemptAt": "2026-10-17T18:11:35.239Z",
+        "failureClass": "chain"
+      },
+      "version": "v5.24.0"
+    },
+    "four": {
+      "cursor": {
+        "nextBlock": 127417539,
+        "anchorBlock": 127417538,
+        "anchorBlockHash": "0x142378383160b8dc3e8f4808739d82e84a7eef6426b3e3a6bc19149216956398"
+      },
+      "updatedAt": "2026-10-17T18:07:01.942Z",
+      "chainId": 56
+    },
+    "apiExit": {
+      "running": true,
+      "intervalMs": 1000,
+      "lastCheckedAt": "2026-10-17T18:12:27.472Z",
+      "checks": 3851,
+      "staleQuotes": 0,
+      "entriesEnabled": true,
+      "lastError": null
+    },
+    "launch": {
+      "keys": [
+        "version",
+        "checkedAt",
+        "readOnly",
+        "status",
+        "platforms",
+        "readErrors",
+        "executionBoundary",
+        "remainingGaps"
+      ],
+      "status": "coverage_limited",
+      "platforms": {
+        "flap": {
+          "officialX": {
+            "handle": "flapdotsh",
+            "status": "source_limited",
+            "lastAttemptAt": null,
+            "lastSuccessAt": "2026-10-17T18:12:20.706Z",
+            "nextAttemptAt": null,
+            "ageMs": 3863,
+            "lastErrorCode": null
+          },
+          "officialWeb": {
+            "status": "fresh",
+            "total": 5,
+            "fresh": 5,
+            "unverified": 0,
+            "stale": 0,
+            "source_limited": 0,
+            "degraded": 0,
+            "metadata_only": 0
+          },
+          "documentBodies": {
+            "version": "official_document_body_v1",
+            "allowedPages": 59,
+            "uncheckedPages": 0,
+            "freshPages": 58,
+            "stalePages": 0,
+            "failedPages": 1,
+            "untrackedPages": 0,
+            "rosterOverflowPages": 0,
+            "pendingChanges": 2,
+            "omittedChangeCount": 0,
+            "nextDueAt": "2026-10-17T18:13:53.693Z",
+            "originNextAttemptAt": null,
+            "rosterDiscovery": {
+              "status": "fresh",
+              "total": 1,
+              "fresh": 1,
+              "unverified": 0,
+              "stale": 0,
+              "source_limited": 0,
+              "degraded": 0,
+              "metadata_only": 0
+            },
+            "status": "partial"
+          },
+          "github": {
+            "status": "fresh",
+            "total": 4,
+            "fresh": 4,
+            "unverified": 0,
+            "stale": 0,
+            "source_limited": 0,
+            "degraded": 0,
+            "metadata_only": 0,
+            "repositories": [
+              {
+                "repository": "flap-sh/flap-vault-component-template",
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-17T18:12:05.241Z",
+                "lastSuccessAt": "2026-10-17T18:12:05.241Z",
+                "nextAttemptAt": null,
+                "ageMs": 19328,
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "fresh",
+                  "lastAttemptAt": "2026-10-17T18:12:05.241Z",
+                  "lastSuccessAt": "2026-10-17T18:12:05.241Z",
+                  "nextAttemptAt": null,
+                  "ageMs": 19328,
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-10-17T18:12:05.241Z",
+                "observationBasis": "commit_poll"
+              },
+              {
+                "repository": "flap-sh/FlapVaultExample",
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-17T18:12:05.184Z",
+                "lastSuccessAt": "2026-10-17T18:12:05.184Z",
+                "nextAttemptAt": null,
+                "ageMs": 19385,
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "fresh",
+                  "lastAttemptAt": "2026-10-17T18:12:05.184Z",
+                  "lastSuccessAt": "2026-10-17T18:12:05.184Z",
+                  "nextAttemptAt": null,
+                  "ageMs": 19385,
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-10-17T18:12:05.184Z",
+                "observationBasis": "commit_poll"
+              },
+              {
+                "repository": "flap-sh/flap-skills",
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-17T18:12:05.590Z",
+                "lastSuccessAt": "2026-10-17T18:12:05.590Z",
+                "nextAttemptAt": null,
+                "ageMs": 18979,
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "fresh",
+                  "lastAttemptAt": "2026-10-17T18:12:05.590Z",
+                  "lastSuccessAt": "2026-10-17T18:12:05.590Z",
+                  "nextAttemptAt": null,
+                  "ageMs": 18979,
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-10-17T18:12:05.590Z",
+                "observationBasis": "commit_poll"
+              }
+            ],
+            "organizations": [
+              {
+                "organization": "flap-sh",
+                "status": "fresh",
+                "lastAttemptAt": null,
+                "lastSuccessAt": "2026-10-17T18:11:37.540Z",
+                "nextAttemptAt": null,
+                "ageMs": 47029,
+                "lastErrorCode": null
+              }
+            ],
+            "repositoryCount": 3,
+            "candidateRepositories": 0
+          },
+          "onchain": {
+            "status": "stale",
+            "lastAttemptAt": "2026-10-17T18:11:36.492Z",
+            "lastSuccessAt": "2026-10-17T04:05:48.028Z",
+            "nextAttemptAt": "2026-10-17T18:16:40.602Z",
+            "ageMs": 50796541,
+            "lastErrorCode": "FLAP_QUOTE_PORTAL_VERSION_MISMATCH",
+            "adapterHealth": {
+              "status": "stale",
+              "lastAttemptAt": "2026-10-17T18:11:36.492Z",
+              "lastSuccessAt": "2026-10-17T04:05:48.028Z",
+              "nextAttemptAt": "2026-10-17T18:16:40.602Z",
+              "ageMs": 50796541,
+              "lastErrorCode": "FLAP_QUOTE_PORTAL_VERSION_MISMATCH"
+            },
+            "checkpointAt": "2026-10-17T18:11:36.492Z",
+            "nextBlock": 128103371,
+            "headLagBlocks": null,
+            "liveHeadVerified": false,
+            "scope": "BSC pinned Portal quote adapter"
+          },
+          "coverageStatus": "bounded_sources_not_all_future_schemas"
+        },
+        "fourmeme": {
+          "officialX": {
+            "handle": "fourdotmemezh",
+            "status": "source_limited",
+            "lastAttemptAt": null,
+            "lastSuccessAt": "2026-10-17T18:12:17.072Z",
+            "nextAttemptAt": null,
+            "ageMs": 7497,
+            "lastErrorCode": null
+          },
+          "officialWeb": {
+            "status": "fresh",
+            "total": 13,
+            "fresh": 13,
+            "unverified": 0,
+            "stale": 0,
+            "source_limited": 0,
+            "degraded": 0,
+            "metadata_only": 0
+          },
+          "documentBodies": {
+            "version": "official_document_body_v1",
+            "allowedPages": 10,
+            "uncheckedPages": 0,
+            "freshPages": 8,
+            "stalePages": 0,
+            "failedPages": 2,
+            "untrackedPages": 0,
+            "rosterOverflowPages": 0,
+            "pendingChanges": 0,
+            "omittedChangeCount": 0,
+            "nextDueAt": "2026-10-17T18:13:49.645Z",
+            "originNextAttemptAt": null,
+            "rosterDiscovery": {
+              "status": "fresh",
+              "total": 1,
+              "fresh": 1,
+              "unverified": 0,
+              "stale": 0,
+              "source_limited": 0,
+              "degraded": 0,
+              "metadata_only": 0
+            },
+            "status": "partial"
+          },
+          "github": {
+            "status": "partial",
+            "total": 6,
+            "fresh": 4,
+            "unverified": 0,
+            "stale": 0,
+            "source_limited": 0,
+            "degraded": 0,
+            "metadata_only": 2,
+            "repositories": [
+              {
+                "repository": "four-meme-community/openfour-docs",
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-17T18:12:05.538Z",
+                "lastSuccessAt": "2026-10-17T18:12:05.538Z",
+                "nextAttemptAt": null,
+                "ageMs": 19031,
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "fresh",
+                  "lastAttemptAt": "2026-10-17T18:12:05.538Z",
+                  "lastSuccessAt": "2026-10-17T18:12:05.538Z",
+                  "nextAttemptAt": null,
+                  "ageMs": 19031,
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-10-17T18:12:05.538Z",
+                "observationBasis": "commit_poll"
+              },
+              {
+                "repository": "four-meme-community/four-meme-ai",
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-17T18:12:05.520Z",
+                "lastSuccessAt": "2026-10-17T18:12:05.520Z",
+                "nextAttemptAt": null,
+                "ageMs": 19049,
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "fresh",
+                  "lastAttemptAt": "2026-10-17T18:12:05.520Z",
+                  "lastSuccessAt": "2026-10-17T18:12:05.520Z",
+                  "nextAttemptAt": null,
+                  "ageMs": 19049,
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-10-17T18:12:05.520Z",
+                "observationBasis": "commit_poll"
+              },
+              {
+                "repository": "four-meme-community/fourmeme-docs",
+                "status": "metadata_only",
+                "lastAttemptAt": "2026-10-17T18:10:30.528Z",
+                "lastSuccessAt": "2026-09-11T07:48:05.561Z",
+                "nextAttemptAt": "2026-10-17T18:15:30.528Z",
+                "ageMs": 3147859008,
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "fresh",
+                  "lastAttemptAt": "2026-10-17T18:10:30.528Z",
+                  "lastSuccessAt": "2026-10-17T18:10:30.528Z",
+                  "nextAttemptAt": "2026-10-17T18:15:30.528Z",
+                  "ageMs": 114041,
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-09-11T07:48:05.561Z",
+                "observationBasis": "organization_metadata_unchanged"
+              },
+              {
+                "repository": "four-meme-community/openfour-boost-launchpad",
+                "status": "metadata_only",
+                "lastAttemptAt": "2026-10-17T18:10:30.528Z",
+                "lastSuccessAt": "2026-10-13T02:37:09.236Z",
+                "nextAttemptAt": "2026-10-17T18:15:30.528Z",
+                "ageMs": 401715333,
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "fresh",
+                  "lastAttemptAt": "2026-10-17T18:10:30.528Z",
+                  "lastSuccessAt": "2026-10-17T18:10:30.528Z",
+                  "nextAttemptAt": "2026-10-17T18:15:30.528Z",
+                  "ageMs": 114041,
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-10-13T02:37:09.236Z",
+                "observationBasis": "organization_metadata_unchanged"
+              }
+            ],
+            "organizations": [
+              {
+                "organization": "four-meme-community",
+                "status": "fresh",
+                "lastAttemptAt": null,
+                "lastSuccessAt": "2026-10-17T18:11:37.014Z",
+                "nextAttemptAt": null,
+                "ageMs": 47555,
+                "lastErrorCode": null
+              },
+              {
+                "organization": "four-meme",
+                "status": "fresh",
+                "lastAttemptAt": null,
+                "lastSuccessAt": "2026-10-17T18:11:35.863Z",
+                "nextAttemptAt": null,
+                "ageMs": 48706,
+                "lastErrorCode": null
+              }
+            ],
+            "repositoryCount": 4,
+            "candidateRepositories": 1
+          },
+          "onchain": {
+            "adapterHealth": null,
+            "status": "checkpoint_only_unverified",
+            "checkpointAt": "2026-10-17T18:07:01.942Z",
+            "nextBlock": 127417539,
+            "headLagBlocks": null,
+            "liveHeadVerified": false,
+            "scope": "BSC pinned OpenFour registry adapter"
+          },
+          "coverageStatus": "bounded_sources_not_all_future_schemas"
+        }
+      }
+    },
+    "localLaunch": {
+      "platforms": {
+        "flap": {
+          "checkedAt": "2026-10-17T18:12:11.340Z",
+          "observedChains": [
+            {
+              "name": "Base",
+              "chainId": null,
+              "environment": "unknown",
+              "stage": "deployed",
+              "evidence": "deployed_contract",
+              "sources": [
+                {
+                  "kind": "docs",
+                  "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+                }
+              ],
+              "source": {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+              }
+            },
+            {
+              "name": "BNB Chain",
+              "chainId": 56,
+              "environment": "mainnet",
+              "stage": "deployed",
+              "evidence": "deployed_contract,deployed_contract,deployed_contract,network_config,supported_network,network_config,supported_network",
+              "sources": [
+                {
+                  "kind": "docs",
+                  "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+                },
+                {
+                  "kind": "docs",
+                  "url": "https://docs.flap.sh/flap/developers/vault-developers/vault-and-vaultfactory-specification"
+                }
+              ],
+              "source": {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+              }
+            },
+            {
+              "name": "BNB Chain",
+              "chainId": 97,
+              "environment": "testnet",
+              "stage": "deployed",
+              "evidence": "deployed_contract,deployed_contract,deployed_contract,network_config,supported_network,network_config,supported_network",
+              "sources": [
+                {
+                  "kind": "docs",
+                  "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+                },
+                {
+                  "kind": "docs",
+                  "url": "https://docs.flap.sh/flap/developers/vault-developers/vault-and-vaultfactory-specification"
+                }
+              ],
+              "source": {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+              }
+            },
+            {
+              "name": "Morph",
+              "chainId": 2818,
+              "environment": "mainnet",
+              "stage": "deployed",
+              "evidence": "deployed_contract",
+              "sources": [
+                {
+                  "kind": "docs",
+                  "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+                }
+              ],
+              "source": {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+              }
+            },
+            {
+              "name": "Robinhood Chain",
+              "chainId": null,
+              "environment": "testnet",
+              "stage": "deployed",
+              "evidence": "deployed_contract",
+              "sources": [
+                {
+                  "kind": "docs",
+                  "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+                }
+              ],
+              "source": {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+              }
+            },
+            {
+              "name": "Robinhood Chain",
+              "chainId": 4663,
+              "environment": "mainnet",
+              "stage": "deployed",
+              "evidence": "deployed_contract,deployed_contract,deployed_contract,network_config,supported_network,network_config,supported_network",
+              "sources": [
+                {
+                  "kind": "docs",
+                  "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+                },
+                {
+                  "kind": "docs",
+                  "url": "https://docs.flap.sh/flap/developers/vault-developers/vault-and-vaultfactory-specification"
+                }
+              ],
+              "source": {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+              }
+            }
+          ],
+          "documentWatchKeys": [
+            "version",
+            "pages",
+            "changes",
+            "omittedChangeCount",
+            "maxTrackedPages",
+            "refreshIntervalMs",
+            "staleAfterMs",
+            "observationOnly"
+          ]
+        },
+        "fourmeme": {
+          "checkedAt": "2026-10-17T18:12:15.553Z",
+          "observedChains": [
+            {
+              "name": "BNB Chain",
+              "chainId": 56,
+              "environment": "mainnet",
+              "stage": "supported",
+              "evidence": "published_network_config",
+              "sources": [
+                {
+                  "kind": "api",
+                  "url": "https://four.meme/meme-api/v1/public/config"
+                }
+              ],
+              "source": {
+                "kind": "api",
+                "url": "https://four.meme/meme-api/v1/public/config"
+              }
+            }
+          ],
+          "documentWatchKeys": [
+            "version",
+            "pages",
+            "changes",
+            "omittedChangeCount",
+            "maxTrackedPages",
+            "refreshIntervalMs",
+            "staleAfterMs",
+            "observationOnly"
+          ]
+        }
+      },
+      "twitter": {
+        "flapdotsh": {
+          "checkedAt": "2026-10-17T18:12:15.206Z",
+          "latestId": "2111008529029190127",
+          "healthScalars": {
+            "status": "backoff",
+            "consecutiveFailures": 1,
+            "priority": true,
+            "checkedAt": "2026-10-17T18:12:19.766Z",
+            "lastSuccessAt": "2026-10-17T18:12:15.206Z",
+            "activeSource": "https://api.fxtwitter.com/2/profile/id:{userId}/statuses?count=40",
+            "timelineItems": 18,
+            "lastGapResolvedAt": "2026-10-17T18:05:58.137Z",
+            "activeSourceId": "fxtwitter_numeric_id",
+            "scheduledUntil": "2026-10-17T18:12:19.579Z",
+            "slaStatus": "source_limited",
+            "slaStatusReason": "public_discovery_limited:x_direct_profile,jina_twitter_profile",
+            "slaHardGuarantee": false,
+            "slaCheckedAt": "2026-10-17T18:12:19.766Z",
+            "lastErrorAt": "2026-10-17T18:12:19.766Z",
+            "lastError": "all X sources are in backoff",
+            "retryAfter": "2026-10-17T18:14:20.312Z",
+            "gapSince": "2026-10-17T18:12:19.766Z"
+          }
+        },
+        "fourdotmemezh": {
+          "checkedAt": "2026-10-17T18:12:17.072Z",
+          "latestId": "2111079404986388853",
+          "healthScalars": {
+            "status": "degraded",
+            "consecutiveFailures": 0,
+            "priority": true,
+            "checkedAt": "2026-10-17T18:12:19.392Z",
+            "lastSuccessAt": "2026-10-17T18:12:17.072Z",
+            "activeSource": "https://api.fxtwitter.com/2/profile/id:{userId}/statuses?count=40",
+            "timelineItems": 18,
+            "lastGapResolvedAt": "2026-10-17T18:09:18.437Z",
+            "activeSourceId": "fxtwitter_numeric_id",
+            "scheduledUntil": "2026-10-17T18:12:21.332Z",
+            "slaStatus": "source_limited",
+            "slaStatusReason": "public_discovery_limited:x_direct_profile,jina_twitter_profile",
+            "slaHardGuarantee": false,
+            "slaCheckedAt": "2026-10-17T18:12:19.392Z"
+          }
+        }
+      }
+    },
+    "continuousCoverageProven": false
+  },
+  "multiarm": {
+    "checkedAt": "2026-10-17T18:15:36.346Z",
+    "summary": {
+      "version": "profit_retention_multiarm_v3",
+      "sessionId": "confirmed-pvp-v2-estimated-20260928",
+      "mode": "shadow_paper",
+      "execution": false,
+      "signing": false,
+      "broadcast": false,
+      "pairedCohort": true,
+      "status": "observing",
+      "policy": {
+        "triggerPriceMultiples": [
+          2,
+          3,
+          5
+        ],
+        "sameActualEntries": true,
+        "sameQuotes": true,
+        "independentHypotheses": true,
+        "noPortfolioSum": true,
+        "historicalBackfill": false,
+        "reusedCapital": false
+      },
+      "baseline": {
+        "tradeCount": 305,
+        "lastTradeId": "1792250738005:304",
+        "tradePrefixHash": "dd8adde1337cddcf30dfee8f2a526fdfb7cbee2d4852e59ae616188302bce9ce",
+        "establishedAtMs": 1792252219527
+      },
+      "cursor": {
+        "tradeCount": 305,
+        "lastTradeId": "1792250738005:304",
+        "tradePrefixHash": "dd8adde1337cddcf30dfee8f2a526fdfb7cbee2d4852e59ae616188302bce9ce"
+      },
+      "startedAtMs": 1792252219527,
+      "updatedAtMs": 1792260681173,
+      "closedPairs": 0,
+      "openPairs": 0,
+      "excludedPairs": 0,
+      "ineligibleEntries": 0,
+      "admissionStopped": false,
+      "sharedCoverage": {
+        "gapCount": 0,
+        "pairGapCount": 0,
+        "reasons": {},
+        "latest": [],
+        "byPair": []
+      },
+      "arms": [
+        {
+          "multiple": 2,
+          "version": "profit_retention_principal_v2",
+          "sessionId": "confirmed-pvp-v2-estimated-20260928",
+          "status": "observing",
+          "startedAtMs": 1792252219527,
+          "updatedAtMs": 1792260681173,
+          "closedPairs": 0,
+          "openPairs": 0,
+          "excludedPairs": 0,
+          "ineligibleEntries": 0,
+          "admissionStopped": false,
+          "performance": null,
+          "active": [],
+          "coverage": {
+            "gapCount": 0,
+            "reasons": {},
+            "latest": []
+          },
+          "policy": {
+            "triggerPriceMultiple": 2,
+            "recoveryRule": "net_sale_proceeds_cover_all_in_original_basis",
+            "quoteMaxAgeMs": 15000,
+            "maxPairs": 200,
+            "maxObservations": 120,
+            "maxDetails": 200,
+            "nextDistinctQuote": true,
+            "mainExitPrecedence": true,
+            "disarmBelowTrigger": true,
+            "reusedCapital": false,
+            "historicalBackfill": false,
+            "riskMeaning": "frozen_scenario_not_maximum_loss"
+          },
+          "note": "Same actual entries; forward hypothetical exits only. Price multiple, not net return multiple. Recovered principal is cashflow, not all profit; remaining inventory and future exit gas still carry risk. Hypothetical fractional quantities: token atom precision and executable routes not modeled. Model fees/slippage/gas; no execution or independent capital reuse."
+        },
+        {
+          "multiple": 3,
+          "version": "profit_retention_principal_v2",
+          "sessionId": "confirmed-pvp-v2-estimated-20260928",
+          "status": "observing",
+          "startedAtMs": 1792252219527,
+          "updatedAtMs": 1792260681173,
+          "closedPairs": 0,
+          "openPairs": 0,
+          "excludedPairs": 0,
+          "ineligibleEntries": 0,
+          "admissionStopped": false,
+          "performance": null,
+          "active": [],
+          "coverage": {
+            "gapCount": 0,
+            "reasons": {},
+            "latest": []
+          },
+          "policy": {
+            "triggerPriceMultiple": 3,
+            "recoveryRule": "net_sale_proceeds_cover_all_in_original_basis",
+            "quoteMaxAgeMs": 15000,
+            "maxPairs": 200,
+            "maxObservations": 120,
+            "maxDetails": 200,
+            "nextDistinctQuote": true,
+            "mainExitPrecedence": true,
+            "disarmBelowTrigger": true,
+            "reusedCapital": false,
+            "historicalBackfill": false,
+            "riskMeaning": "frozen_scenario_not_maximum_loss"
+          },
+          "note": "Same actual entries; forward hypothetical exits only. Price multiple, not net return multiple. Recovered principal is cashflow, not all profit; remaining inventory and future exit gas still carry risk. Hypothetical fractional quantities: token atom precision and executable routes not modeled. Model fees/slippage/gas; no execution or independent capital reuse."
+        },
+        {
+          "multiple": 5,
+          "version": "profit_retention_principal_v2",
+          "sessionId": "confirmed-pvp-v2-estimated-20260928",
+          "status": "observing",
+          "startedAtMs": 1792252219527,
+          "updatedAtMs": 1792260681173,
+          "closedPairs": 0,
+          "openPairs": 0,
+          "excludedPairs": 0,
+          "ineligibleEntries": 0,
+          "admissionStopped": false,
+          "performance": null,
+          "active": [],
+          "coverage": {
+            "gapCount": 0,
+            "reasons": {},
+            "latest": []
+          },
+          "policy": {
+            "triggerPriceMultiple": 5,
+            "recoveryRule": "net_sale_proceeds_cover_all_in_original_basis",
+            "quoteMaxAgeMs": 15000,
+            "maxPairs": 200,
+            "maxObservations": 120,
+            "maxDetails": 200,
+            "nextDistinctQuote": true,
+            "mainExitPrecedence": true,
+            "disarmBelowTrigger": true,
+            "reusedCapital": false,
+            "historicalBackfill": false,
+            "riskMeaning": "frozen_scenario_not_maximum_loss"
+          },
+          "note": "Same actual entries; forward hypothetical exits only. Price multiple, not net return multiple. Recovered principal is cashflow, not all profit; remaining inventory and future exit gas still carry risk. Hypothetical fractional quantities: token atom precision and executable routes not modeled. Model fees/slippage/gas; no execution or independent capital reuse."
+        }
+      ],
+      "note": "Fixed 2x/3x/5x hypotheses share the same actual entries and control. Do not sum their profits or count the shared baseline three times. All completed rounds include untriggered recoveries; no completed rounds means unknown performance."
+    },
+    "persistedAt": "2026-10-17T18:11:21.748Z",
+    "checkpoint": {
+      "tradeCount": 305,
+      "lastTradeId": "1792250738005:304",
+      "tradePrefixHash": "dd8adde1337cddcf30dfee8f2a526fdfb7cbee2d4852e59ae616188302bce9ce",
+      "accountUpdatedAt": "2026-10-17T18:11:21.173Z"
+    },
+    "live": {
+      "status": "observing",
+      "persistedAt": "2026-10-17T18:12:30.073Z",
+      "pendingWrite": false,
+      "error": null,
+      "checkpoint": {
+        "tradeCount": 305,
+        "lastTradeId": "1792250738005:304",
+        "tradePrefixHash": "dd8adde1337cddcf30dfee8f2a526fdfb7cbee2d4852e59ae616188302bce9ce",
+        "accountUpdatedAt": "2026-10-17T18:12:29.660Z"
+      }
+    },
+    "scheduler": [
+      {
+        "path": "researchPipeline.quoteOpportunityScheduler",
+        "value": {
+          "version": "evidence_preserving_event_lease_v1",
+          "rememberedEventLeases": 0,
+          "overflowPreemptionSuppressedUntil": null
+        }
+      }
+    ],
+    "reportedCompletePairIds": [],
+    "newCompletePairIds": [],
+    "newCompletePairs": 0,
+    "baselineEntriesExcluded": 3,
+    "performanceUnknown": true,
+    "gaps": [],
+    "note": "基线及游标一致，0共同新入场、0完整回合，不将空样本当作真实报价配对验收或选择赢家。"
+  },
+  "nextQuestion": "下轮BSC最旧到期头页；Sol保留本轮新游标连接旧锚点。等待2/3/5倍共同新入场和完整回合；继续核验Flap身份/版本错误及Four游标推进，不自动修复或重启。",
+  "boundaries": {
+    "sourceEdits": false,
+    "strategyEdits": false,
+    "ledgerEdits": false,
+    "restart": false,
+    "trading": false,
+    "signing": false,
+    "broadcast": false,
+    "externalMessages": false,
+    "fomoPlatformRestored": false,
+    "jevCalls": false
+  }
+}

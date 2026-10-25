@@ -1,0 +1,686 @@
+{
+  "version": 1,
+  "status": "deployed_verified_progress_backlog_remaining",
+  "task": "four_cursor_and_rpc_capacity_recovery",
+  "date": "2026-10-21",
+  "timeZone": "Asia/Shanghai",
+  "test": {
+    "command": "node --test --test-concurrency=2 --test-reporter=spec",
+    "passed": 4272,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 225123.217834,
+    "log": "/tmp/four-recovery-full-20261021-xLxpKo"
+  },
+  "backup": "data/backups/four-recovery-20261021-zWJEFv",
+  "sourceSha256": {
+    "src/alerts.js": "7c69d40f8ceed0f694cb48248279cf1015d3d958e2defabb8358b9a5aaca3977",
+    "src/four-registry-monitor.js": "d049dc75ae17a79019470f5d400a960c63c09aa29e023c97ad57af6c35a1ad9e",
+    "src/rpc-host-coordinator.js": "d0f4da7fa7029c68ee66d993517bf211a2561840f0c020b0329cefb32c1687eb"
+  },
+  "deployment": {
+    "sigtermAt": "2026-10-20T19:25:56.329Z",
+    "drainedAt": "2026-10-20T19:26:30.156Z",
+    "startedAt": "2026-10-20T19:26:30.952Z",
+    "oldMainPid": 97224,
+    "oldBscPid": 97226,
+    "newMainPid": 26336,
+    "newBscPid": 26338,
+    "unchangedDashboardPid": 97377,
+    "unchangedFomoPid": 829,
+    "continuousOnlineClaim": false
+  },
+  "snapshots": [
+    {
+      "at": "2026-10-20T19:25:56.230Z",
+      "four": {
+        "cursor": {
+          "nextBlock": 127417539,
+          "anchorBlock": 127417538,
+          "anchorBlockHash": "0x142378383160b8dc3e8f4808739d82e84a7eef6426b3e3a6bc19149216956398"
+        },
+        "outbox": [
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:217:module_upserted",
+            "attempts": 67,
+            "lastOutcome": "retry:freshness_too_old"
+          },
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:219:tag_registered",
+            "attempts": 0,
+            "lastOutcome": null
+          },
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:220:module_upserted",
+            "attempts": 0,
+            "lastOutcome": null
+          },
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:221:tag_registered",
+            "attempts": 0,
+            "lastOutcome": null
+          },
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:222:token_impl_upserted",
+            "attempts": 0,
+            "lastOutcome": null
+          },
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:223:added",
+            "attempts": 0,
+            "lastOutcome": null
+          }
+        ],
+        "processed": 39,
+        "policySuppressed": [
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:216:tag_registered",
+            "suppressedAt": "2026-10-13T14:52:45.477Z"
+          }
+        ],
+        "updatedAt": "2026-10-20T19:18:59.137Z",
+        "checkpoints": [
+          {
+            "blockNumber": 127417276,
+            "blockHash": "0x496b40fb64be5cdff1c2e41c1e6a41a5a4e1ea7da657fb0141ac79bf6c19eb19"
+          },
+          {
+            "blockNumber": 127417310,
+            "blockHash": "0x0d820ed3d77081da0053436aee74282f19c4be376f829f42cd098beb6521fb5f"
+          },
+          {
+            "blockNumber": 127417538,
+            "blockHash": "0x142378383160b8dc3e8f4808739d82e84a7eef6426b3e3a6bc19149216956398"
+          }
+        ]
+      },
+      "flap": {
+        "cursor": {
+          "nextBlock": 128652371,
+          "afterLogIndex": -1,
+          "anchorBlock": 128652370,
+          "anchorBlockHash": "0xce2b992b5ecd496fcf46b9595b5b5c324b66e25298fbcc5306be2661ac5a5808",
+          "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+        },
+        "verifiedHead": 128801705,
+        "version": "v5.25.0",
+        "health": {
+          "status": "healthy",
+          "consecutiveFailures": 0,
+          "lastSuccessAt": "2026-10-20T19:25:25.458Z",
+          "lastErrorAt": null,
+          "lastError": null,
+          "lastErrorCode": null,
+          "reorgCount": 0,
+          "lastReorgAt": null,
+          "lastAttemptAt": "2026-10-20T19:25:25.458Z",
+          "nextAttemptAt": null,
+          "failureClass": null
+        },
+        "eventRecords": 30,
+        "checkpoints": [
+          {
+            "blockNumber": 128650370,
+            "blockHash": "0x6cc9ba3ec98666c79285c98ec80e420b7fb055ec704440507e42761f571a858c",
+            "observedAt": "2026-10-20T19:25:25.458Z"
+          },
+          {
+            "blockNumber": 128651370,
+            "blockHash": "0x784dd92fa88801584b133fa96e516b25a21354c54836c1679362c4772fead567",
+            "observedAt": "2026-10-20T19:25:25.458Z"
+          },
+          {
+            "blockNumber": 128652370,
+            "blockHash": "0xce2b992b5ecd496fcf46b9595b5b5c324b66e25298fbcc5306be2661ac5a5808",
+            "observedAt": "2026-10-20T19:25:25.458Z"
+          }
+        ]
+      },
+      "heartbeats": {
+        "main": {
+          "version": 1,
+          "producer": "main",
+          "pid": 97224,
+          "startedAt": "2026-10-20T18:08:11.560Z",
+          "updatedAt": "2026-10-20T19:25:42.876Z",
+          "sequence": 156
+        },
+        "bsc": {
+          "version": 1,
+          "producer": "bsc",
+          "pid": 97226,
+          "startedAt": "2026-10-20T18:08:12.170Z",
+          "updatedAt": "2026-10-20T19:25:45.196Z",
+          "sequence": 152
+        },
+        "fomo": {
+          "version": 1,
+          "producer": "fomo",
+          "pid": 829,
+          "startedAt": "2026-10-20T13:26:36.401Z",
+          "updatedAt": "2026-10-20T19:25:42.287Z",
+          "sequence": 719
+        }
+      },
+      "ledger": {
+        "mode": "paper",
+        "trades": 307,
+        "lastId": "1792275648715:306",
+        "prefix307Hash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437",
+        "legacyHash": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36"
+      }
+    },
+    {
+      "at": "2026-10-20T19:27:12.107Z",
+      "four": {
+        "cursor": {
+          "nextBlock": 127417539,
+          "anchorBlock": 127417538,
+          "anchorBlockHash": "0x142378383160b8dc3e8f4808739d82e84a7eef6426b3e3a6bc19149216956398"
+        },
+        "outbox": [
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:217:module_upserted",
+            "attempts": 68,
+            "lastOutcome": "retry:freshness_too_old"
+          },
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:219:tag_registered",
+            "attempts": 0,
+            "lastOutcome": null
+          },
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:220:module_upserted",
+            "attempts": 0,
+            "lastOutcome": null
+          },
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:221:tag_registered",
+            "attempts": 0,
+            "lastOutcome": null
+          },
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:222:token_impl_upserted",
+            "attempts": 0,
+            "lastOutcome": null
+          },
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:223:added",
+            "attempts": 0,
+            "lastOutcome": null
+          }
+        ],
+        "processed": 39,
+        "policySuppressed": [
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:216:tag_registered",
+            "suppressedAt": "2026-10-13T14:52:45.477Z"
+          }
+        ],
+        "updatedAt": "2026-10-20T19:23:02.964Z",
+        "checkpoints": [
+          {
+            "blockNumber": 127417276,
+            "blockHash": "0x496b40fb64be5cdff1c2e41c1e6a41a5a4e1ea7da657fb0141ac79bf6c19eb19"
+          },
+          {
+            "blockNumber": 127417310,
+            "blockHash": "0x0d820ed3d77081da0053436aee74282f19c4be376f829f42cd098beb6521fb5f"
+          },
+          {
+            "blockNumber": 127417538,
+            "blockHash": "0x142378383160b8dc3e8f4808739d82e84a7eef6426b3e3a6bc19149216956398"
+          }
+        ]
+      },
+      "flap": {
+        "cursor": {
+          "nextBlock": 128660371,
+          "afterLogIndex": -1,
+          "anchorBlock": 128660370,
+          "anchorBlockHash": "0x55b30e3c4ad4f0fdbe07f3e15ef3c79163ece7766f20e83f6eb01e68a7ecbc62",
+          "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+        },
+        "verifiedHead": 128801846,
+        "version": "v5.25.0",
+        "health": {
+          "status": "healthy",
+          "consecutiveFailures": 0,
+          "lastSuccessAt": "2026-10-20T19:26:30.980Z",
+          "lastErrorAt": null,
+          "lastError": null,
+          "lastErrorCode": null,
+          "reorgCount": 0,
+          "lastReorgAt": null,
+          "lastAttemptAt": "2026-10-20T19:26:30.980Z",
+          "nextAttemptAt": null,
+          "failureClass": null
+        },
+        "eventRecords": 30,
+        "checkpoints": [
+          {
+            "blockNumber": 128658370,
+            "blockHash": "0x99184e227153f4decab9f176100b16f1e9dc101a0776e22c1b90ba00b4572cc9",
+            "observedAt": "2026-10-20T19:26:30.980Z"
+          },
+          {
+            "blockNumber": 128659370,
+            "blockHash": "0xacacce943a28fc41363e807d3925df6d210ac7f9aaa606371091c4c4caef612e",
+            "observedAt": "2026-10-20T19:26:30.980Z"
+          },
+          {
+            "blockNumber": 128660370,
+            "blockHash": "0x55b30e3c4ad4f0fdbe07f3e15ef3c79163ece7766f20e83f6eb01e68a7ecbc62",
+            "observedAt": "2026-10-20T19:26:30.980Z"
+          }
+        ]
+      },
+      "heartbeats": {
+        "main": {
+          "version": 1,
+          "producer": "main",
+          "pid": 26336,
+          "startedAt": "2026-10-20T19:26:30.952Z",
+          "updatedAt": "2026-10-20T19:27:00.953Z",
+          "sequence": 2
+        },
+        "bsc": {
+          "version": 1,
+          "producer": "bsc",
+          "pid": 26338,
+          "startedAt": "2026-10-20T19:26:31.375Z",
+          "updatedAt": "2026-10-20T19:27:03.007Z",
+          "sequence": 2
+        },
+        "fomo": {
+          "version": 1,
+          "producer": "fomo",
+          "pid": 829,
+          "startedAt": "2026-10-20T13:26:36.401Z",
+          "updatedAt": "2026-10-20T19:26:42.298Z",
+          "sequence": 721
+        }
+      },
+      "ledger": {
+        "mode": "paper",
+        "trades": 307,
+        "lastId": "1792275648715:306",
+        "prefix307Hash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437",
+        "legacyHash": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36"
+      }
+    },
+    {
+      "at": "2026-10-20T19:28:15.909Z",
+      "four": {
+        "cursor": {
+          "nextBlock": 127417539,
+          "anchorBlock": 127417538,
+          "anchorBlockHash": "0x142378383160b8dc3e8f4808739d82e84a7eef6426b3e3a6bc19149216956398"
+        },
+        "outbox": [
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:217:module_upserted",
+            "attempts": 68,
+            "lastOutcome": "retry:freshness_too_old"
+          },
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:219:tag_registered",
+            "attempts": 0,
+            "lastOutcome": null
+          },
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:220:module_upserted",
+            "attempts": 0,
+            "lastOutcome": null
+          },
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:221:tag_registered",
+            "attempts": 0,
+            "lastOutcome": null
+          },
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:222:token_impl_upserted",
+            "attempts": 0,
+            "lastOutcome": null
+          },
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:223:added",
+            "attempts": 0,
+            "lastOutcome": null
+          }
+        ],
+        "processed": 39,
+        "policySuppressed": [
+          {
+            "eventKey": "four-registry:56:0x537a21e89bd10fe49b0ee176b65a6934f73c18632def066473bebcfc7f9b8c1c:216:tag_registered",
+            "suppressedAt": "2026-10-13T14:52:45.477Z"
+          }
+        ],
+        "updatedAt": "2026-10-20T19:23:02.964Z",
+        "checkpoints": [
+          {
+            "blockNumber": 127417276,
+            "blockHash": "0x496b40fb64be5cdff1c2e41c1e6a41a5a4e1ea7da657fb0141ac79bf6c19eb19"
+          },
+          {
+            "blockNumber": 127417310,
+            "blockHash": "0x0d820ed3d77081da0053436aee74282f19c4be376f829f42cd098beb6521fb5f"
+          },
+          {
+            "blockNumber": 127417538,
+            "blockHash": "0x142378383160b8dc3e8f4808739d82e84a7eef6426b3e3a6bc19149216956398"
+          }
+        ]
+      },
+      "flap": {
+        "cursor": {
+          "nextBlock": 128675371,
+          "afterLogIndex": -1,
+          "anchorBlock": 128675370,
+          "anchorBlockHash": "0xfaae82f3fe3421c7865634315b9ff210f86294c01c6eaa6c31b2152daebff451",
+          "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+        },
+        "verifiedHead": 128801846,
+        "version": "v5.25.0",
+        "health": {
+          "status": "healthy",
+          "consecutiveFailures": 0,
+          "lastSuccessAt": "2026-10-20T19:26:30.980Z",
+          "lastErrorAt": null,
+          "lastError": null,
+          "lastErrorCode": null,
+          "reorgCount": 0,
+          "lastReorgAt": null,
+          "lastAttemptAt": "2026-10-20T19:26:30.980Z",
+          "nextAttemptAt": null,
+          "failureClass": null
+        },
+        "eventRecords": 30,
+        "checkpoints": [
+          {
+            "blockNumber": 128673370,
+            "blockHash": "0x328824b52cce53e0817e3a8b6534f3f24e5cdefd80cd6d57862e0c8611e4a47c",
+            "observedAt": "2026-10-20T19:26:30.980Z"
+          },
+          {
+            "blockNumber": 128674370,
+            "blockHash": "0x2ea4a3149aec05569e4cb32a0cdb9575000be8e79177ab596d6d3c3a1116949b",
+            "observedAt": "2026-10-20T19:26:30.980Z"
+          },
+          {
+            "blockNumber": 128675370,
+            "blockHash": "0xfaae82f3fe3421c7865634315b9ff210f86294c01c6eaa6c31b2152daebff451",
+            "observedAt": "2026-10-20T19:26:30.980Z"
+          }
+        ]
+      },
+      "heartbeats": {
+        "main": {
+          "version": 1,
+          "producer": "main",
+          "pid": 26336,
+          "startedAt": "2026-10-20T19:26:30.952Z",
+          "updatedAt": "2026-10-20T19:28:00.956Z",
+          "sequence": 4
+        },
+        "bsc": {
+          "version": 1,
+          "producer": "bsc",
+          "pid": 26338,
+          "startedAt": "2026-10-20T19:26:31.375Z",
+          "updatedAt": "2026-10-20T19:28:04.008Z",
+          "sequence": 4
+        },
+        "fomo": {
+          "version": 1,
+          "producer": "fomo",
+          "pid": 829,
+          "startedAt": "2026-10-20T13:26:36.401Z",
+          "updatedAt": "2026-10-20T19:28:12.302Z",
+          "sequence": 724
+        }
+      },
+      "ledger": {
+        "mode": "paper",
+        "trades": 307,
+        "lastId": "1792275648715:306",
+        "prefix307Hash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437",
+        "legacyHash": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36"
+      }
+    }
+  ],
+  "safety": {
+    "paper": true,
+    "noLedgerEdits": true,
+    "noRealExecution": true,
+    "noManualStateCursorChanges": true,
+    "coordinatorUnchanged": true,
+    "dualSourceRequired": true,
+    "noManualExternalMessages": true,
+    "noDirectProviderDiagnosticCalls": true
+  },
+  "acceptanceObservations": [
+    {
+      "observedAt": "2026-10-20T19:30:55.682Z",
+      "fourNextBlock": 127417539,
+      "fourPending": 5,
+      "flapNextBlock": 128686371,
+      "flapVerifiedHead": 128801846,
+      "flapPendingToVerifiedHead": 115476,
+      "flapStatus": "degraded"
+    },
+    {
+      "observedAt": "2026-10-20T19:33:21.121Z",
+      "fourNextBlock": 127417539,
+      "fourPending": 5,
+      "flapNextBlock": 128703371,
+      "flapVerifiedHead": 128802581,
+      "flapPendingToVerifiedHead": 99211,
+      "flapStatus": "healthy"
+    },
+    {
+      "observedAt": "2026-10-20T19:37:59.259Z",
+      "fourNextBlock": 127417539,
+      "fourPending": 4,
+      "flapNextBlock": 128764371,
+      "flapVerifiedHead": 128802581,
+      "flapPendingToVerifiedHead": 38211,
+      "flapStatus": "healthy"
+    },
+    {
+      "observedAt": "2026-10-20T19:40:19.604Z",
+      "fourNextBlock": 127417539,
+      "fourPending": 4,
+      "flapNextBlock": 128783371,
+      "flapVerifiedHead": 128803583,
+      "flapPendingToVerifiedHead": 20213,
+      "flapStatus": "healthy"
+    },
+    {
+      "observedAt": "2026-10-20T19:42:16.321Z",
+      "fourNextBlock": 127417539,
+      "fourPending": 4,
+      "flapNextBlock": 128803924,
+      "flapVerifiedHead": 128803923,
+      "flapPendingToVerifiedHead": 0,
+      "flapStatus": "healthy"
+    }
+  ],
+  "handoffFollowup": {
+    "status": "deployed_verified",
+    "drainedAt": "2026-10-20T20:04:55.547Z",
+    "startedAt": "2026-10-20T20:04:56.297Z",
+    "newMainPid": 40494,
+    "newBscPid": 40497,
+    "unchangedDashboardPid": 97377,
+    "unchangedFomoPid": 829,
+    "fullPassed": 4277,
+    "fullFailed": 0,
+    "fullDurationMs": 239971.571625,
+    "sigtermAt": "2026-10-20T19:59:55Z",
+    "oldMainPid": 26336,
+    "oldBscPid": 26338,
+    "fourBeforeNextBlock": 127417539,
+    "fourBeforePending": 3,
+    "flapBeforeNextBlock": 128806274,
+    "reason": "Durable Registry handoff must not wait for notification rendering, HTTP delivery and no-op side effects.",
+    "targetedPassed": 43,
+    "wiringPassed": 9,
+    "initialFullPass": 4276,
+    "initialFullFail": 1,
+    "initialFailure": "Static main-wiring assertion expected the old callback; updated to assert the exact scoped durable-handoff callback.",
+    "fullLog": "/tmp/four-recovery-handoff-full-final-20261021.log",
+    "backup": "data/backups/four-recovery-20261021-zWJEFv/release-source-handoff-final.tgz",
+    "sourceSha256": {
+      "src/alerts.js": "bad8b046165cfa6de8d0c048f2d98fcd814cc57c8f8b991a875c4a50f2226985",
+      "src/index.js": "8bfdcb106dc6c5463c4f8542b893a992732e40832bdce23d78195b0bafb1e9b8",
+      "src/four-registry-monitor.js": "d049dc75ae17a79019470f5d400a960c63c09aa29e023c97ad57af6c35a1ad9e",
+      "src/rpc-host-coordinator.js": "d0f4da7fa7029c68ee66d993517bf211a2561840f0c020b0329cefb32c1687eb"
+    }
+  },
+  "finalAcceptanceSnapshots": [
+    {
+      "observedAt": "2026-10-20T19:59:55.327Z",
+      "four": {
+        "nextBlock": 127417539,
+        "anchorBlock": 127417538,
+        "anchorBlockHash": "0x142378383160b8dc3e8f4808739d82e84a7eef6426b3e3a6bc19149216956398",
+        "pendingNotifications": 3,
+        "checkpoints": [
+          {
+            "blockNumber": 127417276,
+            "blockHash": "0x496b40fb64be5cdff1c2e41c1e6a41a5a4e1ea7da657fb0141ac79bf6c19eb19"
+          },
+          {
+            "blockNumber": 127417310,
+            "blockHash": "0x0d820ed3d77081da0053436aee74282f19c4be376f829f42cd098beb6521fb5f"
+          },
+          {
+            "blockNumber": 127417538,
+            "blockHash": "0x142378383160b8dc3e8f4808739d82e84a7eef6426b3e3a6bc19149216956398"
+          }
+        ],
+        "pendingBlocksToSameChainReference": 1388735
+      },
+      "flap": {
+        "nextBlock": 128806274,
+        "anchorBlockHash": "0x2aa3bab17ba5c134cf904a3cddf0435b2eff1ecaa9c694dd672f98ee89f6bdb4",
+        "verifiedHead": 128806273,
+        "status": "healthy",
+        "version": "v5.25.0",
+        "pendingToVerifiedHead": 0
+      },
+      "mainPid": 26336,
+      "bscPid": 26338,
+      "ledger": {
+        "mode": "paper",
+        "trades": 307,
+        "lastId": "1792275648715:306",
+        "prefix307Hash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437",
+        "legacyHash": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36"
+      }
+    },
+    {
+      "observedAt": "2026-10-20T20:05:22.140Z",
+      "four": {
+        "nextBlock": 127419539,
+        "anchorBlock": 127419538,
+        "anchorBlockHash": "0xe37363ff799ab1c61ef5a9fe42b97550c50838a285b174e5971760bc3ee21fd9",
+        "pendingNotifications": 0,
+        "checkpoints": [
+          {
+            "blockNumber": 127417538,
+            "blockHash": "0x142378383160b8dc3e8f4808739d82e84a7eef6426b3e3a6bc19149216956398"
+          },
+          {
+            "blockNumber": 127418538,
+            "blockHash": "0x774052dc8dcab1ac23ae909d0d8459b2e76d3dfb9dbb197e2123ce131e71b74a"
+          },
+          {
+            "blockNumber": 127419538,
+            "blockHash": "0xe37363ff799ab1c61ef5a9fe42b97550c50838a285b174e5971760bc3ee21fd9"
+          }
+        ],
+        "pendingBlocksToSameChainReference": 1387429
+      },
+      "flap": {
+        "nextBlock": 128806968,
+        "anchorBlockHash": "0x0f946369f16acc1cd446f045d703cd71eb81d21eab0fbbf4dd1c32d3455f9469",
+        "verifiedHead": 128806967,
+        "status": "healthy",
+        "version": "v5.25.0",
+        "pendingToVerifiedHead": 0
+      },
+      "mainPid": 40494,
+      "bscPid": 40497,
+      "ledger": {
+        "mode": "paper",
+        "trades": 307,
+        "lastId": "1792275648715:306",
+        "prefix307Hash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437",
+        "legacyHash": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36"
+      }
+    },
+    {
+      "observedAt": "2026-10-20T20:06:32.329Z",
+      "four": {
+        "nextBlock": 127424539,
+        "anchorBlock": 127424538,
+        "anchorBlockHash": "0xb3734bd8af93f77d22cb5dca8af7cb84a8092573f4cbd845ec1c3e68af0c61e7",
+        "pendingNotifications": 0,
+        "checkpoints": [
+          {
+            "blockNumber": 127422538,
+            "blockHash": "0x114f7ca5d65b15edc213851b5cdc85a71cbe0bf9cbaa94a9502cb6b7471069d3"
+          },
+          {
+            "blockNumber": 127423538,
+            "blockHash": "0x211719c12471974887a174d1124e75f27fb2467de322fd9ec4b12884972475a8"
+          },
+          {
+            "blockNumber": 127424538,
+            "blockHash": "0xb3734bd8af93f77d22cb5dca8af7cb84a8092573f4cbd845ec1c3e68af0c61e7"
+          }
+        ],
+        "pendingBlocksToSameChainReference": 1382595
+      },
+      "flap": {
+        "nextBlock": 128807134,
+        "anchorBlockHash": "0xea496c7cf4b14b680fc56c9919315e134bb71f31876b02fa60476ad788a4ebc3",
+        "verifiedHead": 128807133,
+        "status": "healthy",
+        "version": "v5.25.0",
+        "pendingToVerifiedHead": 0
+      },
+      "mainPid": 40494,
+      "bscPid": 40497,
+      "ledger": {
+        "mode": "paper",
+        "trades": 307,
+        "lastId": "1792275648715:306",
+        "prefix307Hash": "75aecaa369d070f9962bc192f796b44df34012d67af6e15747f8ef84c001f437",
+        "legacyHash": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36"
+      }
+    }
+  ],
+  "finalApiVerification": {
+    "checkedAt": "2026-10-20T20:05:41.930Z",
+    "httpStatus": 200,
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "exitMonitorRunning": true,
+    "exitMonitorLastError": null,
+    "profitRetentionVersion": "profit_retention_multiarm_v3",
+    "profitRetentionStatus": "observing",
+    "quoteSchedulerVersion": "evidence_preserving_event_lease_v1",
+    "earlierApi20SecondTimeout": true
+  },
+  "unresolved": [
+    "Four historical backlog remains: 1382595 blocks to the same-chain verified reference at the final snapshot; this is not full catch-up.",
+    "Legitimate RPC capacity waits and provider cooldowns remain; observed recovery is not a zero-wait or continuous-online guarantee.",
+    "The large shared notification outbox still has read/write latency; Registry scanning no longer waits for post-admission notification work.",
+    "Main/BSC collection had a graceful deployment window from 19:59:55Z to 20:04:57Z; missing coverage is not assumed backfilled merely because the process restarted."
+  ]
+}

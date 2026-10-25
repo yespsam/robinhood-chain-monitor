@@ -1,0 +1,1474 @@
+{
+  "version": "four_flap_capacity_efficiency_deployment_v1",
+  "checkedAt": "2026-10-21T08:57:46.067Z",
+  "status": "deployed_verified_bounded_window",
+  "changes": [
+    "default_static_network_metadata_without_physical_admission_or_circuit_recovery",
+    "four_empty_outbox_omit_delivery_only_postcommit_quorum",
+    "flap_empty_prepared_range_omit_consecutive_duplicate_quorum"
+  ],
+  "backup": "data/backups/remaining-capacity-20261021-uIeLYp",
+  "tests": {
+    "passed": 802,
+    "failed": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "durationMs": 78321.54975,
+    "fullRepository": false
+  },
+  "predeployment": {
+    "at": "2026-10-21T08:49:44.564Z",
+    "collectors": {
+      "four": {
+        "cursor": {
+          "nextBlock": 128908875,
+          "anchorBlock": 128908874,
+          "anchorBlockHash": "0x8faabf119a41d37756d577bdf596652de93dbe3e03275f2158033afd28257eed"
+        },
+        "checkpointAt": "2026-10-21T08:49:32.441Z",
+        "health": null,
+        "outboxCount": 0,
+        "headStatus": "verified",
+        "headError": null,
+        "proof": {
+          "startedAt": "2026-10-21T08:48:49.335Z",
+          "verifiedAt": "2026-10-21T08:48:50.764Z",
+          "headNumber": 128908792,
+          "headHash": "0x97b25410b5247dc831ebcd920c5a127b0a89e69298921dfe3d709c7ba2b489ed",
+          "blockTimestamp": 1792572529,
+          "sourceIds": [
+            "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+            "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+          ],
+          "sourceTips": [
+            128908794,
+            128908792
+          ],
+          "headSpread": 2,
+          "confirmations": 3,
+          "safeHead": 128908789,
+          "cursor": {
+            "nextBlock": 128908776,
+            "anchorBlock": 128908775,
+            "anchorBlockHash": "0x6915431b85ca61a2efc3b7b3400ec134a902006ed87699d52c3338779906d926"
+          },
+          "cursorObservedAt": "2026-10-21T08:48:50.764Z"
+        },
+        "observedLag": 17,
+        "observedBacklog": 14
+      },
+      "flap": {
+        "cursor": {
+          "nextBlock": 128908875,
+          "afterLogIndex": -1,
+          "anchorBlock": 128908874,
+          "anchorBlockHash": "0x8faabf119a41d37756d577bdf596652de93dbe3e03275f2158033afd28257eed",
+          "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+        },
+        "checkpointAt": "2026-10-21T08:49:26.493Z",
+        "health": {
+          "status": "healthy",
+          "consecutiveFailures": 0,
+          "lastSuccessAt": "2026-10-21T08:49:26.493Z",
+          "lastErrorAt": null,
+          "lastError": null,
+          "lastErrorCode": null,
+          "reorgCount": 0,
+          "lastReorgAt": null,
+          "lastAttemptAt": "2026-10-21T08:49:26.493Z",
+          "nextAttemptAt": null,
+          "failureClass": null
+        },
+        "outboxCount": null,
+        "headStatus": "verified",
+        "headError": null,
+        "proof": {
+          "startedAt": "2026-10-21T08:48:52.858Z",
+          "verifiedAt": "2026-10-21T08:48:53.508Z",
+          "headNumber": 128908799,
+          "headHash": "0x38bc525b381e8f8d637317eabf72184e4ad92870642e8b3a2e26f3ef3b650b39",
+          "blockTimestamp": 1792572532,
+          "sourceIds": [
+            "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+            "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+          ],
+          "sourceTips": [
+            128908799,
+            128908800
+          ],
+          "headSpread": 1,
+          "confirmations": 3,
+          "safeHead": 128908796,
+          "cursor": {
+            "nextBlock": 128908776,
+            "anchorBlock": 128908775,
+            "anchorBlockHash": "0x6915431b85ca61a2efc3b7b3400ec134a902006ed87699d52c3338779906d926",
+            "afterLogIndex": -1
+          },
+          "cursorObservedAt": "2026-10-21T08:48:53.509Z"
+        },
+        "observedLag": 24,
+        "observedBacklog": 21
+      }
+    },
+    "apiAt": "2026-10-21T08:49:49.281Z",
+    "api": {
+      "mode": "paper",
+      "execution": false,
+      "signing": false,
+      "broadcast": false,
+      "exit": {
+        "running": true,
+        "error": null
+      },
+      "coverage": {
+        "checkedAt": "2026-10-21T08:49:45.129Z",
+        "readErrors": [],
+        "headReadErrors": [],
+        "platforms": {
+          "flap": {
+            "status": "adapter_observed_head_unverified",
+            "lastAttemptAt": "2026-10-21T08:49:26.493Z",
+            "lastSuccessAt": "2026-10-21T08:49:26.493Z",
+            "nextAttemptAt": null,
+            "ageMs": 18636,
+            "lastErrorAt": null,
+            "lastErrorCode": null,
+            "adapterHealth": {
+              "status": "fresh",
+              "lastAttemptAt": "2026-10-21T08:49:26.493Z",
+              "lastSuccessAt": "2026-10-21T08:49:26.493Z",
+              "nextAttemptAt": null,
+              "ageMs": 18636,
+              "lastErrorAt": null,
+              "lastErrorCode": null
+            },
+            "checkpointAt": "2026-10-21T08:49:26.493Z",
+            "nextBlock": 128908875,
+            "headLagBlocks": null,
+            "liveHeadVerified": false,
+            "scope": "BSC pinned Portal quote adapter",
+            "headVerificationStatus": "cursor_ahead_of_observation",
+            "scanBacklogBlocks": null,
+            "headBlock": 128908799,
+            "confirmedHeadBlock": 128908796,
+            "confirmationDepth": 3,
+            "headSpreadBlocks": 1,
+            "headVerifiedAt": "2026-10-21T08:48:53.508Z",
+            "headAgeMs": 52271,
+            "observationNextBlock": 128908776,
+            "observedHeadLagBlocks": 24,
+            "observedScanBacklogBlocks": 21
+          },
+          "fourmeme": {
+            "adapterHealth": null,
+            "status": "checkpoint_only_unverified",
+            "checkpointAt": "2026-10-21T08:49:32.441Z",
+            "nextBlock": 128908875,
+            "headLagBlocks": null,
+            "liveHeadVerified": false,
+            "scope": "BSC pinned OpenFour registry adapter",
+            "headVerificationStatus": "cursor_ahead_of_observation",
+            "scanBacklogBlocks": null,
+            "headBlock": 128908792,
+            "confirmedHeadBlock": 128908789,
+            "confirmationDepth": 3,
+            "headSpreadBlocks": 2,
+            "headVerifiedAt": "2026-10-21T08:48:50.764Z",
+            "headAgeMs": 55794,
+            "observationNextBlock": 128908776,
+            "observedHeadLagBlocks": 17,
+            "observedScanBacklogBlocks": 14
+          }
+        }
+      }
+    }
+  },
+  "predeploymentLogWindow": {
+    "checkedAt": "2026-10-21T08:50:48.830Z",
+    "since": "2026-10-21T08:35:23.168Z",
+    "firstRetainedLineAt": "2026-10-21T01:23:11.960Z",
+    "bytesRead": 1048576,
+    "groups": {
+      "four-registry": {
+        "total": 8,
+        "capacity": 4,
+        "cooling": 4,
+        "rateLimit": 0,
+        "other": 0,
+        "last": {
+          "at": "2026-10-21T08:48:24.513Z",
+          "code": "RPC_COORDINATOR_UNAVAILABLE"
+        }
+      },
+      "flap-quote": {
+        "total": 9,
+        "capacity": 2,
+        "cooling": 7,
+        "rateLimit": 0,
+        "other": 0,
+        "last": {
+          "at": "2026-10-21T08:50:43.733Z",
+          "code": "FLAP_QUOTE_FINALIZED_LANE_UNAVAILABLE"
+        }
+      }
+    }
+  },
+  "deployment": {
+    "termAt": "2026-10-21T08:52:24.635Z",
+    "oldMain": {
+      "version": 1,
+      "producer": "main",
+      "pid": 99708,
+      "startedAt": "2026-10-21T08:35:23.168Z",
+      "updatedAt": "2026-10-21T08:52:23.760Z",
+      "sequence": 35
+    },
+    "oldBsc": {
+      "version": 1,
+      "producer": "bsc",
+      "pid": 99710,
+      "startedAt": "2026-10-21T08:35:23.678Z",
+      "updatedAt": "2026-10-21T08:52:12.126Z",
+      "sequence": 34
+    },
+    "unchangedFomo": {
+      "version": 1,
+      "producer": "fomo",
+      "pid": 829,
+      "startedAt": "2026-10-20T13:26:36.401Z",
+      "updatedAt": "2026-10-21T08:52:14.577Z",
+      "sequence": 2331
+    },
+    "ledgerCount": 309,
+    "cursors": {
+      "four": {
+        "nextBlock": 128909194,
+        "anchorBlock": 128909193,
+        "anchorBlockHash": "0xc65611f2c8aa5bdf429299218e1d1e1eb117a03aca1ed051b0476f1a46e239ff"
+      },
+      "flap": {
+        "nextBlock": 128909167,
+        "afterLogIndex": -1,
+        "anchorBlock": 128909166,
+        "anchorBlockHash": "0x50856d60063f721adc6f63a2ff7e26e6b49635a9d051cc954c876b8b8c8b5b9d",
+        "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+      }
+    },
+    "logOffset": 20668484,
+    "newMain": {
+      "version": 1,
+      "producer": "main",
+      "pid": 7712,
+      "startedAt": "2026-10-21T08:53:04.561Z",
+      "updatedAt": "2026-10-21T08:57:34.650Z",
+      "sequence": 10
+    },
+    "newBsc": {
+      "version": 1,
+      "producer": "bsc",
+      "pid": 7713,
+      "startedAt": "2026-10-21T08:53:05.000Z",
+      "updatedAt": "2026-10-21T08:57:39.218Z",
+      "sequence": 10
+    },
+    "oldExitCode": 0,
+    "method": "graceful_SIGTERM_existing_launchd_keepalive",
+    "dashboardPidUnchanged": 1275,
+    "fomoPidUnchanged": 829,
+    "sourceHashes": {
+      "src/bsc-launchpad-monitor.js": {
+        "sha256": "7bd70ad567a5aec522deb2ed6021d00e3c2288f76d2a52ecba781fe54c084207",
+        "mtime": "2026-10-21T08:48:02.870Z"
+      },
+      "src/four-registry-monitor.js": {
+        "sha256": "16940c47d787c4722769622bfa30701ce1a07ce178c80e51847e8359700b8fb7",
+        "mtime": "2026-10-21T08:46:40.104Z"
+      },
+      "src/flap-quote-monitor.js": {
+        "sha256": "dcda2d59dcc44da66ab92cc3ffbd8c2974112fd9a94ee899594b9ce591ba5ac2",
+        "mtime": "2026-10-21T08:46:44.227Z"
+      },
+      "src/rpc-host-coordinator.js": {
+        "sha256": "d0f4da7fa7029c68ee66d993517bf211a2561840f0c020b0329cefb32c1687eb",
+        "mtime": "2026-10-20T18:02:21.888Z"
+      },
+      "src/paper-launch-evidence.js": {
+        "sha256": "5dea83466d3734404bbad537e4086fb99a0d5a1886e86d634d87d2d0ef68590d",
+        "mtime": "2026-10-09T11:58:25.612Z"
+      },
+      "src/paper-strategy-runtime.js": {
+        "sha256": "c77b890e5c982f48e69cceb049c98643f98b7f3542516e58cc1ced0ba81210f5",
+        "mtime": "2026-10-17T15:35:58.979Z"
+      }
+    }
+  },
+  "observations": [
+    {
+      "at": "2026-10-21T08:53:08.433Z",
+      "collectors": {
+        "four": {
+          "cursor": {
+            "nextBlock": 128909194,
+            "anchorBlock": 128909193,
+            "anchorBlockHash": "0xc65611f2c8aa5bdf429299218e1d1e1eb117a03aca1ed051b0476f1a46e239ff"
+          },
+          "checkpointAt": "2026-10-21T08:51:55.739Z",
+          "health": null,
+          "outboxCount": 0,
+          "headStatus": "error",
+          "headError": "CHAIN_HEAD_RPC_FAILED",
+          "proof": {
+            "startedAt": "2026-10-21T08:50:02.652Z",
+            "verifiedAt": "2026-10-21T08:50:05.119Z",
+            "headNumber": 128908950,
+            "headHash": "0x4e9c2d22270617dd6835f73c311ff5bb2b7201b0e5c66fe7c9d9adf0f6acec98",
+            "blockTimestamp": 1792572600,
+            "sourceIds": [
+              "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+              "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+            ],
+            "sourceTips": [
+              128908950,
+              128908955
+            ],
+            "headSpread": 5,
+            "confirmations": 3,
+            "safeHead": 128908947,
+            "cursor": {
+              "nextBlock": 128908938,
+              "anchorBlock": 128908937,
+              "anchorBlockHash": "0x53dde4bc840265b55dd5459b56d134729d043f2920fd078ff5d8ec8f83e31747"
+            },
+            "cursorObservedAt": "2026-10-21T08:50:05.121Z"
+          },
+          "observedLag": 13,
+          "observedBacklog": 10
+        },
+        "flap": {
+          "cursor": {
+            "nextBlock": 128909167,
+            "afterLogIndex": -1,
+            "anchorBlock": 128909166,
+            "anchorBlockHash": "0x50856d60063f721adc6f63a2ff7e26e6b49635a9d051cc954c876b8b8c8b5b9d",
+            "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+          },
+          "checkpointAt": "2026-10-21T08:51:35.720Z",
+          "health": {
+            "status": "degraded",
+            "consecutiveFailures": 1,
+            "lastSuccessAt": "2026-10-21T08:51:35.720Z",
+            "lastErrorAt": "2026-10-21T08:52:07.761Z",
+            "lastError": "Flap quote log scan 128909167-128909208 at public-bsc.nownodes.io failed: eth_getLogs failed on every BSC RPC: providers cooling down; retry in 24014ms",
+            "lastErrorCode": "FLAP_QUOTE_GET_LOGS_FAILED",
+            "reorgCount": 0,
+            "lastReorgAt": null,
+            "lastAttemptAt": "2026-10-21T08:52:07.761Z",
+            "nextAttemptAt": "2026-10-21T08:52:31.775Z",
+            "failureClass": "chain"
+          },
+          "outboxCount": null,
+          "headStatus": "verified",
+          "headError": null,
+          "proof": {
+            "startedAt": "2026-10-21T08:51:53.549Z",
+            "verifiedAt": "2026-10-21T08:51:55.199Z",
+            "headNumber": 128909201,
+            "headHash": "0xece355b1b373af020dc7d589b8e1b5c6c764829d7b2d4c5b69a51264ed691b4d",
+            "blockTimestamp": 1792572713,
+            "sourceIds": [
+              "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+              "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+            ],
+            "sourceTips": [
+              128909202,
+              128909201
+            ],
+            "headSpread": 1,
+            "confirmations": 3,
+            "safeHead": 128909198,
+            "cursor": {
+              "nextBlock": 128909167,
+              "anchorBlock": 128909166,
+              "anchorBlockHash": "0x50856d60063f721adc6f63a2ff7e26e6b49635a9d051cc954c876b8b8c8b5b9d",
+              "afterLogIndex": -1
+            },
+            "cursorObservedAt": "2026-10-21T08:51:55.199Z"
+          },
+          "observedLag": 35,
+          "observedBacklog": 32
+        }
+      },
+      "apiAt": "2026-10-21T08:53:15.361Z",
+      "api": {
+        "mode": "paper",
+        "execution": false,
+        "signing": false,
+        "broadcast": false,
+        "exit": {
+          "running": true,
+          "error": null
+        },
+        "coverage": {
+          "checkedAt": "2026-10-21T08:53:08.909Z",
+          "readErrors": [],
+          "headReadErrors": [],
+          "platforms": {
+            "flap": {
+              "status": "degraded",
+              "lastAttemptAt": "2026-10-21T08:52:07.761Z",
+              "lastSuccessAt": "2026-10-21T08:51:35.720Z",
+              "nextAttemptAt": "2026-10-21T08:52:31.775Z",
+              "ageMs": 93189,
+              "lastErrorAt": "2026-10-21T08:52:07.761Z",
+              "lastErrorCode": "FLAP_QUOTE_GET_LOGS_FAILED",
+              "adapterHealth": {
+                "status": "degraded",
+                "lastAttemptAt": "2026-10-21T08:52:07.761Z",
+                "lastSuccessAt": "2026-10-21T08:51:35.720Z",
+                "nextAttemptAt": "2026-10-21T08:52:31.775Z",
+                "ageMs": 93189,
+                "lastErrorAt": "2026-10-21T08:52:07.761Z",
+                "lastErrorCode": "FLAP_QUOTE_GET_LOGS_FAILED"
+              },
+              "checkpointAt": "2026-10-21T08:52:07.761Z",
+              "nextBlock": 128909167,
+              "headLagBlocks": 35,
+              "liveHeadVerified": true,
+              "scope": "BSC pinned Portal quote adapter",
+              "headVerificationStatus": "verified",
+              "scanBacklogBlocks": 32,
+              "headBlock": 128909201,
+              "confirmedHeadBlock": 128909198,
+              "confirmationDepth": 3,
+              "headSpreadBlocks": 1,
+              "headVerifiedAt": "2026-10-21T08:51:55.199Z",
+              "headAgeMs": 75360,
+              "observationNextBlock": 128909167,
+              "observedHeadLagBlocks": 35,
+              "observedScanBacklogBlocks": 32
+            },
+            "fourmeme": {
+              "adapterHealth": null,
+              "status": "checkpoint_only_unverified",
+              "checkpointAt": "2026-10-21T08:51:55.739Z",
+              "nextBlock": 128909194,
+              "headLagBlocks": null,
+              "liveHeadVerified": false,
+              "scope": "BSC pinned OpenFour registry adapter",
+              "headVerificationStatus": "error",
+              "scanBacklogBlocks": null,
+              "headBlock": 128908950,
+              "confirmedHeadBlock": 128908947,
+              "confirmationDepth": 3,
+              "headSpreadBlocks": 5,
+              "headVerifiedAt": "2026-10-21T08:50:05.119Z",
+              "headAgeMs": 186257,
+              "observationNextBlock": 128908938,
+              "observedHeadLagBlocks": 13,
+              "observedScanBacklogBlocks": 10
+            }
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-10-21T08:54:02.808Z",
+      "collectors": {
+        "four": {
+          "cursor": {
+            "nextBlock": 128909456,
+            "anchorBlock": 128909455,
+            "anchorBlockHash": "0x75cc3da1ad8b34340dfd80dd014b4f778d0669c8fa628e38d848d4f5caa43b96"
+          },
+          "checkpointAt": "2026-10-21T08:53:52.860Z",
+          "health": null,
+          "outboxCount": 0,
+          "headStatus": "verified",
+          "headError": null,
+          "proof": {
+            "startedAt": "2026-10-21T08:53:22.097Z",
+            "verifiedAt": "2026-10-21T08:53:22.968Z",
+            "headNumber": 128909397,
+            "headHash": "0x8861ae48c11b422bdd8d46e06000b7b9ae1fca285273e332ef2a4bc3f6099ff8",
+            "blockTimestamp": 1792572801,
+            "sourceIds": [
+              "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+              "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+            ],
+            "sourceTips": [
+              128909397,
+              128909398
+            ],
+            "headSpread": 1,
+            "confirmations": 3,
+            "safeHead": 128909394,
+            "cursor": {
+              "nextBlock": 128909382,
+              "anchorBlock": 128909381,
+              "anchorBlockHash": "0xe3ffc6a9ad257129a298894bcedc7ff7058310a1f4eae4c4b4bd26c31d7cd895"
+            },
+            "cursorObservedAt": "2026-10-21T08:53:22.968Z"
+          },
+          "observedLag": 16,
+          "observedBacklog": 13
+        },
+        "flap": {
+          "cursor": {
+            "nextBlock": 128909450,
+            "afterLogIndex": -1,
+            "anchorBlock": 128909449,
+            "anchorBlockHash": "0x76413b86cc4fdfac5cdd90401bd7f51870e8c2a5584978314a08fc69d4c1827a",
+            "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+          },
+          "checkpointAt": "2026-10-21T08:53:42.154Z",
+          "health": {
+            "status": "healthy",
+            "consecutiveFailures": 0,
+            "lastSuccessAt": "2026-10-21T08:53:42.154Z",
+            "lastErrorAt": null,
+            "lastError": null,
+            "lastErrorCode": null,
+            "reorgCount": 0,
+            "lastReorgAt": null,
+            "lastAttemptAt": "2026-10-21T08:53:42.154Z",
+            "nextAttemptAt": null,
+            "failureClass": null
+          },
+          "outboxCount": null,
+          "headStatus": "verified",
+          "headError": null,
+          "proof": {
+            "startedAt": "2026-10-21T08:53:20.269Z",
+            "verifiedAt": "2026-10-21T08:53:21.646Z",
+            "headNumber": 128909394,
+            "headHash": "0xddbe9cffd4fcf5bc6223f3140ca426bbb485c8f16ec2c011ce2a856a7d9c4397",
+            "blockTimestamp": 1792572800,
+            "sourceIds": [
+              "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+              "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+            ],
+            "sourceTips": [
+              128909394,
+              128909394
+            ],
+            "headSpread": 0,
+            "confirmations": 3,
+            "safeHead": 128909391,
+            "cursor": {
+              "nextBlock": 128909359,
+              "anchorBlock": 128909358,
+              "anchorBlockHash": "0xf4ad7e4c723c1abb98041767c6f157b844c54f74fdee2d9943df6d174619d804",
+              "afterLogIndex": -1
+            },
+            "cursorObservedAt": "2026-10-21T08:53:21.646Z"
+          },
+          "observedLag": 36,
+          "observedBacklog": 33
+        }
+      },
+      "apiAt": "2026-10-21T08:54:09.933Z",
+      "api": {
+        "mode": "paper",
+        "execution": false,
+        "signing": false,
+        "broadcast": false,
+        "exit": {
+          "running": true,
+          "error": null
+        },
+        "coverage": {
+          "checkedAt": "2026-10-21T08:54:03.361Z",
+          "readErrors": [],
+          "headReadErrors": [],
+          "platforms": {
+            "flap": {
+              "status": "adapter_observed_head_unverified",
+              "lastAttemptAt": "2026-10-21T08:53:54.155Z",
+              "lastSuccessAt": "2026-10-21T08:53:54.155Z",
+              "nextAttemptAt": null,
+              "ageMs": 9206,
+              "lastErrorAt": null,
+              "lastErrorCode": null,
+              "adapterHealth": {
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-21T08:53:54.155Z",
+                "lastSuccessAt": "2026-10-21T08:53:54.155Z",
+                "nextAttemptAt": null,
+                "ageMs": 9206,
+                "lastErrorAt": null,
+                "lastErrorCode": null
+              },
+              "checkpointAt": "2026-10-21T08:53:54.155Z",
+              "nextBlock": 128909471,
+              "headLagBlocks": null,
+              "liveHeadVerified": false,
+              "scope": "BSC pinned Portal quote adapter",
+              "headVerificationStatus": "cursor_ahead_of_observation",
+              "scanBacklogBlocks": null,
+              "headBlock": 128909394,
+              "confirmedHeadBlock": 128909391,
+              "confirmationDepth": 3,
+              "headSpreadBlocks": 0,
+              "headVerifiedAt": "2026-10-21T08:53:21.646Z",
+              "headAgeMs": 43092,
+              "observationNextBlock": 128909359,
+              "observedHeadLagBlocks": 36,
+              "observedScanBacklogBlocks": 33
+            },
+            "fourmeme": {
+              "adapterHealth": null,
+              "status": "checkpoint_only_unverified",
+              "checkpointAt": "2026-10-21T08:54:02.646Z",
+              "nextBlock": 128909478,
+              "headLagBlocks": null,
+              "liveHeadVerified": false,
+              "scope": "BSC pinned OpenFour registry adapter",
+              "headVerificationStatus": "cursor_ahead_of_observation",
+              "scanBacklogBlocks": null,
+              "headBlock": 128909397,
+              "confirmedHeadBlock": 128909394,
+              "confirmationDepth": 3,
+              "headSpreadBlocks": 1,
+              "headVerifiedAt": "2026-10-21T08:53:22.968Z",
+              "headAgeMs": 41264,
+              "observationNextBlock": 128909382,
+              "observedHeadLagBlocks": 16,
+              "observedScanBacklogBlocks": 13
+            }
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-10-21T08:56:23.788Z",
+      "collectors": {
+        "four": {
+          "cursor": {
+            "nextBlock": 128909772,
+            "anchorBlock": 128909771,
+            "anchorBlockHash": "0xb739ffe21e278d9983900c067581b1d3690ee87d5c091d697c22b441287f42ef"
+          },
+          "checkpointAt": "2026-10-21T08:56:15.439Z",
+          "health": null,
+          "outboxCount": 0,
+          "headStatus": "verified",
+          "headError": null,
+          "proof": {
+            "startedAt": "2026-10-21T08:55:31.403Z",
+            "verifiedAt": "2026-10-21T08:55:32.518Z",
+            "headNumber": 128909685,
+            "headHash": "0x255279d23731d1be35eb3517ae56ee498c8e7e430d4cd8e96311d99f6ccd2af5",
+            "blockTimestamp": 1792572930,
+            "sourceIds": [
+              "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+              "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+            ],
+            "sourceTips": [
+              128909686,
+              128909685
+            ],
+            "headSpread": 1,
+            "confirmations": 3,
+            "safeHead": 128909682,
+            "cursor": {
+              "nextBlock": 128909672,
+              "anchorBlock": 128909671,
+              "anchorBlockHash": "0xf3304e1af23afeb6f9ebb740dd9cffe89ad7017d7a8c45ae7fd26d30b5b7a970"
+            },
+            "cursorObservedAt": "2026-10-21T08:55:32.518Z"
+          },
+          "observedLag": 14,
+          "observedBacklog": 11
+        },
+        "flap": {
+          "cursor": {
+            "nextBlock": 128909772,
+            "afterLogIndex": -1,
+            "anchorBlock": 128909771,
+            "anchorBlockHash": "0xb739ffe21e278d9983900c067581b1d3690ee87d5c091d697c22b441287f42ef",
+            "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+          },
+          "checkpointAt": "2026-10-21T08:56:09.419Z",
+          "health": {
+            "status": "healthy",
+            "consecutiveFailures": 0,
+            "lastSuccessAt": "2026-10-21T08:56:09.419Z",
+            "lastErrorAt": null,
+            "lastError": null,
+            "lastErrorCode": null,
+            "reorgCount": 0,
+            "lastReorgAt": null,
+            "lastAttemptAt": "2026-10-21T08:56:09.419Z",
+            "nextAttemptAt": null,
+            "failureClass": null
+          },
+          "outboxCount": null,
+          "headStatus": "verified",
+          "headError": null,
+          "proof": {
+            "startedAt": "2026-10-21T08:55:32.306Z",
+            "verifiedAt": "2026-10-21T08:55:33.145Z",
+            "headNumber": 128909687,
+            "headHash": "0xe09e705ac63c1427d61ad030c2acf52fe93ebe35fbe3b722bb74b2a481723707",
+            "blockTimestamp": 1792572931,
+            "sourceIds": [
+              "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+              "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+            ],
+            "sourceTips": [
+              128909688,
+              128909687
+            ],
+            "headSpread": 1,
+            "confirmations": 3,
+            "safeHead": 128909684,
+            "cursor": {
+              "nextBlock": 128909668,
+              "anchorBlock": 128909667,
+              "anchorBlockHash": "0x839220a1b78135a39c72bcb9f68fce13db655d0b07df12953e13365415e5d007",
+              "afterLogIndex": -1
+            },
+            "cursorObservedAt": "2026-10-21T08:55:33.145Z"
+          },
+          "observedLag": 20,
+          "observedBacklog": 17
+        }
+      },
+      "apiAt": "2026-10-21T08:56:27.860Z",
+      "api": {
+        "mode": "paper",
+        "execution": false,
+        "signing": false,
+        "broadcast": false,
+        "exit": {
+          "running": true,
+          "error": null
+        },
+        "coverage": {
+          "checkedAt": "2026-10-21T08:56:11.820Z",
+          "readErrors": [],
+          "headReadErrors": [],
+          "platforms": {
+            "flap": {
+              "status": "adapter_observed_head_unverified",
+              "lastAttemptAt": "2026-10-21T08:55:57.351Z",
+              "lastSuccessAt": "2026-10-21T08:55:57.351Z",
+              "nextAttemptAt": null,
+              "ageMs": 14469,
+              "lastErrorAt": null,
+              "lastErrorCode": null,
+              "adapterHealth": {
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-21T08:55:57.351Z",
+                "lastSuccessAt": "2026-10-21T08:55:57.351Z",
+                "nextAttemptAt": null,
+                "ageMs": 14469,
+                "lastErrorAt": null,
+                "lastErrorCode": null
+              },
+              "checkpointAt": "2026-10-21T08:55:57.351Z",
+              "nextBlock": 128909745,
+              "headLagBlocks": null,
+              "liveHeadVerified": false,
+              "scope": "BSC pinned Portal quote adapter",
+              "headVerificationStatus": "cursor_ahead_of_observation",
+              "scanBacklogBlocks": null,
+              "headBlock": 128909687,
+              "confirmedHeadBlock": 128909684,
+              "confirmationDepth": 3,
+              "headSpreadBlocks": 1,
+              "headVerifiedAt": "2026-10-21T08:55:33.145Z",
+              "headAgeMs": 39514,
+              "observationNextBlock": 128909668,
+              "observedHeadLagBlocks": 20,
+              "observedScanBacklogBlocks": 17
+            },
+            "fourmeme": {
+              "adapterHealth": null,
+              "status": "checkpoint_only_unverified",
+              "checkpointAt": "2026-10-21T08:56:04.066Z",
+              "nextBlock": 128909745,
+              "headLagBlocks": null,
+              "liveHeadVerified": false,
+              "scope": "BSC pinned OpenFour registry adapter",
+              "headVerificationStatus": "cursor_ahead_of_observation",
+              "scanBacklogBlocks": null,
+              "headBlock": 128909685,
+              "confirmedHeadBlock": 128909682,
+              "confirmationDepth": 3,
+              "headSpreadBlocks": 1,
+              "headVerifiedAt": "2026-10-21T08:55:32.518Z",
+              "headAgeMs": 40417,
+              "observationNextBlock": 128909672,
+              "observedHeadLagBlocks": 14,
+              "observedScanBacklogBlocks": 11
+            }
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-10-21T08:57:28.110Z",
+      "collectors": {
+        "four": {
+          "cursor": {
+            "nextBlock": 128909909,
+            "anchorBlock": 128909908,
+            "anchorBlockHash": "0xd6ed6b4eefe583a077171418578082a0eae5c29cf766486de6ec9fa513e3a766"
+          },
+          "checkpointAt": "2026-10-21T08:57:19.118Z",
+          "health": null,
+          "outboxCount": 0,
+          "headStatus": "verified",
+          "headError": null,
+          "proof": {
+            "startedAt": "2026-10-21T08:56:37.010Z",
+            "verifiedAt": "2026-10-21T08:56:38.282Z",
+            "headNumber": 128909831,
+            "headHash": "0xa4389bc9706adf0855c448d7f70d51cd6bb3c19558d05db7ea98a4fc8e178177",
+            "blockTimestamp": 1792572996,
+            "sourceIds": [
+              "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+              "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+            ],
+            "sourceTips": [
+              128909831,
+              128909831
+            ],
+            "headSpread": 0,
+            "confirmations": 3,
+            "safeHead": 128909828,
+            "cursor": {
+              "nextBlock": 128909820,
+              "anchorBlock": 128909819,
+              "anchorBlockHash": "0x8ba8d202d172c2ffab26cf5a5df3b63ff8f8ea73b1a30bebaaaa6c18e2acfd14"
+            },
+            "cursorObservedAt": "2026-10-21T08:56:38.282Z"
+          },
+          "observedLag": 12,
+          "observedBacklog": 9
+        },
+        "flap": {
+          "cursor": {
+            "nextBlock": 128909912,
+            "afterLogIndex": -1,
+            "anchorBlock": 128909911,
+            "anchorBlockHash": "0x0d5eeba049b9b36c56d12acc1eb278846eaa5e0446af03b558199e8c1c5a8c8c",
+            "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+          },
+          "checkpointAt": "2026-10-21T08:57:12.462Z",
+          "health": {
+            "status": "healthy",
+            "consecutiveFailures": 0,
+            "lastSuccessAt": "2026-10-21T08:57:12.462Z",
+            "lastErrorAt": null,
+            "lastError": null,
+            "lastErrorCode": null,
+            "reorgCount": 0,
+            "lastReorgAt": null,
+            "lastAttemptAt": "2026-10-21T08:57:12.462Z",
+            "nextAttemptAt": null,
+            "failureClass": null
+          },
+          "outboxCount": null,
+          "headStatus": "verified",
+          "headError": null,
+          "proof": {
+            "startedAt": "2026-10-21T08:56:38.554Z",
+            "verifiedAt": "2026-10-21T08:56:39.165Z",
+            "headNumber": 128909835,
+            "headHash": "0xeb54855a2bab90fb074ee69b3026d831bc1a08f9982143a1f640cd9c5962b359",
+            "blockTimestamp": 1792572998,
+            "sourceIds": [
+              "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+              "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+            ],
+            "sourceTips": [
+              128909835,
+              128909835
+            ],
+            "headSpread": 0,
+            "confirmations": 3,
+            "safeHead": 128909832,
+            "cursor": {
+              "nextBlock": 128909817,
+              "anchorBlock": 128909816,
+              "anchorBlockHash": "0xc1b3efc54c3fd7b32d9ed04cd54853492c09c76a91d96f324c7be94aafe6cbfd",
+              "afterLogIndex": -1
+            },
+            "cursorObservedAt": "2026-10-21T08:56:39.166Z"
+          },
+          "observedLag": 19,
+          "observedBacklog": 16
+        }
+      },
+      "apiAt": "2026-10-21T08:57:33.895Z",
+      "api": {
+        "mode": "paper",
+        "execution": false,
+        "signing": false,
+        "broadcast": false,
+        "exit": {
+          "running": true,
+          "error": null
+        },
+        "coverage": {
+          "checkedAt": "2026-10-21T08:57:24.975Z",
+          "readErrors": [],
+          "headReadErrors": [],
+          "platforms": {
+            "flap": {
+              "status": "adapter_observed_head_unverified",
+              "lastAttemptAt": "2026-10-21T08:57:12.462Z",
+              "lastSuccessAt": "2026-10-21T08:57:12.462Z",
+              "nextAttemptAt": null,
+              "ageMs": 12513,
+              "lastErrorAt": null,
+              "lastErrorCode": null,
+              "adapterHealth": {
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-21T08:57:12.462Z",
+                "lastSuccessAt": "2026-10-21T08:57:12.462Z",
+                "nextAttemptAt": null,
+                "ageMs": 12513,
+                "lastErrorAt": null,
+                "lastErrorCode": null
+              },
+              "checkpointAt": "2026-10-21T08:57:12.462Z",
+              "nextBlock": 128909912,
+              "headLagBlocks": null,
+              "liveHeadVerified": false,
+              "scope": "BSC pinned Portal quote adapter",
+              "headVerificationStatus": "cursor_ahead_of_observation",
+              "scanBacklogBlocks": null,
+              "headBlock": 128909835,
+              "confirmedHeadBlock": 128909832,
+              "confirmationDepth": 3,
+              "headSpreadBlocks": 0,
+              "headVerifiedAt": "2026-10-21T08:56:39.165Z",
+              "headAgeMs": 46421,
+              "observationNextBlock": 128909817,
+              "observedHeadLagBlocks": 19,
+              "observedScanBacklogBlocks": 16
+            },
+            "fourmeme": {
+              "adapterHealth": null,
+              "status": "checkpoint_only_unverified",
+              "checkpointAt": "2026-10-21T08:57:19.118Z",
+              "nextBlock": 128909909,
+              "headLagBlocks": null,
+              "liveHeadVerified": false,
+              "scope": "BSC pinned OpenFour registry adapter",
+              "headVerificationStatus": "cursor_ahead_of_observation",
+              "scanBacklogBlocks": null,
+              "headBlock": 128909831,
+              "confirmedHeadBlock": 128909828,
+              "confirmationDepth": 3,
+              "headSpreadBlocks": 0,
+              "headVerifiedAt": "2026-10-21T08:56:38.282Z",
+              "headAgeMs": 47965,
+              "observationNextBlock": 128909820,
+              "observedHeadLagBlocks": 12,
+              "observedScanBacklogBlocks": 9
+            }
+          }
+        }
+      }
+    }
+  ],
+  "localCursorTrend": [
+    {
+      "at": "2026-10-21T08:54:35.727Z",
+      "collectors": {
+        "four": {
+          "nextBlock": 128909520,
+          "anchorBlock": 128909519,
+          "checkpointAt": "2026-10-21T08:54:22.156Z",
+          "status": null,
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:54:24.698Z",
+          "headNumber": 128909534,
+          "safeHead": 128909531,
+          "proofNextBlock": 128909520,
+          "headSpread": 0,
+          "observedLag": 15,
+          "observedBacklog": 12
+        },
+        "flap": {
+          "nextBlock": 128909520,
+          "anchorBlock": 128909519,
+          "checkpointAt": "2026-10-21T08:54:15.168Z",
+          "status": "healthy",
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:54:27.916Z",
+          "headNumber": 128909542,
+          "safeHead": 128909539,
+          "proofNextBlock": 128909520,
+          "headSpread": 1,
+          "observedLag": 23,
+          "observedBacklog": 20
+        }
+      }
+    },
+    {
+      "at": "2026-10-21T08:54:50.800Z",
+      "collectors": {
+        "four": {
+          "nextBlock": 128909575,
+          "anchorBlock": 128909574,
+          "checkpointAt": "2026-10-21T08:54:47.361Z",
+          "status": null,
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:54:24.698Z",
+          "headNumber": 128909534,
+          "safeHead": 128909531,
+          "proofNextBlock": 128909520,
+          "headSpread": 0,
+          "observedLag": 15,
+          "observedBacklog": 12
+        },
+        "flap": {
+          "nextBlock": 128909553,
+          "anchorBlock": 128909552,
+          "checkpointAt": "2026-10-21T08:54:30.190Z",
+          "status": "healthy",
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:54:27.916Z",
+          "headNumber": 128909542,
+          "safeHead": 128909539,
+          "proofNextBlock": 128909520,
+          "headSpread": 1,
+          "observedLag": 23,
+          "observedBacklog": 20
+        }
+      }
+    },
+    {
+      "at": "2026-10-21T08:55:05.852Z",
+      "collectors": {
+        "four": {
+          "nextBlock": 128909603,
+          "anchorBlock": 128909602,
+          "checkpointAt": "2026-10-21T08:54:59.402Z",
+          "status": null,
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:54:24.698Z",
+          "headNumber": 128909534,
+          "safeHead": 128909531,
+          "proofNextBlock": 128909520,
+          "headSpread": 0,
+          "observedLag": 15,
+          "observedBacklog": 12
+        },
+        "flap": {
+          "nextBlock": 128909603,
+          "anchorBlock": 128909602,
+          "checkpointAt": "2026-10-21T08:54:51.195Z",
+          "status": "healthy",
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:54:27.916Z",
+          "headNumber": 128909542,
+          "safeHead": 128909539,
+          "proofNextBlock": 128909520,
+          "headSpread": 1,
+          "observedLag": 23,
+          "observedBacklog": 20
+        }
+      }
+    },
+    {
+      "at": "2026-10-21T08:55:20.900Z",
+      "collectors": {
+        "four": {
+          "nextBlock": 128909624,
+          "anchorBlock": 128909623,
+          "checkpointAt": "2026-10-21T08:55:09.439Z",
+          "status": null,
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:54:24.698Z",
+          "headNumber": 128909534,
+          "safeHead": 128909531,
+          "proofNextBlock": 128909520,
+          "headSpread": 0,
+          "observedLag": 15,
+          "observedBacklog": 12
+        },
+        "flap": {
+          "nextBlock": 128909630,
+          "anchorBlock": 128909629,
+          "checkpointAt": "2026-10-21T08:55:06.285Z",
+          "status": "healthy",
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:54:27.916Z",
+          "headNumber": 128909542,
+          "safeHead": 128909539,
+          "proofNextBlock": 128909520,
+          "headSpread": 1,
+          "observedLag": 23,
+          "observedBacklog": 20
+        }
+      }
+    },
+    {
+      "at": "2026-10-21T08:55:35.946Z",
+      "collectors": {
+        "four": {
+          "nextBlock": 128909672,
+          "anchorBlock": 128909671,
+          "checkpointAt": "2026-10-21T08:55:31.015Z",
+          "status": null,
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:55:32.518Z",
+          "headNumber": 128909685,
+          "safeHead": 128909682,
+          "proofNextBlock": 128909672,
+          "headSpread": 1,
+          "observedLag": 14,
+          "observedBacklog": 11
+        },
+        "flap": {
+          "nextBlock": 128909668,
+          "anchorBlock": 128909667,
+          "checkpointAt": "2026-10-21T08:55:18.291Z",
+          "status": "healthy",
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:55:33.145Z",
+          "headNumber": 128909687,
+          "safeHead": 128909684,
+          "proofNextBlock": 128909668,
+          "headSpread": 1,
+          "observedLag": 20,
+          "observedBacklog": 17
+        }
+      }
+    },
+    {
+      "at": "2026-10-21T08:55:50.993Z",
+      "collectors": {
+        "four": {
+          "nextBlock": 128909698,
+          "anchorBlock": 128909697,
+          "checkpointAt": "2026-10-21T08:55:41.819Z",
+          "status": null,
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:55:32.518Z",
+          "headNumber": 128909685,
+          "safeHead": 128909682,
+          "proofNextBlock": 128909672,
+          "headSpread": 1,
+          "observedLag": 14,
+          "observedBacklog": 11
+        },
+        "flap": {
+          "nextBlock": 128909692,
+          "anchorBlock": 128909691,
+          "checkpointAt": "2026-10-21T08:55:33.292Z",
+          "status": "healthy",
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:55:33.145Z",
+          "headNumber": 128909687,
+          "safeHead": 128909684,
+          "proofNextBlock": 128909668,
+          "headSpread": 1,
+          "observedLag": 20,
+          "observedBacklog": 17
+        }
+      }
+    },
+    {
+      "at": "2026-10-21T08:56:06.080Z",
+      "collectors": {
+        "four": {
+          "nextBlock": 128909745,
+          "anchorBlock": 128909744,
+          "checkpointAt": "2026-10-21T08:56:04.066Z",
+          "status": null,
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:55:32.518Z",
+          "headNumber": 128909685,
+          "safeHead": 128909682,
+          "proofNextBlock": 128909672,
+          "headSpread": 1,
+          "observedLag": 14,
+          "observedBacklog": 11
+        },
+        "flap": {
+          "nextBlock": 128909721,
+          "anchorBlock": 128909720,
+          "checkpointAt": "2026-10-21T08:55:45.301Z",
+          "status": "healthy",
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:55:33.145Z",
+          "headNumber": 128909687,
+          "safeHead": 128909684,
+          "proofNextBlock": 128909668,
+          "headSpread": 1,
+          "observedLag": 20,
+          "observedBacklog": 17
+        }
+      }
+    },
+    {
+      "at": "2026-10-21T08:56:21.167Z",
+      "collectors": {
+        "four": {
+          "nextBlock": 128909772,
+          "anchorBlock": 128909771,
+          "checkpointAt": "2026-10-21T08:56:15.439Z",
+          "status": null,
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:55:32.518Z",
+          "headNumber": 128909685,
+          "safeHead": 128909682,
+          "proofNextBlock": 128909672,
+          "headSpread": 1,
+          "observedLag": 14,
+          "observedBacklog": 11
+        },
+        "flap": {
+          "nextBlock": 128909772,
+          "anchorBlock": 128909771,
+          "checkpointAt": "2026-10-21T08:56:09.419Z",
+          "status": "healthy",
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:55:33.145Z",
+          "headNumber": 128909687,
+          "safeHead": 128909684,
+          "proofNextBlock": 128909668,
+          "headSpread": 1,
+          "observedLag": 20,
+          "observedBacklog": 17
+        }
+      }
+    },
+    {
+      "at": "2026-10-21T08:56:36.210Z",
+      "collectors": {
+        "four": {
+          "nextBlock": 128909796,
+          "anchorBlock": 128909795,
+          "checkpointAt": "2026-10-21T08:56:26.350Z",
+          "status": null,
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:55:32.518Z",
+          "headNumber": 128909685,
+          "safeHead": 128909682,
+          "proofNextBlock": 128909672,
+          "headSpread": 1,
+          "observedLag": 14,
+          "observedBacklog": 11
+        },
+        "flap": {
+          "nextBlock": 128909798,
+          "anchorBlock": 128909797,
+          "checkpointAt": "2026-10-21T08:56:21.419Z",
+          "status": "healthy",
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:55:33.145Z",
+          "headNumber": 128909687,
+          "safeHead": 128909684,
+          "proofNextBlock": 128909668,
+          "headSpread": 1,
+          "observedLag": 20,
+          "observedBacklog": 17
+        }
+      }
+    },
+    {
+      "at": "2026-10-21T08:56:51.264Z",
+      "collectors": {
+        "four": {
+          "nextBlock": 128909844,
+          "anchorBlock": 128909843,
+          "checkpointAt": "2026-10-21T08:56:47.528Z",
+          "status": null,
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:56:38.282Z",
+          "headNumber": 128909831,
+          "safeHead": 128909828,
+          "proofNextBlock": 128909820,
+          "headSpread": 0,
+          "observedLag": 12,
+          "observedBacklog": 9
+        },
+        "flap": {
+          "nextBlock": 128909841,
+          "anchorBlock": 128909840,
+          "checkpointAt": "2026-10-21T08:56:39.449Z",
+          "status": "healthy",
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:56:39.165Z",
+          "headNumber": 128909835,
+          "safeHead": 128909832,
+          "proofNextBlock": 128909817,
+          "headSpread": 0,
+          "observedLag": 19,
+          "observedBacklog": 16
+        }
+      }
+    },
+    {
+      "at": "2026-10-21T08:57:06.319Z",
+      "collectors": {
+        "four": {
+          "nextBlock": 128909865,
+          "anchorBlock": 128909864,
+          "checkpointAt": "2026-10-21T08:56:56.996Z",
+          "status": null,
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:56:38.282Z",
+          "headNumber": 128909831,
+          "safeHead": 128909828,
+          "proofNextBlock": 128909820,
+          "headSpread": 0,
+          "observedLag": 12,
+          "observedBacklog": 9
+        },
+        "flap": {
+          "nextBlock": 128909871,
+          "anchorBlock": 128909870,
+          "checkpointAt": "2026-10-21T08:56:51.459Z",
+          "status": "healthy",
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:56:39.165Z",
+          "headNumber": 128909835,
+          "safeHead": 128909832,
+          "proofNextBlock": 128909817,
+          "headSpread": 0,
+          "observedLag": 19,
+          "observedBacklog": 16
+        }
+      }
+    },
+    {
+      "at": "2026-10-21T08:57:21.365Z",
+      "collectors": {
+        "four": {
+          "nextBlock": 128909909,
+          "anchorBlock": 128909908,
+          "checkpointAt": "2026-10-21T08:57:19.118Z",
+          "status": null,
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:56:38.282Z",
+          "headNumber": 128909831,
+          "safeHead": 128909828,
+          "proofNextBlock": 128909820,
+          "headSpread": 0,
+          "observedLag": 12,
+          "observedBacklog": 9
+        },
+        "flap": {
+          "nextBlock": 128909890,
+          "anchorBlock": 128909889,
+          "checkpointAt": "2026-10-21T08:57:03.459Z",
+          "status": "healthy",
+          "headStatus": "verified",
+          "headError": null,
+          "verifiedAt": "2026-10-21T08:56:39.165Z",
+          "headNumber": 128909835,
+          "safeHead": 128909832,
+          "proofNextBlock": 128909817,
+          "headSpread": 0,
+          "observedLag": 19,
+          "observedBacklog": 16
+        }
+      }
+    }
+  ],
+  "integrity": {
+    "checkedAt": "2026-10-21T08:57:46.067Z",
+    "count": 309,
+    "lastId": "1792567338823:308",
+    "preservedPrefixCount": 309,
+    "tradePrefixSha256": "806a982c95c465aae2568fc44797e1e989752fabfcf92271b996ab7a20d1da20",
+    "legacyHash": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36",
+    "sourceHashes": {
+      "src/bsc-launchpad-monitor.js": "7bd70ad567a5aec522deb2ed6021d00e3c2288f76d2a52ecba781fe54c084207",
+      "src/four-registry-monitor.js": "16940c47d787c4722769622bfa30701ce1a07ce178c80e51847e8359700b8fb7",
+      "src/flap-quote-monitor.js": "dcda2d59dcc44da66ab92cc3ffbd8c2974112fd9a94ee899594b9ce591ba5ac2",
+      "src/rpc-host-coordinator.js": "d0f4da7fa7029c68ee66d993517bf211a2561840f0c020b0329cefb32c1687eb",
+      "src/paper-launch-evidence.js": "5dea83466d3734404bbad537e4086fb99a0d5a1886e86d634d87d2d0ef68590d",
+      "src/paper-strategy-runtime.js": "c77b890e5c982f48e69cceb049c98643f98b7f3542516e58cc1ced0ba81210f5"
+    },
+    "processes": {
+      "main": {
+        "version": 1,
+        "producer": "main",
+        "pid": 7712,
+        "startedAt": "2026-10-21T08:53:04.561Z",
+        "updatedAt": "2026-10-21T08:57:34.650Z",
+        "sequence": 10
+      },
+      "bsc": {
+        "version": 1,
+        "producer": "bsc",
+        "pid": 7713,
+        "startedAt": "2026-10-21T08:53:05.000Z",
+        "updatedAt": "2026-10-21T08:57:39.218Z",
+        "sequence": 10
+      },
+      "fomo": {
+        "version": 1,
+        "producer": "fomo",
+        "pid": 829,
+        "startedAt": "2026-10-20T13:26:36.401Z",
+        "updatedAt": "2026-10-21T08:57:44.607Z",
+        "sequence": 2342
+      }
+    },
+    "logWindow": {
+      "since": "2026-10-21T08:52:24.635Z",
+      "byteOffset": 20668484,
+      "bytesRead": 8510,
+      "collectorErrorCount": 0,
+      "collectorErrors": [],
+      "otherBscCapacityLines": 3
+    }
+  },
+  "result": {
+    "strictlyIncreasingCursorSamples": 12,
+    "cursorAdvancementSinceTerm": {
+      "four": 715,
+      "flap": 745
+    },
+    "latestObservedHeadLags": {
+      "four": 12,
+      "flap": 19
+    },
+    "latestObservedScanBacklogs": {
+      "four": 9,
+      "flap": 16
+    },
+    "currentPanelLag": "cursor_ahead_of_observation_null_not_zero",
+    "scopeLimitations": [
+      "No guarantee of continuous uptime or permanently zero RPC wait/429",
+      "Other BSC read lanes still recorded 3 capacity wait lines in the deployment log window; those were not Four/Flap registry/quote collector errors",
+      "No old paused BSC backlog activation, no source expansion or chain/ABI adaptation",
+      "No cross-cycle chain-state cache or head-proof sharing introduced"
+    ]
+  }
+}

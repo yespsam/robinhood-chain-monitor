@@ -2,7 +2,7 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&a
 const number = n => Number.isFinite(n) ? n.toLocaleString('zh-CN', { maximumFractionDigits: 1 }) : '—';
 const money = n => Number.isFinite(n) ? `$${n.toFixed(2)}` : '—';
 const chainName = chain => ({ robinhood: 'Robinhood', bsc: '币安链', sol: 'Solana', base: 'Base', eth: '以太坊' })[chain] || '未知链';
-const roleName = role => ({ teacher: '盈利教师', comparison: '对照观察', unverified: '盈利待验证', excluded: '排除训练' })[role] || '待验证';
+const roleName = role => ({ teacher: '双周期盈利候选', comparison: '对照观察', unverified: '盈利待验证', excluded: '排除训练' })[role] || '待验证';
 export function renderWalletTradeLearning(study) {
   if(!study)return '';
   if(study.error)return `<p class="section-note">${escape(study.error)}</p>`;
@@ -16,12 +16,13 @@ export function renderWalletTradeLearning(study) {
       <p>成交单价 ${escape(price(c.price))} 美元；${c.side==='sell'?`配对买入均价 ${escape(price(c.averageBuyPrice))} 美元；卖出观察仓位 ${pct(c.soldFraction)}；FIFO 毛回报 ${pct(c.grossReturn)}`:`买入金额 ${money(c.usd)}；相对前次买入价 ${pct(c.addPriceChange)}`}</p>
       <p>量价位置：${escape(chart)}。</p><p>叙事时间关联：${escape(narrative)}。不证明该钱包读过消息或因此交易。</p></article>`;
   }).join('');
-  return `<h3>买卖位置与叙事案例学习</h3><p>累计保留 ${number(study.cases)} 个成交案例；${number(study.quarantined)} 个因断档 / 归因问题隔离。当前合格教师案例 ${number(study.teachers?.cases)} 个。</p><p class="section-note">成交前 K 线可还原 ${number(study.observed?.chartContexts)} 个；叙事可关联 ${number(study.observed?.narrativeContexts)} 个。公开链上行为不是交易员的真实想法；均为描述研究，不自动替换主盘。</p>${cases}`;
+  return `<h3>买卖位置与叙事案例学习</h3><p>累计保留 ${number(study.cases)} 个成交案例；${number(study.quarantined)} 个因断档 / 归因问题隔离。当前双周期盈利候选案例 ${number(study.teachers?.cases)} 个。</p><p class="section-note">成交前 K 线可还原 ${number(study.observed?.chartContexts)} 个；叙事可关联 ${number(study.observed?.narrativeContexts)} 个。候选案例不代表 KOL 身份认证或稳定盈利核验；公开链上行为不是交易员的真实想法；均为描述研究，不自动替换主盘。</p>${cases}`;
 }
 export function renderWalletLearning(report, pair) {
   if (!report) return '<p class="section-note">等待真实钱包交易记录。</p>';
   const sampled = (report.wallets || []).filter(w => w.checkedAt).length;
-  const summary = `<p>发现候选 ${number(report.candidateCount)} / ${number(report.capacity?.candidates ?? 500)} 个 · 深度研究 ${number(report.walletCount)} / ${number(report.capacity?.deepWallets ?? 80)} 个（${number(sampled)} 个已取得活动页）· ${number(report.activityRecords)} 条真实记录。</p><p class="section-note">盈利教师 ${number(report.qualifiedNow)} 个 · 对照观察 ${number(report.roles?.comparison)} 个 · 盈利待验证 ${number(report.roles?.unverified)} 个 · 含 GMGN FOMO 标签 ${number(report.fomoWalletCount)} 个。候选数量不等于已采样数量，更不等于合格教师数量。</p>`;
+  const selection = report.teacherSelection;
+  const summary = `<p>发现候选 ${number(report.candidateCount)} / ${number(report.capacity?.candidates ?? 500)} 个 · 深度研究 ${number(report.walletCount)} / ${number(report.capacity?.deepWallets ?? 80)} 个（${number(sampled)} 个已取得活动页）· ${number(report.activityRecords)} 条真实记录。</p><p class="section-note">双周期盈利候选 ${number(report.qualifiedNow)} 个 · 对照观察 ${number(report.roles?.comparison)} 个 · 盈利待验证 ${number(report.roles?.unverified)} 个 · 含 GMGN FOMO 标签 ${number(report.fomoWalletCount)} 个。候选数量不等于已采样数量，更不等于合格教师数量。</p><p class="section-note">已核验 KOL 策略学习教师 ${number(selection?.eligibleWallets ?? 0)} 个钱包 / ${number(selection?.eligibleIdentities ?? 0)} 个独立公开身份。${selection?.registryError ? '身份与稳定盈利核验档案不可用，停止新增策略学习；原采集与普通交易信号保留。' : '必须同时具备本人公开钱包归属、GMGN KOL 认证及非重叠期间稳定盈利证据；证据缺失或过期仅保留观察。'}标签与蓝标本身不证明本人控制钱包或未来盈利。</p>`;
   const stage = `<p class="section-note">${report.lastError ? '本轮采集异常，保留历史记录，暂停新增蒸馏开仓。' : report.status === 'shadow_ready' ? '已有分组达标；对照链也达标后开启同期模拟对照。' : '正在积累样本，尚未启用蒸馏开仓。'}主账户执行多链原策略，蒸馏对照仍限 ${escape(chainName(pair?.chain || 'robinhood'))}，不另增多链对照本金。每两分钟执行一项活动页采样、统计核验或成交前 K 线补采，不是每个地址每两分钟更新；交易检查仍为秒级。历史补图占既有研究时隙，先覆盖 Solana / BSC / Base / ETH。FOMO 是 GMGN 标签，不代表已确认官方身份。</p>`;
   const collection = report.profileCollection;
   const library = report.addressLibrary;
@@ -44,9 +45,9 @@ export function renderWalletLearning(report, pair) {
     const flaws = w.persona?.drawbacks?.slice(0, 3).join('；') || '尚无足够证据归纳具体弊端';
     const performance = w.performance;
     const percentage = n => Number.isFinite(n) ? `${(n * 100).toFixed(1)}%` : '—';
-    return `<p><strong>${escape(chainName(w.chain))} · ${escape(address)} · ${escape(roleName(w.role))}</strong>：${escape(labels)}。配对卖出 ${number(h.matchedSells)} 笔，持仓中位 ${number(h.medianHoldMs === null ? null : h.medianHoldMs / 1000)} 秒，加仓 ${number(h.adds)} 次，分批卖出 ${number(h.partialSells)} 次；排除超快卖出 ${number(h.tooFastSells)} 笔、归因不明代币 ${number(h.excludedTokens)} 个。${w.historyGap ? '历史覆盖断档，仅展示、不训练。' : ''}</p><p class="section-note">最近已取得统计：7日 / 30日胜率 ${percentage(performance?.['7d']?.winRate)} / ${percentage(performance?.['30d']?.winRate)}；7日已实现盈亏 ${money(performance?.['7d']?.realizedProfitUsd)}。已观察局限：${escape(flaws)}。画像置信度：${escape(w.persona?.confidence || '等待样本')}。</p>`;
+    return `<p><strong>${escape(chainName(w.chain))} · ${escape(address)} · ${escape(roleName(w.role))}</strong>：${escape(labels)}。配对卖出 ${number(h.matchedSells)} 笔，持仓中位 ${number(h.medianHoldMs === null ? null : h.medianHoldMs / 1000)} 秒，加仓 ${number(h.adds)} 次，分批卖出 ${number(h.partialSells)} 次；排除超快卖出 ${number(h.tooFastSells)} 笔、归因不明代币 ${number(h.excludedTokens)} 个。${w.historyGap ? '历史覆盖断档，仅展示、不训练。' : ''}</p><p class="section-note">KOL 策略教师核验：${w.strategyTeacherEligibility?.eligible ? '身份与稳定盈利证据达标，仍须活动覆盖及同链多人样本达标。' : '尚未达标，仅作候选观察。'}最近已取得统计：7日 / 30日胜率 ${percentage(performance?.['7d']?.winRate)} / ${percentage(performance?.['30d']?.winRate)}；7日已实现盈亏 ${money(performance?.['7d']?.realizedProfitUsd)}。已观察局限：${escape(flaws)}。画像置信度：${escape(w.persona?.confidence || '等待样本')}。</p>`;
   }).join('');
-  const groups = (report.groups || []).filter(g => g.teacherCount > 0).map(g => `<p class="section-note">${escape(chainName(g.chain))} / ${g.group === 'gmgn_fomo' ? 'FOMO 标签组' : '盈利聪明钱组'}：有效教师 ${number(g.usableTeachers)}/3，配对卖出 ${number(g.matchedSells)}/30，代币 ${number(g.tokens)}/10，跨度 ${number(g.spanMs / 86400000)}/3 天。</p>`).join('');
+  const groups = (report.groups || []).filter(g => g.teacherCount > 0).map(g => `<p class="section-note">${escape(chainName(g.chain))} / ${g.group === 'gmgn_fomo' ? 'FOMO 标签组' : '盈利聪明钱组'}：有效 KOL 教师（按独立身份去重）${number(g.usableTeachers)}/3，配对卖出 ${number(g.matchedSells)}/30，代币 ${number(g.tokens)}/10，跨度 ${number(g.spanMs / 86400000)}/3 天。</p>`).join('');
   const comparison = pair?.student ? `<p>同期原策略净盈亏 ${money(pair.control?.netPnl)}（${number(pair.control?.exits)} 次平仓） · 蒸馏策略净盈亏 ${money(pair.student.netPnl)}（${number(pair.student.exits)} 次平仓）。</p><p class="section-note">各自独立 100 美元虚拟本金，不计入主账户；净盈亏包含模拟成本。价格过期仓位：原策略 ${number(pair.control?.stalePositions)}，蒸馏策略 ${number(pair.student.stalePositions)}。未自动替换主策略。</p>` : '<p class="section-note">同期对照尚未启动；原模拟账户继续运行。只在同链分组样本达标后启用持仓期限与亏损退出幅度，不模仿仓位规模，不降低原筛选门槛。</p>';
   return summary + inventory + stage + health + leaderboard + `<p class="section-note">${coverage}</p>` + renderWalletTradeLearning(report.behaviorLearning) + (personas ? `<h3>已观察交易人格 · 允许多种风格重叠</h3>${personas}` : '<p>尚无足够样本识别交易风格，不虚构人格。</p>')
     + '<h3>钱包实例 · 最多展示 8 个，后台按深度研究名单轮询</h3>' + rows + groups + comparison

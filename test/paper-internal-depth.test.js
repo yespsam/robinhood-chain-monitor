@@ -1,10 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {mkdtemp,rm} from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {createRpcHostCoordinator} from '../src/rpc-host-coordinator.js';
 import {internalDepthCheck,createInternalDepthProbe,selectInternalDepthRpcHost,FOUR_HELPER,BNB_ORACLE,
   DEPTH_RETRY_POLICY,admitInternalDepthRetryCandidate} from '../src/paper-internal-depth.js';
 import {depthFixture,depthAbi} from './helpers/internal-depth-fixture.js';
 import {flapDepthFixture,flapQuoteDepthFixture} from './helpers/internal-depth-fixture.js';
 import {FLAP_DEPTH_ABI,FLAP_DEPTH_PORTAL} from '../src/paper-internal-depth.js';
+import {FLAP_PORTAL_VERIFIED_VERSION} from '../src/flap-portal-pins.js';
 const NOW=Date.parse('2026-10-05T07:00:00Z'),token={chain:'bsc',address:'0x'+'a'.repeat(40),marketStage:'internal',price:1};
 
 const PRIVATE_RPC_HOST='bsc-mainnet.core.chainstack.com',PRIVATE_RPC_SECRET='0123456789abcdef0123456789abcdef';
@@ -138,6 +143,20 @@ test('Flap native curve admits raw eth_call quotes, not an address suffix or mig
     x.raw.info=FLAP_DEPTH_ABI.encodeFunctionResult('getTokenV8Safe',[state]);assert.equal(internalDepthCheck(x,token,10,NOW).ready,false,String(index));
   }
   const x=structuredClone(p);x.raw.portalVersion=FLAP_DEPTH_ABI.encodeFunctionResult('version',['future-unknown']);assert.equal(internalDepthCheck(x,token,10,NOW).ready,false);
+});
+test('Flap v5.26 depth adaptation rejects stale versions and failed reverse quotes',()=>{
+  for(const fixture of [flapDepthFixture,flapQuoteDepthFixture]) {
+    const p=fixture(token,10,9.7,NOW);
+    p.raw.portalVersion=FLAP_DEPTH_ABI.encodeFunctionResult('version',[FLAP_PORTAL_VERIFIED_VERSION]);
+    assert.equal(internalDepthCheck(p,token,10,NOW).ready,true);
+    for(const version of ['v5.25.0','v5.24.0','v5.23.1']) {
+      const old=structuredClone(p);
+      old.raw.portalVersion=FLAP_DEPTH_ABI.encodeFunctionResult('version',[version]);
+      assert.equal(internalDepthCheck(old,token,10,NOW).ready,false,version);
+    }
+    const failed=structuredClone(p);failed.raw.sell='0x';
+    assert.equal(internalDepthCheck(failed,token,10,NOW).ready,false);
+  }
 });
 test('Flap quote method is non-view but only eth_call is made, with correct buy/sell legs at same block',async()=>{
   const t={...token,launchpad:'flap'},p=flapDepthFixture(t,10,9.7,NOW),legs=[];
@@ -299,6 +318,54 @@ for(const error of [{code:'RPC_TIMEOUT'},{code:'TIMEOUT'},{status:429,retryAfter
   assert.equal(r.status,'unavailable');assert.equal(r.proof,undefined);assert.equal(r.diagnostics.failedMethod,'eth_chainId');
   assert.equal(r.diagnostics.physicalRequests,1);assert.equal(f.cooldowns.length,1);
   assert.equal(f.cooldowns[0][1],'eth_chainId');assert.equal(f.cooldowns[0][2],NOW+(error.retryAfter?45000:30000));
+  assert.equal(f.cooldowns[0][3],['RPC_TIMEOUT','TIMEOUT'].includes(error.code)?'method':undefined);
+});
+
+for(const host of ['bsc.rpc.sentio.xyz','public-bsc.nownodes.io'])
+test(`depth ${host} fast sequential reads complete through SQLite with the original 200 ms wait`,async t=>{
+  const dir=await mkdtemp(path.join(os.tmpdir(),'depth-fast-shared-'));
+  const gate=createRpcHostCoordinator({file:path.join(dir,'rpc.sqlite'),now:()=>NOW}),calls=[];
+  t.after(async()=>{gate.close();await rm(dir,{recursive:true,force:true});});
+  const coordinator={...gate,run:(h,method,lane,fn,options)=>{
+    calls.push({h,method,lane,waitMs:options.waitMs});return gate.run(h,method,lane,fn,options);
+  }};
+  const f=batchFixture('flap'),started=Date.now();
+  const r=await createInternalDepthProbe({...f,coordinator,now:()=>NOW,
+    rpcEndpoints:[{host,url:`https://${host}`}]}).probe(f.args);
+  assert.equal(r.status,'ok',r.reason);
+  assert.equal(r.diagnostics.physicalRequests,8);assert.equal(r.diagnostics.rpcItems,12);
+  assert.equal(r.diagnostics.failedMethod,null);assert.equal(calls.length,8);
+  assert.ok(calls.every(c=>c.h===host&&c.lane==='background'&&c.waitMs===200));
+  assert.ok(Date.now()-started<10000,'the existing ten-second round budget is not enlarged');
+  assert.equal(internalDepthCheck(r.proof,f.args.token,10,NOW,null,9.7).ready,true);
+  assert.deepEqual(gate.snapshot().circuits,[]);
+  assert.equal(gate.snapshot().leases.length,0);assert.equal(gate.snapshot().waiters.length,0);
+});
+
+for(const [error,scope] of [
+  ...['RPC_TIMEOUT','TIMEOUT','ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT'].map(code=>[{code},'method']),
+  [{status:429,code:'RPC_TIMEOUT'},'host'],[{status:503,code:'TIMEOUT'},'host'],
+  [{code:'ECONNRESET'},'host'],[{code:'ECONNREFUSED'},'host'],[{name:'TypeError'},'host'],
+])test(`depth ${JSON.stringify(error)} persists ${scope} cooldown without cross-method timeout pollution`,async t=>{
+  const dir=await mkdtemp(path.join(os.tmpdir(),'depth-cooldown-scope-'));
+  const gate=createRpcHostCoordinator({file:path.join(dir,'rpc.sqlite'),now:()=>NOW});
+  t.after(async()=>{gate.close();await rm(dir,{recursive:true,force:true});});
+  const f=batchFixture('four');f.reader.getBlockNumber=async()=>{throw Object.assign(Error('fixture'),error);};
+  const r=await createInternalDepthProbe({...f,coordinator:gate,now:()=>NOW}).probe(f.args),host=r.diagnostics.host;
+  assert.equal(r.status,'unavailable');assert.equal(r.proof,undefined);
+  assert.equal(r.diagnostics.failedMethod,'eth_blockNumber');assert.equal(r.diagnostics.physicalRequests,2);
+  assert.deepEqual(gate.snapshot().circuits.map(({operation,until_ms})=>({operation,until_ms})),
+    [{operation:scope==='method'?'eth_blockNumber':'*',until_ms:NOW+30000}]);
+  let dispatched=0;
+  await assert.rejects(gate.run(host,'eth_blockNumber','background',()=>{dispatched++;},{waitMs:200}),
+    e=>e.code==='RPC_COORDINATOR_UNAVAILABLE'&&e.rpcFailureScope===scope);
+  for(const method of ['eth_chainId','eth_getLogs']) {
+    if(scope==='host')await assert.rejects(gate.run(host,method,'background',()=>{dispatched++;},{waitMs:200}),
+      e=>e.rpcFailureScope==='host');
+    else assert.equal(await gate.run(host,method,'background',()=>{dispatched++;return 'read-only fixture';},{waitMs:200}),'read-only fixture');
+  }
+  assert.equal(dispatched,scope==='method'?2:0);
+  assert.equal(gate.snapshot().leases.length,0);assert.equal(gate.snapshot().waiters.length,0);
 });
 
 test('depth local queue contention never becomes provider cooldown or retries another host',async()=>{

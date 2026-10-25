@@ -212,7 +212,10 @@ export function createInnerTradeMonitor({dataDir,now=Date.now,reader=null,coordi
         if(method==='callBatch'){round.callBatches++;round.callBatchItems+=items;}
         try{return await rpc[method](...args,{signal});}catch(e){if(gate&&[429,503].includes(e.status)) {
           await gate.persistCooldown(host,METHODS[method],rpcRetryAfterUntil(e.retryAfter,now()));
-        }else if(gate&&!signal.aborted&&(['RPC_TIMEOUT','ECONNRESET','ECONNREFUSED','ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT'].includes(e.code)||e.name==='TypeError')) {
+        }else if(gate&&!signal.aborted&&['RPC_TIMEOUT','TIMEOUT','ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT'].includes(e.code)) {
+          // A bounded read timeout is not evidence that every RPC method failed.
+          await gate.persistCooldown(host,METHODS[method],now()+30000,'method');
+        }else if(gate&&!signal.aborted&&(['ECONNRESET','ECONNREFUSED'].includes(e.code)||e.name==='TypeError')) {
           await gate.persistCooldown(host,METHODS[method],now()+30000);
         }throw e;}};
       // Use the coordinator's existing default FIFO wait, never priority or

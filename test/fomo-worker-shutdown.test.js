@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import streamFs from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { startAlertOutboxWorker } from "../src/alerts.js";
 import {
   createFomoWorkerShutdown,
@@ -14,16 +16,21 @@ test("SIGTERM and SIGINT share one Fomo stop that waits for the active outbox", 
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "fomo-worker-stop-"));
   const outboxFile = path.join(dataDir, "alert-outbox.json");
   await fs.writeFile(outboxFile, `${JSON.stringify({ version: 2, events: {} })}\n`);
-  const originalReadFile = fs.readFile.bind(fs);
+  const originalReadStream = streamFs.createReadStream.bind(streamFs);
   let outboxReads = 0;
   let releaseOutbox;
   const outboxGate = new Promise((resolve) => { releaseOutbox = resolve; });
-  t.mock.method(fs, "readFile", async (...args) => {
+  t.mock.method(streamFs, "createReadStream", (...args) => {
     if (String(args[0]) === outboxFile) {
       outboxReads += 1;
-      await outboxGate;
+      // Gate the actual incremental reader used by the outbox worker. A
+      // readFile mock no longer intercepts this durability boundary.
+      return Readable.from((async function* () {
+        await outboxGate;
+        yield* originalReadStream(...args);
+      })());
     }
-    return originalReadFile(...args);
+    return originalReadStream(...args);
   });
 
   const realOutbox = startAlertOutboxWorker({ dataDir, alertRetryIntervalMs: 60_000 });

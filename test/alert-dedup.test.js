@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
+import streamFs from "node:fs";
+import { Readable } from "node:stream";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -1701,7 +1703,7 @@ function flapPortalDelayedRecoveryEvent({
   const portal = "0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0";
   const quoteAddress = "0xe28c09e21db5bb63c4821c3f44c26ee5aee8280f";
   const transactionHash = `0x${"ab".repeat(32)}`;
-  const blockNumber = 119_700_000;
+  const blockNumber = 123_700_000;
   const finalizedHead = blockNumber + 2;
   const finalizedHeadHash = `0x${"ef".repeat(32)}`;
   const logIndex = 7;
@@ -5606,11 +5608,11 @@ test("the outbox worker does not repeatedly parse an unchanged idle file", async
       },
     },
   })}\n`);
-  const originalReadFile = fs.readFile.bind(fs);
+  const originalReadStream = streamFs.createReadStream.bind(streamFs);
   let outboxReads = 0;
-  t.mock.method(fs, "readFile", async (...args) => {
+  t.mock.method(streamFs, "createReadStream", (...args) => {
     if (String(args[0]) === file) outboxReads += 1;
-    return originalReadFile(...args);
+    return originalReadStream(...args);
   });
   const worker = startAlertOutboxWorker({ ...alertConfig(dataDir), alertRetryIntervalMs: 60_000 });
   t.after(() => {
@@ -5629,16 +5631,19 @@ test("the outbox worker stop is idempotent, drains its active run, and prevents 
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-worker-stop-"));
   const file = path.join(dataDir, "alert-outbox.json");
   await fs.writeFile(file, `${JSON.stringify({ version: 2, events: {} })}\n`);
-  const originalReadFile = fs.readFile.bind(fs);
+  const originalReadStream = streamFs.createReadStream.bind(streamFs);
   let outboxReads = 0;
   let releaseRead;
   const readGate = new Promise((resolve) => { releaseRead = resolve; });
-  t.mock.method(fs, "readFile", async (...args) => {
+  t.mock.method(streamFs, "createReadStream", (...args) => {
     if (String(args[0]) === file) {
       outboxReads += 1;
-      await readGate;
+      return Readable.from((async function* () {
+        await readGate;
+        yield* originalReadStream(...args);
+      })());
     }
-    return originalReadFile(...args);
+    return originalReadStream(...args);
   });
 
   const worker = startAlertOutboxWorker({ ...alertConfig(dataDir), alertRetryIntervalMs: 60_000 });

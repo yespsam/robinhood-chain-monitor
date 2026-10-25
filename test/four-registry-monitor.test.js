@@ -15,6 +15,7 @@ import {
   FOUR_REGISTRY_RPC_CALLS_PER_HOST_PER_MINUTE,
   atomicWriteFourRegistryState,
   classifyFourRegistryDelivery,
+  readFourRegistryState,
   createFourRegistryMonitor,
   isFourRegistryCapabilityEvent,
   isFourRegistryFirstTokenEvent,
@@ -23,6 +24,91 @@ import {
   restoreFourLegacyTransaction,
 } from "../src/four-registry-monitor.js";
 import { createRpcPool } from "../src/bsc-launchpad-monitor.js";
+
+async function durableSharedTransactionFixture(t) {
+  const provider = new FakeBscProvider({ head: 102 });
+  provider.setSnapshot(100, []);
+  const counts = [{ receipt: 0, transaction: 0, block: 0 }, { receipt: 0, transaction: 0, block: 0 }];
+  const controls = { missingLog: false, changedFinalHeader: false, differentTransaction: false };
+  const readers = counts.map((count, index) => providerFacade(provider, {
+    getTransactionReceipt: async hash => {
+      count.receipt += 1;
+      const receipt = structuredClone(await provider.getTransactionReceipt(hash));
+      if (index === 1 && controls.missingLog) receipt.logs = receipt.logs.slice(0, 1);
+      return receipt;
+    },
+    getTransaction: async hash => {
+      count.transaction += 1;
+      const transaction = structuredClone(await provider.getTransaction(hash));
+      if (index === 1 && controls.differentTransaction) transaction.blockHash = blockHash(999);
+      return transaction;
+    },
+    getBlock: async number => {
+      const block = provider.block(number);
+      if (Number(number) === 101) {
+        count.block += 1;
+        if (index === 1 && controls.changedFinalHeader && count.block === 4) block.hash = blockHash(999);
+      }
+      return block;
+    },
+  }));
+  const attempts = [];
+  const { monitor } = await fixture(t, provider, {
+    onEvent: async event => { attempts.push(event.eventKey); return { status: "retry" }; },
+    dependencies: { stateVerificationProviders: readers.map((reader, index) => ({
+      sourceId: `proof-${index}.test`, provider: reader,
+    })) },
+  });
+  assert.equal((await monitor.check()).status, "baseline");
+  provider.head = 103;
+  const hash = txHash("d");
+  const first = addTagRegistered(provider, { tagId: "0x1111111111111111", hash, logIndex: 0 });
+  const second = addTagRegistered(provider, { tagId: "0x2222222222222222", hash, logIndex: 1 });
+  provider.receipts.get(hash).logs = [structuredClone(first), structuredClone(second)];
+  assert.equal((await monitor.check()).outboxPending, 2);
+  const reset = () => { counts.forEach(count => Object.assign(count, { receipt: 0, transaction: 0, block: 0 })); attempts.length = 0; };
+  reset();
+  return { monitor, counts, controls, attempts, reset };
+}
+
+test("durable same-transaction proofs reuse reads only within one source and one retry", async t => {
+  const { monitor, counts, controls, attempts, reset } = await durableSharedTransactionFixture(t);
+  for (let round = 0; round < 2; round += 1) {
+    assert.equal((await monitor.check()).status, "delivery_pending");
+    assert.equal(attempts.length, 1);
+    for (const count of counts) {
+      assert.equal(count.receipt, 1, "two events and nested receipt checks share one exact source read");
+      assert.equal(count.transaction, 1);
+      assert.equal(count.block, 4, "anchor, two event headers and final header are not cached");
+    }
+    reset();
+  }
+  controls.differentTransaction = true;
+  assert.equal((await monitor.check()).status, "degraded", "the next check must read and validate both sources again");
+  assert.equal(attempts.length, 0);
+  assert.equal((await monitor.getState()).outbox.length, 2);
+});
+
+test("durable proof reuse still validates every distinct log against both sources", async t => {
+  const { monitor, controls, attempts } = await durableSharedTransactionFixture(t);
+  controls.missingLog = true;
+  const result = await monitor.check();
+  assert.equal(result.status, "degraded");
+  assert.equal(result.errorCode, "FOUR_REGISTRY_OUTBOX_PROOF_UNAVAILABLE");
+  assert.equal(attempts.length, 0);
+  assert.equal((await monitor.getState()).outbox.length, 2);
+});
+
+test("durable proof reuse cannot hide a changed final canonical header", async t => {
+  const { monitor, controls, attempts } = await durableSharedTransactionFixture(t);
+  controls.changedFinalHeader = true;
+  const result = await monitor.check();
+  assert.equal(result.status, "degraded");
+  assert.equal(result.errorCode, "FOUR_REGISTRY_STATE_CONSENSUS_MISMATCH");
+  assert.equal(attempts.length, 0);
+  assert.equal((await monitor.getState()).outbox.length, 2);
+});
+
 
 const CREATOR = "0x1111111111111111111111111111111111111111";
 const TOKEN = "0x2222222222222222222222222222222222222222";
@@ -824,6 +910,134 @@ test("a changed finalized anchor hash performs bounded checkpoint recovery and r
   assert.equal(onDisk.reorgRecoveries[0].oldAnchorBlockHash, durableBefore.cursor.anchorBlockHash);
 });
 
+test("an empty committed outbox saves only the delivery-only quorum reads", async (t) => {
+  const provider = new FakeBscProvider({ head: 102 });
+  provider.setSnapshot(100, [preset("1778027615723")]);
+  const reads = [[], []];
+  let readsAtCommit;
+  const { monitor, delivered } = await fixture(t, provider, { dependencies: {
+    stateVerificationProviders: reads.map((sourceReads, index) => ({
+      sourceId: `empty-commit-${index}.test`,
+      provider: providerFacade(provider, { getBlock: async number => {
+        sourceReads.push(Number(number));
+        return provider.block(number);
+      } }),
+    })),
+    atomicWriteImpl: async (file, state) => {
+      if (state.cursor.anchorBlock === 101) readsAtCommit = structuredClone(reads);
+      return atomicWriteFourRegistryState(file, state);
+    },
+  } });
+  assert.equal((await monitor.check()).status, "baseline");
+  reads.forEach(sourceReads => { sourceReads.length = 0; });
+  provider.head = 103;
+  const result = await monitor.check();
+  assert.equal(result.status, "ok");
+  assert.equal(result.outboxPending, 0);
+  assert.deepEqual(result.events, []);
+  assert.deepEqual(delivered, []);
+  assert.deepEqual(readsAtCommit, [[100, 101, 101, 101], [100, 101, 101, 101]],
+    "both fixed readers retain anchor, snapshot before/after and commit-time verification");
+  assert.deepEqual(reads, readsAtCommit,
+    "no delivery-only header is requested from either source after an empty commit");
+  assert.equal((await monitor.getState()).cursor.anchorBlock, 101);
+});
+
+test("empty-outbox optimization still rejects a changed pre-commit quorum", async (t) => {
+  const provider = new FakeBscProvider({ head: 102 });
+  provider.setSnapshot(100, [preset("1778027615723")]);
+  const reads = [0, 0];
+  const { monitor, delivered } = await fixture(t, provider, { dependencies: {
+    stateVerificationProviders: reads.map((_, index) => ({
+      sourceId: `pre-commit-${index}.test`,
+      provider: providerFacade(provider, { getBlock: async number => {
+        const block = provider.block(number);
+        if (Number(number) === 101 && ++reads[index] === 3) block.hash = blockHash(999);
+        return block;
+      } }),
+    })),
+  } });
+  assert.equal((await monitor.check()).status, "baseline");
+  provider.head = 103;
+  const result = await monitor.check();
+  assert.equal(result.status, "degraded");
+  assert.equal(result.errorCode, "FOUR_REGISTRY_FINALIZED_BLOCK_CHANGED");
+  assert.deepEqual(reads, [3, 3]);
+  assert.equal((await monitor.getState()).cursor.anchorBlock, 100);
+  assert.deepEqual(delivered, []);
+});
+
+test("a queued event still receives a fresh post-write quorum before delivery", async (t) => {
+  const provider = new FakeBscProvider({ head: 102 });
+  provider.setSnapshot(100, [preset("1778027615723")]);
+  let changeAfterWrite = true;
+  const postWriteReads = [0, 0];
+  let written = false;
+  const { monitor, dataDir, delivered } = await fixture(t, provider, { dependencies: {
+    stateVerificationProviders: postWriteReads.map((_, index) => ({
+      sourceId: `post-commit-${index}.test`,
+      provider: providerFacade(provider, { getBlock: async number => {
+        if (written && Number(number) === 101) postWriteReads[index] += 1;
+        return provider.block(number);
+      } }),
+    })),
+    atomicWriteImpl: async (file, state) => {
+      await atomicWriteFourRegistryState(file, state);
+      if (changeAfterWrite && state.cursor.anchorBlock === 101 && state.outbox.length > 0) {
+        written = true;
+        provider.setBlockHash(101, blockHash(999));
+      }
+    },
+  } });
+  assert.equal((await monitor.check()).status, "baseline");
+  provider.head = 103;
+  addTagRegistered(provider);
+  const result = await monitor.check();
+  assert.equal(result.status, "degraded");
+  assert.equal(result.errorCode, "FOUR_REGISTRY_FINALIZED_BLOCK_CHANGED");
+  assert.deepEqual(postWriteReads, [1, 1], "both fixed sources are reread after the durable write");
+  assert.deepEqual(delivered, [], "a post-write fork must withhold the external sink");
+  const durable = await readFourRegistryState(path.join(dataDir, "four-registry-state.json"));
+  assert.equal(durable.outbox.length, 1, "the complete event remains durable and retryable");
+  assert.equal(durable.cursor.anchorBlockHash, blockHash(101));
+  changeAfterWrite = false;
+  provider.setBlockHash(101, blockHash(101));
+  assert.equal((await monitor.check()).status, "ok");
+  assert.equal(delivered.length, 1, "retry revalidates and delivers the original queued event once");
+  assert.equal((await monitor.getState()).outbox.length, 0);
+});
+
+test("the next check revalidates an empty checkpoint and recovers a later anchor fork", async (t) => {
+  const provider = new FakeBscProvider({ head: 102 });
+  provider.setSnapshot(100, [preset("1778027615723")]);
+  const reads = [[], []];
+  const { monitor, delivered } = await fixture(t, provider, { dependencies: {
+    stateVerificationProviders: reads.map((sourceReads, index) => ({
+      sourceId: `next-anchor-${index}.test`,
+      provider: providerFacade(provider, { getBlock: async number => {
+        sourceReads.push(Number(number));
+        return provider.block(number);
+      } }),
+    })),
+  } });
+  assert.equal((await monitor.check()).status, "baseline");
+  provider.head = 103;
+  assert.equal((await monitor.check()).status, "ok");
+  assert.equal((await monitor.getState()).outbox.length, 0);
+  reads.forEach(sourceReads => { sourceReads.length = 0; });
+  provider.head = 104;
+  provider.setBlockHash(101, blockHash(999));
+  const result = await monitor.check();
+  assert.equal(result.status, "recovered_reorg");
+  assert.deepEqual(reads.map(sourceReads => sourceReads[0]), [101, 101],
+    "a prior empty commit never substitutes cached headers for the next anchor quorum");
+  const state = await monitor.getState();
+  assert.equal(state.cursor.anchorBlock, 100);
+  assert.equal(state.reorgRecoveries.length, 1);
+  assert.equal(state.reorgRecoveries[0].oldAnchorBlockHash, blockHash(101));
+  assert.deepEqual(delivered, []);
+});
+
 test("a post-baseline inventory diff without a quorum Registry log fails closed without advancing", async (t) => {
   const existing = preset("1778027615723");
   const added = preset("1778027615732");
@@ -893,12 +1107,12 @@ test("Multicall3 keeps the default 10000-block catch-up scan within the fixed ph
   const delta = (host, lane) => (
     (after.hosts[host].lanes[lane]?.calls || 0) - (before.hosts[host].lanes[lane]?.calls || 0)
   );
-  assert.equal(delta("shared-budget.test", "state"), 12,
-    "the large catch-up step also revalidates all three pinned runtimes on both state sources");
+  assert.equal(delta("shared-budget.test", "state"), 11,
+    "all three pinned runtimes and the pre-commit quorum remain; only the empty delivery quorum is omitted");
   assert.equal(delta("shared-budget.test", "log"), 2, "combined Registry/Core logs share one range hash and one eth_getLogs call");
   assert.equal(
     after.hosts["shared-budget.test"].calls - before.hosts["shared-budget.test"].calls,
-    14,
+    13,
     "the complete default catch-up cycle remains below the hard rolling host budget even with runtime revalidation",
   );
   assert.equal(after.hosts["shared-budget.test"].rateLimited, 0);
@@ -1005,15 +1219,15 @@ test("stop cancels a saturated RPC budget wait without starting or committing th
   });
 
   assert.equal((await monitor.check()).status, "baseline");
-  // Move beyond the baseline's rolling window, then consume exactly twelve
-  // ordinary nine-call cycles. The next cycle is stopped before its first RPC.
+  // Move beyond the baseline's rolling window, then consume thirteen empty
+  // eight-call cycles. The next cycle saturates before its snapshot can finish.
   rpcNowMs = 60_001;
   sharedCallStarts.length = 0;
   provider.head = 100 + 20 + 2;
-  for (let cycle = 0; cycle < 12; cycle += 1) {
+  for (let cycle = 0; cycle < 13; cycle += 1) {
     assert.equal((await monitor.check()).status, "ok");
   }
-  assert.equal(sharedCallStarts.length, FOUR_REGISTRY_RPC_CALLS_PER_HOST_PER_MINUTE);
+  assert.equal(sharedCallStarts.length, FOUR_REGISTRY_RPC_CALLS_PER_HOST_PER_MINUTE - 4);
   const anchorBeforeBlockedCycle = (await monitor.getState()).cursor.anchorBlock;
   const active = monitor.check();
   await budgetWaitEntered;
@@ -1212,6 +1426,168 @@ test("policy/source suppression stays in the durable outbox and retries in lifec
   assert.equal(attempts.length, 3);
   assert.equal(attempts[0], attempts[1]);
   assert.equal(classifyFourRegistryDelivery({ status: "suppressed", reason: "policy_suppressed", terminal: true }), "retry");
+});
+
+function persistedPolicySuppression(event, at = new Date().toISOString()) {
+  return { status: "suppressed", reason: "policy_suppressed", disposition: "terminal",
+    terminal: true, persisted: true, eventId: event.eventKey, suppressedAt: at };
+}
+
+test("durable policy suppression retains evidence without claiming delivery and allows later scanning after restart", async (t) => {
+  const existing = preset("1778027615723");
+  const added = preset("1778027615732");
+  const provider = new FakeBscProvider({ head: 102 });
+  provider.setSnapshot(100, [existing]);
+  const { monitor, dataDir } = await fixture(t, provider, {
+    onEvent: async (event) => persistedPolicySuppression(event),
+  });
+  await monitor.check();
+  provider.head = 104;
+  provider.setSnapshot(101, [existing, added]);
+  provider.setSnapshot(102, [existing, added]);
+  addUpsert(provider, added, 101, 1, 0, txHash("8"));
+  addTokenCreated(provider, added, { blockNumber: 102, transactionIndex: 2, hash: txHash("9") });
+  const result = await monitor.check();
+  assert.equal(result.delivery.accepted, 2);
+  assert.equal(result.outboxPending, 0);
+  const state = await monitor.getState();
+  assert.equal(state.processedEventKeys.length, 2);
+  for (const record of Object.values(state.processedEvents)) {
+    assert.equal(record.deliveryStatus, "policy_suppressed");
+    assert.equal(record.canonicalOwnerDelivered, false);
+    assert.equal(record.duplicateOf, null);
+    assert.equal(record.policySuppression.eventId, record.eventKey);
+    assert.equal(record.event.payloadDigest, record.payloadDigest);
+    assert.ok(record.canonicalLog);
+  }
+  await monitor.stop();
+  provider.head = 105;
+  provider.setSnapshot(103, [existing, added]);
+  const restarted = createFourRegistryMonitor({ dataDir, fourRegistryConfirmations: 2 }, {
+    provider, ...verificationDependencies(provider), cancelPendingEvent: supersedeCancellation,
+    onEvent: async () => { throw new Error("a settled suppression must not be resent"); },
+    logger: { error() {} },
+  });
+  assert.equal((await restarted.check()).status, "ok");
+  assert.equal((await restarted.getState()).cursor.anchorBlock, 103);
+  assert.deepEqual((await restarted.getState()).processedEvents, state.processedEvents);
+  await restarted.stop();
+  const stateFile = path.join(dataDir, "four-registry-state.json");
+  const durable = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  for (const mutation of [
+    record => { delete record.policySuppression; },
+    record => { record.policySuppression.eventId = "other"; },
+    record => { record.policySuppression.persisted = false; },
+    record => { record.policySuppression.reason = "monitoring_source_disabled"; },
+    record => { record.canonicalOwnerDelivered = true; },
+  ]) {
+    const corrupted = structuredClone(durable);
+    mutation(corrupted.processedEvents[state.processedEventKeys[0]]);
+    await fs.writeFile(stateFile, JSON.stringify(corrupted));
+    await assert.rejects(readFourRegistryState(stateFile), { code: "FOUR_REGISTRY_STATE_INVALID" });
+  }
+});
+
+test("policy acknowledgement write failure leaves the complete event queued and restart retries the same receipt", async (t) => {
+  const existing = preset("1778027615723");
+  const added = preset("1778027615732");
+  const provider = new FakeBscProvider({ head: 102 });
+  provider.setSnapshot(100, [existing]);
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "four-policy-ack-failure-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  let writes = 0;
+  const attempts = [];
+  const deps = {
+    provider, ...verificationDependencies(provider), cancelPendingEvent: supersedeCancellation,
+    onEvent: async event => { attempts.push(event.eventKey); return persistedPolicySuppression(event); },
+    logger: { error() {} },
+  };
+  const first = createFourRegistryMonitor({ dataDir, fourRegistryConfirmations: 2 }, {
+    ...deps,
+    atomicWriteImpl: async (file, state) => {
+      if (++writes === 3) throw new Error("policy acknowledgement failed before commit");
+      return atomicWriteFourRegistryState(file, state);
+    },
+  });
+  await first.check();
+  provider.head = 103;
+  provider.setSnapshot(101, [existing, added]);
+  addUpsert(provider, added, 101, 1, 0, txHash("6"));
+  assert.equal((await first.check()).status, "degraded");
+  const durable = JSON.parse(await fs.readFile(path.join(dataDir, "four-registry-state.json"), "utf8"));
+  assert.equal(durable.outbox.length, 1);
+  assert.deepEqual(durable.processedEventKeys, []);
+  assert.equal(durable.outbox[0].eventKey, attempts[0]);
+  await first.stop();
+  const restarted = createFourRegistryMonitor({ dataDir, fourRegistryConfirmations: 2 }, deps);
+  assert.equal((await restarted.check()).status, "ok");
+  assert.deepEqual(attempts, [attempts[0], attempts[0]]);
+  const accepted = await restarted.getState();
+  assert.equal(accepted.outbox.length, 0);
+  assert.equal(accepted.processedEvents[attempts[0]].deliveryStatus, "policy_suppressed");
+  await restarted.stop();
+});
+
+test("policy acknowledgements require a durable exact-id terminal receipt and keep every incomplete receipt retryable", () => {
+  const eventKey = "four-registry:56:expected";
+  const receipt = persistedPolicySuppression({ eventKey }, "2026-10-19T00:00:00.000Z");
+  assert.equal(classifyFourRegistryDelivery(receipt, eventKey), "policy_suppressed");
+  for (const key of ["eventId", "persisted", "terminal", "disposition", "suppressedAt"]) {
+    const incomplete = { ...receipt };
+    delete incomplete[key];
+    assert.equal(classifyFourRegistryDelivery(incomplete, eventKey), "retry", key);
+  }
+  for (const change of [
+    { eventId: "other" }, { persisted: false }, { terminal: false }, { disposition: "retry" },
+    { suppressedAt: "invalid" }, { suppressedAt: "2026-10-19" },
+    { reason: "monitoring_source_disabled" }, { reason: "freshness_too_old" },
+    { reason: "blocked_event" }, { reason: "semantic_duplicate" },
+  ]) assert.equal(classifyFourRegistryDelivery({ ...receipt, ...change }, eventKey), "retry");
+});
+
+test("a policy-suppressed canonical proof is superseded on reorg without inventing a delivered correction", async (t) => {
+  const id = "1778027617202";
+  const disabled = preset(id, { active: false, createEnabled: true });
+  const enabled = preset(id, { active: true, createEnabled: true });
+  const provider = new FakeBscProvider({ head: 102 });
+  provider.setSnapshot(100, [disabled]);
+  const attempts = [];
+  const { monitor, dataDir } = await fixture(t, provider, {
+    chunkSize: 1,
+    onEvent: async (event) => {
+      attempts.push(structuredClone(event));
+      return persistedPolicySuppression(event, "2026-09-04T08:00:00.000Z");
+    },
+    cancelPendingEvent: supersedeCancellation,
+  });
+  await monitor.check();
+  const hash = txHash("9");
+  provider.head = 103;
+  provider.setSnapshot(101, [enabled]);
+  addActiveUpdate(provider, id, true, 101, 1, 0, hash);
+  const original = (await monitor.check()).events[0];
+  provider.logs = provider.logs.filter(log => log.transactionHash !== hash);
+  provider.receipts.delete(hash);
+  provider.transactions.delete(hash);
+  provider.setBlockHash(101, `0x${"c".repeat(64)}`);
+  addActiveUpdate(provider, id, true, 101, 1, 0, hash);
+  assert.equal((await monitor.check()).status, "recovered_reorg");
+  const current = (await monitor.check()).events[0];
+  assert.equal(current.eventKey, original.eventKey);
+  assert.equal(current.canonicalRevision, undefined);
+  assert.equal(current.canonicalSupersession.cancelledBlockHash, original.blockHash);
+  assert.equal(attempts.length, 2);
+  const owners = Object.values((await monitor.getState()).orphanedDeliveredEvents);
+  assert.equal(owners[0].processedEvent.deliveryStatus, "policy_suppressed");
+  assert.equal(owners[0].processedEvent.canonicalOwnerDelivered, false);
+  await monitor.stop();
+  const restarted = createFourRegistryMonitor({ dataDir, fourRegistryConfirmations: 2 }, {
+    provider, ...verificationDependencies(provider), cancelPendingEvent: supersedeCancellation,
+    onEvent: async () => { throw new Error("settled suppression must not be resent"); },
+    logger: { error() {} },
+  });
+  assert.equal((await restarted.check()).status, "ok");
+  await restarted.stop();
 });
 
 test("an acknowledgement fsync failure retries the identical eventKey after restart and accepts only canonical-owner semantic duplicate", async (t) => {
@@ -1452,6 +1828,72 @@ test("long outage catch-up is bounded into configured eth_getLogs chunks and doe
   assert.equal(delivered.length, 1);
   assert.equal(delivered[0].presetId, added.id);
   assert.ok(provider.logQueries.every((filter) => filter.toBlock - filter.fromBlock + 1 <= 5));
+});
+
+test("Sentio fixed log quorum scans contiguous 1000/1001 boundaries without losing either preset", async (t) => {
+  const existing = preset("1778027615723");
+  const atThousand = preset("1778027615732");
+  const atThousandOne = preset("1778027615733");
+  const provider = new FakeBscProvider({ head: 102 });
+  provider.setSnapshot(100, [existing]);
+  const queries = new Map([["bsc.rpc.sentio.xyz", []], ["log-boundary.test", []]]);
+  const logVerificationProviders = [...queries.keys()].map((sourceId) => ({
+    sourceId,
+    provider: providerFacade(provider, {
+      getLogs: async (filter) => {
+        assert.ok(filter.toBlock - filter.fromBlock + 1 <= 1_000);
+        queries.get(sourceId).push([filter.fromBlock, filter.toBlock]);
+        return provider.getLogs(filter);
+      },
+    }),
+  }));
+  const { monitor, delivered } = await fixture(t, provider, {
+    chunkSize: 10_000,
+    now: () => Date.parse("2026-09-04T09:00:00.000Z"),
+    dependencies: { logVerificationProviders },
+  });
+  assert.equal((await monitor.check()).status, "baseline");
+  provider.head = 1103;
+  provider.setSnapshot(1100, [existing, atThousand]);
+  provider.setSnapshot(1101, [existing, atThousand, atThousandOne]);
+  addUpsert(provider, atThousand, 1100, 1, 0, txHash("7"));
+  addUpsert(provider, atThousandOne, 1101, 1, 0, txHash("8"));
+
+  const first = await monitor.check();
+  assert.equal(first.status, "ok", first.error);
+  assert.equal(first.finalizedBlock.number, 1100);
+  assert.equal(first.hasMore, true);
+  assert.equal((await monitor.getState()).cursor.nextBlock, 1101);
+  assert.deepEqual(delivered.map((event) => event.presetId), [atThousand.id]);
+  const second = await monitor.check();
+  assert.equal(second.status, "ok", second.error);
+  assert.equal(second.finalizedBlock.number, 1101);
+  assert.equal(second.hasMore, false);
+  assert.equal((await monitor.getState()).cursor.nextBlock, 1102);
+  assert.deepEqual(delivered.map((event) => event.presetId), [atThousand.id, atThousandOne.id]);
+  for (const ranges of queries.values()) assert.deepEqual(ranges, [[101, 1100], [1101, 1101]]);
+  await monitor.check();
+  assert.equal(delivered.length, 2, "a repeated head cannot redeliver either boundary event");
+});
+
+test("Sentio state-only reader does not reduce a non-Sentio fixed log range", async (t) => {
+  const provider = new FakeBscProvider({ head: 102 });
+  provider.setSnapshot(100, [preset("1778027615723")]);
+  const { monitor } = await fixture(t, provider, {
+    dependencies: {
+      stateVerificationProviders: [
+        { sourceId: "bsc.rpc.sentio.xyz", provider: forwardingProvider(provider) },
+        { sourceId: "state-other.test", provider: forwardingProvider(provider) },
+      ],
+    },
+  });
+  assert.equal((await monitor.check()).status, "baseline");
+  provider.head = 1103;
+  const result = await monitor.check();
+  assert.equal(result.status, "ok");
+  assert.equal(result.finalizedBlock.number, 1101);
+  assert.equal(result.hasMore, false);
+  assert.ok(provider.logQueries.every((filter) => filter.fromBlock === 101 && filter.toBlock === 1101));
 });
 
 test("reorg recovery replays the canonical post-baseline capability and its true first TokenCreated", async (t) => {

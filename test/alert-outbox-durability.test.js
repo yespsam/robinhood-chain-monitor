@@ -184,6 +184,54 @@ test("a pre-rename fsync failure preserves the prior outbox and never delivers",
   assert.deepEqual(await outboxTemps(dataDir), []);
 });
 
+test("a mid-stream write failure preserves the prior outbox, cleans the partial temp and never delivers", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alert-outbox-durable-midstream-"));
+  const observed = observedFs(dataDir);
+  const original = `${JSON.stringify({ version: 2, events: { sentinel: {
+    id: "sentinel", status: "delivered", deliveredAt: new Date().toISOString(),
+    event: { text: "已经发送，必须原样保留 🚀" }, destinations: { telegram: { status: "delivered", messageId: 99 } },
+  } } })}\n`;
+  let telegramCalls = 0;
+  let writtenChunks = 0;
+  let partialBytes = 0;
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  await fs.writeFile(observed.target, original, { mode: 0o600 });
+  const open = observed.impl.open;
+  observed.impl.open = async (file, ...args) => {
+    const handle = await open(file, ...args);
+    if (String(file) === dataDir) return handle;
+    return {
+      ...handle,
+      writeFile: async (chunks, options) => {
+        assert.notEqual(typeof chunks, "string", "the outbox writer must supply an incremental iterable");
+        for await (const chunk of chunks) {
+          await handle.writeFile(chunk, options);
+          writtenChunks += 1;
+          if (writtenChunks === 8) {
+            partialBytes = (await fs.stat(file)).size;
+            throw new Error("injected mid-stream outbox write failure");
+          }
+        }
+        assert.fail("the fixture must reach the mid-stream failure point");
+      },
+    };
+  };
+  t.mock.method(globalThis, "fetch", async () => {
+    telegramCalls += 1;
+    throw new Error("delivery must not begin before durable enqueue");
+  });
+
+  await assert.rejects(sendAlerts(alertConfig(dataDir, observed.impl), platformEvent("midstream")),
+    /injected mid-stream outbox write failure/);
+  assert.equal(writtenChunks, 8);
+  assert.ok(partialBytes > 0, "failure must occur after actual bytes reach the temporary file");
+  assert.equal(await fs.readFile(observed.target, "utf8"), original);
+  assert.equal(observed.observations.fileSyncs, 0);
+  assert.equal(observed.observations.renames, 0);
+  assert.equal(telegramCalls, 0);
+  assert.deepEqual(await outboxTemps(dataDir), []);
+});
+
 test("a post-rename directory fsync failure is reported and a retry delivers exactly once", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alert-outbox-durable-postrename-"));
   const observed = observedFs(dataDir, { failDirectorySyncOnce: true });

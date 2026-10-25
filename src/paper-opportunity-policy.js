@@ -62,7 +62,7 @@ export function opportunityChart(candles, status, nowMs, {contiguousTail=false}=
   return { ready: true, rows, last: rows.at(-1), previous: rows.at(-2), diagnostics:{...diagnostics,code:'ready',issue:null} };
 }
 
-function shape(route, chart, price, evidenceExit = false) {
+export function structurePattern(route, chart, price, evidenceExit = false) {
   if (!chart.ready) return { ready: false, missing: chart.reason === '新鲜且足够的 K 线', reason: chart.reason };
   const { rows, last, previous } = chart;
   const baseline = median(rows.slice(-13,-1).map(r=>r.volume));
@@ -138,7 +138,7 @@ export function multiOpportunityEntry(base, options) {
     if (route.basis === 'ohlcv') {
       if (base.evidence.marketStage !== 'external') route.reasons.push('仅适用于已核实外盘');
       const created = stamp(token.creationTimestamp ?? token.createdAt);
-      route.pattern = shape(route,chart,base.token.price,evidenceExit);
+      route.pattern = structurePattern(route,chart,base.token.price,evidenceExit);
       if (reviewed) {
         route.pattern = reviewStructurePattern(route,chart,base.token.price,route.pattern,{evidenceExit});
         if (chart.ready) {
@@ -160,6 +160,10 @@ export function multiOpportunityEntry(base, options) {
     route.signalId = finite(route.signalAt) ? `${token.chain}:${token.address}:${route.id}:${route.signalAt}` : null;
     const row = confirmedPaperEntry(base,{ ...options, narrativeRecall:route.id==='narrative_recall'?narrativeRecall:null, route });
     if(evidenceExit && route.basis==='ohlcv') {
+      // Source quote time and strategy evaluation time are different clocks.
+      // The writer reconstructs exactly the closed window available here,
+      // even if it serializes the fill just after the next minute closes.
+      row.evidence.opportunity.evaluatedAt=new Date(nowMs).toISOString();
       row.evidence.opportunity.chartWindowPolicy=MAIN_CHART_WINDOW_VERSION;
       row.evidence.opportunity.chartWindow=structuredClone(chart.diagnostics);
     }

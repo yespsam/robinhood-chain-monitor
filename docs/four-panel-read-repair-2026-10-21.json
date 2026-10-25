@@ -1,0 +1,375 @@
+{
+  "version": "four_panel_read_repair_v1",
+  "checkedAt": "2026-10-21T07:51:25.227Z",
+  "status": "deployed_verified",
+  "report": "docs/four-panel-read-repair-2026-10-21.md",
+  "evidence": "docs/four-panel-read-repair-2026-10-21.json",
+  "rootCause": {
+    "file": "four-registry-state.json",
+    "bytes": 9411441,
+    "previousLimit": 8388608,
+    "reason": "valid_four_state_exceeded_uniform_panel_read_budget"
+  },
+  "changes": {
+    "fourSnapshotMaxBytes": 33554432,
+    "otherSnapshotMaxBytes": 8388608,
+    "readOnly": true,
+    "descriptorPinned": true,
+    "actualReadBounded": true,
+    "jsonCompletelyValidated": true,
+    "inPlaceChangesRejected": true,
+    "safeReadDiagnostics": true,
+    "cacheTtlMs": 15000,
+    "singleFlightPreserved": true,
+    "uiDisplaysCursorAndCheckpoint": true,
+    "liveHeadVerified": false
+  },
+  "tests": {
+    "command": "node --test test/dashboard*.test.js test/launch-update-coverage.test.js test/runtime-service-health.test.js test/deploy-health-check.test.js",
+    "passed": 179,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 6147.005625,
+    "focusedFinal": {
+      "passed": 17,
+      "failed": 0
+    },
+    "syntaxAndDiffCheckPassed": true,
+    "independentReadOnlyReview": "passed",
+    "servedUiProjectionPassed": true
+  },
+  "backup": "data/backups/four-panel-20261021-iaG3Dw",
+  "baseline": {
+    "at": "2026-10-21T07:46:01.280Z",
+    "status": 200,
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "exit": {
+      "running": true,
+      "error": null
+    },
+    "coverage": {
+      "readErrors": [
+        "four"
+      ],
+      "four": {
+        "adapterHealth": null,
+        "status": "unverified",
+        "checkpointAt": null,
+        "nextBlock": null,
+        "headLagBlocks": null,
+        "liveHeadVerified": false,
+        "scope": "BSC pinned OpenFour registry adapter"
+      }
+    },
+    "ledger": {
+      "tradeCount": 309,
+      "last": "1792567338823:308",
+      "prefix": "806a982c95c465aae2568fc44797e1e989752fabfcf92271b996ab7a20d1da20"
+    },
+    "sources": {
+      "src/launch-update-coverage.js": "c54182284657b6f14c0a87d95bbc3e278c029164165694bc983c9f75ed10cc6e",
+      "scripts/dashboard-server.js": "6550a20e9e3c4aefcb085f27ae10acd5e88200da498b76792f6c971bd7d7280b",
+      "src/four-registry-monitor.js": "d049dc75ae17a79019470f5d400a960c63c09aa29e023c97ad57af6c35a1ad9e",
+      "src/flap-quote-monitor.js": "7ebfe8aaa1f3944af54637e75cd38c0306b6b57b6c246ad73779e818b05364c3",
+      "src/rpc-host-coordinator.js": "d0f4da7fa7029c68ee66d993517bf211a2561840f0c020b0329cefb32c1687eb",
+      "src/paper-launch-evidence.js": "5dea83466d3734404bbad537e4086fb99a0d5a1886e86d634d87d2d0ef68590d"
+    }
+  },
+  "deployment": {
+    "at": "2026-10-21T07:49:23.367Z",
+    "oldPid": 97377,
+    "service": "com.qohfq.yesp-atm-dashboard",
+    "sources": {
+      "src/launch-update-coverage.js": "80c2cc4fc8db14455b023ca4df5b4b0ae4652875ff4f4d1880c37a7b7ffcb359",
+      "dashboard/app.js": "5b4da1fff914e575c737b0861db56b1d735accedd22ca6bd321e2215ae4d29be"
+    },
+    "ledger": {
+      "tradeCount": 309,
+      "lastTradeId": "1792567338823:308",
+      "tradePrefixHash": "806a982c95c465aae2568fc44797e1e989752fabfcf92271b996ab7a20d1da20",
+      "sealedLegacyHash": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36"
+    },
+    "four": {
+      "nextBlock": 128900799,
+      "anchorBlock": 128900798,
+      "anchorBlockHash": "0x8c820c2ad93d21c45f052104ba62a86c3c5985b5a95f5231f6a38815d05bf03b"
+    },
+    "flap": {
+      "nextBlock": 128900782,
+      "afterLogIndex": -1,
+      "anchorBlock": 128900781,
+      "anchorBlockHash": "0x1836fe7e83fe582037839ed031a7262f834e222bb241ed40cc5243f61d6d0ea4",
+      "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+    },
+    "heartbeats": {
+      "main": {
+        "version": 1,
+        "producer": "main",
+        "pid": 40494,
+        "startedAt": "2026-10-20T20:04:56.297Z",
+        "updatedAt": "2026-10-21T07:49:20.982Z",
+        "sequence": 1409
+      },
+      "bsc": {
+        "version": 1,
+        "producer": "bsc",
+        "pid": 40497,
+        "startedAt": "2026-10-20T20:04:56.720Z",
+        "updatedAt": "2026-10-21T07:49:20.890Z",
+        "sequence": 1377
+      },
+      "fomo": {
+        "version": 1,
+        "producer": "fomo",
+        "pid": 829,
+        "startedAt": "2026-10-20T13:26:36.401Z",
+        "updatedAt": "2026-10-21T07:49:12.258Z",
+        "sequence": 2205
+      }
+    },
+    "action": "SIGTERM_to_verified_dashboard_only;existing_launchd_KeepAlive_restart",
+    "newPid": 82464,
+    "newProcessStartedAt": "2026-10-21T07:49:28.000Z",
+    "exitMonitorVerifiedAt": "2026-10-21T07:50:31.100Z",
+    "scope": "dashboard_only; no main/BSC/GMGN-X restart"
+  },
+  "observations": [
+    {
+      "at": "2026-10-21T07:50:31.100Z",
+      "http": 200,
+      "pid": 82464,
+      "started": "Wed Oct 21 15:49:28 2026",
+      "mode": "paper",
+      "execution": false,
+      "signing": false,
+      "broadcast": false,
+      "exit": {
+        "running": true,
+        "lastError": null
+      },
+      "coverage": {
+        "checkedAt": "2026-10-21T07:50:27.372Z",
+        "readErrors": [],
+        "diagnostic": {
+          "status": "ok",
+          "bytes": 9411441,
+          "maxBytes": 33554432,
+          "modifiedAt": "2026-10-21T07:50:18.907Z"
+        },
+        "four": {
+          "adapterHealth": null,
+          "status": "checkpoint_only_unverified",
+          "checkpointAt": "2026-10-21T07:50:18.157Z",
+          "nextBlock": 128900963,
+          "headLagBlocks": null,
+          "liveHeadVerified": false,
+          "scope": "BSC pinned OpenFour registry adapter"
+        }
+      },
+      "fourSamples": [
+        {
+          "observedAt": "2026-10-21T07:50:27.014Z",
+          "nextBlock": 128900963,
+          "checkpointAt": "2026-10-21T07:50:18.157Z",
+          "anchorBlock": 128900962,
+          "anchorBlockHash": "0x8e39e8ca6e669d5a940f7bb5ec6312b99c91e3843d7db92ec7468e1c51f98790"
+        },
+        {
+          "observedAt": "2026-10-21T07:50:30.068Z",
+          "nextBlock": 128901007,
+          "checkpointAt": "2026-10-21T07:50:27.624Z",
+          "anchorBlock": 128901006,
+          "anchorBlockHash": "0x783f3cceae2f35e4aeb20bd94f68a94fd65adabf6518dbf895ee71f26f7bdb21"
+        }
+      ],
+      "matchedSnapshot": {
+        "observedAt": "2026-10-21T07:50:27.014Z",
+        "nextBlock": 128900963,
+        "checkpointAt": "2026-10-21T07:50:18.157Z",
+        "anchorBlock": 128900962,
+        "anchorBlockHash": "0x8e39e8ca6e669d5a940f7bb5ec6312b99c91e3843d7db92ec7468e1c51f98790"
+      },
+      "flap": {
+        "nextBlock": 128900963,
+        "checkedAt": "2026-10-21T07:50:11.020Z",
+        "version": "v5.25.0",
+        "health": {
+          "status": "healthy",
+          "consecutiveFailures": 0,
+          "lastSuccessAt": "2026-10-21T07:50:11.020Z",
+          "lastErrorAt": null,
+          "lastError": null,
+          "lastErrorCode": null,
+          "reorgCount": 0,
+          "lastReorgAt": null,
+          "lastAttemptAt": "2026-10-21T07:50:11.020Z",
+          "nextAttemptAt": null,
+          "failureClass": null
+        }
+      },
+      "servedAppHash": "5b4da1fff914e575c737b0861db56b1d735accedd22ca6bd321e2215ae4d29be",
+      "ledger": {
+        "tradeCount": 309,
+        "lastTradeId": "1792567338823:308",
+        "first309Hash": "806a982c95c465aae2568fc44797e1e989752fabfcf92271b996ab7a20d1da20",
+        "sealedLegacyHash": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36"
+      },
+      "heartbeats": {
+        "main": {
+          "version": 1,
+          "producer": "main",
+          "pid": 40494,
+          "startedAt": "2026-10-20T20:04:56.297Z",
+          "updatedAt": "2026-10-21T07:50:20.985Z",
+          "sequence": 1411
+        },
+        "bsc": {
+          "version": 1,
+          "producer": "bsc",
+          "pid": 40497,
+          "startedAt": "2026-10-20T20:04:56.720Z",
+          "updatedAt": "2026-10-21T07:50:21.214Z",
+          "sequence": 1379
+        },
+        "fomo": {
+          "version": 1,
+          "producer": "fomo",
+          "pid": 829,
+          "startedAt": "2026-10-20T13:26:36.401Z",
+          "updatedAt": "2026-10-21T07:50:12.258Z",
+          "sequence": 2207
+        }
+      }
+    },
+    {
+      "at": "2026-10-21T07:51:25.227Z",
+      "http": 200,
+      "pid": 82464,
+      "started": "Wed Oct 21 15:49:28 2026",
+      "mode": "paper",
+      "execution": false,
+      "signing": false,
+      "broadcast": false,
+      "exit": {
+        "running": true,
+        "lastError": null
+      },
+      "coverage": {
+        "checkedAt": "2026-10-21T07:51:20.582Z",
+        "readErrors": [],
+        "diagnostic": {
+          "status": "ok",
+          "bytes": 9411441,
+          "maxBytes": 33554432,
+          "modifiedAt": "2026-10-21T07:51:15.177Z"
+        },
+        "four": {
+          "adapterHealth": null,
+          "status": "checkpoint_only_unverified",
+          "checkpointAt": "2026-10-21T07:51:14.514Z",
+          "nextBlock": 128901106,
+          "headLagBlocks": null,
+          "liveHeadVerified": false,
+          "scope": "BSC pinned OpenFour registry adapter"
+        }
+      },
+      "fourSamples": [
+        {
+          "observedAt": "2026-10-21T07:51:20.753Z",
+          "nextBlock": 128901106,
+          "checkpointAt": "2026-10-21T07:51:14.514Z",
+          "anchorBlock": 128901105,
+          "anchorBlockHash": "0x945567d2369559268114e48d2a5c845848bf393a448b295a2905a06d7ee6b9ec"
+        },
+        {
+          "observedAt": "2026-10-21T07:51:24.810Z",
+          "nextBlock": 128901134,
+          "checkpointAt": "2026-10-21T07:51:23.774Z",
+          "anchorBlock": 128901133,
+          "anchorBlockHash": "0x28b4481770405bc4098f2537a57a42cc3b5cc97b76d25952f58e271582fcbe10"
+        }
+      ],
+      "matchedSnapshot": {
+        "observedAt": "2026-10-21T07:51:20.753Z",
+        "nextBlock": 128901106,
+        "checkpointAt": "2026-10-21T07:51:14.514Z",
+        "anchorBlock": 128901105,
+        "anchorBlockHash": "0x945567d2369559268114e48d2a5c845848bf393a448b295a2905a06d7ee6b9ec"
+      },
+      "flap": {
+        "nextBlock": 128901106,
+        "checkedAt": "2026-10-21T07:51:08.076Z",
+        "version": "v5.25.0",
+        "health": {
+          "status": "healthy",
+          "consecutiveFailures": 0,
+          "lastSuccessAt": "2026-10-21T07:51:08.076Z",
+          "lastErrorAt": null,
+          "lastError": null,
+          "lastErrorCode": null,
+          "reorgCount": 0,
+          "lastReorgAt": null,
+          "lastAttemptAt": "2026-10-21T07:51:08.076Z",
+          "nextAttemptAt": null,
+          "failureClass": null
+        }
+      },
+      "servedAppHash": "5b4da1fff914e575c737b0861db56b1d735accedd22ca6bd321e2215ae4d29be",
+      "ledger": {
+        "tradeCount": 309,
+        "lastTradeId": "1792567338823:308",
+        "first309Hash": "806a982c95c465aae2568fc44797e1e989752fabfcf92271b996ab7a20d1da20",
+        "sealedLegacyHash": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36"
+      },
+      "heartbeats": {
+        "main": {
+          "version": 1,
+          "producer": "main",
+          "pid": 40494,
+          "startedAt": "2026-10-20T20:04:56.297Z",
+          "updatedAt": "2026-10-21T07:51:20.990Z",
+          "sequence": 1413
+        },
+        "bsc": {
+          "version": 1,
+          "producer": "bsc",
+          "pid": 40497,
+          "startedAt": "2026-10-20T20:04:56.720Z",
+          "updatedAt": "2026-10-21T07:51:23.143Z",
+          "sequence": 1381
+        },
+        "fomo": {
+          "version": 1,
+          "producer": "fomo",
+          "pid": 829,
+          "startedAt": "2026-10-20T13:26:36.401Z",
+          "updatedAt": "2026-10-21T07:51:12.259Z",
+          "sequence": 2209
+        }
+      }
+    }
+  ],
+  "acceptance": {
+    "readErrorsCleared": true,
+    "cursorAndCheckpointMatchDiskSnapshots": true,
+    "panelCursorDelta": 143,
+    "flapCursorDelta": 143,
+    "cacheRefreshVerified": true,
+    "historyPrefixPreserved": true,
+    "sealedLegacyUnchanged": true,
+    "otherProducerPidsUnchanged": true,
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "rateLimitsAndDualSourceUnchanged": true
+  },
+  "remainingGaps": [
+    "本地游标和检查点可读取不证明独立实时链头、全天在线或零漏报。",
+    "Four/Robinhood公告与适配仍未验证；官方正文/X来源覆盖缺口不在本次修复范围。",
+    "32MiB仍为有界容量；将来超限会明确报size_limit，不截断或静默跳过。"
+  ]
+}

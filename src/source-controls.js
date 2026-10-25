@@ -1,9 +1,7 @@
 import { createHash } from "node:crypto";
 import { isMaterialFlapQuoteConfigurationChange, validFlapQuoteConfigurationLog } from "./flap-quote-generation.js";
 import { isCancelledFomoPlatformEvent } from "./monitor-source-policy.js";
-import { FLAP_PORTAL_VERIFIED_VERSION as FLAP_QUOTE_PORTAL_VERSION,
-  FLAP_PORTAL_VERIFIED_IMPLEMENTATION as FLAP_QUOTE_PORTAL_IMPLEMENTATION,
-  FLAP_PORTAL_VERIFIED_IMPLEMENTATION_HASH as FLAP_QUOTE_PORTAL_IMPLEMENTATION_HASH } from './flap-portal-pins.js';
+import { isVerifiedFlapPortalEvidenceIdentity } from './flap-portal-pins.js';
 import { claimsGeniusSource, isGeniusOfficialEvent } from "./genius-source-policy.js";
 import { isGmgnFlowEvent } from "./gmgn-flow-signal.js";
 import { isGiwaEvent } from "./giwa-monitor.js";
@@ -2154,9 +2152,7 @@ function validFlapDirectEvidence(value, source, asset) {
     && value.chainId === FLAP_BSC_CHAIN_ID
     && value.portal === FLAP_BSC_QUOTE_PORTAL
     && value.portalRuntimeCodeHash === FLAP_QUOTE_PORTAL_RUNTIME_HASH
-    && value.portalVersion === FLAP_QUOTE_PORTAL_VERSION
-    && value.portalImplementation === FLAP_QUOTE_PORTAL_IMPLEMENTATION
-    && value.portalImplementationCodeHash === FLAP_QUOTE_PORTAL_IMPLEMENTATION_HASH
+    && isVerifiedFlapPortalEvidenceIdentity(value)
     && value.eventSignature === FLAP_QUOTE_CONFIGURATION_SIGNATURE
     && value.topic0 === FLAP_QUOTE_CONFIGURATION_TOPIC
     && value.logIndex === source.logIndex

@@ -11,6 +11,12 @@ import {
   FLAP_ERC20_INTERFACE,
   FLAP_MRNAB_ADDRESS,
   FLAP_PORTAL_ADDRESS,
+  FLAP_PORTAL_HISTORICAL_V5231_VERSION,
+  FLAP_PORTAL_HISTORICAL_V5231_IMPLEMENTATION,
+  FLAP_PORTAL_HISTORICAL_V5231_IMPLEMENTATION_HASH,
+  FLAP_PORTAL_HISTORICAL_V524_VERSION,
+  FLAP_PORTAL_HISTORICAL_V524_IMPLEMENTATION,
+  FLAP_PORTAL_HISTORICAL_V524_IMPLEMENTATION_HASH,
   FLAP_PORTAL_IMPLEMENTATION_SLOT,
   FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION,
   FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH,
@@ -19,6 +25,7 @@ import {
   FLAP_PORTAL_UPGRADE_BLOCK,
   FLAP_PORTAL_UPGRADE_BLOCK_HASH,
   FLAP_PORTAL_UPGRADE_TRANSACTION,
+  FLAP_PORTAL_UPGRADE_VERSION,
   FLAP_PORTAL_VERIFIED_IMPLEMENTATION,
   FLAP_PORTAL_VERIFIED_IMPLEMENTATION_HASH,
   FLAP_PORTAL_VERIFIED_VERSION,
@@ -51,6 +58,29 @@ const SQQQB_LOG_DATA = "0x00000000000000000000000025e572b466d152604d9e6c3e53b432
 
 const lower = (value) => String(value).toLowerCase();
 const clone = (value) => structuredClone(value);
+const PRODUCTION_FLAP_BLOCK_OFFSET = 128_914_179;
+
+// The real source gate verifies the implementation's supported block window.
+// Keep tiny fake-provider coordinates local to the monitor fixture, but move
+// every coordinate together when testing the production alert/cancellation
+// boundary. No production identity validation is stubbed or relaxed.
+function productionFlapCoordinates(value) {
+  const result = clone(value);
+  const visited = new WeakSet();
+  const blockKeys = new Set(["blockNumber", "verifiedAtBlock", "configurationVerifiedAtBlock",
+    "metadataVerifiedAtBlock", "finalizedHead", "originalBlockNumber", "nextBlockAtRecovery", "eventBlock"]);
+  function shift(record, parentKey = "") {
+    if (!record || typeof record !== "object" || visited.has(record)) return;
+    visited.add(record);
+    for (const [key, item] of Object.entries(record)) {
+      if (Number.isSafeInteger(item) && (blockKeys.has(key) || (parentKey === "blockProof" && key === "number"))) {
+        record[key] = item + PRODUCTION_FLAP_BLOCK_OFFSET;
+      } else if (item && typeof item === "object") shift(item, key);
+    }
+  }
+  shift(result);
+  return result;
+}
 
 class FakeBscProvider {
   constructor({ head = 100 } = {}) {
@@ -305,6 +335,8 @@ class FakeLogRpcEndpoint {
 
   getNetwork(...args) { return this.chain.getNetwork(...args); }
 
+  getBlockNumber(...args) { return this.chain.getBlockNumber(...args); }
+
   getBlock(...args) { return this.chain.getBlock(...args); }
 
   getCode(...args) { return this.chain.getCode(...args); }
@@ -375,6 +407,8 @@ async function harness(t, {
   cancelPendingFlapQuoteActivationImpl,
   onFlapQuotePoolLifecycle,
   atomicWriteImpl,
+  headObservationFile,
+  writeHeadObservation,
   dataDir,
   logVerificationProviders,
   stateVerificationProviders,
@@ -436,6 +470,8 @@ async function harness(t, {
       };
     }),
     atomicWriteImpl,
+    headObservationFile,
+    writeHeadObservation,
     now,
     random,
     logger: { error() {} },
@@ -569,17 +605,25 @@ test("runtime wiring owns and destroys one fixed provider per configured Flap lo
   assert.match(envExample, new RegExp(`FLAP_QUOTE_STATE_RPC_URLS=${stateDefaults.replaceAll(".", "\\.")}`));
 });
 
-test("production Portal pins carry the exact independently reproduced v5.24.0 upgrade evidence", () => {
-  assert.equal(FLAP_PORTAL_VERIFIED_VERSION, "v5.24.0");
-  assert.equal(FLAP_PORTAL_VERIFIED_IMPLEMENTATION, "0x27a0f9Da7F5BEAd616fe0bf02bf0c793bece4e20");
+test("production Portal pins carry the two-source v5.26.0 identity", () => {
+  assert.equal(FLAP_PORTAL_VERIFIED_VERSION, "v5.26.0");
+  assert.equal(FLAP_PORTAL_VERIFIED_IMPLEMENTATION, "0x7a94f37b61a82c395f9812CF266b444783cC5e8c");
   assert.equal(
     FLAP_PORTAL_VERIFIED_IMPLEMENTATION_HASH,
-    "0xb191694f7248773f714234aeb150149a2b9af5d1ab483a53d31c19ec3132b230",
+    "0x3db27f98826706ac5ddedb919594d4670151874482dff23e31d2186858635194",
   );
-  assert.equal(FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION, "v5.23.1");
-  assert.equal(FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION, "0xAb8Ec926b6e113c2212aF152b086eA62d1FDced9");
+  assert.equal(FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION, "v5.25.0");
+  assert.equal(FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION, "0xE13227370996f892a56d2Ff4a30f6026887B48Fb");
   assert.equal(FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH,
+    "0xf8d56fe09f2ec5e3eeaabdbfeeb0faf55e4ed8996a55bc1b69a78e62dbb792e4");
+});
+
+test("v5.23.1 identity and v5.24.0 upgrade evidence remain historical and unchanged", () => {
+  assert.equal(FLAP_PORTAL_HISTORICAL_V5231_VERSION, "v5.23.1");
+  assert.equal(FLAP_PORTAL_HISTORICAL_V5231_IMPLEMENTATION, "0xAb8Ec926b6e113c2212aF152b086eA62d1FDced9");
+  assert.equal(FLAP_PORTAL_HISTORICAL_V5231_IMPLEMENTATION_HASH,
     "0x78653cdd7296d940ae531c86bc6700ae163f1f9dec002c2af3143c9ae6696a15");
+  assert.equal(FLAP_PORTAL_UPGRADE_VERSION, "v5.24.0");
   assert.equal(FLAP_PORTAL_UPGRADE_BLOCK, 123_307_497);
   assert.equal(
     FLAP_PORTAL_UPGRADE_BLOCK_HASH,
@@ -676,14 +720,15 @@ test("production defaults checkpoint contiguous ranges within a bounded 100k-blo
   }
 });
 
-test('indexed archive readers cap oversized configuration at 10k pages without skipping blocks',async t=>{
+test('indexed archive readers checkpoint their common 1k cap without skipping blocks',async t=>{
  const provider=new FakeBscProvider();
  const readers=['https://bsc.rpc.sentio.xyz','https://public-bsc.nownodes.io'].map(url=>new FakeLogRpcEndpoint(url,provider));
  const f=await harness(t,{provider,logVerificationProviders:readers.map(r=>r.descriptor()),
   config:{flapQuoteEventChunkSize:20001,flapQuoteMaxBlocksPerCycle:20001,flapQuoteLogMaxBlockSpan:50000,flapQuoteLogRequestIntervalMs:0}});
  await f.monitor.check();provider.head=20101;
  const result=await f.monitor.check();assert.equal(result.status,'healthy');
- for(const r of readers)assert.deepEqual(r.calls.filter(c=>c.method==='eth_getLogs').map(c=>[Number(c.params[0].fromBlock),Number(c.params[0].toBlock)]).sort((a,b)=>a[0]-b[0]),[[99,10098],[10099,20098],[20099,20099]]);
+ const expected = Array.from({length:21},(_,i)=>[99+i*1000,Math.min(20099,1098+i*1000)]);
+ for(const r of readers)assert.deepEqual(r.calls.filter(c=>c.method==='eth_getLogs').map(c=>[Number(c.params[0].fromBlock),Number(c.params[0].toBlock)]).sort((a,b)=>a[0]-b[0]),expected);
  assert.equal(f.monitor.state().cursor.nextBlock,20100);
 });
 
@@ -850,7 +895,7 @@ test("empty versus non-empty independent log results freeze the durable cursor",
   assert.equal(fixture.monitor.state().processedEventKeys.length, 0);
 });
 
-test("fixed log readers split wide catch-up ranges into bounded concurrent pages", async (t) => {
+test("fixed log readers checkpoint wide catch-up ranges as common bounded pages", async (t) => {
   const provider = new FakeBscProvider();
   const firstLogs = new FakeLogRpcEndpoint("https://paged-log-a.test", provider);
   const secondLogs = new FakeLogRpcEndpoint("https://paged-log-b.test", provider);
@@ -893,7 +938,7 @@ test('public archive reader pages at 512 blocks while preserving the full-range 
  await fixture.monitor.check();const from=fixture.monitor.state().cursor.nextBlock;provider.head=from+1101;
  const result=await fixture.monitor.check();assert.equal(result.status,'healthy');
  const ranges=endpoint=>endpoint.calls.filter(c=>c.method==='eth_getLogs').map(c=>[Number(c.params[0].fromBlock),Number(c.params[0].toBlock)]).sort((a,b)=>a[0]-b[0]);
- assert.deepEqual(ranges(first),[[from,from+1099]]);
+ assert.deepEqual(ranges(first),[[from,from+511],[from+512,from+1023],[from+1024,from+1099]]);
  assert.deepEqual(ranges(archive),[[from,from+511],[from+512,from+1023],[from+1024,from+1099]]);
  assert.equal(fixture.monitor.state().cursor.nextBlock,from+1100);
 });
@@ -908,7 +953,135 @@ test('BlockRazor archive paging respects its 25-block cap and agrees with the la
  assert.equal(result.status,'healthy');
  const ranges=p=>p.calls.filter(c=>c.method==='eth_getLogs').map(c=>[Number(c.params[0].fromBlock),Number(c.params[0].toBlock)]).sort((a,b)=>a[0]-b[0]);
  assert.deepEqual(ranges(first),[[99,123],[124,148],[149,173],[174,178]]);
- assert.deepEqual(ranges(second),[[99,178]]);assert.equal(f.monitor.state().cursor.nextBlock,179);
+ assert.deepEqual(ranges(second),[[99,123],[124,148],[149,173],[174,178]]);assert.equal(f.monitor.state().cursor.nextBlock,179);
+});
+
+test("Sentio's 1000/1001 block boundary is bounded before issuing either source's request", async (t) => {
+  for (const blocks of [1000, 1001]) {
+    const provider = new FakeBscProvider();
+    const readers = ["https://bsc.rpc.sentio.xyz", "https://public-bsc.nownodes.io"]
+      .map((url) => new FakeLogRpcEndpoint(url, provider, {
+        result: async (method, params) => {
+          if (method === "eth_getLogs") {
+            assert.ok(Number(params[0].toBlock) - Number(params[0].fromBlock) + 1 <= 1000);
+          }
+          return provider.send(method, params);
+        },
+      }));
+    const fixture = await harness(t, {
+      provider, logVerificationProviders: readers.map((reader) => reader.descriptor()),
+      config: { flapQuoteEventChunkSize: undefined, flapQuoteMaxBlocksPerCycle: undefined,
+        flapQuoteLogMaxBlockSpan: undefined, flapQuoteLogRequestIntervalMs: 0 },
+    });
+    await fixture.monitor.check();
+    provider.head = 98 + blocks + CONFIRMATIONS;
+    assert.equal((await fixture.monitor.check()).status, "healthy");
+    const expected = blocks === 1000 ? [[99, 1098]] : [[99, 1098], [1099, 1099]];
+    for (const reader of readers) {
+      assert.deepEqual(reader.calls.filter(({method}) => method === "eth_getLogs")
+        .map(({params}) => [Number(params[0].fromBlock), Number(params[0].toBlock)]), expected);
+    }
+    assert.equal(fixture.monitor.state().cursor.nextBlock, 99 + blocks);
+  }
+});
+
+for (const failure of ["429", "timeout", "missing"]) {
+  test(`default indexed paging persists only the agreed prefix before ${failure}, and restart resumes it`, async (t) => {
+    const provider = new FakeBscProvider();
+    let nowMs = Date.parse("2026-09-03T07:00:00Z");
+    let fail = true;
+    const first = new FakeLogRpcEndpoint("https://bsc.rpc.sentio.xyz", provider);
+    const second = new FakeLogRpcEndpoint("https://public-bsc.nownodes.io", provider, {
+      result: async (method, params) => {
+        if (method === "eth_getLogs" && Number(params[0].fromBlock) === 1099 && fail) {
+          if (failure === "missing") return null;
+          throw Object.assign(new Error(failure === "429" ? "HTTP 429 public eth_getLogs is limited to 1000 blocks" : "RPC timeout"), {
+            code: failure === "429" ? "SERVER_ERROR" : "TIMEOUT",
+            rpcFailureScope: failure === "429" ? "host" : "method",
+            rpcOperation: "eth_getLogs",
+            ...(failure === "429" ? {retryAfterMs: 60_000} : {}),
+          });
+        }
+        return provider.send(method, params);
+      },
+    });
+    const config = { flapQuoteEventChunkSize: undefined, flapQuoteMaxBlocksPerCycle: undefined,
+      flapQuoteLogMaxBlockSpan: undefined, flapQuoteLogRequestIntervalMs: 0,
+      flapQuoteBackoffBaseMs: 3000, flapQuoteBackoffMaxMs: 60_000 };
+    const fixture = await harness(t, {
+      provider, now: () => nowMs, config,
+      logVerificationProviders: [first.descriptor(), second.descriptor()],
+    });
+    await fixture.monitor.check();
+    const event = addAssetEvent(provider, {blockNumber: 150});
+    provider.head = 2101;
+    const interrupted = await fixture.monitor.check();
+    assert.equal(interrupted.errorCode, failure === "missing"
+      ? "FLAP_QUOTE_LOG_BOUNDARY_INVALID" : "FLAP_QUOTE_GET_LOGS_FAILED");
+    assert.equal(fixture.monitor.state().cursor.nextBlock, 1099);
+    assert.equal(fixture.monitor.state().cursor.anchorBlock, 1098);
+    assert.equal(fixture.alerts.length, 0, "activation cannot precede complete catch-up");
+    assert.equal(fixture.monitor.state().pendingEnableCandidates[lower(FLAP_MRNAB_ADDRESS)].eventKey,
+      flapQuoteEventKey(event));
+    const persisted = JSON.parse(await fs.readFile(fixture.monitor.stateFile, "utf8"));
+    assert.equal(persisted.cursor.nextBlock, 1099);
+    for (const reader of [first, second]) {
+      assert.deepEqual(reader.calls.filter(({method}) => method === "eth_getLogs")
+        .map(({params}) => [Number(params[0].fromBlock), Number(params[0].toBlock)]),
+      [[99, 1098], [1099, 2098]], "no new suffix starts after the failed quorum");
+    }
+    if (failure === "429") {
+      assert.equal(interrupted.rpcFailureScope, "host");
+      assert.equal(interrupted.nextAttemptAt, "2026-09-03T07:01:00.000Z");
+    }
+    await fixture.monitor.stop();
+    fail = false;
+    const callsBeforeRestart = [first.calls.length, second.calls.length];
+    const resumed = await harness(t, {
+      provider, now: () => nowMs, config, dataDir: fixture.dataDir,
+      logVerificationProviders: [first.descriptor(), second.descriptor()],
+    });
+    assert.equal((await resumed.monitor.check()).status, "backoff");
+    assert.deepEqual([first.calls.length, second.calls.length], callsBeforeRestart);
+    nowMs = Date.parse(interrupted.nextAttemptAt);
+    const result = await resumed.monitor.check();
+    assert.equal(result.status, "healthy");
+    assert.equal(result.delivered, 1);
+    assert.equal(resumed.monitor.state().cursor.nextBlock, 2100);
+    assert.equal(resumed.alerts[0].eventKey, flapQuoteEventKey(event));
+    for (const [index, reader] of [first, second].entries()) {
+      assert.deepEqual(reader.calls.slice(callsBeforeRestart[index]).filter(({method}) => method === "eth_getLogs")
+        .map(({params}) => [Number(params[0].fromBlock), Number(params[0].toBlock)]),
+      [[1099, 2098], [2099, 2099]], "restart does not replay the committed prefix or skip the failed segment");
+    }
+    assert.equal((await resumed.monitor.check()).delivered, 0);
+  });
+}
+
+test("public log pacing remains in force across durable segments and following cycles", async (t) => {
+  const provider = new FakeBscProvider();
+  const starts = new Map();
+  const readers = ["https://bsc.rpc.sentio.xyz", "https://public-bsc.nownodes.io"]
+    .map((url) => new FakeLogRpcEndpoint(url, provider, {
+      result: async (method, params) => {
+        if (method === "eth_getLogs") starts.set(url, [...(starts.get(url) || []), Date.now()]);
+        return provider.send(method, params);
+      },
+    }));
+  const fixture = await harness(t, {
+    provider, logVerificationProviders: readers.map((reader) => reader.descriptor()),
+    config: {flapQuoteEventChunkSize: 1, flapQuoteMaxBlocksPerCycle: 2, flapQuoteLogRequestIntervalMs: 60},
+  });
+  await fixture.monitor.check();
+  provider.head = 102;
+  assert.equal((await fixture.monitor.check()).status, "healthy");
+  provider.head = 103;
+  assert.equal((await fixture.monitor.check()).status, "healthy");
+  for (const values of starts.values()) {
+    assert.equal(values.length, 3);
+    assert.ok(values[1] - values[0] >= 55, `adjacent segments must remain paced: ${values}`);
+    assert.ok(values[2] - values[1] >= 55, `cycle boundary must remain paced: ${values}`);
+  }
 });
 
 test("a later page rate limit preserves earlier page commits and resumes exactly once after restart", async (t) => {
@@ -1041,6 +1214,33 @@ test("log and state lanes must agree on the finalized fork before evidence can b
   assert.equal(fixture.monitor.state().processedEventKeys.length, 0);
   assert.equal(fixture.alerts.length, 0);
   assert.equal(logChain.getLogsCalls.length, 0, "fork mismatch freezes before log scanning");
+});
+
+test("finalized log-lane cooldown is unavailable, not evidence of a fork mismatch", async (t) => {
+  const provider = new FakeBscProvider();
+  const first = new FakeLogRpcEndpoint("https://lane-cooldown-a.test", provider);
+  const second = new FakeLogRpcEndpoint("https://lane-cooldown-b.test", provider);
+  const fixture = await harness(t, {
+    provider,
+    logVerificationProviders: [first.descriptor(), second.descriptor()],
+    config: { flapQuoteBackoffBaseMs: 3_000, flapQuoteBackoffMaxMs: 60_000 },
+  });
+  assert.equal((await fixture.monitor.check()).status, "baseline");
+  const before = fixture.monitor.state();
+  provider.head = 101;
+  first.send = async () => {
+    throw Object.assign(new Error("shared RPC coordinator: host/method cooling down"), { retryAfterMs: 44_000 });
+  };
+
+  const result = await fixture.monitor.check();
+  assert.equal(result.errorCode, "FLAP_QUOTE_FINALIZED_LANE_UNAVAILABLE");
+  assert.doesNotMatch(result.error, /disagree|mismatch/i);
+  assert.equal(result.nextAttemptAt, "2026-09-03T07:00:44.000Z");
+  assert.deepEqual(fixture.monitor.state().cursor, before.cursor);
+  assert.deepEqual(fixture.monitor.state().identity, before.identity);
+  assert.deepEqual(fixture.monitor.state().processedEventKeys, before.processedEventKeys);
+  assert.equal(fixture.alerts.length, 0);
+  assert.equal(provider.getLogsCalls.length, 0);
 });
 
 test("historical state is bound to the parent hash of the verified event block", async (t) => {
@@ -1474,7 +1674,7 @@ test("the direct Portal event passes the strict focus3 monitoring-source gate", 
   addAssetEvent(fixture.provider, { blockNumber: 99 });
   fixture.provider.head = 101;
   await fixture.monitor.check();
-  const event = clone(fixture.alerts[0]);
+  const event = productionFlapCoordinates(fixture.alerts[0]);
   Object.assign(event.onchainProof, {
     portalRuntimeCodeHash: FLAP_PORTAL_RUNTIME_HASH,
     portalVersion: FLAP_PORTAL_VERIFIED_VERSION,
@@ -1516,7 +1716,7 @@ test("a fresh direct Portal event reaches the real durable T1 Telegram pipeline"
       webhookUrl: "",
     },
     sendAlertsImpl: async (runtimeConfig, directEvent) => {
-      const event = clone(directEvent);
+      const event = productionFlapCoordinates(directEvent);
       Object.assign(event.onchainProof, {
         portalRuntimeCodeHash: FLAP_PORTAL_RUNTIME_HASH,
         portalVersion: FLAP_PORTAL_VERIFIED_VERSION,
@@ -1574,7 +1774,7 @@ test("a stale direct Portal enable reaches the real durable T2 recovery pipeline
   t.mock.method(console, "info", () => {});
   const provider = new FakeBscProvider();
   const realSender = async (runtimeConfig, directEvent) => {
-    const event = clone(directEvent);
+    const event = productionFlapCoordinates(directEvent);
     Object.assign(event.onchainProof, {
       portalRuntimeCodeHash: FLAP_PORTAL_RUNTIME_HASH,
       portalVersion: FLAP_PORTAL_VERIFIED_VERSION,
@@ -1698,7 +1898,7 @@ test("archive-state loss produces a truthful first-observed T2 through the real 
     webhookUrl: "",
   };
   const realSender = async (alertConfig, directEvent) => {
-    const event = clone(directEvent);
+    const event = productionFlapCoordinates(directEvent);
     Object.assign(event.onchainProof, {
       portalRuntimeCodeHash: FLAP_PORTAL_RUNTIME_HASH,
       portalVersion: FLAP_PORTAL_VERIFIED_VERSION,
@@ -1737,7 +1937,7 @@ test("archive-state loss produces a truthful first-observed T2 through the real 
   assert.equal(producedEvent.strong, false);
   assert.equal(producedEvent.priorTransitionProof, "unavailable");
   assert.deepEqual(producedEvent.priorStateRead, {
-    blockNumber: 98,
+    blockNumber: PRODUCTION_FLAP_BLOCK_OFFSET + 98,
     method: "getQuoteTokenConfiguration(address)",
     requiredIndependentReaders: 2,
     successfulReaders: 0,
@@ -2093,7 +2293,7 @@ test("a queued fresh alert holds the cursor, then recovers once as T2 after the 
     webhookUrl: "",
   };
   const realSender = async (alertConfig, directEvent) => {
-    const event = clone(directEvent);
+    const event = productionFlapCoordinates(directEvent);
     Object.assign(event.onchainProof, {
       portalRuntimeCodeHash: FLAP_PORTAL_RUNTIME_HASH,
       portalVersion: FLAP_PORTAL_VERIFIED_VERSION,
@@ -2959,7 +3159,7 @@ test("a real queued Portal alert is terminally cancelled before disable cursor c
     webhookUrl: "",
   };
   const realSender = async (alertConfig, directEvent) => {
-    const event = clone(directEvent);
+    const event = productionFlapCoordinates(directEvent);
     Object.assign(event.onchainProof, {
       portalRuntimeCodeHash: FLAP_PORTAL_RUNTIME_HASH,
       portalVersion: FLAP_PORTAL_VERIFIED_VERSION,
@@ -2974,7 +3174,7 @@ test("a real queued Portal alert is terminally cancelled before disable cursor c
     dataDir,
     config: runtimeConfig,
     sendAlertsImpl: realSender,
-    cancelPendingFlapQuoteActivationImpl: cancelPendingFlapQuoteActivation,
+    cancelPendingFlapQuoteActivationImpl: (alertConfig, cancellation) => cancelPendingFlapQuoteActivation(alertConfig, productionFlapCoordinates(cancellation)),
   });
   await fixture.monitor.check();
   const enable = addAssetEvent(provider, { blockNumber: 99 });
@@ -3048,7 +3248,7 @@ test("a reorged disable proof reactivates its cancelled Portal alert exactly onc
     webhookUrl: "",
   };
   const realSender = async (alertConfig, directEvent) => {
-    const event = clone(directEvent);
+    const event = productionFlapCoordinates(directEvent);
     Object.assign(event.onchainProof, {
       portalRuntimeCodeHash: FLAP_PORTAL_RUNTIME_HASH,
       portalVersion: FLAP_PORTAL_VERIFIED_VERSION,
@@ -3065,7 +3265,7 @@ test("a reorged disable proof reactivates its cancelled Portal alert exactly onc
     config: runtimeConfig,
     sendAlertsImpl: realSender,
     cancelPendingFlapQuoteActivationImpl: async (alertConfig, cancellation) => {
-      const result = await cancelPendingFlapQuoteActivation(alertConfig, cancellation);
+      const result = await cancelPendingFlapQuoteActivation(alertConfig, productionFlapCoordinates(cancellation));
       if (!disableProofReorged) {
         disableProofReorged = true;
         provider.setBlockHash(cancellation.blockNumber, id("cancelled-disable-reorged-after-fsync"));
@@ -3162,7 +3362,7 @@ test("a crash after cancellation fsync can revive the revalidated Portal activat
     webhookUrl: "",
   };
   const realSender = async (alertConfig, directEvent) => {
-    const event = clone(directEvent);
+    const event = productionFlapCoordinates(directEvent);
     Object.assign(event.onchainProof, {
       portalRuntimeCodeHash: FLAP_PORTAL_RUNTIME_HASH,
       portalVersion: FLAP_PORTAL_VERIFIED_VERSION,
@@ -3194,7 +3394,7 @@ test("a crash after cancellation fsync can revive the revalidated Portal activat
     logVerificationProviders: readers.map((reader) => reader.descriptor()),
     sendAlertsImpl: realSender,
     cancelPendingFlapQuoteActivationImpl: async (alertConfig, cancellation) => {
-      const result = await cancelPendingFlapQuoteActivation(alertConfig, cancellation);
+      const result = await cancelPendingFlapQuoteActivation(alertConfig, productionFlapCoordinates(cancellation));
       crashAfterCancellation = true;
       return result;
     },
@@ -3240,7 +3440,7 @@ test("a crash after cancellation fsync can revive the revalidated Portal activat
     dataDir,
     config: runtimeConfig,
     sendAlertsImpl: realSender,
-    cancelPendingFlapQuoteActivationImpl: cancelPendingFlapQuoteActivation,
+    cancelPendingFlapQuoteActivationImpl: (alertConfig, cancellation) => cancelPendingFlapQuoteActivation(alertConfig, productionFlapCoordinates(cancellation)),
   });
   const recovered = await restarted.monitor.check();
   assert.equal(recovered.status, "healthy");
@@ -3792,7 +3992,7 @@ test("persisted Portal identity pins cannot be forged or carried across an upgra
   assert.equal(provider.getLogsCalls.length, 0);
 });
 
-test("the exact v5.23.1 state migrates only after v5.24.0 quorum verification and resumes its cursor", async (t) => {
+test("the exact v5.25.0 state migrates only after v5.26.0 quorum verification and resumes its cursor", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-quote-pin-migration-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
   const provider = new FakeBscProvider();
@@ -3818,6 +4018,13 @@ test("the exact v5.23.1 state migrates only after v5.24.0 quorum verification an
   legacy.identity.version = FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION;
   legacy.identity.implementation = FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION;
   legacy.identity.implementationCodeHash = FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH;
+  // A historical audit remains proof of its original Portal identity. The
+  // root identity migration must never rewrite it to the new implementation.
+  Object.assign(legacy.auditTrail[0].evidence, {
+    portalVersion: FLAP_PORTAL_HISTORICAL_V5231_VERSION,
+    portalImplementation: FLAP_PORTAL_HISTORICAL_V5231_IMPLEMENTATION,
+    portalImplementationCodeHash: FLAP_PORTAL_HISTORICAL_V5231_IMPLEMENTATION_HASH,
+  });
   legacy._health = {
     ...legacy._health,
     status: "degraded",
@@ -3861,6 +4068,11 @@ test("the exact v5.23.1 state migrates only after v5.24.0 quorum verification an
         selector === FLAP_PORTAL_INTERFACE.getFunction("version").selector && blockTag === 101
       ));
       assert.ok(versionReads.length >= 2, "both fixed state readers verify the new identity before any migration write");
+      if (migrationWrites === 1) {
+        for (const [key, original] of Object.entries(preserved)) {
+          assert.deepEqual(value[key], original, `migration preserves ${key} before normal scanning resumes`);
+        }
+      }
       await atomicWriteFlapQuoteState(file, value);
     },
   });
@@ -3886,6 +4098,65 @@ test("the exact v5.23.1 state migrates only after v5.24.0 quorum verification an
   const firstMigrationLogRead = provider.getLogsCalls.slice(callsBeforeRestart)[0];
   assert.equal(firstMigrationLogRead.fromBlock, preserved.cursor.nextBlock);
   assert.equal(firstMigrationLogRead.toBlock, 101);
+});
+
+test("v5.25 migration retains a non-empty pending activation journal across failed delivery and restart", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-quote-pending-pin-migration-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const provider = new FakeBscProvider();
+  const refuseLifecycle = async () => ({ accepted: false, status: "queued" });
+  const first = await harness(t, { provider, dataDir, onFlapQuotePoolLifecycle: refuseLifecycle });
+  await first.monitor.check();
+  const log = addAssetEvent(provider, { blockNumber: 99 });
+  provider.head = 101;
+  assert.equal((await first.monitor.check()).errorCode, "FLAP_QUOTE_LIFECYCLE_NOT_DURABLE");
+  await first.monitor.stop();
+  const stateFile = first.monitor.stateFile;
+  const legacy = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  Object.assign(legacy.identity, {
+    version: FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION,
+    implementation: FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION,
+    implementationCodeHash: FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH,
+  });
+  await fs.writeFile(stateFile, `${JSON.stringify(legacy)}\n`, { mode: 0o600 });
+  const preservedKeys = ["cursor", "quoteAssets", "pendingEnableCandidates", "processedEventKeys",
+    "reorgOrphanedEventKeys", "eventRecords", "finalizedCheckpoints", "auditTrail"];
+  assert.equal(Object.keys(legacy.pendingEnableCandidates).length, 1);
+  assert.equal(legacy.eventRecords[0].delivered, false);
+
+  provider.portalVersion = FLAP_PORTAL_VERIFIED_VERSION;
+  provider.implementation = FLAP_PORTAL_VERIFIED_IMPLEMENTATION;
+  const currentPins = {
+    expectedPortalVersion: FLAP_PORTAL_VERIFIED_VERSION,
+    expectedPortalImplementation: FLAP_PORTAL_VERIFIED_IMPLEMENTATION,
+    expectedPortalImplementationHash: keccak256(provider.implementationCode),
+  };
+  let writes = 0;
+  const restarted = await harness(t, {
+    provider, dataDir, ...currentPins, onFlapQuotePoolLifecycle: refuseLifecycle,
+    atomicWriteImpl: async (file, value) => {
+      writes += 1;
+      if (writes === 1) {
+        for (const key of preservedKeys) assert.deepEqual(value[key], legacy[key], key);
+      }
+      await atomicWriteFlapQuoteState(file, value);
+    },
+  });
+  assert.equal((await restarted.monitor.check()).errorCode, "FLAP_QUOTE_LIFECYCLE_NOT_DURABLE");
+  assert.ok(writes >= 1);
+  assert.equal(restarted.monitor.state().identity.version, FLAP_PORTAL_VERIFIED_VERSION);
+  assert.deepEqual(restarted.monitor.state().pendingEnableCandidates, legacy.pendingEnableCandidates);
+  assert.equal(restarted.monitor.state().eventRecords[0].delivered, false);
+  assert.equal(restarted.alerts.length, 0);
+  await restarted.monitor.stop();
+
+  const resumed = await harness(t, { provider, dataDir, ...currentPins });
+  const recovered = await resumed.monitor.check();
+  assert.equal(recovered.delivered, 1, "normal current-version verification can finish the retained candidate");
+  assert.equal(resumed.alerts[0].eventKey, flapQuoteEventKey(log));
+  assert.equal(resumed.monitor.state().cursor.baselineEstablishedAt, legacy.cursor.baselineEstablishedAt);
+  assert.equal(Object.keys(resumed.monitor.state().pendingEnableCandidates).length, 0);
+  assert.equal(resumed.monitor.state().eventRecords[0].delivered, true);
 });
 
 test("legacy pin migration writes nothing when the new finalized identity cannot be proved", async (t) => {
@@ -3921,6 +4192,48 @@ test("legacy pin migration writes nothing when the new finalized identity cannot
   assert.equal(await fs.readFile(first.monitor.stateFile, "utf8"), before);
   assert.equal(restarted.monitor.state().identity.version, FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION);
   assert.deepEqual(restarted.monitor.state().cursor, legacy.cursor);
+});
+
+test("one new-version identity reader cannot authorize a v5.25 migration when its peer disagrees", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-quote-pin-migration-quorum-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const first = await harness(t, { dataDir });
+  await first.monitor.check();
+  await first.monitor.stop();
+  const stateFile = first.monitor.stateFile;
+  const legacy = JSON.parse(await fs.readFile(stateFile, "utf8"));
+  Object.assign(legacy.identity, {
+    version: FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION,
+    implementation: FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION,
+    implementationCodeHash: FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH,
+  });
+  const before = `${JSON.stringify(legacy)}\n`;
+  await fs.writeFile(stateFile, before, { mode: 0o600 });
+  const provider = new FakeBscProvider();
+  provider.portalVersion = FLAP_PORTAL_VERIFIED_VERSION;
+  provider.implementation = FLAP_PORTAL_VERIFIED_IMPLEMENTATION;
+  const disagreeing = new FakeBscProvider();
+  disagreeing.portalVersion = "v5.99.0";
+  disagreeing.implementation = FLAP_PORTAL_VERIFIED_IMPLEMENTATION;
+  let writes = 0;
+  const restarted = await harness(t, {
+    provider, dataDir,
+    expectedPortalVersion: FLAP_PORTAL_VERIFIED_VERSION,
+    expectedPortalImplementation: FLAP_PORTAL_VERIFIED_IMPLEMENTATION,
+    expectedPortalImplementationHash: keccak256(provider.implementationCode),
+    stateVerificationProviders: [
+      new FakeLogRpcEndpoint("https://migration-quorum-current.test", provider).descriptor(),
+      new FakeLogRpcEndpoint("https://migration-quorum-disagrees.test", disagreeing).descriptor(),
+    ],
+    atomicWriteImpl: async (file, value) => { writes += 1; await atomicWriteFlapQuoteState(file, value); },
+  });
+  const result = await restarted.monitor.check();
+  assert.equal(result.errorCode, "FLAP_QUOTE_PORTAL_VERSION_MISMATCH");
+  assert.ok(provider.callTags.some(({ selector }) => selector === FLAP_PORTAL_INTERFACE.getFunction("version").selector));
+  assert.equal(writes, 0);
+  assert.equal(provider.getLogsCalls.length, 0);
+  assert.equal(await fs.readFile(stateFile, "utf8"), before);
+  assert.deepEqual(restarted.monitor.state().identity, legacy.identity);
 });
 
 test("a failed migration write re-verifies the current identity before any retry", async (t) => {
@@ -3973,6 +4286,16 @@ test("nearby but non-exact legacy identity tuples never enter the migration RPC 
     ["version", (identity) => { identity.version = `${FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION}+forged`; }],
     ["implementation", (identity) => { identity.implementation = "0x2222222222222222222222222222222222222222"; }],
     ["implementation hash", (identity) => { identity.implementationCodeHash = lower(id("forged-old-implementation")); }],
+    ["v5.23.1 is historical evidence, not a direct migration predecessor", (identity) => {
+      identity.version = FLAP_PORTAL_HISTORICAL_V5231_VERSION;
+      identity.implementation = FLAP_PORTAL_HISTORICAL_V5231_IMPLEMENTATION;
+      identity.implementationCodeHash = FLAP_PORTAL_HISTORICAL_V5231_IMPLEMENTATION_HASH;
+    }],
+    ["v5.24.0 is historical evidence, not a direct migration predecessor", (identity) => {
+      identity.version = FLAP_PORTAL_HISTORICAL_V524_VERSION;
+      identity.implementation = FLAP_PORTAL_HISTORICAL_V524_IMPLEMENTATION;
+      identity.implementationCodeHash = FLAP_PORTAL_HISTORICAL_V524_IMPLEMENTATION_HASH;
+    }],
   ]) {
     await t.test(label, async (subtest) => {
       const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-quote-pin-migration-attack-"));
@@ -4036,7 +4359,7 @@ test("raw Node error codes are normalized before degraded health survives restar
   assert.equal(restarted.status, "healthy");
 });
 
-test("persistent backoff caps RPC retryAfter and performs no early RPC or write", async (t) => {
+test("persistent backoff honors RPC retryAfter beyond the local exponential cap without early RPC or write", async (t) => {
   let nowMs = Date.parse("2026-09-03T07:00:00.000Z");
   const provider = new FakeBscProvider();
   const fixture = await harness(t, {
@@ -4054,7 +4377,7 @@ test("persistent backoff caps RPC retryAfter and performs no early RPC or write"
   };
   const failed = await fixture.monitor.check();
   assert.equal(failed.errorCode, "FLAP_QUOTE_HEAD_UNAVAILABLE");
-  assert.equal(failed.nextAttemptAt, "2026-09-03T07:00:10.000Z");
+  assert.equal(failed.nextAttemptAt, "2026-09-03T07:00:50.000Z");
   const persistedBefore = await fs.readFile(fixture.monitor.stateFile, "utf8");
   let headCalls = 0;
   provider.getBlockNumber = async () => {
@@ -4063,7 +4386,7 @@ test("persistent backoff caps RPC retryAfter and performs no early RPC or write"
   };
 
   assert.equal((await fixture.monitor.check()).status, "backoff");
-  nowMs += 9_999;
+  nowMs += 49_999;
   assert.equal((await fixture.monitor.check()).status, "backoff");
   assert.equal(headCalls, 0);
   assert.equal(await fs.readFile(fixture.monitor.stateFile, "utf8"), persistedBefore);
@@ -4085,7 +4408,203 @@ test("persistent backoff caps RPC retryAfter and performs no early RPC or write"
   assert.equal((await restarted.monitor.check()).status, "healthy");
 });
 
-test("lowering the configured backoff cap clamps a valid persisted retry instead of invalidating state", async (t) => {
+test("local capacity waits preserve the durable cursor without increasing upstream failures across restart", async (t) => {
+  let nowMs = Date.parse("2026-09-03T07:00:00Z");
+  const provider = new FakeBscProvider();
+  const fixture = await harness(t, {
+    provider, now: () => nowMs,
+    config: {flapQuoteBackoffBaseMs: 1000, flapQuoteBackoffMaxMs: 30_000},
+  });
+  await fixture.monitor.check();
+  const originalGetBlockNumber = provider.getBlockNumber.bind(provider);
+  const before = clone(fixture.monitor.state().cursor);
+  let upstream = false;
+  let headCalls = 0;
+  provider.getBlockNumber = async () => {
+    headCalls += 1;
+    throw Object.assign(new Error(upstream ? "upstream timeout" : "shared RPC coordinator: capacity wait deadline"), {
+      code: upstream ? "TIMEOUT" : "RPC_COORDINATOR_UNAVAILABLE",
+      rpcFailureScope: upstream ? "method" : "capacity",
+      rpcOperation: "eth_blockNumber",
+      rpcCircuitAlreadyOpen: !upstream,
+      retryAfterMs: 100,
+    });
+  };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const failure = await fixture.monitor.check();
+    assert.equal(failure.rpcFailureScope, "capacity");
+    assert.equal(failure.rpcOperation, "eth_blockNumber");
+    assert.equal(failure.rpcCircuitAlreadyOpen, true);
+    assert.equal(Date.parse(failure.nextAttemptAt) - nowMs, 1000, "capacity delay never grows exponentially");
+    assert.equal(fixture.monitor.state()._health.consecutiveFailures, 0);
+    assert.equal(fixture.monitor.state()._health.failureClass, "capacity");
+    assert.deepEqual(fixture.monitor.state().cursor, before);
+    const calls = headCalls;
+    assert.equal((await fixture.monitor.check()).status, "backoff");
+    assert.equal(headCalls, calls);
+    nowMs += 1000;
+  }
+  await fixture.monitor.stop();
+  const resumed = await harness(t, {
+    provider, dataDir: fixture.dataDir, now: () => nowMs,
+    config: {flapQuoteBackoffBaseMs: 1000, flapQuoteBackoffMaxMs: 30_000},
+  });
+  const capacityAfterRestart = await resumed.monitor.check();
+  assert.equal(capacityAfterRestart.rpcFailureScope, "capacity");
+  assert.notEqual(capacityAfterRestart.errorCode, "FLAP_QUOTE_STATE_INVALID");
+  assert.equal(resumed.monitor.state()._health.consecutiveFailures, 0);
+  nowMs += 1000;
+  upstream = true;
+  assert.equal(Date.parse((await resumed.monitor.check()).nextAttemptAt) - nowMs, 1000);
+  assert.equal(resumed.monitor.state()._health.consecutiveFailures, 1);
+  nowMs += 1000;
+  upstream = false;
+  assert.equal(Date.parse((await resumed.monitor.check()).nextAttemptAt) - nowMs, 1000);
+  assert.equal(resumed.monitor.state()._health.consecutiveFailures, 1, "capacity does not erase earlier genuine failures");
+  nowMs += 1000;
+  upstream = true;
+  assert.equal(Date.parse((await resumed.monitor.check()).nextAttemptAt) - nowMs, 2000);
+  assert.equal(resumed.monitor.state()._health.consecutiveFailures, 2);
+  nowMs += 2000;
+  provider.getBlockNumber = originalGetBlockNumber;
+  assert.equal((await resumed.monitor.check()).status, "healthy");
+  assert.equal(resumed.monitor.state()._health.consecutiveFailures, 0);
+});
+
+test("pre-baseline capacity waits remain volatile and do not grow the upstream backoff", async (t) => {
+  let nowMs = Date.parse("2026-09-03T07:00:00Z");
+  const provider = new FakeBscProvider();
+  const originalGetBlockNumber = provider.getBlockNumber.bind(provider);
+  provider.getBlockNumber = async () => {
+    throw Object.assign(new Error("shared local admission timeout"), {
+      code: "RPC_COORDINATOR_UNAVAILABLE", rpcFailureScope: "capacity", rpcOperation: "eth_blockNumber", retryAfterMs: 100,
+    });
+  };
+  const fixture = await harness(t, {
+    provider, now: () => nowMs,
+    config: {flapQuoteBackoffBaseMs: 1000, flapQuoteBackoffMaxMs: 30_000},
+  });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const failed = await fixture.monitor.check();
+    assert.equal(failed.rpcFailureScope, "capacity");
+    assert.equal(Date.parse(failed.nextAttemptAt) - nowMs, 1000);
+    await assert.rejects(fs.stat(fixture.monitor.stateFile), {code: "ENOENT"});
+    nowMs += 1000;
+  }
+  provider.getBlockNumber = originalGetBlockNumber;
+  assert.equal((await fixture.monitor.check()).status, "baseline");
+});
+
+test("capacity scope survives nested identity and canonical wrappers without accepting a single-source proof", async (t) => {
+  for (const lane of ["identity", "log-anchor", "logs"]) {
+    const provider = new FakeBscProvider();
+    const first = new FakeLogRpcEndpoint(`https://capacity-${lane}-a.test`, provider);
+    const second = new FakeLogRpcEndpoint(`https://capacity-${lane}-b.test`, provider);
+    const descriptors = [first.descriptor(), second.descriptor()];
+    const fixture = await harness(t, {
+      provider, ...(lane === "identity" ? {stateVerificationProviders: descriptors} : {logVerificationProviders: descriptors}),
+    });
+    await fixture.monitor.check();
+    provider.head = 101;
+    const before = clone(fixture.monitor.state().cursor);
+    const unavailable = () => {
+      throw Object.assign(new Error("shared RPC coordinator: capacity wait deadline"), {
+        code: "RPC_COORDINATOR_UNAVAILABLE", rpcFailureScope: "capacity",
+        rpcOperation: lane === "logs" ? "eth_getLogs" : "getBlock", retryAfterMs: 100,
+      });
+    };
+    if (lane === "logs") {
+      first.result = (method, params) => method === "eth_getLogs" ? unavailable() : provider.send(method, params);
+    } else first.getBlock = unavailable;
+    const failed = await fixture.monitor.check();
+    assert.equal(failed.rpcFailureScope, "capacity");
+    assert.equal(fixture.monitor.state()._health.failureClass, "capacity");
+    assert.equal(fixture.monitor.state()._health.consecutiveFailures, 0);
+    assert.deepEqual(fixture.monitor.state().cursor, before);
+    assert.equal(fixture.alerts.length, 0);
+  }
+});
+
+test("a peer's real 429 is not hidden by the first reader's local capacity refusal", async (t) => {
+  const provider = new FakeBscProvider();
+  const readers = ["capacity", "host"].map((scope, index) => new FakeLogRpcEndpoint(`https://mixed-failure-${index}.test`, provider, {
+    result: async (method, params) => {
+      if (method !== "eth_getLogs") return provider.send(method, params);
+      throw Object.assign(new Error(scope === "capacity" ? "capacity wait deadline" : "HTTP 429"), {
+        code: scope === "capacity" ? "RPC_COORDINATOR_UNAVAILABLE" : "SERVER_ERROR",
+        rpcFailureScope: scope, rpcOperation: "eth_getLogs", retryAfterMs: scope === "capacity" ? 100 : 60_000,
+      });
+    },
+  }));
+  const fixture = await harness(t, {
+    provider, logVerificationProviders: readers.map((reader) => reader.descriptor()),
+    config: {flapQuoteBackoffBaseMs: 1000, flapQuoteBackoffMaxMs: 60_000},
+  });
+  await fixture.monitor.check();
+  const before = clone(fixture.monitor.state().cursor);
+  provider.head = 101;
+  const failed = await fixture.monitor.check();
+  assert.equal(failed.rpcFailureScope, "host");
+  assert.equal(failed.nextAttemptAt, "2026-09-03T07:01:00.000Z");
+  assert.equal(fixture.monitor.state()._health.failureClass, "chain");
+  assert.equal(fixture.monitor.state()._health.consecutiveFailures, 1);
+  assert.deepEqual(fixture.monitor.state().cursor, before);
+});
+
+test("an all-capacity quorum preserves the longest local admission retry", async (t) => {
+  const provider = new FakeBscProvider();
+  const readers = [100, 5500].map((retryAfterMs, index) => new FakeLogRpcEndpoint(`https://capacity-quorum-${index}.test`, provider));
+  const fixture = await harness(t, {
+    provider, stateVerificationProviders: readers.map((reader) => reader.descriptor()),
+    config: {flapQuoteBackoffBaseMs: 1000, flapQuoteBackoffMaxMs: 1000},
+  });
+  await fixture.monitor.check();
+  for (const [index, reader] of readers.entries()) {
+    reader.getBlock = async () => {
+      throw Object.assign(new Error("local admission wait deadline"), {
+        code: "RPC_COORDINATOR_UNAVAILABLE", rpcFailureScope: "capacity",
+        rpcOperation: "getBlock", retryAfterMs: [100, 5500][index],
+      });
+    };
+  }
+  const failed = await fixture.monitor.check();
+  assert.equal(failed.rpcFailureScope, "capacity");
+  assert.equal(failed.retryAfterMs, 5500);
+  assert.equal(failed.nextAttemptAt, "2026-09-03T07:00:05.500Z");
+  assert.equal(fixture.monitor.state()._health.consecutiveFailures, 0);
+});
+
+test("a slow failed cycle persists the full bounded provider cooldown through restart", async (t) => {
+  for (const advertisedWait of [600_000, 7_200_000]) {
+    const provider = new FakeBscProvider();
+    let nowMs = Date.parse("2026-09-03T07:00:00Z");
+    const config = {flapQuoteBackoffBaseMs: 3000, flapQuoteBackoffMaxMs: 300_000};
+    const fixture = await harness(t, {provider, now: () => nowMs, config});
+    await fixture.monitor.check();
+    const originalGetBlockNumber = provider.getBlockNumber.bind(provider);
+    provider.getBlockNumber = async () => {
+      nowMs += 120_000;
+      throw Object.assign(new Error("shared upstream host cooldown"), {
+        code: "SERVER_ERROR", rpcFailureScope: "host", rpcOperation: "eth_blockNumber", retryAfterMs: advertisedWait,
+      });
+    };
+    const failed = await fixture.monitor.check();
+    const boundedWait = Math.min(advertisedWait, 3_600_000);
+    assert.equal(Date.parse(failed.nextAttemptAt) - nowMs, boundedWait);
+    assert.equal(fixture.monitor.state()._health.lastAttemptAt, "2026-09-03T07:02:00.000Z");
+    assert.equal(fixture.monitor.state().checkedAt, "2026-09-03T07:02:00.000Z");
+    await fixture.monitor.stop();
+    provider.getBlockNumber = originalGetBlockNumber;
+    const resumed = await harness(t, {provider, now: () => nowMs, config, dataDir: fixture.dataDir});
+    const waiting = await resumed.monitor.check();
+    assert.equal(waiting.status, "backoff");
+    assert.equal(waiting.nextAttemptAt, failed.nextAttemptAt);
+    nowMs += boundedWait;
+    assert.equal((await resumed.monitor.check()).status, "healthy");
+  }
+});
+
+test("lowering the configured backoff cap cannot shorten a valid persisted retry", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "flap-quote-backoff-migration-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
   let nowMs = Date.parse("2026-09-03T07:00:00.000Z");
@@ -4109,12 +4628,51 @@ test("lowering the configured backoff cap clamps a valid persisted retry instead
     now: () => nowMs,
     config: { flapQuoteBackoffBaseMs: 3_000, flapQuoteBackoffMaxMs: 30_000 },
   });
-  const clamped = await second.monitor.check();
-  assert.equal(clamped.status, "backoff");
-  assert.equal(clamped.nextAttemptAt, "2026-09-03T07:00:30.000Z");
-  assert.notEqual(clamped.errorCode, "FLAP_QUOTE_STATE_INVALID");
-  nowMs += 30_000;
+  const preserved = await second.monitor.check();
+  assert.equal(preserved.status, "backoff");
+  assert.equal(preserved.nextAttemptAt, "2026-09-03T07:05:00.000Z");
+  assert.notEqual(preserved.errorCode, "FLAP_QUOTE_STATE_INVALID");
+  nowMs += 300_000;
   assert.equal((await second.monitor.check()).status, "healthy");
+});
+
+test("stop aborts fixed-reader Portal identity work without starting follow-up reads", async (t) => {
+  const provider = new FakeBscProvider();
+  const first = new FakeLogRpcEndpoint("https://identity-stop-a.test", provider);
+  const second = new FakeLogRpcEndpoint("https://identity-stop-b.test", provider);
+  let releaseIdentity;
+  let enteredIdentity;
+  const entered = new Promise(resolve => { enteredIdentity = resolve; });
+  const gate = new Promise(resolve => { releaseIdentity = resolve; });
+  let followUpReads = 0;
+  first.getNetwork = async () => {
+    enteredIdentity();
+    await gate;
+    return provider.getNetwork();
+  };
+  const originalSend = first.send.bind(first);
+  first.send = (...args) => { followUpReads += 1; return originalSend(...args); };
+  const fixture = await harness(t, {
+    provider,
+    stateVerificationProviders: [first.descriptor(), second.descriptor()],
+  });
+  const checking = fixture.monitor.check();
+  await entered;
+  let stopped = false;
+  const stopping = fixture.monitor.stop().then(() => { stopped = true; });
+  await new Promise(resolve => setImmediate(resolve));
+  const stoppedBeforeTransportSettled = stopped;
+  // The underlying physical request retains its own lease until settled;
+  // releasing this fixture lets cleanup complete even on the regression.
+  releaseIdentity();
+  await stopping;
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(stoppedBeforeTransportSettled, true);
+  assert.equal((await checking).status, "stopped");
+  assert.equal(followUpReads, 0, "late identity results must not start another RPC");
+  assert.equal(fixture.monitor.state().initialized, false);
+  assert.equal(fixture.alerts.length, 0);
+  await assert.rejects(fs.readFile(fixture.monitor.stateFile), { code: "ENOENT" });
 });
 
 test("stop waits for an in-flight atomic state commit", async (t) => {
@@ -4169,4 +4727,238 @@ test("stop never abandons an in-flight durable alert delivery", async (t) => {
   assert.equal(stopped, true);
   assert.equal((await checking).status, "healthy");
   assert.ok(fixture.monitor.state().processedEventKeys.includes(flapQuoteEventKey(log)));
+});
+
+test("Flap head telemetry records the durable cursor only after commit and observes the 60-second floor", async (t) => {
+  let now = Date.parse("2026-09-03T07:00:00.000Z");
+  const provider = new FakeBscProvider();
+  const readers = ["a", "b"].map(name => new FakeLogRpcEndpoint(`https://head-flap-${name}.test`, provider));
+  const snapshots = [], probes = [];
+  readers.forEach((reader, index) => {
+    reader.getBlockNumber = async () => { probes.push(index); return provider.head + index; };
+  });
+  const fixture = await harness(t, {
+    provider, now: () => now, stateVerificationProviders: readers.map(reader => reader.descriptor()),
+    headObservationFile: "/missing/flap-head-observation-fixture.json",
+    writeHeadObservation: async (_file, snapshot) => {
+      const durable = JSON.parse(await fs.readFile(fixture.monitor.stateFile, "utf8"));
+      const { nextBlock, anchorBlock, anchorBlockHash, afterLogIndex } = durable.cursor;
+      assert.deepEqual(snapshot.lastSuccess.cursor, { nextBlock, anchorBlock, anchorBlockHash, afterLogIndex });
+      snapshots.push(clone(snapshot));
+    },
+  });
+  assert.equal((await fixture.monitor.check()).status, "baseline");
+  assert.equal(snapshots.length, 1);
+  assert.equal(snapshots[0].producer, "flap");
+  assert.equal(snapshots[0].displayOnly, true);
+  assert.equal(snapshots[0].status, "verified");
+  assert.deepEqual(snapshots[0].lastSuccess.sourceTips, [100, 101]);
+  assert.equal(snapshots[0].lastSuccess.headNumber, 100);
+  assert.equal(snapshots[0].lastSuccess.safeHead, 98);
+  assert.equal(new Set(snapshots[0].lastSuccess.sourceIds).size, 2);
+  assert.deepEqual(probes, [0, 1]);
+  now += 59_999;
+  provider.head = 101;
+  assert.equal((await fixture.monitor.check()).status, "healthy");
+  assert.equal(fixture.monitor.state().cursor.nextBlock, 100);
+  assert.equal(snapshots.length, 1);
+  assert.deepEqual(probes, [0, 1]);
+  now += 1;
+  assert.equal((await fixture.monitor.check()).status, "healthy");
+  assert.equal(snapshots.length, 2);
+  assert.deepEqual(probes, [0, 1, 0, 1]);
+  assert.equal(snapshots[1].lastSuccess.cursor.nextBlock, 100);
+  assert.equal(snapshots[1].lastSuccess.safeHead, 99);
+  assert.equal(fixture.alerts.length, 0);
+  assert.equal(fixture.lifecycles.length, 0);
+});
+
+test("Flap head-only disagreement, 429, and sidecar write failure cannot alter collection state or outcome", async (t) => {
+  const control = await harness(t);
+  const expected = await control.monitor.check();
+  for (const mode of ["disagreement", "429", "write"]) {
+    await t.test(mode, async (subtest) => {
+      const provider = new FakeBscProvider();
+      const readers = ["a", "b"].map(name => new FakeLogRpcEndpoint(`https://head-flap-${name}.test`, provider));
+      readers[1].getBlock = async number => {
+        if (number === provider.head && mode === "429") {
+          throw Object.assign(new Error("HTTP 429"), { status: 429, retryAfterMs: 120_000, rpcFailureScope: "host" });
+        }
+        const value = await provider.getBlock(number);
+        return number === provider.head && mode === "disagreement" ? { ...value, hash: id("disagreeing-head") } : value;
+      };
+      let snapshot;
+      const fixture = await harness(subtest, {
+        provider, stateVerificationProviders: readers.map(reader => reader.descriptor()),
+        headObservationFile: "/missing/flap-head-observation-fixture.json",
+        writeHeadObservation: async (_file, value) => {
+          snapshot = clone(value);
+          if (mode === "write") throw new Error("sidecar disk unavailable");
+        },
+      });
+      assert.deepEqual(await fixture.monitor.check(), expected);
+      assert.deepEqual(fixture.monitor.state(), control.monitor.state(), "head telemetry cannot mutate scanner proofs or health");
+      assert.deepEqual(JSON.parse(await fs.readFile(fixture.monitor.stateFile, "utf8")), control.monitor.state());
+      assert.equal(snapshot.status, mode === "write" ? "verified" : "error");
+      assert.equal(snapshot.errorCode, mode === "disagreement" ? "CHAIN_HEAD_CONSENSUS_MISMATCH"
+        : mode === "429" ? "CHAIN_HEAD_RPC_RATE_LIMITED" : null);
+      if (mode !== "write") assert.equal(snapshot.lastSuccess, null);
+      assert.equal(fixture.alerts.length, 0);
+      assert.equal(fixture.cancellations.length, 0);
+      assert.equal(fixture.lifecycles.length, 0);
+    });
+  }
+});
+
+test("Flap failed, backoff, and stopped cycles never issue a head telemetry probe", async (t) => {
+  let now = Date.parse("2026-09-03T07:00:00.000Z"), probes = 0, snapshots = 0;
+  const provider = new FakeBscProvider();
+  const readers = ["a", "b"].map(name => new FakeLogRpcEndpoint(`https://head-flap-${name}.test`, provider));
+  for (const reader of readers) reader.getBlockNumber = async () => { probes++; return provider.head; };
+  const fixture = await harness(t, {
+    provider, now: () => now, stateVerificationProviders: readers.map(reader => reader.descriptor()),
+    config: { flapQuoteBackoffBaseMs: 1_000, flapQuoteBackoffMaxMs: 60_000 },
+    headObservationFile: "/missing/flap-head-observation-fixture.json",
+    writeHeadObservation: async () => { snapshots++; },
+  });
+  assert.equal((await fixture.monitor.check()).status, "baseline");
+  const before = clone(fixture.monitor.state().cursor);
+  now += 60_000;
+  provider.getBlockNumber = async () => {
+    throw Object.assign(new Error("HTTP 429"), { status: 429, retryAfterMs: 60_000, rpcFailureScope: "host" });
+  };
+  assert.equal((await fixture.monitor.check()).status, "degraded");
+  assert.deepEqual(fixture.monitor.state().cursor, before);
+  assert.equal((await fixture.monitor.check()).status, "backoff");
+  assert.equal(probes, 2);
+  assert.equal(snapshots, 1);
+  await fixture.monitor.stop();
+  assert.equal((await fixture.monitor.check()).status, "stopped");
+  assert.equal(probes, 2);
+  assert.equal(fixture.alerts.length, 0);
+});
+
+test("empty Flap ranges retain dual-reader initial and terminal checks without a consecutive duplicate", async (t) => {
+  const provider = new FakeBscProvider();
+  const readers = ["a", "b"].map(name => new FakeLogRpcEndpoint(`https://empty-range-${name}.test`, provider));
+  const blockReads = readers.map(() => []);
+  readers.forEach((reader, index) => {
+    reader.getBlock = async number => { blockReads[index].push(number); return provider.getBlock(number); };
+  });
+  const fixture = await harness(t, { provider, logVerificationProviders: readers.map(reader => reader.descriptor()) });
+  assert.equal((await fixture.monitor.check()).status, "baseline");
+  readers.forEach(reader => { reader.calls.length = 0; });
+  blockReads.forEach(reads => { reads.length = 0; });
+  provider.head = 101;
+  assert.equal((await fixture.monitor.check()).status, "healthy");
+  assert.equal(fixture.monitor.state().cursor.nextBlock, 100);
+  for (let index = 0; index < readers.length; index += 1) {
+    assert.deepEqual(blockReads[index], [99, 98, 99, 99],
+      "finalized lane, durable anchor, range initial, and fresh pre-commit terminal checks remain");
+    assert.equal(readers[index].calls.filter(call => call.method === "eth_chainId").length, 5);
+    assert.equal(readers[index].calls.filter(call => call.method === "eth_getLogs").length, 1);
+  }
+  assert.equal(fixture.alerts.length, 0);
+  assert.equal(fixture.lifecycles.length, 0);
+});
+
+test("empty Flap range terminal checks reject a reorg after both log reads", async (t) => {
+  const provider = new FakeBscProvider();
+  let logReads = 0;
+  const readers = ["a", "b"].map(name => new FakeLogRpcEndpoint(`https://empty-reorg-${name}.test`, provider, {
+    result: async (method, params) => {
+      const value = await provider.send(method, params);
+      if (method === "eth_getLogs" && ++logReads === 2) provider.setBlockHash(99, id("empty-range-reorg"));
+      return value;
+    },
+  }));
+  const fixture = await harness(t, { provider, logVerificationProviders: readers.map(reader => reader.descriptor()) });
+  await fixture.monitor.check();
+  const before = clone(fixture.monitor.state().cursor);
+  provider.head = 101;
+  const result = await fixture.monitor.check();
+  assert.equal(logReads, 2);
+  assert.equal(result.errorCode, "FLAP_QUOTE_SCAN_ANCHOR_CHANGED");
+  assert.deepEqual(fixture.monitor.state().cursor, before);
+  assert.deepEqual(JSON.parse(await fs.readFile(fixture.monitor.stateFile, "utf8")).cursor, before);
+  assert.equal(fixture.alerts.length, 0);
+});
+
+test("empty Flap terminal capacity and 429 failures drain both readers and retain the durable cursor", async (t) => {
+  for (const scope of ["capacity", "host"]) {
+    await t.test(scope, async (subtest) => {
+      const provider = new FakeBscProvider();
+      const readers = ["a", "b"].map(name => new FakeLogRpcEndpoint(`https://empty-${scope}-${name}.test`, provider));
+      let afterLogs = false, logReads = 0;
+      readers.forEach(reader => {
+        reader.result = async (method, params) => {
+          const value = await provider.send(method, params);
+          if (method === "eth_getLogs" && ++logReads === 2) afterLogs = true;
+          return value;
+        };
+      });
+      const fixture = await harness(subtest, { provider, logVerificationProviders: readers.map(reader => reader.descriptor()),
+        config: { flapQuoteBackoffBaseMs: 1_000, flapQuoteBackoffMaxMs: 60_000 } });
+      await fixture.monitor.check();
+      const before = clone(fixture.monitor.state().cursor);
+      let releasePeer, enteredPeer;
+      const entered = new Promise(resolve => { enteredPeer = resolve; });
+      const gate = new Promise(resolve => { releasePeer = resolve; });
+      readers[0].getBlock = async number => {
+        if (afterLogs && number === 99) { enteredPeer(); await gate; }
+        return provider.getBlock(number);
+      };
+      readers[1].getBlock = async number => {
+        if (afterLogs && number === 99) {
+          throw Object.assign(new Error(scope === "capacity" ? "shared capacity wait deadline" : "HTTP 429"), {
+            code: scope === "capacity" ? "RPC_COORDINATOR_UNAVAILABLE" : "SERVER_ERROR",
+            rpcFailureScope: scope, rpcOperation: "getBlock", retryAfterMs: scope === "capacity" ? 4_500 : 60_000,
+          });
+        }
+        return provider.getBlock(number);
+      };
+      provider.head = 101;
+      let settled = false;
+      const checking = fixture.monitor.check().finally(() => { settled = true; });
+      await entered;
+      await new Promise(resolve => setImmediate(resolve));
+      const settledBeforePeer = settled;
+      releasePeer();
+      const result = await checking;
+      assert.equal(settledBeforePeer, false, "the healthy peer remains drained before returning the failure");
+      assert.equal(result.errorCode, "FLAP_QUOTE_SCAN_ANCHOR_CHANGED");
+      assert.equal(result.rpcFailureScope, scope);
+      assert.equal(Date.parse(result.nextAttemptAt) - Date.parse("2026-09-03T07:00:00Z"), scope === "capacity" ? 4_500 : 60_000);
+      assert.equal(fixture.monitor.state()._health.consecutiveFailures, scope === "capacity" ? 0 : 1);
+      assert.deepEqual(fixture.monitor.state().cursor, before);
+      assert.deepEqual(JSON.parse(await fs.readFile(fixture.monitor.stateFile, "utf8")).cursor, before);
+      const callsBeforeBackoff = readers.map(reader => reader.calls.length);
+      assert.equal((await fixture.monitor.check()).status, "backoff");
+      assert.deepEqual(readers.map(reader => reader.calls.length), callsBeforeBackoff);
+      assert.equal(fixture.alerts.length, 0);
+    });
+  }
+});
+
+test("empty Flap ranges still recheck a distinct finalized decision snapshot before cursor commit", async (t) => {
+  const provider = new FakeBscProvider();
+  let logReads = 0;
+  const readers = ["a", "b"].map(name => new FakeLogRpcEndpoint(`https://empty-snapshot-${name}.test`, provider, {
+    result: async (method, params) => {
+      const value = await provider.send(method, params);
+      if (method === "eth_getLogs" && ++logReads === 2) provider.setBlockHash(103, id("empty-range-future-reorg"));
+      return value;
+    },
+  }));
+  const fixture = await harness(t, { provider, logVerificationProviders: readers.map(reader => reader.descriptor()),
+    config: { flapQuoteEventChunkSize: 1, flapQuoteMaxBlocksPerCycle: 1 } });
+  await fixture.monitor.check();
+  const before = clone(fixture.monitor.state().cursor);
+  provider.head = 105;
+  const result = await fixture.monitor.check();
+  assert.equal(logReads, 2);
+  assert.equal(result.errorCode, "FLAP_QUOTE_PRECOMMIT_REORG");
+  assert.deepEqual(fixture.monitor.state().cursor, before);
+  assert.deepEqual(JSON.parse(await fs.readFile(fixture.monitor.stateFile, "utf8")).cursor, before);
+  assert.equal(fixture.alerts.length, 0);
 });

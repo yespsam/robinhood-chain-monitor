@@ -1,0 +1,2867 @@
+{
+  "version": 1,
+  "triggerAt": "2026-10-17T22:02:46.318Z",
+  "checkedAt": "2026-10-17T22:06:22.507Z",
+  "round": 72,
+  "group": "bsc",
+  "question": "A/B到期最新页是否有去重新交易；A已知nonce缺口是否扩大",
+  "requests": {
+    "configChecks": 1,
+    "gmgnBusinessRequests": 2,
+    "gmgnSuccessful": 2,
+    "rpcRequests": 2,
+    "modelRequests": 0
+  },
+  "pages": [
+    {
+      "id": "A",
+      "rowCount": 20,
+      "identityValid": true,
+      "pageOverlap": 20,
+      "newRows": 0,
+      "next": "MTI1MjY3MDU2MDAxOTAwMDAwMDowOjo=",
+      "latest": {
+        "at": "2026-10-02T11:08:09.000Z",
+        "hash": "0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868",
+        "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777"
+      }
+    },
+    {
+      "id": "B",
+      "rowCount": 20,
+      "identityValid": true,
+      "pageOverlap": 20,
+      "newRows": 0,
+      "next": "MTI1MjY3MDU2MDAyMTcwMDAwMDowOjo=",
+      "latest": {
+        "at": "2026-10-02T11:08:09.000Z",
+        "hash": "0x276ed1a8787a851f66bf341a62bd62728028d53b19a22ea8a69fa6b3f7857f6d",
+        "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777"
+      }
+    }
+  ],
+  "rawPages": [
+    {
+      "id": "A",
+      "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+      "startedAt": "2026-10-17T22:03:33.535Z",
+      "page": {
+        "activities": [
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868",
+            "timestamp": 1790939289,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "2456931.540114164",
+            "quote_amount": "0.18428497431381125",
+            "cost_usd": "143.15993944594112",
+            "buy_cost_usd": "16.7387906812469",
+            "price_usd": "0.00005827214755852825",
+            "price": "0.00000007501177534438012",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.00126861",
+            "gas_usd": "0.9855069924",
+            "dex_native": "0.005962066074007345",
+            "dex_usd": "4.631571408931865",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0xf5329b4689cbd5400fe283accb9dc261672214574fc6280022c181dfc1cca23a",
+            "timestamp": 1790939288,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "350990.2200163091",
+            "quote_amount": "0.02669136323485407",
+            "cost_usd": "20.734918615364034",
+            "buy_cost_usd": "2.3912558116066998",
+            "price_usd": "0.000059079919235183565",
+            "price": "0.00000007605159265123264",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001389",
+            "gas_usd": "1.07903076",
+            "dex_native": "0.0008635303654249357",
+            "dex_usd": "0.670824929076707",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0x79bc8e7aebfe73f4a5045cd6208064cfee316412ba7216e0548b02ed7af5af5a",
+            "timestamp": 1790939287,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "350990.2200163091",
+            "quote_amount": "0.026776611979796878",
+            "cost_usd": "20.8020804318047",
+            "buy_cost_usd": "2.3912558116066998",
+            "price_usd": "0.00005927128312546971",
+            "price": "0.00000007629449155329971",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001326096",
+            "gas_usd": "1.03021083",
+            "dex_native": "0.0008662883691741174",
+            "dex_usd": "0.6729977768021425",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0x37c6adb747f76c746dd3d085204fc5447f16ebb704018ab0542ddd8ffe8da3cc",
+            "timestamp": 1790939287,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "350990.2200163091",
+            "quote_amount": "0.02703351925394569",
+            "cost_usd": "21.00098943242771",
+            "buy_cost_usd": "2.3912558116066998",
+            "price_usd": "0.00005983803373153434",
+            "price": "0.00000007702649640411192",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001389",
+            "gas_usd": "1.07904465",
+            "dex_native": "0.0008745999428608574",
+            "dex_usd": "0.679432965611457",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0xbdfb4b65bffe6b587d847a6be634ee2f7b435e7bf35a661709d72991533a7305",
+            "timestamp": 1790939285,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "438737.77502038644",
+            "quote_amount": "0.03404972524206792",
+            "cost_usd": "26.451529054300458",
+            "buy_cost_usd": "2.9890697645083746",
+            "price_usd": "0.000060294587277221234",
+            "price": "0.00000007761419486029637",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001326096",
+            "gas_usd": "1.0301776776",
+            "dex_native": "0.0011015912309232164",
+            "dex_usd": "0.8557711477427007",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0x0593ac9567acbd81b8b41d7e71c368eda5ad4cd4d72f7faac6cc9fa78b0a97b7",
+            "timestamp": 1790939285,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "438737.77502038644",
+            "quote_amount": "0.03432434694976577",
+            "cost_usd": "26.664525684456045",
+            "buy_cost_usd": "2.9890697645083746",
+            "price_usd": "0.0000607800996224738",
+            "price": "0.00000007824017767168761",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001389",
+            "gas_usd": "1.07903076",
+            "dex_native": "0.0011104759095181362",
+            "dex_usd": "0.8626621055500688",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0x8e706d4fe7654b71d3a1768cc5877c4875a166790f9fe63009f9c39e5b4847b3",
+            "timestamp": 1790938713,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "548422.2187754831",
+            "quote_amount": "0.04275472984977257",
+            "cost_usd": "33.185793762094974",
+            "buy_cost_usd": "3.736337205635468",
+            "price_usd": "0.000060515934160023654",
+            "price": "0.00000007796536178000703",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001326096",
+            "gas_usd": "1.02930245424",
+            "dex_native": "0.001383219252084049",
+            "dex_usd": "1.073640951275118",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0x1cce17c1b86ffcd7d5800d756a4248293546b4b4a81aed1e35a3ae52c8d19522",
+            "timestamp": 1790938713,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "548422.2187754831",
+            "quote_amount": "0.04340649832113743",
+            "cost_usd": "33.69125586690045",
+            "buy_cost_usd": "3.7363372056354685",
+            "price_usd": "0.00006143766927578074",
+            "price": "0.00000007915389378208759",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001389",
+            "gas_usd": "1.07811402",
+            "dex_native": "0.0014043055436045665",
+            "dex_usd": "1.0899938768349926",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0xac316400ce531eefe80c6ef12fc3184b209f1540ed6460381c73dea23da39179",
+            "timestamp": 1790938711,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "685527.7734693538",
+            "quote_amount": "0.05396864399602018",
+            "cost_usd": "41.88992178327091",
+            "buy_cost_usd": "4.670421507044335",
+            "price_usd": "0.0000611106732423671",
+            "price": "0.00000007873159051568185",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001388928",
+            "gas_usd": "1.07807202432",
+            "dex_native": "0.001746016584515092",
+            "dex_usd": "1.3552406127347691",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0x963cb40538974241daedc46c3c3292997c5dead9dfab8c3ee9a4e65dea8b7263",
+            "timestamp": 1790938710,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "685527.7734693538",
+            "quote_amount": "0.05532203471805131",
+            "cost_usd": "42.93985690745707",
+            "buy_cost_usd": "4.670421507044336",
+            "price_usd": "0.00006264236009133727",
+            "price": "0.0000000807059703823047",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.002430618",
+            "gas_usd": "1.88659707924",
+            "dex_native": "0.0017898020582833316",
+            "dex_usd": "1.3892085615983563",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0x9f0ed021d5a002c996db989ef147cccf3ae55c8bd1a29eaa6ab1f4a03d37b87e",
+            "timestamp": 1790938708,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "761697.5260770598",
+            "quote_amount": "0.06526556934436106",
+            "cost_usd": "50.65848226939961",
+            "buy_cost_usd": "5.189357230049262",
+            "price_usd": "0.00006651233620446305",
+            "price": "0.00000008569079246635881",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001326024",
+            "gas_usd": "1.02924656856",
+            "dex_native": "0.002111499530754887",
+            "dex_usd": "1.6389248207766358",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0xa0e646570759ad738c381c3214ff45ed876003486db2fa468e9a38f6d9ac0475",
+            "timestamp": 1790938708,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "846330.5845300665",
+            "quote_amount": "0.07398525022239405",
+            "cost_usd": "57.425871517617814",
+            "buy_cost_usd": "5.765952477832513",
+            "price_usd": "0.0000678578558199159",
+            "price": "0.0000000874254113993093",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001389",
+            "gas_usd": "1.07811402",
+            "dex_native": "0.0023936023648718123",
+            "dex_usd": "1.8578662835662034",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0x706f6d229209e48023215af140db1c168b07ab49e4ff31fa60d8d9986ff80045",
+            "timestamp": 1790937078,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "940367.3161445182",
+            "quote_amount": "0.19951700784732165",
+            "cost_usd": "154.94091795407306",
+            "buy_cost_usd": "6.406613864258348",
+            "price_usd": "0.0001647787377700759",
+            "price": "0.00000021218514225202285",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001386612",
+            "gas_usd": "1.07681514696",
+            "dex_native": "0.006454859318309729",
+            "dex_usd": "5.0127146494129695",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0x72258a2854565512e1aae736a7e550b348acdc35fca6984fd573dd14b88caefd",
+            "timestamp": 1790935459,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "1044852.5734939092",
+            "quote_amount": "0.21547913622532122",
+            "cost_usd": "167.38850260255404",
+            "buy_cost_usd": "7.118459849175942",
+            "price_usd": "0.00016021500250710348",
+            "price": "0.00000020624469311694275",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001323708",
+            "gas_usd": "1.02828284856",
+            "dex_native": "0.006971272902356818",
+            "dex_usd": "5.415424216008824",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0x17d34e77d89583058a4c866f57fa41f817bb1d375c48e151ef74672a1aa0de9d",
+            "timestamp": 1790933263,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "1160947.3038821213",
+            "quote_amount": "0.18433175745724192",
+            "cost_usd": "142.92531477962166",
+            "buy_cost_usd": "7.909399832417713",
+            "price_usd": "0.00012312017479542602",
+            "price": "0.00000015878893276168284",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001323708",
+            "gas_usd": "1.02636347196",
+            "dex_native": "0.005963579622213442",
+            "dex_usd": "4.623980731675637",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0xe8de65e7fbc09100e4292ed811246b4407f29781e467f6a070d3b852ebfbda66",
+            "timestamp": 1790933107,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "1451184.1298526516",
+            "quote_amount": "0.14880862099186845",
+            "cost_usd": "115.5454299415561",
+            "buy_cost_usd": "9.88674979052214",
+            "price_usd": "0.00007962745327881065",
+            "price": "0.00000010255058570042711",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.00132378",
+            "gas_usd": "1.0278754566",
+            "dex_native": "0.004814319963084176",
+            "dex_usd": "3.73817502173597",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0x54ea77e128121dd1871ad07eeb11758e74897c82fcb270212b1abc85e44807a0",
+            "timestamp": 1790933106,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "1451184.1298526516",
+            "quote_amount": "0.151268079625031",
+            "cost_usd": "117.45512578644782",
+            "buy_cost_usd": "9.886749790522142",
+            "price_usd": "0.00008094350893538461",
+            "price": "0.00000010424550714822802",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.00132378",
+            "gas_usd": "1.0278754566",
+            "dex_native": "0.004893889417576071",
+            "dex_usd": "3.799958316065292",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0x517e20b8293376b80f007451d645b7574a876e02bc9bc4d48a25b3bfcc82705b",
+            "timestamp": 1790932951,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "1612426.8109473907",
+            "quote_amount": "0.1253840152636674",
+            "cost_usd": "97.39328769620629",
+            "buy_cost_usd": "10.985277545024601",
+            "price_usd": "0.00006040621011717955",
+            "price": "0.00000007776689082493892",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001323708",
+            "gas_usd": "1.02820342608",
+            "dex_native": "0.0040564771295643585",
+            "dex_usd": "3.150909175160411",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0xb2d6c9457082b4ffd65572666974f0e7e36f231d21278b2d4485736fc30c12ff",
+            "timestamp": 1790932686,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "1791585.3454971008",
+            "quote_amount": "0.06329380300069849",
+            "cost_usd": "49.18814606396283",
+            "buy_cost_usd": "12.205863938916224",
+            "price_usd": "0.00002745509511315794",
+            "price": "0.000000035328377271994675",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0x0000000000000000000000000000000000000000",
+              "name": "BNB",
+              "symbol": "BNB",
+              "decimals": 18,
+              "logo": "https://static.alchemyapi.io/images/assets/1839.png"
+            },
+            "quote_address": "0x0000000000000000000000000000000000000000",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.002547534",
+            "gas_usd": "1.97979057276",
+            "dex_native": "0.002531752120027938",
+            "dex_usd": "1.9675258425585118",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+            "chain": "bsc",
+            "tx_hash": "0x1f233cef19b97ac78e1e03a566075135ad86f1b5ae762585e03c304999ea203e",
+            "timestamp": 1790932684,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "1990650.3838856674",
+            "quote_amount": "0.07168260564638808",
+            "cost_usd": "55.708136978090494",
+            "buy_cost_usd": "13.562071043240248",
+            "price_usd": "0.00002798489248993613",
+            "price": "0.000000036009640982997016",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0x0000000000000000000000000000000000000000",
+              "name": "BNB",
+              "symbol": "BNB",
+              "decimals": 18,
+              "logo": "https://static.alchemyapi.io/images/assets/1839.png"
+            },
+            "quote_address": "0x0000000000000000000000000000000000000000",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.002547534",
+            "gas_usd": "1.9798160481",
+            "dex_native": "0.002867304225855522",
+            "dex_usd": "2.228325479123619",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          }
+        ],
+        "next": "MTI1MjY3MDU2MDAxOTAwMDAwMDowOjo="
+      },
+      "checkedAt": "2026-10-17T22:03:42.670Z"
+    },
+    {
+      "id": "B",
+      "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+      "startedAt": "2026-10-17T22:03:42.670Z",
+      "page": {
+        "activities": [
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0x276ed1a8787a851f66bf341a62bd62728028d53b19a22ea8a69fa6b3f7857f6d",
+            "timestamp": 1790939289,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "2438440.135282079",
+            "quote_amount": "0.18700171343536953",
+            "cost_usd": "145.27041106513246",
+            "buy_cost_usd": "17.677612108013687",
+            "price_usd": "0.00005957960790633211",
+            "price": "0.00000007669482506865263",
+            "is_open_or_close": 1,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001331586",
+            "gas_usd": "1.03442926824",
+            "dex_native": "0.0060499591765724465",
+            "dex_usd": "4.699850286728539",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0xf21c768f9d08702bbdcbcacd8211d997056c5e8d06ba01a595a75cc72b413a5b",
+            "timestamp": 1790939288,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "348348.5907545827",
+            "quote_amount": "0.026406590085301097",
+            "cost_usd": "20.513695441865305",
+            "buy_cost_usd": "2.5253731582876693",
+            "price_usd": "0.00005889282927765583",
+            "price": "0.00000007581075804239719",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001326096",
+            "gas_usd": "1.03016441664",
+            "dex_native": "0.0008543172630542193",
+            "dex_usd": "0.6636678226310397",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0xacb32cc30d9f432b2cbb678063bc1bd970bdefc6c72c48cca7b5d34a9665bb27",
+            "timestamp": 1790939287,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "348348.5907545827",
+            "quote_amount": "0.02665977729754559",
+            "cost_usd": "20.71131448803073",
+            "buy_cost_usd": "2.5253731582876693",
+            "price_usd": "0.000059460174385260453",
+            "price": "0.00000007653763396332802",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001326096",
+            "gas_usd": "1.03021083",
+            "dex_native": "0.0008625084837118784",
+            "dex_usd": "0.6700612782836655",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0x5db83af0f80e8d7d9cd1f56029356ad921d7e4c16015bb93fd2fe434983acdfd",
+            "timestamp": 1790939287,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "348348.5907545827",
+            "quote_amount": "0.026744553381936677",
+            "cost_usd": "20.776506294757507",
+            "buy_cost_usd": "2.5253731582876693",
+            "price_usd": "0.00005964733373715502",
+            "price": "0.00000007678101787623739",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001326096",
+            "gas_usd": "1.0301776776",
+            "dex_native": "0.0008652511957453325",
+            "dex_usd": "0.6721703914147616",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0xb28715ac2228aa8d83c46fea544497fad601d1ef66e613e3c53732dc08749f3b",
+            "timestamp": 1790939285,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "435435.7384432284",
+            "quote_amount": "0.03365840647832945",
+            "cost_usd": "26.14753307269023",
+            "buy_cost_usd": "3.156716447859586",
+            "price_usd": "0.00006005362439530426",
+            "price": "0.0000000773040154409529",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001326096",
+            "gas_usd": "1.0301776776",
+            "dex_native": "0.0010889311194079133",
+            "dex_usd": "0.8459361401120374",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0xc3f8e6c5cbe00f9487f8fc6886ccbbbb503985152898da8ea92abb6a7de27696",
+            "timestamp": 1790939285,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "435435.7384432284",
+            "quote_amount": "0.03392932512781561",
+            "cost_usd": "26.357656932292276",
+            "buy_cost_usd": "3.1567164478595866",
+            "price_usd": "0.00006053622056626819",
+            "price": "0.00000007792624036644378",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001326096",
+            "gas_usd": "1.03016441664",
+            "dex_native": "0.0010976959950844663",
+            "dex_usd": "0.8527341568214168",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0x99ca4abb08a390c46765b76d039711ba5893fead20ac0596e5b177b4fbbb406c",
+            "timestamp": 1790938713,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "544294.6730540355",
+            "quote_amount": "0.042647209163655095",
+            "cost_usd": "33.10233728073745",
+            "buy_cost_usd": "3.945895559824483",
+            "price_usd": "0.00006082150309591877",
+            "price": "0.00000007835903979169891",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001326096",
+            "gas_usd": "1.02930245424",
+            "dex_native": "0.0013797406969965175",
+            "dex_usd": "1.0709409316017269",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0x603c938f2bbb7e48f40b0d6687be914ceb7f90126161473962ab1bcaa46b7c95",
+            "timestamp": 1790938713,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "544294.6730540355",
+            "quote_amount": "0.04286228104042578",
+            "cost_usd": "33.26884529795768",
+            "buy_cost_usd": "3.9458955598244834",
+            "price_usd": "0.00006112744124762593",
+            "price": "0.00000007875420810588516",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001326096",
+            "gas_usd": "1.02928919328",
+            "dex_native": "0.0013866987940673288",
+            "dex_usd": "1.0763278699791794",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0x848201ba92c46036de75a35e8141d7ce17451bcc5019f345b278c0afa93e4175",
+            "timestamp": 1790938711,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "680368.3413175443",
+            "quote_amount": "0.05322559726534234",
+            "cost_usd": "41.31317634138607",
+            "buy_cost_usd": "4.932369449780603",
+            "price_usd": "0.000060726333888502344",
+            "price": "0.00000007823642908115582",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001326096",
+            "gas_usd": "1.02930245424",
+            "dex_native": "0.0017219772198253116",
+            "dex_usd": "1.3365814982562088",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0x3e29ea056bc18a1bb1da17cee5a16e1d34a1f7e5eae4ad03628a6c713d6d090d",
+            "timestamp": 1790938710,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "680368.3413175443",
+            "quote_amount": "0.05455606651330138",
+            "cost_usd": "42.34532770629426",
+            "buy_cost_usd": "4.932369449780604",
+            "price_usd": "0.00006224349557781305",
+            "price": "0.00000008019208891985499",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001326096",
+            "gas_usd": "1.02928919328",
+            "dex_native": "0.0017650211282899215",
+            "dex_usd": "1.3699740993560714",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0x0931fda0e076501f12c1b99c2d87c0af9f568cf9149a1f1dc89c9746eaec25a1",
+            "timestamp": 1790938708,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "755964.8236861604",
+            "quote_amount": "0.0643024615548249",
+            "cost_usd": "49.91092763423954",
+            "buy_cost_usd": "5.480410499756227",
+            "price_usd": "0.00006602776964038245",
+            "price": "0.00000008506650387196749",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001326096",
+            "gas_usd": "1.02930245424",
+            "dex_native": "0.002080340656847849",
+            "dex_usd": "1.614739614438732",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0x746a90098371e7309cc9cc98cff377b91de2a7d37567b2d246fb3e56d20cd37f",
+            "timestamp": 1790938708,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "839960.9152068449",
+            "quote_amount": "0.07282843637516169",
+            "cost_usd": "56.527975745673",
+            "buy_cost_usd": "6.089344999729141",
+            "price_usd": "0.00006730338833435633",
+            "price": "0.00000008671105714442054",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001326096",
+            "gas_usd": "1.02928919328",
+            "dex_native": "0.00235617662998373",
+            "dex_usd": "1.8288171766607713",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0xb3547c0aac9fbd227d0ffad01b4936e9ca1ae5bec3510127ef43b4048b0f166e",
+            "timestamp": 1790937078,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "933289.9057853832",
+            "quote_amount": "0.19521718626380605",
+            "cost_usd": "151.6017625087465",
+            "buy_cost_usd": "6.765938888587934",
+            "price_usd": "0.0001624502017582338",
+            "price": "0.00000020918669262437072",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001323708",
+            "gas_usd": "1.02796515864",
+            "dex_native": "0.0063157496568583904",
+            "dex_usd": "4.904684868523089",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0xe00666690dd7e03aed0ca3fc017c86047341c50890af223e966fe39a6aed9ad2",
+            "timestamp": 1790935459,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "1036988.7842059813",
+            "quote_amount": "0.2105355448547419",
+            "cost_usd": "163.5482219540606",
+            "buy_cost_usd": "7.517709876208816",
+            "price_usd": "0.0001577263818875077",
+            "price": "0.00000020304109302992672",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001323708",
+            "gas_usd": "1.02828284856",
+            "dex_native": "0.0068113357262303675",
+            "dex_usd": "5.291181818850274",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0x69f1785263e656d2572cd6c2c6c2fb998877ffdfc177800acb82dca6bb5f9f90",
+            "timestamp": 1790933263,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "1152209.760228868",
+            "quote_amount": "0.18011798311821772",
+            "cost_usd": "139.65808057037248",
+            "buy_cost_usd": "8.35301097356535",
+            "price_usd": "0.00012121799392179071",
+            "price": "0.00000015633567705971434",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.001323708",
+            "gas_usd": "1.02636347196",
+            "dex_native": "0.005827253797909187",
+            "dex_usd": "4.518277777284846",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0x081247889dd0662729ab14c07a83073d5e3bb99aa356334844494f78041280c3",
+            "timestamp": 1790933107,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "1440262.2002860853",
+            "quote_amount": "0.1453881112625876",
+            "cost_usd": "112.88950675206141",
+            "buy_cost_usd": "10.441263716956687",
+            "price_usd": "0.00007838709790321062",
+            "price": "0.00000010095315711258725",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.00132378",
+            "gas_usd": "1.0278754566",
+            "dex_native": "0.004703658173707737",
+            "dex_usd": "3.6522494621388466",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0xe2eb7b749d0604472287132df7763121a676f1d7cc9d4fe02d574fd4e7b2886f",
+            "timestamp": 1790933106,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "1440262.2002860853",
+            "quote_amount": "0.14777194675004193",
+            "cost_usd": "114.74048349300506",
+            "buy_cost_usd": "10.441263716956689",
+            "price_usd": "0.00007967236080481566",
+            "price": "0.00000010260842119439986",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.00132378",
+            "gas_usd": "1.0278754566",
+            "dex_native": "0.004780781035941551",
+            "dex_usd": "3.7121330509775365",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0x04b7b1e461c560789313c9e7c561665a64caa22d209f2b6587da2136a068cf64",
+            "timestamp": 1790932951,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "1600291.3336512058",
+            "quote_amount": "0.12255569668478718",
+            "cost_usd": "95.19636295687529",
+            "buy_cost_usd": "11.601404129951876",
+            "price_usd": "0.00005949135711583314",
+            "price": "0.00000007658911004149691",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "name": "Wrapped BNB",
+              "symbol": "WBNB",
+              "decimals": 18,
+              "logo": "https://gmgn.ai/external-res/a477e8924def57eea4994c5a1d874f8b.webp"
+            },
+            "quote_address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.00132378",
+            "gas_usd": "1.0282593528",
+            "dex_native": "0.003964974160814926",
+            "dex_usd": "3.079833329154602",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0xf2fb530c98551eece8a50ad4260f63c8086cc7270593188e79cea79363cf5d9e",
+            "timestamp": 1790932686,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "1778101.481834673",
+            "quote_amount": "0.06230931950695168",
+            "cost_usd": "48.42306456163243",
+            "buy_cost_usd": "12.890449033279863",
+            "price_usd": "0.000027233015132335836",
+            "price": "0.000000035042611540180456",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0x0000000000000000000000000000000000000000",
+              "name": "BNB",
+              "symbol": "BNB",
+              "decimals": 18,
+              "logo": "https://static.alchemyapi.io/images/assets/1839.png"
+            },
+            "quote_address": "0x0000000000000000000000000000000000000000",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.002547534",
+            "gas_usd": "1.97979057276",
+            "dex_native": "0.002492372780278066",
+            "dex_usd": "1.9369225824652962",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          },
+          {
+            "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+            "chain": "bsc",
+            "tx_hash": "0x3d58035f695dbc52b0fab614c644734bb464267a02d3bee4e721208a78e812e7",
+            "timestamp": 1790932684,
+            "event_type": "sell",
+            "token": {
+              "address": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+              "symbol": "PairLab",
+              "logo": "https://gmgn.ai/external-res/a5f1884a57fffbb6fe000489aa86b0a5_v2.webp",
+              "total_supply": "1000000000"
+            },
+            "token_amount": "1975668.3131496368",
+            "quote_amount": "0.0704980412110292",
+            "cost_usd": "54.78755272715135",
+            "buy_cost_usd": "14.322721148088736",
+            "price_usd": "0.000027731149182530694",
+            "price": "0.00000003568313605163829",
+            "is_open_or_close": 0,
+            "quote_token": {
+              "token_address": "0x0000000000000000000000000000000000000000",
+              "name": "BNB",
+              "symbol": "BNB",
+              "decimals": 18,
+              "logo": "https://static.alchemyapi.io/images/assets/1839.png"
+            },
+            "quote_address": "0x0000000000000000000000000000000000000000",
+            "from_address": "",
+            "to_address": "",
+            "gas_native": "0.002547534",
+            "gas_usd": "1.9798160481",
+            "dex_native": "0.002819921648441168",
+            "dex_usd": "2.191502109086054",
+            "priority_fee": "0",
+            "tip_fee": "0",
+            "launchpad": "flap",
+            "launchpad_platform": "flap"
+          }
+        ],
+        "next": "MTI1MjY3MDU2MDAyMTcwMDAwMDowOjo="
+      },
+      "checkedAt": "2026-10-17T22:03:55.350Z"
+    }
+  ],
+  "rpc": [
+    {
+      "method": "eth_getTransactionByHash",
+      "source": "https://bsc-dataseed-public.bnbchain.org",
+      "startedAt": "2026-10-17T22:04:31.899Z",
+      "checkedAt": "2026-10-17T22:04:32.763Z",
+      "httpStatus": 200,
+      "error": null,
+      "result": {
+        "hash": "0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868",
+        "from": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+        "to": "0x1de460f363af910f51726def188f9004276bf4bc",
+        "nonce": "0x9d",
+        "blockNumber": "0x777a5be"
+      }
+    },
+    {
+      "method": "eth_getTransactionCount",
+      "source": "https://bsc-dataseed-public.bnbchain.org",
+      "startedAt": "2026-10-17T22:04:31.932Z",
+      "checkedAt": "2026-10-17T22:04:32.631Z",
+      "httpStatus": 200,
+      "error": null,
+      "result": "0xa2"
+    }
+  ],
+  "nonceVerification": {
+    "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+    "checkedAt": "2026-10-17T22:04:32.631Z",
+    "source": "https://bsc-dataseed-public.bnbchain.org",
+    "method": "eth_getTransactionCount",
+    "value": 162,
+    "knownTransactionNonce": 157,
+    "knownHash": "0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868",
+    "identityVerified": true,
+    "previousValue": 162,
+    "deltaSincePrior": 0,
+    "laterNonceCount": 4,
+    "newActivityEvidence": false,
+    "transactionTypesVerified": false,
+    "classification": "provider_coverage_gap_pending_classification",
+    "report": "docs/operator-reference-followups/2026-10-18-0602-bsc-head-shadow-check.md",
+    "note": "旧nonce158–161差异保留，不能据此断定交易类型、笔数、成功状态或钱包不活跃；未核验入账/内部交易。"
+  },
+  "newRows": 0,
+  "newAddresses": 0,
+  "conclusion": "本轮无新增证据，保留上轮结论（钱包研究）。A旧nonce覆盖缺口不变；重复最新页不能证明不活跃。",
+  "paper": {
+    "generatedAt": "2026-10-17T22:03:33.684Z",
+    "tradeCount": 305,
+    "lastTradeId": "1792250738005:304",
+    "newFills": 0,
+    "newCurrentVersionClosedRounds": 0,
+    "currentVersion": {
+      "closedRounds": 18,
+      "tokens": 16,
+      "spanMs": 568250094,
+      "wins": 4,
+      "losses": 14,
+      "breakeven": 0,
+      "netPnlUsd": -0.9435437322510536,
+      "modelCostsUsd": 6.33233389471666,
+      "grossPricePnlUsd": 5.3887901624656065,
+      "winRate": 0.2222222222222222,
+      "averageNetUsd": -0.052419096236169645,
+      "averageWinUsd": 2.5070341726994014,
+      "averageLossUsd": 0.78369145878919,
+      "profitFactor": 0.9140018943434669,
+      "payoffRatio": 3.1990066302021343,
+      "averageNetR": -0.09768189243184029,
+      "riskKnownRounds": 18,
+      "closedRoundDrawdownUsd": 8.777388300725844,
+      "costOnlyLosses": 2,
+      "priceLosses": 12,
+      "stopShortfalls": 0,
+      "stopExitsWithoutQuotePath": 0,
+      "sampleStatus": "collecting",
+      "byChainRoute": [
+        {
+          "chain": "bsc",
+          "route": "external_breakout",
+          "closedRounds": 9,
+          "tokens": 8,
+          "spanMs": 568250094,
+          "wins": 2,
+          "losses": 7,
+          "breakeven": 0,
+          "netPnlUsd": 2.3019375950953274,
+          "modelCostsUsd": 3.941985574466428,
+          "grossPricePnlUsd": 6.243923169561755,
+          "winRate": 0.2222222222222222,
+          "averageNetUsd": 0.2557708438994808,
+          "averageWinUsd": 3.832181886228065,
+          "averageLossUsd": 0.7660608824801146,
+          "profitFactor": 1.4292716615500822,
+          "payoffRatio": 5.002450815425288,
+          "averageNetR": 0.39491389486270934,
+          "riskKnownRounds": 9,
+          "closedRoundDrawdownUsd": 3.5541172165942836,
+          "costOnlyLosses": 1,
+          "priceLosses": 6,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        },
+        {
+          "chain": "sol",
+          "route": "external_breakout",
+          "closedRounds": 7,
+          "tokens": 6,
+          "spanMs": 251200299,
+          "wins": 2,
+          "losses": 5,
+          "breakeven": 0,
+          "netPnlUsd": -1.205071655820662,
+          "modelCostsUsd": 1.897375488416624,
+          "grossPricePnlUsd": 0.6923038325959621,
+          "winRate": 0.2857142857142857,
+          "averageNetUsd": -0.172153093688666,
+          "averageWinUsd": 1.1818864591707383,
+          "averageLossUsd": 0.7137689148324278,
+          "profitFactor": 0.6623356297034656,
+          "payoffRatio": 1.655839074258664,
+          "averageNetR": -0.4187210403901932,
+          "riskKnownRounds": 7,
+          "closedRoundDrawdownUsd": 3.5688445741621386,
+          "costOnlyLosses": 1,
+          "priceLosses": 4,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        },
+        {
+          "chain": "robinhood",
+          "route": "external_pullback",
+          "closedRounds": 1,
+          "tokens": 1,
+          "spanMs": 868622,
+          "wins": 0,
+          "losses": 1,
+          "breakeven": 0,
+          "netPnlUsd": -1.0474852672385744,
+          "modelCostsUsd": 0.25833463440209364,
+          "grossPricePnlUsd": -0.7891506328364808,
+          "winRate": 0,
+          "averageNetUsd": -1.0474852672385744,
+          "averageWinUsd": null,
+          "averageLossUsd": 1.0474852672385744,
+          "profitFactor": 0,
+          "payoffRatio": null,
+          "averageNetR": -0.6186851868504517,
+          "riskKnownRounds": 1,
+          "closedRoundDrawdownUsd": 1.0474852672385744,
+          "costOnlyLosses": 0,
+          "priceLosses": 1,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        },
+        {
+          "chain": "robinhood",
+          "route": "external_breakout",
+          "closedRounds": 1,
+          "tokens": 1,
+          "spanMs": 447747,
+          "wins": 0,
+          "losses": 1,
+          "breakeven": 0,
+          "netPnlUsd": -0.9929244042871446,
+          "modelCostsUsd": 0.23463819743151496,
+          "grossPricePnlUsd": -0.7582862068556296,
+          "winRate": 0,
+          "averageNetUsd": -0.9929244042871446,
+          "averageWinUsd": null,
+          "averageLossUsd": 0.9929244042871446,
+          "profitFactor": 0,
+          "payoffRatio": null,
+          "averageNetR": -1.7627666479557074,
+          "riskKnownRounds": 1,
+          "closedRoundDrawdownUsd": 0.9929244042871446,
+          "costOnlyLosses": 0,
+          "priceLosses": 1,
+          "stopShortfalls": 0,
+          "stopExitsWithoutQuotePath": 0,
+          "sampleStatus": "collecting"
+        }
+      ],
+      "concentration": {
+        "caCount": 16,
+        "largestCaRoundShare": 0.1111111111111111,
+        "largestCaPositivePnlShare": 0.6317788618023847,
+        "denominator": "sum_of_positive_round_pnl_not_total_net_pnl",
+        "byCA": [
+          {
+            "chain": "bsc",
+            "address": "0x5e066411ca15adaa15d3c16edfea3fbb92987777",
+            "rounds": 2,
+            "netPnlUsd": 5.470071650133314,
+            "positivePnlUsd": 6.3355647845108445
+          },
+          {
+            "chain": "sol",
+            "address": "t9bnCGiZVUYsRKvx4d5dPcoDCSyuBM9C33ZNGNULARP",
+            "rounds": 1,
+            "netPnlUsd": 1.9690897303963517,
+            "positivePnlUsd": 1.9690897303963517
+          },
+          {
+            "chain": "sol",
+            "address": "33jENUQnjoitkMFpvNJcSHyLAHFWJuHwT6E3E8CNpump",
+            "rounds": 2,
+            "netPnlUsd": 0.30164873097769895,
+            "positivePnlUsd": 0.3946831879451249
+          },
+          {
+            "chain": "bsc",
+            "address": "0x0699c83f715271da83c4d2191194d12d61417777",
+            "rounds": 1,
+            "netPnlUsd": -0.9428158263889888,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "robinhood",
+            "address": "0xb1da35ddb716a2f66c612d15e6d3ce5b90afb447",
+            "rounds": 1,
+            "netPnlUsd": -1.0474852672385744,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "sol",
+            "address": "Cy1GS2FqefgaMbi45UunrUzin1rfEmTUYnomddzBpump",
+            "rounds": 1,
+            "netPnlUsd": -0.67126794341557,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "sol",
+            "address": "6x4Z2dr5DgHUBCKvta8T8GNsFTxJhsBZxNrycWQ8pump",
+            "rounds": 1,
+            "netPnlUsd": -1.2609886090806928,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "bsc",
+            "address": "0x794ac64f70ebee4cae3b116154d3def76ba37777",
+            "rounds": 1,
+            "netPnlUsd": 1.3287989879452855,
+            "positivePnlUsd": 1.3287989879452855
+          },
+          {
+            "chain": "bsc",
+            "address": "0x8dceff98285b93013ab708d65e0206880c167777",
+            "rounds": 1,
+            "netPnlUsd": -0.957701324589527,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "sol",
+            "address": "EVD9rS4kGfSnwEzsQWxBnQAgM8ha3iCfbbe6GFNMpump",
+            "rounds": 1,
+            "netPnlUsd": -1.061495913201151,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "sol",
+            "address": "8TiMkgvsrat9tM2esko8zVTt99LZLpefUM4SnZaziXaQ",
+            "rounds": 1,
+            "netPnlUsd": -0.48205765149729896,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "bsc",
+            "address": "0x5ce033b2bfca3af30b3e8c8457deaf776a8b695a",
+            "rounds": 1,
+            "netPnlUsd": -0.6111732076900607,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "bsc",
+            "address": "0x9e8187936953420bf3b6b9e36b7568b21b807777",
+            "rounds": 1,
+            "netPnlUsd": -1.0652944417839807,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "robinhood",
+            "address": "0xf9e990ccb47806ac9268922bd21dc9a91c8e8899",
+            "rounds": 1,
+            "netPnlUsd": -0.9929244042871446,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "bsc",
+            "address": "0x097dd7ee96b36444ad3439b32a8518e682ff7777",
+            "rounds": 1,
+            "netPnlUsd": -0.762530633006099,
+            "positivePnlUsd": 0
+          },
+          {
+            "chain": "bsc",
+            "address": "0xa96402db0112ed21a6613b43cdfb766d9e5c7777",
+            "rounds": 1,
+            "netPnlUsd": -0.15741760952461625,
+            "positivePnlUsd": 0
+          }
+        ]
+      },
+      "automaticPromotion": false
+    },
+    "account": {
+      "initialCashUsd": 100,
+      "cashUsd": 46.67698465759682,
+      "cashAdjustmentUsd": 99.6684734885994,
+      "totalContributedUsd": 199.6684734885994,
+      "cashAdjustments": [
+        {
+          "id": "user_refill_20260930_repair_01",
+          "kind": "manual_paper_cash_reset",
+          "amountUsd": 99.6684734885994,
+          "cashBefore": 0.33152651140059874,
+          "cashAfter": 100,
+          "tradeCount": 204,
+          "at": "2026-09-30T04:46:53.549Z"
+        }
+      ],
+      "modelCostsAllFillsUsd": 60.446021317292,
+      "remainingCostBasisUsd": 19.849999999999998,
+      "realizedPnlUsd": -133.14148883100253,
+      "unrealizedPnlUsd": -7.013956111492104,
+      "totalPnlIncludingOpenUsd": -140.15544494249463,
+      "netLiquidationValueUsd": 59.513028546104714,
+      "valuationComplete": true,
+      "note": "补款不是利润；总已实现含未平仓头寸的部分卖出，不混入当前版本完整回合成绩。"
+    },
+    "versionCohorts": {
+      "legacyForwardClosedRounds": 0,
+      "mixedOrMissingForwardClosedRounds": 0,
+      "carriedInClosedAfterBaseline": 0
+    },
+    "openPositions": [
+      {
+        "key": "bsc:0x07bcb8e8226f671300e135b4a61dc157359b7777",
+        "chain": "bsc",
+        "address": "0x07bcb8e8226f671300e135b4a61dc157359b7777",
+        "route": "external_pullback",
+        "entryId": "1791473723820:238",
+        "openedAt": "2026-10-08T15:35:23.820Z",
+        "enteredAfterBaseline": false,
+        "quantity": 5993.959722058011,
+        "costBasisUsd": 8.7,
+        "valuationStatus": "fresh",
+        "markAt": "2026-10-17T22:03:24.206Z",
+        "valuationAgeMs": 9478,
+        "maxValuationAgeMs": 15000,
+        "lastRecorded": {
+          "markPrice": 0.00039640128,
+          "markValueUsd": 2.37601330609224,
+          "unrealizedPnlUsd": -6.482787359212372
+        },
+        "currentMarkValueUsd": 2.37601330609224,
+        "currentNetLiquidationUsd": 2.217212640787628,
+        "currentUnrealizedPnlUsd": -6.482787359212372
+      },
+      {
+        "key": "sol:D7fGMz4E8r8FQyqULpqKr9MCu46izx9stJeStgGfYnJb",
+        "chain": "sol",
+        "address": "D7fGMz4E8r8FQyqULpqKr9MCu46izx9stJeStgGfYnJb",
+        "route": "monitored_event",
+        "entryId": "1792085285247:297",
+        "openedAt": "2026-10-15T17:28:05.247Z",
+        "enteredAfterBaseline": true,
+        "quantity": 1891406.2626126807,
+        "costBasisUsd": 5.97,
+        "valuationStatus": "fresh",
+        "markAt": "2026-10-17T22:03:26.944Z",
+        "valuationAgeMs": 6740,
+        "maxValuationAgeMs": 15000,
+        "lastRecorded": {
+          "markPrice": 0.0000030597989,
+          "markValueUsd": 5.7873228017953915,
+          "unrealizedPnlUsd": -0.3084236542405163
+        },
+        "currentMarkValueUsd": 5.7873228017953915,
+        "currentNetLiquidationUsd": 5.661576345759483,
+        "currentUnrealizedPnlUsd": -0.3084236542405163
+      },
+      {
+        "key": "sol:9LMZwPNYp2xQE5JpGFTeMVm3b6xtWw8wiDio459Kpump",
+        "chain": "sol",
+        "address": "9LMZwPNYp2xQE5JpGFTeMVm3b6xtWw8wiDio459Kpump",
+        "route": "monitored_event",
+        "entryId": "1792250738005:304",
+        "openedAt": "2026-10-17T15:25:38.005Z",
+        "enteredAfterBaseline": true,
+        "quantity": 1550586.5652434053,
+        "costBasisUsd": 5.18,
+        "valuationStatus": "fresh",
+        "markAt": "2026-10-17T22:03:29.429Z",
+        "valuationAgeMs": 4255,
+        "maxValuationAgeMs": 15000,
+        "lastRecorded": {
+          "markPrice": 0.0000032688452,
+          "markValueUsd": 5.068627450980392,
+          "unrealizedPnlUsd": -0.2227450980392156
+        },
+        "currentMarkValueUsd": 5.068627450980392,
+        "currentNetLiquidationUsd": 4.957254901960784,
+        "currentUnrealizedPnlUsd": -0.2227450980392156
+      }
+    ],
+    "firstThree": {
+      "source": "new_pool_first_three",
+      "configured": {
+        "observed": true,
+        "version": "paper_quote_asset_first_three_v1",
+        "mode": "paper",
+        "maxUniqueCA": 3,
+        "generationPolicyVersion": "paper_launch_generation_first_three_v2",
+        "supportedSources": [
+          "bsc:flap",
+          "bsc:fourmeme"
+        ],
+        "maxEventAgeMs": 120000,
+        "requiresChart": false,
+        "orderBasis": "链上 TokenCreated 的区块号、交易序号、日志序号；不是发现顺序或热门榜",
+        "coverageNote": "仅接入严格链上证明的 BSC Flap 底池配置与 OpenFour 模板代次；网页模板、无关联 Hook 或缺排序证据仍观察；其他发射台未覆盖，不推测排名"
+      },
+      "actual": {
+        "allHistoryBuys": 0,
+        "forwardBuys": 0,
+        "forwardDistinctCA": 0,
+        "forwardClosedRounds": 0,
+        "currentVersionForwardClosedRounds": 0,
+        "openPositions": 0
+      },
+      "note": "配置前三 CA 上限不等于产生三笔成交；只按冻结买入事件来源计数，不能用已配置代替实绩。"
+    },
+    "safety": {
+      "mode": "paper",
+      "execution": false,
+      "signing": false,
+      "broadcast": false
+    }
+  },
+  "multiarm": {
+    "checkedAt": "2026-10-17T22:06:22.507Z",
+    "summary": {
+      "version": "profit_retention_multiarm_v3",
+      "sessionId": "confirmed-pvp-v2-estimated-20260928",
+      "mode": "shadow_paper",
+      "execution": false,
+      "signing": false,
+      "broadcast": false,
+      "pairedCohort": true,
+      "status": "observing",
+      "policy": {
+        "triggerPriceMultiples": [
+          2,
+          3,
+          5
+        ],
+        "sameActualEntries": true,
+        "sameQuotes": true,
+        "independentHypotheses": true,
+        "noPortfolioSum": true,
+        "historicalBackfill": false,
+        "reusedCapital": false
+      },
+      "baseline": {
+        "tradeCount": 305,
+        "lastTradeId": "1792250738005:304",
+        "tradePrefixHash": "dd8adde1337cddcf30dfee8f2a526fdfb7cbee2d4852e59ae616188302bce9ce",
+        "establishedAtMs": 1792252219527
+      },
+      "cursor": {
+        "tradeCount": 305,
+        "lastTradeId": "1792250738005:304",
+        "tradePrefixHash": "dd8adde1337cddcf30dfee8f2a526fdfb7cbee2d4852e59ae616188302bce9ce"
+      },
+      "startedAtMs": 1792252219527,
+      "updatedAtMs": 1792274612539,
+      "closedPairs": 0,
+      "openPairs": 0,
+      "excludedPairs": 0,
+      "ineligibleEntries": 0,
+      "admissionStopped": false,
+      "sharedCoverage": {
+        "gapCount": 0,
+        "pairGapCount": 0,
+        "reasons": {},
+        "latest": [],
+        "byPair": []
+      },
+      "arms": [
+        {
+          "multiple": 2,
+          "version": "profit_retention_principal_v2",
+          "sessionId": "confirmed-pvp-v2-estimated-20260928",
+          "status": "observing",
+          "startedAtMs": 1792252219527,
+          "updatedAtMs": 1792274612539,
+          "closedPairs": 0,
+          "openPairs": 0,
+          "excludedPairs": 0,
+          "ineligibleEntries": 0,
+          "admissionStopped": false,
+          "performance": null,
+          "active": [],
+          "coverage": {
+            "gapCount": 0,
+            "reasons": {},
+            "latest": []
+          },
+          "policy": {
+            "triggerPriceMultiple": 2,
+            "recoveryRule": "net_sale_proceeds_cover_all_in_original_basis",
+            "quoteMaxAgeMs": 15000,
+            "maxPairs": 200,
+            "maxObservations": 120,
+            "maxDetails": 200,
+            "nextDistinctQuote": true,
+            "mainExitPrecedence": true,
+            "disarmBelowTrigger": true,
+            "reusedCapital": false,
+            "historicalBackfill": false,
+            "riskMeaning": "frozen_scenario_not_maximum_loss"
+          },
+          "note": "Same actual entries; forward hypothetical exits only. Price multiple, not net return multiple. Recovered principal is cashflow, not all profit; remaining inventory and future exit gas still carry risk. Hypothetical fractional quantities: token atom precision and executable routes not modeled. Model fees/slippage/gas; no execution or independent capital reuse."
+        },
+        {
+          "multiple": 3,
+          "version": "profit_retention_principal_v2",
+          "sessionId": "confirmed-pvp-v2-estimated-20260928",
+          "status": "observing",
+          "startedAtMs": 1792252219527,
+          "updatedAtMs": 1792274612539,
+          "closedPairs": 0,
+          "openPairs": 0,
+          "excludedPairs": 0,
+          "ineligibleEntries": 0,
+          "admissionStopped": false,
+          "performance": null,
+          "active": [],
+          "coverage": {
+            "gapCount": 0,
+            "reasons": {},
+            "latest": []
+          },
+          "policy": {
+            "triggerPriceMultiple": 3,
+            "recoveryRule": "net_sale_proceeds_cover_all_in_original_basis",
+            "quoteMaxAgeMs": 15000,
+            "maxPairs": 200,
+            "maxObservations": 120,
+            "maxDetails": 200,
+            "nextDistinctQuote": true,
+            "mainExitPrecedence": true,
+            "disarmBelowTrigger": true,
+            "reusedCapital": false,
+            "historicalBackfill": false,
+            "riskMeaning": "frozen_scenario_not_maximum_loss"
+          },
+          "note": "Same actual entries; forward hypothetical exits only. Price multiple, not net return multiple. Recovered principal is cashflow, not all profit; remaining inventory and future exit gas still carry risk. Hypothetical fractional quantities: token atom precision and executable routes not modeled. Model fees/slippage/gas; no execution or independent capital reuse."
+        },
+        {
+          "multiple": 5,
+          "version": "profit_retention_principal_v2",
+          "sessionId": "confirmed-pvp-v2-estimated-20260928",
+          "status": "observing",
+          "startedAtMs": 1792252219527,
+          "updatedAtMs": 1792274612539,
+          "closedPairs": 0,
+          "openPairs": 0,
+          "excludedPairs": 0,
+          "ineligibleEntries": 0,
+          "admissionStopped": false,
+          "performance": null,
+          "active": [],
+          "coverage": {
+            "gapCount": 0,
+            "reasons": {},
+            "latest": []
+          },
+          "policy": {
+            "triggerPriceMultiple": 5,
+            "recoveryRule": "net_sale_proceeds_cover_all_in_original_basis",
+            "quoteMaxAgeMs": 15000,
+            "maxPairs": 200,
+            "maxObservations": 120,
+            "maxDetails": 200,
+            "nextDistinctQuote": true,
+            "mainExitPrecedence": true,
+            "disarmBelowTrigger": true,
+            "reusedCapital": false,
+            "historicalBackfill": false,
+            "riskMeaning": "frozen_scenario_not_maximum_loss"
+          },
+          "note": "Same actual entries; forward hypothetical exits only. Price multiple, not net return multiple. Recovered principal is cashflow, not all profit; remaining inventory and future exit gas still carry risk. Hypothetical fractional quantities: token atom precision and executable routes not modeled. Model fees/slippage/gas; no execution or independent capital reuse."
+        }
+      ],
+      "note": "Fixed 2x/3x/5x hypotheses share the same actual entries and control. Do not sum their profits or count the shared baseline three times. All completed rounds include untriggered recoveries; no completed rounds means unknown performance."
+    },
+    "persistedAt": "2026-10-17T22:05:05.789Z",
+    "checkpoint": {
+      "tradeCount": 305,
+      "lastTradeId": "1792250738005:304",
+      "tradePrefixHash": "dd8adde1337cddcf30dfee8f2a526fdfb7cbee2d4852e59ae616188302bce9ce",
+      "accountUpdatedAt": "2026-10-17T22:05:05.238Z"
+    },
+    "live": {
+      "version": "profit_retention_multiarm_v3",
+      "status": "observing",
+      "error": null,
+      "pendingWrite": false,
+      "persistedAt": "2026-10-17T22:04:59.426Z",
+      "checkpoint": {
+        "tradeCount": 305,
+        "lastTradeId": "1792250738005:304",
+        "tradePrefixHash": "dd8adde1337cddcf30dfee8f2a526fdfb7cbee2d4852e59ae616188302bce9ce",
+        "accountUpdatedAt": "2026-10-17T22:04:59.058Z"
+      }
+    },
+    "scheduler": {
+      "version": "evidence_preserving_event_lease_v1",
+      "rememberedEventLeases": 0,
+      "overflowPreemptionSuppressedUntil": null
+    },
+    "baselineConsistency": true,
+    "cursorConsistency": true,
+    "sameEntryPairIds": true,
+    "sameQuotePairing": "no_post_baseline_pairs_to_validate",
+    "reportedCompletePairIds": [],
+    "newCompletePairIds": [],
+    "newCompletePairs": 0,
+    "baselineEntriesExcluded": 3,
+    "performanceUnknown": true,
+    "gaps": [],
+    "pendingWriteObservation": {
+      "first": true,
+      "second": false,
+      "persistenceAdvanced": true
+    },
+    "note": "0新入场/完整回合，各收益、差额、回本/未触发/失败计数、卖飞、回撤、集中度与剔除最大CA后净收益均null；不是0盈利。三组不可相加，不自动切主盘。"
+  },
+  "health": {
+    "capturedAt": "2026-10-17T22:03:33.741Z",
+    "main": {
+      "version": 1,
+      "producer": "main",
+      "pid": 83916,
+      "startedAt": "2026-10-12T06:01:24.038Z",
+      "updatedAt": "2026-10-17T22:03:29.113Z",
+      "sequence": 16321
+    },
+    "bsc": {
+      "version": 1,
+      "producer": "bsc",
+      "pid": 48732,
+      "startedAt": "2026-10-17T21:39:08.426Z",
+      "updatedAt": "2026-10-17T22:03:30.118Z",
+      "sequence": 49
+    },
+    "flap": {
+      "cursor": {
+        "nextBlock": 128103371,
+        "afterLogIndex": -1,
+        "anchorBlock": 128103370,
+        "anchorBlockHash": "0xc0f5445175a135ce2db493a3eaa88a011e47e29c3a423d37183c6eac8e6ed395",
+        "baselineEstablishedAt": "2026-09-03T09:53:09.737Z"
+      },
+      "checkedAt": "2026-10-17T22:02:10.413Z",
+      "health": {
+        "status": "degraded",
+        "consecutiveFailures": 216,
+        "lastSuccessAt": "2026-10-17T04:05:48.028Z",
+        "lastErrorAt": "2026-10-17T22:02:10.413Z",
+        "lastError": "Flap Portal version v5.25.0 does not match pinned v5.24.0",
+        "lastErrorCode": "FLAP_QUOTE_PORTAL_VERSION_MISMATCH",
+        "reorgCount": 0,
+        "lastReorgAt": null,
+        "lastAttemptAt": "2026-10-17T22:02:10.413Z",
+        "nextAttemptAt": "2026-10-17T22:07:16.880Z",
+        "failureClass": "chain"
+      },
+      "identity": {
+        "chainId": 56,
+        "portal": "0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0",
+        "portalRuntimeCodeHash": "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3",
+        "version": "v5.24.0",
+        "implementation": "0x27a0f9Da7F5BEAd616fe0bf02bf0c793bece4e20",
+        "implementationCodeHash": "0xb191694f7248773f714234aeb150149a2b9af5d1ab483a53d31c19ec3132b230",
+        "verifiedBlock": 128103370,
+        "verifiedBlockHash": "0xc0f5445175a135ce2db493a3eaa88a011e47e29c3a423d37183c6eac8e6ed395",
+        "portalRuntimeCodeBytes": 2882,
+        "implementationCodeBytes": 20475
+      }
+    },
+    "four": {
+      "cursor": {
+        "nextBlock": 127417539,
+        "anchorBlock": 127417538,
+        "anchorBlockHash": "0x142378383160b8dc3e8f4808739d82e84a7eef6426b3e3a6bc19149216956398"
+      },
+      "updatedAt": "2026-10-17T21:58:42.909Z",
+      "chainId": 56
+    },
+    "platforms": {
+      "flap": {
+        "checkedAt": "2026-10-17T22:01:25.586Z",
+        "observedChains": [
+          {
+            "name": "Base",
+            "chainId": null,
+            "environment": "unknown",
+            "stage": "deployed",
+            "evidence": "deployed_contract",
+            "sources": [
+              {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+              }
+            ],
+            "source": {
+              "kind": "docs",
+              "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+            }
+          },
+          {
+            "name": "BNB Chain",
+            "chainId": 56,
+            "environment": "mainnet",
+            "stage": "deployed",
+            "evidence": "deployed_contract,deployed_contract,deployed_contract,network_config,supported_network,network_config,supported_network",
+            "sources": [
+              {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+              },
+              {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/vault-developers/vault-and-vaultfactory-specification"
+              }
+            ],
+            "source": {
+              "kind": "docs",
+              "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+            }
+          },
+          {
+            "name": "BNB Chain",
+            "chainId": 97,
+            "environment": "testnet",
+            "stage": "deployed",
+            "evidence": "deployed_contract,deployed_contract,deployed_contract,network_config,supported_network,network_config,supported_network",
+            "sources": [
+              {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+              },
+              {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/vault-developers/vault-and-vaultfactory-specification"
+              }
+            ],
+            "source": {
+              "kind": "docs",
+              "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+            }
+          },
+          {
+            "name": "Morph",
+            "chainId": 2818,
+            "environment": "mainnet",
+            "stage": "deployed",
+            "evidence": "deployed_contract",
+            "sources": [
+              {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+              }
+            ],
+            "source": {
+              "kind": "docs",
+              "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+            }
+          },
+          {
+            "name": "Robinhood Chain",
+            "chainId": null,
+            "environment": "testnet",
+            "stage": "deployed",
+            "evidence": "deployed_contract",
+            "sources": [
+              {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+              }
+            ],
+            "source": {
+              "kind": "docs",
+              "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+            }
+          },
+          {
+            "name": "Robinhood Chain",
+            "chainId": 4663,
+            "environment": "mainnet",
+            "stage": "deployed",
+            "evidence": "deployed_contract,deployed_contract,deployed_contract,network_config,supported_network,network_config,supported_network",
+            "sources": [
+              {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+              },
+              {
+                "kind": "docs",
+                "url": "https://docs.flap.sh/flap/developers/vault-developers/vault-and-vaultfactory-specification"
+              }
+            ],
+            "source": {
+              "kind": "docs",
+              "url": "https://docs.flap.sh/flap/developers/deployed-contract-addresses"
+            }
+          }
+        ],
+        "documentChanges": [
+          {
+            "id": "77ee37ee1553235b423d4c62e5452e9a6174ec4700f44fe52d291c6de58f6829",
+            "url": "https://docs.flap.sh/flap/developers/flap-token-locker",
+            "observedAt": "2026-10-17T11:36:48.190Z",
+            "status": "pending_verification",
+            "beforeFingerprint": "81fdefdd4aba1c50336042ba3305bbe2fa6b84909e24583d1991860129a0deb3",
+            "afterFingerprint": "f8ba614e47cad72cf75fdb7a4e4fc2e7f3a492327d0dc7f28137e51e0c3f66a1",
+            "removed": [],
+            "added": [],
+            "summaryIncomplete": true,
+            "meaning": "官方页面正文变化待核实；不代表新部署、新代次、具体 CA 或首三名交易资格"
+          },
+          {
+            "id": "06aff81084c83e5e02e05412966922b6068064decfb63d901793a8ba9c5ed04c",
+            "url": "https://docs.flap.sh/flap/developers/flap-token-locker/integration-guide",
+            "observedAt": "2026-10-17T11:36:48.860Z",
+            "status": "pending_verification",
+            "beforeFingerprint": "f206cf74382c09df98a4cce05978c6166f62434b0d42d13e2a629a8047f61a62",
+            "afterFingerprint": "37d68a9f5bb488ae284212268708682e0d0b3351f389b8057cdba4eb768970db",
+            "removed": [],
+            "added": [],
+            "summaryIncomplete": true,
+            "meaning": "官方页面正文变化待核实；不代表新部署、新代次、具体 CA 或首三名交易资格"
+          }
+        ]
+      },
+      "fourmeme": {
+        "checkedAt": "2026-10-17T22:01:22.415Z",
+        "observedChains": [
+          {
+            "name": "BNB Chain",
+            "chainId": 56,
+            "environment": "mainnet",
+            "stage": "supported",
+            "evidence": "published_network_config",
+            "sources": [
+              {
+                "kind": "api",
+                "url": "https://four.meme/meme-api/v1/public/config"
+              }
+            ],
+            "source": {
+              "kind": "api",
+              "url": "https://four.meme/meme-api/v1/public/config"
+            }
+          }
+        ],
+        "documentChanges": []
+      }
+    },
+    "twitter": {
+      "flapdotsh": {
+        "checkedAt": "2026-10-17T22:03:29.149Z",
+        "latestId": "2111008529029190127",
+        "health": {
+          "status": "degraded",
+          "consecutiveFailures": 0,
+          "priority": true,
+          "checkedAt": "2026-10-17T22:03:29.809Z",
+          "lastSuccessAt": "2026-10-17T22:03:29.150Z",
+          "activeSource": "https://api.fxtwitter.com/2/profile/id:{userId}/statuses?count=40",
+          "timelineItems": 18,
+          "lastGapResolvedAt": "2026-10-17T21:47:57.115Z",
+          "activeSourceId": "fxtwitter_numeric_id",
+          "scheduledUntil": "2026-10-17T22:03:33.558Z",
+          "slaStatus": "source_limited",
+          "slaStatusReason": "public_discovery_limited:x_direct_profile,jina_twitter_profile",
+          "slaHardGuarantee": false,
+          "slaCheckedAt": "2026-10-17T22:03:29.809Z"
+        }
+      },
+      "fourdotmemezh": {
+        "checkedAt": "2026-10-17T22:03:29.229Z",
+        "latestId": "2111079404986388853",
+        "health": {
+          "status": "degraded",
+          "consecutiveFailures": 0,
+          "priority": true,
+          "checkedAt": "2026-10-17T22:03:29.809Z",
+          "lastSuccessAt": "2026-10-17T22:03:29.229Z",
+          "activeSource": "https://api.fxtwitter.com/2/profile/id:{userId}/statuses?count=40",
+          "timelineItems": 18,
+          "lastGapResolvedAt": "2026-10-17T22:00:57.969Z",
+          "activeSourceId": "fxtwitter_numeric_id",
+          "scheduledUntil": "2026-10-17T22:03:33.559Z",
+          "slaStatus": "source_limited",
+          "slaStatusReason": "public_discovery_limited:x_direct_profile,jina_twitter_profile",
+          "slaHardGuarantee": false,
+          "slaCheckedAt": "2026-10-17T22:03:29.809Z"
+        }
+      }
+    },
+    "apiExit": {
+      "running": true,
+      "intervalMs": 1000,
+      "lastCheckedAt": "2026-10-17T22:03:32.539Z",
+      "checks": 9851,
+      "staleQuotes": 0,
+      "entriesEnabled": true,
+      "lastError": null
+    },
+    "launchUpdateCoverage": {
+      "version": "launch_update_coverage_v1",
+      "checkedAt": "2026-10-17T22:03:29.760Z",
+      "readOnly": true,
+      "status": "coverage_limited",
+      "platforms": {
+        "flap": {
+          "officialX": {
+            "handle": "flapdotsh",
+            "status": "source_limited",
+            "lastAttemptAt": null,
+            "lastSuccessAt": "2026-10-17T22:02:59.014Z",
+            "nextAttemptAt": null,
+            "ageMs": 30746,
+            "lastErrorCode": null
+          },
+          "officialWeb": {
+            "status": "fresh",
+            "total": 5,
+            "fresh": 5,
+            "unverified": 0,
+            "stale": 0,
+            "source_limited": 0,
+            "degraded": 0,
+            "metadata_only": 0
+          },
+          "documentBodies": {
+            "version": "official_document_body_v1",
+            "allowedPages": 59,
+            "uncheckedPages": 0,
+            "freshPages": 58,
+            "stalePages": 0,
+            "failedPages": 1,
+            "untrackedPages": 0,
+            "rosterOverflowPages": 0,
+            "pendingChanges": 2,
+            "omittedChangeCount": 0,
+            "nextDueAt": "2026-10-17T21:00:57.163Z",
+            "originNextAttemptAt": null,
+            "rosterDiscovery": {
+              "status": "fresh",
+              "total": 1,
+              "fresh": 1,
+              "unverified": 0,
+              "stale": 0,
+              "source_limited": 0,
+              "degraded": 0,
+              "metadata_only": 0
+            },
+            "status": "partial"
+          },
+          "github": {
+            "status": "fresh",
+            "total": 4,
+            "fresh": 4,
+            "unverified": 0,
+            "stale": 0,
+            "source_limited": 0,
+            "degraded": 0,
+            "metadata_only": 0,
+            "repositories": [
+              {
+                "repository": "flap-sh/flap-vault-component-template",
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-17T22:03:06.094Z",
+                "lastSuccessAt": "2026-10-17T22:03:06.094Z",
+                "nextAttemptAt": null,
+                "ageMs": 23666,
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "fresh",
+                  "lastAttemptAt": "2026-10-17T22:03:06.094Z",
+                  "lastSuccessAt": "2026-10-17T22:03:06.094Z",
+                  "nextAttemptAt": null,
+                  "ageMs": 23666,
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-10-17T22:03:06.094Z",
+                "observationBasis": "commit_poll"
+              },
+              {
+                "repository": "flap-sh/FlapVaultExample",
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-17T22:03:06.095Z",
+                "lastSuccessAt": "2026-10-17T22:03:06.095Z",
+                "nextAttemptAt": null,
+                "ageMs": 23665,
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "fresh",
+                  "lastAttemptAt": "2026-10-17T22:03:06.095Z",
+                  "lastSuccessAt": "2026-10-17T22:03:06.095Z",
+                  "nextAttemptAt": null,
+                  "ageMs": 23665,
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-10-17T22:03:06.095Z",
+                "observationBasis": "commit_poll"
+              },
+              {
+                "repository": "flap-sh/flap-skills",
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-17T22:03:06.093Z",
+                "lastSuccessAt": "2026-10-17T22:03:06.093Z",
+                "nextAttemptAt": null,
+                "ageMs": 23667,
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "fresh",
+                  "lastAttemptAt": "2026-10-17T22:03:06.093Z",
+                  "lastSuccessAt": "2026-10-17T22:03:06.093Z",
+                  "nextAttemptAt": null,
+                  "ageMs": 23667,
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-10-17T22:03:06.093Z",
+                "observationBasis": "commit_poll"
+              }
+            ],
+            "organizations": [
+              {
+                "organization": "flap-sh",
+                "status": "fresh",
+                "lastAttemptAt": null,
+                "lastSuccessAt": "2026-10-17T22:01:36.243Z",
+                "nextAttemptAt": null,
+                "ageMs": 113517,
+                "lastErrorCode": null
+              }
+            ],
+            "repositoryCount": 3,
+            "candidateRepositories": 0
+          },
+          "onchain": {
+            "status": "stale",
+            "lastAttemptAt": "2026-10-17T22:02:10.413Z",
+            "lastSuccessAt": "2026-10-17T04:05:48.028Z",
+            "nextAttemptAt": "2026-10-17T22:07:16.880Z",
+            "ageMs": 64661732,
+            "lastErrorCode": "FLAP_QUOTE_PORTAL_VERSION_MISMATCH",
+            "adapterHealth": {
+              "status": "stale",
+              "lastAttemptAt": "2026-10-17T22:02:10.413Z",
+              "lastSuccessAt": "2026-10-17T04:05:48.028Z",
+              "nextAttemptAt": "2026-10-17T22:07:16.880Z",
+              "ageMs": 64661732,
+              "lastErrorCode": "FLAP_QUOTE_PORTAL_VERSION_MISMATCH"
+            },
+            "checkpointAt": "2026-10-17T22:02:10.413Z",
+            "nextBlock": 128103371,
+            "headLagBlocks": null,
+            "liveHeadVerified": false,
+            "scope": "BSC pinned Portal quote adapter"
+          },
+          "coverageStatus": "bounded_sources_not_all_future_schemas"
+        },
+        "fourmeme": {
+          "officialX": {
+            "handle": "fourdotmemezh",
+            "status": "source_limited",
+            "lastAttemptAt": null,
+            "lastSuccessAt": "2026-10-17T22:02:59.019Z",
+            "nextAttemptAt": null,
+            "ageMs": 30741,
+            "lastErrorCode": null
+          },
+          "officialWeb": {
+            "status": "fresh",
+            "total": 13,
+            "fresh": 13,
+            "unverified": 0,
+            "stale": 0,
+            "source_limited": 0,
+            "degraded": 0,
+            "metadata_only": 0
+          },
+          "documentBodies": {
+            "version": "official_document_body_v1",
+            "allowedPages": 10,
+            "uncheckedPages": 0,
+            "freshPages": 8,
+            "stalePages": 0,
+            "failedPages": 2,
+            "untrackedPages": 0,
+            "rosterOverflowPages": 0,
+            "pendingChanges": 0,
+            "omittedChangeCount": 0,
+            "nextDueAt": "2026-10-17T22:03:25.412Z",
+            "originNextAttemptAt": null,
+            "rosterDiscovery": {
+              "status": "fresh",
+              "total": 1,
+              "fresh": 1,
+              "unverified": 0,
+              "stale": 0,
+              "source_limited": 0,
+              "degraded": 0,
+              "metadata_only": 0
+            },
+            "status": "partial"
+          },
+          "github": {
+            "status": "partial",
+            "total": 6,
+            "fresh": 4,
+            "unverified": 0,
+            "stale": 0,
+            "source_limited": 0,
+            "degraded": 0,
+            "metadata_only": 2,
+            "repositories": [
+              {
+                "repository": "four-meme-community/openfour-docs",
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-17T22:03:05.979Z",
+                "lastSuccessAt": "2026-10-17T22:03:05.979Z",
+                "nextAttemptAt": null,
+                "ageMs": 23781,
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "fresh",
+                  "lastAttemptAt": "2026-10-17T22:03:05.979Z",
+                  "lastSuccessAt": "2026-10-17T22:03:05.979Z",
+                  "nextAttemptAt": null,
+                  "ageMs": 23781,
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-10-17T22:03:05.979Z",
+                "observationBasis": "commit_poll"
+              },
+              {
+                "repository": "four-meme-community/four-meme-ai",
+                "status": "fresh",
+                "lastAttemptAt": "2026-10-17T22:03:07.039Z",
+                "lastSuccessAt": "2026-10-17T22:03:07.039Z",
+                "nextAttemptAt": null,
+                "ageMs": 22721,
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "fresh",
+                  "lastAttemptAt": "2026-10-17T22:03:07.039Z",
+                  "lastSuccessAt": "2026-10-17T22:03:07.039Z",
+                  "nextAttemptAt": null,
+                  "ageMs": 22721,
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-10-17T22:03:07.039Z",
+                "observationBasis": "commit_poll"
+              },
+              {
+                "repository": "four-meme-community/fourmeme-docs",
+                "status": "metadata_only",
+                "lastAttemptAt": "2026-10-17T21:58:32.794Z",
+                "lastSuccessAt": "2026-09-11T07:48:05.561Z",
+                "nextAttemptAt": "2026-10-17T22:03:32.794Z",
+                "ageMs": 3161724199,
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "fresh",
+                  "lastAttemptAt": "2026-10-17T21:58:32.794Z",
+                  "lastSuccessAt": "2026-10-17T21:58:32.794Z",
+                  "nextAttemptAt": "2026-10-17T22:03:32.794Z",
+                  "ageMs": 296966,
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-09-11T07:48:05.561Z",
+                "observationBasis": "organization_metadata_unchanged"
+              },
+              {
+                "repository": "four-meme-community/openfour-boost-launchpad",
+                "status": "metadata_only",
+                "lastAttemptAt": "2026-10-17T21:58:32.794Z",
+                "lastSuccessAt": "2026-10-13T02:37:09.236Z",
+                "nextAttemptAt": "2026-10-17T22:03:32.794Z",
+                "ageMs": 415580524,
+                "lastErrorCode": null,
+                "metadataHealth": {
+                  "status": "fresh",
+                  "lastAttemptAt": "2026-10-17T21:58:32.794Z",
+                  "lastSuccessAt": "2026-10-17T21:58:32.794Z",
+                  "nextAttemptAt": "2026-10-17T22:03:32.794Z",
+                  "ageMs": 296966,
+                  "lastErrorCode": null
+                },
+                "lastCommitReadAt": "2026-10-13T02:37:09.236Z",
+                "observationBasis": "organization_metadata_unchanged"
+              }
+            ],
+            "organizations": [
+              {
+                "organization": "four-meme-community",
+                "status": "fresh",
+                "lastAttemptAt": null,
+                "lastSuccessAt": "2026-10-17T22:01:35.275Z",
+                "nextAttemptAt": null,
+                "ageMs": 114485,
+                "lastErrorCode": null
+              },
+              {
+                "organization": "four-meme",
+                "status": "fresh",
+                "lastAttemptAt": null,
+                "lastSuccessAt": "2026-10-17T22:01:34.427Z",
+                "nextAttemptAt": null,
+                "ageMs": 115333,
+                "lastErrorCode": null
+              }
+            ],
+            "repositoryCount": 4,
+            "candidateRepositories": 1
+          },
+          "onchain": {
+            "adapterHealth": null,
+            "status": "checkpoint_only_unverified",
+            "checkpointAt": "2026-10-17T21:58:42.909Z",
+            "nextBlock": 127417539,
+            "headLagBlocks": null,
+            "liveHeadVerified": false,
+            "scope": "BSC pinned OpenFour registry adapter"
+          },
+          "coverageStatus": "bounded_sources_not_all_future_schemas"
+        }
+      },
+      "readErrors": [],
+      "executionBoundary": "更新正文仅作待核实观察；仅已绑定受支持链上版本且顺序核实的最早三个不同 CA 进入模拟评估，不补第四名，仍须通过时效、可卖性及仓位检查。",
+      "remainingGaps": [
+        "未知合约地址、事件 ABI 和同地址 Hook 新版本仍需核实适配",
+        "链上检查点不等于已追平链头；网站正常不等于狙击完整覆盖",
+        "X 上游来源受限或电脑离线时不保证连续覆盖"
+      ]
+    },
+    "bscProcessChanged": true,
+    "previousBsc": {
+      "version": 1,
+      "producer": "bsc",
+      "pid": 6435,
+      "startedAt": "2026-10-16T15:49:20.816Z",
+      "updatedAt": "2026-10-17T18:11:12.800Z",
+      "sequence": 3109
+    },
+    "processChangeInitiatedByThisReview": false,
+    "flapCursorAdvance": 0,
+    "fourCursorAdvance": 0,
+    "continuousCoverageProven": false
+  },
+  "limits": [
+    "仅已成功观察的快照；当前在线不代表两次检查间持续在线或断档已补齐。",
+    "Flap v5.25.0与固定v5.24.0不匹配未修复；Four仍仅BSC56，Robinhood未核实/未接入。",
+    "无交易、签名、广播、实盘钱包读取、额外Jev、策略代码更改、进程重启或外部消息；FOMO平台维持关闭。"
+  ],
+  "nextQuestion": "下轮Sol：到期头页优先，否则从保留的新头页游标有界连接旧锚点；BSC A nonce158–161待按哈希分类。三组对照继续等待共同新入场/完整回合；检查Flap版本错误和Four游标，不自动修复或重启。",
+  "notificationDecision": "DONT_NOTIFY",
+  "notificationReason": "没有新增交易/完整回合或覆盖恢复；BSC进程标识变化已记录，但尚存缺口无新的处置要求，不重复提醒已报告故障。"
+}

@@ -1,0 +1,179 @@
+{
+  "schema": "launch_update_monitoring_review_v1",
+  "checkedAt": "2026-10-10T16:31:26.255Z",
+  "timezone": "Asia/Shanghai",
+  "scope": "Four.meme / Flap public-update observation and paper-only earliest-three-CA evaluation",
+  "tests": {
+    "firstFull": {
+      "total": 4062,
+      "passed": 4061,
+      "failed": 1,
+      "failure": "gmgn-plus-pacing fixture timeout"
+    },
+    "isolatedPacing": {
+      "total": 9,
+      "passed": 9
+    },
+    "finalFull": {
+      "total": 4063,
+      "passed": 4063,
+      "failed": 0,
+      "concurrency": 2,
+      "durationMs": 173436.268125
+    }
+  },
+  "rollout": {
+    "mainBefore": 86444,
+    "mainAfter": 28101,
+    "bscBefore": 6239,
+    "bscAfter": 28102,
+    "dashboardBefore": 97032,
+    "dashboardAfter": 28196,
+    "gmgnXWorkerUnchanged": 7258,
+    "mainTermAt": "2026-10-10T16:29:43.403Z",
+    "mainDrainedAt": "2026-10-10T16:29:48.092Z",
+    "mainStartedAt": "2026-10-10T16:29:48.902Z",
+    "bscStartedAt": "2026-10-10T16:29:49.294Z",
+    "forcedKill": false,
+    "manualLockRemoval": false
+  },
+  "safety": {
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "fomoPlatformSourcesEnabled": false,
+    "reviewBatchSize": 100,
+    "automaticParameterChanges": false
+  },
+  "preservation": {
+    "before": {
+      "checkedAt": "2026-10-10T16:23:27.955Z",
+      "source": "data/yesp-atm-confirmed-pvp-v2-estimated-20260928.json",
+      "trades": 267,
+      "tradesHash": "d1ee6d916864584df57583a7f1f1982018fb4f23c4c3d4575b10a3e4ec6cd478",
+      "reviewHash": "f3c37f508c544d2a09b983b5f89737c05f8bcfb407a1cb3c152bc85437d75435",
+      "cashAdjustmentsHash": "68e2aacf2f8f7308a1988f1e1ce2a57d65d646a2207445f1e3ebe100fd37539b",
+      "legacyHash": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36",
+      "positions": [
+        {
+          "key": "bsc:0x07bcb8e8226f671300e135b4a61dc157359b7777",
+          "openedAt": "2026-10-08T15:35:23.820Z",
+          "entryEvidenceHash": "43493d2915e4ce0e8b0d2944eadb1bf3f0de099f5b3588c99efe06fe66c5e11e"
+        }
+      ],
+      "cash": 58.770528389847854,
+      "realizedPnl": -132.1979450987515
+    },
+    "after": {
+      "checkedAt": "2026-10-10T16:30:15.988Z",
+      "source": "data/yesp-atm-confirmed-pvp-v2-estimated-20260928.json",
+      "trades": 267,
+      "tradesHash": "d1ee6d916864584df57583a7f1f1982018fb4f23c4c3d4575b10a3e4ec6cd478",
+      "reviewHash": "f3c37f508c544d2a09b983b5f89737c05f8bcfb407a1cb3c152bc85437d75435",
+      "cashAdjustmentsHash": "68e2aacf2f8f7308a1988f1e1ce2a57d65d646a2207445f1e3ebe100fd37539b",
+      "legacyHash": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36",
+      "positions": [
+        {
+          "key": "bsc:0x07bcb8e8226f671300e135b4a61dc157359b7777",
+          "openedAt": "2026-10-08T15:35:23.820Z",
+          "entryEvidenceHash": "43493d2915e4ce0e8b0d2944eadb1bf3f0de099f5b3588c99efe06fe66c5e11e"
+        }
+      ],
+      "cash": 58.770528389847854,
+      "realizedPnl": -132.1979450987515
+    },
+    "matched": true
+  },
+  "coverage": {
+    "checkedAt": "2026-10-10T16:31:21.209Z",
+    "status": "coverage_limited",
+    "readErrors": [],
+    "platforms": {
+      "flap": {
+        "officialX": "source_limited",
+        "officialWeb": "fresh",
+        "documentBodies": {
+          "version": "official_document_body_v1",
+          "allowedPages": 59,
+          "uncheckedPages": 51,
+          "freshPages": 8,
+          "stalePages": 0,
+          "failedPages": 0,
+          "untrackedPages": 0,
+          "rosterOverflowPages": 0,
+          "pendingChanges": 0,
+          "omittedChangeCount": 0,
+          "nextDueAt": "2026-10-10T16:31:21.209Z",
+          "originNextAttemptAt": null,
+          "rosterDiscovery": {
+            "status": "fresh",
+            "total": 1,
+            "fresh": 1,
+            "unverified": 0,
+            "stale": 0,
+            "source_limited": 0,
+            "degraded": 0,
+            "metadata_only": 0
+          },
+          "status": "partial"
+        },
+        "github": "fresh",
+        "onchain": "adapter_observed_head_unverified"
+      },
+      "fourmeme": {
+        "officialX": "source_limited",
+        "officialWeb": "fresh",
+        "documentBodies": {
+          "version": "official_document_body_v1",
+          "allowedPages": 10,
+          "uncheckedPages": 2,
+          "freshPages": 6,
+          "stalePages": 0,
+          "failedPages": 2,
+          "untrackedPages": 0,
+          "rosterOverflowPages": 0,
+          "pendingChanges": 0,
+          "omittedChangeCount": 0,
+          "nextDueAt": "2026-10-10T16:30:45.908Z",
+          "originNextAttemptAt": null,
+          "rosterDiscovery": {
+            "status": "fresh",
+            "total": 1,
+            "fresh": 1,
+            "unverified": 0,
+            "stale": 0,
+            "source_limited": 0,
+            "degraded": 0,
+            "metadata_only": 0
+          },
+          "status": "partial"
+        },
+        "github": "partial",
+        "onchain": "checkpoint_only_unverified"
+      }
+    },
+    "bsc": {
+      "checkedAt": "2026-10-10T16:31:24.656Z",
+      "lastFinalizedBlock": 119873135,
+      "tail": 126860008,
+      "tailHealth": {
+        "status": "error",
+        "lastSuccessAt": null,
+        "coveredBlock": 126860007,
+        "confirmedHeadBlock": 126860163,
+        "lagBlocks": 156,
+        "lagSeconds": 71
+      }
+    },
+    "documentRedirectGaps": [
+      "https://four-meme.gitbook.io/four.meme/brand/protocol-integration",
+      "https://four-meme.gitbook.io/four.meme/product-update"
+    ]
+  },
+  "remainingGaps": [
+    "未知合约地址、事件 ABI 和同地址 Hook 新版本仍需核实适配",
+    "链上检查点不等于已追平链头；网站正常不等于狙击完整覆盖",
+    "X 上游来源受限或电脑离线时不保证连续覆盖"
+  ],
+  "noClaim": "Tests and source observations do not prove profit, continuous online coverage, all future update schemas, or immediate sniping."
+}

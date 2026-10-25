@@ -14,6 +14,7 @@ import {readyForPaperQuote} from '../src/paper-candidate-research.js';
 import {createPaperStrategyRuntime} from '../src/paper-strategy-runtime.js';
 import {createConfirmedPaperSession,createEstimatedPaperSession,LEGACY_PAPER_FILE} from '../src/paper-account-session.js';
 import {createPublicSnapshot} from '../src/public-dashboard-state.js';
+import {recoveryEntryCheck} from '../src/paper-recovery-policy.js';
 
 const NOW=Date.parse('2026-09-30T06:00:00Z'),iso=v=>new Date(v).toISOString(),CA='0x'+'a'.repeat(40);
 const modes={allowExploratory:true,pvpMode:true,confirmedMode:true,evidenceHoldMode:true,continuousPaperMode:true,
@@ -53,6 +54,31 @@ test('no quote can schedule fast research but cannot become a fill',()=>{
   const row=evaluate(i);assert.notEqual(row.decision,'可模拟');
   assert.equal(readyForPaperQuote(row),true,JSON.stringify({r:row.reasons,m:row.missing,routes:row.evidence.opportunityRoutes}));
   assert.equal(advance(row).trades.length,0);
+});
+
+test('new-launch fast lane cannot ignore complete observed selling, and the writer rechecks it',()=>{
+  const i=launchInput(),good=evaluate(i);
+  const outflow={chain:token.chain,address:CA,provider:'gmgn',scope:'public_tagged_wallets_not_full_market',
+    fresh:true,complete:true,status:'healthy',observedAt:iso(NOW),netBuyUsd:-1200,wallets:[]};
+  const bad=evaluate({...i,flow:outflow});
+  assert.equal(bad.decision,'观察');assert.equal(bad.evidence.recoveryCheck.entryFlow.blocked,true);
+  assert.equal(bad.evidence.opportunity.signalReady,false);assert.equal(advance(bad).trades.length,0);
+  const forged=structuredClone(good);forged.evidence.recoveryEntry.flow=outflow;
+  assert.equal(advance(forged).trades.length,0);
+  for(const sourceObservedAt of [iso(NOW),iso(NOW+1),'invalid']) {
+    const injected=structuredClone(forged);
+    injected.evidence.recoveryEntry.collectiveSignal={sourceObservedAt};
+    const check=recoveryEntryCheck(injected.evidence.recoveryEntry,injected.token,injected.evidence.opportunity.event,NOW,injected.evidence.opportunity);
+    assert.equal(check.ready,false);assert.equal(check.entryFlow.blocked,true);
+    assert.equal(check.entryFlow.afterObservedAt,null,'a launch cannot borrow an unvalidated cohort clock');
+    assert.equal(advance(injected).trades.length,0,'injected future/same/invalid timestamps cannot bypass the single writer');
+    injected.evidence.recoveryEntry.flow.netBuyUsd=0;
+    assert.equal(advance(injected).trades.length,0,'mixed route proofs are rejected even without outflow');
+  }
+  for(const patch of [{complete:false},{observedAt:iso(NOW-120001)},{netBuyUsd:0},{netBuyUsd:10}]) {
+    const row=evaluate({...i,flow:{...outflow,...patch}});
+    assert.equal(row.decision,'可模拟',JSON.stringify(patch));assert.equal(advance(row).trades.length,1);
+  }
 });
 
 test('external, unknown stage, stale launches, ambiguous original and absent safety never borrow the fast lane',()=>{

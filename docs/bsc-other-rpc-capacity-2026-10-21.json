@@ -1,0 +1,1623 @@
+{
+  "schema": "bsc_other_rpc_capacity_repair_v1",
+  "checkedAt": "2026-10-21T09:34:01.647Z",
+  "status": "deployed_partial_acceptance_flap_new_version_blocked",
+  "report": "docs/bsc-other-rpc-capacity-2026-10-21.md",
+  "scope": "User-authorized BSC read-only RPC routing and bounded maintenance scheduling repair; no automatic version migration",
+  "tests": {
+    "passed": 883,
+    "failed": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "durationMs": 85285.525417,
+    "files": [
+      "test/bsc-launchpad-monitor.test.js",
+      "test/bsc-rpc-static-network.test.js",
+      "test/bsc-rpc-capacity-routing.test.js",
+      "test/bsc-rpc-body-retry-after.test.js",
+      "test/rpc-host-coordinator.test.js",
+      "test/rpc-state-read-budget.test.js",
+      "test/bsc-main-read-wiring.test.js",
+      "test/bsc-paid-rpc-wiring.test.js",
+      "test/bsc-replay-scheduler.test.js",
+      "test/runtime-resilience.test.js",
+      "test/flap-quote-monitor.test.js",
+      "test/four-registry-monitor.test.js",
+      "test/four-registry-pipeline.test.js",
+      "test/four-registry-generations.test.js",
+      "test/four-rpc-capacity.test.js",
+      "test/chain-head-observation.test.js",
+      "test/chain-head-coverage.test.js",
+      "test/launch-update-coverage.test.js",
+      "test/bsc-four-replay-pool.test.js",
+      "test/bsc-four-quote-classification.test.js",
+      "test/bsc-fourmeme-fast-rpc.test.js",
+      "test/bsc-live-scan-policy.test.js",
+      "test/bsc-log-filter-batch.test.js"
+    ],
+    "fullRepository": false
+  },
+  "changes": [
+    "Four maintenance token-info reads use isolated replay pool with exact block tag and existing archive fallback semantics",
+    "A typed physical-host capacity refusal is reused only within one logical read across aliases/pools; other configured hosts remain subject to unchanged total budget",
+    "Pure capacity remains capacity when bounded reads exhaust; mixed upstream/malformed log errors remain method failures",
+    "Typed capacity/host cooldown and strict budget exhaustion stop subsequent route wakeups while preserving actual Retry-After, failure exponent and durable work",
+    "Four/Flap sweeps advance their in-memory rotation only after actual operation entry; scheduler refusals consume no position; canonical checks and paused work unchanged"
+  ],
+  "deployments": [
+    {
+      "termAt": "2026-10-21T09:15:48.193Z",
+      "oldMainPid": 7712,
+      "oldBscPid": 7713,
+      "logOffset": 20712138,
+      "newMainPid": 17624,
+      "newBscPid": 17626,
+      "mainStartedAt": "2026-10-21T09:16:32.185Z",
+      "bscStartedAt": "2026-10-21T09:16:32.635Z",
+      "previousExitCode": 0
+    },
+    {
+      "requestedAt": "2026-10-21T09:24:35.967Z",
+      "oldMainPid": 17624,
+      "oldBscPid": 17626,
+      "oldMainStartedAt": "2026-10-21T09:16:32.185Z",
+      "signal": "SIGTERM",
+      "logOffset": 20725711,
+      "sourceHashes": {
+        "src/bsc-launchpad-monitor.js": "81445d4a0f1730d4fa09045870f80fc22d5eab4b7057714b2529d1c89489350f",
+        "src/bsc-replay-scheduler.js": "0944525e49212dfc0074e33e72b17b2c9777873eaf358e3b4ea5c8b2fd367ea4"
+      },
+      "newMainPid": 20752,
+      "newBscPid": 20755,
+      "mainStartedAt": "2026-10-21T09:24:48.102Z",
+      "bscStartedAt": "2026-10-21T09:24:48.622Z",
+      "previousExitCode": 0
+    },
+    {
+      "requestedAt": "2026-10-21T09:31:45.643Z",
+      "oldMainPid": 20752,
+      "oldBscPid": 20755,
+      "oldMainStartedAt": "2026-10-21T09:24:48.102Z",
+      "signal": "SIGTERM",
+      "logOffset": 20738826,
+      "sourceHashes": {
+        "src/bsc-launchpad-monitor.js": "78acbb40502e3f7b2541e3620967505d1d2794648a579955d7186f5764160975",
+        "src/bsc-replay-scheduler.js": "0944525e49212dfc0074e33e72b17b2c9777873eaf358e3b4ea5c8b2fd367ea4"
+      },
+      "newMainPid": 23653,
+      "newBscPid": 23655,
+      "mainStartedAt": "2026-10-21T09:31:58.048Z",
+      "bscStartedAt": "2026-10-21T09:31:58.497Z",
+      "previousExitCode": 0
+    }
+  ],
+  "observations": {
+    "phase1": {
+      "samples": [
+        {
+          "at": "2026-10-21T09:17:25.086Z",
+          "four": {
+            "nextBlock": 128912537,
+            "checkpointAt": "2026-10-21T09:17:01.217Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:16:50.664Z",
+            "observedHeadLag": 15,
+            "observedSafeBacklog": 12,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128912536,
+            "checkpointAt": "2026-10-21T09:17:22.274Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:16:49.586Z",
+            "observedHeadLag": 36,
+            "observedSafeBacklog": 33,
+            "errorCode": "FLAP_QUOTE_PORTAL_IDENTITY_UNAVAILABLE"
+          }
+        },
+        {
+          "at": "2026-10-21T09:17:40.176Z",
+          "four": {
+            "nextBlock": 128912537,
+            "checkpointAt": "2026-10-21T09:17:01.217Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:16:50.664Z",
+            "observedHeadLag": 15,
+            "observedSafeBacklog": 12,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128912536,
+            "checkpointAt": "2026-10-21T09:17:37.567Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:16:49.586Z",
+            "observedHeadLag": 36,
+            "observedSafeBacklog": 33,
+            "errorCode": "FLAP_QUOTE_PORTAL_IDENTITY_UNAVAILABLE"
+          }
+        },
+        {
+          "at": "2026-10-21T09:17:55.248Z",
+          "four": {
+            "nextBlock": 128912537,
+            "checkpointAt": "2026-10-21T09:17:01.217Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:16:50.664Z",
+            "observedHeadLag": 15,
+            "observedSafeBacklog": 12,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128912536,
+            "checkpointAt": "2026-10-21T09:17:37.567Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:16:49.586Z",
+            "observedHeadLag": 36,
+            "observedSafeBacklog": 33,
+            "errorCode": "FLAP_QUOTE_PORTAL_IDENTITY_UNAVAILABLE"
+          }
+        },
+        {
+          "at": "2026-10-21T09:18:10.317Z",
+          "four": {
+            "nextBlock": 128912537,
+            "checkpointAt": "2026-10-21T09:17:01.217Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:16:50.664Z",
+            "observedHeadLag": 15,
+            "observedSafeBacklog": 12,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128912536,
+            "checkpointAt": "2026-10-21T09:17:37.567Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:16:49.586Z",
+            "observedHeadLag": 36,
+            "observedSafeBacklog": 33,
+            "errorCode": "FLAP_QUOTE_PORTAL_IDENTITY_UNAVAILABLE"
+          }
+        },
+        {
+          "at": "2026-10-21T09:18:25.400Z",
+          "four": {
+            "nextBlock": 128912726,
+            "checkpointAt": "2026-10-21T09:18:23.849Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:16:50.664Z",
+            "observedHeadLag": 15,
+            "observedSafeBacklog": 12,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128912700,
+            "checkpointAt": "2026-10-21T09:18:07.514Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:18:17.747Z",
+            "observedHeadLag": 19,
+            "observedSafeBacklog": 16,
+            "errorCode": null
+          }
+        },
+        {
+          "at": "2026-10-21T09:18:40.476Z",
+          "four": {
+            "nextBlock": 128912748,
+            "checkpointAt": "2026-10-21T09:18:35.667Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:18:25.802Z",
+            "observedHeadLag": 11,
+            "observedSafeBacklog": 8,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128912745,
+            "checkpointAt": "2026-10-21T09:18:28.523Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:18:17.747Z",
+            "observedHeadLag": 19,
+            "observedSafeBacklog": 16,
+            "errorCode": null
+          }
+        },
+        {
+          "at": "2026-10-21T09:18:55.539Z",
+          "four": {
+            "nextBlock": 128912773,
+            "checkpointAt": "2026-10-21T09:18:48.250Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:18:25.802Z",
+            "observedHeadLag": 11,
+            "observedSafeBacklog": 8,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128912772,
+            "checkpointAt": "2026-10-21T09:18:40.529Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:18:17.747Z",
+            "observedHeadLag": 19,
+            "observedSafeBacklog": 16,
+            "errorCode": null
+          }
+        },
+        {
+          "at": "2026-10-21T09:19:10.636Z",
+          "four": {
+            "nextBlock": 128912805,
+            "checkpointAt": "2026-10-21T09:19:00.794Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:18:25.802Z",
+            "observedHeadLag": 11,
+            "observedSafeBacklog": 8,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128912799,
+            "checkpointAt": "2026-10-21T09:18:52.537Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:18:17.747Z",
+            "observedHeadLag": 19,
+            "observedSafeBacklog": 16,
+            "errorCode": null
+          }
+        },
+        {
+          "at": "2026-10-21T09:19:25.720Z",
+          "four": {
+            "nextBlock": 128912852,
+            "checkpointAt": "2026-10-21T09:19:22.377Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:18:25.802Z",
+            "observedHeadLag": 11,
+            "observedSafeBacklog": 8,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128912825,
+            "checkpointAt": "2026-10-21T09:19:04.581Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:18:17.747Z",
+            "observedHeadLag": 19,
+            "observedSafeBacklog": 16,
+            "errorCode": null
+          }
+        },
+        {
+          "at": "2026-10-21T09:19:40.787Z",
+          "four": {
+            "nextBlock": 128912879,
+            "checkpointAt": "2026-10-21T09:19:33.498Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:19:34.828Z",
+            "observedHeadLag": 12,
+            "observedSafeBacklog": 9,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128912884,
+            "checkpointAt": "2026-10-21T09:19:28.602Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:19:26.816Z",
+            "observedHeadLag": 22,
+            "observedSafeBacklog": 19,
+            "errorCode": null
+          }
+        },
+        {
+          "at": "2026-10-21T09:19:55.846Z",
+          "four": {
+            "nextBlock": 128912905,
+            "checkpointAt": "2026-10-21T09:19:46.246Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:19:34.828Z",
+            "observedHeadLag": 12,
+            "observedSafeBacklog": 9,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128912906,
+            "checkpointAt": "2026-10-21T09:19:40.607Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:19:26.816Z",
+            "observedHeadLag": 22,
+            "observedSafeBacklog": 19,
+            "errorCode": null
+          }
+        },
+        {
+          "at": "2026-10-21T09:20:10.911Z",
+          "four": {
+            "nextBlock": 128912930,
+            "checkpointAt": "2026-10-21T09:19:56.213Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:19:34.828Z",
+            "observedHeadLag": 12,
+            "observedSafeBacklog": 9,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128912935,
+            "checkpointAt": "2026-10-21T09:20:09.725Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:19:26.816Z",
+            "observedHeadLag": 22,
+            "observedSafeBacklog": 19,
+            "errorCode": "FLAP_QUOTE_FINALIZED_LANE_UNAVAILABLE"
+          }
+        },
+        {
+          "at": "2026-10-21T09:20:25.986Z",
+          "four": {
+            "nextBlock": 128912983,
+            "checkpointAt": "2026-10-21T09:20:21.899Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:19:34.828Z",
+            "observedHeadLag": 12,
+            "observedSafeBacklog": 9,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128912978,
+            "checkpointAt": "2026-10-21T09:20:13.695Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:19:26.816Z",
+            "observedHeadLag": 22,
+            "observedSafeBacklog": 19,
+            "errorCode": null
+          }
+        }
+      ],
+      "proofs": [
+        {
+          "platform": "four",
+          "startedAt": "2026-10-21T09:16:50.022Z",
+          "verifiedAt": "2026-10-21T09:16:50.664Z",
+          "headNumber": 128912526,
+          "headHash": "0x759f9bbc2318be4b76fa23c72fbb6512904820963dce4dd84b23624a4013780d",
+          "blockTimestamp": 1792574209,
+          "sourceIds": [
+            "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+            "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+          ],
+          "sourceTips": [
+            128912526,
+            128912527
+          ],
+          "headSpread": 1,
+          "confirmations": 3,
+          "safeHead": 128912523,
+          "cursor": {
+            "nextBlock": 128912512,
+            "anchorBlock": 128912511,
+            "anchorBlockHash": "0x6d1c575dbc3eb031dacda34a0c9f66abc75a41c56252d16ab7f9c3eac9bcfc1e"
+          },
+          "cursorObservedAt": "2026-10-21T09:16:50.664Z",
+          "observedHeadLag": 15,
+          "observedSafeBacklog": 12
+        },
+        {
+          "platform": "flap",
+          "startedAt": "2026-10-21T09:16:48.235Z",
+          "verifiedAt": "2026-10-21T09:16:49.586Z",
+          "headNumber": 128912523,
+          "headHash": "0x3a2acaf0ce3f56264305be18c0fe341eff5e03c42975cc4ae618ceb6b112caa0",
+          "blockTimestamp": 1792574208,
+          "sourceIds": [
+            "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+            "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+          ],
+          "sourceTips": [
+            128912523,
+            128912523
+          ],
+          "headSpread": 0,
+          "confirmations": 3,
+          "safeHead": 128912520,
+          "cursor": {
+            "nextBlock": 128912488,
+            "anchorBlock": 128912487,
+            "anchorBlockHash": "0x2548371d3b73ed4a4cf2f36c1f32bcce52a0ad62da059caebf3c1183cfad8ca7",
+            "afterLogIndex": -1
+          },
+          "cursorObservedAt": "2026-10-21T09:16:49.586Z",
+          "observedHeadLag": 36,
+          "observedSafeBacklog": 33
+        },
+        {
+          "platform": "flap",
+          "startedAt": "2026-10-21T09:18:16.724Z",
+          "verifiedAt": "2026-10-21T09:18:17.747Z",
+          "headNumber": 128912718,
+          "headHash": "0x291fc2da49379ea446e6bf8755e4204a0b84e9b58dd4a2f7df9fdd528280aece",
+          "blockTimestamp": 1792574295,
+          "sourceIds": [
+            "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+            "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+          ],
+          "sourceTips": [
+            128912718,
+            128912721
+          ],
+          "headSpread": 3,
+          "confirmations": 3,
+          "safeHead": 128912715,
+          "cursor": {
+            "nextBlock": 128912700,
+            "anchorBlock": 128912699,
+            "anchorBlockHash": "0xa2fba62da339062e4eddbfd5086b4e5f93edb60b955184eaa2f6efe052931541",
+            "afterLogIndex": -1
+          },
+          "cursorObservedAt": "2026-10-21T09:18:17.747Z",
+          "observedHeadLag": 19,
+          "observedSafeBacklog": 16
+        },
+        {
+          "platform": "four",
+          "startedAt": "2026-10-21T09:18:24.374Z",
+          "verifiedAt": "2026-10-21T09:18:25.802Z",
+          "headNumber": 128912736,
+          "headHash": "0x905f054aaf82c8d1060e9d10118d1df19c35e9a92da32d5e95953f2383eced03",
+          "blockTimestamp": 1792574303,
+          "sourceIds": [
+            "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+            "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+          ],
+          "sourceTips": [
+            128912737,
+            128912736
+          ],
+          "headSpread": 1,
+          "confirmations": 3,
+          "safeHead": 128912733,
+          "cursor": {
+            "nextBlock": 128912726,
+            "anchorBlock": 128912725,
+            "anchorBlockHash": "0x5ce00f1921bb4fbd7482c6073c95e48268db3b1acf4d19e6875adff315b5ea7a"
+          },
+          "cursorObservedAt": "2026-10-21T09:18:25.802Z",
+          "observedHeadLag": 11,
+          "observedSafeBacklog": 8
+        },
+        {
+          "platform": "four",
+          "startedAt": "2026-10-21T09:19:33.997Z",
+          "verifiedAt": "2026-10-21T09:19:34.828Z",
+          "headNumber": 128912890,
+          "headHash": "0xed9894e7e8d1cb0fb3e6f217937813ef15c48048cedf858cea5a15d57571530e",
+          "blockTimestamp": 1792574373,
+          "sourceIds": [
+            "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+            "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+          ],
+          "sourceTips": [
+            128912890,
+            128912891
+          ],
+          "headSpread": 1,
+          "confirmations": 3,
+          "safeHead": 128912887,
+          "cursor": {
+            "nextBlock": 128912879,
+            "anchorBlock": 128912878,
+            "anchorBlockHash": "0x54955aad2adba598eed3afb3a5278a3da267e9e21e3a8849ff07dc179b4a3fdb"
+          },
+          "cursorObservedAt": "2026-10-21T09:19:34.828Z",
+          "observedHeadLag": 12,
+          "observedSafeBacklog": 9
+        },
+        {
+          "platform": "flap",
+          "startedAt": "2026-10-21T09:19:26.236Z",
+          "verifiedAt": "2026-10-21T09:19:26.816Z",
+          "headNumber": 128912873,
+          "headHash": "0xc1453101935066e3575bf9b17ca3aa9b62ae378963b334f57305e21293ee6fbd",
+          "blockTimestamp": 1792574365,
+          "sourceIds": [
+            "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+            "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+          ],
+          "sourceTips": [
+            128912873,
+            128912874
+          ],
+          "headSpread": 1,
+          "confirmations": 3,
+          "safeHead": 128912870,
+          "cursor": {
+            "nextBlock": 128912852,
+            "anchorBlock": 128912851,
+            "anchorBlockHash": "0x1d47936e3d2d74ced16d649f681d99b69ca77eb72970548657af0bea65d18229",
+            "afterLogIndex": -1
+          },
+          "cursorObservedAt": "2026-10-21T09:19:26.816Z",
+          "observedHeadLag": 22,
+          "observedSafeBacklog": 19
+        }
+      ],
+      "note": "Actual shared cooldown pause followed by recovery; not strictly continuous advancement"
+    },
+    "phase2": {
+      "samples": [
+        {
+          "at": "2026-10-21T09:25:02.723Z",
+          "four": {
+            "nextBlock": 128913551,
+            "checkpointAt": "2026-10-21T09:24:35.353Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:23:51.527Z",
+            "observedHeadLag": 18,
+            "observedSafeBacklog": 15,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128913527,
+            "checkpointAt": "2026-10-21T09:24:20.180Z",
+            "headStatus": "error",
+            "proofVerifiedAt": "2026-10-21T09:23:06.635Z",
+            "observedHeadLag": 23,
+            "observedSafeBacklog": 20,
+            "errorCode": null
+          }
+        },
+        {
+          "at": "2026-10-21T09:25:17.809Z",
+          "four": {
+            "nextBlock": 128913612,
+            "checkpointAt": "2026-10-21T09:25:05.886Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:25:07.175Z",
+            "observedHeadLag": 18,
+            "observedSafeBacklog": 15,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128913590,
+            "checkpointAt": "2026-10-21T09:24:48.164Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:25:05.162Z",
+            "observedHeadLag": 33,
+            "observedSafeBacklog": 30,
+            "errorCode": null
+          }
+        },
+        {
+          "at": "2026-10-21T09:25:32.930Z",
+          "four": {
+            "nextBlock": 128913666,
+            "checkpointAt": "2026-10-21T09:25:29.353Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:25:07.175Z",
+            "observedHeadLag": 18,
+            "observedSafeBacklog": 15,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128913634,
+            "checkpointAt": "2026-10-21T09:25:07.553Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:25:05.162Z",
+            "observedHeadLag": 33,
+            "observedSafeBacklog": 30,
+            "errorCode": null
+          }
+        },
+        {
+          "at": "2026-10-21T09:25:47.995Z",
+          "four": {
+            "nextBlock": 128913690,
+            "checkpointAt": "2026-10-21T09:25:40.572Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:25:07.175Z",
+            "observedHeadLag": 18,
+            "observedSafeBacklog": 15,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128913690,
+            "checkpointAt": "2026-10-21T09:25:34.623Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:25:05.162Z",
+            "observedHeadLag": 33,
+            "observedSafeBacklog": 30,
+            "errorCode": null
+          }
+        },
+        {
+          "at": "2026-10-21T09:26:03.059Z",
+          "four": {
+            "nextBlock": 128913717,
+            "checkpointAt": "2026-10-21T09:25:52.704Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:25:07.175Z",
+            "observedHeadLag": 18,
+            "observedSafeBacklog": 15,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128913719,
+            "checkpointAt": "2026-10-21T09:25:46.635Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:25:05.162Z",
+            "observedHeadLag": 33,
+            "observedSafeBacklog": 30,
+            "errorCode": null
+          }
+        },
+        {
+          "at": "2026-10-21T09:26:18.129Z",
+          "four": {
+            "nextBlock": 128913747,
+            "checkpointAt": "2026-10-21T09:26:07.350Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:26:08.864Z",
+            "observedHeadLag": 18,
+            "observedSafeBacklog": 15,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128913747,
+            "checkpointAt": "2026-10-21T09:25:58.818Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:26:12.358Z",
+            "observedHeadLag": 25,
+            "observedSafeBacklog": 22,
+            "errorCode": null
+          }
+        },
+        {
+          "at": "2026-10-21T09:26:33.191Z",
+          "four": {
+            "nextBlock": 128913808,
+            "checkpointAt": "2026-10-21T09:26:31.445Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:26:08.864Z",
+            "observedHeadLag": 18,
+            "observedSafeBacklog": 15,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128913785,
+            "checkpointAt": "2026-10-21T09:26:16.822Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:26:12.358Z",
+            "observedHeadLag": 25,
+            "observedSafeBacklog": 22,
+            "errorCode": null
+          }
+        },
+        {
+          "at": "2026-10-21T09:26:48.270Z",
+          "four": {
+            "nextBlock": 128913830,
+            "checkpointAt": "2026-10-21T09:26:42.417Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:26:08.864Z",
+            "observedHeadLag": 18,
+            "observedSafeBacklog": 15,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128913830,
+            "checkpointAt": "2026-10-21T09:26:38.012Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:26:12.358Z",
+            "observedHeadLag": 25,
+            "observedSafeBacklog": 22,
+            "errorCode": null
+          }
+        },
+        {
+          "at": "2026-10-21T09:27:03.348Z",
+          "four": {
+            "nextBlock": 128913853,
+            "checkpointAt": "2026-10-21T09:26:53.690Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:26:08.864Z",
+            "observedHeadLag": 18,
+            "observedSafeBacklog": 15,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128913854,
+            "checkpointAt": "2026-10-21T09:26:47.035Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:26:12.358Z",
+            "observedHeadLag": 25,
+            "observedSafeBacklog": 22,
+            "errorCode": null
+          }
+        },
+        {
+          "at": "2026-10-21T09:27:18.432Z",
+          "four": {
+            "nextBlock": 128913878,
+            "checkpointAt": "2026-10-21T09:27:06.681Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:26:08.864Z",
+            "observedHeadLag": 18,
+            "observedSafeBacklog": 15,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128913878,
+            "checkpointAt": "2026-10-21T09:26:59.049Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:26:12.358Z",
+            "observedHeadLag": 25,
+            "observedSafeBacklog": 22,
+            "errorCode": null
+          }
+        },
+        {
+          "at": "2026-10-21T09:27:33.518Z",
+          "four": {
+            "nextBlock": 128913934,
+            "checkpointAt": "2026-10-21T09:27:28.650Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:27:20.098Z",
+            "observedHeadLag": 14,
+            "observedSafeBacklog": 11,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128913910,
+            "checkpointAt": "2026-10-21T09:27:11.061Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:27:23.741Z",
+            "observedHeadLag": 22,
+            "observedSafeBacklog": 19,
+            "errorCode": null
+          }
+        },
+        {
+          "at": "2026-10-21T09:27:48.589Z",
+          "four": {
+            "nextBlock": 128913955,
+            "checkpointAt": "2026-10-21T09:27:38.702Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:27:20.098Z",
+            "observedHeadLag": 14,
+            "observedSafeBacklog": 11,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128913958,
+            "checkpointAt": "2026-10-21T09:27:35.245Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:27:23.741Z",
+            "observedHeadLag": 22,
+            "observedSafeBacklog": 19,
+            "errorCode": null
+          }
+        },
+        {
+          "at": "2026-10-21T09:28:03.662Z",
+          "four": {
+            "nextBlock": 128914005,
+            "checkpointAt": "2026-10-21T09:28:00.713Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:27:20.098Z",
+            "observedHeadLag": 14,
+            "observedSafeBacklog": 11,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128913979,
+            "checkpointAt": "2026-10-21T09:27:44.270Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:27:23.741Z",
+            "observedHeadLag": 22,
+            "observedSafeBacklog": 19,
+            "errorCode": null
+          }
+        }
+      ],
+      "proofs": [
+        {
+          "platform": "four",
+          "startedAt": "2026-10-21T09:23:50.827Z",
+          "verifiedAt": "2026-10-21T09:23:51.527Z",
+          "headNumber": 128913460,
+          "headHash": "0x01a4d6c7acefe14f0ba1b7e41d89c9cdc8845d88eeaf0c40a77e96324e4719b7",
+          "blockTimestamp": 1792574629,
+          "sourceIds": [
+            "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+            "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+          ],
+          "sourceTips": [
+            128913460,
+            128913461
+          ],
+          "headSpread": 1,
+          "confirmations": 3,
+          "safeHead": 128913457,
+          "cursor": {
+            "nextBlock": 128913443,
+            "anchorBlock": 128913442,
+            "anchorBlockHash": "0x9c205170dfbd1b84924f1b8e2657d60053190ae9154143db39d6d265f93916aa"
+          },
+          "cursorObservedAt": "2026-10-21T09:23:51.527Z",
+          "observedHeadLag": 18,
+          "observedSafeBacklog": 15
+        },
+        {
+          "platform": "flap",
+          "startedAt": "2026-10-21T09:23:06.028Z",
+          "verifiedAt": "2026-10-21T09:23:06.635Z",
+          "headNumber": 128913361,
+          "headHash": "0x6c1d49d6e2de941f9be3191337998407cd7ef4ca011246efe21929c5d6c8c00e",
+          "blockTimestamp": 1792574585,
+          "sourceIds": [
+            "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+            "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+          ],
+          "sourceTips": [
+            128913361,
+            128913362
+          ],
+          "headSpread": 1,
+          "confirmations": 3,
+          "safeHead": 128913358,
+          "cursor": {
+            "nextBlock": 128913339,
+            "anchorBlock": 128913338,
+            "anchorBlockHash": "0xb8ae52328b8c9647e686b492efb610d27cf818727e7d723e4f5d3bc4b5bbb131",
+            "afterLogIndex": -1
+          },
+          "cursorObservedAt": "2026-10-21T09:23:06.635Z",
+          "observedHeadLag": 23,
+          "observedSafeBacklog": 20
+        },
+        {
+          "platform": "four",
+          "startedAt": "2026-10-21T09:25:06.489Z",
+          "verifiedAt": "2026-10-21T09:25:07.175Z",
+          "headNumber": 128913629,
+          "headHash": "0x2ffdee2679ea91fa064fb33a3f4364bce12d6a25d1760751f8098f55b06d545d",
+          "blockTimestamp": 1792574706,
+          "sourceIds": [
+            "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+            "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+          ],
+          "sourceTips": [
+            128913629,
+            128913629
+          ],
+          "headSpread": 0,
+          "confirmations": 3,
+          "safeHead": 128913626,
+          "cursor": {
+            "nextBlock": 128913612,
+            "anchorBlock": 128913611,
+            "anchorBlockHash": "0x18e0306079b607ec6f294f8b168de80552c4e5181d566eb616bcebe336218cfd"
+          },
+          "cursorObservedAt": "2026-10-21T09:25:07.175Z",
+          "observedHeadLag": 18,
+          "observedSafeBacklog": 15
+        },
+        {
+          "platform": "flap",
+          "startedAt": "2026-10-21T09:25:03.782Z",
+          "verifiedAt": "2026-10-21T09:25:05.162Z",
+          "headNumber": 128913622,
+          "headHash": "0x9f5da5a5da302ca5e97e3b871d74b7f0e638121ba9bb15220e80158c7811d92c",
+          "blockTimestamp": 1792574702,
+          "sourceIds": [
+            "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+            "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+          ],
+          "sourceTips": [
+            128913622,
+            128913623
+          ],
+          "headSpread": 1,
+          "confirmations": 3,
+          "safeHead": 128913619,
+          "cursor": {
+            "nextBlock": 128913590,
+            "anchorBlock": 128913589,
+            "anchorBlockHash": "0xc44cb9f44203f19e096f2297de87ef9255680adebce85b56511020314b5d766b",
+            "afterLogIndex": -1
+          },
+          "cursorObservedAt": "2026-10-21T09:25:05.163Z",
+          "observedHeadLag": 33,
+          "observedSafeBacklog": 30
+        },
+        {
+          "platform": "four",
+          "startedAt": "2026-10-21T09:26:07.760Z",
+          "verifiedAt": "2026-10-21T09:26:08.864Z",
+          "headNumber": 128913764,
+          "headHash": "0xa4ffd8cdd5dd39e9eb55ec2ffa3bae7319a32d4f44d88f815596daa230878701",
+          "blockTimestamp": 1792574767,
+          "sourceIds": [
+            "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+            "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+          ],
+          "sourceTips": [
+            128913764,
+            128913765
+          ],
+          "headSpread": 1,
+          "confirmations": 3,
+          "safeHead": 128913761,
+          "cursor": {
+            "nextBlock": 128913747,
+            "anchorBlock": 128913746,
+            "anchorBlockHash": "0xd7b6b1429b99f5ba463558451c6e7544dc8eb3982f0c840449e674ff6e1d0ca6"
+          },
+          "cursorObservedAt": "2026-10-21T09:26:08.864Z",
+          "observedHeadLag": 18,
+          "observedSafeBacklog": 15
+        },
+        {
+          "platform": "flap",
+          "startedAt": "2026-10-21T09:26:11.756Z",
+          "verifiedAt": "2026-10-21T09:26:12.358Z",
+          "headNumber": 128913771,
+          "headHash": "0x65940fcdc1e7994d7f140e78f350588d08cabcb963063b52bbfb8324e577bda0",
+          "blockTimestamp": 1792574770,
+          "sourceIds": [
+            "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+            "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+          ],
+          "sourceTips": [
+            128913771,
+            128913773
+          ],
+          "headSpread": 2,
+          "confirmations": 3,
+          "safeHead": 128913768,
+          "cursor": {
+            "nextBlock": 128913747,
+            "anchorBlock": 128913746,
+            "anchorBlockHash": "0xd7b6b1429b99f5ba463558451c6e7544dc8eb3982f0c840449e674ff6e1d0ca6",
+            "afterLogIndex": -1
+          },
+          "cursorObservedAt": "2026-10-21T09:26:12.359Z",
+          "observedHeadLag": 25,
+          "observedSafeBacklog": 22
+        },
+        {
+          "platform": "four",
+          "startedAt": "2026-10-21T09:27:19.247Z",
+          "verifiedAt": "2026-10-21T09:27:20.098Z",
+          "headNumber": 128913923,
+          "headHash": "0xa7d50f38e21a460bfe0dfb014363819e3634de44c7b7db7266d1ac827e27cf23",
+          "blockTimestamp": 1792574838,
+          "sourceIds": [
+            "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+            "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+          ],
+          "sourceTips": [
+            128913924,
+            128913923
+          ],
+          "headSpread": 1,
+          "confirmations": 3,
+          "safeHead": 128913920,
+          "cursor": {
+            "nextBlock": 128913910,
+            "anchorBlock": 128913909,
+            "anchorBlockHash": "0xfe2cd73ad703a02725dfc0b9cb1ec268786d122e505a528932ab8aa14bab3473"
+          },
+          "cursorObservedAt": "2026-10-21T09:27:20.098Z",
+          "observedHeadLag": 14,
+          "observedSafeBacklog": 11
+        },
+        {
+          "platform": "flap",
+          "startedAt": "2026-10-21T09:27:23.113Z",
+          "verifiedAt": "2026-10-21T09:27:23.741Z",
+          "headNumber": 128913931,
+          "headHash": "0xa51259d0665700f90f765cdbc80ea86ca8bc89e97fc7884a9651e482c32ebb93",
+          "blockTimestamp": 1792574842,
+          "sourceIds": [
+            "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+            "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+          ],
+          "sourceTips": [
+            128913931,
+            128913932
+          ],
+          "headSpread": 1,
+          "confirmations": 3,
+          "safeHead": 128913928,
+          "cursor": {
+            "nextBlock": 128913910,
+            "anchorBlock": 128913909,
+            "anchorBlockHash": "0xfe2cd73ad703a02725dfc0b9cb1ec268786d122e505a528932ab8aa14bab3473",
+            "afterLogIndex": -1
+          },
+          "cursorObservedAt": "2026-10-21T09:27:23.742Z",
+          "observedHeadLag": 22,
+          "observedSafeBacklog": 19
+        }
+      ],
+      "note": "13 samples each advance on both collectors; later independent Flap version change invalidates any claim of ongoing two-collector recovery"
+    },
+    "final": {
+      "samples": [
+        {
+          "at": "2026-10-21T09:32:21.510Z",
+          "four": {
+            "nextBlock": 128914569,
+            "checkpointAt": "2026-10-21T09:32:16.184Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:32:17.271Z",
+            "observedHeadLag": 14,
+            "observedSafeBacklog": 11,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128914122,
+            "checkpointAt": "2026-10-21T09:31:30.477Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:28:27.166Z",
+            "observedHeadLag": 19,
+            "observedSafeBacklog": 16,
+            "errorCode": "FLAP_QUOTE_PORTAL_VERSION_MISMATCH"
+          }
+        },
+        {
+          "at": "2026-10-21T09:32:36.595Z",
+          "four": {
+            "nextBlock": 128914614,
+            "checkpointAt": "2026-10-21T09:32:35.467Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:32:17.271Z",
+            "observedHeadLag": 14,
+            "observedSafeBacklog": 11,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128914122,
+            "checkpointAt": "2026-10-21T09:31:30.477Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:28:27.166Z",
+            "observedHeadLag": 19,
+            "observedSafeBacklog": 16,
+            "errorCode": "FLAP_QUOTE_PORTAL_VERSION_MISMATCH"
+          }
+        },
+        {
+          "at": "2026-10-21T09:32:51.678Z",
+          "four": {
+            "nextBlock": 128914638,
+            "checkpointAt": "2026-10-21T09:32:46.578Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:32:17.271Z",
+            "observedHeadLag": 14,
+            "observedSafeBacklog": 11,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128914122,
+            "checkpointAt": "2026-10-21T09:31:30.477Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:28:27.166Z",
+            "observedHeadLag": 19,
+            "observedSafeBacklog": 16,
+            "errorCode": "FLAP_QUOTE_PORTAL_VERSION_MISMATCH"
+          }
+        },
+        {
+          "at": "2026-10-21T09:33:06.740Z",
+          "four": {
+            "nextBlock": 128914661,
+            "checkpointAt": "2026-10-21T09:32:59.271Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:32:17.271Z",
+            "observedHeadLag": 14,
+            "observedSafeBacklog": 11,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128914122,
+            "checkpointAt": "2026-10-21T09:32:58.473Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:28:27.166Z",
+            "observedHeadLag": 19,
+            "observedSafeBacklog": 16,
+            "errorCode": "FLAP_QUOTE_PORTAL_VERSION_MISMATCH"
+          }
+        },
+        {
+          "at": "2026-10-21T09:33:21.817Z",
+          "four": {
+            "nextBlock": 128914709,
+            "checkpointAt": "2026-10-21T09:33:18.691Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:33:19.793Z",
+            "observedHeadLag": 13,
+            "observedSafeBacklog": 10,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128914122,
+            "checkpointAt": "2026-10-21T09:32:58.473Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:28:27.166Z",
+            "observedHeadLag": 19,
+            "observedSafeBacklog": 16,
+            "errorCode": "FLAP_QUOTE_PORTAL_VERSION_MISMATCH"
+          }
+        },
+        {
+          "at": "2026-10-21T09:33:36.894Z",
+          "four": {
+            "nextBlock": 128914734,
+            "checkpointAt": "2026-10-21T09:33:28.983Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:33:19.793Z",
+            "observedHeadLag": 13,
+            "observedSafeBacklog": 10,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128914122,
+            "checkpointAt": "2026-10-21T09:32:58.473Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:28:27.166Z",
+            "observedHeadLag": 19,
+            "observedSafeBacklog": 16,
+            "errorCode": "FLAP_QUOTE_PORTAL_VERSION_MISMATCH"
+          }
+        },
+        {
+          "at": "2026-10-21T09:33:51.970Z",
+          "four": {
+            "nextBlock": 128914756,
+            "checkpointAt": "2026-10-21T09:33:40.124Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:33:19.793Z",
+            "observedHeadLag": 13,
+            "observedSafeBacklog": 10,
+            "errorCode": null
+          },
+          "flap": {
+            "nextBlock": 128914122,
+            "checkpointAt": "2026-10-21T09:32:58.473Z",
+            "headStatus": "verified",
+            "proofVerifiedAt": "2026-10-21T09:28:27.166Z",
+            "observedHeadLag": 19,
+            "observedSafeBacklog": 16,
+            "errorCode": "FLAP_QUOTE_PORTAL_VERSION_MISMATCH"
+          }
+        }
+      ],
+      "proofs": [
+        {
+          "platform": "four",
+          "startedAt": "2026-10-21T09:32:16.649Z",
+          "verifiedAt": "2026-10-21T09:32:17.271Z",
+          "headNumber": 128914582,
+          "headHash": "0xe23920a51fd623ae2920758770d98e0ccef283c3bf93e2f0635912585f8878cf",
+          "blockTimestamp": 1792575136,
+          "sourceIds": [
+            "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+            "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+          ],
+          "sourceTips": [
+            128914582,
+            128914582
+          ],
+          "headSpread": 0,
+          "confirmations": 3,
+          "safeHead": 128914579,
+          "cursor": {
+            "nextBlock": 128914569,
+            "anchorBlock": 128914568,
+            "anchorBlockHash": "0xe73727abe761363e704b59e777e4c94632d6280f442b8436c5938924cab80098"
+          },
+          "cursorObservedAt": "2026-10-21T09:32:17.272Z",
+          "observedHeadLag": 14,
+          "observedSafeBacklog": 11
+        },
+        {
+          "platform": "flap",
+          "startedAt": "2026-10-21T09:28:26.583Z",
+          "verifiedAt": "2026-10-21T09:28:27.166Z",
+          "headNumber": 128914072,
+          "headHash": "0xd69356eae88d09db8fd6b4bb74c4770cb0b654874ddcd0c3c92c674251c2fca5",
+          "blockTimestamp": 1792574905,
+          "sourceIds": [
+            "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+            "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+          ],
+          "sourceTips": [
+            128914072,
+            128914073
+          ],
+          "headSpread": 1,
+          "confirmations": 3,
+          "safeHead": 128914069,
+          "cursor": {
+            "nextBlock": 128914054,
+            "anchorBlock": 128914053,
+            "anchorBlockHash": "0xd742c05b3602168ef4157121a72e7c0437d5219b25118b39e8c07aba8211e13e",
+            "afterLogIndex": -1
+          },
+          "cursorObservedAt": "2026-10-21T09:28:27.166Z",
+          "observedHeadLag": 19,
+          "observedSafeBacklog": 16
+        },
+        {
+          "platform": "four",
+          "startedAt": "2026-10-21T09:33:19.130Z",
+          "verifiedAt": "2026-10-21T09:33:19.793Z",
+          "headNumber": 128914721,
+          "headHash": "0x85be0b2493d67a1d2548f47df4f87c325b01236857e458ebf046ab44ec3f17aa",
+          "blockTimestamp": 1792575198,
+          "sourceIds": [
+            "fbfc846869005053b81c33e2508444a796990be4d0874d6029bae246317b08e8",
+            "768d9456a61b14c9c09953c1db3cea5986eeb2e9fd65527d1861402cd8ea87f8"
+          ],
+          "sourceTips": [
+            128914721,
+            128914721
+          ],
+          "headSpread": 0,
+          "confirmations": 3,
+          "safeHead": 128914718,
+          "cursor": {
+            "nextBlock": 128914709,
+            "anchorBlock": 128914708,
+            "anchorBlockHash": "0x27d6f8e680d34500a983b63ff819317cb1b99cbc3ffd4f48448d99a764be912b"
+          },
+          "cursorObservedAt": "2026-10-21T09:33:19.793Z",
+          "observedHeadLag": 13,
+          "observedSafeBacklog": 10
+        }
+      ],
+      "note": "Four advances; Flap remains fail-closed at 128914122. Flap old observed lag/backlog are historical only, not current."
+    }
+  },
+  "runtimeApi": {
+    "at": "2026-10-21T09:33:51.141Z",
+    "mode": "paper",
+    "enabled": true,
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "exitMonitor": {
+      "running": true,
+      "intervalMs": 1000,
+      "lastCheckedAt": "2026-10-21T09:33:43.886Z",
+      "checks": 1582,
+      "staleQuotes": 0,
+      "entriesEnabled": true,
+      "lastError": null
+    },
+    "coverageCheckedAt": "2026-10-21T09:33:45.546Z",
+    "platforms": {
+      "flap": {
+        "status": "stale",
+        "lastAttemptAt": "2026-10-21T09:32:58.473Z",
+        "lastSuccessAt": "2026-10-21T09:28:50.319Z",
+        "nextAttemptAt": "2026-10-21T09:36:07.378Z",
+        "ageMs": 295227,
+        "lastErrorAt": "2026-10-21T09:32:58.473Z",
+        "lastErrorCode": "FLAP_QUOTE_PORTAL_VERSION_MISMATCH",
+        "adapterHealth": {
+          "status": "stale",
+          "lastAttemptAt": "2026-10-21T09:32:58.473Z",
+          "lastSuccessAt": "2026-10-21T09:28:50.319Z",
+          "nextAttemptAt": "2026-10-21T09:36:07.378Z",
+          "ageMs": 295227,
+          "lastErrorAt": "2026-10-21T09:32:58.473Z",
+          "lastErrorCode": "FLAP_QUOTE_PORTAL_VERSION_MISMATCH"
+        },
+        "checkpointAt": "2026-10-21T09:32:58.473Z",
+        "nextBlock": 128914122,
+        "headLagBlocks": null,
+        "liveHeadVerified": false,
+        "scope": "BSC pinned Portal quote adapter",
+        "headVerificationStatus": "stale",
+        "scanBacklogBlocks": null,
+        "headBlock": 128914072,
+        "confirmedHeadBlock": 128914069,
+        "confirmationDepth": 3,
+        "headSpreadBlocks": 1,
+        "headVerifiedAt": "2026-10-21T09:28:27.166Z",
+        "headAgeMs": 318963,
+        "observationNextBlock": 128914054,
+        "observedHeadLagBlocks": 19,
+        "observedScanBacklogBlocks": 16
+      },
+      "fourmeme": {
+        "adapterHealth": null,
+        "status": "checkpoint_only_unverified",
+        "checkpointAt": "2026-10-21T09:33:40.124Z",
+        "nextBlock": 128914756,
+        "headLagBlocks": null,
+        "liveHeadVerified": false,
+        "scope": "BSC pinned OpenFour registry adapter",
+        "headVerificationStatus": "cursor_ahead_of_observation",
+        "scanBacklogBlocks": null,
+        "headBlock": 128914721,
+        "confirmedHeadBlock": 128914718,
+        "confirmationDepth": 3,
+        "headSpreadBlocks": 0,
+        "headVerifiedAt": "2026-10-21T09:33:19.793Z",
+        "headAgeMs": 26416,
+        "observationNextBlock": 128914709,
+        "observedHeadLagBlocks": 13,
+        "observedScanBacklogBlocks": 10
+      }
+    },
+    "readErrors": [],
+    "headReadErrors": []
+  },
+  "finalLog": {
+    "at": "2026-10-21T09:34:01.647Z",
+    "from": 20738826,
+    "to": 20742552,
+    "lineCount": 27,
+    "counts": {
+      "bscCapacity": 0,
+      "bscBudget": 11,
+      "bscQueuePressure": 2
+    },
+    "versionMismatches": [
+      "[2026-10-21T09:29:26.807Z] [flap-quote] FLAP_QUOTE_PORTAL_VERSION_MISMATCH: Flap Portal version v5.26.0 does not match pinned v5.25.0",
+      "[2026-10-21T09:29:38.341Z] [flap-quote] FLAP_QUOTE_PORTAL_VERSION_MISMATCH: Flap Portal version v5.26.0 does not match pinned v5.25.0",
+      "[2026-10-21T09:29:55.054Z] [flap-quote] FLAP_QUOTE_PORTAL_VERSION_MISMATCH: Flap Portal version v5.26.0 does not match pinned v5.25.0",
+      "[2026-10-21T09:30:32.328Z] [flap-quote] FLAP_QUOTE_PORTAL_VERSION_MISMATCH: Flap Portal version v5.26.0 does not match pinned v5.25.0",
+      "[2026-10-21T09:31:30.523Z] [flap-quote] FLAP_QUOTE_PORTAL_VERSION_MISMATCH: Flap Portal version v5.26.0 does not match pinned v5.25.0",
+      "[2026-10-21T09:32:58.487Z] [flap-quote] FLAP_QUOTE_PORTAL_VERSION_MISMATCH: Flap Portal version v5.26.0 does not match pinned v5.25.0"
+    ],
+    "shutdown": [
+      "[2026-10-21T09:31:45.674Z] [shutdown] SIGTERM received; draining monitors",
+      "[2026-10-21T09:31:56.772Z] [shutdown] complete"
+    ]
+  },
+  "routeHealth": {
+    "at": "2026-10-21T09:33:10.590Z",
+    "maintenance": {
+      "checkedAt": "2026-10-21T09:33:02.193Z",
+      "enabled": true,
+      "started": 4,
+      "completed": 2,
+      "failed": 2,
+      "joined": 0,
+      "capacityYields": 0,
+      "cooldownYields": 2,
+      "cancelled": 0,
+      "active": 0,
+      "pending": 0,
+      "maxPending": 8,
+      "activeFamily": null,
+      "activeAgeMs": 0,
+      "stopped": false,
+      "rpc": {
+        "enabled": true,
+        "budgetMs": 10000,
+        "maxAttempts": 2,
+        "calls": 10,
+        "joined": 0,
+        "succeeded": 8,
+        "failed": 2,
+        "exhausted": 2,
+        "endpointAttempts": 13,
+        "active": 0,
+        "lastDurationMs": 1964,
+        "maxDurationMs": 9721,
+        "coalescedKeys": 0,
+        "totalSlots": {
+          "active": 0,
+          "waiting": 0,
+          "limit": 1
+        }
+      },
+      "expired": 0,
+      "routeCooldownRemainingMs": 4099
+    },
+    "fresh": {
+      "checkedAt": "2026-10-21T09:33:02.193Z",
+      "enabled": true,
+      "maxActivationAgeMs": 120000,
+      "started": 0,
+      "completed": 0,
+      "failed": 0,
+      "joined": 0,
+      "capacityYields": 0,
+      "cooldownYields": 0,
+      "cancelled": 0,
+      "expired": 0,
+      "active": 0,
+      "pending": 0,
+      "maxPending": 2,
+      "activeFamily": null,
+      "activeAgeMs": 0,
+      "stopped": false,
+      "rpc": {
+        "enabled": true,
+        "budgetMs": 8000,
+        "maxAttempts": 2,
+        "calls": 0,
+        "joined": 0,
+        "succeeded": 0,
+        "failed": 0,
+        "exhausted": 0,
+        "endpointAttempts": 0,
+        "active": 0,
+        "lastDurationMs": 0,
+        "maxDurationMs": 0,
+        "coalescedKeys": 0,
+        "totalSlots": {
+          "active": 0,
+          "waiting": 0,
+          "limit": 1
+        }
+      },
+      "routeCooldownRemainingMs": 0
+    },
+    "realtimeTail": {
+      "status": "error",
+      "consecutiveFailures": 12,
+      "checkedAt": "2026-10-21T09:32:58.674Z",
+      "lastSuccessAt": null,
+      "fromBlock": 128914289,
+      "toBlock": 128914308,
+      "nextBlock": 128914564,
+      "healthCheckedAt": "2026-10-21T09:33:02.193Z",
+      "confirmedHeadBlock": 128914681,
+      "coveredBlock": 128914563,
+      "lagBlocks": 118,
+      "lagSeconds": 54,
+      "lastSuccessAgeMs": null,
+      "degradedLagBlocks": 40,
+      "criticalLagBlocks": 128,
+      "cursorRebuiltAt": "2026-10-21T09:32:38.633Z",
+      "cursorRebuildReason": "cursor_stale_handoff_to_near_head_recovery",
+      "previousNextBlock": 128914495,
+      "previousLagBlocks": 133,
+      "handoffFromBlock": 128914495,
+      "handoffThroughBlock": 128914563,
+      "handoffLane": "near_head_recovery",
+      "legacyHandoffMigratedAt": "2026-08-06T07:38:40.983Z",
+      "legacyHandoffOriginalLane": "historical_recovery",
+      "handoffGapIds": [
+        "realtime-tail-gap:128914309:128914563"
+      ],
+      "handoffMigrationFromBlock": 114314439,
+      "handoffMigrationThroughBlock": 114314518,
+      "handoffCompaction": {
+        "previousLastFinalizedBlock": 119869645,
+        "compactedThroughBlock": 119920033,
+        "replayLookbackFromBlock": 119917634,
+        "droppedGapCount": 203,
+        "retainedGapCount": 3
+      },
+      "lastCycle": {
+        "startedAt": "2026-10-21T09:32:53.045Z",
+        "stage": "commit",
+        "initializeMs": 0,
+        "cursorMs": 195,
+        "queryMs": 5433,
+        "commitWaitMs": 0,
+        "commitMs": 0,
+        "filters": {
+          "filters": 5,
+          "started": 5,
+          "completed": 5,
+          "failed": 0,
+          "skipped": 0,
+          "elapsedMs": 5425,
+          "maxFilterMs": 3356
+        },
+        "fromBlock": 128914564,
+        "toBlock": 128914583,
+        "outcome": "error",
+        "durationMs": 5629,
+        "completedAt": "2026-10-21T09:32:58.674Z"
+      },
+      "lastErrorAt": "2026-10-21T09:32:58.674Z",
+      "lastError": "BSC realtime pending capacity 998+3>1000 or live admission paused",
+      "retryDelayMs": 5000,
+      "nextRetryAt": "2026-10-21T09:33:03.674Z",
+      "backpressureReason": "realtime_pending_capacity",
+      "pendingEntryCount": 998,
+      "newEntryCount": 3,
+      "pendingEntryCapacity": 1000
+    },
+    "objectRead": {
+      "status": "healthy",
+      "checkedAt": "2026-10-21T09:28:39.166Z",
+      "lastSuccessAt": "2026-10-21T09:28:39.166Z",
+      "attempted": 1,
+      "classified": 1,
+      "remaining": 0,
+      "providers": [
+        "bsc-mainnet.core.chainstack.com",
+        "bsc-dataseed.nariox.org",
+        "bsc-dataseed.defibit.io",
+        "bsc-dataseed.ninicoin.io",
+        "bsc.nodereal.io",
+        "bsc-dataseed-public.bnbchain.org",
+        "bsc-dataseed.bnbchain.org"
+      ],
+      "nextRunAt": "2026-10-21T09:28:41.921Z"
+    },
+    "objectReadCaution": "Last success is before final reload; not evidence of a new post-final-reload classification"
+  },
+  "protected": {
+    "invariants": {
+      "paperHistoryPrefixUnchanged": true,
+      "protectedFilesUnchanged": true,
+      "pausedEntriesUnchanged": true,
+      "pausedFlapWindowsUnchanged": true,
+      "independentWorkerPidUnchanged": true,
+      "execution": false,
+      "signing": false,
+      "broadcast": false
+    },
+    "paper": {
+      "count": 309,
+      "lastId": "1792567338823:308",
+      "prefix309Hash": "806a982c95c465aae2568fc44797e1e989752fabfcf92271b996ab7a20d1da20"
+    },
+    "hashes": {
+      "data/yesp-atm-confirmed-pvp-v2-20260923.json": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36",
+      "data/bsc-scan-policy.json": "c65c25b8997b43d788c07e2576a783b708f9f1f24445b2828da0e68d18676024",
+      "src/rpc-host-coordinator.js": "d0f4da7fa7029c68ee66d993517bf211a2561840f0c020b0329cefb32c1687eb",
+      "src/paper-launch-evidence.js": "5dea83466d3734404bbad537e4086fb99a0d5a1886e86d634d87d2d0ef68590d",
+      "src/paper-strategy-runtime.js": "c77b890e5c982f48e69cceb049c98643f98b7f3542516e58cc1ced0ba81210f5",
+      "src/four-registry-monitor.js": "16940c47d787c4722769622bfa30701ce1a07ce178c80e51847e8359700b8fb7",
+      "src/flap-quote-monitor.js": "dcda2d59dcc44da66ab92cc3ffbd8c2974112fd9a94ee899594b9ce591ba5ac2"
+    },
+    "pausedEntries": {
+      "realtimePendingEntries": {
+        "count": 28857,
+        "hash": "a8dc9b8ea1c262525152ac0bf5cfa8dab4e8908b14dfb3b7a6522b442a33fb4b"
+      },
+      "deferredCreationEvidence": {
+        "count": 5032,
+        "hash": "7aa4b1c4b5309a805ea1c17a62d8a67e275b9a88dcf8a2f715a680ac2652be60"
+      }
+    },
+    "pausedFlapWindows": {
+      "count": 22,
+      "hash": "dc38b694138349839ba2e08a3dfccc5725fb94755ba6c6ce77255dbc6af6b2c5"
+    },
+    "policy": {
+      "version": 1,
+      "mode": "live_only",
+      "fromBlock": 125126748,
+      "activatedAt": "2026-10-01T15:45:18.063Z"
+    }
+  },
+  "blockers": [
+    {
+      "code": "FLAP_QUOTE_PORTAL_VERSION_MISMATCH",
+      "detectedRuntimeVersion": "v5.26.0",
+      "pinnedVersion": "v5.25.0",
+      "firstObservedLogAt": "2026-10-21T09:29:26.807Z",
+      "lastSuccessAt": "2026-10-21T09:28:50.319Z",
+      "lastErrorAt": "2026-10-21T09:32:58.473Z",
+      "nextBlock": 128914122,
+      "currentHeadLagBlocks": null,
+      "currentScanBacklogBlocks": null,
+      "claimBoundary": "Runtime read reports v5.26.0; official announcement, new implementation/ABI and quote compatibility not independently verified. Do not merely change pin.",
+      "nextActionRequiresUserDirection": "Verify and adapt v5.26.0 in a separately authorized change, test safety rejection paths, then validate cursor recovery."
+    },
+    {
+      "code": "REAL_RPC_AND_LIVE_QUEUE_PRESSURE_REMAINS",
+      "note": "Bounded retry exhaustion and live pending cap 1000 still observed; no increased concurrency/budget/caps, no restored old backlog. Zero direct capacity-deadline log lines is not proof of zero capacity waits."
+    }
+  ],
+  "coverage": "Only bounded timestamped local snapshots. Three graceful main/BSC reloads create observation gaps. No continuous-online or zero-miss guarantee.",
+  "localReadCaution": "One WAL read produced a leading Warning and was not used; a second bounded read returned a clean snapshot+WAL projection. Stale legacy rpc/deepState health fields excluded.",
+  "backups": [
+    "data/backups/bsc-other-capacity-20261021-RA50A3",
+    "data/backups/four-replay-pool-20261021-Py7Mry",
+    "/tmp/bsc-replay-sweep-fairness-Yc22zU"
+  ],
+  "nextChecks": [
+    "Resolve Flap v5.26.0 evidence and adaptation scope before changing pin",
+    "Continue existing low-frequency read-only cursor/proof and real capacity pressure review; do not create another automation",
+    "Retain Four/Robinhood unverified/unadapted coverage gap and existing exclusions"
+  ]
+}

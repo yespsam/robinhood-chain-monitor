@@ -25,3 +25,36 @@ export function trainingState() {
     return [w.key, w];
   })) };
 }
+
+// Synthetic, explicitly reviewed evidence belongs only to policy tests. The
+// generic teacher() fixture remains an ordinary profitability candidate.
+export function reviewedTeacherRegistry(wallets = Object.values(trainingState().wallets), now = NOW) {
+  const iso = value => new Date(value).toISOString(), day = 86400000;
+  return { version: KOL_TEACHER_POLICY_VERSION, entries: Object.fromEntries(wallets.map((w, index) => {
+    const handle = `fixturekol${index + 1}`, reviewedAt = iso(now);
+    const review = { version: KOL_TEACHER_POLICY_VERSION, reviewId: `synthetic-review-${index + 1}`, chain: w.chain, wallet: w.wallet,
+      reviewedAt, validUntil: iso(now + day),
+      identity: { subjectId: String(100000 + index), handle, publicPersonReviewed: true,
+        gmgn: { source: 'gmgn_portfolio_stats', chain: w.chain, wallet: w.wallet, handle, kol: true, xVerified: true,
+          checkedAt: reviewedAt, evidenceRef: 'docs/fixture-gmgn.json' },
+        firstParty: { url: `https://x.com/${handle}/status/${123456789 + index}`, chain: w.chain, wallet: w.wallet, handle,
+          claim: 'wallet_ownership', checkedAt: reviewedAt, evidenceRef: 'docs/fixture-binding.json' } },
+      stability: { source: 'audited_public_trade_inventory', evidenceRef: 'docs/fixture-cost-inventory.json', checkedAt: reviewedAt,
+        weeks: Array.from({ length: 4 }, (_, week) => ({ startAt: iso(now - (4 - week) * 7 * day), endAt: iso(now - (3 - week) * 7 * day),
+          grossRealizedPnlUsd: 100, costsUsd: 10, closedPositions: 10,
+          tokens: Array.from({ length: 10 }, (_, token) => address(100 + token)),
+          coverageComplete: true, inventoryReconciled: true, costsVerified: true })),
+        maxDrawdownRate: .1, largestWinningTokenShare: .2, transfersReconciled: true,
+        openPositionCount: 0, unrealizedPnlUsd: 0, openPositionsValuedAt: reviewedAt, lossExamples: [hash(999)] } };
+    return [w.key, review];
+  })) };
+}
+
+export function reviewedTeacherSelection(chain = 'robinhood', now = NOW) {
+  const wallets = [1, 2, 3].map(n => teacher(n, chain, now)), reviews = reviewedTeacherRegistry(wallets, now);
+  return { version: KOL_TEACHER_POLICY_VERSION, teachers: wallets.map(w => {
+    const { identityId, reviewId, reviewedAt, validUntil, evidenceDigest } = assessKolLearningTeacher(w, reviews, now);
+    return { key: w.key, identityId, reviewId, reviewedAt, validUntil, evidenceDigest };
+  }) };
+}
+import { KOL_TEACHER_POLICY_VERSION, assessKolLearningTeacher } from '../../src/kol-learning-teachers.js';

@@ -1,6 +1,7 @@
 import { isEventBlocked } from "./blocklist.js";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { readOutboxJson, outboxJsonChunks } from "./outbox-json.js";
 import {
   claimsBscOpenFourFirstTokenUpdate,
   claimsFourRegistryUpdate,
@@ -4313,7 +4314,7 @@ function pruneOutbox(outbox, now = Date.now()) {
 
 async function readOutbox(file) {
   try {
-    const parsed = JSON.parse(await fs.readFile(file, "utf8"));
+    const parsed = await readOutboxJson(file);
     return {
       ...emptyOutbox(),
       ...parsed,
@@ -4346,13 +4347,12 @@ async function writeOutbox(file, outbox, fsImpl = fs) {
   await fsImpl.mkdir(directory, { recursive: true });
   const temporary = path.join(directory, `.${path.basename(file)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`);
   try {
-    // The outbox keeps the full persisted render bundle for deterministic
-    // retries. Compact JSON materially reduces parse/stringify allocation for
-    // that payload without changing the durable schema.
-    const payload = `${JSON.stringify(outbox)}\n`;
+    // Keep all retry/ownership evidence, but never materialize and UTF-8
+    // encode the whole historical outbox alongside its live object graph.
+    // The stream remains behind the same temp/fsync/rename durability barrier.
     const temporaryHandle = await fsImpl.open(temporary, "wx", 0o600);
     await withClosedHandle(temporaryHandle, async (handle) => {
-      await handle.writeFile(payload, "utf8");
+      await handle.writeFile(outboxJsonChunks(outbox), "utf8");
       await handle.chmod(0o600);
       await handle.sync();
     });
@@ -4977,8 +4977,21 @@ async function enqueueAlert(config, event) {
     throw new AlertDeliveryError(event.type, [{ destination: "configuration", message: "no alert destinations configured" }]);
   }
   const requestedEventId = alertEventKey(event);
-  const persistedEventId = await mutateOutbox(config, (outbox) => {
+  const admit = (outbox) => {
     const now = new Date(alertPipelineNow(config)).toISOString();
+    if (!outbox.events[requestedEventId] && isStrictFourRegistryEnqueueUpdate(event)) {
+      // Lock acquisition/reading a large outbox can take minutes. Derive a
+      // new admission's envelope at the actual enqueue boundary, not before
+      // that wait. Keep original chain/observation times and re-age priority;
+      // do not relax the 60s envelope check or rewrite an existing receipt.
+      const rawEvent = { ...event };
+      for (const key of ["canonicalSignalId", "canonicalSignalIds", "freshness", "tradingPriority", "alertQueuedAt"]) {
+        delete rawEvent[key];
+      }
+      if (!isStrictFourRegistryUpdate(rawEvent)) throw new Error("invalid Four Registry admission proof");
+      event = withTradingPriority(withAlertFreshness(config,
+        withFocusNovelty(config, rawEvent), Date.parse(now)), { nowMs: Date.parse(now) });
+    }
     assertImmutableOpenFourSignalCapacity(outbox, event);
     assertFourRegistryDeliveryOwnerCapacity(outbox, event);
     let eventId = requestedEventId;
@@ -5365,8 +5378,13 @@ async function enqueueAlert(config, event) {
     if (reactivatingCancelledFlapQuote) delete outbox.events[eventId].flapQuoteCancellation;
     rememberFourRegistryDeliveryOwner(outbox, outbox.events[eventId]);
     return eventId;
+  };
+  return mutateOutbox(config, (outbox) => {
+    const eventId = admit(outbox) || requestedEventId;
+    // Return the receipt from the same fsync/rename boundary. Inspecting the
+    // complete historical file again would needlessly block the producer.
+    return { eventId, entry: outbox.events[eventId] || null };
   });
-  return persistedEventId || requestedEventId;
 }
 
 const FLAP_QUOTE_CANCELLATION_KEYS = Object.freeze([
@@ -6675,6 +6693,36 @@ function terminalAlertSuppression(eventType, reason, details = {}) {
   };
 }
 
+function isPersistedExpiredFourRegistrySuppression(entry, event, eventId) {
+  // An old sender decision is already terminal. A producer retry must neither
+  // reopen that destination nor wait forever for a delivery that policy forbids.
+  // Bind the acknowledgement to the exact authenticated canonical payload;
+  // arbitrary terminal/source failures are not permission to drop evidence.
+  const destinations = Object.values(entry?.destinations || {});
+  const persistedRawEvent = { ...entry?.event };
+  // Old sender versions may have attached a now-invalid priority/freshness
+  // envelope. That envelope cannot authorize delivery, but it also cannot
+  // invalidate an already-final expiration of the exact, intact producer
+  // proof. Strip only these known sender-owned fields for this receipt check.
+  for (const key of ["canonicalSignalId", "canonicalSignalIds", "freshness", "tradingPriority", "alertQueuedAt"]) {
+    delete persistedRawEvent[key];
+  }
+  return isStrictFourRegistryUpdate(event)
+    && isStrictFourRegistryUpdate(persistedRawEvent)
+    && entry.status === "suppressed"
+    && entry.id === eventId
+    && eventId === event.eventKey
+    && entry.event.eventKey === eventId
+    && entry.event.blockHash === event.blockHash
+    && entry.event.payloadDigest === event.payloadDigest
+    && entry.event.deliveryEvidenceDigest === event.deliveryEvidenceDigest
+    && !entry.semanticDuplicateOf
+    && Number.isFinite(Date.parse(entry.suppressedAt || ""))
+    && destinations.length > 0
+    && destinations.every((destination) => destination.status === "disabled"
+      && ["freshness_too_old", "delivery_ttl_expired"].includes(destination.disabledReason));
+}
+
 export async function sendAlerts(config, event) {
   if (!isMonitoringSourceEnabled(config, event)) return terminalAlertSuppression(event?.type, "monitoring_source_disabled");
   // A closed Four Registry event is already informational-only/no-auto and
@@ -6697,12 +6745,22 @@ export async function sendAlerts(config, event) {
   if (effectiveFreshnessDecision(queuedEvent) !== "suppress" && await isRepeatedOfficialToken(config, queuedEvent)) {
     return terminalAlertSuppression(queuedEvent.type, "repeated_official_token");
   }
-  const eventId = await enqueueAlert(config, queuedEvent);
+  const { eventId, entry: admittedEntry } = await enqueueAlert(config, queuedEvent);
   // A new pending destination is immediately due because nextAttemptAt is
   // null. Existing failed destinations must keep their persisted backoff;
   // repeated source observations are not permission to hammer Telegram or a
   // webhook before that deadline.
-  const entry = await deliverOutboxEvent(config, eventId, { pipelineStartedAtMs });
+  // The Registry producer accepts a durable queued receipt and can cancel it
+  // on a later canonical reorg. Its existing outbox worker owns fan-out; HTTP,
+  // rendering and notification side effects must not stall chain scanning.
+  // Scope this handoff to that producer and the closed Registry proof schema.
+  const durableFourHandoff = config.alertFourRegistryDurableHandoff === true
+    && isStrictFourRegistryUpdate(event)
+    && (isDurablyAcceptedFourRegistryEntry(admittedEntry)
+      || ["delivered", "suppressed"].includes(admittedEntry?.status));
+  const entry = durableFourHandoff
+    ? admittedEntry
+    : await deliverOutboxEvent(config, eventId, { pipelineStartedAtMs });
   const receipts = Object.entries(entry?.destinations || {}).flatMap(([destination, state]) => state.status === "delivered"
     ? [{ destination, ...(state.receipt?.messageId === undefined ? {} : { messageId: state.receipt.messageId }) }]
     : []);
@@ -6714,12 +6772,16 @@ export async function sendAlerts(config, event) {
       .map((state) => state?.disabledReason)
       .filter(Boolean);
     const semanticDuplicate = disabledReasons.includes("semantic_duplicate");
+    const expiredFourRegistry = isPersistedExpiredFourRegistrySuppression(entry, event, eventId);
     const reason = semanticDuplicate
       ? "semantic_duplicate"
-      : disabledReasons.find((candidate) => TERMINAL_ALERT_SUPPRESSION_REASONS.has(candidate)) || "policy_suppressed";
+      : expiredFourRegistry
+        ? "policy_suppressed"
+        : disabledReasons.find((candidate) => TERMINAL_ALERT_SUPPRESSION_REASONS.has(candidate)) || "policy_suppressed";
     return terminalAlertSuppression(queuedEvent.type, reason, {
       eventId,
       persisted: true,
+      ...(expiredFourRegistry ? { suppressionReason: disabledReasons[0] } : {}),
       ...(semanticDuplicate ? {
         duplicateOf: entry?.semanticDuplicateOf || null,
         canonicalOwnerDelivered: entry?.semanticDuplicateOwnerDelivered === true,

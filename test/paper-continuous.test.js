@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { confirmedAccountGate, CONTINUOUS_PAPER_VERSION } from '../src/paper-confirmed-policy.js';
 import { evaluatePaperStrategies, createPaperStrategyAccount, advancePaperStrategyAccount, validatePaperStrategyAccount } from '../src/paper-strategy-engine.js';
+import { strategyCohortSummary } from '../dashboard/strategy-cohorts.js';
 
 const NOW = Date.parse('2026-09-24T02:00:00Z');
 const iso = ms => new Date(ms).toISOString();
@@ -118,7 +119,24 @@ test('dashboard describes continuous mode without claiming that entry criteria o
   assert.match(app, /focusAutoLabel.*entry.label/);
   assert.match(app, /满足买点且余额足够时模拟交易/);
   assert.match(app, /lossGuards\?\.enforced/);
-  assert.match(app, /c.accountPolicyVersion === 'continuous_paper_v1'/);
+  assert.match(app, /import\s*\{\s*strategyCohortSummary\s*\}\s*from\s*['"]\.\/strategy-cohorts\.js['"]/);
+  assert.match(app, /strategyCohortSummary\(trader\?\.cohorts,\s*state\.snapshot\)/);
+  const current = { closedRounds: 1, reasoningVersion: 'evidence_first_v1', setupId: 'external_breakout',
+    accountPolicyVersion: CONTINUOUS_PAPER_VERSION, opportunityVersion: 'multi_setup_v2',
+    entryFlowVersion: 'paper_entry_observed_outflow_v1', entryFlowVersionEvidence: 'recorded',
+    exitObservationVersion: 'entry_cohort_sell_retention_v1', exitObservationVersionEvidence: 'recorded',
+    exitVersion: 'meme_evidence_exit_v2', exitVersionEvidence: 'recorded',
+    entryCostVersion: 'paper_estimated_cost_v1', exitCostVersion: 'paper_estimated_cost_v1', exitCostVersionEvidence: 'recorded' };
+  const snapshot = { operatingPolicy: { continuous: true }, opportunityMode: 'multi_setup_v2',
+    mainExitPolicy: { version: 'meme_evidence_exit_v2' }, strategyValidationRequirements: {
+      entryFlowVersion: current.entryFlowVersion, exitObservationVersion: current.exitObservationVersion,
+      entryCostVersion: current.entryCostVersion, exitCostVersion: current.exitCostVersion } };
+  const versions = strategyCohortSummary([current,
+    { ...current, closedRounds: 2, accountPolicyVersion: 'bounded_paper_v1' },
+    { ...current, closedRounds: 3, accountPolicyVersion: undefined }], snapshot);
+  assert.equal(versions.currentRounds, 1, 'only the continuous cohort belongs to the current continuous version');
+  assert.equal(versions.legacyRounds, 2, 'bounded entries remain separate historical results');
+  assert.equal(versions.unknownRounds, 3, 'missing account version cannot borrow the current runtime mode');
   const server = await readFile(new URL('../scripts/dashboard-server.js', import.meta.url), 'utf8');
   assert.match(server, /continuousPaperMode: confirmedMode && process.env.PAPER_CONTINUOUS_MODE !== '0'/);
 });

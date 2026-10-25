@@ -1,0 +1,150 @@
+{
+  "round": 100,
+  "scheduledAt": "2026-10-22T19:06:48.101Z",
+  "startedAt": "2026-10-22T19:06:48.101Z",
+  "completedAt": "2026-10-22T19:12:13.000Z",
+  "group": "bsc",
+  "question": "Refresh A/B latest activity heads and compare current Four/Flap proof-time heads against later cursors without bypassing shared RPC cooldown.",
+  "walletResearch": {
+    "configCheckPassed": true,
+    "gmgnBusinessRequests": 2,
+    "gmgnSuccessful": 2,
+    "gmgnFailed": 0,
+    "publicRpcRequests": 0,
+    "newAddressCount": 0,
+    "wallets": {
+      "A": {
+        "chain": "bsc",
+        "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+        "providerHeadCheckedAt": "2026-10-22T19:08:21.017Z",
+        "providerLatestActivityAt": "2026-10-02T11:08:09.000Z",
+        "lastNewEvidenceAt": "2026-10-21T15:03:29.153Z",
+        "rows": 20,
+        "latestKnownTrade": {
+          "at": "2026-10-02T11:08:09.000Z",
+          "hash": "0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868",
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "side": "sell"
+        },
+        "anchorFound": true,
+        "pageOverlap": null,
+        "newRows": null,
+        "nextCursorReturned": true,
+        "nextCursorRetained": false,
+        "status": "success_anchor_present_exact_page_dedupe_unavailable"
+      },
+      "B": {
+        "chain": "bsc",
+        "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+        "providerHeadCheckedAt": "2026-10-22T19:08:29.659Z",
+        "providerLatestActivityAt": "2026-10-02T11:08:09.000Z",
+        "lastNewEvidenceAt": "2026-10-21T15:03:38.659Z",
+        "rows": 20,
+        "latestKnownTrade": {
+          "at": "2026-10-02T11:08:09.000Z",
+          "hash": "0x276ed1a8787a851f66bf341a62bd62728028d53b19a22ea8a69fa6b3f7857f6d",
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+          "side": "sell"
+        },
+        "anchorFound": true,
+        "pageOverlap": null,
+        "newRows": null,
+        "nextCursorReturned": true,
+        "nextCursorRetained": false,
+        "status": "success_anchor_present_exact_page_dedupe_unavailable"
+      }
+    },
+    "interpretation": "No new transaction evidence retained; both provider heads still return the known Oct 2 sell activity. Exact row overlap/new-row count is unknown. Preserve historical cursors and do not infer inactivity or common control.",
+    "knownGapsPreserved": [
+      "A known nonce 157; subsequent account activity has not been classified.",
+      "B nonces 158-161 remain historically classified; no fresh RPC check this round.",
+      "No new transaction hashes were retained for RPC sampling."
+    ]
+  },
+  "fourFlap": {
+    "chainId": 56,
+    "four": {
+      "proofAt": "2026-10-22T19:09:08.725Z",
+      "sourceTips": [129183376, 129183377],
+      "spread": 1,
+      "safeHead": 129183373,
+      "cursorNextBlockAtProof": 129183364,
+      "lagAtProof": 10,
+      "subsequentAttemptAt": "2026-10-22T19:10:17.462Z",
+      "subsequentAttemptStatus": "error",
+      "subsequentError": "CHAIN_HEAD_RPC_FAILED",
+      "liveCursorNextBlock": 129183600,
+      "liveCursorAt": "2026-10-22T19:10:55.428Z",
+      "currentLag": null
+    },
+    "flap": {
+      "proofAt": "2026-10-22T19:10:10.326Z",
+      "sourceTips": [129183511, 129183514],
+      "spread": 3,
+      "safeHead": 129183508,
+      "cursorNextBlockAtProof": 129183489,
+      "lagAtProof": 20,
+      "liveCursorNextBlock": 129183609,
+      "liveCursorAt": "2026-10-22T19:11:04.639Z",
+      "health": "degraded",
+      "errorCode": "FLAP_QUOTE_PORTAL_IDENTITY_UNAVAILABLE",
+      "error": "providers cooling down; retry in 29336ms",
+      "currentLag": null,
+      "capacityWaitResolved": false
+    },
+    "backlogReductionVerified": false,
+    "note": "Both cursors moved beyond their latest proof safe heads, but no contemporaneous head/cursor pair establishes current lag; do not claim backlog reduction. RPC cooldown continues to govern attempts."
+  },
+  "paperForward": {
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "tradeCount": 311,
+    "lastTradeId": "1792647072099:310",
+    "newTrades": 0,
+    "mainCashUsd": 44.348991189490235,
+    "mainRealizedPnlUsd": -135.46948229910913,
+    "multiarmCursorMatches": true,
+    "newCompletePairIds": [],
+    "reportedCompletePairIds": [
+      "1792274973724:305",
+      "1792567092580:307",
+      "1792645698811:309"
+    ],
+    "cumulativeQuoteGapCount": 105,
+    "quoteGapReasons": {
+      "missing_quote": 58,
+      "pre_entry_quote": 6,
+      "out_of_order_quote": 39,
+      "stale_quote": 2
+    },
+    "quoteOpportunityScheduler": null,
+    "artifactPersistedAt": "2026-10-22T19:11:55.511Z"
+  },
+  "binanceAgenticLaunchMonitoring": {
+    "officialSourcesChecked": [
+      "https://www.binance.com/en/support/faq/detail/3ff00e2d488a41c4aaa4aabb6fc36763",
+      "https://developers.binance.com/en/docs/products/agentic-wallet/welcome",
+      "https://www.four.meme/en/agentic",
+      "https://flap.sh/event/bstocks?lang=en"
+    ],
+    "boundedReviewOnly": true,
+    "aiProExclusiveRuleFound": false,
+    "qualifyingIdentityAndSuccessfulBuyPairObserved": false,
+    "triggerFired": false,
+    "fullChainScan": false
+  },
+  "safety": {
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "walletConnected": false,
+    "strategyChanged": false,
+    "ledgerChanged": false,
+    "processRestarted": false,
+    "bypassedRateLimits": false,
+    "modelCalls": 0
+  }
+}

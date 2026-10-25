@@ -29,6 +29,23 @@ test('a new deposit separates the ongoing round without rewriting or hiding hist
   assert.equal(r.overall.netPnlUsd,1);assert.equal(r.currentRound.netPnlUsd,3);assert.equal(r.currentRound.realizedPnlUsd,3);
   assert.equal(r.lessons[0].closedRounds,2);assert.equal(r.automaticParameterChanges,false);
 });
+test('missing context does not label structural evidence invalid or promote unknown winners to valid entries',()=>{
+  const structural={...buy('structural'),entryEvidence:{lossRepair:{group:'price_only'},
+    opportunity:{id:'external_breakout',basis:'ohlcv',signalReady:true},entryPlan:{eligible:true}}};
+  const unknown=buy('unknown',NOW-1900);
+  const account={trades:[structural,sell('structural-sell',-2),unknown,sell('unknown-sell',1,NOW-1000)]};
+  const before=structuredClone(account),r=paperLossLearning(account,NOW);
+  const context=r.lessons.find(x=>x.id==='entry_evidence');
+  assert.equal(context.label,'缺少已核叙事或盈利钱包上下文');
+  assert.match(context.action,/结构依据另行评价/);
+  assert.match(context.action,/不证明结构有效/);
+  assert.match(context.action,/上下文缺失保留未知/);
+  assert.equal(context.closedRounds,2,'both the losing structural route and unknown winner retain missing context');
+  assert.equal(context.losses,1);assert.equal(context.wins,1);assert.equal(context.netPnlUsd,-1);
+  assert.equal(r.routePerformance.groups.find(g=>g.id==='price_only').netPnlUsd,-2);
+  assert.equal(r.routePerformance.groups.find(g=>g.id==='unknown').netPnlUsd,1);
+  assert.equal(r.automaticParameterChanges,false);assert.deepEqual(account,before);
+});
 test('route results use frozen route and selection version, not names or later story; open lots are excluded',()=>{
   const event={...buy('event'),entryEvidence:{lossRepair:{group:'event_narrative'},traderDecision:{selectionPolicy:'new'}}};
   const price={...buy('price',NOW-1900),entryEvidence:{lossRepair:{group:'price_only'},traderDecision:{selectionPolicy:'old'}}};

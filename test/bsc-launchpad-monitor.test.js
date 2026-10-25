@@ -3312,8 +3312,8 @@ test('indexed archive handles historical state and bounded logs before state-lim
   }),
  });
  await pool.getCode('0x1111111111111111111111111111111111111111',119678948);
- await pool.send('eth_getLogs',[{fromBlock:'0x1',toBlock:'0x2710'}]);
- await pool.send('eth_getLogs',[{fromBlock:'0x1',toBlock:'0x2711'}]);
+ await pool.send('eth_getLogs',[{fromBlock:'0x1',toBlock:'0x3e8'}]);
+ await pool.send('eth_getLogs',[{fromBlock:'0x1',toBlock:'0x3e9'}]);
  assert.deepEqual(calls,[['bsc.rpc.sentio.xyz','code'],['bsc.rpc.sentio.xyz','logs'],['bsc.rpc.blxrbdn.com','logs']]);
  pool.destroy();
 });
@@ -5917,6 +5917,81 @@ test("isolated Four.Meme replay scans one range per sweep and resumes after rest
   assert.equal(ranges.length, 2);
   assert.equal(Number.parseInt(ranges[1].fromBlock, 16), first.replayNextBlock);
 });
+
+for (const failure of ["capacity", "budget"]) {
+  test(`Four sweep fairly rotates four pending windows after ${failure} and preserves refused positions`, async t => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-four-sweep-fairness-"));
+    const baseline = Date.parse("2026-10-21T00:00:00.000Z");
+    let clock = baseline, unavailable = true, canonicalReads = 0;
+    const ranges = [];
+    await fs.writeFile(path.join(dataDir, "bsc-scan-policy.json"), JSON.stringify({
+      version: 1, mode: "live_only", fromBlock: 100, activatedAt: new Date(baseline).toISOString(),
+    }));
+    const replayProvider = {
+      getNetwork: async () => ({ chainId: 56n }), getBlockNumber: async () => 10_000,
+      getBlock: async () => {
+        canonicalReads++;
+        if (unavailable) throw Object.assign(new Error("fixture canonical header resource wait"), {
+          rpcFailureScope: failure === "capacity" ? "capacity" : "method",
+          rpcBudgetExhausted: failure === "budget", rpcCircuitAlreadyOpen: true, retryAfterMs: 20_000,
+        });
+        return { timestamp: baseline / 1000 };
+      },
+      send: async (_method, [filter]) => { ranges.push(filter); return []; }, destroy() {},
+    };
+    const monitor = createBscLaunchpadMonitor({ dataDir, monitorScope: "focus3",
+      bscReplayIsolationEnabled: true, bscConfirmations: 0 }, {
+      autoStart: false, externalAttribution: false, fourMemeFastReplayEnabled: false,
+      now: () => clock, provider: { destroy() {} }, replayProvider,
+      fetchImpl: async () => { throw new Error("official HTTP disabled in fixture"); },
+      logger: { error() {}, info() {} }, ...disabledJournalTimerDependencies(),
+    });
+    t.after(async () => { await monitor.stop(); await fs.rm(dataDir, { recursive: true, force: true }); });
+    await monitor.registerFourMemeFeatureActivations(["A", "B", "C", "D", "PAUSED"].map((symbol, index) => ({
+      quoteConfig: { symbol: `FAIR${symbol}`, address: `0x${String(index + 1).repeat(40)}`, status: "PUBLISH" },
+      observedAt: new Date(baseline).toISOString(),
+      firstObservedAt: new Date(index === 4 ? baseline - 60_000 : baseline).toISOString(),
+    })));
+    await monitor.awaitIdle();
+    const snapshot = async () => (await monitor.getState()).officialSources.fourMeme.featureActivations;
+    const initial = await snapshot(), activeKeys = Object.keys(initial).filter(key => !key.includes("FAIRPAUSED"));
+    const pausedKey = Object.keys(initial).find(key => key.includes("FAIRPAUSED"));
+    assert.equal(activeKeys.length, 4);
+    for (let turn = 0; turn < 8; turn++) {
+      clock += 60_000;
+      const before = await snapshot(), readsBefore = canonicalReads;
+      await monitor.checkOfficialSources(); await monitor.awaitIdle();
+      const after = await snapshot();
+      assert.equal(canonicalReads, readsBefore + 1, "only one window starts before route yield");
+      assert.deepEqual(activeKeys.filter(key => after[key].replayLastAttemptAt !== before[key].replayLastAttemptAt),
+        [activeKeys[turn % 4]], "each next sweep starts with the last unattempted window");
+      for (const key of activeKeys) {
+        assert.equal(after[key].replayNextBlock, initial[key].replayNextBlock);
+        assert.equal(after[key].replayScannedThroughBlock, initial[key].replayScannedThroughBlock);
+        assert.equal(after[key].replayCompletedAt, null);
+        assert.deepEqual(after[key].replayAttemptedCandidateKeys, initial[key].replayAttemptedCandidateKeys);
+      }
+      assert.deepEqual(after[pausedKey], initial[pausedKey], "old paused activation remains untouched");
+      for (let refused = 0; refused < 3; refused++) {
+        await monitor.checkOfficialSources(); await monitor.awaitIdle();
+        assert.equal(canonicalReads, readsBefore + 1, "cooldown refusal starts no proof request");
+        assert.deepEqual(await snapshot(), after, "refusal changes neither durable work nor rotation progress");
+      }
+    }
+    assert.equal(ranges.length, 0, "failed canonical header cannot commit a range");
+    unavailable = false;
+    for (const pair of [activeKeys.slice(0, 2), activeKeys.slice(2)]) {
+      clock += 60_000;
+      const before = await snapshot();
+      await monitor.checkOfficialSources(); await monitor.awaitIdle();
+      const after = await snapshot();
+      assert.deepEqual(activeKeys.filter(key => after[key].replayNextBlock !== before[key].replayNextBlock), pair,
+        "a started bounded replay returning false still advances the fair rotation");
+      assert.deepEqual(after[pausedKey], initial[pausedKey]);
+    }
+    assert.equal(ranges.length, 4);
+  });
+}
 
 test("a background Four.Meme activation replay returns after the durable handoff and remains single-flight", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsc-fourmeme-background-replay-"));
@@ -18077,6 +18152,128 @@ test("isolated first-three log failure retains the range and retries only after 
   assert.equal(window.archiveReplayNextBlock, 102);
   assert.equal(attempts, 2);
 });
+
+for (const failure of ["capacity", "host-cooldown", "budget"]) {
+  test(`isolated first-three sweep stops on ${failure}, retains windows and resumes rotation`, async t => {
+    const h = await createFlapQuoteFirstThreeHarness(t);
+    Object.assign(h.config, { monitorScope: "focus3", bscReplayIsolationEnabled: true });
+    await fs.writeFile(path.join(h.dataDir, "bsc-scan-policy.json"), JSON.stringify({
+      version: 1, mode: "live_only", fromBlock: 100, activatedAt: "2026-08-24T12:00:00.000Z",
+    }));
+    h.setArchiveVisible(false); h.setHead(110);
+    let unavailable = false;
+    const reads = [];
+    const replayProvider = { ...h.dependencies.provider, getNetwork: async () => ({ chainId: 56n }),
+      getBlock: async n => {
+        reads.push(n);
+        if (unavailable) throw Object.assign(new Error("fixture resource wait"), {
+          rpcFailureScope: failure === "capacity" ? "capacity" : failure === "budget" ? "method" : "host",
+          rpcBudgetExhausted: failure === "budget",
+          rpcCircuitAlreadyOpen: true, retryAfterMs: 20_000,
+        });
+        return h.dependencies.provider.getBlock(n);
+      },
+    };
+    const monitor = h.createMonitor({ replayProvider });
+    t.after(() => monitor.stop());
+    const a = await monitor.registerFlapQuotePoolLifecycle(h.activation);
+    await monitor.awaitIdle();
+    const b = await monitor.registerFlapQuotePoolLifecycle(flapQuoteLifecycleRecord({
+      quoteAddress: `0x${"7".repeat(40)}`, blockNumber: 101, blockHash: h.blockHash,
+      transactionHash: `0x${"72".repeat(32)}`, occurredAt: h.activation.occurredAt,
+    }));
+    await monitor.awaitIdle();
+    const paused = await monitor.registerFlapQuotePoolLifecycle(flapQuoteLifecycleRecord({
+      quoteAddress: `0x${"8".repeat(40)}`, blockNumber: 99,
+      transactionHash: `0x${"83".repeat(32)}`, occurredAt: h.activation.occurredAt,
+    }));
+    await monitor.awaitIdle();
+    const before = (await monitor.getState()).officialSources.flap.quotePoolFirstThree.windows;
+    reads.length = 0; unavailable = true;
+    await assert.rejects(monitor.replayFlapQuotePoolFirstThree(), /fixture resource wait/);
+    await monitor.awaitIdle();
+    assert.deepEqual(reads, [100], "the next window cannot repeat the same resource wait");
+    const retained = (await monitor.getState()).officialSources.flap.quotePoolFirstThree.windows;
+    assert.deepEqual(retained, before, "failed canonical read changes no slots, cursor or paused window");
+    unavailable = false; h.setClock(h.blockTimestampMs + 60 * 60_000); reads.length = 0;
+    await monitor.replayFlapQuotePoolFirstThree(); await monitor.awaitIdle();
+    assert.equal(reads[0], 101, "rotation resumes with the next window after the wait");
+    const after = (await monitor.getState()).officialSources.flap.quotePoolFirstThree.windows;
+    for (const ack of [a, b]) assert.equal(after[ack.generationKey].archiveReplayNextBlock,
+      before[ack.generationKey].archiveReplayNextBlock + 2);
+    assert.deepEqual(after[paused.generationKey], before[paused.generationKey]);
+    assert.equal(h.alerts.length, 0);
+  });
+}
+
+for (const failure of ["capacity", "budget"]) {
+  test(`Flap sweep preserves four-window fairness through repeated ${failure} cooldown refusals`, async t => {
+    const h = await createFlapQuoteFirstThreeHarness(t);
+    Object.assign(h.config, { monitorScope: "focus3", bscReplayIsolationEnabled: true });
+    await fs.writeFile(path.join(h.dataDir, "bsc-scan-policy.json"), JSON.stringify({
+      version: 1, mode: "live_only", fromBlock: 100, activatedAt: "2026-08-24T12:00:00.000Z",
+    }));
+    h.setArchiveVisible(false); h.setHead(110);
+    let unavailable = false;
+    const reads = [];
+    const replayProvider = { ...h.dependencies.provider, getNetwork: async () => ({ chainId: 56n }),
+      getBlock: async n => {
+        reads.push(n);
+        if (unavailable) throw Object.assign(new Error("fixture canonical resource wait"), {
+          rpcFailureScope: failure === "capacity" ? "capacity" : "method",
+          rpcBudgetExhausted: failure === "budget", rpcCircuitAlreadyOpen: true, retryAfterMs: 20_000,
+        });
+        return n > 101 ? { number: n, hash: h.blockHash, timestamp: h.blockTimestampMs / 1000 }
+          : h.dependencies.provider.getBlock(n);
+      },
+    };
+    const monitor = h.createMonitor({ replayProvider });
+    t.after(() => monitor.stop());
+    const acks = [await monitor.registerFlapQuotePoolLifecycle(h.activation)];
+    await monitor.awaitIdle();
+    for (let index = 1; index < 4; index++) {
+      acks.push(await monitor.registerFlapQuotePoolLifecycle(flapQuoteLifecycleRecord({
+        quoteAddress: `0x${String(index + 6).repeat(40)}`, blockNumber: 100 + index,
+        blockHash: h.blockHash, transactionHash: `0x${(0xa0 + index).toString(16).repeat(32)}`,
+        occurredAt: h.activation.occurredAt,
+      })));
+      await monitor.awaitIdle();
+    }
+    const paused = await monitor.registerFlapQuotePoolLifecycle(flapQuoteLifecycleRecord({
+      quoteAddress: `0x${"a".repeat(40)}`, blockNumber: 99,
+      transactionHash: `0x${"b1".repeat(32)}`, occurredAt: h.activation.occurredAt,
+    }));
+    await monitor.awaitIdle();
+    const snapshot = async () => (await monitor.getState()).officialSources.flap.quotePoolFirstThree.windows;
+    const initial = await snapshot();
+    unavailable = true;
+    for (let turn = 0; turn < 8; turn++) {
+      h.setClock(h.blockTimestampMs + (60 + turn) * 60_000); reads.length = 0;
+      await assert.rejects(monitor.replayFlapQuotePoolFirstThree(), /fixture canonical resource wait/);
+      await monitor.awaitIdle();
+      assert.deepEqual(reads, [100 + turn % 4], "resource yield leaves the next window at the front");
+      assert.deepEqual(await snapshot(), initial, "failed canonical proof commits no slot/cursor or paused work");
+      for (let refused = 0; refused < 3; refused++) {
+        await monitor.replayFlapQuotePoolFirstThree(); await monitor.awaitIdle();
+        assert.deepEqual(reads, [100 + turn % 4], "refused sweeps cannot spend or skip a window");
+        assert.deepEqual(await snapshot(), initial);
+      }
+    }
+    unavailable = false;
+    for (let pair = 0; pair < 2; pair++) {
+      h.setClock(h.blockTimestampMs + (70 + pair) * 60_000);
+      const before = await snapshot();
+      await monitor.replayFlapQuotePoolFirstThree(); await monitor.awaitIdle();
+      const after = await snapshot();
+      assert.deepEqual(acks.filter(ack => after[ack.generationKey].archiveReplayNextBlock
+        !== before[ack.generationKey].archiveReplayNextBlock).map(ack => ack.generationKey),
+      acks.slice(pair * 2, pair * 2 + 2).map(ack => ack.generationKey),
+      "legitimate bounded replay false results still rotate to both next windows");
+      assert.deepEqual(after[paused.generationKey], initial[paused.generationKey]);
+    }
+    assert.equal(h.alerts.length, 0);
+  });
+}
 
 test("isolated completed first-three windows still revalidate canonical blocks", async (t) => {
   const h = await createFlapQuoteFirstThreeHarness(t);

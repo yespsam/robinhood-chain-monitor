@@ -1,0 +1,201 @@
+{
+  "checkedAt": "2026-10-22T11:10:37Z",
+  "scheduledAt": "2026-10-22T11:03:16.329Z",
+  "round": 98,
+  "durationSecondsApprox": 429,
+  "durationNote": "约7分钟，超过5分钟目标；本地只读面板API大响应超时后未重试。",
+  "group": "bsc",
+  "researchQuestion": "刷新 A/B 最新活动页并保留精确去重缺口；旁核 Four/Flap 当前链头、模拟盘与 Agentic Wallet 官方触发规则",
+  "gmgn": {
+    "configChecks": 2,
+    "businessRequests": 2,
+    "successfulRequests": 2,
+    "failedRequests": 0,
+    "priority": 0,
+    "sharedClient": "src/gmgn-flow-client.js",
+    "wallets": [
+      {
+        "id": "A",
+        "chain": "bsc",
+        "wallet": "0x452b8fd1edd95184fa7f9123da2e441d323a9fd7",
+        "providerHeadCheckedAt": null,
+        "providerHeadCheckWindow": ["2026-10-22T11:03:28Z", "2026-10-22T11:07:09Z"],
+        "providerLatestActivityAt": "2026-10-02T11:08:09Z",
+        "lastNewEvidenceAt": "2026-10-21T15:03:29.153Z",
+        "rows": 20,
+        "identityEchoValidated": true,
+        "anchor": {
+          "at": "2026-10-02T11:08:09Z",
+          "hash": "0x136d7a2b58d81ccf6ab7ca79dbea68cbb2c76bbf819a76d28f1e2072e36e4868",
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777"
+        },
+        "anchorFound": true,
+        "pageOverlap": null,
+        "newRows": null,
+        "coverageStatus": "head_reloaded_anchor_found_full_row_dedupe_unverified; old_nonce_gap_preserved"
+      },
+      {
+        "id": "B",
+        "chain": "bsc",
+        "wallet": "0x8fa9e760bdd3f767f4cb36bd3d87a8056a43da1c",
+        "providerHeadCheckedAt": null,
+        "providerHeadCheckWindow": ["2026-10-22T11:03:28Z", "2026-10-22T11:07:09Z"],
+        "providerLatestActivityAt": "2026-10-02T11:08:09Z",
+        "lastNewEvidenceAt": "2026-10-21T15:03:38.659Z",
+        "rows": 20,
+        "identityEchoValidated": true,
+        "anchor": {
+          "at": "2026-10-02T11:08:09Z",
+          "hash": "0x276ed1a8787a851f66bf341a62bd62728028d53b19a22ea8a69fa6b3f7857f6d",
+          "ca": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777"
+        },
+        "anchorFound": true,
+        "pageOverlap": null,
+        "newRows": null,
+        "coverageStatus": "head_reloaded_anchor_found_full_row_dedupe_unverified; nonce_158_161_old_classification_preserved"
+      }
+    ],
+    "pairedTimestampPattern": {
+      "matchedRowsOneToOne": 20,
+      "sameCA": "0x7a3f00299a61ca38c4d5981c34661f6bda4a7777",
+      "sideClassification": null,
+      "sameControlInference": false
+    },
+    "publicRpcRequests": 0,
+    "modelRequests": 0
+  },
+  "forwardPaper": {
+    "reviewAt": "2026-10-22T11:07:51.596Z",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "tradeCount": 311,
+    "previousTradeCount": 309,
+    "lastTradeId": "1792647072099:310",
+    "lastTradeAt": "2026-10-22T05:31:12.099Z",
+    "newTrades": 2,
+    "newClosedRounds": 1,
+    "newRound": {
+      "entryId": "1792645698811:309",
+      "exitId": "1792647072099:310",
+      "chain": "sol",
+      "route": "external_breakout",
+      "ca": "Cbkg5w7V7W2J2sUmecnyN825CbvwvXwasfhduVtNpump",
+      "netPnlUsd": -0.3369566003411464,
+      "modelCostsUsd": 0.19160272644261945
+    },
+    "currentVersionClosedRounds": 21,
+    "currentVersionNetPnlUsd": -3.2715372003576393,
+    "freshOpenMarkUnrealizedUsd": -8.602934667132196
+  },
+  "profitRetentionMultiarm": {
+    "version": "profit_retention_multiarm_v3",
+    "baselineTradeCount": 305,
+    "cursorTradeCount": 311,
+    "lastTradeId": "1792647072099:310",
+    "tradePrefixHash": "09770ca4861e7107afd49684e65f4945e7f1ec4df98214cd6af434895b59a3e3",
+    "previouslyReportedCompletePairIds": [
+      "1792274973724:305",
+      "1792567092580:307"
+    ],
+    "newCompletePairIds": ["1792645698811:309"],
+    "cumulativeCompletePairIds": [
+      "1792274973724:305",
+      "1792567092580:307",
+      "1792645698811:309"
+    ],
+    "armMetrics": {
+      "2x": null,
+      "3x": null,
+      "5x": null
+    },
+    "pairCoverageGaps": 105,
+    "pairCoverageGapReasons": {
+      "missing_quote": 58,
+      "pre_entry_quote": 6,
+      "out_of_order_quote": 39,
+      "stale_quote": 2
+    },
+    "observerInterruptionCount": 1,
+    "quoteOpportunityScheduler": null,
+    "apiSnapshotStatus": "local_read_only_api_timeout_2s_large_response_17_6mb"
+  },
+  "fourFlap": {
+    "dualSourceHeadProofAt": "2026-10-22T11:07:38.662Z",
+    "observedTip": 129119209,
+    "safeHead": 129119206,
+    "headProofCurrentForCursor": false,
+    "four": {
+      "cursorNextBlock": 129119514,
+      "anchorBlock": 129119513,
+      "previousCursorNextBlock": 129119122,
+      "observedCursorAdvanceBlocks": 392,
+      "pendingOutbox": 0,
+      "checkpoints": 64,
+      "processedEvents": 78,
+      "currentLagBlocks": null,
+      "backlogBlocks": null
+    },
+    "flap": {
+      "chainId": 56,
+      "version": "v5.26.0",
+      "verifiedBlock": 129119528,
+      "cursorNextBlock": 129119529,
+      "previousCursorNextBlock": 129119100,
+      "observedCursorAdvanceBlocks": 429,
+      "currentLagBlocks": null,
+      "backlogBlocks": null,
+      "lastErrorCode": "FLAP_QUOTE_FINALIZED_LANE_UNAVAILABLE",
+      "failureClass": "capacity",
+      "errorAt": "2026-10-22T11:08:05.675Z",
+      "sharedRpcWaitDeadlineExceeded": true,
+      "bypassedRateLimit": false
+    },
+    "dashboardApi": {
+      "url": "http://127.0.0.1:4173/api/strategy-state",
+      "status": "timeout",
+      "timeoutMs": 2000,
+      "responseBytesApprox": 17600000,
+      "retries": 0
+    },
+    "processes": {
+      "mainPid": 48659,
+      "mainStartedAt": "2026-10-21T10:38:45.834Z",
+      "bscPid": 7039,
+      "bscStartedAt": "2026-10-22T09:08:32.928Z",
+      "continuousUptimeProven": false
+    }
+  },
+  "binanceAiLaunchMonitoring": {
+    "qualifyingCandidateObservedWithFullIdentityAndBuyEvidence": false,
+    "candidateScanScope": "bounded_official_source_review_only_not_full_chain_or_address_sweep",
+    "triggerFired": false,
+    "aiProExclusiveRuleFound": false,
+    "officialEvidence": [
+      "https://www.binance.com/en/support/faq/detail/3ff00e2d488a41c4aaa4aabb6fc36763",
+      "https://www.binance.com/en/support/announcement/detail/0c533c5a820341ce87e5ddda76f36ac0",
+      "https://www.binance.com/en/square/post/378961974502219",
+      "https://www.four.meme/en/agentic",
+      "https://flap.sh/event/bstocks?lang=en"
+    ],
+    "policyConclusion": "Agentic Wallet is distinct from AI Pro; official evidence supports compatibility with other agent frameworks, not AI Pro exclusivity. Flap MPC/Alpha Points requirements are campaign eligibility, not proof of a qualifying Agentic Wallet purchase."
+  },
+  "report": "docs/operator-reference-followups/2026-10-22-1110-bsc-ab-agentic-forward-review.md",
+  "limitations": [
+    "A/B exact pageOverlap and newRows were not computed; providerHeadCheckedAt is window-only/null.",
+    "Four/Flap dual-source head proof predates current cursors; lag/backlog are null, so no backlog-shrinking claim.",
+    "Dashboard strategy-state request timed out and quoteOpportunityScheduler is unknown.",
+    "No full-chain scan or continuous-uptime proof was performed."
+  ],
+  "safety": {
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "historyChanged": false,
+    "strategyChanged": false,
+    "processRestarted": false,
+    "rateLimitBypassed": false
+  },
+  "nextQuestion": "轮换 Solana，优先 D/E 到期头页；Four/Flap 需取得与最新游标同一时段的双源链头后计算 lag/backlog，继续观察共享 RPC 容量等待。"
+}

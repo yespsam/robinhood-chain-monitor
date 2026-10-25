@@ -47,7 +47,9 @@ const units=(v,d)=>Number(formatUnits(v,d));
 const decode=(abi,name,raw)=>abi.decodeFunctionResult(name,raw);
 const goodAddress=a=>typeof a==='string'&&/^0x[0-9a-f]{40}$/.test(a)&&a!==ZeroAddress;
 // Type 6 is the official mixed router. Type 7's bidirectional Portal quote
-// capability was checked on pinned v5.24.0 at BSC block 126216078 (2026-10-07);
+// capability was rechecked on pinned v5.25.0 at BSC block 128782994;
+// see docs/flap-v525-compatibility-evidence-2026-10-21.json. The older v5.24
+// check was block 126216078 (2026-10-07), not evidence for the new runtime.
 // its implementation semantics are NOT inferred from the older public enum.
 // Every admission still needs its own exact-CA, same-block quotes in BOTH
 // directions. This is depth evidence only, never a sellability exemption.
@@ -207,7 +209,10 @@ export function createInternalDepthProbe({dataDir,now=Date.now,reader=null,coord
         catch(e){metrics.failedMethod=method;
           if(coordinator&&!controller.signal.aborted){
             if([429,503].includes(e.status))await coordinator.persistCooldown(host,method,rpcRetryAfterUntil(e.retryAfter,now()));
-            else if(['RPC_TIMEOUT','TIMEOUT','ECONNRESET','ECONNREFUSED','ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT'].includes(e.code)||e.name==='TypeError')
+            // A bounded read timeout is not evidence that every RPC method failed.
+            else if(['RPC_TIMEOUT','TIMEOUT','ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT'].includes(e.code))
+              await coordinator.persistCooldown(host,method,now()+30000,'method');
+            else if(['ECONNRESET','ECONNREFUSED'].includes(e.code)||e.name==='TypeError')
               await coordinator.persistCooldown(host,method,now()+30000);
           }throw e;}
       };

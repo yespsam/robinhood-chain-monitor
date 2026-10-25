@@ -3,6 +3,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { sendAlerts } from "./alerts.js";
 import { extractChainSupportSignals } from "./chain-support.js";
+import { PLATFORM_DOCUMENT_MAX_PER_RUN, planPlatformDocumentWatch, fetchPlatformDocument,
+  applyPlatformDocumentResult, platformDocumentOriginCooldown, isPlatformDocumentOrigin } from "./platform-document-watch.js";
+export { platformDocumentCoverage } from "./platform-document-watch.js";
 
 const FOUR_MEME_CONFIG_URL = "https://four.meme/meme-api/v1/public/config";
 const FOUR_MEME_NPM_URL = "https://registry.npmjs.org/@four-meme%2Ffour-meme-ai/latest";
@@ -2762,8 +2765,9 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
   const telemetryPersistIntervalMs = Math.max(1_000, Number(dependencies.telemetryPersistIntervalMs) || 30_000);
   const writeState = dependencies.atomicWriteJsonImpl || atomicWriteJson;
   let latestState = await readPlatformCapabilityState(stateFile, fsImpl);
+  let documentBudget = PLATFORM_DOCUMENT_MAX_PER_RUN;
 
-  for (const platform of targets) {
+  for (const [platformIndex, platform] of targets.entries()) {
     const observedAt = now().toISOString();
     const observedMs = Date.parse(observedAt);
     const snapshot = await readPlatformCapabilityState(stateFile, fsImpl);
@@ -2788,6 +2792,11 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
       sourceLane === "fast" ? 1 : Math.max(1, Number(config.platformCapabilityConcurrency) || 3),
       (descriptor) => {
       const prior = snapshotSources[descriptor.key];
+      // The slow documentation observer shares an origin cooldown with the
+      // established docs requests. Fast Board/API sources remain independent.
+      const documentCooldown = descriptor.kind === "docs" && isPlatformDocumentOrigin(platform, descriptor.url)
+        ? platformDocumentOriginCooldown(platform, snapshot[platform.id]) : null;
+      if (documentCooldown !== null && observedMs < documentCooldown) return { skippedForBackoff: true };
       const sourceNextAttemptAt = Date.parse(prior?.nextAttemptAt || "");
       const optionalFlapMorphEmptyMigration = platform.id === "flap"
         && descriptor.requiredForBaseline === false
@@ -3127,6 +3136,9 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
         checkedAt: observedAt,
         lastAttemptAt: observedAt,
         ...(stabilizedBoard.boardCandidateState ? { boardCandidateState: stabilizedBoard.boardCandidateState } : {}),
+        // Fast capability commits must not discard the slow observer's body
+        // baselines, pending research observations, or source cooldowns.
+        ...(previousEntry?.documentWatch ? { documentWatch: previousEntry.documentWatch } : {}),
       };
       const removedPendingSources = Boolean(state._health.pendingSources?.[platform.id]);
       if (state._health.pendingSources) delete state._health.pendingSources[platform.id];
@@ -3358,6 +3370,39 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
         durable: entryDurableChange || notificationStateChanged || Boolean(changes && meaningful(changes)),
       });
     });
+    if (sourceLane !== "fast" && !selectedKeys?.size && latestState[platform.id]
+      && allDescriptors.some(descriptor => descriptor.kind === "docs" && isPlatformDocumentOrigin(platform, descriptor.url))) {
+      // Four additional bodies TOTAL per existing slow cycle, fairly divided
+      // across platforms. No new timer, concurrent worker, recursive crawl,
+      // trading activation, or outbound notification is introduced here.
+      const limit = Math.ceil(documentBudget / Math.max(1, targets.length-platformIndex));
+      const documentAt = now().getTime();
+      const plan = planPlatformDocumentWatch(platform, latestState[platform.id], documentAt, { limit });
+      const documentResults = [];
+      for (const page of plan.selected) {
+        const checkedAtMs = now().getTime();
+        let result;
+        try {
+          result = await fetchPlatformDocument(platform, page, fetchImpl, {
+            nowMs:checkedAtMs, timeoutMs:config.platformCapabilityRequestTimeoutMs,
+          });
+        } catch (error) { result = { error }; }
+        documentResults.push({ url:page.url, result, checkedAtMs });
+        documentBudget--;
+        if ([403,429].includes(result.error?.status)) break;
+      }
+      latestState = await stateCoordinator.run(async () => {
+        const state = await readPlatformCapabilityState(stateFile, fsImpl), entry = state[platform.id];
+        if (!entry) return state;
+        let watch = planPlatformDocumentWatch(platform, entry, documentAt, { limit:0 }).watch;
+        for (const item of documentResults) watch = applyPlatformDocumentResult(watch, item.url, item.result, item.checkedAtMs, { retryBaseMs, retryMaxMs });
+        if (stableStringify(entry.documentWatch || null) !== stableStringify(watch)) {
+          state[platform.id] = { ...entry, documentWatch:watch };
+          await writeState(stateFile, state, fsImpl);
+        }
+        return state;
+      });
+    }
   }
   return latestState;
 }

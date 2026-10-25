@@ -1,0 +1,206 @@
+{
+  "checkedAt": "2026-10-23T15:17:07.213Z",
+  "scheduledAt": "2026-10-23T15:09:50.992Z",
+  "report": "docs/operator-reference-followups/2026-10-23-1509-bsc-agentic-four-flap.md",
+  "walletResearch": {
+    "group": "bsc",
+    "gmgnConfigCheck": "passed",
+    "gmgnBusinessRequests": 2,
+    "gmgnSuccessfulRequests": 2,
+    "gmgnFailedRequests": 0,
+    "priority": 0,
+    "publicRpcRequests": 0,
+    "modelRequests": 0,
+    "wallets": {
+      "A": {
+        "providerHeadCheckedAt": "2026-10-23T15:12:00Z",
+        "timestampPrecision": "approximate",
+        "rows": 20,
+        "providerLatestActivityAt": "2026-10-02T11:08:09.000Z",
+        "lastNewEvidenceAt": "2026-10-21T15:03:29.153Z",
+        "pageOverlap": null,
+        "newRows": null,
+        "identityEchoValidated": false,
+        "nextCursorRetained": false,
+        "coverageStatus": "provider_coverage_gap_pending_classification"
+      },
+      "B": {
+        "providerHeadCheckedAt": "2026-10-23T15:12:00Z",
+        "timestampPrecision": "approximate",
+        "rows": 20,
+        "providerLatestActivityAt": "2026-10-02T11:08:09.000Z",
+        "lastNewEvidenceAt": "2026-10-21T15:03:38.659Z",
+        "pageOverlap": null,
+        "newRows": null,
+        "identityEchoValidated": false,
+        "nextCursorRetained": false,
+        "coverageStatus": "provider_freshness_unverified"
+      }
+    },
+    "verifiedNewEvidenceRows": 0,
+    "newAddresses": 0
+  },
+  "fourFlap": {
+    "four": {
+      "proofAt": "2026-10-23T13:00:05.562Z",
+      "safeHead": 129326125,
+      "cursorNextBlock": 129326094,
+      "lagAtProofBlocks": 32,
+      "currentLagBlocks": null,
+      "currentHeadProofAvailable": false
+    },
+    "flap": {
+      "proofAt": "2026-10-23T11:17:03.599Z",
+      "safeHeadAtProof": 129312396,
+      "cursorNextBlockAtProof": 129312379,
+      "lagAtProofBlocks": 18,
+      "checkedAt": "2026-10-23T15:14:44.612Z",
+      "cursorNextBlock": 129316431,
+      "status": "degraded",
+      "consecutiveFailures": 28,
+      "lastSuccessAt": "2026-10-23T13:11:24.781Z",
+      "lastErrorCode": "FLAP_QUOTE_CHAIN_ID_UNAVAILABLE",
+      "currentLagBlocks": null,
+      "nextAttemptAt": "2026-10-23T15:19:44.612Z"
+    },
+    "quoteOpportunityScheduler": {
+      "version": "evidence_preserving_event_lease_v1",
+      "rememberedEventLeases": 0,
+      "overflowPreemptionSuppressedUntil": null
+    },
+    "exitMonitor": {
+      "running": true,
+      "intervalMs": 1000,
+      "lastCheckedAt": "2026-10-23T15:17:07.213Z",
+      "checks": 96988,
+      "staleQuotes": 0,
+      "lastError": null
+    },
+    "processesObservedAlive": {
+      "mainPid": 48659,
+      "mainStartedAt": "2026-10-21T10:38:45.834Z",
+      "bscPid": 30967,
+      "bscStartedAt": "2026-10-23T09:46:20.468Z",
+      "continuousUptimeProven": false,
+      "restartPerformed": false
+    },
+    "dashboardFirstReadTimedOut": true,
+    "dashboardReadSucceededAt": "2026-10-23T15:17:07.213Z"
+  },
+  "paperForward": {
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "previousTradeCount": 317,
+    "tradeCount": 321,
+    "lastTradeId": "1792761076261:320",
+    "newClosedRounds": [
+      {
+        "entryId": "1792747849174:317",
+        "exitId": "1792748004205:318",
+        "chain": "bsc",
+        "ca": "0x4237e9d772a46f54abea96e157430b6aeb7e7777",
+        "netPnlUsd": -1.4917740317966568
+      },
+      {
+        "entryId": "1792758835045:319",
+        "exitId": "1792761076261:320",
+        "chain": "bsc",
+        "ca": "0x0c6302401aa5325c2e36f170f52c00b1d220b405",
+        "netPnlUsd": 0.2784950052331592
+      }
+    ],
+    "newClosedNetUsd": -1.2132790265634976,
+    "openPositionCount": 3,
+    "openValuationAt": "2026-10-23T15:13:44.796Z",
+    "openUnrealizedPnlUsd": -8.993780012136558
+  },
+  "profitRetentionMultiarm": {
+    "sessionId": "confirmed-pvp-v2-estimated-20260928",
+    "version": "profit_retention_multiarm_v3",
+    "sourceTradeCount": 321,
+    "lastTradeId": "1792761076261:320",
+    "cursorMatches": true,
+    "newCompletePairIds": [
+      "1792735289326:313",
+      "1792737270435:315",
+      "1792747849174:317",
+      "1792758835045:319"
+    ],
+    "sharedCoverageGapCount": 322,
+    "newGapCount": 195,
+    "newGapReasons": {
+      "missing_quote": 64,
+      "pre_entry_quote": 9,
+      "out_of_order_quote": 116,
+      "stale_quote": 6
+    },
+    "arms": {
+      "2x": {
+        "netPnlUsd": -2.687292695897164,
+        "deltaVsOriginalExitUsd": 0,
+        "principalRecoveryCount": 0,
+        "untriggeredCount": 4,
+        "negativeNetFailureCount": 3,
+        "breakevenCount": 0,
+        "earlySaleLossUsd": null,
+        "closedRoundDrawdownUsd": 2.9657877011303233,
+        "distinctCAs": 4,
+        "largestPositiveCaShare": 1,
+        "largestPositiveCA": "0x0c6302401aa5325c2e36f170f52c00b1d220b405",
+        "netExcludingLargestPositiveCAUsd": -2.9657877011303233
+      },
+      "3x": {
+        "netPnlUsd": -2.687292695897164,
+        "deltaVsOriginalExitUsd": 0,
+        "principalRecoveryCount": 0,
+        "untriggeredCount": 4,
+        "negativeNetFailureCount": 3,
+        "breakevenCount": 0,
+        "earlySaleLossUsd": null,
+        "closedRoundDrawdownUsd": 2.9657877011303233,
+        "distinctCAs": 4,
+        "largestPositiveCaShare": 1,
+        "largestPositiveCA": "0x0c6302401aa5325c2e36f170f52c00b1d220b405",
+        "netExcludingLargestPositiveCAUsd": -2.9657877011303233
+      },
+      "5x": {
+        "netPnlUsd": -2.687292695897164,
+        "deltaVsOriginalExitUsd": 0,
+        "principalRecoveryCount": 0,
+        "untriggeredCount": 4,
+        "negativeNetFailureCount": 3,
+        "breakevenCount": 0,
+        "earlySaleLossUsd": null,
+        "closedRoundDrawdownUsd": 2.9657877011303233,
+        "distinctCAs": 4,
+        "largestPositiveCaShare": 1,
+        "largestPositiveCA": "0x0c6302401aa5325c2e36f170f52c00b1d220b405",
+        "netExcludingLargestPositiveCAUsd": -2.9657877011303233
+      }
+    },
+    "execution": false,
+    "signing": false,
+    "broadcast": false
+  },
+  "binanceAgentic": {
+    "officialReviewPerformed": true,
+    "officialExclusiveRuleFound": false,
+    "qualifyingCandidateBuys": null,
+    "triggerFired": false,
+    "candidateCA": "0xd4c14b32e4b49e5b8acbf499f156ee5d09ba7777",
+    "candidateStatus": "third_party_lead_unverified_no_registry_or_wallet_identity_and_no_successful_buy_hash",
+    "nextCheckAt": "2026-10-23T19:17:07Z"
+  },
+  "safety": {
+    "codeChanged": false,
+    "strategyChanged": false,
+    "paperLedgerChanged": false,
+    "processRestarted": false,
+    "walletConnected": false,
+    "signing": false,
+    "broadcast": false,
+    "giwaInspected": false
+  }
+}

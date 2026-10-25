@@ -1,0 +1,133 @@
+{
+  "version": "operator_reference_followup_v1",
+  "round": 95,
+  "scheduledAt": "2026-10-21T18:56:12.683Z",
+  "checkedAt": "2026-10-21T19:05:01.369Z",
+  "group": "sol",
+  "boundedQuestion": "D/E due latest-head refresh: did it add independently verifiable synchronized buy/sell evidence?",
+  "walletResearch": {
+    "configCheckPassedBeforeBusinessRequests": true,
+    "gmgnBusinessRequests": 2,
+    "gmgnSuccessful": 2,
+    "gmgnFailed": 0,
+    "publicRpcRequests": 0,
+    "modelRequests": 0,
+    "priority": 0,
+    "pagesPerWallet": 1,
+    "rowCountPerWallet": 20,
+    "pageOverlap": null,
+    "newRows": null,
+    "identityEcho": null,
+    "responseKeys": ["activities", "next"],
+    "returnedSideField": null,
+    "D": {
+      "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+      "providerHeadCheckedAt": "2026-10-21T19:00:10.461Z",
+      "providerLatestActivityAt": "2026-10-21T10:36:10.000Z",
+      "lastNewEvidenceAt": "2026-10-21T11:01:44.245Z",
+      "latestReturnedTimestampField": "2026-10-21T07:16:10.000Z",
+      "lastKnownTradeHash": "2cTPMmhZ4Ygo2SKta6FPU178z2k3fP7iuRCLkC8HiqD2QHPdrTMp7RocvdxknH5SdkXKt5Guufm9zQoLyKv7fxQf",
+      "headNextCursor": "NDU5NDA2MDc0MDAxOTQwNDA6MDo6",
+      "previousHeadNextCursor": "NDU5NDA2MDc0MDAxOTQwNDA6MDo6",
+      "coverageStatus": "provider_freshness_unverified"
+    },
+    "E": {
+      "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+      "providerHeadCheckedAt": "2026-10-21T19:00:14.648Z",
+      "providerLatestActivityAt": "2026-10-21T10:36:10.000Z",
+      "lastNewEvidenceAt": "2026-10-21T10:59:37.937Z",
+      "latestReturnedTimestampField": "2026-10-21T07:16:10.000Z",
+      "lastKnownTradeHash": "232MFf5dJv2rpjT5u4CVMo8ymf6aMiLGwwKdP6WAFeQCGBmLBneb7EpagAUUUktmqtG9KhdBUgKY6QaDaMmi83r4",
+      "headNextCursor": "NDU5MDk2OTA0MDE0MTcwMzI6MDo6",
+      "previousHeadNextCursor": "NDU5MDk2OTA0MDE0MTcwMzI6MDo6",
+      "coverageStatus": "provider_freshness_unverified"
+    },
+    "dedupPolicy": "by chain, CA, wallet and transaction hash; same-second matches one-to-one only; no full PnL attribution",
+    "nextHeadCheckDueAt": {
+      "D": "2026-10-22T03:00:10.461Z",
+      "E": "2026-10-22T03:00:14.648Z"
+    }
+  },
+  "launchCoverage": {
+    "checkedAt": "2026-10-21T19:03:59.513Z",
+    "status": "coverage_limited",
+    "readErrors": [],
+    "four": {
+      "headVerificationStatus": "verified",
+      "headBlock": 128990751,
+      "confirmedHeadBlock": 128990748,
+      "cursorNextBlock": 128990742,
+      "headLagBlocks": 10,
+      "scanBacklogBlocks": 7
+    },
+    "flap": {
+      "version": "v5.26.0",
+      "status": "verified_backlog",
+      "headVerificationStatus": "verified",
+      "headBlock": 128990738,
+      "confirmedHeadBlock": 128990735,
+      "cursorNextBlock": 128990716,
+      "headLagBlocks": 23,
+      "scanBacklogBlocks": 20,
+      "lastSuccessfulHealthAt": "2026-10-21T19:03:33.328Z",
+      "transientFailureAt": "2026-10-21T19:03:05.374Z",
+      "transientFailureCode": "FLAP_QUOTE_PORTAL_IDENTITY_UNAVAILABLE"
+    },
+    "quoteOpportunityScheduler": null,
+    "comparisonToPriorVerifiedProof": {
+      "priorProofAt": "2026-10-21T15:07:32.027Z",
+      "priorFourHeadLagBlocks": 14,
+      "priorFlapHeadLagBlocks": 25,
+      "fourHeadLagDelta": -4,
+      "flapHeadLagDelta": -2
+    }
+  },
+  "paperForward": {
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "sourceTradeCount": 309,
+    "lastTradeId": "1792567338823:308",
+    "newTrades": 0,
+    "newClosedPairs": 0,
+    "closedPairs": 2,
+    "openPairs": 0,
+    "observerFileSavedAt": "2026-10-21T19:05:01.369Z",
+    "quoteScheduler": null,
+    "observerInterruptionCount": 1,
+    "apiTimeoutAt": "2026-10-21T19:05:01Z",
+    "apiTimeoutNote": "One 2-second local filtered read timed out while a large response was in flight; no retry. A smaller filtered API snapshot succeeded at 19:04:05.388Z."
+  },
+  "binanceAgenticWalletTrigger": {
+    "required": "A successful on-chain buy of a candidate first-launch token by an address whose Binance Agentic Wallet identity is independently supported by official evidence.",
+    "qualifyingEvents": 0,
+    "triggered": false,
+    "thirdPartyDotaiStatus": "unverified",
+    "sourceReview": "No official Four/Flap statement found in reviewed sources that makes AI Pro or Agentic Wallet exclusive; Flap bStocks eligibility is MPC Wallet plus Alpha Points, not proof of a successful Agentic Wallet buy.",
+    "officialSources": [
+      "https://www.binance.com/en/square/post/317689081214801",
+      "https://www.binance.com/en/square/post/378961974502219",
+      "https://www.binance.com/en/square/profile/binancewallet",
+      "https://flap.sh/event/bstocks?lang=en",
+      "https://four.meme/"
+    ],
+    "referenceOrderSizeBnb": 0.2,
+    "paperObservationOnly": true,
+    "liveWalletConnected": false,
+    "liveExecutionEnabled": false
+  },
+  "safety": {
+    "mode": "paper",
+    "buysOrSells": false,
+    "signing": false,
+    "broadcast": false,
+    "ledgerChanged": false,
+    "strategyChanged": false,
+    "processRestarted": false,
+    "rpcLimitBypassed": false,
+    "dualSourceCheckBypassed": false
+  },
+  "report": "docs/operator-reference-followups/2026-10-22-0304-sol-head-agentic-review.md",
+  "nextQuestion": "Rotate to BSC next; refresh the oldest due BSC head pages within the shared budget, preserve C nonce 22/23 classification gap, and recheck Four/Flap display lag plus scheduler null."
+}

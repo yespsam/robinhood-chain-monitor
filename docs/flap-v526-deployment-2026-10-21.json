@@ -1,0 +1,137 @@
+{
+  "schema": "flap_v526_deployment_validation_v1",
+  "checkedAt": "2026-10-21T10:55:24.026Z",
+  "status": "deployed_and_cursor_progress_verified_with_intermittent_rpc_waits_and_natural_recovery",
+  "compatibilityEvidence": "docs/flap-v526-compatibility-evidence-2026-10-21.json",
+  "implementation": {
+    "version": "v5.26.0",
+    "address": "0x7a94f37b61a82c395f9812CF266b444783cC5e8c",
+    "runtimeCodeHash": "0x3db27f98826706ac5ddedb919594d4670151874482dff23e31d2186858635194",
+    "upgradeBlock": 128914179,
+    "unknownIdentityGap": { "fromBlock": 128914122, "throughBlock": 128914178 }
+  },
+  "tests": {
+    "focusedCommand": "node --test test/flap-portal-pins.test.js test/flap-quote-monitor.test.js test/paper-internal-depth.test.js test/bsc-inner-trade-events.test.js test/bsc-inner-trade-monitor.test.js",
+    "focusedPassed": 344,
+    "focusedFailed": 0,
+    "fullTopLevelCommand": "node --test --test-concurrency=2 --test-reporter=spec test/*.test.js",
+    "fullTopLevelPassed": 4363,
+    "fullTopLevelFailed": 0,
+    "fullTopLevelCancelled": 0,
+    "diffCheckPassed": true,
+    "npmTestDefaultNote": "Default recursive discovery entered archived data/backups tests without paired sources; those archives were not edited."
+  },
+  "deployment": {
+    "mechanism": "launchd graceful restart",
+    "service": "gui/501/com.qohfq.robinhood-launchpad-monitor",
+    "oldMainPid": 23653,
+    "sigtermAt": "2026-10-21T10:34:54.776Z",
+    "shutdownCompleteAt": "2026-10-21T10:38:45.093Z",
+    "newMainPid": 48659,
+    "newProcessStartedAt": "2026-10-21T10:38:45Z",
+    "dashboardPidRestarted": false,
+    "independentGmgnXRestarted": false,
+    "collectionGapSeconds": 230,
+    "forceKill": false,
+    "sharedCooldownBypassed": false,
+    "limitsOrConcurrencyChanged": false
+  },
+  "flap": {
+    "preDeployCursorNextBlock": 128914122,
+    "baselineEstablishedAtPreserved": "2026-09-03T09:53:09.737Z",
+    "initialObservedBacklog": {
+      "at": "2026-10-21T10:27:39Z",
+      "safeHead": 128921935,
+      "cursorNextBlock": 128914122,
+      "blocks": 7813
+    },
+    "cursorSamples": [
+      { "at": "2026-10-21T10:41:13.309Z", "nextBlock": 128923777 },
+      { "at": "2026-10-21T10:43:07.440Z", "nextBlock": 128924024 },
+      { "at": "2026-10-21T10:44:46.600Z", "nextBlock": 128924243, "verifiedBlock": 128924242, "health": "healthy", "consecutiveFailures": 0, "lastError": null },
+      { "at": "2026-10-21T10:47:23.045Z", "nextBlock": 128924595, "verifiedBlock": 128924594, "health": "healthy", "consecutiveFailures": 0, "lastError": null },
+      { "at": "2026-10-21T10:47:49.679Z", "nextBlock": 128924595, "health": "degraded", "lastError": "scan end block 128924630 changed before cursor commit: getBlock failed on every BSC RPC: bsc.rpc.sentio.xyz: shared RPC coordinator: host/method cooling down" },
+      { "at": "2026-10-21T10:48:44.094Z", "nextBlock": 128924773, "verifiedBlock": 128924772, "health": "healthy", "consecutiveFailures": 0, "lastError": null },
+      { "at": "2026-10-21T10:49:25.145Z", "nextBlock": 128924773, "health": "degraded", "lastError": "Flap finalized log-lane block 128924802 could not be verified: public-bsc.nownodes.io request timed out after 19750ms" },
+      { "at": "2026-10-21T10:49:59.413Z", "nextBlock": 128924946, "verifiedBlock": 128924945, "health": "healthy", "consecutiveFailures": 0, "lastError": null },
+      { "at": "2026-10-21T10:50:41.487Z", "nextBlock": 128925032, "verifiedBlock": 128925031, "health": "healthy", "consecutiveFailures": 0, "lastError": null },
+      { "at": "2026-10-21T10:51:53.511Z", "nextBlock": 128925190, "verifiedBlock": 128925189, "health": "healthy", "consecutiveFailures": 0, "lastError": null },
+      { "at": "2026-10-21T10:54:02.851Z", "nextBlock": 128925484, "verifiedBlock": 128925483, "health": "healthy", "consecutiveFailures": 0, "lastError": null },
+      { "at": "2026-10-21T10:54:39.007Z", "nextBlock": 128925563, "verifiedBlock": 128925562, "health": "healthy", "consecutiveFailures": 0, "lastError": null },
+      { "at": "2026-10-21T10:55:24.026Z", "nextBlock": 128925659, "verifiedBlock": 128925658, "health": "healthy", "consecutiveFailures": 0, "lastError": null }
+    ],
+    "latestDualSourceHead": {
+      "verifiedAt": "2026-10-21T10:54:38.550Z",
+      "safeHead": 128925554,
+      "headSpread": 1,
+      "confirmations": 3,
+      "cursorObservedAt": "2026-10-21T10:54:38.550Z",
+      "cursorNextBlock": 128925535,
+      "observedBacklogBlocks": 19,
+      "observedBacklogReductionBlocks": 7794,
+      "priorObservation": { "verifiedAt": "2026-10-21T10:44:44.222Z", "safeHead": 128924233, "cursorNextBlock": 128924216, "lagBlocks": 17 },
+      "displayOnly": true
+    },
+    "stateCountsPreservedAtMigration": {
+      "quoteAssets": 24,
+      "pendingEnableCandidates": 0,
+      "processedEventKeys": 30,
+      "eventRecords": 30,
+      "finalizedCheckpoints": 128,
+      "auditTrail": 4
+    }
+  },
+  "four": {
+    "headObservation": {
+      "verifiedAt": "2026-10-21T10:54:35.098Z",
+      "safeHead": 128925545,
+      "cursorNextBlock": 128925535,
+      "observedBacklogBlocks": 10,
+      "headSpread": 1,
+      "confirmations": 3,
+      "displayOnly": true
+    },
+    "cursorProgress": {
+      "fromAt": "2026-10-21T10:27:39Z",
+      "fromNextBlock": 128921954,
+      "toAt": "2026-10-21T10:54:35.098Z",
+      "toNextBlock": 128925535,
+      "deltaBlocks": 3581
+    }
+  },
+  "rpc": {
+    "sharedCoordinatorUsed": true,
+    "newEndpoints": false,
+    "rateLimitsChanged": false,
+    "concurrencyChanged": false,
+    "cooldownBypassed": false,
+    "residualCooldownOrCapacityWaitObserved": true,
+    "claimOfRpcProblemFullyResolved": false
+  },
+  "paperLedger": {
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "sourceTradeCount": 309,
+    "lastTradeId": "1792567338823:308",
+    "tradeArraySha256": "806a982c95c465aae2568fc44797e1e989752fabfcf92271b996ab7a20d1da20",
+    "sealedLedger": "data/yesp-atm-confirmed-pvp-v2-20260923.json",
+    "sealedLedgerSha256": "09d472310b1ce816bf02875d2988ab67ee5d657ee1f66905001dcba84ec60e36",
+    "historyModified": false,
+    "pausedOldBscBacklogRestored": false,
+    "tradesExecuted": false
+  },
+  "limitations": [
+    "The 57-block interval 128914122..128914178 remains unknown and unsupported by either identity window.",
+    "Shared RPC cooldown/capacity waits remain; successful later cycles do not prove provider availability is permanently restored.",
+    "The local strategy-state endpoint does not expose the Flap monitor payload; direct cursor proof comes from the state file and the display-only head snapshot.",
+    "Official deployment docs and implementation source-to-bytecode verification remain incomplete; this is not a security audit.",
+    "A finite observation window does not prove uninterrupted collection or full event-level completeness."
+  ],
+  "nextChecks": [
+    "Continue existing low-frequency read-only checks of Four/Flap cursors against fresh dual-source head observations.",
+    "Record current lag as unknown whenever head evidence is stale or unavailable.",
+    "Retain shared capacity limits, cooldown, finalized dual-source verification, paper mode, and the paused old backlog state."
+  ]
+}

@@ -16,7 +16,7 @@ import { sharedRpcHostCoordinator } from "./rpc-host-coordinator.js";
 import { rpcRetryAfterUntil } from "./rpc-retry-after.js";
 import { createBscReceiptProofCache } from "./bsc-receipt-proof-cache.js";
 import { createRpcStateReadBudget, createRpcPoolSlots, createRpcStateSourceAffinity } from "./rpc-state-read-budget.js";
-import { createBscReplayScheduler } from "./bsc-replay-scheduler.js";
+import { createBscReplayScheduler, isBscReplayResourceWait } from "./bsc-replay-scheduler.js";
 import { readBscLogFilterBatch } from "./bsc-log-filter-batch.js";
 import { loadBscScanPolicy, bscScanEntryActive, bscScanFeatureActive, bscScanGapActive, splitBscScanGaps } from "./bsc-live-scan-policy.js";
 import { CHAINSTACK_BSC_HOST, sanitizeBscRpcError, validateBscRpcEndpoints,
@@ -4898,15 +4898,25 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
       // only retry schedule and every pool sees the server-declared delay.
       if (response.status === 429) {
         const error = new Error(`HTTP 429 from ${new URL(request.url).host}`);
+        const current = clockNow();
         const retryAfter = response.headers.get("retry-after");
         const seconds = Number(retryAfter);
         const timestamp = Number.isFinite(seconds) ? Number.NaN : Date.parse(String(retryAfter || ""));
+        let bodyRetryAfterMs = 0;
+        // Only inspect a small JSON error envelope, and retain numeric retry
+        // hints rather than its raw text (which may echo private RPC inputs).
+        if (responseBody.byteLength <= 64 * 1_024) {
+          try {
+            bodyRetryAfterMs = jsonRetryAfterDelayMs(JSON.parse(Buffer.from(responseBody).toString("utf8")), current);
+          } catch { /* An absent or malformed hint must leave the 429 fallback intact. */ }
+        }
         error.code = "SERVER_ERROR";
         error.status = 429;
         error.headers = responseHeaders;
-        error.retryAfterMs = Number.isFinite(seconds) && seconds >= 0
+        const headerRetryAfterMs = Number.isFinite(seconds) && seconds >= 0
           ? seconds * 1_000
-          : Number.isFinite(timestamp) ? Math.max(0, timestamp - clockNow()) : 0;
+          : Number.isFinite(timestamp) ? Math.max(0, timestamp - current) : 0;
+        error.retryAfterMs = Math.max(headerRetryAfterMs, bodyRetryAfterMs);
         throw error;
       }
       return {
@@ -4926,6 +4936,7 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
       clearTimeout(timeout);
     }
   };
+  const usesDefaultProviderFactory = !dependencies.providerFactory;
   const providerFactory = dependencies.providerFactory || ((url) => {
     const request = new FetchRequest(url);
     // Fire the transport timeout just before the outer provider fallback so
@@ -5015,7 +5026,7 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
       || (host.endsWith(".bnbchain.org") && host.startsWith("bsc-dataseed"))
       || (host.includes("blastapi.io") && blockSpan !== null && blockSpan > 10)
       || (host.includes("blockrazor.xyz") && blockSpan !== null && blockSpan > 25)
-      || (host === "bsc.rpc.sentio.xyz" && blockSpan !== null && blockSpan > 10_000)
+      || (host === "bsc.rpc.sentio.xyz" && blockSpan !== null && blockSpan > 1_000)
       // PublicNode's free BSC endpoint accepts recent log queries only when
       // they are scoped to one or more addresses. Sending a global topic-only
       // request adds a guaranteed failure before the next fallback provider.
@@ -5103,6 +5114,23 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     const key = Object.keys(headers).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
     return key ? headers[key] : null;
   };
+  function jsonRetryAfterDelayMs(value, current) {
+    const containers = [value, value?.data, value?.error, value?.error?.data];
+    let delay = 0;
+    for (const container of containers) {
+      if (!container || typeof container !== "object" || Array.isArray(container)) continue;
+      for (const [field, multiplier] of [["retry_after_ms", 1], ["retry_after", 1_000]]) {
+        const hint = container[field];
+        if (typeof hint !== "number"
+          && !(typeof hint === "string" && /^(?:\d+(?:\.\d*)?|\.\d+)$/.test(hint.trim()))) continue;
+        const milliseconds = Math.ceil(Number(hint) * multiplier);
+        if (milliseconds > 0 && Number.isSafeInteger(milliseconds)
+          && Number.isSafeInteger(current + milliseconds)) delay = Math.max(delay, milliseconds);
+      }
+    }
+    // A short JSON hint must not turn the no-header minute into a 5s probe.
+    return delay > 0 ? Math.max(60_000, delay) : 0;
+  }
   const retryAfterDelayMs = (error, current) => {
     const explicitMs = [
       error?.retryAfterMs,
@@ -5125,13 +5153,8 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
         return Number.isFinite(timestamp) ? Math.max(0, timestamp - current) : 0;
       })
       .filter((value) => Number.isFinite(value) && value > 0);
-    const jsonSeconds = [
-      error?.retry_after,
-      error?.data?.retry_after,
-      error?.error?.data?.retry_after,
-      error?.info?.error?.data?.retry_after,
-    ].map(Number).filter((value) => Number.isFinite(value) && value > 0).map((value) => value * 1_000);
-    return Math.max(0, ...explicitMs, ...headerDelays, ...jsonSeconds);
+    return Math.max(0, ...explicitMs, ...headerDelays,
+      jsonRetryAfterDelayMs(error, current), jsonRetryAfterDelayMs(error?.info, current));
   };
   const isExplicitMethodCapabilityFailure = (message, error = null) => !isGlobalRateLimit(message, error)
     && /(?:\bmethod\b.{0,100}\b(?:not found|does not exist|not supported|unsupported|not available)\b|\bunsupported method\b)/i.test(message);
@@ -5270,6 +5293,45 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     if (delay <= 0 || !error || typeof error !== "object") return error;
     error.rpcHostRetryAfterMs = Math.max(Number(error.rpcHostRetryAfterMs) || 0, Math.ceil(delay));
     if (!error.rpcHostFailure && cause) error.rpcHostFailure = errorSummary(cause).slice(0, 300);
+    return error;
+  };
+  const preserveCapacityFailure = (error, failureScopes, capacityRetryAt, capable, circuits, operation) => {
+    if (!failureScopes.length || !failureScopes.every((scope) => scope === "capacity")
+      || capable.some((index) => cooldownUntil(circuits, index, operation) > clockNow())) return false;
+    error.code = "RPC_COORDINATOR_UNAVAILABLE";
+    error.rpcFailureScope = "capacity";
+    error.rpcCircuitAlreadyOpen = true;
+    // Alternative hosts may be tried when the first local admission wait is
+    // due. Preserve its actual deadline instead of inventing a 1 ms retry.
+    error.retryAfterMs = Math.max(1, Math.ceil(Math.min(...capacityRetryAt) - clockNow()));
+    return true;
+  };
+  // Scope these refusals to one logical read (including its archive fallback),
+  // not a host-wide cooldown. A second URL/pool for the same physical host
+  // cannot recover an admission that this read has already waited for.
+  const createRoutingContext = () => ({ capacityHosts: new Map(), failureScopes: [], capacityRetryAt: [] });
+  const noteRoutingFailure = (routing, host, error) => {
+    routing.failureScopes.push(error?.rpcFailureScope || null);
+    if (error?.rpcFailureScope === "capacity") {
+      const retryAt = clockNow() + Math.max(1, Number(error.retryAfterMs) || 100);
+      routing.capacityHosts.set(host, retryAt);
+      routing.capacityRetryAt.push(retryAt);
+    }
+  };
+  const finishRoutingFailure = (error, routing, capable, circuits, operation) => {
+    if (error?.rpcBudgetExhausted) {
+      const preserved = Object.assign(new Error(error.message), error);
+      if (preserveCapacityFailure(preserved, routing.failureScopes, routing.capacityRetryAt, capable, circuits, operation)) {
+        // Keep the exhausted marker: this is better attribution, never an
+        // extra endpoint attempt or an invitation to continue fallback.
+        preserved.message = `${operation} retry budget exhausted after shared RPC capacity waits; evidence retained for retry`;
+        return preserved;
+      }
+    } else if (error?.rpcFailureScope !== "capacity") {
+      // Includes failures before the endpoint loop (e.g. all hosts cooling).
+      // A later local refusal must not hide a real upstream/method failure.
+      routing.failureScopes.push(error?.rpcFailureScope || null);
+    }
     return error;
   };
   const queuedCircuitCoolingError = (circuits, index, operation) => {
@@ -5412,10 +5474,11 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     }
     return ordered;
   };
-  const invoke = (method, args, budget = null) => standardSlots.run(async () => {
+  const invoke = (method, args, budget = null, routing = createRoutingContext()) => standardSlots.run(async () => {
     const operation = operationName(method, args);
     const errors = [];
     const failureScopes = [];
+    const capacityRetryAt = [];
     const start = nextProvider++ % providers.length;
     const rotated = providers.map((_, offset) => (start + offset) % providers.length);
     const ordered = orderForOperation(budget ? providers.map((_, index) => index) : rotated, operation, unique, args);
@@ -5493,6 +5556,13 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
       : closed;
     try {
       for (const index of order) {
+        const host = hostForUrl(unique[index]);
+        if (routing.capacityHosts.has(host)) {
+          failureScopes.push("capacity");
+          capacityRetryAt.push(routing.capacityHosts.get(host));
+          errors.push(`${host}: shared RPC capacity already refused for this read`);
+          continue;
+        }
         if (budget) {
           budget.attempt(requestTimeoutMs + physicalWaitMs);
           stateReadCursors.standard.set(operation, (ordered.indexOf(index) + 1) % ordered.length);
@@ -5539,11 +5609,14 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
             && !legacyTransactionFormatError(operation, error)) {
             await recordFailureCooldown(providerCircuits, index, operation, error);
           }
+          noteRoutingFailure(routing, host, error);
           failureScopes.push(error?.rpcFailureScope || null);
+          if (error?.rpcFailureScope === "capacity") capacityRetryAt.push(clockNow() + Math.max(1, Number(error.retryAfterMs) || 100));
           errors.push(`${new URL(unique[index]).host}: ${errorSummary(error)}`);
         }
       }
-      if (recoveryProbe && probeIndex !== undefined) {
+      if (recoveryProbe && probeIndex !== undefined
+        && !failureScopes.every((scope) => scope === "capacity")) {
         hostMethodRecoveryProbeAfter.set(
           recoveryProbeLease?.key || recoveryProbeKey(providerCircuits, probeIndex, operation),
           clockNow() + recoveryProbeIntervalMs,
@@ -5559,16 +5632,20 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
       error.rpcFailureScope = capable.every((index) => Number(providerCircuits[index]?.globalUntil || 0) > clockNow())
         ? "host"
         : "method";
+      preserveCapacityFailure(error, failureScopes, capacityRetryAt, capable, providerCircuits, operation);
       attachHostRetryEvidence(error, hostRetryDelayForCircuits(capable, providerCircuits), error);
       throw error;
     } finally {
       releaseRecoveryProbe(recoveryProbeLease);
     }
-  }, budget);
-  const invokeArchive = (method, args, budget = null) => archiveSlots.run(async () => {
+  }, budget).catch((error) => {
+    throw finishRoutingFailure(error, routing, providers.map((_, index) => index), providerCircuits, operationName(method, args));
+  });
+  const invokeArchive = (method, args, budget = null, routing = createRoutingContext()) => archiveSlots.run(async () => {
     const operation = operationName(method, args);
     const errors = [];
     const failureScopes = [];
+    const capacityRetryAt = [];
     const start = nextArchiveProvider++ % archiveProviders.length;
     const rotated = archiveProviders.map((_, offset) => (start + offset) % archiveProviders.length);
     const ordered = orderForOperation(budget ? archiveProviders.map((_, index) => index) : rotated, operation, archiveUnique, args);
@@ -5638,6 +5715,13 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
       : closed;
     try {
       for (const index of order) {
+        const host = hostForUrl(archiveUnique[index]);
+        if (routing.capacityHosts.has(host)) {
+          failureScopes.push("capacity");
+          capacityRetryAt.push(routing.capacityHosts.get(host));
+          errors.push(`${host}: shared RPC capacity already refused for this read`);
+          continue;
+        }
         if (budget) {
           budget.attempt(requestTimeoutMs + physicalWaitMs);
           stateReadCursors.archive.set(operation, (ordered.indexOf(index) + 1) % ordered.length);
@@ -5677,11 +5761,14 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
             && !legacyTransactionFormatError(operation, error)) {
             await recordFailureCooldown(archiveCircuits, index, operation, error);
           }
+          noteRoutingFailure(routing, host, error);
           failureScopes.push(error?.rpcFailureScope || null);
+          if (error?.rpcFailureScope === "capacity") capacityRetryAt.push(clockNow() + Math.max(1, Number(error.retryAfterMs) || 100));
           errors.push(`${new URL(archiveUnique[index]).host}: ${errorSummary(error)}`);
         }
       }
-      if (recoveryProbe && probeIndex !== undefined) {
+      if (recoveryProbe && probeIndex !== undefined
+        && !failureScopes.every((scope) => scope === "capacity")) {
         hostMethodRecoveryProbeAfter.set(
           recoveryProbeLease?.key || recoveryProbeKey(archiveCircuits, probeIndex, operation),
           clockNow() + recoveryProbeIntervalMs,
@@ -5694,12 +5781,15 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
       error.rpcFailureScope = capable.every((index) => Number(archiveCircuits[index]?.globalUntil || 0) > clockNow())
         ? "host"
         : "method";
+      preserveCapacityFailure(error, failureScopes, capacityRetryAt, capable, archiveCircuits, operation);
       attachHostRetryEvidence(error, hostRetryDelayForCircuits(capable, archiveCircuits), error);
       throw error;
     } finally {
       releaseRecoveryProbe(recoveryProbeLease);
     }
-  }, budget);
+  }, budget).catch((error) => {
+    throw finishRoutingFailure(error, routing, archiveProviders.map((_, index) => index), archiveCircuits, operationName(method, args));
+  });
   const combinedRpcError = (message, ...causes) => {
     const error = new Error(message);
     error.code = "SERVER_ERROR";
@@ -5709,6 +5799,11 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     if (retryAfterMs > 0) error.retryAfterMs = retryAfterMs;
     const scopes = causes.map((cause) => cause?.rpcFailureScope).filter(Boolean);
     if (scopes.length) error.rpcFailureScope = scopes.every((scope) => scope === "host") ? "host" : "method";
+    if (causes.length && causes.every((cause) => cause?.rpcFailureScope === "capacity")) {
+      error.code = "RPC_COORDINATOR_UNAVAILABLE";
+      error.rpcFailureScope = "capacity";
+      error.rpcCircuitAlreadyOpen = true;
+    }
     error.rpcOperation = causes.find((cause) => cause?.rpcOperation)?.rpcOperation || null;
     const hostCause = causes.find((cause) => Number(cause?.rpcHostRetryAfterMs) > 0
       || (cause?.rpcFailureScope === "host" && Number(cause?.retryAfterMs) > 0));
@@ -5720,12 +5815,14 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     return error;
   };
   const invokeArchiveFirst = async (method, args, budget = null) => {
+    const routing = createRoutingContext();
     let archiveError = null;
     if (archiveProviders.length) {
-      try { return await invokeArchive(method, args, budget); }
+      try { return await invokeArchive(method, args, budget, routing); }
       catch (error) { if (error.rpcBudgetExhausted || error.code === "CANCELLED") throw error; archiveError = error; }
     }
-    try { return await invoke(method, args, budget); }
+    if (!providers.length && archiveError) throw archiveError;
+    try { return await invoke(method, args, budget, routing); }
     catch (error) {
       if (error.rpcBudgetExhausted || error.code === "CANCELLED") throw error;
       if (!archiveError) throw error;
@@ -5737,14 +5834,16 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     }
   };
   const invokeState = (method, args, blockIndex, resolveBlockTag = null) => stateReadBudget.run(method, args, budget => withTotalSlot(async () => {
+    const routing = createRoutingContext();
     const blockTag = typeof resolveBlockTag === "function" ? resolveBlockTag(args) : args[blockIndex];
     const historical = blockTag !== null && blockTag !== undefined && blockTag !== "latest";
     let archiveError = null;
     if (historical && archiveProviders.length) {
-      try { return await invokeArchive(method, args, budget); }
+      try { return await invokeArchive(method, args, budget, routing); }
       catch (error) { if (error.rpcBudgetExhausted || error.code === "CANCELLED") throw error; archiveError = error; }
     }
-    try { return await invoke(method, args, budget); }
+    if (!providers.length && archiveError) throw archiveError;
+    try { return await invoke(method, args, budget, routing); }
     catch (error) {
       if (error.rpcBudgetExhausted || error.code === "CANCELLED") throw error;
       // Archive-capable readers also serve latest state. Previously a latest
@@ -5752,7 +5851,7 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
       // while these independent readers were healthy. Keep exactly the same
       // block tag; this is source failover, not a historical-to-latest rewrite.
       if (!historical && archiveProviders.length && !NON_RETRYABLE_RPC_CODES.has(error.code)) {
-        try { return await invokeArchive(method, args, budget); }
+        try { return await invokeArchive(method, args, budget, routing); }
         catch (fallbackError) { if (fallbackError.rpcBudgetExhausted || fallbackError.code === "CANCELLED") throw fallbackError; archiveError = fallbackError; }
       }
       if (!archiveError) throw error;
@@ -5764,18 +5863,30 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     }
   }, budget));
   const invokeLogs = async (args, budget = null) => {
+    const routing = createRoutingContext();
+    const invalidLogResult = (pool) => {
+      // Validation happens after invoke() has returned successfully. Retain
+      // this real method failure before an alternative pool can exhaust its
+      // admission budget; it is not evidence of pure local capacity pressure.
+      // This does not open an upstream circuit or add an endpoint attempt.
+      routing.failureScopes.push("method");
+      return Object.assign(new Error(`eth_getLogs ${pool} RPC returned a non-array result`), {
+        code: "SERVER_ERROR", rpcOperation: "eth_getLogs", rpcFailureScope: "method",
+      });
+    };
     let archiveError = null;
     if (archiveProviders.length) {
       try {
-        const result = await invokeArchive("send", args, budget);
-        if (!Array.isArray(result)) throw new Error("eth_getLogs archive RPC returned a non-array result");
+        const result = await invokeArchive("send", args, budget, routing);
+        if (!Array.isArray(result)) throw invalidLogResult("archive");
         return result;
       }
       catch (error) { if (error.rpcBudgetExhausted || error.code === "CANCELLED") throw error; archiveError = error; }
     }
+    if (!providers.length && archiveError) throw archiveError;
     try {
-      const result = await invoke("send", args, budget);
-      if (!Array.isArray(result)) throw new Error("eth_getLogs standard RPC returned a non-array result");
+      const result = await invoke("send", args, budget, routing);
+      if (!Array.isArray(result)) throw invalidLogResult("standard");
       return result;
     }
     catch (error) {
@@ -5789,14 +5900,22 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     }
   };
   const publicPool = {
-    getNetwork: (...args) => boundedRead("getNetwork", args, b => invoke("getNetwork", args, b)),
+    // The default factory pins ethers' static network at construction. This
+    // method reads local metadata, not the remote chain: queuing it wastes a
+    // physical lease and its cached success could clear an eth_chainId circuit.
+    // Live identity proofs must still use send("eth_chainId", []), which keeps
+    // the normal admission/cooldown path. An injected factory may do real I/O,
+    // so it must retain that path (as must the no-standard-provider error).
+    getNetwork: (...args) => usesDefaultProviderFactory && providers.length
+      ? providers[0].getNetwork(...args)
+      : boundedRead("getNetwork", args, b => invoke("getNetwork", args, b)),
     getBlockNumber: (...args) => boundedRead("getBlockNumber", args, b => invoke("getBlockNumber", args, b)),
     getTransaction: (...args) => boundedRead("getTransaction", args, b => invoke("getTransaction", args, b)),
     getTransactionReceipt: (...args) => boundedRead("getTransactionReceipt", args, b => invoke("getTransactionReceipt", args, b)),
     getBlock: (...args) => boundedRead("getBlock", args, b => invoke("getBlock", args, b)),
-    getHistoricalTransaction: (...args) => boundedRead("getTransaction", args, b => invokeArchiveFirst("getTransaction", args, b)),
-    getHistoricalTransactionReceipt: (...args) => boundedRead("getTransactionReceipt", args, b => invokeArchiveFirst("getTransactionReceipt", args, b)),
-    getHistoricalBlock: (...args) => boundedRead("getBlock", args, b => invokeArchiveFirst("getBlock", args, b)),
+    getHistoricalTransaction: (...args) => boundedRead("getHistoricalTransaction", args, b => invokeArchiveFirst("getTransaction", args, b)),
+    getHistoricalTransactionReceipt: (...args) => boundedRead("getHistoricalTransactionReceipt", args, b => invokeArchiveFirst("getTransactionReceipt", args, b)),
+    getHistoricalBlock: (...args) => boundedRead("getHistoricalBlock", args, b => invokeArchiveFirst("getBlock", args, b)),
     getCode: (...args) => invokeState("getCode", args, 1),
     getStorage: (...args) => invokeState("getStorage", args, 2),
     call: (...args) => invokeState("call", args, 0, (callArgs) => callArgs[0]?.blockTag),
@@ -5822,7 +5941,7 @@ export function createRpcPool(urls, archiveUrls = [], archiveConcurrency = 4, de
     for (const key of ["rpcBudgetExhausted", "rpcCircuitAlreadyOpen"]) {
       if (typeof error?.[key] === "boolean") clean[key] = error[key];
     }
-    if (["host", "method"].includes(error?.rpcFailureScope)) clean.rpcFailureScope = error.rpcFailureScope;
+    if (["host", "method", "capacity"].includes(error?.rpcFailureScope)) clean.rpcFailureScope = error.rpcFailureScope;
     if (typeof error?.rpcOperation === "string" && /^[a-zA-Z][a-zA-Z0-9_]{0,63}$/u.test(error.rpcOperation)
       && sanitizeBscRpcError({ message: error.rpcOperation }).message === error.rpcOperation) clean.rpcOperation = error.rpcOperation;
     if (typeof error?.rpcHostFailure === "string") clean.rpcHostFailure = sanitizeBscRpcError({ message: error.rpcHostFailure }).message;
@@ -9036,7 +9155,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     });
     if (attempted) return false;
     if (activation.type === "quote_config" && candidate.topic === FOUR_MEME_TOKEN_CREATE_TOPIC) {
-      const info = await readFourMemeManagerTokenInfo(candidate.launcher, candidate.token, candidate.blockNumber);
+      const info = await readFourMemeManagerTokenInfo(candidate.launcher, candidate.token, candidate.blockNumber, replayProvider);
       throwIfFourMemeReplayStopped();
       if (!info || info.quoteAsset !== String(activation.quoteAddress || "").toLowerCase()) {
         await markFourMemeReplayCandidateAttempted(activationKey, candidate);
@@ -9260,14 +9379,22 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     }
   }
 
-  async function replayFourMemeActivation(activationKey) {
-    if (fourMemeReplayFlights.has(activationKey)) return fourMemeReplayFlights.get(activationKey);
-    let flight;
-    flight = runMaintenanceReplay(`four:${activationKey}`, () => runFourMemeActivationReplay(activationKey)).finally(() => {
+  async function replayFourMemeActivation(activationKey, admission = null) {
+    if (fourMemeReplayFlights.has(activationKey)) {
+      const existing = fourMemeReplayFlights.get(activationKey);
+      if (admission) admission.flight = existing;
+      return existing.promise;
+    }
+    const flight = { started: false, promise: null };
+    if (admission) admission.flight = flight;
+    flight.promise = runMaintenanceReplay(`four:${activationKey}`, () => {
+      flight.started = true;
+      return runFourMemeActivationReplay(activationKey);
+    }).finally(() => {
       if (fourMemeReplayFlights.get(activationKey) === flight) fourMemeReplayFlights.delete(activationKey);
     });
     fourMemeReplayFlights.set(activationKey, flight);
-    return flight;
+    return flight.promise;
   }
 
   async function runPendingFourMemeActivations(keys = null) {
@@ -9282,11 +9409,11 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       const count = Math.min(2, requested.length);
       const offset = Array.isArray(keys) ? 0 : fourReplaySweepOffset;
       const selected = Array.from({ length: count }, (_, i) => requested[(offset + i) % requested.length]);
-      if (!Array.isArray(keys)) fourReplaySweepOffset += count;
       requested = selected;
     }
     for (const key of requested) {
       if (stopped) break;
+      const admission = {};
       try {
         // A newly observed template can deliberately disable historical
         // replay (allowReplay=false).  Treat it as a live-only activation;
@@ -9301,7 +9428,8 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
             return shouldReplayFourMemeActivation(activation);
           });
           if (!eligible) break;
-          await replayFourMemeActivation(key);
+          await replayFourMemeActivation(key, admission);
+          if (!admission.flight?.started) break;
           if (stopped) break;
           // One bounded follow-up closes the race where realtime appends a
           // matching creation candidate while an existing replay flight is
@@ -9322,7 +9450,13 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       } catch (error) {
         if (stopped || error?.code === "BSC_FOUR_REPLAY_STOPPED") break;
         logger.error(`[bsc][fourmeme] activation replay ${key}: ${errorSummary(error)}`);
+        if (replayIsolationEnabled && isBscReplayResourceWait(error)) break;
+      } finally {
+        // A scheduler refusal is not an attempt. Preserve that position for
+        // the next sweep; a real operation returning false still rotates.
+        if (replayIsolationEnabled && !Array.isArray(keys) && admission.flight?.started) fourReplaySweepOffset++;
       }
+      if (replayIsolationEnabled && !admission.flight?.started) break;
     }
   }
 
@@ -11191,28 +11325,35 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     }
   }
 
-  function replayFlapQuoteFirstThreeGeneration(generationKey) {
+  function replayFlapQuoteFirstThreeGeneration(generationKey, admission = null) {
     if (!generationKey) return Promise.resolve(false);
     if (flapQuoteFirstThreeReplayFlights.has(generationKey)) {
-      return flapQuoteFirstThreeReplayFlights.get(generationKey);
+      const existing = flapQuoteFirstThreeReplayFlights.get(generationKey);
+      if (admission) admission.flight = existing;
+      return existing.promise;
     }
+    const flight = { started: false, promise: null };
+    if (admission) admission.flight = flight;
     const window = state.officialSources?.flap?.quotePoolFirstThree?.windows?.[generationKey];
     const fresh = freshFlapFirstThreeWindow(window);
     const run = fresh ? freshFlapScheduler.run(`flap:${generationKey}`, async () => {
+      flight.started = true;
       if (stopped || !freshFlapFirstThreeWindow(state.officialSources?.flap?.quotePoolFirstThree?.windows?.[generationKey])) return false;
       const network = await freshFlapProvider.getNetwork();
       if (Number(network?.chainId) !== 56) throw new Error("BSC fresh Flap RPC chain mismatch");
       return runFlapQuoteFirstThreeArchiveReplay(generationKey, freshFlapProvider, Date.parse(window.activatedAt) + 120_000);
     }, { deadlineAt: Date.parse(window.activatedAt) + 120_000 })
-      : runMaintenanceReplay(`flap:${generationKey}`, () => runFlapQuoteFirstThreeArchiveReplay(generationKey));
-    let flight;
-    flight = run.finally(() => {
+      : runMaintenanceReplay(`flap:${generationKey}`, () => {
+        flight.started = true;
+        return runFlapQuoteFirstThreeArchiveReplay(generationKey);
+      });
+    flight.promise = run.finally(() => {
       if (flapQuoteFirstThreeReplayFlights.get(generationKey) === flight) {
         flapQuoteFirstThreeReplayFlights.delete(generationKey);
       }
     });
     flapQuoteFirstThreeReplayFlights.set(generationKey, flight);
-    return flight;
+    return flight.promise;
   }
 
   function freshFlapFirstThreeWindow(window) {
@@ -11239,11 +11380,19 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       const count = Math.min(2, activeKeys.length);
       let firstError = null;
       for (let i = 0; i < count && !stopped; i++) {
-        const key = activeKeys[firstThreeSweepOffset++ % activeKeys.length];
-        // Includes completed windows for fresh reorg checks. A failing window
-        // cannot starve the next one, nor can a timer queue another sweep.
-        try { await replayFlapQuoteFirstThreeGeneration(key); }
-        catch (error) { firstError ||= error; }
+        const key = activeKeys[firstThreeSweepOffset % activeKeys.length];
+        const admission = {};
+        // Includes completed windows for fresh reorg checks. Keep the rotation
+        // when a shared resource wait ends this batch; durable windows remain
+        // untouched and the next eligible sweep starts with the next window.
+        try { await replayFlapQuoteFirstThreeGeneration(key, admission); }
+        catch (error) {
+          firstError ||= error;
+          if (isBscReplayResourceWait(error)) break;
+        } finally {
+          if (admission.flight?.started) firstThreeSweepOffset++;
+        }
+        if (!admission.flight?.started) break;
       }
       if (firstError) throw firstError;
       return count;
@@ -13512,7 +13661,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         && !activation.firstTokenTransactionHash);
   }
 
-  async function readFourMemeManagerTokenInfo(manager, token, blockTag = null) {
+  async function readFourMemeManagerTokenInfo(manager, token, blockTag = null, rpc = provider) {
     const request = {
       to: manager,
       data: fourMemeTokenInfo.encodeFunctionData("_tokenInfos", [token]),
@@ -13520,10 +13669,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     };
     let raw;
     try {
-      raw = await provider.call(request);
+      raw = await rpc.call(request);
     } catch (error) {
       if (blockTag === null || !isBscArchiveStateUnavailable(error)) throw error;
-      raw = await provider.call({ to: manager, data: request.data });
+      raw = await rpc.call({ to: manager, data: request.data });
     }
     const info = fourMemeTokenInfo.decodeFunctionResult("_tokenInfos", raw);
     if (String(info.base).toLowerCase() !== String(token).toLowerCase()) return null;
@@ -15367,7 +15516,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         let hookEvent = null;
         for (const pool of hookPools) {
           if (flapReplaySignal) throwIfFlapReplayStopped(flapReplaySignal);
-          hookEvent ||= await observeVerifiedHook(pool, entry.transactionHash, entry.blockNumber, { transaction, receipt, verifiedNewContracts: entry.verifiedNewContracts });
+          // Every pool owns an observation/durability boundary. Retaining the
+          // first event must not short-circuit later hooks in this receipt.
+          const observedHookEvent = await observeVerifiedHook(pool, entry.transactionHash, entry.blockNumber, { transaction, receipt, verifiedNewContracts: entry.verifiedNewContracts });
+          hookEvent ||= observedHookEvent;
         }
         if (hookEvent) return {
           revision,

@@ -1,0 +1,289 @@
+{
+  "schema": "gmgn_wallet_learning_audit_v1",
+  "mode": "research_only",
+  "execution": false,
+  "signing": false,
+  "broadcast": false,
+  "sourceScope": "public_gmgn_records_not_human_identity_verification",
+  "localSnapshot": {
+    "at": "2026-10-10T13:38:17.000Z",
+    "sourceUpdatedAt": "2026-10-10T13:37:23.707Z",
+    "walletCount": 80,
+    "candidateCount": 500,
+    "roles": {
+      "teacher": 9,
+      "comparison": 17,
+      "unverified": 54,
+      "excluded": 0
+    },
+    "status": "collecting",
+    "groups": [
+      {
+        "chain": "sol",
+        "group": "gmgn_smartmoney",
+        "teacherCount": 4,
+        "usableTeachers": 0,
+        "matchedSells": 0,
+        "tokens": 0,
+        "spanMs": 0,
+        "ready": false
+      },
+      {
+        "chain": "bsc",
+        "group": "gmgn_smartmoney",
+        "teacherCount": 4,
+        "usableTeachers": 1,
+        "matchedSells": 691,
+        "tokens": 61,
+        "spanMs": 1151091000,
+        "ready": false
+      },
+      {
+        "chain": "bsc",
+        "group": "gmgn_fomo",
+        "teacherCount": 1,
+        "usableTeachers": 1,
+        "matchedSells": 348,
+        "tokens": 201,
+        "spanMs": 976683000,
+        "ready": false
+      }
+    ],
+    "historyGapCount": 45,
+    "staleProfileCount": 54,
+    "policies": 0,
+    "selectedWallet": {
+      "wallet": "0x2ce9d43d1cba6ae31d7f07bfe0098dfa2d833373",
+      "chain": "bsc",
+      "checkedAt": "2026-10-10T12:45:00.419Z",
+      "profile": {
+        "7d": {
+          "chain": "bsc",
+          "wallet": "0x2ce9d43d1cba6ae31d7f07bfe0098dfa2d833373",
+          "period": "7d",
+          "checkedAt": "2026-10-10T12:08:47.890Z",
+          "realizedProfitUsd": 49130.11312939319,
+          "realizedRoi": 0.617017082459597,
+          "winRate": 0.672,
+          "tokenCount": 438,
+          "buyCount": 126,
+          "sellCount": 236,
+          "tags": [
+            "fomo",
+            "gmgn",
+            "gmgn_go",
+            "kol",
+            "top_followed",
+            "top_renamed"
+          ],
+          "createdAt": 1759543244,
+          "lastTradeAt": 1791634112,
+          "createdTokenCount": 0
+        },
+        "30d": {
+          "chain": "bsc",
+          "wallet": "0x2ce9d43d1cba6ae31d7f07bfe0098dfa2d833373",
+          "period": "30d",
+          "checkedAt": "2026-10-10T12:08:56.245Z",
+          "realizedProfitUsd": 350671.5227841649,
+          "realizedRoi": 0.5850623071767844,
+          "winRate": 0.6336866902237926,
+          "tokenCount": 2000,
+          "buyCount": 1015,
+          "sellCount": 1690,
+          "tags": [
+            "fomo",
+            "gmgn",
+            "gmgn_go",
+            "kol",
+            "top_followed",
+            "top_renamed"
+          ],
+          "createdAt": 1759543244,
+          "lastTradeAt": 1791634112,
+          "createdTokenCount": 0
+        }
+      },
+      "historyGap": false,
+      "hasOlderPages": true,
+      "earliestAt": "2026-09-29T05:08:22.000Z",
+      "latestAt": "2026-10-10T12:39:28.000Z",
+      "cases": [
+        {
+          "token": "0xfdc07228ebda25c5aed32bdc61bd0cf00ec57777",
+          "rows": [
+            {
+              "chain": "bsc",
+              "wallet": "0x2ce9d43d1cba6ae31d7f07bfe0098dfa2d833373",
+              "token": "0xfdc07228ebda25c5aed32bdc61bd0cf00ec57777",
+              "hash": "0xe2ba058d997fa5af3fd28271a155a401324fd9a7834ce029a242fb04a26ab261",
+              "at": 1791634519000,
+              "side": "buy",
+              "quantity": 83051852.04799503,
+              "usd": 948.0235780077631,
+              "price": 0.000011414839701105131,
+              "symbol": "缪斯",
+              "positionAction": "observed_entry",
+              "addPriceChange": null
+            },
+            {
+              "chain": "bsc",
+              "wallet": "0x2ce9d43d1cba6ae31d7f07bfe0098dfa2d833373",
+              "token": "0xfdc07228ebda25c5aed32bdc61bd0cf00ec57777",
+              "hash": "0xf99413e0cd3c8fc87d2581be41347f0ff4433203a8b2f72f9746a0f25f03d748",
+              "at": 1791634526000,
+              "side": "sell",
+              "quantity": 41525926.023997515,
+              "usd": 808.2737054465549,
+              "price": 0.00001946480163566414,
+              "symbol": "缪斯",
+              "positionAction": "partial_exit",
+              "soldFraction": 0.5,
+              "holdMs": 7000,
+              "grossReturn": 0.7051763778810491,
+              "matchedCostUsd": 474.0117890038816,
+              "averageBuyPrice": 0.000011414839701105131
+            },
+            {
+              "chain": "bsc",
+              "wallet": "0x2ce9d43d1cba6ae31d7f07bfe0098dfa2d833373",
+              "token": "0xfdc07228ebda25c5aed32bdc61bd0cf00ec57777",
+              "hash": "0x6e57dbabffb7b088e8e6599f0b0c61d103dce45519c6f16683629f486902f26c",
+              "at": 1791634573000,
+              "side": "sell",
+              "quantity": 20762963.011998758,
+              "usd": 555.1323197763817,
+              "price": 0.000026737330221632033,
+              "symbol": "缪斯",
+              "positionAction": "partial_exit",
+              "soldFraction": 0.5,
+              "holdMs": 54000,
+              "grossReturn": 1.3422722077987634,
+              "matchedCostUsd": 237.0058945019408,
+              "averageBuyPrice": 0.000011414839701105131
+            }
+          ],
+          "buyUsd": 948.0235780077631,
+          "sellUsd": 1363.4060252229365,
+          "remaining": 20762963.011998758,
+          "netCashflowUsd": 415.38244721517333,
+          "inventoryReconciledWithinObservedWindow": false,
+          "matchedSoldCostUsd": 711.0176835058223,
+          "matchedGrossRealizedUsd": 652.3883417171141,
+          "unrealizedPnlUsd": null
+        },
+        {
+          "token": "0x0cb3dbc091f2f2481ef3eb2fd71b5ca0af5b7777",
+          "rows": [
+            {
+              "chain": "bsc",
+              "wallet": "0x2ce9d43d1cba6ae31d7f07bfe0098dfa2d833373",
+              "token": "0x0cb3dbc091f2f2481ef3eb2fd71b5ca0af5b7777",
+              "hash": "0x3383d448508ab6f49751e1672c5509c5c06054355032778a1d6327fc73cf8b64",
+              "at": 1791634652000,
+              "side": "buy",
+              "quantity": 29796539.54231485,
+              "usd": 506.06561808,
+              "price": 0.00001698403995408,
+              "symbol": "活着的模因",
+              "positionAction": "observed_entry",
+              "addPriceChange": null
+            },
+            {
+              "chain": "bsc",
+              "wallet": "0x2ce9d43d1cba6ae31d7f07bfe0098dfa2d833373",
+              "token": "0x0cb3dbc091f2f2481ef3eb2fd71b5ca0af5b7777",
+              "hash": "0xb2a68baa5a0e58fec23cfc478693aa612c9f91da613ea5e2ff471327dc3f9e06",
+              "at": 1791634706000,
+              "side": "sell",
+              "quantity": 14581101.305815073,
+              "usd": 397.8478704256984,
+              "price": 0.000027285855061747014,
+              "symbol": "活着的模因",
+              "positionAction": "partial_exit",
+              "soldFraction": 0.489355526842574,
+              "holdMs": 54000,
+              "grossReturn": 0.606518413118539,
+              "matchedCostUsd": 247.64600715245126,
+              "averageBuyPrice": 0.00001698403995408
+            },
+            {
+              "chain": "bsc",
+              "wallet": "0x2ce9d43d1cba6ae31d7f07bfe0098dfa2d833373",
+              "token": "0x0cb3dbc091f2f2481ef3eb2fd71b5ca0af5b7777",
+              "hash": "0xf088f9e5350987056d9ff776cba4d09e2a13c367ce76914448aab504abbcadba",
+              "at": 1791635968000,
+              "side": "sell",
+              "quantity": 15215438.236499777,
+              "usd": 78.9284402880707,
+              "price": 0.0000051875215371099885,
+              "symbol": "活着的模因",
+              "positionAction": "observed_exit",
+              "soldFraction": 1,
+              "holdMs": 1316000,
+              "grossReturn": -0.6945725597032986,
+              "matchedCostUsd": 258.4196109275487,
+              "averageBuyPrice": 0.000016984039954079997
+            }
+          ],
+          "buyUsd": 506.06561808,
+          "sellUsd": 476.7763107137691,
+          "remaining": 0,
+          "grossPnl": -29.2893073662309,
+          "grossRoi": -0.057876501227951,
+          "netCashflowUsd": -29.2893073662309,
+          "inventoryReconciledWithinObservedWindow": true,
+          "matchedSoldCostUsd": 506.06561808,
+          "matchedGrossRealizedUsd": -29.2893073662309
+        }
+      ]
+    }
+  },
+  "freshTokenTraderSampling": {
+    "startedAt": "2026-10-10T13:37:56.924Z",
+    "configChecks": 1,
+    "businessRequests": 2,
+    "rpcRequests": 0,
+    "samples": [
+      {
+        "chain": "bsc",
+        "address": "0x2341955aacb92ecf30401cbab01e9a4760e07777",
+        "observedAt": "2026-10-10T13:38:03.918Z",
+        "observedRows": 1,
+        "positive": 1,
+        "eligible": 0,
+        "issueCounts": {
+          "excluded_wallet_tags": 1
+        },
+        "examples": []
+      },
+      {
+        "chain": "sol",
+        "address": "bsp4qPLNf4sLAAcWMiFR9UfpAQTP6c2QYS9KHpTpump",
+        "observedAt": "2026-10-10T13:38:13.204Z",
+        "observedRows": 20,
+        "positive": 0,
+        "eligible": 0,
+        "issueCounts": {},
+        "examples": []
+      }
+    ],
+    "completedAt": "2026-10-10T13:38:13.205Z"
+  },
+  "leaderboardCheckpoint": {
+    "file": "data/profit-leaderboard-candidates.json",
+    "updatedAt": "2026-09-22T05:09:25.249Z",
+    "retainedEntries": 407,
+    "historicallyEligible": 185,
+    "activeSourceCandidatesAtAudit": 0,
+    "scope": "sampled_token_trader_profit_lists_not_global_ranking"
+  },
+  "limitations": [
+    "GMGN records not independently RPC verified this turn",
+    "Research labels do not identify a real human or independent beneficial owner",
+    "Local activity windows have older pages and are not complete lifetime inventories",
+    "Gross returns exclude fees, gas, tax, impact and copy latency",
+    "No global real-person leaderboard was retrieved",
+    "No live or paper trade, learner roster, strategy parameter, or automation was changed"
+  ]
+}

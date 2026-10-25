@@ -1,0 +1,189 @@
+{
+  "checkedAt": "2026-10-22T23:15:17.000Z",
+  "scheduledAt": "2026-10-22T23:08:19.158Z",
+  "round": 101,
+  "group": "sol",
+  "question": "D/E头页出现的新活动是否构成跨钱包同步，及D同CA快速往返的链上性质如何",
+  "scope": {
+    "wallets": [
+      {
+        "id": "D",
+        "chain": "sol",
+        "wallet": "9bwzwZvTyB8yXdCi2Bz7TATM5nVcSGnNyB2KqhUj8Zqp",
+        "providerHeadCheckedAt": "2026-10-22T23:10:02.496Z",
+        "providerLatestActivityAt": "2026-10-22T03:13:03.000Z",
+        "lastNewEvidenceAt": "2026-10-22T23:10:15.000Z",
+        "rows": 20,
+        "newRows": null,
+        "pageOverlap": null,
+        "verifiedUniqueEvidenceRows": 2,
+        "identityEcho": null,
+        "nextCursor": "NDU5NTQxMjk5MDA0NDYwMzI6MDo6",
+        "historicalResumeCursorPreserved": true,
+        "coverageStatus": "head_page_read_20_rows; two_exact_hash_keys_new_and_rpc_verified; full_page_dedupe_unknown; historical_gaps_preserved"
+      },
+      {
+        "id": "E",
+        "chain": "sol",
+        "wallet": "8jY86w2GVQQ79TW8EnU9CVswUyk6x66FJnWcVADCDuwj",
+        "providerHeadCheckedAt": "2026-10-22T23:10:13.185Z",
+        "providerLatestActivityAt": "2026-10-21T22:57:10.000Z",
+        "lastNewEvidenceAt": "2026-10-22T15:01:37.018Z",
+        "rows": 20,
+        "newRows": null,
+        "pageOverlap": null,
+        "verifiedUniqueEvidenceRows": 0,
+        "identityEcho": null,
+        "nextCursor": "NDU5NTMwNjY0MDAwMzEwNDQ6MDo6",
+        "historicalResumeCursorPreserved": true,
+        "coverageStatus": "head_page_read_20_rows; latest_provider_activity_oct21; no_matching_D_event; full_page_dedupe_unknown; historical_gaps_preserved"
+      }
+    ],
+    "gmgn": {
+      "configChecks": 2,
+      "businessRequests": 2,
+      "successfulRequests": 2,
+      "failedRequests": 0,
+      "priority": 0,
+      "pagesPerWallet": 1,
+      "retries": 0
+    },
+    "publicRpc": {
+      "requests": 2,
+      "network": "Solana mainnet-beta",
+      "method": "getTransaction",
+      "commitment": "finalized",
+      "versionSupport": 1,
+      "budgetExhausted": true
+    },
+    "modelRequests": 0,
+    "newAddresses": 0,
+    "historicalPages": 0,
+    "crossWalletOneToOnePairs": 0
+  },
+  "samples": [
+    {
+      "walletId": "D",
+      "ca": "6TAtbaZAExDVoC3R3MD7dCKc7jmZvCjwQz23cZ2fpump",
+      "symbol": null,
+      "buy": {
+        "hash": "4pmeUY9efuXhmRLAfQrTW8nrSeXpNznwoMMfVqhbMZ9DxeRSaJM7zTtJszczvdE2jBjy594bdwUSrMgCAdXn4KNo",
+        "at": "2026-10-22T03:13:01.000Z",
+        "slot": 459878250,
+        "signatureIdentityMatch": true,
+        "ownerSigner": true,
+        "success": true,
+        "metaErr": null,
+        "tokenRawBefore": "0",
+        "tokenRawAfter": "7775126904530",
+        "tokenDecimals": 6,
+        "gmgnCostUsd": 25.77666651435
+      },
+      "sell": {
+        "hash": "66fm2stCWTSZvaaqLeLNTjCymNEWv64FK5ASnqWPMhwHssqFwEzvyijgVhVnEfyKbH9X1MXCu3Ke5AotTa1e1Vsx",
+        "at": "2026-10-22T03:13:03.000Z",
+        "slot": 459878256,
+        "signatureIdentityMatch": true,
+        "ownerSigner": true,
+        "success": true,
+        "metaErr": null,
+        "tokenRawBefore": "7775126904530",
+        "tokenRawAfter": "0",
+        "tokenDecimals": 6,
+        "gmgnCostUsd": 25.77422196448
+      },
+      "ownerNativeBalanceDeltaAcrossPairLamports": "-12588843",
+      "fullPnlUsd": null,
+      "classification": "verified_successful_same_CA_fast_round_trip; full_net_PnL_and_quote_leg_unverified"
+    }
+  ],
+  "crossWalletAssessment": {
+    "DAndEActivityMatch": false,
+    "sameSecondOneToOneMatchingApplied": true,
+    "directTransferOrCommonControlEvidenceFound": false,
+    "interpretation": "E has no corresponding same-CA transaction in the refreshed page; single-wallet sequence is not a cross-wallet synchronization/control finding."
+  },
+  "fourFlap": {
+    "four": {
+      "proofAt": "2026-10-22T23:10:29.372Z",
+      "sourceTips": [129215548, 129215547],
+      "safeHead": 129215544,
+      "cursorAtProofNextBlock": 129215533,
+      "lagBlocksAtProof": 12,
+      "laterCursorNextBlock": 129215764,
+      "laterObservedHead": 129215695,
+      "laterSafeHead": 129215692,
+      "liveHeadVerified": false,
+      "currentLagBlocks": null
+    },
+    "flap": {
+      "proofAt": "2026-10-22T23:11:02.352Z",
+      "sourceTips": [129215624, 129215623],
+      "safeHead": 129215620,
+      "cursorAtProofNextBlock": 129215592,
+      "lagBlocksAtProof": 29,
+      "laterCursorNextBlock": 129215703,
+      "status": "degraded",
+      "errorCode": "FLAP_QUOTE_FINALIZED_LANE_UNAVAILABLE",
+      "capacityWaitResolved": false,
+      "currentLagBlocks": null
+    },
+    "quoteOpportunityScheduler": null
+  },
+  "paperForward": {
+    "mode": "paper",
+    "execution": false,
+    "signing": false,
+    "broadcast": false,
+    "tradeCount": 311,
+    "lastTradeId": "1792647072099:310",
+    "newTrades": 0,
+    "newClosedRounds": 0,
+    "openPositionCount": 3,
+    "freshOpenPositionValuation": null,
+    "multiarmBaselineTradeCount": 305,
+    "multiarmCursorTradeCount": 311,
+    "multiarmCursorLastTradeId": "1792647072099:310",
+    "multiarmCursorMatchesLedger": true,
+    "multiarmNewCompleteRoundIds": [],
+    "reportedCompleteRoundIdsPreserved": [
+      "1792274973724:305",
+      "1792567092580:307",
+      "1792645698811:309"
+    ],
+    "cumulativeQuoteGaps": 105,
+    "observerInterruptionCount": 1,
+    "quoteOpportunityScheduler": null
+  },
+  "agenticWallet": {
+    "officialAiProOrAgenticWalletExclusiveRuleFound": false,
+    "qualifyingSuccessfulBuyAndOfficialWalletIdentityPair": false,
+    "fullChainScan": false,
+    "triggerFired": false,
+    "verifiedRuleSummary": "Four.Meme official roadmap mentions future Agentic Mode/AI identity but does not specify an AI Pro/Agentic Wallet-only gate. Flap bStocks requires Binance Wallet MPC plus at least 2 Alpha Points as campaign eligibility, not proof of an Agentic Wallet first-buy gate."
+  },
+  "safety": {
+    "paperOnly": true,
+    "walletConnected": false,
+    "signing": false,
+    "broadcast": false,
+    "liveTrades": false,
+    "strategyOrParametersChanged": false,
+    "ledgerChanged": false,
+    "processRestarted": false,
+    "oldPausedBacklogRestored": false,
+    "rateLimitOrDualSourceBypassed": false
+  },
+  "nextGroup": "bsc",
+  "nextQuestion": "轮换BSC；刷新最早到期参考钱包头页，并复核Four/Flap当前同窗双源头与游标、共享容量等待和quoteOpportunityScheduler字段；保留未知lag，不回填或绕过。",
+  "report": "docs/operator-reference-followups/2026-10-23-0708-sol-de-head-review.md",
+  "sourceEvidence": {
+    "officialBinanceAgenticWalletFaq": "https://www.binance.com/en/support/faq/detail/3ff00e2d488a41c4aaa4aabb6fc36763",
+    "fourMemeRoadmap": "https://www.binance.com/en/square/post/297600375569202",
+    "flapBstocksEvent": "https://flap.sh/event/bstocks?lang=en"
+  },
+  "durationSecondsApprox": 810,
+  "completedAt": "2026-10-22T23:21:49.000Z",
+  "coverageStatus": "D_new_fast_roundtrip_verified_but_activity_20h_old; E_no_match; full_page_dedupe_unknown; Four_proof_lag12_then_cursor_passed_proof_current_lag_unknown; Flap_proof_lag29_then_finalized_lane_unavailable_capacity_wait_unresolved; paper_ledger_unchanged",
+  "nextReviewAt": "2026-10-23T03:15:17.000Z"
+}

@@ -1,5 +1,5 @@
 import { createPaperStrategyAccount, validatePaperStrategyAccount, advancePaperStrategyAccount } from './paper-strategy-engine.js';
-import { validLearningPolicy } from './wallet-learning.js';
+import { validNewLearningPolicy } from './wallet-learning.js';
 
 export function validateLearningShadow(pair) {
   if (!pair || pair.schema !== 'yesp_learning_pair_v1' || !Number.isFinite(Date.parse(pair.startedAt))
@@ -8,8 +8,8 @@ export function validateLearningShadow(pair) {
   validatePaperStrategyAccount(pair.student); validatePaperStrategyAccount(pair.control); return true;
 }
 export function advanceLearningShadow(pair, { report, chain, evaluations, marksFor, enabled, nowMs }) {
-  const personaPolicies = (report?.personaPolicies || []).filter(p => validLearningPolicy(p, chain, nowMs));
-  const policy = (report?.lastError ? [] : personaPolicies.length ? personaPolicies : report?.policies || []).filter(p => validLearningPolicy(p, chain, nowMs))
+  const personaPolicies = (report?.personaPolicies || []).filter(p => validNewLearningPolicy(p, chain, nowMs));
+  const policy = (report?.lastError ? [] : personaPolicies.length ? personaPolicies : report?.policies || []).filter(p => validNewLearningPolicy(p, chain, nowMs))
     .sort((a, b) => b.teacherCount - a.teacherCount || (b.group === 'gmgn_fomo') - (a.group === 'gmgn_fomo') || String(a.personaId || '').localeCompare(String(b.personaId || '')))[0];
   if (!pair && (!policy || !enabled)) return null;
   if (pair) validateLearningShadow(pair);

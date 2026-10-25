@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import path from 'node:path';
 import { applyPrivateBscRpcConfig } from '../src/bsc-private-rpc.js';
 import { createRpcPool } from '../src/bsc-launchpad-monitor.js';
 import { orderedFlapQuoteMetadataRpcUrls, resolveFlapQuoteAssetMetadataAcrossRpcUrls } from '../src/platform-capability-monitor.js';
@@ -46,7 +47,7 @@ function harness({ privateConfig = paid, enabled = true, paidFails = false, real
       return '0x38';
     }, async getCode() { return '0x1234'; } };
   };
-  const context = vm.createContext({ config, applyPrivateBscRpcConfig,
+  const context = vm.createContext({ config, path, applyPrivateBscRpcConfig,
     loadPrivateBscRpcConfig: ({ dataDir }) => { assert.equal(dataDir, config.dataDir); loads++; return privateConfig; },
     createRpcPool: pool, orderedFlapQuoteMetadataRpcUrls, resolveFlapQuoteAssetMetadataAcrossRpcUrls,
     createAbortableJsonRpcProvider: (url, chainId) => {
@@ -115,6 +116,8 @@ test('Flap and Four primary pools receive paid preference without changing fixed
   assert.equal(h.monitors.length, 2);
   for (const monitor of h.monitors) {
     assert.equal(monitor.input, h.config);
+    assert.equal(monitor.deps.headObservationFile,
+      path.join(h.config.dataDir, `${monitor.name}-chain-head-observation.json`));
     assert.equal(monitor.deps.provider.record.urls[0], paid.httpUrl);
     assert.equal(monitor.deps.provider.record.archives[0], paid.httpUrl);
     assert.deepEqual([...monitor.deps.provider.record.options.preferredHosts], [paid.host]);
