@@ -1,0 +1,27 @@
+{
+  "name": "agentic-wallet-local-dashboard",
+  "version": "1.11.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server/local-server.mjs",
+    "start:windows": "Start-YESP.exe",
+    "build:local": "node scripts/build-local-launcher.mjs",
+    "flap:check": "node scripts/flap-operator.mjs --action buy",
+    "extension:install": "node scripts/install-flap-extension.mjs",
+    "build:windows": "node scripts/build-windows-support.mjs",
+    "pretest": "node scripts/build-windows-support.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@binance/agentic-wallet": "1.11.0",
+    "ethers": "6.16.0",
+    "qrcode": "1.5.4"
+  },
+  "overrides": {
+    "wsl-utils": "0.3.1"
+  }
+}

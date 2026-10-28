@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>YESP Agentic Wallet · 扫码与转出</title><link rel="stylesheet" href="wallet.css"></head>
+<body><main>
+  <header><div><span class="brand">YESP</span><span class="muted">WINDOWS · 本机钱包</span></div><a href="https://flap.sh/apps/agent-bonding-curve" target="_blank" rel="noopener noreferrer">打开 Flap ↗</a></header>
+  <section class="intro"><span class="tag">BINANCE AGENTIC WALLET · BSC 56</span><h1>钱包连接与代币转出</h1><p>扫码连接钱包；填写收款地址和数量，核对后转出。</p></section>
+  <div class="row"><a href="trade.html" class="secondary">打开统一交易面板 ↗</a><button id="open-four" class="secondary">原 Four.meme 面板 ↗</button></div>
+  <p class="hint">OpenFour 专属模式需要 Agent ID。<a href="https://web3.binance.com/agent-id" target="_blank" rel="noopener noreferrer">打开币安官方 Agent ID 入口 ↗</a>；扫码连接后，交易资格仍须通过合约检查。</p>
+  <section class="card wallet"><div class="row"><strong id="connection">正在连接本机钱包…</strong><button id="refresh" class="text-button">刷新</button></div><code id="wallet-address">等待连接</code>
+    <div id="login"><button id="signin" class="primary">获取登录二维码</button><button id="verify" class="secondary" disabled>我已扫码，验证连接</button></div>
+    <div id="signin-details" hidden>
+      <p class="hint">用币安 App 扫码，核对配对码后确认登录，再点击“我已扫码，验证连接”。</p>
+      <img id="signin-qr" width="280" height="280" alt="币安钱包登录二维码" hidden>
+      <p id="pairing" hidden>币安配对码：<code id="pairing-code"></code></p>
+      <p><a id="signin-link" target="_blank" rel="noopener noreferrer" hidden>打开币安官方扫码页面 ↗</a></p>
+      <p id="signin-expiry" class="hint" role="status"></p>
+    </div>
+  </section>
+  <section class="card"><form id="transfer-form" autocomplete="off">
+    <label for="token">转出资产</label><select id="token"><option value="0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE">BNB · 原生币</option><option value="0x4902C5ebc598265Ed2212b559B042De8a5Eeec3f">BNCB</option><option value="0x55d398326f99059fF775485246999027B3197955">USDT · Binance-Peg</option><option value="custom">自定义代币合约</option></select>
+    <div id="custom-token" hidden><label for="contract">BSC 代币合约地址</label><input id="contract" spellcheck="false" placeholder="0x…" maxlength="42"></div>
+    <label for="recipient">收款地址</label><input id="recipient" spellcheck="false" placeholder="完整的 0x 地址" maxlength="42" required>
+    <p class="hint">收款地址须先加入币安 App → 钱包 → 设置 → 地址簿。</p>
+    <label for="amount">转出数量</label><input id="amount" inputmode="decimal" placeholder="例如 1.5" maxlength="115" required>
+    <p class="hint">BNB 需留足网络费。代币名称以合约返回为准，请核对合约地址。OpenFour Agent ID 专属币在内盘期间限制普通转账。</p>
+    <button id="prepare" class="primary" type="submit" disabled>核对转出信息</button>
+  </form></section>
+  <section id="review" class="card review" hidden aria-label="转出确认">
+    <h2>确认本次转出</h2><dl id="review-details"></dl>
+    <p class="hint">网络费为估算，最终以钱包与链上扣费为准。带转账税的代币可能少到账。</p>
+    <label class="check"><input id="acknowledge" type="checkbox"><span>我已核对 BSC 网络、完整收款地址、代币合约与数量。</span></label>
+    <p id="expiry" class="hint"></p><div class="row"><button id="cancel" class="secondary">返回修改</button><button id="send" class="primary" disabled>确认转出</button></div>
+  </section>
+  <section class="card status" role="status" aria-live="polite"><strong id="status-title">等待连接</strong><p id="status-message">通过本机 Binance Agentic Wallet 执行。</p><a id="transaction-link" hidden target="_blank" rel="noopener noreferrer">查看链上交易 ↗</a>
+    <div id="recover" hidden><p class="hint">如果币安 App 已显示交易，请填写该笔交易哈希以核验。核验不会再次转账。</p><label for="recover-hash">交易哈希</label><input id="recover-hash" placeholder="0x…" maxlength="66"><button id="reconcile" class="secondary">核验已有交易</button></div>
+  </section>
+  <footer>YESP 0.4.0 · 钱包登录与统一交易面板共享。代币转出在本页单独确认。</footer>
+</main><script type="module" src="wallet.js"></script></body></html>

@@ -1,0 +1,12 @@
+node_modules/
+.generated/
+.private/
+.env
+.env.*
+scripts/flap-native-host.command
+output/
+*.log
+.DS_Store
+.local-runtime/
+work/
+Start-YESP.exe

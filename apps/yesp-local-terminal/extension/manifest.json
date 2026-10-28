@@ -1,0 +1,62 @@
+{
+  "manifest_version": 3,
+  "name": "YESP · Flap / Four.meme 交易台",
+  "version": "0.4.0",
+  "description": "统一 CA 交易面板，支持 Four.meme 与 Flap 内盘查询、按数量买卖及共享币安钱包登录。",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmgaOiLLXbGzgwVliF+tS5cj3IOnEfIa5WYFOyxbVag47wDIpTCeaS0xmUmpyLhQM3bZt6pBAuVsdTy/sN0uS+eEbvtr8GcKNo7j2dI5nHsbp2+nUApmA4p1/FDyxe+Hc2bU1gpQaXlfUMqQ/WUFAkuQOfCMOKn3sN7BfIeysr45+ipPEYAE94erBM3ZnD5TVYmjjTr77mknYYdopfd6qpSi4Z4LsNxsc/fw9V+xdgYSMOT75ZFB5t93HkeLAfdBf9/TxOlRuCQ2vNkHIK4bO/M4edOApxjjQCb77Atguykk4JYJFUdS1DnKWSLdNejjZnFG9J16A/awPTw9djxUG1wIDAQAB",
+  "permissions": [
+    "nativeMessaging",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://flap.sh/apps/agent-bonding-curve*"
+      ],
+      "js": [
+        "flap-page.js",
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://four.meme/*"
+      ],
+      "js": [
+        "four-ui.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "panel.css"
+      ],
+      "matches": [
+        "https://flap.sh/*"
+      ]
+    },
+    {
+      "resources": [
+        "four.css"
+      ],
+      "matches": [
+        "https://four.meme/*"
+      ]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'"
+  },
+  "action": {
+    "default_title": "YESP · Four.meme / Flap 统一交易面板"
+  }
+}

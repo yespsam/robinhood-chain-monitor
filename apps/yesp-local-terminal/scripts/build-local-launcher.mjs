@@ -1,0 +1,12 @@
+import {readFile} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+import {compileWindowsSource,buildWindowsSupport} from './build-windows-support.mjs';
+if(process.platform!=='win32')throw Error('Windows required');
+const native=await readFile(new URL('./windows/NativeLauncher.cs',import.meta.url),'utf8');
+const helpers=native.slice(native.indexOf('    internal static string ManualProxy'),native.indexOf('    static int Main'));
+if(!helpers.includes('static void ApplyProxy')||!helpers.includes('static string Quote'))throw Error('Launcher helpers unavailable');
+const literal=value=>'@"'+value.replaceAll('"','""')+'"';
+const source=(await readFile(new URL('./windows/LocalLauncher.cs',import.meta.url),'utf8')).replace('__NODE_PATH__',()=>literal(process.execPath)).replace('__COMMON_HELPERS__',()=>helpers);
+await buildWindowsSupport();
+await compileWindowsSource(source,fileURLToPath(new URL('../Start-YESP.exe',import.meta.url)));
+process.stdout.write('Start-YESP.exe built.\n');

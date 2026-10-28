@@ -1,0 +1,21 @@
+{
+  "id": "heyi",
+  "name": "Heyi.ai · 1%额度",
+  "chainId": "56",
+  "wallet": "REPLACE_WITH_VERIFIED_CONNECTED_WALLET",
+  "factory": "0xC55820f24015bE7c4f18949D9e1363A3609B300e",
+  "portal": "0x49387D2E6cbF8FefE856e3FBc3E98a01aC3af062",
+  "market": "0xeddc6C5736CD9f280bE750c408D36c8d6E1a473d",
+  "probe": "0x5d03C5DB5bD27612BBbB1237F7Fc33bD588261c2",
+  "quote": "0x4902C5ebc598265Ed2212b559B042De8a5Eeec3f",
+  "quoteSymbol": "BNCB",
+  "buySlippageBps": 500,
+  "sellSlippageBps": 9900,
+  "allocationSharesRaw": "10000000000000000000000000",
+  "quoteHintRaw": "0",
+  "quoteSearchMaxRaw": "100000000000000000000",
+  "priorAuditUnavailableAcknowledged": false,
+  "beacons": {},
+  "codeHashes": {},
+  "verifiedBlock": "REPLACE_AFTER_PUBLIC_CHAIN_REVIEW"
+}

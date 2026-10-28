@@ -1,0 +1,127 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID,createHash} from 'node:crypto';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {createModeWatch} from '../server/mode-watch.mjs';
+import {describeModeUpdate} from '../server/mode-report.mjs';
+import {ModeStore} from '../server/mode-store.mjs';
+import {createModeChain,firstCreation,modeAbi} from '../server/mode-chain.mjs';
+import {createSourceReader,MODE_SOURCES,parseFlapArtifact,parseGithubAtom,boundedText} from '../server/mode-sources.mjs';
+import {sameAgentPreset,agentPresetKeys} from '../server/reviewed-modes.mjs';
+import {createSniper,validateSnipe} from '../server/sniper.mjs';
+import {launchAbi,SCAN_SOURCES} from '../server/chain-scanner.mjs';
+import {marketViewAbi} from '../server/flap-market.mjs';
+import {coreAbi} from '../server/openfour-abi.mjs';
+const ca='0x'+'2'.repeat(40),wallet='0x'+'1'.repeat(40),zero='0x'+'0'.repeat(40),market='0x'+'3'.repeat(40),hash='0x'+'a'.repeat(64),tx='0x'+'b'.repeat(64);
+const memory=initial=>{let value=structuredClone(initial);return {read:async()=>structuredClone(value),save:async x=>{value=structuredClone(x);}};};
+const err=code=>Object.assign(Error(code),{code});
+test('Gang buyback updates are summarized as evidence and never manufacture first-token authority',()=>{
+ const s=describeModeUpdate({platform:'gang',title:'Merge pull request #48 from gangfun/feat/buyback-splitter'});assert.equal(s.kind,'buyback');assert.match(s.note,/链上核验与首币结果见下方/);assert.equal(s.adapter,undefined);assert.equal(describeModeUpdate({platform:'four',title:'buyback'}),null);
+ assert.equal(describeModeUpdate({platform:'gang',title:'dev tax buy-back'}).kind,'buyback');assert.equal(describeModeUpdate({platform:'gang',title:'feat/gang-bond',files:[{name:'docs/v3.md'}]}).kind,'bond');
+});
+function watchFixture(){let now=100000,block=100,rows={four:[],flap:[]},first=null,sourceRevision='a'.repeat(40),sourceError=false,reorg=false;
+ const store=memory(null),chain={four:async()=>({block:{number:block,hash,time:now,tag:'0x'+block.toString(16)},rows:structuredClone(rows.four)}),flap:async()=>({block:{number:block,hash,time:now},rows:structuredClone(rows.flap)}),canonical:async()=>{if(reorg)throw err('MODE_REORG');},earliest:async()=>({first,complete:true,through:block,throughHash:hash}),verifyFirst:async()=>{if(reorg)throw err('MODE_REORG');}};
+ const sources={read:async()=>{if(sourceError)throw err('SOURCE_RATE_LIMITED');return {revision:sourceRevision,title:'Documentation update'};}};
+ const watch=createModeWatch({store,chain,sources,clock:()=>now});
+ const mode=(platform='four',id='new')=>({id,platform,name:'New mode '+id,presetId:'123',emitter:market,factory:market,portal:ca,reader:wallet,adapter:platform==='four'?'openfour-agent-v1':'flap-agent-v1',fingerprint:'one',ready:true,tokenCount:0});
+ return {watch,store,chain,rows,mode,setFirst:x=>first=x,advance(n=10000){now+=n;block+=10;},sourceUpdate(char='b'){sourceRevision=char.repeat(40);},sourceFail(){sourceError=true;},reorg(){reorg=true;}};
+}
+test('baseline includes existing modes; only subsequently discovered IDs can be selected',async()=>{const f=watchFixture();f.rows.four=[f.mode('four','old')];const baseline=await f.watch.baseline();assert.equal(await f.watch.choose(baseline),null);f.rows.flap=[f.mode('flap')];f.advance();const chosen=await f.watch.choose(baseline);assert.equal(chosen.id,'new');assert.equal(f.watch.state().modes.find(m=>m.id==='old').newMode,false);});
+test('saved baseline survives restart and does not reclassify an old mode as new',async()=>{const f=watchFixture();f.rows.four=[f.mode()];await f.watch.baseline();const w=createModeWatch({store:f.store,chain:f.chain});await w.init();assert.equal(w.state().modes[0].newMode,false);});
+test('GitHub-only update records review evidence without manufacturing a mode',async()=>{const f=watchFixture();await f.watch.refreshSources();f.sourceUpdate();f.advance(300001);await f.watch.refreshSources();assert.equal(f.watch.state().changes.length,MODE_SOURCES.length);assert.equal(f.watch.state().modes.length,0);assert.equal(f.watch.state().changes[0].status,'REVIEW_REQUIRED');f.sourceFail();f.advance(300001);await f.watch.refreshSources();assert.equal(f.watch.state().sources[0].revision,'b'.repeat(40));assert.equal(f.watch.state().sources[0].error,'SOURCE_RATE_LIMITED');});
+test('manual source refresh polls after cooldown; superseded Gang reports and outages remain explicit',async()=>{
+ const f=watchFixture();await f.watch.refreshSources();f.sourceUpdate();f.advance(30001);await f.watch.refreshSources();assert.equal(f.watch.state().changes.filter(c=>c.sourceId==='gang-contracts').length,0);
+ await f.watch.refreshSources(true);const report=f.watch.state().changes.find(c=>c.sourceId==='gang-contracts');assert.equal(report.reviewState,'ADAPTER_REVIEW_REQUIRED');
+ f.sourceUpdate('c');await f.watch.refreshSources(true);assert.equal(f.watch.state().changes.length,MODE_SOURCES.length);f.advance(30001);await f.watch.refreshSources(true);
+ assert.equal(f.watch.state().changes.find(c=>c.id===report.id).reviewState,'SUPERSEDED');f.sourceFail();f.advance(30001);await f.watch.refreshSources(true);assert.equal(f.watch.state().changes.find(c=>c.sourceId==='gang-contracts').reviewState,'SOURCE_UNAVAILABLE');
+});
+test('definition change never resets an existing mode into a new first token opportunity',async()=>{const f=watchFixture();await f.watch.baseline();f.rows.four=[f.mode()];f.advance();await f.watch.refresh();f.rows.four[0].fingerprint='changed';f.advance();await f.watch.refresh();await assert.rejects(f.watch.resolve('new'),{code:'MODE_DEFINITION_CHANGED'});assert.equal(f.watch.state().modes[0].ready,false);});
+test('newly observed Flap factory with any token already present is missed, not latest-as-first',async()=>{const f=watchFixture();await f.watch.baseline();f.rows.flap=[{...f.mode('flap'),tokenCount:5}];f.advance();await f.watch.refresh();await assert.rejects(f.watch.resolve('new'),{code:'MODE_FIRST_ALREADY_EXISTS'});});
+test('Flap observes empty factory then locks index zero; later tokens cannot replace it',async()=>{const f=watchFixture();await f.watch.baseline();f.rows.flap=[f.mode('flap')];f.advance();await f.watch.refresh();f.setFirst({tokenAddress:ca,marketAddress:market,proof:'factory-index-zero'});const a=await f.watch.resolve('new');f.setFirst({tokenAddress:wallet});assert.equal((await f.watch.resolve('new')).first.tokenAddress,a.first.tokenAddress);});
+test('canonical baseline failure blocks new job and mode selection',async()=>{const f=watchFixture();await f.watch.baseline();f.reorg();await assert.rejects(f.watch.baseline(),{code:'MODE_BASELINE_UNAVAILABLE'});});
+test('private mode state persists and rejects oversize state',async t=>{const dir=await mkdtemp(join(tmpdir(),'yesp-mode-'));t.after(()=>rm(dir,{recursive:true,force:true}));const s=new ModeStore(dir);assert.equal(await s.read(),null);const state={version:1,sequence:1,platforms:{},modes:[],sources:[],changes:[]};await s.save(state);assert.deepEqual(await s.read(),state);assert.throws(()=>s.save({...state,huge:'x'.repeat(3000001)}));});
+test('adapter matching requires every known module and validator to match',()=>{const reference=Object.fromEntries(agentPresetKeys.map(k=>[k,k==='version'?'1.0.0':'123']));assert.equal(sameAgentPreset(reference,reference),true);for(const key of agentPresetKeys)assert.equal(sameAgentPreset({...reference,[key]:'changed'},reference),false);});
+function log(index,token=ca,block=101){const encoded=launchAbi.encodeEventLog(launchAbi.getEvent(SCAN_SOURCES[0].event),launchAbi.getEvent(SCAN_SOURCES[0].event).inputs.map(c=>c.name==='presetId'?123n:c.name==='token'?token:c.type==='address'?wallet:c.type==='string'?'':c.type==='bytes'?'0x':0n));return {...encoded,address:SCAN_SOURCES[0].address,blockHash:hash,transactionHash:tx,blockNumber:'0x'+block.toString(16),logIndex:'0x'+index.toString(16)};}
+test('Four creation event selection follows block and log index, never response order',()=>{const first=firstCreation([log(9,wallet),log(2,ca),log(0,wallet,102)],{platform:'four',emitter:SCAN_SOURCES[0].address,presetId:'123'});assert.equal(first.tokenAddress,ca);assert.equal(first.logIndex,2);});
+test('Four rejects removed, spoofed or different preset events',()=>{for(const altered of [{...log(0),removed:true},{...log(0),address:wallet},{...log(0),blockHash:'bad'}])assert.throws(()=>firstCreation([altered],{platform:'four',emitter:SCAN_SOURCES[0].address,presetId:'123'}));assert.throws(()=>firstCreation([log(0)],{platform:'four',emitter:SCAN_SOURCES[0].address,presetId:'124'}));});
+test('Four failed log range is never skipped and successful coverage remains contiguous',async()=>{let froms=[],fail=true;const rpc=async(method,p)=>{if(method==='eth_chainId')return '0x38';if(method==='eth_blockNumber')return '0x2710';if(method==='eth_getBlockByNumber')return {number:p[0],timestamp:'0x64',hash};throw Error(method);};const chain=createModeChain({rpc,clock:()=>100000,logsRpc:async(method,p)=>{if(method==='eth_chainId')return '0x38';froms.push(p[0].fromBlock);if(fail)throw err('RPC_UNAVAILABLE');return [];}});const mode={platform:'four',emitter:SCAN_SOURCES[0].address,presetId:'123',absence:{number:100,hash}};await assert.rejects(chain.earliest(mode));fail=false;const a=await chain.earliest(mode);assert.deepEqual(froms,['0x65','0x65']);assert.equal(a.through,6100);const b=await chain.earliest({...mode,coveredThrough:a.through,coveredHash:a.throughHash});assert.equal(froms[2],'0x17d1');assert.equal(b.through,9998);});
+test('Flap first proof reads markets(0), not the newest market',async()=>{let index;const rpc=async(method,p)=>{if(method==='eth_chainId')return '0x38';if(method==='eth_blockNumber')return '0x64';if(method==='eth_getBlockByNumber')return {number:p[0],timestamp:'0x64',hash};const parsed=(()=>{try{return modeAbi.parseTransaction(p[0]);}catch{return null;}})();if(parsed?.name==='marketCount')return modeAbi.encodeFunctionResult('marketCount',[5n]);if(parsed?.name==='markets'){index=parsed.args[0];return modeAbi.encodeFunctionResult('markets',[market]);}if(parsed?.name==='marketOfToken')return modeAbi.encodeFunctionResult('marketOfToken',[market]);const card=marketViewAbi.getFunction('marketCards').outputs[0].arrayChildren.components.map(c=>c.name==='market'?market:c.name==='predictedToken'?ca:c.type==='address'?zero:c.type==='string'?'':c.type==='bool'?false:0n);return marketViewAbi.encodeFunctionResult('marketCards',[[card]]);};const chain=createModeChain({rpc,clock:()=>100000});const result=await chain.earliest({platform:'flap',factory:wallet,reader:ca});assert.equal(index,0n);assert.equal(result.first.tokenAddress,ca);assert.equal(result.first.sequence,1);});
+function artifact(body,host='lulxnvty7pwl9d1n.public.blob.vercel-storage.com'){const url='https://'+host+'/apps/agent-bonding-curve/version/component.mjs',hash=createHash('sha256').update(body).digest('hex');return 'self.__next_f.push([1,'+JSON.stringify(JSON.stringify({componentUrl:url,componentSha256:hash}))+'])';}
+test('source reader checks artifact hash and extracts literal addresses without executing code',async()=>{const body=`var FACTORY_ADDRESS = "${market}"; var PORTAL_ADDRESS = "${ca}"; var READER_ADDRESS = "${wallet}"; throw new Error('must not run');`;const reader=createSourceReader({fetcher:async url=>new Response(url.includes('component.mjs')?body:artifact(body))});const result=await reader.read(MODE_SOURCES.find(s=>s.kind==='artifact'));assert.equal(result.deployment.factory,market);});
+test('source reader rejects changed bytes, untrusted host, oversized response and rate limit',async()=>{assert.throws(()=>parseFlapArtifact(artifact('x','evil.test')),{code:'SOURCE_ORIGIN_INVALID'});const r=createSourceReader({fetcher:async url=>new Response(url.includes('component.mjs')?'wrong':artifact('expected'))});await assert.rejects(r.read(MODE_SOURCES.find(s=>s.kind==='artifact')),{code:'SOURCE_HASH_MISMATCH'});await assert.rejects(boundedText('x',{fetcher:async()=>new Response('x'.repeat(2000001))}),{code:'SOURCE_TOO_LARGE'});await assert.rejects(boundedText('x',{fetcher:async()=>new Response('',{status:429})}),{code:'SOURCE_RATE_LIMITED'});});
+const config=()=>({strategy:'first-mode',reportId:'four-open:'+ 'b'.repeat(40),modeId:'new',firstMaxAgeSeconds:90,quoteTokenAddress:zero,amount:'100',maxSpend:'0.01',slippageBps:'100',validForSeconds:86400,gasEstimateLimit:'0.002'});
+function snipeFixture(){let now=100000,selected=null,first=null,verifyError=null,prepareOverride=null,release=null;const calls=[],store=memory([]),baseline={sequence:1,at:now,modeId:'next',blocks:{four:{number:100,time:now},flap:{number:100,time:now}}};let mode={id:'new',name:'New',platform:'four',presetId:'123',emitter:market,adapter:'openfour-agent-v1',ready:true,fingerprint:'one'};
+ const modes={checkReport:async()=>{},authorize:async()=>({...structuredClone(baseline),reportId:config().reportId,modeId:'new',fingerprint:'one',modeName:'New',report:{id:config().reportId,title:'Update',revision:'b'.repeat(40)}}),baseline:async()=>structuredClone(baseline),choose:async()=>selected,resolve:async()=>({...mode,first}),verify:async()=>{if(verifyError)throw err(verifyError);return {...mode,first};}};
+ const preview={previewId:randomUUID(),wallet,tokenAddress:ca,action:'buy',kind:'buy',buyMode:'tokenAmount',protocol:'openfour-agent',presetId:'123',manager:market,quote:{address:zero,decimals:18},spendRaw:'1000000000000000',spend:'0.001',expected:'100',estimatedGas:'0.0001',official:{}};
+ const trader={restrictPreviewDeadline(){},async handle(method){calls.push(method);if(method==='panelStatus')return {wallet:{connected:true,address:wallet},operation:null};if(method==='panelPrepare')return prepareOverride?prepareOverride():{tradePreview:preview};if(method==='panelExecute'){assert.equal((await store.read())[0].state,'SUBMITTING');return {operation:{status:'UNKNOWN'}};}}};const sniper=createSniper({trader,modes,store,clock:()=>now});
+ return {sniper,modes,preview,calls,store,mode,select(){selected=mode;},first(){first={tokenAddress:ca,blockNumber:101,createdAt:now,foundAt:now};},age(){now+=91000;},fail(){verifyError='MODE_REORG';},override(fn){prepareOverride=fn;},async arm(){const d=await sniper.draft(config());return (await sniper.arm({draftId:d.snipeDraft.draftId})).snipe;}};
+}
+test('first strategy requires no CA and rejects platform quota, unlimited age or infinite budget',()=>{assert.equal(validateSnipe(config()).modeId,'new');for(const p of [{...config(),tokenAddress:ca},{...config(),platform:'four'},{...config(),firstMaxAgeSeconds:301},{...config(),validForSeconds:604801},{...config(),maxSpend:'Infinity'}])assert.throws(()=>validateSnipe(p));});
+test('both platforms share one job, lock once, persist first before preview, submit once',async()=>{const f=snipeFixture();await f.arm();await f.sniper.tick();assert.equal(f.sniper.state().jobs[0].phase,'WAITING_MODE');assert.equal(f.calls.includes('panelPrepare'),false);f.select();await f.sniper.tick();assert.equal(f.sniper.state().jobs[0].phase,'WAITING_FIRST');f.first();f.override(async()=>{assert.equal((await f.store.read())[0].tokenAddress,ca);return {tradePreview:f.preview};});await f.sniper.tick();await f.sniper.tick();assert.equal(f.calls.filter(c=>c==='panelExecute').length,1);assert.equal(f.sniper.state().jobs[0].operationStatus,'UNKNOWN');});
+test('unsupported mode is pinned, never skipped to another platform',async()=>{const f=snipeFixture();await f.arm();f.mode.adapter=null;f.select();await f.sniper.tick();f.modes.choose=async()=>{throw Error('must not choose twice');};await f.sniper.tick();assert.equal(f.sniper.state().jobs[0].phase,'WAITING_ADAPTER');assert.equal(f.calls.includes('panelPrepare'),false);});
+test('missed first never buys second token',async()=>{const f=snipeFixture();await f.arm();f.select();f.first();f.age();await f.sniper.tick();assert.equal(f.sniper.state().jobs[0].error,'MODE_FIRST_MISSED');assert.equal(f.calls.includes('panelExecute'),false);});
+test('first token from a different preset cannot be submitted',async()=>{const f=snipeFixture();await f.arm();f.select();f.first();f.preview.presetId='124';await f.sniper.tick();assert.equal(f.sniper.state().jobs[0].error,'MODE_PREVIEW_MISMATCH');assert.equal(f.calls.includes('panelExecute'),false);});
+test('second first-proof verification catches reorg after preview',async()=>{const f=snipeFixture();await f.arm();f.select();f.first();f.override(()=>{f.fail();return {tradePreview:f.preview};});await f.sniper.tick();assert.equal(f.sniper.state().jobs[0].error,'MODE_REORG');assert.equal(f.calls.includes('panelExecute'),false);});
+test('cancellation during mode selection prevents locking or spending',async()=>{const f=snipeFixture();const j=await f.arm();let release;f.modes.choose=()=>new Promise(r=>{release=r;});const pending=f.sniper.tick();while(!release)await new Promise(r=>setImmediate(r));await f.sniper.cancel({id:j.id});release(f.mode);await pending;assert.equal(f.sniper.state().jobs[0].state,'CANCELLED');assert.equal(f.sniper.state().jobs[0].lockedModeId,undefined);assert.equal(f.calls.includes('panelPrepare'),false);});
+test('cannot arm another job while first-mode job is waiting',async()=>{const f=snipeFixture();await f.arm();await assert.rejects(f.arm(),{code:'SNIPE_ALREADY_ACTIVE'});});
+
+async function reportedFixture(){const f=watchFixture();f.rows.four=[f.mode('four','old')];await f.watch.refreshSources();f.sourceUpdate();f.advance(300001);await f.watch.refreshSources();f.report=f.watch.state().changes.find(c=>c.sourceId==='four-open');return f;}
+test('report without a concrete mode cannot grant trading permission; fabricated and old targets fail',async()=>{
+ const f=await reportedFixture();assert.equal(f.report.reviewState,'WAITING_MODE');
+ await assert.rejects(f.watch.authorize('made-up','old'),{code:'MODE_REPORT_REQUIRED'});
+ await assert.rejects(f.watch.authorize(f.report.id,'next'),{code:'MODE_REPORT_TARGET_INVALID'});
+ await assert.rejects(f.watch.authorize(f.report.id,'old'),{code:'MODE_REPORT_TARGET_INVALID'});
+ for(const c of [{...config(),reportId:undefined},{...config(),modeId:'next'}])assert.throws(()=>validateSnipe(c));
+});
+test('reported mode may be registered before approval, but must be explicitly selected and belong to the reported platform',async()=>{
+ const f=await reportedFixture();f.rows.four.push(f.mode());f.rows.flap.push(f.mode('flap','other'));f.advance();await f.watch.refresh();
+ const approved=await f.watch.authorize(f.report.id,'new');assert.equal(approved.modeId,'new');assert.equal(approved.report.revision,'b'.repeat(40));
+ assert.equal((await f.watch.choose(approved)).id,'new');await assert.rejects(f.watch.authorize(f.report.id,'other'),{code:'MODE_REPORT_TARGET_INVALID'});
+ f.rows.four.push(f.mode('four','later'));f.advance();await f.watch.refresh();assert.equal((await f.watch.choose(approved)).id,'new');
+});
+test('registration between source checks remains reviewable when the update is reported later',async()=>{
+ const f=watchFixture();await f.watch.refreshSources();f.rows.four=[f.mode()];f.advance();await f.watch.refresh();f.sourceUpdate();f.advance(300001);await f.watch.refreshSources();
+ const report=f.watch.state().changes.find(c=>c.sourceId==='four-open');assert.deepEqual(report.candidateIds,['new']);assert.equal((await f.watch.authorize(report.id,'new')).modeId,'new');
+});
+test('reports persist across restart and unsupported, changed or already issued modes cannot be approved',async()=>{
+ const f=await reportedFixture();f.rows.four.push(f.mode());f.advance();await f.watch.refresh();
+ const w=createModeWatch({store:f.store,chain:f.chain});await w.init();assert.equal(w.state().changes.find(c=>c.id===f.report.id).candidateIds[0],'new');
+ f.rows.four[1].adapter=null;await f.watch.refresh();await assert.rejects(f.watch.authorize(f.report.id,'new'),{code:'MODE_ADAPTER_REQUIRED'});
+ f.rows.four[1].adapter='openfour-agent-v1';await f.watch.refresh();f.setFirst({tokenAddress:ca,blockNumber:111,createdAt:400000});await assert.rejects(f.watch.authorize(f.report.id,'new'),{code:'MODE_FIRST_ALREADY_EXISTS'});
+});
+test('source update and rollback both invalidate earlier approvals; source outage prevents review',async()=>{
+ const f=await reportedFixture();f.rows.four.push(f.mode());f.advance();await f.watch.refresh();const approved=await f.watch.authorize(f.report.id,'new');
+ f.sourceUpdate('c');f.advance(300001);await f.watch.refreshSources();await assert.rejects(f.watch.checkReport(approved.reportId,'new'),{code:'MODE_REPORT_SUPERSEDED'});
+ f.sourceUpdate('b');f.advance(300001);await f.watch.refreshSources();await assert.rejects(f.watch.checkReport(approved.reportId,'new'),{code:'MODE_REPORT_SUPERSEDED'});
+ const latest=f.watch.state().changes.find(c=>c.sourceId==='four-open');assert.notEqual(latest.id,approved.reportId);
+ f.sourceFail();f.advance(300001);await f.watch.refreshSources();await assert.rejects(f.watch.checkReport(latest.id,'new'),{code:'MODE_SOURCE_STALE'});
+});
+test('draft binds update and fingerprint; first appearance between review and approval rejects the arm',async()=>{
+ const f=snipeFixture();let reviewed=[];f.modes.authorize=async(reportId,modeId,fingerprint)=>{reviewed.push({reportId,modeId,fingerprint});if(reviewed.length===2)throw err('MODE_FIRST_ALREADY_EXISTS');return {report:{revision:'b'.repeat(40)},modeName:'New',fingerprint:'one'};};
+ const d=await f.sniper.draft(config());assert.equal(f.sniper.state().jobs.length,0);await assert.rejects(f.sniper.arm({draftId:d.snipeDraft.draftId}),{code:'MODE_FIRST_ALREADY_EXISTS'});
+ assert.equal(reviewed[1].fingerprint,'one');assert.equal(reviewed[1].reportId,config().reportId);assert.equal(f.sniper.state().jobs.length,0);assert.equal(f.calls.includes('panelPrepare'),false);
+});
+test('post-approval source revision change pauses before any quote or submission',async()=>{
+ const f=snipeFixture();await f.arm();f.select();f.first();f.modes.checkReport=async()=>{throw err('MODE_REPORT_SUPERSEDED');};await f.sniper.tick();assert.equal(f.sniper.state().jobs[0].error,'MODE_REPORT_SUPERSEDED');assert.equal(f.calls.includes('panelPrepare'),false);
+});
+test('revision change during wallet preview prevents submission',async()=>{
+ const f=snipeFixture();await f.arm();f.select();f.first();f.override(()=>{f.modes.checkReport=async()=>{throw err('MODE_REPORT_SUPERSEDED');};return {tradePreview:f.preview};});await f.sniper.tick();assert.equal(f.sniper.state().jobs[0].state,'PAUSED');assert.equal(f.calls.includes('panelExecute'),false);
+});
+test('GitHub report includes bounded commit details and official comparison without executing content',async()=>{
+ const source=MODE_SOURCES[0],revision='b'.repeat(40),prior='a'.repeat(40);const urls=[];
+ const reader=createSourceReader({fetcher:async url=>{urls.push(url);return Response.json(url.includes('/compare/')?{total_commits:2,files:[{filename:'docs/new-mode.md',status:'added'}]}:[{sha:revision,html_url:source.url+'/commit/'+revision,commit:{message:'New mode\n\n<svg onload=evil()>',committer:{date:'2026-10-26T00:00:00Z'}}}]);}});
+ const result=await reader.read(source,{revision:prior});assert.equal(result.compareUrl,source.url+'/compare/'+prior+'...'+revision);assert.equal(result.files[0].name,'docs/new-mode.md');assert.equal(result.commitCount,2);assert.match(result.description,/<svg/);assert.equal(urls.length,2);
+});
+test('upgrade checks legacy sources immediately and uses the upgrade catalog, never reclassifying existing modes',async()=>{
+ const f=watchFixture();f.rows.four=[f.mode('four','old')];await f.watch.refreshSources();const saved=await f.store.read();for(const s of saved.sources)delete s.catalog;await f.store.save(saved);
+ const w=createModeWatch({store:f.store,chain:f.chain,clock:()=>100001,sources:{read:async()=>({revision:'b'.repeat(40),title:'Updated'})}});await w.refreshSources();const report=w.state().changes.find(c=>c.sourceId==='four-open');
+ assert.ok(report);assert.deepEqual(report.candidateIds,[]);assert.ok(w.state().sources.every(s=>s.catalog));await assert.rejects(w.authorize(report.id,'old'),{code:'MODE_REPORT_TARGET_INVALID'});
+});
+test('GitHub API rate limiting falls back to the official Atom feed and backs off API calls',async()=>{
+ const source=MODE_SOURCES[0],revision='b'.repeat(40),requests=[],feed=`<feed><link rel="self" href="${source.url}/commits/main.atom"/><entry><id>tag:github.com,2008:Grit::Commit/${revision}</id><link href="${source.url}/commit/${revision}"/><title>New &amp; reviewed</title><updated>2026-10-29T00:00:00Z</updated><content type="html">&lt;pre&gt;Details&lt;/pre&gt;</content></entry></feed>`;
+ const reader=createSourceReader({clock:()=>10000,fetcher:async url=>{requests.push(url);return url.endsWith('.atom')?new Response(feed):new Response('',{status:403});}});
+ const r=await reader.read(source,{revision:'a'.repeat(40)});assert.equal(r.revision,revision);assert.equal(r.title,'New & reviewed');assert.equal(r.transport,'github-atom');assert.equal(r.detailsUnavailable,true);assert.equal(r.description,'Details');await reader.read(source,{revision});assert.equal(requests.filter(u=>u.includes('api.github.com')).length,1);
+ assert.throws(()=>parseGithubAtom(feed.replace(source.url+'/commit/', 'https://evil.test/commit/'),source),{code:'SOURCE_INVALID'});
+});
