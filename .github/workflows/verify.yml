@@ -31,6 +31,9 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci --ignore-scripts
+      - name: Install YESP Local Terminal locked dependencies
+        working-directory: apps/yesp-local-terminal
+        run: npm ci --ignore-scripts
       - name: Check whitespace
         run: git show --format= --check HEAD
       - name: Test

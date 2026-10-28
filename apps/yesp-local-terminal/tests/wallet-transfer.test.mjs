@@ -101,7 +101,7 @@ test('wallet send adapter pins BSC and typed amount; never permits max or arbitr
   const p={chainId:'56',recipient:to,tokenAddress:token,amount:'1.234567'};
   assert.equal(transferArguments(p).includes('--max'),false);assert.throws(()=>transferArguments({...p,chainId:'1'}));assert.throws(()=>transferArguments({...p,max:true}));
   let calls=0;
-  const create=allowWrites=>createFastTradeCli({allowWrites,resolveInstallation:async()=>({metadata:{name:'@binance/agentic-wallet',version:'1.11.0',bin:{baw:'dist/index.js'}},entryPath:'C:\\fixture\\dist\\index.js'}),
+  const create=allowWrites=>createFastTradeCli({allowWrites,resolveInstallation:async()=>({metadata:{name:'@binance/agentic-wallet',version:'1.11.0',bin:{baw:'dist/index.js'}},entryPath:join(tmpdir(),'fixture','dist','index.js')}),
     execute:async(exe,args,options)=>{calls++;assert.deepEqual(args.slice(1),[...transferArguments(p),'--json']);assert.equal(options.shell,false);return {stdout:JSON.stringify({success:true,data:{txHash:hash(1)}})};}});
   assert.equal((await create(false).sendTransfer(p)).outcome,'REJECTED');assert.equal(calls,0);assert.equal((await create(true).sendTransfer(p)).outcome,'SUBMITTED');assert.equal(calls,1);
 });
