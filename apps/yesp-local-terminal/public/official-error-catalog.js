@@ -60,4 +60,3 @@ export const AUTH_URL_ISSUES = Object.freeze({
 export function safeAuthUrlIssues(value) {
   return Array.isArray(value) ? [...new Set(value.filter(x => typeof x === 'string' && Object.hasOwn(AUTH_URL_ISSUES, x)))] : [];
 }
-

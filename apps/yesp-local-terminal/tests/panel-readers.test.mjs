@@ -103,4 +103,3 @@ test('standard Flap sell receipt uses the documented net quote amount without de
  const low={address:plan.manager,...flapStandardAbi.encodeEventLog(flapStandardAbi.getEvent('TokenSold'),[1n,token,wallet,100n*U,out-1n,fee,1n])};
  assert.throws(()=>flapReceipt(plan,{logs:[low,transfer]}),{code:'TRADE_SETTLEMENT_MISMATCH'});
 });
-
