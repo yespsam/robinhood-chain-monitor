@@ -34,8 +34,7 @@ export function automaticFailureMessage(op){
   const validBps=x=>/^\d{1,4}$/.test(x||'')&&Number(x)>0&&Number(x)<10000;
   const detail=facts?`固定投入 ${facts.spend} ${facts.quoteSymbol}，当时预计收到 ${display(facts.expected)} ${facts.symbol}，低于本次最低 ${display(facts.minimum)} ${facts.symbol}（目标 ${display(facts.amount)}，买入滑点 ${Number(facts.slippageBps)/100}%）。`:`价格已超出本次首份报价允许范围${validBps(slip)?'（买入滑点 '+Number(slip)/100+'%）':''}。`;
   const confirmed=(op.steps||[]).some(s=>s.status==='CONFIRMED'&&['panelFund','panelWrap'].includes(s.action));
-  const reviewReady=!empty&&op.steps?.every(s=>s.status==='CONFIRMED'&&['panelFund','panelWrap','panelApprove'].includes(s.action));
-  return detail+(validBps(swap)?`兑换滑点 ${Number(swap)/100}% 只用于兑换结算币，不控制目标代币买入。`:'')+(empty?'本次未提交交易。':confirmed?'已到账的结算币保留在钱包，目标代币尚未买入。':'后续买入已停止。')+(reviewReady?'可点击“重新核对买入（不提交）”获取新报价；':'可重新核对当前买入报价；')+'已有结算币会先抵扣，不会自动重发旧交易。';
+  return detail+(validBps(swap)?`兑换滑点 ${Number(swap)/100}% 只用于兑换结算币，不控制目标代币买入。`:'')+(empty?'本次未提交交易。':confirmed?'已到账的结算币保留在钱包，目标代币尚未买入。':'后续买入已停止。')+'可修改当前数量与滑点后重新买入，也可仅查看报价；已有结算币会先抵扣，不会自动重发旧交易。';
  }
  if(op.error?.code==='FUNDING_BUDGET_EXCEEDED'){
   const p=op.request,legacy=p?.action==='buy'&&/^[\d.]+$/.test(p.amount||'')&&/^[\d.]+$/.test(p.maxBnb||'')?`本次目标 ${display(p.amount)} 枚，BNB 支付上限 ${p.maxBnb}；所需支付超过预算。平台持仓额度不代表预算可买数量。请减少数量或自行调整预算后重新核对。`: '所需支付超过 BNB 预算，请核对数量与支付上限。';

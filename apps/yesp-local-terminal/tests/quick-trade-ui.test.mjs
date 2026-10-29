@@ -1,10 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import {readFile} from 'node:fs/promises';
+import {readFile,mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import * as model from '../extension/trade-model.js';
 import {fundingMessage,budgetMessage,automaticFailureMessage} from '../extension/funding-model.js';
+import {createRoundtripLedger,token as ledgerToken,wallet as ledgerWallet} from './helpers/roundtrip-ledger.mjs';
 const addr=n=>'0x'+n.toString(16).padStart(40,'0'),token=addr(1),wallet=addr(2),quote=addr(3);
 const market={tokenAddress:token,base:{symbol:'T',decimals:18},quote:{address:quote,symbol:'GANG',decimals:18},supported:true,protocol:'gang-curve',variant:'v2',block:'0x1'};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
@@ -17,7 +20,7 @@ async function ui(){
  const context=vm.createContext({...model,fundingMessage,budgetMessage,automaticFailureMessage,document,client,Date,performance,crypto:{randomUUID},isOfficialSigninUrl:()=>true,setupMarketChart:()=>({select(){}}),setupLocalFeatures(){},setInterval(){},window:{addEventListener(){}},location:{hash:''}});
  vm.runInContext((await readFile(new URL('../extension/trade-ui.js',import.meta.url),'utf8')).replace(/^import .*;\r?\n/gm,''),context);
  for(let i=0;i<5;i++)await tick();context.marketInput=market;
- vm.runInContext(`market=marketInput;holdings={base:'100',quote:'0.0'};$('ca').value=market.tokenAddress;$('slippage').value='1';renderMarket();`,context);calls.length=0;
+ vm.runInContext(`market=marketInput;holdings={base:'100',quote:'0.0'};$('ca').value=market.tokenAddress;$('slippage').value='1';$('funding-slippage').value='1';renderMarket();`,context);calls.length=0;
  const settle=async()=>{for(let i=0;i<30;i++){await tick();if(!vm.runInContext('busy||polling',context))return;}throw Error('UI did not settle');};
  return {context,get,calls,quickBuy,quickSell,settle,client,progress:data=>progress(data),setHandler:f=>handler=f};
 }
@@ -55,13 +58,41 @@ test('legacy budget failure names the quantity and cap, hides empty steps and do
  const u=await ui();u.progress({operation:{intentId:randomUUID(),action:'panelAutoBuy',market:token,status:'FAILED',steps:[],request:{action:'buy',amount:'10000000.0',maxBnb:'0.1'},error:{code:'FUNDING_BUDGET_EXCEEDED'},message:'old opaque failure',updatedAt:Date.now()}});
  assert.match(u.get('status-title').textContent,/未提交交易/);assert.match(u.get('status-text').textContent,/10,000,000/);assert.match(u.get('status-text').textContent,/0.1/);assert.match(u.get('status-text').textContent,/平台持仓额度/);assert.doesNotMatch(u.get('status-text').textContent,/已完成的步骤保留/);assert(u.get('flow-steps').hidden);assert.match(u.get('flow-timing').textContent,/未提交交易/);assert(!u.get('prepare').disabled);
 });
-test('a price-stopped buy can only refresh its quote, reuses original parameters and never submits',async()=>{
+test('continuing a stopped buy uses one fresh intent and visible edited parameters without another modal',async()=>{
  const u=await ui();u.client.local=true;u.get('oneclick-enabled').checked=true;
  const op={intentId:randomUUID(),action:'panelAutoBuy',market:token,wallet,status:'FAILED',updatedAt:Date.now(),error:{code:'AUTO_PRICE_CHANGED'},request:{action:'buy',tokenAddress:token,wallet,amount:'10000000',slippageBps:'100',swapSlippageBps:'1000'},steps:[{action:'panelWrap',status:'CONFIRMED',plan:{...market,action:'buy'}}]};
- u.setHandler(async r=>r.method==='panelQuery'?{wallet:{connected:true,address:wallet},market,holdings:{base:'0',quote:'1'}}:{tradePreview:preview(r.params)});
- u.progress({operation:op});await u.settle();u.calls.length=0;assert(!u.get('continue-buy').hidden);assert.equal(u.get('continue-buy').textContent,'重新核对买入（不提交）');assert.match(u.get('status-text').textContent,/买入滑点 1%/);
- u.get('continue-buy').fire('click');await u.settle();assert.deepEqual(u.calls.map(r=>r.method),['panelQuery','panelPrepare']);assert.equal(u.calls[1].params.amount,'10000000');assert.equal(u.calls[1].params.slippageBps,'100');assert.equal(u.get('funding-slippage').value,'10');assert.equal(u.calls[1].params.funding,undefined);assert(u.get('review').open);assert(u.get('send').disabled);assert(!u.get('ack').checked);
+ u.setHandler(async r=>r.method==='panelQuery'?{wallet:{connected:true,address:wallet},market,holdings:{base:'0',quote:'1'}}:{operation:{intentId:r.params.intentId,status:'SUBMITTING',action:'panelAutoBuy',market:token,wallet,steps:[]}});
+ u.progress({operation:op});await u.settle();u.calls.length=0;assert(!u.get('continue-buy').hidden);assert.equal(u.get('continue-buy').textContent,'一键继续买入（当前参数）');assert.match(u.get('status-text').textContent,/买入滑点 1%/);assert.equal(u.get('amount').value,'10000000');assert.equal(u.get('funding-slippage').value,'10');
+ u.get('amount').value='8000000';u.get('amount').fire('input');u.get('slippage').value='2';u.get('slippage').fire('input');
+ u.get('continue-buy').fire('click');u.get('continue-buy').fire('click');await u.settle();assert.deepEqual(u.calls.map(r=>r.method),['panelTrade']);assert.equal(u.calls[0].params.amount,'8000000');assert.equal(u.calls[0].params.slippageBps,'200');assert.equal(u.calls[0].params.swapSlippageBps,'1000');assert.equal(u.calls[0].params.fundingMode,'quantity');assert.notEqual(u.calls[0].params.intentId,op.intentId);assert(!u.get('review').open);
  for(const changed of [{status:'UNKNOWN'},{status:'COMPLETE'},{wallet:addr(9)},{market:addr(9)},{steps:[{action:'panelBuy',status:'CONFIRMED'}]},{steps:[{action:'panelWrap',status:'UNKNOWN'}]}])assert.equal(model.canReviewStoppedBuy({...op,...changed},wallet,token),false);
+});
+for(const kind of ['fund','wrap','approve','buy'])test(`one-click quote for ${kind} stays read-only until one full-flow buy click, never a single-step approval`,async()=>{
+ const u=await ui();u.client.local=true;u.get('oneclick-enabled').checked=true;u.get('amount').value='3';u.get('funding-enabled').checked=false;
+ u.setHandler(async r=>r.method==='panelPrepare'?{tradePreview:{...preview(r.params),kind,approvalRaw:'100',funding:{required:'10',available:'1',shortfall:'9'},fundingSettings:r.params.funding}}:{operation:{intentId:r.params.intentId,status:'SUBMITTING',market:token,action:'panelAutoBuy',steps:[]}});
+ vm.runInContext('render()',u.context);u.get('preview-only').fire('click');await u.settle();assert.deepEqual(u.calls.map(r=>r.method),['panelPrepare']);assert.equal(u.calls[0].params.funding.mode,'quantity');assert(u.get('review').open);assert(u.get('review-ack').hidden);assert(!u.get('send').disabled);assert.match(u.get('send').textContent,/一键买入/);assert.match(u.get('review-note').textContent,/自动兑换缺口/);assert.doesNotMatch(u.get('review-note').textContent,/本次仅|本次只/);
+ u.get('send').fire('click',{isTrusted:false});assert.equal(u.calls.length,1);u.get('send').fire('click');u.get('send').fire('click');await u.settle();assert.deepEqual(u.calls.map(r=>r.method),['panelPrepare','panelTrade']);assert.equal(u.calls[1].params.amount,'3');assert.equal(u.calls[1].params.fundingMode,'quantity');assert(!u.get('review').open);
+});
+test('one-click quote captures visible quantities, blocks expired or changed forms, and can be closed without buying',async()=>{
+ for(const change of ['cancel','amount','wallet','expiry']){const u=await ui();u.client.local=true;u.get('oneclick-enabled').checked=true;u.get('amount').value='3';u.setHandler(async r=>({tradePreview:preview(r.params)}));vm.runInContext('render()',u.context);u.get('preview-only').fire('click');await u.settle();
+  if(change==='cancel')u.get('cancel').fire('click');if(change==='amount'){u.get('amount').value='4';u.get('amount').fire('input');}if(change==='wallet')vm.runInContext(`wallet.address='${addr(9)}';render()`,u.context);if(change==='expiry')vm.runInContext('preview.expiresAt=0',u.context);
+  u.get('send').fire('click');await u.settle();assert.deepEqual(u.calls.map(r=>r.method),['panelPrepare']);
+ }
+ const u=await ui();u.client.local=true;u.get('oneclick-enabled').checked=true;vm.runInContext("side='sell';",u.context);u.setHandler(async r=>r.method==='panelPrepare'?{tradePreview:preview(r.params)}:{operation:{intentId:r.params.intentId,status:'SUBMITTING'}});await vm.runInContext("prepare('sell','50')",u.context);u.get('send').fire('click');await u.settle();assert.equal(u.calls[1].params.action,'sell');assert.equal(u.calls[1].params.amount,'50');assert.equal(u.calls[1].params.sellPercent,undefined);
+});
+test('a completed manual funding or approval can continue once only for its wallet and CA',async()=>{
+ for(const action of ['panelFund','panelWrap','panelApprove']){const op={action,status:'COMPLETE',wallet,market:token,steps:[{status:'CONFIRMED',plan:{wallet,tokenAddress:token,action:'buy',amount:'3',slippageBps:'100'}}]};assert.equal(model.continuationBuyRequest(op,wallet,token),op.steps[0].plan);
+  assert.equal(model.continuationBuyRequest(op,addr(9),token),null);assert.equal(model.continuationBuyRequest(op,wallet,addr(9)),null);assert.equal(model.continuationBuyRequest({...op,status:'UNKNOWN'},wallet,token),null);
+ }
+});
+test('one browser buy click completes funding and allowances, then one sell click completes proceeds conversion with the ledger',async t=>{
+ const dir=await mkdtemp(join(tmpdir(),'oneclick-ui-ledger-'));t.after(()=>rm(dir,{recursive:true,force:true}));const f=createRoundtripLedger(dir,{oldAllowance:true}),u=await ui();u.client.local=true;u.get('oneclick-enabled').checked=true;
+ u.context.ledgerMarket=await f.reader.inspect(ledgerToken);u.context.ledgerHoldings=await f.reader.holdings(u.context.ledgerMarket,ledgerWallet);
+ vm.runInContext(`market=ledgerMarket;holdings=ledgerHoldings;wallet={connected:true,address:'${ledgerWallet}'};$('ca').value=market.tokenAddress;$('amount').value='10000000';$('slippage').value='10';renderMarket();`,u.context);
+ let responseDone=Promise.resolve();u.setHandler(r=>(responseDone=f.trader.handle(r.method,r.params)));u.get('order-form').fire('submit',{isTrusted:true,preventDefault(){}});await tick();await responseDone;await u.settle();await f.trader.drain();
+ const buyRequest=u.calls.find(r=>r.method==='panelTrade'),bought=await f.journal.read(buyRequest.params.intentId);assert.equal(bought.status,'COMPLETE',JSON.stringify(bought.error));assert.deepEqual(f.state.submissions.map(x=>x.kind),['fund','revoke','approve','buy']);assert(!u.get('review').open);assert(!u.calls.some(r=>r.method==='panelExecute'));
+ u.progress({operation:bought});await responseDone;await tick();u.quickSell.fire('click');await tick();await responseDone;await u.settle();await f.trader.drain();
+ const trades=u.calls.filter(r=>r.method==='panelTrade');assert.equal(trades.length,2);assert.equal(trades[1].params.sellPercent,'50');assert.equal((await f.journal.read(trades[1].params.intentId)).status,'COMPLETE');assert.deepEqual(f.state.submissions.map(x=>x.kind),['fund','revoke','approve','buy','revoke','approve','sell','convert']);assert(!u.get('review').open);assert(!u.calls.some(r=>r.method==='panelExecute'));
 });
 test('completed multi-step flow links to final buy receipt instead of the earlier funding transaction',async()=>{
  const u=await ui(),fundHash='0x'+'1'.repeat(64),buyHash='0x'+'2'.repeat(64);

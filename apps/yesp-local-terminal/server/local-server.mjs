@@ -90,7 +90,7 @@ export function createLocalApp({cli=createFastTradeCli({allowWrites:true,allowAu
     try{const data=await scanner.image?.(url.pathname.split('/').at(-1));if(!data)throw fault('IMAGE_NOT_FOUND');res.setHeader('Content-Type',data.type);res.setHeader('Cache-Control','private, max-age=600');return res.end(data.body);}
     catch(e){return send(res,e.code==='IMAGE_BUSY'?429:404,{error:{code:'IMAGE_UNAVAILABLE'}});}
    }
-   if(url.pathname==='/api/health')return send(res,200,{name:'YESP Local Terminal',version:'1.11.1',network:'BSC',port:server.address().port});
+   if(url.pathname==='/api/health')return send(res,200,{name:'YESP Local Terminal',version:'1.11.2',network:'BSC',port:server.address().port});
    if(url.pathname==='/api/session')return send(res,200,{csrf});
    if(url.pathname==='/api/events'){
     if(clients.size>=8)return send(res,429,{error:{code:'TOO_MANY_STREAMS'}});res.writeHead(200,{'Content-Type':'text/event-stream','Connection':'keep-alive'});res.write(': YESP local stream\n\n');clients.add(res);req.on('close',()=>clients.delete(res));
@@ -118,7 +118,7 @@ export function createLocalApp({cli=createFastTradeCli({allowWrites:true,allowAu
    scanner.start();modes.start();sniper.start();gangLaunch.start();heartbeat=setInterval(()=>publish('metrics',rpc.metrics?.()||{}),10000);heartbeat.unref?.();return origin;},
   async close(){clearInterval(heartbeat);scanner.stop();await gangLaunch.stop();await sniper.stop();await modes.stop();await trader.drain?.();for(const c of clients)c.end();await new Promise(r=>server.close(r));await auth.close?.();}};
 }
-export async function main(){const app=createLocalApp();const url=await app.listen();process.stdout.write(`YESP Local Terminal 1.11.1\n${url}\n`);let closing=false;
+export async function main(){const app=createLocalApp();const url=await app.listen();process.stdout.write(`YESP Local Terminal 1.11.2\n${url}\n`);let closing=false;
  for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{if(!closing){closing=true;app.close().then(()=>process.exit(0));}});
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)main().catch(e=>{process.stderr.write(`YESP: ${/^[A-Z][A-Z0-9_]+$/.test(e.code||'')?e.code:'START_FAILED'}\n`);process.exitCode=1;});

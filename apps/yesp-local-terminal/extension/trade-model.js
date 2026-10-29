@@ -23,3 +23,12 @@ export function canReviewStoppedBuy(op,wallet,token){
   &&op.wallet?.toLowerCase()===wallet?.toLowerCase()&&op.market?.toLowerCase()===token?.toLowerCase()&&op.request?.tokenAddress?.toLowerCase()===token?.toLowerCase()
   &&op.steps?.length>0&&op.steps.every(s=>s.status==='CONFIRMED'&&['panelFund','panelWrap','panelApprove'].includes(s.action)));
 }
+export function continuationBuyRequest(op,wallet,token){
+ if(!/^0x[\da-f]{40}$/i.test(wallet||'')||!/^0x[\da-f]{40}$/i.test(token||''))return null;
+ if(canReviewStoppedBuy(op,wallet,token))return op.request;
+ const plan=op?.steps?.[0]?.plan;
+ return op?.status==='COMPLETE'&&['panelFund','panelWrap','panelApprove'].includes(op.action)
+  &&op.wallet?.toLowerCase()===wallet.toLowerCase()&&op.market?.toLowerCase()===token.toLowerCase()
+  &&op.steps?.length===1&&op.steps[0].status==='CONFIRMED'&&plan?.action==='buy'
+  &&plan.wallet?.toLowerCase()===wallet.toLowerCase()&&plan.tokenAddress?.toLowerCase()===token.toLowerCase()?plan:null;
+}

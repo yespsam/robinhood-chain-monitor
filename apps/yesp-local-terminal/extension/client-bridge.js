@@ -8,7 +8,7 @@ function syncEvents(){
  events.onerror=()=>{for(const fn of listeners)fn({connection:'disconnected'});};
 }
 async function csrf(){session??=fetch('/api/session',{cache:'no-store'}).then(async r=>{if(!r.ok)throw Error('LOCAL_SERVER_UNAVAILABLE');return (await r.json()).csrf;}).catch(e=>{session=null;throw e;});return session;}
-export const client={local,version:()=>local?'1.11.1':chrome.runtime.getManifest().version,
+export const client={local,version:()=>local?'1.11.2':chrome.runtime.getManifest().version,
  async sendMessage(message){if(!local)return chrome.runtime.sendMessage(message);
   const response=await fetch('/api/request',{method:'POST',headers:{'content-type':'application/json','x-yesp-csrf':await csrf()},body:JSON.stringify(message)});
   if(response.status===403){session=null;throw Error('LOCAL_SESSION_CHANGED');}const result=await response.json();if(result.ok&&['/wallet.html','/trade.html'].includes(result.data?.navigate))location.assign(result.data.navigate);return result;
