@@ -14,6 +14,20 @@ const HASH = '0x' + 'a'.repeat(64);
 const KEY = 'never-persist-this-browser-session';
 const request = { chainId: '56', fromToken: USDT, toToken: BNB, amount: '10.123456789012345678', slippage: '2.5' };
 const confirm = review => ({ reviewId: review.reviewId, confirmed: true, riskAcknowledged: true, costAcknowledged: true });
+test('dashboard submits a BSC trade from one explicit click after live preflight', async () => {
+  const source = await readFile(new URL('../public/wallet.js', import.meta.url), 'utf8');
+  const start = source.indexOf("$('live-quote-button').onclick = async () => {");
+  const end = source.indexOf("$('close-live-review').onclick", start);
+  const flow = source.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.match(source, /一键买入并提交/); assert.match(source, /一键卖出并提交/);
+  assert.match(source, /button\.type = 'button'/);
+  assert.match(flow, /reportValidity\(\)/);
+  assert.ok(flow.indexOf("'/api/trade/preview'") < flow.indexOf("api('\/api\/trade\/submit'"));
+  assert.match(flow, /riskAcknowledged: true, costAcknowledged: true/);
+  assert.match(flow, /quote\.risk\?\.blocked === true/);
+  assert.doesNotMatch(source, /\$\('confirm-trade'\)\.onclick/);
+});
 async function setup(t, options = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'manual-trade-test-')); t.after(() => rm(directory, { recursive: true, force: true }));
   let now = 1800000000000, active = true, quote = '2.123456789012345678', lock = 'UNLOCKED', native = '1', source = '1000000000000000000';
