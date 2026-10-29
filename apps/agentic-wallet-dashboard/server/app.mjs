@@ -22,25 +22,28 @@ const files = new Map([['/', ['index.html', 'text/html']], ['/app.js', ['app.js'
   ['/mint.css', ['mint.css', 'text/css']],
   ['/official-checklist.txt', ['official-checklist.txt', 'text/plain']]]);
 function json(res, status, value) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(value)); }
-async function readBody(req) {
+async function readBody(req, maxBytes = 8192) {
   if (req.headers['content-type']?.split(';')[0] !== 'application/json') throw new Denied('JSON_REQUIRED', 415);
-  if (Number(req.headers['content-length']) > 8192) throw new Denied('BODY_TOO_LARGE', 413);
+  if (Number(req.headers['content-length']) > maxBytes) throw new Denied('BODY_TOO_LARGE', 413);
   let size = 0; const chunks = [];
-  for await (const part of req) { size += part.length; if (size > 8192) throw new Denied('BODY_TOO_LARGE', 413); chunks.push(part); }
+  for await (const part of req) { size += part.length; if (size > maxBytes) throw new Denied('BODY_TOO_LARGE', 413); chunks.push(part); }
   try { const value = JSON.parse(Buffer.concat(chunks).toString()); if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error(); return value; }
   catch { throw new Denied('INVALID_JSON', 400); }
 }
-export async function createApplication({ sessions, wallet = new OfficialWallet(), binding = null, port = 0, localAccess = false, walletAccess = false, localAccessKey = null, manualTradeFactory = null, mintFactory = null } = {}) {
+export async function createApplication({ sessions, wallet = new OfficialWallet(), binding = null, port = 0, localAccess = false, walletAccess = false, localAccessKey = null, manualTradeFactory = null, mintFactory = null, contractCallFactory = null } = {}) {
   if (localAccessKey !== null && !/^[a-f0-9]{64}$/.test(localAccessKey)) throw new Error('INVALID_LOCAL_ACCESS_KEY');
   if (localAccess && (binding !== null || Object.values(DEVELOPMENT).some(Boolean))) throw new Error('LOCAL_ACCESS_REQUIRES_DEMO_ONLY');
   const gate = new WalletGate({ sessions, wallet, binding });
   const localWallet = localAccess && walletAccess ? new LocalWalletAccess(wallet) : null;
   if (manualTradeFactory && (!localWallet || !localAccessKey)) throw new Error('MANUAL_TRADES_REQUIRE_LOCAL_ACCESS_KEY');
   if (mintFactory && (!localWallet || !localAccessKey)) throw new Error('MINTING_REQUIRES_LOCAL_ACCESS_KEY');
+  if (contractCallFactory && (!localWallet || !localAccessKey)) throw new Error('CONTRACT_CALLS_REQUIRE_LOCAL_ACCESS_KEY');
   const manualTrades = manualTradeFactory ? manualTradeFactory({ wallet, gate: localWallet.gate }) : null;
   const mints = mintFactory ? mintFactory({ wallet, gate: localWallet.gate }) : null;
+  const contractCalls = contractCallFactory ? contractCallFactory({ wallet, gate: localWallet.gate }) : null;
   if (localWallet) localWallet.tradeService = manualTrades;
   if (localWallet) localWallet.mintService = mints;
+  if (localWallet) localWallet.contractCallService = contractCalls;
   const cli = await cliVersionInfo();
   let origin, cookieName;
   const streams = new Map();
@@ -68,7 +71,7 @@ export async function createApplication({ sessions, wallet = new OfficialWallet(
       if (url.pathname === '/api/status' && req.method === 'GET') {
         if (localAccess) {
           json(res, 200, { product: 'yesp-wallet', version: '0.4.0', localAccessRequired: localAccessKey !== null, accessMode: 'local', loginRequired: false, authenticated: false, identityVerified: false,
-            walletConnected: false, mode: localWallet ? 'wallet-read-quote' : 'development', capabilities: localWallet ? { ...LOCAL_CAPABILITIES, manualTrades: !!manualTrades, liveTrades: !!manualTrades, tokenMinting: !!mints } : DEVELOPMENT, cli }); return;
+            walletConnected: false, mode: localWallet ? 'wallet-read-quote' : 'development', capabilities: localWallet ? { ...LOCAL_CAPABILITIES, manualTrades: !!manualTrades, liveTrades: !!manualTrades, tokenMinting: !!mints, customContractCalls: !!contractCalls } : DEVELOPMENT, cli }); return;
         }
         let state = { authenticated: false }; try {
           const current = sessions.fromToken(token); sessions.checkCsrf(current, req.headers['x-csrf-token']);
@@ -89,7 +92,7 @@ export async function createApplication({ sessions, wallet = new OfficialWallet(
           const quote = demoQuote(await readBody(req)); json(res, 200, { ...quote, blockers: reviewBlockers(quote) }); return;
         }
         if (localWallet && req.method === 'POST') {
-          const key = req.headers['x-local-session'], body = await readBody(req);
+          const key = req.headers['x-local-session'], body = await readBody(req, url.pathname.startsWith('/api/contract-call/') ? 65_536 : 8192);
           const tradeMethod = new Map([['/api/trade/preview', 'preview'], ['/api/trade/submit', 'submit'], ['/api/trade/status', 'status'], ['/api/trade/list', 'list']]).get(url.pathname);
           if (manualTrades && tradeMethod) {
             localWallet.check(key); localWallet.touch(key);
@@ -99,6 +102,12 @@ export async function createApplication({ sessions, wallet = new OfficialWallet(
           if (mints && mintMethod) {
             localWallet.check(key); localWallet.touch(key);
             json(res, 200, await mints[mintMethod](key, body)); return;
+          }
+          const contractCallMethod = new Map([['/api/contract-call/preview', 'preview'], ['/api/contract-call/submit', 'submit'],
+            ['/api/contract-call/status', 'status'], ['/api/contract-call/list', 'list']]).get(url.pathname);
+          if (contractCalls && contractCallMethod) {
+            localWallet.check(key); localWallet.touch(key);
+            json(res, 200, await contractCalls[contractCallMethod](key, body)); return;
           }
           json(res, 200, await localWallet.handle(url.pathname, key, body, { reuseSession: localAccessKey !== null })); return;
         }
@@ -168,5 +177,5 @@ export async function createApplication({ sessions, wallet = new OfficialWallet(
   const timer = setInterval(() => { for (const key of sessions.items.keys()) {
     try { sessions.byKey(key); for (const stream of streams.get(key) || []) stream.res.write(': heartbeat\n\n'); } catch { /* expired */ }
   } }, 1000); timer.unref();
-  return { origin, sessions, gate, server, localWallet, manualTrades, mints, async close() { clearInterval(timer); localWallet?.lock(); sessions.invalidateAll('SERVER_STOPPED'); server.closeAllConnections(); await new Promise(r => server.close(r)); } };
+  return { origin, sessions, gate, server, localWallet, manualTrades, mints, contractCalls, async close() { clearInterval(timer); localWallet?.lock(); sessions.invalidateAll('SERVER_STOPPED'); server.closeAllConnections(); await new Promise(r => server.close(r)); } };
 }
