@@ -30,7 +30,7 @@ async function setup(t, options = {}) {
   const config = { wallet, gate, clock: () => now, journalDir: join(directory, 'trades'),
     executeSwap: async trade => { executeCount++; lastExecution = trade; return options.execute ? options.execute(trade) : { status: 'SUBMITTED', orderId: 'order-1' }; },
     readOrder: async () => ({ list: order ? [order] : [] }),
-    auditTarget: async () => { auditCount++; return options.audit || { hasResult: true, isSupported: true, status: 'CLEAR', riskItems: [] }; }
+    auditTarget: async ({ contractAddress }) => { auditCount++; return options.auditFor?.(contractAddress) || options.audit || { hasResult: true, isSupported: true, status: 'CLEAR', riskItems: [] }; }
   };
   const service = new ManualTradeService(config);
   return { directory, config, service, wallet, gate, get executeCount() { return executeCount; }, get auditCount() { return auditCount; }, get lastExecution() { return lastExecution; },
@@ -46,7 +46,7 @@ test('review retains exact decimals, trusted target skips audit, command forces 
 });
 test('strict fields, chain, token pair, and slippage cannot inject commands', async t => {
   const c = await setup(t);
-  for (const bad of [{ ...request, command: 'send' }, { ...request, chainId: '1' }, { ...request, amount: '--max' }, { ...request, slippage: '100' }, { ...request, toToken: request.fromToken }]) await assert.rejects(c.service.preview(KEY, bad));
+  for (const bad of [{ ...request, command: 'send' }, { ...request, chainId: '1' }, { ...request, amount: '--max' }, { ...request, slippage: '100' }, { ...request, slippage: '100.0000000000000001' }, { ...request, toToken: request.fromToken }]) await assert.rejects(c.service.preview(KEY, bad));
   assert.equal(c.executeCount, 0);
 });
 test('confirmation and fee acknowledgment required; submitted is not success', async t => {
@@ -88,9 +88,33 @@ test('unavailable audit requires explicit risk acknowledgment and strips invalid
   await c.service.submit(KEY, confirm(r)); assert.equal(c.executeCount, 1);
 });
 test('explicit risk block cannot be acknowledged away', async t => {
-  const c = await setup(t, { audit: { status: 'BLOCKED', blocked: true, hasResult: true, isSupported: true } });
+  const c = await setup(t, { audit: { status: 'BLOCKED', blocked: true, hasResult: true, isSupported: true,
+    riskItems: [{ isHit: true, code: 'HONEYPOT', description: '买入限制' }] } });
   const r = await c.service.preview(KEY, { ...request, toToken: OTHER }); assert.equal(r.executable, false);
+  assert.equal(r.risk.items[0].description, '买入限制');
   await assert.rejects(c.service.submit(KEY, confirm(r)), { code: 'TOKEN_RISK_BLOCKED' }); assert.equal(c.executeCount, 0);
+});
+test('sell-side audit is disclosed and acknowledged but a flagged source never blocks an exit', async t => {
+  const source = OTHER, sell = { ...request, fromToken: source, toToken: USDT };
+  const c = await setup(t, { audit: { status: 'BLOCKED', blocked: true, hasResult: true, isSupported: true, riskLevel: 5,
+    riskItems: [{ isHit: true, code: 'SELL_TAX', description: '高卖出税' }] } });
+  const r = await c.service.preview(KEY, sell);
+  assert.equal(r.risk.state, 'TRUSTED_TARGET'); assert.equal(r.sourceRisk.state, 'SOURCE_HIGH_RISK_ADVISORY');
+  assert.equal(r.sourceRisk.blocked, false); assert.equal(r.executable, true); assert.equal(r.requiresRiskAcknowledgment, true);
+  assert.match(r.sourceRisk.items[0].description, /高卖出税/);
+  await assert.rejects(c.service.submit(KEY, { ...confirm(r), riskAcknowledged: false }), { code: 'TOKEN_RISK_ACKNOWLEDGMENT_REQUIRED' });
+  const result = await c.service.submit(KEY, confirm(r));
+  assert.equal(result.status, 'SUBMITTED'); assert.equal(c.executeCount, 1);
+});
+test('source token audit changes require a fresh sell review', async t => {
+  let blocked = false;
+  const c = await setup(t, { auditFor: () => blocked
+    ? { status: 'BLOCKED', blocked: true, hasResult: true, isSupported: true, riskLevel: 5, riskItems: [{ isHit: true, code: 'SELL_TAX' }] }
+    : { status: 'CLEAR', hasResult: true, isSupported: true, riskLevel: 0, riskItems: [] } });
+  const r = await c.service.preview(KEY, { ...request, fromToken: OTHER, toToken: USDT });
+  assert.equal(r.sourceRisk.state, 'SOURCE_AUDITED_FOR_SELL'); blocked = true;
+  await assert.rejects(c.service.submit(KEY, confirm(r)), { code: 'TOKEN_AUDIT_CHANGED_REVIEW_REQUIRED' });
+  assert.equal(c.executeCount, 0);
 });
 test('unknown submission persists across restart and blocks a new intent', async t => {
   const c = await setup(t, { execute: async () => { throw new Error('secret-bearing timeout detail'); } }), r = await c.service.preview(KEY, request);

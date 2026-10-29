@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { resolveCliInstallation, DOCUMENTED_CLI_VERSION } from './official-cli.mjs';
-import { validChain, validContract, decimal, addressKey, CORE_CHAINS } from './model.mjs';
+import { validChain, validContract, decimal, decimalExceedsInteger, addressKey, CORE_CHAINS } from './model.mjs';
 import { Denied } from './auth.mjs';
 import { safeOfficialIdentity } from '../public/official-error-catalog.js';
 
@@ -37,7 +37,7 @@ function swapArguments(trade) {
   checkedChain(chainId); validContract(chainId, fromToken); validContract(chainId, toToken);
   if (addressKey(chainId, fromToken) === addressKey(chainId, toToken)) throw new Denied('IDENTICAL_TOKEN_PAIR', 400);
   decimal(amount); decimal(slippage, { zero: true });
-  if (Number(slippage) > 100) throw new Denied('INVALID_SLIPPAGE', 400);
+  if (decimalExceedsInteger(slippage, '100')) throw new Denied('INVALID_SLIPPAGE', 400);
   return ['market-order', 'swap', '--fromTokenQty', amount, '--fromToken', fromToken, '--toToken', toToken,
     '--binanceChainId', chainId, '--slippage', slippage, '--mev', 'true', '--gasLevel', 'MEDIUM'];
 }

@@ -26,6 +26,12 @@ export function decimal(value, { zero = false } = {}) {
     throw new Denied('INVALID_AMOUNT', 400);
   return value;
 }
+export function decimalExceedsInteger(value, limit) {
+  decimal(value, { zero: true });
+  if (typeof limit !== 'string' || !/^\d{1,24}$/.test(limit)) throw new TypeError('Invalid decimal comparison limit');
+  const [whole, fraction = ''] = value.split('.'), n = BigInt(whole), max = BigInt(limit);
+  return n > max || n === max && /[1-9]/.test(fraction);
+}
 // Chain quantities remain decimal strings, including values above Number.MAX_SAFE_INTEGER.
 export function formatUnits(raw, decimals) {
   if (typeof raw !== 'string' || !/^(0|[1-9][0-9]{0,77})$/.test(raw) || BigInt(raw) >= 2n ** 256n ||

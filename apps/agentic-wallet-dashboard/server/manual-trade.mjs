@@ -67,13 +67,30 @@ export class ManualTradeService {
     await this.bound(key, permission, bound.walletAddress);
     return { ...bound, sourceBalance: human(sourceBalance), nativeBalance: human(nativeBalance), gasPriceGwei: gas.medium.gasPrice };
   }
+  async tokenRisk(contractAddress) {
+    if (trusted(contractAddress)) return { state: 'TRUSTED', blocked: false, requiresAcknowledgment: false, items: [] };
+    let result; try { result = await this.auditTarget?.({ chainId: '56', contractAddress }); } catch { /* No raw provider errors or response data. */ }
+    const items = Array.isArray(result?.riskItems) ? result.riskItems.filter(x => x?.isHit === true).slice(0, 50).map(x => ({ code: text(x.code), description: text(x.description) })) : [];
+    if (result?.blocked === true || result?.block === true || result?.status === 'BLOCKED')
+      return { state: 'BLOCKED', blocked: true, requiresAcknowledgment: false,
+        riskLevel: Number.isInteger(result.riskLevel) ? String(result.riskLevel) : text(result.riskLevel), items };
+    if (result?.hasResult !== true || result?.isSupported !== true || result?.status === 'UNKNOWN')
+      return { state: 'UNAVAILABLE', blocked: false, requiresAcknowledgment: true, items: [] };
+    return { state: 'AUDITED', blocked: false, requiresAcknowledgment: items.length > 0 || result.requiresAcknowledgment === true || result.status === 'WARNING', riskLevel: Number.isInteger(result.riskLevel) ? String(result.riskLevel) : text(result.riskLevel), items };
+  }
   async risk(trade) {
     if (trusted(trade.toToken)) return { state: 'TRUSTED_TARGET', blocked: false, requiresAcknowledgment: false, items: [] };
-    let result; try { result = await this.auditTarget?.({ chainId: '56', contractAddress: trade.toToken }); } catch { /* No raw provider errors or response data. */ }
-    if (result?.blocked === true || result?.block === true || result?.status === 'BLOCKED') return { state: 'BLOCKED', blocked: true, requiresAcknowledgment: false, items: [] };
-    if (result?.hasResult !== true || result?.isSupported !== true || result?.status === 'UNKNOWN') return { state: 'UNAVAILABLE', blocked: false, requiresAcknowledgment: true, items: [] };
-    const items = Array.isArray(result.riskItems) ? result.riskItems.filter(x => x?.isHit === true).slice(0, 50).map(x => ({ code: text(x.code), description: text(x.description) })) : [];
-    return { state: 'AUDITED', blocked: false, requiresAcknowledgment: items.length > 0 || result.requiresAcknowledgment === true || result.status === 'WARNING', riskLevel: Number.isInteger(result.riskLevel) ? String(result.riskLevel) : text(result.riskLevel), items };
+    return this.tokenRisk(trade.toToken);
+  }
+  async sourceRisk(trade) {
+    if (trusted(trade.fromToken)) return null;
+    const result = await this.tokenRisk(trade.fromToken);
+    // A high-risk source is being sold, not acquired. Surface the warning and
+    // require explicit acknowledgment, but never make the risk gate trap an exit.
+    if (result.blocked) return { ...result, state: 'SOURCE_HIGH_RISK_ADVISORY', blocked: false, advisoryOnly: true,
+      requiresAcknowledgment: true, items: [...result.items, { code: 'SELL_SIDE_ADVISORY', description: '该源代币触发强风险提示；本次是卖出方向，风险提示不拦截退出，但不保证存在可用路由或交易能够成功。' }] };
+    return { ...result, state: result.state === 'UNAVAILABLE' ? 'SOURCE_AUDIT_UNAVAILABLE' : 'SOURCE_AUDITED_FOR_SELL',
+      blocked: false, advisoryOnly: true, requiresAcknowledgment: result.requiresAcknowledgment };
   }
   async preview(key, request) {
     const trade = input(request), before = await this.preflight(key, trade);
@@ -81,14 +98,15 @@ export class ManualTradeService {
     if (quote?.mode !== 'official-quote' || quote.chainId !== '56' || !same(quote.fromToken, trade.fromToken) || !same(quote.toToken, trade.toToken)
         || units(quote.amount) !== units(trade.amount) || units(quote.slippagePercent) !== units(trade.slippage)) throw new Denied('TRADE_QUOTE_MISMATCH', 503);
     decimal(quote.estimatedOut);
-    const risk = await this.risk(trade); await this.bound(key, 'read', before.walletAddress);
+    const risk = await this.risk(trade), sourceRisk = await this.sourceRisk(trade); await this.bound(key, 'read', before.walletAddress);
     const now = this.clock();
     for (const [k, r] of this.reviews) if (r.expiresAt <= now && !this.inFlight.has(k)) this.reviews.delete(k);
     if (this.reviews.size >= 1000) throw new Denied('TRADE_REVIEW_CAPACITY', 429);
     const review = { reviewId: id(), intentId: id(), ...trade, walletAddress: before.walletAddress,
       fromSymbol: text(quote.fromSymbol), toSymbol: text(quote.toSymbol), quotedOut: tidy(quote.estimatedOut),
       minimumReferenceOut: referenceMinimum(quote.estimatedOut, trade.slippage), minimumIsReferenceOnly: true,
-      expiresAt: now + this.reviewTtlMs, createdAt: now, risk, requiresRiskAcknowledgment: risk.requiresAcknowledgment,
+      expiresAt: now + this.reviewTtlMs, createdAt: now, risk, sourceRisk,
+      requiresRiskAcknowledgment: risk.requiresAcknowledgment || sourceRisk?.requiresAcknowledgment === true,
       requiresCostAcknowledgment: true, executable: !risk.blocked,
       sourceBalance: before.sourceBalance, nativeBalance: before.nativeBalance, minNativeReserve: this.minNativeReserve,
       gasPriceGwei: before.gasPriceGwei, totalGas: null, knownFees: null, approvalPlan: null,
@@ -96,7 +114,8 @@ export class ManualTradeService {
         '最低参考到账按本次报价及滑点计算，提交会重新构建路由；价格明显变动时需重新审单。',
         '保留 BNB 门槛不是交易 Gas 估算；兑换可能包括代币授权，并可能要求币安 App 确认。',
         ...(!trusted(trade.fromToken) ? ['卖出非可信币：目标资产可信不代表源代币可卖或没有转账税。'] : []),
-        ...(risk.state === 'UNAVAILABLE' ? ['目标代币安全审计数据不可用，无法确认代币风险。'] : [])] };
+      ...(risk.state === 'UNAVAILABLE' ? ['目标代币安全审计数据不可用，无法确认代币风险。'] : []),
+      ...(sourceRisk ? ['支付侧代币也已单独检查；若本次为卖出，源币强风险仅作退出提示，不会因此阻止卖出。'] : [])] };
     this.reviews.set(review.reviewId, { ...review, sessionKey: key });
     return structuredClone(review);
   }
@@ -129,9 +148,9 @@ export class ManualTradeService {
       if (fresh?.mode !== 'official-quote' || fresh.chainId !== review.chainId || !same(fresh.fromToken, review.fromToken) || !same(fresh.toToken, review.toToken)
           || units(fresh.amount) !== units(review.amount) || units(fresh.slippagePercent) !== units(review.slippage)) throw new Denied('TRADE_QUOTE_MISMATCH', 503);
       if (units(fresh.estimatedOut) < units(review.quotedOut)) throw new Denied('TRADE_QUOTE_CHANGED_REVIEW_REQUIRED', 409);
-      const risk = await this.risk(review);
+      const risk = await this.risk(review), sourceRisk = await this.sourceRisk(review);
       if (risk.blocked) throw new Denied('TOKEN_RISK_BLOCKED', 403);
-      if (JSON.stringify(risk) !== JSON.stringify(review.risk)) throw new Denied('TOKEN_AUDIT_CHANGED_REVIEW_REQUIRED', 409);
+      if (JSON.stringify(risk) !== JSON.stringify(review.risk) || JSON.stringify(sourceRisk) !== JSON.stringify(review.sourceRisk)) throw new Denied('TOKEN_AUDIT_CHANGED_REVIEW_REQUIRED', 409);
       await this.bound(key, 'manual', review.walletAddress);
       const now = this.clock(); if (now < review.createdAt || now >= review.expiresAt) throw new Denied('TRADE_REVIEW_EXPIRED', 409);
       const record = { schema: 1, intentId: review.intentId, reviewId: review.reviewId, walletAddress: review.walletAddress,

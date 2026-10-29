@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { Denied } from './auth.mjs';
-import { validChain, validContract, decimal, addressKey } from './model.mjs';
+import { validChain, validContract, decimal, decimalExceedsInteger, addressKey } from './model.mjs';
 import { WalletFailure, officialFailure, stageFor } from './diagnostics.mjs';
 
 const runFile = promisify(execFile);
@@ -79,7 +79,7 @@ export function assertAllowedCliArgs(args) {
     exact(['--fromTokenQty', '--fromToken', '--toToken', '--binanceChainId', '--slippage']);
     validContract(chain(), flags.get('--fromToken')); validContract(chain(), flags.get('--toToken'));
     decimal(flags.get('--fromTokenQty')); decimal(flags.get('--slippage'), { zero: true });
-    if (Number(flags.get('--slippage')) > 100) throw new Denied('INVALID_SLIPPAGE', 400);
+    if (decimalExceedsInteger(flags.get('--slippage'), '100')) throw new Denied('INVALID_SLIPPAGE', 400);
   } else throw new Denied('CLI_COMMAND_NOT_ALLOWED', 400);
   return args;
 }
@@ -177,7 +177,7 @@ export class OfficialWallet {
   }
   async quote({ chainId, fromToken, toToken, amount, slippage }) {
     decimal(amount); decimal(slippage, { zero: true });
-    if (Number(slippage) > 100) throw new Denied('INVALID_SLIPPAGE', 400);
+    if (decimalExceedsInteger(slippage, '100')) throw new Denied('INVALID_SLIPPAGE', 400);
     const v = await this.call(['market-order', 'quote', '--fromTokenQty', amount, '--fromToken', validContract(chainId, fromToken),
       '--toToken', validContract(chainId, toToken), '--binanceChainId', validChain(chainId), '--slippage', slippage]);
     return { mode: 'official-quote', chainId, fromToken, toToken, amount, slippagePercent: slippage,

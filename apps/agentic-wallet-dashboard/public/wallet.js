@@ -468,9 +468,20 @@ function showTradeReview(review) {
   const warnings = Array.isArray(review.warnings) ? review.warnings : [];
   $('live-review-blockers').replaceChildren(...warnings.map(x => el('li', typeof x === 'string' ? x : x.message || '存在未确认信息')));
   const riskItems = Array.isArray(review.risk?.items) ? review.risk.items : [];
-  $('trade-risk-items').replaceChildren(...riskItems.map(x => el('p', typeof x === 'string' ? x : x.message || x.description || x.name || '代币风险信息待核对')));
-  if (review.risk?.blocked) $('trade-risk-items').prepend(el('p', '风险检查已拦截，此笔交易不能提交。', 'blocked-notice'));
-  else if (review.requiresRiskAcknowledgment && riskItems.length === 0) $('trade-risk-items').append(el('p', '代币安全信息未完整确认。请核实合约并明确确认风险。'));
+  const sourceRisk = review.sourceRisk, sourceRiskItems = Array.isArray(sourceRisk?.items) ? sourceRisk.items : [];
+  const riskRows = [];
+  if (review.risk?.state !== 'TRUSTED_TARGET') {
+    riskRows.push(el('p', '接收侧（买入目标）风险审查', 'risk-heading'));
+    riskRows.push(...riskItems.map(x => el('p', typeof x === 'string' ? x : x.message || x.description || x.name || '目标代币风险信息待核对')));
+    if (review.risk?.blocked) riskRows.push(el('p', '目标代币风险检查已拦截，此笔买入/兑换不能提交。', 'blocked-notice'));
+  }
+  if (sourceRisk) {
+    riskRows.push(el('p', '支付侧（卖出源币）风险审查', 'risk-heading'));
+    riskRows.push(...sourceRiskItems.map(x => el('p', typeof x === 'string' ? x : x.message || x.description || x.name || '源代币风险信息待核对')));
+    if (sourceRisk.state === 'SOURCE_AUDIT_UNAVAILABLE') riskRows.push(el('p', '卖出源币的安全资料不可用；此提示不拦截退出，但交易仍可能因合约、税费或路由失败。'));
+  }
+  $('trade-risk-items').replaceChildren(...riskRows);
+  if (!review.risk?.blocked && review.requiresRiskAcknowledgment && riskRows.length === 0) $('trade-risk-items').append(el('p', '代币安全信息未完整确认。请核实合约并明确确认风险。'));
   $('trade-risk-label').hidden = !review.requiresRiskAcknowledgment;
   $('trade-confirmations').hidden = !review.executable || review.risk?.blocked === true;
   $('review-state-label').textContent = '报价预览 · 尚未提交'; $('trade-submit-message').textContent = '确认将提交真实兑换；请核对以上完整合约和金额。';
