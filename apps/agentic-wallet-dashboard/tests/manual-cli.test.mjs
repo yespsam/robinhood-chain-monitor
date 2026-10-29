@@ -29,7 +29,7 @@ test('manual swap uses exact reviewed CLI arguments and reports submitted, never
 test('invalid fields, chains, contracts, amount and slippage never access metadata or execute', async () => {
   const cli = createManualCli({ resolveInstallation: () => assert.fail('no metadata'), execute: () => assert.fail('no execution') });
   for (const override of [{ command: 'send' }, { args: ['swap'] }, { chainId: '137' }, { chainId: '--help' }, { fromToken: '$(bad)' },
-    { amount: '1e18' }, { amount: '0' }, { amount: '-1' }, { slippage: 'auto' }, { slippage: '101' }, { toToken: NATIVE }])
+    { amount: '1e18' }, { amount: '0' }, { amount: '-1' }, { slippage: 'auto' }, { slippage: '101' }, { slippage: '100.0000000000000001' }, { toToken: NATIVE }])
     await assert.rejects(cli.executeSwap({ ...trade, ...override }));
   await assert.rejects(cli.readOrder({ orderId: '--json', chainId: '56' }));
   await assert.rejects(cli.txLock('$(bad)')); await assert.rejects(cli.gasPrice('137'));

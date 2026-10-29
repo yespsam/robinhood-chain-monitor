@@ -51,7 +51,7 @@ const forbidden = [
   ['wallet', 'balance', '--binanceChainId', '56', '--binanceChainId', '56'],
   ['wallet', 'balance', '--binanceChainId=56'],
   ['wallet', 'status', '--json'], ['--json', 'wallet', 'status'],
-  [...quote, '--json'], [...quote, '--slippage', '100'],
+  [...quote, '--json'], [...quote, '--slippage', '100'], [...quote.slice(0, -1), '100.0000000000000001'],
   ['auth', 'verify', '--qrCodeId', 'valid-id', '--qrCodeId', 'second-id'],
   ['wallet', 'status', 'market-order', 'swap'],
   ['wallet', 'status', '--', 'execute'],

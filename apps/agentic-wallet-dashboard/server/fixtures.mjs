@@ -1,4 +1,4 @@
-import { CORE_CHAINS, NATIVE, estimateAssets, decimal } from './model.mjs';
+import { CORE_CHAINS, NATIVE, estimateAssets, decimal, decimalExceedsInteger } from './model.mjs';
 import { Denied } from './auth.mjs';
 export const mockWallets = Object.fromEntries(CORE_CHAINS.map(c => [c.id, 'DEMO-' + c.id + '-WALLET-NOT-AN-ADDRESS']));
 const assets = [
@@ -24,7 +24,7 @@ export function demoQuote(input) {
   if (kind === 'limit' && !['56', 'CT_501'].includes(chainId)) throw new Denied('LIMIT_CHAIN_UNSUPPORTED', 400);
   if (!['market', 'limit'].includes(kind)) throw new Denied('INVALID_KIND', 400);
   decimal(amount); decimal(slippage, { zero: true });
-  if (Number(slippage) > 100) throw new Denied('INVALID_SLIPPAGE', 400);
+  if (decimalExceedsInteger(slippage, '100')) throw new Denied('INVALID_SLIPPAGE', 400);
   const from = assets.find(x => x.chainId === chainId && x.contract === fromToken);
   const to = assets.find(x => x.chainId === chainId && x.contract === toToken);
   if (!from || !to || fromToken === toToken) throw new Denied('TOKEN_PAIR_NOT_IN_DEMO', 400);

@@ -2,6 +2,7 @@ import { PHASES, STAGES, activePhases, diagnosticText, safeDiagnosticExport } fr
 import { AUTH_URL_ISSUES } from './official-error-catalog.js';
 import { renderAuthQr } from './auth-qr.js';
 import { readLocalSession, saveLocalSession, clearLocalSession } from './session-recovery.js';
+import { COMMON_TOKENS, createBscTradePair } from './trade-pair.js';
 const $ = id => document.getElementById(id);
 // The launch capability is transient. Never persist it, display it, or send it to external origins.
 const accessMatch = /^#access=([a-f0-9]{64})$/.exec(location.hash);
@@ -282,7 +283,7 @@ function render(v) {
     if (v.chains.some(c => c.id === '56')) $('live-chain').value = '56';
     changeChain(false); $('live-data-badge').textContent = '已绑定 · 待读取'; document.dispatchEvent(new CustomEvent('wallet:bound')); void refreshCurrent(); void loadTrades();
   }
-  if (connected && !wasConnected) $('live-quote-message').textContent = '先获取报价并核对信息，点击确认交易后才会提交。';
+  if (connected && !wasConnected) $('live-quote-message').textContent = '填好合约、数量和滑点后，点击一次买入/卖出按钮即可核验并提交。';
   clearTimeout(pollTimer);
   if (!['FAILED', 'TIMEOUT', 'PAUSED', 'DISCONNECTED'].includes(v.phase)) pollTimer = setTimeout(poll, connected ? 60_000 : 1500);
 }
@@ -308,9 +309,9 @@ function changeChain(refresh = true) {
   $('live-to').value = chain === '56' ? '0x55d398326f99059fF775485246999027B3197955' : '';
   $('from-preset').value = chain === '56' ? 'BNB' : 'custom'; $('to-preset').value = chain === '56' ? 'USDT' : 'custom';
   $('from-preset').disabled = chain !== '56'; $('to-preset').disabled = chain !== '56';
-  $('live-quote-message').textContent = chain === '56' ? '获取报价后逐笔确认；不会自动交易。' : '此网络仅提供报价预览，手动交易暂仅支持 BSC。';
+  $('live-quote-message').textContent = chain === '56' ? '点击买入/卖出按钮一次即可核验并提交；不会自动重发。' : '此网络仅提供报价预览，手动交易暂仅支持 BSC。';
   if (chain !== '56') $('ptah-note').textContent = 'PTAH 持仓仅在 BNB Smart Chain 上查询。';
-  setReadMessage('网络已切换，待读取真实数据。'); if (refresh) void refreshCurrent();
+  updateTradeActionButton(); setReadMessage('网络已切换，待读取真实数据。'); if (refresh) void refreshCurrent();
 }
 function makeTable(headers, rows, target = 'live-table', numeric = []) {
   const t = el('table'), head = el('tr'), thead = el('thead'), body = el('tbody');
@@ -441,11 +442,60 @@ $('live-kind').onchange = () => { readVersion++; readBusy = false; void refreshC
 $('asset-search').oninput = renderHoldings;
 document.querySelectorAll('[data-asset-tab]').forEach(button => button.addEventListener('click', () => { assetTab = button.dataset.assetTab; document.querySelectorAll('[data-asset-tab]').forEach(node => node.setAttribute('aria-selected', String(node === button))); renderHoldings(); }));
 document.addEventListener('wallet:view', event => { const before = currentView; currentView = event.detail.view; $('read-wallet').hidden = currentView === 'quote'; if (before !== currentView && state?.walletConnected) { if (currentView === 'history') { readVersion++; readBusy = false; void refreshCurrent(); } else if (currentView === 'overview') { if (assetSnapshot || portfolioSnapshot) renderAssets(); else { readVersion++; readBusy = false; void refreshCurrent(); } } } });
-const COMMON_TOKENS = { BNB: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', USDT: '0x55d398326f99059fF775485246999027B3197955', USDC: '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d' };
+function installCaTradeHelper() {
+  const form = $('live-quote-form'); if (!form) return;
+  const panel = el('div', undefined, 'quote-scope'), direction = el('select'), token = el('input'), quoteAsset = el('select');
+  panel.append(el('strong', '单 CA 快捷买入 / 卖出'));
+  const directionLabel = el('label', '方向'), tokenLabel = el('label', '代币 CA'), quoteLabel = el('label', '报价资产');
+  direction.id = 'quick-ca-direction'; directionLabel.htmlFor = direction.id;
+  direction.append(new Option('买入该 CA', 'buy'), new Option('卖出该 CA', 'sell'));
+  token.id = 'quick-ca-address'; token.type = 'text'; token.autocomplete = 'off'; token.spellcheck = false; token.placeholder = '粘贴 BNB Chain 代币合约地址'; tokenLabel.htmlFor = token.id;
+  quoteAsset.id = 'quick-ca-quote'; quoteLabel.htmlFor = quoteAsset.id;
+  for (const [id, label] of [['BNB', 'BNB'], ['USDT', 'USDT'], ['USDC', 'USDC']]) quoteAsset.append(new Option(label, id));
+  const hint = el('p', '买入：用报价资产支付并接收 CA；卖出：支付 CA 并换回报价资产。', 'small muted');
+  const apply = el('button', '填入交易对', 'quiet-button full'); apply.type = 'button';
+  const status = el('p', '', 'small muted'); status.setAttribute('role', 'status');
+  direction.onchange = () => { hint.textContent = direction.value === 'buy'
+    ? '买入：支付数量填写报价资产数量。'
+    : '卖出：支付数量填写要卖出的 CA 数量。'; };
+  apply.onclick = () => {
+    try {
+      if ($('live-chain').value !== '56') throw new Error('BSC_ONLY');
+      const pair = createBscTradePair({ direction: direction.value, tokenAddress: token.value.trim(), quoteAsset: quoteAsset.value });
+      for (const [side, address] of [['from', pair.fromToken], ['to', pair.toToken]]) {
+        const preset = Object.entries(COMMON_TOKENS).find(([, contract]) => contract.toLowerCase() === address.toLowerCase());
+        $(side + '-preset').value = preset?.[0] || 'custom'; $('live-' + side).value = address;
+      }
+      $('live-amount').value = '';
+      updateTradeActionButton();
+      invalidateReview('交易对已填入；填写支付数量和滑点后，点击一次即可核验并提交。');
+      status.textContent = '已填入。CA 仍须通过实时报价、审计、余额、Gas 与交易锁核验；快捷填入不保证可交易。';
+    } catch (error) { status.textContent = error.message === 'BSC_ONLY'
+      ? '此快捷入口只适用于 BNB Smart Chain；其他网络当前仅可查询报价。'
+      : 'CA 格式或报价资产无效，请核对完整合约地址。'; }
+  };
+  panel.append(directionLabel, direction, tokenLabel, token, quoteLabel, quoteAsset, apply, hint, status);
+  form.prepend(panel);
+}
+installCaTradeHelper();
+function updateTradeActionButton() {
+  const button = $('live-quote-button');
+  const known = address => Object.values(COMMON_TOKENS).some(value => value.toLowerCase() === address.trim().toLowerCase());
+  const fromKnown = known($('live-from').value), toKnown = known($('live-to').value);
+  button.type = 'button';
+  button.textContent = $('live-chain').value !== '56' ? '仅获取报价' : fromKnown && !toKnown ? '一键买入并提交' : !fromKnown && toKnown ? '一键卖出并提交' : '一键兑换并提交';
+  document.querySelector('.readonly-label').textContent = '一键手动提交 · 本机专属';
+  document.querySelector('.quote-screen .section-note').textContent = '填好合约、数量和滑点后，点击买入/卖出按钮一次；系统会即时核验并提交。';
+  document.querySelector('.quote-scope strong').textContent = '每次点击即为本笔提交授权';
+  document.querySelector('.quote-scope p').textContent = '仅 BNB Smart Chain 开放手动兑换。按钮点击后会核验最新报价、风险、余额、Gas 与交易锁；任一硬拦截或参数变化都会停止提交。未知结果不自动重发；币安 App 如要求确认，仍需在 App 内完成。';
+}
+updateTradeActionButton();
+document.querySelector('.quote-screen .section-note').setAttribute('aria-live', 'polite');
+document.querySelector('.quote-scope p').setAttribute('aria-live', 'polite');
 function invalidateReview(message = '') {
   quoteVersion++; displayedIntentId = null;
   tradeReview = null; clearTimeout(reviewTimer);
-  $('trade-cost-ack').checked = false; $('trade-risk-ack').checked = false; $('confirm-trade').disabled = true;
+  $('confirm-trade').disabled = true;
   if (!tradeSubmitting && $('live-review').open) $('live-review').close();
   if (message) $('live-quote-message').textContent = message;
 }
@@ -453,28 +503,38 @@ function clearTradeUI() {
   quoteBusy = false; quoteVersion++; displayedIntentId = null; clearTimeout(tradeTimer); clearTimeout(reviewTimer); trackedIntentId = null; tradeReview = null; trades = []; tradeSubmitting = false;
   $('trade-list').replaceChildren(); $('trade-state-message').textContent = '连接钱包后查询本机交易记录。'; $('refresh-trades').disabled = true;
   $('trade-risk-items').replaceChildren(); $('trade-confirmations').hidden = true; $('confirm-trade').disabled = true;
-  $('trade-cost-ack').checked = false; $('trade-risk-ack').checked = false; $('trade-submit-message').textContent = '请先连接钱包。';
+  $('trade-submit-message').textContent = '请先连接钱包。';
 }
 function checkTradeConfirmation() {
   const review = tradeReview;
   const notExpired = review && timestamp(review.expiresAt) > Date.now();
-  $('confirm-trade').disabled = tradeSubmitting || !review?.executable || review?.risk?.blocked === true || !notExpired || !$('trade-cost-ack').checked || (review.requiresRiskAcknowledgment && !$('trade-risk-ack').checked);
+  $('confirm-trade').disabled = tradeSubmitting || !review?.executable || review?.risk?.blocked === true || !notExpired;
 }
 function quoteDetails(details) { $('live-review-details').replaceChildren(...details.map(([key, value]) => { const div = el('div'); div.append(el('dt', key), el('dd', value ?? '未返回')); return div; })); }
 function showTradeReview(review) {
   displayedIntentId = null;
-  tradeReview = review; $('trade-cost-ack').checked = false; $('trade-risk-ack').checked = false;
+  tradeReview = review;
   quoteDetails([['网络', 'BNB Smart Chain / ' + review.chainId], ['钱包', review.walletAddress], ['支付合约', review.fromToken], ['接收合约', review.toToken], ['支付数量', review.amount + (review.fromSymbol ? ' ' + review.fromSymbol : '')], ['预计到账', review.quotedOut + (review.toSymbol ? ' ' + review.toSymbol : '')], ['滑点参考最低到账', review.minimumReferenceOut + (review.toSymbol ? ' ' + review.toSymbol : '')], ['滑点上限', review.slippage + '%'], ['报价有效期', localTime(review.expiresAt)], ['MEV 保护', review.mev === true ? '已启用' : '未确认'], ['Gas 档位', review.gasLevel || '未确认'], ['价格影响 / 总费用', '未完整确认，实际以执行结果为准']]);
   const warnings = Array.isArray(review.warnings) ? review.warnings : [];
   $('live-review-blockers').replaceChildren(...warnings.map(x => el('li', typeof x === 'string' ? x : x.message || '存在未确认信息')));
   const riskItems = Array.isArray(review.risk?.items) ? review.risk.items : [];
-  $('trade-risk-items').replaceChildren(...riskItems.map(x => el('p', typeof x === 'string' ? x : x.message || x.description || x.name || '代币风险信息待核对')));
-  if (review.risk?.blocked) $('trade-risk-items').prepend(el('p', '风险检查已拦截，此笔交易不能提交。', 'blocked-notice'));
-  else if (review.requiresRiskAcknowledgment && riskItems.length === 0) $('trade-risk-items').append(el('p', '代币安全信息未完整确认。请核实合约并明确确认风险。'));
-  $('trade-risk-label').hidden = !review.requiresRiskAcknowledgment;
-  $('trade-confirmations').hidden = !review.executable || review.risk?.blocked === true;
-  $('review-state-label').textContent = '报价预览 · 尚未提交'; $('trade-submit-message').textContent = '确认将提交真实兑换；请核对以上完整合约和金额。';
-  $('confirm-trade').textContent = '确认交易'; checkTradeConfirmation(); $('live-review').showModal();
+  const sourceRisk = review.sourceRisk, sourceRiskItems = Array.isArray(sourceRisk?.items) ? sourceRisk.items : [];
+  const riskRows = [];
+  if (review.risk?.state !== 'TRUSTED_TARGET') {
+    riskRows.push(el('p', '接收侧（买入目标）风险审查', 'risk-heading'));
+    riskRows.push(...riskItems.map(x => el('p', typeof x === 'string' ? x : x.message || x.description || x.name || '目标代币风险信息待核对')));
+    if (review.risk?.blocked) riskRows.push(el('p', '目标代币风险检查已拦截，此笔买入/兑换不能提交。', 'blocked-notice'));
+  }
+  if (sourceRisk) {
+    riskRows.push(el('p', '支付侧（卖出源币）风险审查', 'risk-heading'));
+    riskRows.push(...sourceRiskItems.map(x => el('p', typeof x === 'string' ? x : x.message || x.description || x.name || '源代币风险信息待核对')));
+    if (sourceRisk.state === 'SOURCE_AUDIT_UNAVAILABLE') riskRows.push(el('p', '卖出源币的安全资料不可用；此提示不拦截退出，但交易仍可能因合约、税费或路由失败。'));
+  }
+  $('trade-risk-items').replaceChildren(...riskRows);
+  if (!review.risk?.blocked && review.requiresRiskAcknowledgment && riskRows.length === 0) $('trade-risk-items').append(el('p', '代币安全信息未完整确认。请核实合约并明确确认风险。'));
+  $('trade-confirmations').hidden = true;
+  $('review-state-label').textContent = '安全拦截 · 未提交'; $('trade-submit-message').textContent = '风险检查已阻止本次提交。请查看拦截原因；本机不会提供绕过按钮。';
+  $('confirm-trade').textContent = '确认并提交真实交易'; checkTradeConfirmation(); $('live-review').showModal();
   clearTimeout(reviewTimer); const duration = timestamp(review.expiresAt) - Date.now();
   reviewTimer = setTimeout(() => { if (tradeReview?.reviewId !== review.reviewId || tradeSubmitting) return; tradeReview = null; $('confirm-trade').disabled = true; $('review-state-label').textContent = '报价已过期'; $('trade-submit-message').textContent = '关闭审阅并重新获取报价，再次确认。'; }, Math.max(0, Number.isFinite(duration) ? duration : 0));
 }
@@ -536,50 +596,48 @@ async function loadTrades() {
   finally { if (current === epoch) $('refresh-trades').disabled = !state?.walletConnected; }
 }
 for (const side of ['from', 'to']) {
-  $(side + '-preset').onchange = () => { invalidateReview('代币已更改，请重新获取报价。'); $('live-' + side).value = COMMON_TOKENS[$(side + '-preset').value] || ''; if ($(side + '-preset').value === 'custom') $('live-' + side).focus(); };
+  $(side + '-preset').onchange = () => { invalidateReview('代币已更改，请再次点击执行。'); $('live-' + side).value = COMMON_TOKENS[$(side + '-preset').value] || ''; if ($(side + '-preset').value === 'custom') $('live-' + side).focus(); updateTradeActionButton(); };
   $('live-' + side).addEventListener('input', () => { const match = Object.entries(COMMON_TOKENS).find(([, contract]) => contract.toLowerCase() === $('live-' + side).value.trim().toLowerCase()); $(side + '-preset').value = match?.[0] || 'custom'; });
 }
-$('live-quote-form').addEventListener('input', () => invalidateReview('参数已更改，请重新获取报价。'));
-$('live-quote-form').onsubmit = async event => {
-  event.preventDefault(); if (tradeSubmitting || quoteBusy || hasOpenTrade()) return; invalidateReview(); quoteBusy = true; const requestVersion = quoteVersion;
-  const current = epoch, chainId = $('live-chain').value; $('live-quote-button').disabled = true; $('live-quote-message').textContent = '正在核验钱包、查询报价与风险…';
+$('live-quote-form').addEventListener('input', () => { invalidateReview('参数已更改，请再次点击执行。'); updateTradeActionButton(); });
+$('live-chain').addEventListener('change', updateTradeActionButton);
+$('live-quote-form').onsubmit = event => event.preventDefault();
+$('live-quote-button').onclick = async () => {
+  if (!$('live-quote-form').reportValidity()) return;
+  if (tradeSubmitting || quoteBusy || hasOpenTrade()) return;
+  invalidateReview(); quoteBusy = true; const requestVersion = quoteVersion;
+  const current = epoch, chainId = $('live-chain').value; let review = null, submissionStarted = false;
+  $('live-quote-button').disabled = true; $('live-quote-button').textContent = '正在核验…'; $('live-quote-message').textContent = '正在核验钱包、最新报价、风险、余额与 Gas…';
   const request = { chainId, fromToken: $('live-from').value.trim(), toToken: $('live-to').value.trim(), amount: $('live-amount').value.trim(), slippage: $('live-slippage').value.trim() };
   const parameters = JSON.stringify(request);
   try {
     const quote = await api(chainId === '56' ? '/api/trade/preview' : '/api/wallet/quote', request);
     const now = JSON.stringify({ chainId: $('live-chain').value, fromToken: $('live-from').value.trim(), toToken: $('live-to').value.trim(), amount: $('live-amount').value.trim(), slippage: $('live-slippage').value.trim() });
     if (current !== epoch || requestVersion !== quoteVersion || parameters !== now) return;
-    if (chainId === '56') { showTradeReview(quote); $('live-quote-message').textContent = quote.risk?.blocked ? '风险检查已拦截，未提交交易。' : '报价与风险信息已返回，请逐项核对。'; }
-    else {
+    if (chainId !== '56') {
       quoteDetails([['网络', quote.chainId], ['钱包', quote.wallet], ['支付合约', quote.fromToken], ['接收合约', quote.toToken], ['支付数量', quote.amount + ' ' + (quote.fromSymbol || '')], ['预计到账', quote.estimatedOut === null ? '官方未返回' : quote.estimatedOut + ' ' + (quote.toSymbol || '')], ['滑点上限', quote.slippagePercent + '%'], ['价格影响 / 费用', '未确认']]);
       $('live-review-blockers').replaceChildren(...(quote.blockers || []).map(x => el('li', x))); $('trade-risk-items').replaceChildren(); $('trade-confirmations').hidden = true; $('review-state-label').textContent = '此网络仅提供报价预览'; $('trade-submit-message').textContent = '手动交易暂仅支持 BSC。'; $('live-review').showModal();
       $('live-quote-message').textContent = '官方报价已返回；此网络未开放提交。';
+      return;
     }
-  } catch (error) { if (current === epoch && requestVersion === quoteVersion) $('live-quote-message').textContent = error.message; }
-  finally { if (current === epoch) { quoteBusy = false; $('live-quote-button').disabled = !state?.walletConnected || tradeSubmitting || hasOpenTrade(); } }
-};
-$('trade-cost-ack').onchange = checkTradeConfirmation; $('trade-risk-ack').onchange = checkTradeConfirmation;
-$('confirm-trade').onclick = async () => {
-  checkTradeConfirmation(); if ($('confirm-trade').disabled || !tradeReview) return;
-  const current = epoch, review = tradeReview; displayedIntentId = review.intentId; tradeSubmitting = true; tradeReview = null; clearTimeout(reviewTimer); $('confirm-trade').disabled = true; $('confirm-trade').textContent = '正在提交…'; $('close-live-review').disabled = true;
-  $('trade-submit-message').textContent = '提交一次后只查询状态。请勿重复操作。'; $('live-quote-button').disabled = true;
-  try {
-    const intent = normalizeIntent(await api('/api/trade/submit', { reviewId: review.reviewId, confirmed: true, riskAcknowledged: review.requiresRiskAcknowledgment ? $('trade-risk-ack').checked : false, costAcknowledged: $('trade-cost-ack').checked }));
+    review = quote;
+    if (quote.risk?.blocked === true) { showTradeReview(quote); $('live-quote-message').textContent = '安全检查已拦截，未提交交易。请查看拦截原因。'; return; }
+    tradeSubmitting = true; submissionStarted = true; displayedIntentId = quote.intentId;
+    $('live-quote-button').textContent = '正在提交…'; $('live-quote-message').textContent = '报价与安全检查通过，正在通过官方钱包提交；提交不代表成交。';
+    const intent = normalizeIntent(await api('/api/trade/submit', { reviewId: review.reviewId, confirmed: true, riskAcknowledged: true, costAcknowledged: true }));
     if (current !== epoch) return;
-    trackIntent(intent); $('review-state-label').textContent = labelOfIntent(intent); $('trade-submit-message').textContent = '请在下方交易状态区查看进度，需要 App 确认时请在币安处理。'; $('trade-confirmations').hidden = true;
-    $('live-quote-message').textContent = labelOfIntent(intent) + '。本机持续查询，未确认完成前不会当作成交。';
+    trackIntent(intent); $('live-quote-message').textContent = labelOfIntent(intent) + '。本机只查询状态，不会自动重复提交。';
   } catch (error) {
     if (current === epoch) {
       const beforeSubmissionErrors = new Set(['TRADE_REVIEW_EXPIRED', 'UNKNOWN_TRADE_REVIEW', 'TRADE_QUOTE_CHANGED_REVIEW_REQUIRED', 'TOKEN_AUDIT_CHANGED_REVIEW_REQUIRED', 'TOKEN_RISK_BLOCKED', 'UNRESOLVED_TRADE_EXISTS', 'TRADE_CONFIRMATION_REQUIRED', 'TOKEN_RISK_ACKNOWLEDGMENT_REQUIRED', 'INSUFFICIENT_TRADE_BALANCE', 'INSUFFICIENT_GAS_RESERVE', 'WALLET_TRANSACTION_LOCKED', 'TRADE_BALANCE_UNCONFIRMED', 'GAS_PRICE_UNCONFIRMED', 'TRADE_QUOTE_MISMATCH']);
-      if (beforeSubmissionErrors.has(error.code)) {
-        displayedIntentId = null; $('review-state-label').textContent = '尚未提交'; $('trade-submit-message').textContent = error.message; $('live-quote-message').textContent = error.message;
+      if (!submissionStarted || beforeSubmissionErrors.has(error.code)) {
+        displayedIntentId = null; $('live-quote-message').textContent = error.message;
         if (error.code === 'UNRESOLVED_TRADE_EXISTS') void loadTrades();
       } else {
-        const intent = { intentId: review.intentId, state: 'UNKNOWN', amount: review.amount, fromToken: review.fromToken, toToken: review.toToken, message: '提交结果未确认：' + error.message }; updateIntent(intent); trackedIntentId = review.intentId; if (trackedIntentId) tradeTimer = setTimeout(pollTrade, 5000); $('review-state-label').textContent = '提交结果待核验'; $('trade-submit-message').textContent = '正在查询此意图的状态，不会重发。可关闭此窗口查看记录。';
+        const intent = { intentId: review.intentId, state: 'UNKNOWN', amount: review.amount, fromToken: review.fromToken, toToken: review.toToken, message: '提交结果未确认：' + error.message }; updateIntent(intent); trackedIntentId = review.intentId; if (trackedIntentId) tradeTimer = setTimeout(pollTrade, 5000); $('live-quote-message').textContent = '提交结果待核验；已锁定本笔意图，只查询状态，不会重发。';
       }
-      $('trade-confirmations').hidden = true;
     }
-  } finally { if (current === epoch) { tradeSubmitting = false; $('close-live-review').disabled = false; $('live-quote-button').disabled = !state?.walletConnected || tradeSubmitting || hasOpenTrade(); } }
+  } finally { if (current === epoch) { quoteBusy = false; tradeSubmitting = false; updateTradeActionButton(); $('live-quote-button').disabled = !state?.walletConnected || hasOpenTrade(); } }
 };
 $('close-live-review').onclick = () => { if (!tradeSubmitting) invalidateReview(); };
 $('live-review').addEventListener('cancel', event => { if (tradeSubmitting) event.preventDefault(); else invalidateReview(); });
