@@ -1638,6 +1638,8 @@ test("priority polling starts Flap and Four.Meme without waiting for a slow veri
   let releasePons;
   const slowPons = new Promise((resolve) => { releasePons = resolve; });
   const requested = [];
+  let resolveRequestsStarted;
+  const requestsStarted = new Promise((resolve) => { resolveRequestsStarted = resolve; });
   t.after(() => {
     PRIORITY_REPOSITORIES.delete(ponsRepository);
     return fs.rm(dataDir, { recursive: true, force: true });
@@ -1646,6 +1648,10 @@ test("priority polling starts Flap and Four.Meme without waiting for a slow veri
   t.mock.method(globalThis, "fetch", async (url) => {
     const value = String(url);
     requested.push(value);
+    if ([ponsRepository, "flap-sh/flap-skills", "four-meme-community/openfour-docs"]
+      .every((repository) => requested.some((request) => request.includes(`/${repository}/`)))) {
+      resolveRequestsStarted();
+    }
     if (value.includes(`/${ponsRepository}/`) && value.endsWith(".atom")) await slowPons;
     return { ok: true, status: 200, text: async () => "<feed></feed>" };
   });
@@ -1661,16 +1667,22 @@ test("priority polling starts Flap and Four.Meme without waiting for a slow veri
   });
 
   const check = monitor.check(true);
-  for (let attempt = 0; attempt < 20 && requested.length < repositories.length; attempt += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-  }
+  let requestTimeout;
   try {
+    // Await actual requests after asynchronous state loading; event-loop turns are not an I/O barrier.
+    await Promise.race([
+      requestsStarted,
+      new Promise((_, reject) => {
+        requestTimeout = setTimeout(() => reject(new Error("Priority requests did not start while Pons was blocked")), 5_000);
+      }),
+    ]);
     assert.equal(requested.some((url) => url.includes("/flap-sh/flap-skills/")), true);
     assert.equal(requested.some((url) => url.includes("/four-meme-community/openfour-docs/")), true);
   } finally {
+    clearTimeout(requestTimeout);
     releasePons();
+    await check;
   }
-  await check;
 });
 
 test("overlapping GitHub lane ticks coalesce into one immediate follow-up without same-lane concurrency", async (t) => {
