@@ -55,6 +55,14 @@ test('legacy budget failure names the quantity and cap, hides empty steps and do
  const u=await ui();u.progress({operation:{intentId:randomUUID(),action:'panelAutoBuy',market:token,status:'FAILED',steps:[],request:{action:'buy',amount:'10000000.0',maxBnb:'0.1'},error:{code:'FUNDING_BUDGET_EXCEEDED'},message:'old opaque failure',updatedAt:Date.now()}});
  assert.match(u.get('status-title').textContent,/未提交交易/);assert.match(u.get('status-text').textContent,/10,000,000/);assert.match(u.get('status-text').textContent,/0.1/);assert.match(u.get('status-text').textContent,/平台持仓额度/);assert.doesNotMatch(u.get('status-text').textContent,/已完成的步骤保留/);assert(u.get('flow-steps').hidden);assert.match(u.get('flow-timing').textContent,/未提交交易/);assert(!u.get('prepare').disabled);
 });
+test('a price-stopped buy can only refresh its quote, reuses original parameters and never submits',async()=>{
+ const u=await ui();u.client.local=true;u.get('oneclick-enabled').checked=true;
+ const op={intentId:randomUUID(),action:'panelAutoBuy',market:token,wallet,status:'FAILED',updatedAt:Date.now(),error:{code:'AUTO_PRICE_CHANGED'},request:{action:'buy',tokenAddress:token,wallet,amount:'10000000',slippageBps:'100',swapSlippageBps:'1000'},steps:[{action:'panelWrap',status:'CONFIRMED',plan:{...market,action:'buy'}}]};
+ u.setHandler(async r=>r.method==='panelQuery'?{wallet:{connected:true,address:wallet},market,holdings:{base:'0',quote:'1'}}:{tradePreview:preview(r.params)});
+ u.progress({operation:op});await u.settle();u.calls.length=0;assert(!u.get('continue-buy').hidden);assert.equal(u.get('continue-buy').textContent,'重新核对买入（不提交）');assert.match(u.get('status-text').textContent,/买入滑点 1%/);
+ u.get('continue-buy').fire('click');await u.settle();assert.deepEqual(u.calls.map(r=>r.method),['panelQuery','panelPrepare']);assert.equal(u.calls[1].params.amount,'10000000');assert.equal(u.calls[1].params.slippageBps,'100');assert.equal(u.get('funding-slippage').value,'10');assert.equal(u.calls[1].params.funding,undefined);assert(u.get('review').open);assert(u.get('send').disabled);assert(!u.get('ack').checked);
+ for(const changed of [{status:'UNKNOWN'},{status:'COMPLETE'},{wallet:addr(9)},{market:addr(9)},{steps:[{action:'panelBuy',status:'CONFIRMED'}]},{steps:[{action:'panelWrap',status:'UNKNOWN'}]}])assert.equal(model.canReviewStoppedBuy({...op,...changed},wallet,token),false);
+});
 test('completed multi-step flow links to final buy receipt instead of the earlier funding transaction',async()=>{
  const u=await ui(),fundHash='0x'+'1'.repeat(64),buyHash='0x'+'2'.repeat(64);
  u.progress({operation:{intentId:randomUUID(),action:'panelAutoBuy',market:token,status:'COMPLETE',updatedAt:Date.now(),txHash:fundHash,steps:[{action:'panelFund',status:'CONFIRMED',txHash:fundHash},{action:'panelBuy',status:'CONFIRMED',txHash:buyHash}]}});

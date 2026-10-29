@@ -40,6 +40,12 @@ test('a price jump after funding stops before the target buy; no automatic secon
  const f=await fixture(t,['fund','buy']);f.state.highPrice=true;const p=request();await f.engine.start(p);await f.engine.drain();assert.deepEqual(f.sent,['fund']);assert.equal((await f.journal.read(p.intentId)).error.code,'AUTO_PRICE_CHANGED');
  const g=await fixture(t,['fund','fund']);await g.engine.start(request());await g.engine.drain();assert.deepEqual(g.sent,['fund']);assert.equal((await g.journal.all())[0].error.code,'AUTO_FUNDING_SHORTFALL');
 });
+test('Gang output-price diagnostic survives a stopped flow without another submission or raw error data',async t=>{
+ const f=await fixture(t),p=request();delete p.maxBnb;p.fundingMode='quantity';
+ const price={amount:'3',expected:'2.9',minimum:'2.97',spend:'100',symbol:'T',quoteSymbol:'QUOTE',slippageBps:'100'};
+ const engine=createAutomaticTrader({journal:f.journal,allowWrites:true,prepare:async()=>{if(f.sent.length)throw Object.assign(Error('not public'),{code:'AUTO_PRICE_CHANGED',details:{price:{...price,stderr:'secret'}}});return {preview:plan('fund')};},submit:async()=>{f.sent.push('fund');return {outcome:'SUBMITTED',data:{txHash:hash(1)}};},reconcile:async op=>{op.status='COMPLETE';Object.assign(op.steps[0],{status:'CONFIRMED',txHash:hash(1),blockNumber:'0x100',gasRaw:'1'});return op;}});
+ await engine.start(p);await engine.drain();const op=await f.journal.read(p.intentId);assert.equal(op.status,'FAILED');assert.deepEqual(op.error.price,price);assert.deepEqual(f.sent,['fund']);assert.match(op.message,/2.97/);assert.doesNotMatch(op.message,/secret|not public/);
+});
 test('new preview risk details stop the automatic path without sending anything',async t=>{
  const f=await fixture(t,['buy']);f.state.risk=true;await f.engine.start(request());await f.engine.drain();assert.equal(f.sent.length,0);assert.equal((await f.journal.all())[0].error.code,'AUTO_RISK_REVIEW_REQUIRED');
 });

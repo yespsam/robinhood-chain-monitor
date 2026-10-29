@@ -17,7 +17,7 @@ class LocalLauncher {
             using (var response = request.GetResponse())
             using (var reader = new StreamReader(response.GetResponseStream())) {
                 string body = reader.ReadToEnd();
-                return body.Contains("\"name\":\"YESP Local Terminal\"") && body.Contains("\"version\":\"1.11.0\"");
+                return body.Contains("\"name\":\"YESP Local Terminal\"") && body.Contains("\"version\":\"1.11.1\"");
             }
         } catch { return false; }
     }

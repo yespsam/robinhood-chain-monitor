@@ -18,3 +18,8 @@ export function transferBlocked(m){
 }
 export const terminal=new Set(['COMPLETE','FAILED','REJECTED','CANCELLED']);
 export function buyRoom(m,h){if(m?.protocol==='dex-swap')return null;return h?.buyableTokenAmount??h?.buyable??(h?m?.offers:null)??null;}
+export function canReviewStoppedBuy(op,wallet,token){
+ return Boolean(op?.action==='panelAutoBuy'&&op.status==='FAILED'&&op.error?.code==='AUTO_PRICE_CHANGED'&&op.request?.action==='buy'
+  &&op.wallet?.toLowerCase()===wallet?.toLowerCase()&&op.market?.toLowerCase()===token?.toLowerCase()&&op.request?.tokenAddress?.toLowerCase()===token?.toLowerCase()
+  &&op.steps?.length>0&&op.steps.every(s=>s.status==='CONFIRMED'&&['panelFund','panelWrap','panelApprove'].includes(s.action)));
+}

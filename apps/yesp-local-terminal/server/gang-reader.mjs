@@ -114,7 +114,7 @@ export function createGangReader({rpc=createFlapRpc({url:'https://bsc-rpc.public
    if(!fixed&&expected<target)throw fault('QUOTE_UNAVAILABLE');
   }else{if(target>BigInt(h.baseRaw))throw fault('INSUFFICIENT_BALANCE');expected=m.variant==='soft'?(await c.call(m.manager,abi,'quoteSell',[m.tokenAddress,target],m.block)).net:math.sell(target);}
   const minimum=(fixed?target:expected)*(10000n-bps)/10000n;if(minimum<=0n)throw fault('QUOTE_UNAVAILABLE');
-  if(fixed&&expected<minimum)throw fault('AUTO_PRICE_CHANGED');
+  if(fixed&&expected<minimum)throw fault('AUTO_PRICE_CHANGED',{price:{amount:p.amount,expected:formatUnits(expected,m.base.decimals),minimum:formatUnits(minimum,m.base.decimals),spend:formatUnits(input,m.quote.decimals),symbol:m.base.symbol,quoteSymbol:m.quote.symbol,slippageBps:p.slippageBps}});
   // A separate, explicitly confirmed deposit. Never auto-wrap or auto-submit the later buy.
   if(buy&&same(m.quote.address,WBNB)&&BigInt(h.quoteRaw)<input){const wrap=input-BigInt(h.quoteRaw),plan=await c.finalize(m,{...p,action:'wrap'},w,{to:WBNB,inputData:wrapAbi.encodeFunctionData('deposit'),value:wrap,
     spendAsset:ZERO,spendRaw:wrap,amountRaw:target,expectedRaw:wrap,minimumRaw:wrap,wrapRaw:wrap,fundingQuoteRequiredRaw:input.toString()},[m.manager,m.tokenAddress,WBNB]);return {...plan,action:'buy',kind:'wrap'};}

@@ -3,7 +3,7 @@ import {fault,same} from './flap-reader.mjs';
 import {ZERO,tokenAddress} from './four-reader.mjs';
 import {TERMINAL} from './flap-journal.mjs';
 import {AUTO_ACTIONS,validateAutomatic} from './automatic-policy.mjs';
-import {safeBudget,automaticFailureMessage} from '../extension/funding-model.js';
+import {safeBudget,safePriceChange,automaticFailureMessage} from '../extension/funding-model.js';
 const unresolved=s=>['SUBMITTING','SUBMITTED','PENDING_CONFIRMATION','UNKNOWN'].includes(s?.status);
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 export function createAutomaticTrader({journal,prepare,submit,reconcile,conversion,allowWrites=false,clock=Date.now,sleep=wait,onProgress=()=>{}}){
@@ -48,7 +48,7 @@ export function createAutomaticTrader({journal,prepare,submit,reconcile,conversi
     }
    }throw fault('AUTO_STEP_LIMIT');
   }catch(e){const last=op.steps.at(-1);op.error={code:/^[A-Z][A-Z0-9_]{0,80}$/.test(e.code||'')?e.code:'AUTO_FAILED'};op.status=unresolved(last)?'UNKNOWN':'FAILED';op.message=unresolved(last)?'已有交易结果待核验；已停止后续流程，不会重复发送。':`流程已停止（${op.error.code}）。已完成的步骤保留，未自动重试。`;
-   const budget=op.error.code==='FUNDING_BUDGET_EXCEEDED'&&safeBudget(e.details?.budget);if(budget)op.error.budget=budget;if(!unresolved(last))op.message=automaticFailureMessage(op);
+   const budget=op.error.code==='FUNDING_BUDGET_EXCEEDED'&&safeBudget(e.details?.budget);if(budget)op.error.budget=budget;const price=op.error.code==='AUTO_PRICE_CHANGED'&&safePriceChange(e.details?.price);if(price)op.error.price=price;if(!unresolved(last))op.message=automaticFailureMessage(op);
    await save(op);
   }finally{if(running===op.intentId)running=null;}
  }

@@ -57,7 +57,7 @@ test('Gang automatic fixed input survives a price rise within original slippage 
  move(40);await assert.rejects(f.reader.build(p,wallet),{code:'INSUFFICIENT_BALANCE'});
  const next=await f.reader.build(fixed,wallet);assert.equal(next.kind,'buy');assert.equal(next.spendRaw,first.spendRaw);assert.equal(next.minimumRaw,(900000n*U).toString());assert(BigInt(next.expectedRaw)<1000000n*U);assert(BigInt(next.expectedRaw)>=900000n*U);
  const tx=gangV2Abi.parseTransaction({data:next.tx.inputData});assert.equal(tx.args[1],BigInt(first.spendRaw));assert.equal(tx.args[2],900000n*U);
- move(10);await assert.rejects(f.reader.build(fixed,wallet),{code:'AUTO_PRICE_CHANGED'});
+ move(10);await assert.rejects(f.reader.build(fixed,wallet),e=>{assert.equal(e.code,'AUTO_PRICE_CHANGED');assert.equal(e.details.price.minimum,'900000.0');assert.equal(e.details.price.slippageBps,'1000');assert.equal(e.details.price.spend,first.spend);assert(Number(e.details.price.expected)<900000);return true;});
  assert.throws(()=>validatePanelParams('panelPrepare',{profile:'unified',...fixed}),{code:'INVALID_REQUEST'});
  for(const value of ['0','-1','1e18',((1n<<256n)).toString()])await assert.rejects(f.reader.build({...p,fixedSpendRaw:value},wallet),{code:'INVALID_REQUEST'});
 });
