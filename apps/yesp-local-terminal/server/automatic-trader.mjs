@@ -56,7 +56,8 @@ export function createAutomaticTrader({journal,prepare,submit,reconcile,conversi
   const checked=await policy?.check?.(plan);policy?.active?.();
   // Persist SUBMITTING before the only network mutation for this step.
   if(checked?.costRaw!==undefined&&(!/^[1-9]\d{0,77}$/.test(checked.costRaw)||BigInt(checked.costRaw)>=1n<<256n))throw fault('GANG_COST_INVALID');
-  const step={action,status:'SUBMITTING',startedAt:clock(),prepareMs,...(checked?.costRaw?{strategyCostRaw:checked.costRaw}:{}),plan,...(plan.tx?{tx:plan.tx}:{trade:plan.trade})};op.steps.push(step);op.status='SUBMITTING';op.message={fund:'正在兑换买入所需的结算币差额。',wrap:'正在把所需 BNB 包装为 WBNB。',approve:'正在提交本次数量授权。',buy:'正在提交目标代币买入。',sell:'正在提交目标代币卖出。',convert:'正在把本次卖出所得换回 BNB。'}[plan.kind];await save(op);
+  const step={action,status:'SUBMITTING',startedAt:clock(),prepareMs,...(checked?.costRaw?{strategyCostRaw:checked.costRaw}:{}),plan,...(plan.tx?{tx:plan.tx}:{trade:plan.trade})};op.steps.push(step);op.status='SUBMITTING';op.message={fund:'正在兑换买入所需的结算币差额。',wrap:'正在把所需 BNB 包装为 WBNB。',approve:'正在提交本次数量授权。',buy:'正在提交目标代币买入。',sell:'正在提交目标代币卖出。',convert:'正在把本次卖出所得换回 BNB。'}[plan.kind];
+  try{await save(op);}catch(e){step.status='REJECTED';step.submissionNotStarted=true;throw e;}
   let r;try{r=await submit(prepared,op.wallet,op.deadlineAt,policy?.active);}catch(e){if(e.submissionNotStarted){step.status='REJECTED';await save(op);throw e;}r={outcome:'UNKNOWN'};}
   if(r.outcome==='REJECTED'&&r.submitted===false){step.status='REJECTED';step.error={code:r.code||'REJECTED'};await save(op);throw fault(r.code||'AUTO_STEP_REJECTED');}
   step.submittedAt=clock();

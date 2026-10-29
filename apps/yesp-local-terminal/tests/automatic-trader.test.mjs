@@ -90,3 +90,11 @@ test('Gang carries a frozen settlement spend through funding, revoke, approval a
  const op=await f.journal.read(p.intentId);assert.equal(op.status,'COMPLETE');assert.deepEqual(f.sent,['fund','approve','approve','buy']);assert.equal(f.prepared[0].execution,undefined);
  for(const r of f.prepared.slice(1)){assert.equal(r.execution.spendRaw,(100n*U).toString());assert.equal(r.execution.protocol,'gang-curve');assert.equal(r.execution.quote,quote);assert.equal(r.execution.manager,manager);assert.equal(r.amount,'3');}
 });
+for(const afterSubmit of [false,true])test(`journal failure ${afterSubmit?'after':'before'} conversion submission keeps the correct financial boundary`,async t=>{
+ const f=await fixture(t,['approve','sell']),save=f.journal.save.bind(f.journal);let failed=false;
+ f.journal.save=async(op,options)=>{if(!failed&&op.steps.at(-1)?.action==='panelConvert'&&op.steps.at(-1).status===(afterSubmit?'SUBMITTED':'SUBMITTING')){failed=true;throw Object.assign(Error('commit failed'),{code:'JOURNAL_COMMIT_FAILED'});}return save(op,options);};
+ const p=request('sell');await f.engine.start(p);await f.engine.drain();const op=await f.journal.read(p.intentId);assert(failed);assert.equal(op.error.code,'JOURNAL_COMMIT_FAILED');
+ assert.deepEqual(f.sent,afterSubmit?['approve','sell','convert']:['approve','sell']);assert.equal(op.status,afterSubmit?'UNKNOWN':'FAILED');assert.equal(op.steps.at(-1).submissionNotStarted,afterSubmit?undefined:true);
+ assert.equal(op.steps.at(-1).status,afterSubmit?'SUBMITTED':'REJECTED');if(afterSubmit)await assert.rejects(()=>f.engine.start(request()),{code:'UNRESOLVED_TRADE_EXISTS'});
+ await f.engine.start(p).catch(e=>{assert(afterSubmit);assert.equal(e.code,'UNRESOLVED_TRADE_EXISTS');});await f.engine.drain();assert.equal(f.sent.length,afterSubmit?3:2);
+});

@@ -159,3 +159,12 @@ test('Windows journal helper refuses a path through a junction without changing 
   await assert.rejects(secureDirectory(join(junction, 'nested')), { code: 'JOURNAL_UNSAFE' });
   await assert.rejects(readFile(join(outside, 'nested')), { code: 'ENOENT' });
 });
+test('Windows journal commit tolerates a transient delete-sharing lock without losing either record', {skip:!windows},async t=>{
+ const root=await temporary(t);await secureDirectory(root);const destination=join(root,'record.json'),temporaryFile=join(root,'next.tmp'),helper=join(root,'hold-file.exe');
+ await writeFile(destination,'old');await writeFile(temporaryFile,'new');
+ await compileWindowsSource('using System; using System.IO; using System.Threading; class HoldFile { static void Main(string[] a) { using (var f = new FileStream(a[0], FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) { Console.WriteLine("ready"); Thread.Sleep(600); } } }',helper);
+ const child=spawn(helper,[destination],{shell:false,windowsHide:true,stdio:['ignore','pipe','pipe']});
+ await new Promise((resolve,reject)=>{child.once('error',reject);child.stdout.once('data',resolve);});
+ const closed=new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',code=>code===0?resolve():reject(Error('lock helper failed')));});
+ await windowsFiles('commit',temporaryFile,destination,'replace');await closed;assert.equal(await readFile(destination,'utf8'),'new');await assert.rejects(readFile(temporaryFile),{code:'ENOENT'});
+});

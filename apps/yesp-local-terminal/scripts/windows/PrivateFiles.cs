@@ -82,8 +82,16 @@ class PrivateFiles {
                     throw new Exception("JOURNAL_UNSAFE");
                 if (File.Exists(args[2])) CheckFile(args[2]);
                 int flags = 8 | (args[3] == "replace" ? 1 : 0); // MOVEFILE_WRITE_THROUGH | REPLACE_EXISTING
-                if (!MoveFileEx(args[1], args[2], flags)) {
+                for (int attempt = 0; !MoveFileEx(args[1], args[2], flags); attempt++) {
                     int code = Marshal.GetLastWin32Error();
+                    // Antivirus/indexing may briefly hold an NTFS file without delete sharing.
+                    // Retry only local rename failures, never a financial submission.
+                    if ((code == 5 || code == 32 || code == 33) && attempt < 5) {
+                        System.Threading.Thread.Sleep(50 * (attempt + 1));
+                        CheckFile(args[1]); LocalPath(args[2]);
+                        if (File.Exists(args[2])) CheckFile(args[2]);
+                        continue;
+                    }
                     throw new Exception(code == 80 || code == 183 ? "EEXIST" : "JOURNAL_COMMIT_FAILED");
                 }
             } else throw new Exception("INVALID_REQUEST");
