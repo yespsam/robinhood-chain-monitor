@@ -2,6 +2,7 @@ import {formatUnits,toBeHex,zeroPadValue} from 'ethers';
 import {createFlapRpc,fault,same} from './flap-reader.mjs';
 import {createPanelRouter} from './panel-router.mjs';
 import {agentAbi} from './flap-agent-reader.mjs';
+import {FLAP_PORTAL,flapStandardAbi} from './flap-standard-reader.mjs';
 import {coreAbi} from './openfour-abi.mjs';
 import {OPENFOUR} from './openfour-reader.mjs';
 import {tokenAddress,hex} from './four-reader.mjs';
@@ -15,10 +16,12 @@ export function validateChartRequest(p){
 }
 export function chartMarket(m){
  const market=m.agentMarket||(m.protocol==='dex-swap'?{...m,protocol:m.originProtocol,quote:m.originQuote}:m);
+ if(market.protocol==='flap-standard'&&same(market.manager,FLAP_PORTAL))return market;
  if(market.protocol!=='gang-curve'&&market.protocol!=='flap-agent'&&!(market.protocol==='openfour-agent'&&(market.presetId===OPENFOUR.presetId||market.adapter==='openfour-agent-v1'&&same(market.manager,OPENFOUR.core)&&/^\d+$/.test(market.presetId))))throw fault('CHART_UNSUPPORTED_MODE');
  return market;
 }
 export function tradeFilter(m){
+ if(m.protocol==='flap-standard')return {address:FLAP_PORTAL,topics:[[flapStandardAbi.getEvent('TokenBought').topicHash,flapStandardAbi.getEvent('TokenSold').topicHash]]};
  if(m.protocol==='gang-curve'){const abi=gangAbi(m);return {address:m.manager,topics:[[abi.getEvent('Buy').topicHash,abi.getEvent('Sell').topicHash],zeroPadValue(m.tokenAddress,32)]};}
  return m.protocol==='flap-agent'?{address:m.marketAddress,topics:[agentAbi.getEvent('VirtualTrade').topicHash]}:
  {address:OPENFOUR.core,topics:[coreAbi.getEvent('TradeExecuted').topicHash,zeroPadValue(m.tokenAddress,32),null,zeroPadValue(toBeHex(BigInt(m.presetId)),32)]};
@@ -28,7 +31,13 @@ export function decodeChartTrade(log,m){
  if(log.removed||!same(log.address,filter.address)||!(Array.isArray(filter.topics[0])?filter.topics[0].some(t=>same(log.topics?.[0],t)):same(log.topics?.[0],filter.topics[0])))return null;
  if(!HASH.test(log.blockHash||'')||!HASH.test(log.transactionHash||'')||!QUANTITY.test(log.blockNumber||'')||!QUANTITY.test(log.logIndex||''))throw fault('CHART_LOG_INVALID');
  let baseRaw,quoteRaw,buy;
- if(m.protocol==='gang-curve'){
+ if(m.protocol==='flap-standard'){
+  // Portal events have no indexed CA. Filter the decoded token explicitly so
+  // trades from other Flap markets never enter this chart.
+  const e=flapStandardAbi.parseLog(log);if(!same(e.args.token,m.tokenAddress))return null;
+  buy=e.name==='TokenBought';baseRaw=e.args.amount;
+  quoteRaw=buy?e.args.eth+e.args.fee:e.args.eth;
+ }else if(m.protocol==='gang-curve'){
   const e=gangAbi(m).parseLog(log);if(!same(e.args.token,m.tokenAddress))return null;buy=e.name==='Buy';const a=e.args,soft=m.variant==='soft';
   baseRaw=buy?a.tokensOut:a.tokensIn;quoteRaw=buy?(soft?a.bnbIn+a.fee:m.variant==='v3'?a.quoteIn+a.protocolFee+a.tax:a.quoteIn+a.taxDividend+a.taxPlatform):(soft?a.bnbOut:a.quoteOut);
  }else if(m.protocol==='flap-agent'){
@@ -93,12 +102,16 @@ export function createMarketCharts({rpc=createFlapRpc({url:process.env.YESP_SCAN
    if(e.identity&&e.identity!==identity)throw fault('CHART_MARKET_CHANGED');e.market=m;e.identity=identity;e.marketAt=clock();}
   const creation=Number(e.market.runtime?.createBlock||0),floor=Math.max(0,head-maxHistoryBlocks,creation);
   if(!Number.isSafeInteger(creation)||creation>head)throw fault('CHART_MARKET_NOT_READY');
-  let from=e.from===null?Math.max(floor,head-windowBlocks+1):Math.max(floor,Math.min(e.from,head));
-  if(older)from=Math.max(floor,from-windowBlocks);
+  const window=e.market.protocol==='flap-standard'?Math.min(windowBlocks,1200):windowBlocks;
+  let from=e.from===null?Math.max(floor,head-window+1):Math.max(floor,Math.min(e.from,head));
+  if(older)from=Math.max(floor,from-window);
   const tailStart=e.to===null?from:Math.max(from,Math.min(e.to,head)-12);
   const ranges=[[tailStart,head]];if(e.from!==null&&from<e.from)ranges.push([from,Math.min(e.from-1,tailStart-1)]);
   let incoming=[];
-  for(const [start,end]of ranges){for(let b=start;b<=end;b+=windowBlocks)incoming.push(...await readRange(e.market,b,Math.min(end,b+windowBlocks-1)));}
+  // Standard Portal events cover every token. Keep each response bounded;
+  // only the selected CA's trades and block headers enter the cache.
+  const chunk=e.market.protocol==='flap-standard'?Math.min(200,windowBlocks):windowBlocks;
+  for(const [start,end]of ranges){for(let b=start;b<=end;b+=chunk)incoming.push(...await readRange(e.market,b,Math.min(end,b+chunk-1)));}
   const retained=e.trades.filter(t=>t.block>=from&&t.block<=head&&!ranges.some(([a,b])=>t.block>=a&&t.block<=b));
   const merged=[...new Map([...retained,...incoming].map(t=>[t.id,t])).values()];if(merged.length>15000)throw fault('CHART_LOG_LIMIT');
   const first=await getHeader(from);

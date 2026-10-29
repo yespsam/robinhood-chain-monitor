@@ -16,6 +16,12 @@ const preview = () => ({ requestId: 'preview-123', parsedTx: { recipient: to, am
   expiresAt: now + 60000, requireConfirmation: false, accessToken: secret });
 const broadcast = { orderId: '12345', status: 'BROADCASTED', txHash: '0x' + 'a'.repeat(64), cookie: secret };
 const failure = (name, code) => ({ stdout: JSON.stringify({ success: false, error: { name, code, message: secret } }) });
+test('read errors distinguish wallet network failure and timeout without exposing stderr or retrying',async()=>{
+ for(const [execute,code]of [[async()=>failure('NETWORK_ERROR',50001001),'WALLET_NETWORK_ERROR'],[async()=>failure('REQUEST_TIMEOUT',50001002),'WALLET_READ_TIMEOUT'],[async()=>{throw {killed:true,stderr:secret};},'WALLET_READ_TIMEOUT']]){
+  let calls=0;const cli=createFastTradeCli({...config,execute:async()=>{calls++;return execute();}});
+  await assert.rejects(()=>cli.status(),e=>e.code===code&&!JSON.stringify(e).includes(secret));assert.equal(calls,1);
+ }
+});
 
 test('reads use documented argv and resolve installation only once, preserving nonsecret settings', async () => {
   let resolutions = 0; const calls = [];

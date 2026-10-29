@@ -6,6 +6,10 @@ export function isTradePage(url,id){try{const u=new URL(url);return u.protocol==
 export function validatePanelParams(method,p){
  if(!PANEL_METHODS.has(method)||p?.profile!=='unified')throw Object.assign(new Error('Invalid panel request'),{code:'INVALID_REQUEST'});
  const mapped=method.replace('panel','four'),copy={...p,profile:'fourmeme'};
+ if(Object.hasOwn(p,'marketOnly')){
+  if(method!=='panelQuery'||typeof p.marketOnly!=='boolean')throw Object.assign(new Error('Invalid market query'),{code:'INVALID_REQUEST'});
+  delete copy.marketOnly;
+ }
  if(p.funding!==undefined){const f=p.funding;
   const quantity=f?.mode==='quantity'&&Object.keys(f).length===2&&Object.hasOwn(f,'slippageBps');
   const budgeted=f&&typeof f==='object'&&!Array.isArray(f)&&Object.keys(f).length===2&&Object.hasOwn(f,'maxBnb')&&Object.hasOwn(f,'slippageBps')&&typeof f.maxBnb==='string'&&/^(?:0|[1-9]\d{0,5})(?:\.\d{1,18})?$/.test(f.maxBnb)&&/[1-9]/.test(f.maxBnb);

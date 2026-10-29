@@ -7,7 +7,12 @@ import {createGmgnCharts,createChartSources,normalizeGmgnCandles,GmgnConfigStore
 import {scanLane} from '../extension/scan-ui.js';
 const ca='0x'+'2'.repeat(40),key='test-only-gmgn-key-00000',params={tokenAddress:ca,interval:60};
 const mem=(apiKey=key)=>({value:{apiKey,cooldownUntil:0},async read(){return this.value;},async save(v){this.value={...v};}});
-const candle=(time,close='2')=>({time,open:'1',high:'3',low:'0.5',close,volume:'12',amount:'24'});
+const candle=(time,close='2')=>({time,open:'1',high:'3',low:'0.5',close,volume:'24',amount:'12'});
+test('live-style microprice bars show token count and USD turnover in their correct units',()=>{
+ const row={time:1800000000,open:'0.00000319',high:'0.00000320',low:'0.00000318',close:'0.00000319',volume:'4.155021',amount:'1303582'};
+ const [c]=normalizeGmgnCandles({code:0,data:{list:[row]}},{ca,interval:60,from:1799999940,to:1800000060});
+ assert.equal(c.volume,1303582);assert.equal(c.quoteVolume,4.155021);assert(c.quoteVolume/c.volume>=Number(row.low)&&c.quoteVolume/c.volume<=Number(row.high));
+});
 const response=list=>new Response(JSON.stringify({code:0,data:{list}}),{status:200,headers:{'content-type':'application/json'}});
 test('GMGN uses the documented BSC readonly route, milliseconds in query, USD/base volume semantics and cache',async()=>{
  let calls=0,now=1800000000000;const gmgn=createGmgnCharts({store:mem(),clock:()=>now,fetchImpl:async(url,opts)=>{calls++;assert.equal(url.origin,'https://openapi.gmgn.ai');assert.equal(url.pathname,'/v1/market/token_kline');assert.equal(url.searchParams.get('chain'),'bsc');assert.equal(url.searchParams.get('address'),ca);assert.equal(url.searchParams.get('resolution'),'1m');assert.equal(Number(url.searchParams.get('to')),now);assert.equal(Number(url.searchParams.get('timestamp')),now/1000);assert.equal(opts.method,'GET');assert.equal(opts.headers['X-APIKEY'],key);assert.equal(opts.redirect,'error');assert.equal(opts.headers['X-Signature'],undefined);return response([candle(now/1000-60)]);}});

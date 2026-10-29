@@ -1,7 +1,7 @@
 const $=id=>document.getElementById(id);
 const timeText=time=>new Date(time*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
 const number=n=>!Number.isFinite(n)?'—':n===0?'0':Math.abs(n)<0.0001?n.toExponential(4):new Intl.NumberFormat('en-US',{maximumSignificantDigits:7}).format(n);
-const messages={CHART_UNSUPPORTED_MODE:'K 线目前支持 Four Agent ID 和 Flap Agent 内盘。',CHART_REORG:'区块正在更新，稍后重新读取。',CHART_LOG_LIMIT:'该区间成交过多，暂时无法完整读取。',RPC_UNAVAILABLE:'行情节点暂时不可用。',RPC_INVALID_RESPONSE:'行情节点返回异常。',STALE_BLOCK:'行情节点数据滞后。',CHART_MARKET_CHANGED:'市场信息已变化，请重新识别 CA。'};
+const messages={CHART_UNSUPPORTED_MODE:'链上备用 K 线支持 Four Agent、Flap 普通 / Agent 和 Gang 内盘；其他市场请使用 GMGN。',CHART_REORG:'区块正在更新，稍后重新读取。',CHART_LOG_LIMIT:'该区间成交过多，暂时无法完整读取。',RPC_UNAVAILABLE:'行情节点暂时不可用。',RPC_INVALID_RESPONSE:'行情节点返回异常。',STALE_BLOCK:'行情节点数据滞后。',CHART_MARKET_CHANGED:'市场信息已变化，请重新识别 CA。'};
 Object.assign(messages,{GMGN_NOT_CONFIGURED:'请展开“GMGN 数据设置”填写 API Key。',GMGN_INVALID_KEY:'GMGN 拒绝了凭据，请检查 Key 和账户访问权限。',GMGN_PLAN_REQUIRED:'当前 GMGN 套餐不支持此接口。',GMGN_RATE_LIMITED:'GMGN 达到请求限额，已暂停请求并等待配额恢复。',GMGN_NO_DATA:'GMGN 暂无这个 CA 的 K 线，可能尚未收录或尚无成交。',GMGN_INVALID_RESPONSE:'GMGN 返回的数据未通过校验。',GMGN_UNAVAILABLE:'GMGN 行情暂时不可用，请检查网络。',GMGN_BUSY:'正在读取其他行情，请稍候。',GMGN_CONFIG_CHANGED:'GMGN 设置已变化，正在重新读取。',GMGN_CONFIG_INVALID:'本机 GMGN 设置无法读取，请重新保存。'});
 const chainCaption='链上图按真实成交的支付 / 到账金额除以数量聚合，含费用影响；价格使用原结算币。';
 
@@ -59,7 +59,7 @@ export function setupMarketChart({client}){
  function select(m){
   if(selected?.tokenAddress.toLowerCase()===m?.tokenAddress.toLowerCase())return;
   selected=m;generation++;busy=false;data=null;hover=null;endBucket=null;$('chart-last').textContent='—';$('chart-unit').textContent=m?`${m.quote.symbol} / ${m.base.symbol}`:'选择代币';
-  $('chart-caption').textContent='优先读取 GMGN 美元行情；新币尚未收录时可查看 Agent 内盘链上成交。';note(m?'正在读取行情…':'输入 CA 后读取图表；GMGN 数据设置可在下方填写。');buttons();draw();if(m)void load();
+  $('chart-caption').textContent='优先读取 GMGN 美元行情；新币尚未收录时可查看 内盘链上成交。';note(m?'正在读取行情…':'输入 CA 后读取图表；GMGN 数据设置可在下方填写。');buttons();draw();if(m)void load();
  }
  function reset(){generation++;busy=false;data=null;hover=null;endBucket=null;$('chart-last').textContent='—';$('chart-unit').textContent=selected?'等待行情':'选择代币';buttons();draw();void load();}
  $('chart-source').addEventListener('change',()=>{source=$('chart-source').value;reset();});

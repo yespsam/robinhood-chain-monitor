@@ -4,11 +4,23 @@ import {decodeLaunch,launchAbi,SCAN_SOURCES} from '../server/chain-scanner.mjs';
 import {OPENFOUR} from '../server/openfour-reader.mjs';
 import {FOUR} from '../server/four-reader.mjs';
 import {agentAbi} from '../server/flap-agent-reader.mjs';
+import {FLAP_PORTAL,flapStandardAbi} from '../server/flap-standard-reader.mjs';
 import {coreAbi} from '../server/openfour-abi.mjs';
 import {aggregateCandles,decodeChartTrade,createMarketCharts,tradeFilter,validateChartRequest,chartMarket} from '../server/market-chart.mjs';
 const addr=n=>'0x'+n.toString(16).padStart(40,'0'),hash=n=>'0x'+n.toString(16).padStart(64,'0'),hex=n=>'0x'+n.toString(16),U=10n**18n;
 const ca=addr(1),wallet=addr(2),market=addr(3),zero=addr(0);
 const flap={protocol:'flap-agent',tokenAddress:ca,marketAddress:market,base:{decimals:18,symbol:'TEST'},quote:{address:zero,decimals:18,symbol:'BNB'}};
+test('ordinary Flap chart binds the official Portal and CA, with asymmetric buy/sell fee accounting',()=>{
+ const m={...flap,protocol:'flap-standard',manager:FLAP_PORTAL,quote:{address:addr(9),decimals:6,symbol:'USD'}};
+ assert.equal(chartMarket(m),m);
+ const entry=(event,token=ca)=>log(flapStandardAbi.encodeEventLog(flapStandardAbi.getEvent(event),[1,token,wallet,100n*U,2000000n,100000n,1]),FLAP_PORTAL);
+ const buy=decodeChartTrade(entry('TokenBought'),m),sell=decodeChartTrade(entry('TokenSold'),m);
+ assert.equal(buy.price,0.021);assert.equal(sell.price,0.02);
+ assert.equal(decodeChartTrade(entry('TokenBought',addr(99)),m),null);
+ assert.equal(decodeChartTrade({...entry('TokenBought'),address:addr(99)},m),null);
+ assert.equal(tradeFilter(m).topics[0].length,2);
+ assert.throws(()=>chartMarket({...m,manager:addr(99)}),{code:'CHART_UNSUPPORTED_MODE'});
+});
 test('DEX routing preserves the original curve asset for historical chart fallback',()=>{
  const quote={address:addr(8),symbol:'GANG',decimals:18},m=chartMarket({protocol:'dex-swap',originProtocol:'gang-curve',originQuote:quote,quote:{address:zero,symbol:'BNB',decimals:18}});
  assert.equal(m.protocol,'gang-curve');assert.equal(m.quote,quote);
@@ -55,4 +67,14 @@ test('chart cannot accept arbitrary contracts or fabricated timestamps',async()=
  assert.throws(()=>validateChartRequest({tokenAddress:ca,interval:60,to:addr(99)}),{code:'INVALID_REQUEST'});assert.throws(()=>validateChartRequest({tokenAddress:ca,interval:0}),{code:'INVALID_REQUEST'});
  const rpc=async m=>m==='eth_chainId'?'0x38':m==='eth_blockNumber'?'0x1':{number:'0x1',hash:hash(1),timestamp:'0x3e8'};
  const charts=createMarketCharts({rpc,clock:()=>1000000,resolveMarket:async()=>({...flap,protocol:'flap-standard'})});await assert.rejects(()=>charts.query({tokenAddress:ca,interval:60}),{code:'CHART_UNSUPPORTED_MODE'});
+});
+
+test('ordinary Flap history bounds shared Portal reads and retains only the selected CA',async()=>{
+ const m={...flap,protocol:'flap-standard',manager:FLAP_PORTAL},calls=[];
+ const entry=token=>log(flapStandardAbi.encodeEventLog(flapStandardAbi.getEvent('TokenBought'),[1,token,wallet,100n*U,U,0,1]),FLAP_PORTAL,1990);
+ const rpc=async(method,p)=>{if(method==='eth_chainId')return '0x38';if(method==='eth_blockNumber')return hex(2000);
+  if(method==='eth_getBlockByNumber'){const b=Number(BigInt(p[0]));return {number:hex(b),hash:hash(b),timestamp:hex(1000+b)};}
+  if(method==='eth_getLogs'){const f=Number(BigInt(p[0].fromBlock)),t=Number(BigInt(p[0].toBlock));calls.push([f,t]);assert(t-f<200);return f<=1990&&t>=1990?[entry(ca),entry(addr(99))]:[];}throw Error(method);};
+ const chart=(await createMarketCharts({rpc,resolveMarket:async()=>m,clock:()=>3000000}).query({tokenAddress:ca,interval:60})).chart;
+ assert.equal(chart.fromBlock,801);assert.equal(calls.length,6);assert.equal(chart.tradeCount,1);assert.equal(chart.candles[0].volume,100);
 });

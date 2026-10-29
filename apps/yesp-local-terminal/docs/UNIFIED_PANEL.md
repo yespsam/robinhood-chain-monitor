@@ -48,3 +48,14 @@ Flap 的公开接口主要是固定投入交易。面板用同一区块的实际
 - [Flap 迁移目标说明](https://docs.flap.sh/flap/developers/wallet-and-terminal-and-bot-developers/token-migration)
 - [Flap Agent 官方应用](https://flap.sh/apps/agent-bonding-curve)：ABI 取自应用组件 `v20261023134909522_agent-bonding-curve_8b26639fea52`，源文件 SHA256 `08545080fdc1e4c8d86e827cb56a3d1f748d8369d905e29b1b1b98b374ddc83f`。只解析文本并验证链上绑定，未执行下载的组件。
 - [GMGN 交易交互参考](https://docs.gmgn.ai/index/auto-trading-quick-buy-take-profit-stop-loss)：参考布局与参数组织，不移植其中的自动交易策略。
+
+
+## 1.11.3 查询可用性
+
+`panelQuery` 可传入布尔值 `marketOnly: true`，仅读取当前 CA 的公开链上市场，完全不调用钱包服务。完整查询中的钱包或持仓故障分别放在 `wallet.error`、`holdingsError`，余额为 null 而非零。链上合约绑定失败仍返回错误；该只读参数不能用于准备或提交交易。界面先绘制市场，再更新持仓，丢弃旧 CA 或旧钱包的迟到响应。钱包恢复后刷新状态会重取持仓。并发显示请求合并同一次钱包读取，签名检查不使用此结果。
+
+普通 Flap 的 `TokenBought` / `TokenSold` 事件用于链上备用 K 线。事件 CA 未 indexed，因此首屏读取最近 1,200 个区块，每次日志请求最多 200 个区块，在解码后核对完整 CA，只缓存该代币的成交与时间戳。买入报价金额计入事件手续费、卖出事件金额已扣费；图表按结算资产标价，不与 GMGN 的美元 K 线混合。
+
+新币扫描仍按已选择的 Agent 市场范围；普通 Flap 币可以直接粘贴 CA 查询，无需先出现在 Agent 扫描目录。
+
+GMGN 的当前接口返回 `volume` 为美元成交额、`amount` 为代币数量；旧字段表与其顶部说明冲突，已结合实时返回核对并修正映射，避免将一百多万枚代币显示成一百多万美元成交额。参考：https://github.com/GMGNAI/gmgn-skills/blob/main/skills/gmgn-market/SKILL.md 。

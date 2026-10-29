@@ -5,7 +5,7 @@ import {client} from './client-bridge.js';
 import {isOfficialSigninUrl} from './signin-policy.js';
 import {parseCA,percentAmount,slippageBps,terminal,buyRoom,toRaw,transferBlocked,continuationBuyRequest} from './trade-model.js';
 const $=id=>document.getElementById(id),ids=['ca','query','amount','slippage','buy','sell','transfer','recipient','signin','verify','refresh','claim','reconcile','funding-enabled','funding-slippage','oneclick-enabled'];
-const errors={TOKEN_METADATA_UNAVAILABLE:'合约存在，但名称、精度或供应量读取失败，暂不能按 ERC20 交易。',TOKEN_SUPPLY_INVALID:'该合约当前总供应量为零，暂不能建立交易报价。',GANG_KIND_UNSUPPORTED:'该 CA 属于 Gang 打新销售，尚未接入该机制的交易；不能使用 V3 内盘买卖。',DEX_QUOTE_UNAVAILABLE:'多次报价仍无法覆盖目标数量，请减少数量后重新核对。',DEX_ROUTE_UNAVAILABLE:'当前代币没有可用的 DEX 买卖路径。',DEX_SETTLEMENT_MISMATCH:'DEX 订单与链上到账未通过匹配，已停止后续提交，请保留订单核验。',NO_LIQUIDITY:'当前交易对没有可用流动性。',AUTO_DEADLINE:'一键流程已超时，后续步骤停止。',AUTO_PRICE_CHANGED:'当前价格已超出本次一键交易的首份报价范围，后续步骤停止。',AUTO_FUNDING_SHORTFALL:'兑换到账不足，后续买入已停止；不会再次自动兑换。',AUTO_RISK_REVIEW_REQUIRED:'币安预演返回新的风险提示，已停止自动提交。',AUTO_APPROVAL_CHANGED:'授权需求发生变化，已停止重复授权。',FUNDING_BALANCE_INSUFFICIENT:'当前 BNB 余额不足以兑换目标数量所需的结算币并预留网络费，请减少购买数量。',FUNDING_NOT_REQUIRED:'结算币余额已足够，请重新核对买入。',FUNDING_ROUTE_UNAVAILABLE:'该结算币目前没有可用的 BNB 兑换路径。',FUNDING_BUDGET_EXCEEDED:'兑换所需 BNB 超过预算上限，请调整购买数量或预算后重新核对。',FUNDING_QUOTE_UNAVAILABLE:'多次报价仍无法覆盖差额，未执行兑换。',SWAP_QUOTE_INVALID:'币安兑换报价未通过核验。',FUNDING_SETTLEMENT_MISMATCH:'兑换到账与预期身份不符，请保留交易记录并核验。',GANG_AGENT_ID_REQUIRED:'此 Gang 内盘要求当前钱包持有有效的 .ai Agent ID。',GANG_DEX_ROUTE_REQUIRED:'此 Gang 代币已毕业到 PancakeSwap；当前面板未接入该外盘交易。',GANG_CONTRACT_CHANGED:'Gang 合约代码发生变化，需重新核验后才能交易。',GANG_CURVE_INVALID:'Gang 曲线参数核验失败。',INVALID_AMOUNT:'请输入大于零的普通十进制数量。',SELF_TRANSFER:'收款地址不能与当前钱包相同。',TOKEN_NOT_CONTRACT:'该 CA 尚不是已部署的代币合约。',TOKEN_BALANCE_UNAVAILABLE:'币安暂未返回该代币余额，请等待同步后重试。',TOKEN_UNIT_MISMATCH:'币安显示数量与链上数量不一致，请等待同步后重试。',TRANSFER_IDENTITY_MISMATCH:'该交易哈希与本次转出不符，请核对。',WALLET_CHANGED:'钱包已变化，请重新核对。',TRANSFER_PREVIEW_MISMATCH:'转出预览与当前地址或数量不一致，已停止。',TRANSFER_UNAVAILABLE:'当前市场的份额或代币尚不可转出。',LOGIN_REQUIRED:'请先连接币安钱包。',DEVELOPER_MODE_REQUIRED:'请在币安 Agentic Wallet 开启开发者模式并核对额度。',AGENT_ID_REQUIRED:'此市场要求当前钱包持有有效 Agent ID。',
+const errors={WALLET_NETWORK_ERROR:'币安钱包服务暂时连接失败；代币资料仍可查询，交易需等待连接恢复。',WALLET_READ_TIMEOUT:'币安钱包响应超时；代币资料仍可查询，请稍后刷新钱包状态。',READ_FAILED:'钱包读取未完成；请刷新状态查看连接情况。',TOKEN_METADATA_UNAVAILABLE:'合约存在，但名称、精度或供应量读取失败，暂不能按 ERC20 交易。',TOKEN_SUPPLY_INVALID:'该合约当前总供应量为零，暂不能建立交易报价。',GANG_KIND_UNSUPPORTED:'该 CA 属于 Gang 打新销售，尚未接入该机制的交易；不能使用 V3 内盘买卖。',DEX_QUOTE_UNAVAILABLE:'多次报价仍无法覆盖目标数量，请减少数量后重新核对。',DEX_ROUTE_UNAVAILABLE:'当前代币没有可用的 DEX 买卖路径。',DEX_SETTLEMENT_MISMATCH:'DEX 订单与链上到账未通过匹配，已停止后续提交，请保留订单核验。',NO_LIQUIDITY:'当前交易对没有可用流动性。',AUTO_DEADLINE:'一键流程已超时，后续步骤停止。',AUTO_PRICE_CHANGED:'当前价格已超出本次一键交易的首份报价范围，后续步骤停止。',AUTO_FUNDING_SHORTFALL:'兑换到账不足，后续买入已停止；不会再次自动兑换。',AUTO_RISK_REVIEW_REQUIRED:'币安预演返回新的风险提示，已停止自动提交。',AUTO_APPROVAL_CHANGED:'授权需求发生变化，已停止重复授权。',FUNDING_BALANCE_INSUFFICIENT:'当前 BNB 余额不足以兑换目标数量所需的结算币并预留网络费，请减少购买数量。',FUNDING_NOT_REQUIRED:'结算币余额已足够，请重新核对买入。',FUNDING_ROUTE_UNAVAILABLE:'该结算币目前没有可用的 BNB 兑换路径。',FUNDING_BUDGET_EXCEEDED:'兑换所需 BNB 超过预算上限，请调整购买数量或预算后重新核对。',FUNDING_QUOTE_UNAVAILABLE:'多次报价仍无法覆盖差额，未执行兑换。',SWAP_QUOTE_INVALID:'币安兑换报价未通过核验。',FUNDING_SETTLEMENT_MISMATCH:'兑换到账与预期身份不符，请保留交易记录并核验。',GANG_AGENT_ID_REQUIRED:'此 Gang 内盘要求当前钱包持有有效的 .ai Agent ID。',GANG_DEX_ROUTE_REQUIRED:'此 Gang 代币已毕业到 PancakeSwap；当前面板未接入该外盘交易。',GANG_CONTRACT_CHANGED:'Gang 合约代码发生变化，需重新核验后才能交易。',GANG_CURVE_INVALID:'Gang 曲线参数核验失败。',INVALID_AMOUNT:'请输入大于零的普通十进制数量。',SELF_TRANSFER:'收款地址不能与当前钱包相同。',TOKEN_NOT_CONTRACT:'该 CA 尚不是已部署的代币合约。',TOKEN_BALANCE_UNAVAILABLE:'币安暂未返回该代币余额，请等待同步后重试。',TOKEN_UNIT_MISMATCH:'币安显示数量与链上数量不一致，请等待同步后重试。',TRANSFER_IDENTITY_MISMATCH:'该交易哈希与本次转出不符，请核对。',WALLET_CHANGED:'钱包已变化，请重新核对。',TRANSFER_PREVIEW_MISMATCH:'转出预览与当前地址或数量不一致，已停止。',TRANSFER_UNAVAILABLE:'当前市场的份额或代币尚不可转出。',LOGIN_REQUIRED:'请先连接币安钱包。',DEVELOPER_MODE_REQUIRED:'请在币安 Agentic Wallet 开启开发者模式并核对额度。',AGENT_ID_REQUIRED:'此市场要求当前钱包持有有效 Agent ID。',
  INVALID_ADDRESS:'请填写完整、有效的 BSC 地址，并核对大小写。',INVALID_SLIPPAGE:'滑点范围为 0.01% 至 99.99%，最多两位小数。',AMOUNT_PRECISION:'请填写正数，且小数位不能超过代币精度。',
  INSUFFICIENT_BALANCE:'所需资产余额不足，请核对结算币种和数量。',INSUFFICIENT_GAS:'BNB 网络费余额不足。',BUY_LIMIT_EXCEEDED:'购买数量超过当前可买额度，请刷新并减少数量。',
  FLAP_SELL_MIN_PERCENT:'Flap 虚拟份额卖出最小步长为持仓的 0.01%，请增加数量。',FLAP_BACKING_UNVERIFIED:'市场的储备核验未通过，暂不能交易。',
@@ -22,7 +22,7 @@ const errors={TOKEN_METADATA_UNAVAILABLE:'合约存在，但名称、精度或�
  APPROVAL_PREVIEW_MISMATCH:'币安返回的授权预演与本次授权不一致，已停止。',PREVIEW_MISMATCH:'币安预演与本次交易不一致，已停止。',
  QR_CODE_EXPIRED:'二维码已过期，请重新获取。',AUTH_URL_REVIEW_REQUIRED:'登录链接未通过校验，请重新获取二维码。',LOGIN_FLOW_REQUIRED:'请先获取二维码，再验证连接。'};
 let wallet={connected:false},market=null,holdings=null,preview=null,operation=null,guard=null,busy=false,polling=false,side='buy',signinExpiry=0,recent=[];
-let revision=0,formRevision=0,autoActive=false,refreshDone=Promise.resolve();
+let revision=0,walletRevision=0,holdingsError=null,formRevision=0,autoActive=false,refreshDone=Promise.resolve();
 let balancesRefreshing=false,settledRefreshKey='';
 let continuationFilled='',orderEdited=false;
 const chartView=setupMarketChart({client});
@@ -31,7 +31,7 @@ function oneclick(){return client.local&&$('oneclick-enabled').checked&&side!=='
 function pending(){return Boolean(guard)||Boolean(operation&&!terminal.has(operation.status));}
 function invalidate(){formRevision++;preview=null;$('ack').checked=false;if($('review').open)$('review').close();render();}
 function clearLogin(){signinExpiry=0;$('signin-details').hidden=true;$('signin-qr').hidden=true;$('signin-qr').removeAttribute('src');$('signin-link').hidden=true;$('signin-link').removeAttribute('href');$('pairing-code').textContent='';}
-function clearMarket(){market=holdings=null;continuationFilled='';orderEdited=false;$('amount').value='';$('recipient').value='';invalidate();renderMarket();}
+function clearMarket(){market=holdings=null;holdingsError=null;continuationFilled='';orderEdited=false;$('amount').value='';$('recipient').value='';invalidate();renderMarket();}
 function fillContinuation(){
  const p=continuationBuyRequest(operation,wallet.address,market?.tokenAddress),key=wallet.address+':'+market?.tokenAddress+':'+operation?.intentId;
  if(!p||side!=='buy'||continuationFilled===key)return;continuationFilled=key;
@@ -63,7 +63,7 @@ function render(){
  $('continue-buy').hidden=!continuation||side!=='buy';$('continue-buy').disabled=busy||pending()||autoActive||!wallet.connected||!$('amount').value.trim();
  $('funding-note').hidden=side!=='buy'||!market;
  if(market){$('funding-title').textContent='买入支付：'+market.quote.symbol;$('funding-balance').textContent=`余额：${holdings?.quote??'未读取'} ${market.quote.symbol}。`+(/^0x0{40}$/i.test(market.quote.address)?'另需预留 BNB 网络费。':oneclick()?'一键买入会先用现有余额，自动兑换差额并接续授权、买入。':'结算币不足时先核对兑换，到账后继续买入。');$('funding-ca').textContent=market.quote.address;$('funding-ca').href='https://bscscan.com/address/'+market.quote.address;}
- $('login-toggle').textContent=wallet.connected?'钱包已连接':'连接钱包';$('wallet-address').textContent=wallet.connected?wallet.address:'尚未连接';
+ $('login-toggle').textContent=wallet.connected?'钱包已连接':wallet.unavailable?'钱包暂不可用':'连接钱包';$('wallet-address').textContent=wallet.connected?wallet.address:wallet.unavailable?'连接状态读取失败':'尚未连接';
  for(const action of ['buy','sell','transfer'])$(action).classList.toggle('selected',side===action);
  $('transfer-fields').hidden=side!=='transfer';$('slippage-field').hidden=side==='transfer';
  $('transfer-ca').textContent=market?.tokenAddress||'请先识别代币';
@@ -82,6 +82,8 @@ function render(){
 }
 function renderMarket(){
  const m=market,h=holdings,room=buyRoom(m,h);
+ const readError=wallet.error||holdingsError;
+ $('market-read-status').hidden=!readError; $('market-read-status').textContent=readError?`${wallet.error?'钱包状态':'持仓'}读取失败：${errors[readError.code]||'暂时无法读取，请刷新状态重试。'}（${readError.code}）`+(m?' 代币已识别，未读取的余额不代表零。':''):'';
  chartView.select(m);
  $('platform').textContent=m?`${m.platform||'Four.meme'} · BSC`:'等待识别';$('symbol').textContent=m?.base.symbol||'粘贴代币合约';$('coin').textContent=(m?.base.symbol||'?').slice(0,2);
  $('name').textContent=m?.name||m?.preset?.name||'Four.meme / Flap / Gang · BSC';$('phase').textContent=m?.phaseLabel||'未选择市场';
@@ -101,7 +103,10 @@ function renderMarket(){
 function absorb(data){
  if(data?.operation&&operation?.intentId===data.operation.intentId&&(Number(operation.updatedAt)>Number(data.operation.updatedAt)||terminal.has(operation.status)&&!terminal.has(data.operation.status)))data={...data,operation};
  const operationChanged=Object.hasOwn(data||{},'operation')&&JSON.stringify([data.operation?.intentId,data.operation?.status,data.operation?.updatedAt])!==JSON.stringify([operation?.intentId,operation?.status,operation?.updatedAt]);
- if(data?.wallet){if(wallet.address!==data.wallet.address||wallet.connected!==data.wallet.connected){invalidate();holdings=null;$('amount').value='';$('recipient').value='';}wallet=data.wallet;if(wallet.connected)clearLogin();renderMarket();}
+ if(data?.wallet){const next=data.wallet.unavailable?{...data.wallet,address:wallet.address}:data.wallet;
+  if(wallet.address!==next.address||wallet.connected!==next.connected||wallet.unavailable!==next.unavailable){walletRevision++;invalidate();holdings=null;holdingsError=null;
+   if(!next.unavailable&&(wallet.address!==next.address||!next.connected)){$('amount').value='';$('recipient').value='';}}
+  wallet=next;if(wallet.connected)clearLogin();renderMarket();}
  if(Object.hasOwn(data||{},'operation'))operation=data.operation;
  fillContinuation();
  if(data?.reconcileError)say('交易仍待核验',`${errors[data.reconcileError.code]||'暂未通过回执核验，请保留交易记录。'}（${data.reconcileError.code}）`);
@@ -117,7 +122,7 @@ function refreshSettledHoldings(){
  client.sendMessage({id:crypto.randomUUID(),method:'panelQuery',params:{profile:'unified',tokenAddress:ca}}).then(r=>{
   if(!r?.ok||!r.data?.holdings||r.data.market?.tokenAddress?.toLowerCase()!==ca.toLowerCase())throw Error('BALANCE_REFRESH_FAILED');
   if(rev!==revision||wallet.address!==address||r.data.wallet?.address!==address||parseCA($('ca').value)?.toLowerCase()!==ca.toLowerCase())return;
-  market=r.data.market;holdings=r.data.holdings;$('data-time').textContent='成交后更新 · 区块 '+BigInt(market.block).toString();renderMarket();
+  market=r.data.market;holdings=r.data.holdings;holdingsError=r.data.holdingsError||null;if(!holdings)settledRefreshKey='';$('data-time').textContent='成交后更新 · 区块 '+BigInt(market.block).toString();renderMarket();
  }).catch(()=>{settledRefreshKey='';if(rev===revision&&wallet.address===address&&validSelection())$('data-time').textContent='持仓更新失败，点击刷新状态重试';}).finally(()=>{balancesRefreshing=false;});
 }
 function renderFlow(){const flow=operation?.action?.startsWith('panelAuto')?operation:null;$('flow-steps').hidden=!flow?.steps?.length;$('flow-steps').replaceChildren();$('flow-timing').textContent='';if(!flow)return;
@@ -126,27 +131,47 @@ function renderFlow(){const flow=operation?.action?.startsWith('panelAuto')?oper
  for(const step of flow.steps||[]){const li=document.createElement('li'),times=[];if(Number.isFinite(step.prepareMs))times.push('报价 '+(step.prepareMs/1000).toFixed(2)+' 秒');if(step.submittedAt>=step.startedAt)times.push('提交 '+((step.submittedAt-step.startedAt)/1000).toFixed(2)+' 秒');if(step.confirmedAt>=step.submittedAt)times.push('回执 '+((step.confirmedAt-step.submittedAt)/1000).toFixed(2)+' 秒');li.textContent=(step.plan?.protocol==='dex-swap'?(step.action==='panelBuy'?'DEX 买入':'DEX 卖出 → BNB'):(names[step.action]||step.action))+' · '+(states[step.status]||step.status)+(times.length?' · '+times.join(' / '):'');$('flow-steps').append(li);}
  $('flow-timing').textContent=(flow.firstSubmittedAt?'首笔提交 '+((flow.firstSubmittedAt-flow.createdAt)/1000).toFixed(2)+' 秒':terminal.has(flow.status)?'流程已结束':'正在准备首笔提交')+(flow.completedAt?' · 全部到账 '+((flow.completedAt-flow.createdAt)/1000).toFixed(2)+' 秒':terminal.has(flow.status)?flow.status==='COMPLETE'?' · 最终步骤已核验':' · 后续交易已停止，已到账步骤保留':' · 链上确认中');
 }
-async function request(method,params={}){
+async function request(method,params={},apply=true){
  const financial=['panelExecute','panelTrade','transfer'].includes(method);let r;try{r=await client.sendMessage({id:crypto.randomUUID(),method,params:{profile:method.startsWith('panel')?'unified':'heyi',...params}});}
  catch{if(financial)guard={intentId:params.intentId,status:'UNKNOWN'};throw Error(financial?'UNKNOWN':'NATIVE_UNAVAILABLE');}
  const stale=r?.data?.operation&&operation?.intentId===r.data.operation.intentId&&(Number(operation.updatedAt)>Number(r.data.operation.updatedAt)||terminal.has(operation.status)&&!terminal.has(r.data.operation.status));
  if(!stale&&r?.guard!==undefined&&(r.guard||!guard||financial&&r.submissionNotStarted||r.data?.operation?.intentId===guard.intentId))guard=r.guard;
  if(!r?.ok){if(financial&&!r?.submissionNotStarted&&!guard)guard={intentId:params.intentId,status:'UNKNOWN'};throw Object.assign(Error(r?.error?.code||'UNKNOWN'),{funding:r?.error?.funding,budget:r?.error?.budget});}
- absorb(r.data);return r.data;
+ if(apply)absorb(r.data);return r.data;
 }
 function showError(e){const code=/^[A-Z][A-Z0-9_]{0,80}$/.test(e?.message||'')?e.message:'READ_FAILED',message=`${code==='FUNDING_BUDGET_EXCEEDED'&&budgetMessage(e.budget)||code==='INSUFFICIENT_BALANCE'&&fundingMessage(e.funding)||errors[code]||'操作未完成，请核对当前状态。'}（${code}）`;
  say('操作未完成',message);if($('login-dialog').open)$('login-status').textContent=message;render();}
-async function task(fn){if(busy)return;const version=formRevision;busy=true;render();try{await refreshDone;if(version!==formRevision)return;await fn();}catch(e){showError(e);}finally{busy=false;render();}}
+async function task(fn,{waitForStatus=true}={}){if(busy)return;const version=formRevision;busy=true;render();try{if(waitForStatus){await refreshDone;if(version!==formRevision)return;}await fn();}catch(e){showError(e);}finally{busy=false;render();}}
 async function query(){
  const ca=parseCA($('ca').value);if(!ca){clearMarket();throw Error('INVALID_ADDRESS');}invalidate();
- const rev=++revision,data=await request('panelQuery',{tokenAddress:ca});if(rev!==revision||parseCA($('ca').value)?.toLowerCase()!==ca.toLowerCase())return null;
- market=data.market;holdings=data.holdings;$('ca').value=market.tokenAddress;$('data-time').textContent='刚刚更新 · 区块 '+BigInt(market.block).toString();fillContinuation();renderMarket();
+ const rev=++revision,current=()=>rev===revision&&parseCA($('ca').value)?.toLowerCase()===ca.toLowerCase();
+ // Paint public market data before waiting for the wallet service.
+ const first=await request('panelQuery',{tokenAddress:ca,marketOnly:true},false);if(!current())return null;
+ market=first.market;holdings=null;holdingsError=null;$('ca').value=market.tokenAddress;
+ $('data-time').textContent='市场已读取 · 正在读取钱包和持仓';renderMarket();
  recent=[{ca:market.tokenAddress,symbol:market.base.symbol},...recent.filter(x=>x.ca.toLowerCase()!==ca.toLowerCase())].slice(0,6);
- await client.storage.set({yespRecentMarkets:recent});renderRecent();return data;
+ await client.storage.set({yespRecentMarkets:recent});renderRecent();
+ const wr=walletRevision;
+ let data;try{data=await request('panelQuery',{tokenAddress:ca},false);}catch(e){if(!current())return null;holdingsError={code:e.message};$('data-time').textContent='代币已识别 · 持仓读取失败';renderMarket();return first;}
+ if(!current())return null;
+ if(wr!==walletRevision){$('data-time').textContent='钱包状态已变化 · 请刷新持仓';return first;}
+ absorb(data);market=data.market;holdings=data.holdings;holdingsError=data.holdingsError||null;
+ $('data-time').textContent=(holdings?'刚刚更新':wallet.unavailable?'钱包读取失败':holdingsError?'持仓读取失败':'连接钱包后读取持仓')+' · 区块 '+BigInt(market.block).toString();fillContinuation();renderMarket();return data;
 }
 function renderRecent(){$('recent').replaceChildren();for(const row of recent){const b=document.createElement('button');b.type='button';b.textContent=`${row.symbol.slice(0,16)} · ${row.ca.slice(0,6)}…${row.ca.slice(-4)}`;
- b.addEventListener('click',e=>{if(e.isTrusted&&!busy&&!polling)task(async()=>{$('ca').value=row.ca;clearMarket();say('正在读取市场','核验平台、阶段和持仓。');await query();if(market&&!pending())say('市场已识别',market.supported?'请填写本次交易数量和滑点，所需支付自动计算。':'当前阶段的支持情况见市场提示。');});});$('recent').append(b);}}
-async function refresh(){if(busy||polling)return;let finish;refreshDone=new Promise(resolve=>{finish=resolve;});polling=true;render();try{let data=await request('panelStatus');if(data.operation?.action==='transfer'&&!terminal.has(data.operation.status))data=await request('walletStatus');if(!data.operation)say(wallet.connected?'钱包已连接':'请连接钱包',wallet.connected?'填写 CA 即可查询，内盘与通用 Swap 共用此钱包。':'点击右上角连接钱包，获取币安登录二维码。');}catch(e){showError(e);}finally{polling=false;finish();render();}}
+ b.addEventListener('click',e=>{if(e.isTrusted&&!busy&&!polling)task(async()=>{$('ca').value=row.ca;clearMarket();say('正在读取市场','核验平台、阶段和持仓。');await query();if(market&&!pending())say('市场已识别',market.supported?'请填写本次交易数量和滑点，所需支付自动计算。':'当前阶段的支持情况见市场提示。');},{waitForStatus:false});});$('recent').append(b);}}
+async function refresh(){if(busy||polling)return;let finish;refreshDone=new Promise(resolve=>{finish=resolve;});polling=true;render();try{
+ let data=await request('panelStatus');if(data.operation?.action==='transfer'&&!terminal.has(data.operation.status))data=await request('walletStatus');
+ if(data.wallet?.error)renderMarket();else if(!data.operation)say(wallet.connected?'钱包已连接':'请连接钱包',wallet.connected?'填写 CA 即可查询，内盘与通用 Swap 共用此钱包。':'点击右上角连接钱包，获取币安登录二维码。');
+ if(wallet.connected&&validSelection()&&(!holdings||holdingsError)&&!busy){
+  const ca=market.tokenAddress,rev=revision,wr=walletRevision;
+  const d=await request('panelQuery',{tokenAddress:ca},false);
+  if(rev===revision&&wr===walletRevision&&validSelection()&&market.tokenAddress.toLowerCase()===ca.toLowerCase()){
+   absorb(d);market=d.market;holdings=d.holdings;holdingsError=d.holdingsError||null;
+   $('data-time').textContent=holdings?'持仓已刷新 · 区块 '+BigInt(market.block).toString():'持仓尚未读取';renderMarket();
+  }
+ }
+}catch(e){showError(e);}finally{polling=false;finish();render();}}
 function showPreview(p){preview=p;$('review-ack').hidden=false;$('official-details').hidden=false;$('review-ack-text').textContent='我已核对完整 CA、钱包、数量、结算资产、滑点与授权。';$('ack').checked=false;$('review-title').textContent=p.kind==='approve'?(p.approvalRaw==='0'?'核对清零旧授权':'核对本次数量授权'):p.kind==='claim'?'核对领取代币':p.action==='buy'?'核对买入':'核对卖出';
  const facts=[['网络','BNB Smart Chain（56）'],['钱包',p.wallet],['完整 CA',p.tokenAddress],['市场',p.protocol||'Four.meme V2'],['操作',p.kind==='approve'?'仅授权，不会自动买卖':p.kind==='claim'?'领取':p.action==='buy'?'买入':'卖出'],
   ['目标数量',`${p.amount} ${p.base.symbol}`],...(p.actualTokenAmount?[['本次报价数量',`${p.actualTokenAmount} ${p.base.symbol}`]]:[]),
@@ -242,7 +267,7 @@ async function trade(action=side,sellPercent){if(!oneclick()||action==='claim')r
  await submitAutomatic(automaticParams(action,sellPercent));
 }
 for(const b of document.querySelectorAll('[data-quick-buy],[data-quick-sell]'))b.addEventListener('click',e=>{if(!e.isTrusted||b.disabled)return;task(async()=>{side=b.dataset.quickBuy?'buy':'sell';$('amount').value=b.dataset.quickBuy||'';invalidate();await trade(side,b.dataset.quickSell);});});
-$('lookup').addEventListener('submit',e=>{e.preventDefault();if(e.isTrusted)task(async()=>{clearMarket();say('正在识别代币','核验平台合约与当前市场阶段。');await query();if(market)say('市场已识别',market.supported?'可以填写数量并核对报价。':'当前阶段的支持情况见市场提示。');});});
+$('lookup').addEventListener('submit',e=>{e.preventDefault();if(e.isTrusted)task(async()=>{clearMarket();say('正在识别代币','核验平台合约与当前市场阶段。');await query();if(market)say('市场已识别',market.supported?'可以填写数量并核对报价。':'当前阶段的支持情况见市场提示。');},{waitForStatus:false});});
 $('ca').addEventListener('input',()=>{revision++;clearMarket();});
 $('funding-enabled').addEventListener('change',invalidate);$('oneclick-enabled').addEventListener('change',invalidate);
 $('preview-only').addEventListener('click',e=>{if(e.isTrusted&&!$('preview-only').disabled)task(()=>prepare());});
@@ -279,4 +304,4 @@ async function init(){
 init();setInterval(()=>{if(!document.hidden&&(preview||signinExpiry))render();},1000);setInterval(()=>{if(!document.hidden)refresh();},15000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)render();});
 
-setupLocalFeatures({client,getSelected:()=>market,onSelect:ca=>task(async()=>{$('ca').value=ca;clearMarket();await query();}),onActive:value=>{if(autoActive!==value){autoActive=value;invalidate();}render();}});
+setupLocalFeatures({client,getSelected:()=>market,onSelect:ca=>task(async()=>{$('ca').value=ca;clearMarket();await query();},{waitForStatus:false}),onActive:value=>{if(autoActive!==value){autoActive=value;invalidate();}render();}});

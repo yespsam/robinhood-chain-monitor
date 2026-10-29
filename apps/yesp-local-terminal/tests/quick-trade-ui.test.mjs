@@ -25,6 +25,26 @@ async function ui(){
  return {context,get,calls,quickBuy,quickSell,settle,client,progress:data=>progress(data),setHandler:f=>handler=f};
 }
 const preview=p=>({...market,...p,wallet,kind:p.action,amount:p.amount||'50',previewId:randomUUID(),expiresAt:Date.now()+60000,spend:'1',expected:'50',minimum:'49',estimatedGas:'0.0001',official:{},timing:{totalMs:100,walletMs:30,quoteMs:40,previewMs:30}});
+test('public market paints while wallet status is hanging; wallet failure does not erase the CA',async()=>{
+ const u=await ui();let finishStatus,finishQuery;
+ u.setHandler(async r=>r.method==='panelStatus'?new Promise(resolve=>{finishStatus=()=>resolve({wallet:{connected:false,unavailable:true,error:{code:'WALLET_NETWORK_ERROR'}}});}):r.params.marketOnly?{market}:new Promise(resolve=>{finishQuery=()=>resolve({market,wallet:{connected:false,unavailable:true,error:{code:'WALLET_NETWORK_ERROR'}},holdings:null});}));
+ const poll=vm.runInContext('refresh()',u.context);await tick();
+ u.get('lookup').fire('submit',{isTrusted:true,preventDefault(){}});for(let i=0;i<8;i++)await tick();
+ assert.equal(u.get('symbol').textContent,'T');assert(u.calls.some(r=>r.method==='panelQuery'&&r.params.marketOnly));assert.equal(u.get('base-balance').textContent,'—');
+ finishQuery();for(let i=0;i<8;i++)await tick();finishStatus();await poll;await u.settle();
+ assert.equal(u.get('contract').textContent,token);assert.equal(u.get('market-read-status').hidden,false);assert.match(u.get('market-read-status').textContent,/WALLET_NETWORK_ERROR/);assert(u.get('prepare').disabled);assert(!u.calls.some(r=>r.method==='panelTrade'));
+});
+test('late wallet/holdings response cannot replace a different selected CA',async()=>{
+ const u=await ui();let finish;u.setHandler(async r=>r.params.marketOnly?{market}:new Promise(resolve=>{finish=()=>resolve({market,wallet:{connected:true,address:wallet},holdings:{base:'900'}});}));
+ const q=vm.runInContext('query()',u.context);for(let i=0;i<8;i++)await tick();
+ vm.runInContext(`$('ca').value='${addr(99)}';revision++;clearMarket();`,u.context);finish();await q;
+ assert.equal(u.get('contract').textContent,'');assert.equal(u.get('base-balance').textContent,'—');
+});
+test('refresh restores unavailable wallet holdings without clearing an unchanged order',async()=>{
+ const u=await ui();vm.runInContext(`wallet={connected:false,unavailable:true,address:'${wallet}',error:{code:'WALLET_NETWORK_ERROR'}};holdings=null;$('amount').value='123';renderMarket();`,u.context);
+ u.setHandler(async r=>r.method==='panelStatus'?{wallet:{connected:true,address:wallet}}:{market,wallet:{connected:true,address:wallet},holdings:{base:'7',quote:'9'}});
+ await vm.runInContext('refresh()',u.context);assert.equal(u.get('base-balance').textContent,'7');assert.equal(u.get('amount').value,'123');assert(u.get('market-read-status').hidden);assert(!u.get('prepare').disabled);assert.deepEqual(u.calls.map(r=>r.method),['panelStatus','panelQuery']);
+});
 test('quick sell makes one percentage preview request, opens review, and never submits automatically',async()=>{
  const u=await ui();u.setHandler(async r=>({tradePreview:preview(r.params)}));u.quickSell.fire('click');await u.settle();assert.deepEqual(u.calls.map(r=>r.method),['panelPrepare']);
  assert.equal(u.calls[0].params.sellPercent,'50');assert.equal(u.calls[0].params.amount,undefined);assert.equal(u.get('amount').value,'50');assert(u.get('review').open);assert.equal(u.get('ack').checked,false);assert(u.get('send').disabled);assert.match(u.get('quote-timing').textContent,/100 ms/);

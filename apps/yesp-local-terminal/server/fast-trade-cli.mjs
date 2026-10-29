@@ -12,6 +12,8 @@ const messages = Object.freeze({
   CLI_NOT_AVAILABLE: 'The reviewed official wallet CLI is unavailable.',
   CLI_START_FAILED: 'The official CLI did not start.',
   READ_FAILED: 'The official wallet read did not complete.',
+  WALLET_NETWORK_ERROR: 'The official wallet service could not be reached.',
+  WALLET_READ_TIMEOUT: 'The official wallet read timed out.',
   INVALID_RESPONSE: 'The official response could not be verified.',
   PREVIEW_REJECTED: 'The official preview was rejected.',
   PREVIEW_UNKNOWN: 'The preview result is unavailable.',
@@ -172,7 +174,8 @@ export function createFastTradeCli({ execute = runFile, resolveInstallation = re
       }));
     } catch (error) {
       if (['ENOENT', 'EACCES', 'EPERM', 'ENOEXEC'].includes(error.code)) return { kind: 'not-started', code: 'CLI_START_FAILED' };
-      if (error.killed || error.code === 'ETIMEDOUT' || error.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return { kind: 'unknown' };
+      if (error.killed || error.code === 'ETIMEDOUT') return { kind: 'unknown', timedOut: true };
+      if (error.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return { kind: 'unknown' };
       stdout = error.stdout;
     }
     let value; try { value = parseOfficialJson(stdout); } catch { return { kind: 'unknown' }; }
@@ -185,7 +188,11 @@ export function createFastTradeCli({ execute = runFile, resolveInstallation = re
   }
   async function read(args, valid) {
     const result = await run(args, readTimeoutMs);
-    if (result.kind !== 'success') throw new FastTradeCliError(result.code || 'READ_FAILED', result.identity);
+    if (result.kind !== 'success') {
+      const network=['NETWORK_ERROR','SERVICE_UNAVAILABLE','DNS_RESOLVE_FAILED','SSL_ERROR'].includes(result.identity?.officialName);
+      const timeout=result.timedOut||result.identity?.officialName==='REQUEST_TIMEOUT';
+      throw new FastTradeCliError(result.code || (timeout?'WALLET_READ_TIMEOUT':network?'WALLET_NETWORK_ERROR':'READ_FAILED'), result.identity);
+    }
     if (!valid(result.data)) throw new FastTradeCliError('INVALID_RESPONSE');
     return result.data;
   }

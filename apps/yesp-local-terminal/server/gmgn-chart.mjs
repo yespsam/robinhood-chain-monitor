@@ -37,7 +37,10 @@ export function normalizeGmgnCandles(payload,{ca,interval,from,to}){
  for(const item of rows){identity(item,ca);let time=decimal(item.time);if(time>=1e12)time/=1000;
   const [o,h,l,c,v,a]=['open','high','low','close','volume','amount'].map(k=>decimal(item[k]));
   if(!Number.isSafeInteger(time)||time%interval!==0||time<Math.floor(from/interval)*interval||time>to||![o,h,l,c].every(n=>n>0&&Number.isFinite(n))||h<Math.max(o,c,l)||l>Math.min(o,c,h)||!Number.isFinite(v)||v<0||!Number.isFinite(a)||a<0)throw fault('GMGN_INVALID_RESPONSE');
-  const candle={time,open:o,high:h,low:l,close:c,volume:v,quoteVolume:a,trades:null,partial:time+interval>to};
+  // GMGN's live endpoint uses volume=USD and amount=token units. Its market
+  // guide's quick note agrees, although the older field table is reversed.
+  // Our normalized schema always uses volume=base and quoteVolume=USD.
+  const candle={time,open:o,high:h,low:l,close:c,volume:a,quoteVolume:v,trades:null,partial:time+interval>to};
   if(seen.has(time)&&JSON.stringify(seen.get(time))!==JSON.stringify(candle))throw fault('GMGN_INVALID_RESPONSE');seen.set(time,candle);
  }
  return [...seen.values()].sort((a,b)=>a.time-b.time);

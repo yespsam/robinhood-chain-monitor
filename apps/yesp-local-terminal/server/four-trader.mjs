@@ -60,7 +60,7 @@ export function createFourTrader({cli=createFastTradeCli(),reader=createFourRout
   const dex=panel?createDexSwap({reader,cli,clock}):null;
   const conversion=panel?createPanelConversion({reader,cli,clock}):null;
   const automatic=panel?createAutomaticTrader({journal,allowWrites,clock,sleep,onProgress,prepare:prepareAutomatic,submit:submitAutomatic,reconcile:op=>reconcile(op,undefined,async x=>x),conversion:prepareConversion}):null;
-  const previews=new Map();let active=false;
+  const previews=new Map();let active=false,walletReadPending=null;
   const readScope=fn=>reader.rpc?.withReadScope?reader.rpc.withReadScope(fn):fn();
   async function wallet({sign=false}={}){
     let addresses,settings,lock;
@@ -78,6 +78,13 @@ export function createFourTrader({cli=createFastTradeCli(),reader=createFourRout
     if(sign){if(settings.devMode?.enabled!==true||settings.devMode.balanceExceeded)throw fault('DEVELOPER_MODE_REQUIRED');
       if(lock.status!=='UNLOCKED')throw fault('WALLET_LOCKED');}
     return w;
+  }
+  // Market discovery is public chain data. A wallet service outage must not
+  // hide it, hide an unresolved operation, or masquerade as a zero balance.
+  // Coalesce concurrent display reads only; signing always checks afresh.
+  function readWallet(){
+    walletReadPending??=wallet().catch(e=>({connected:false,chainId:'56',unavailable:true,error:errorCode(e)})).finally(()=>{walletReadPending=null;});
+    return walletReadPending;
   }
   async function save(op){op.updatedAt=clock();await journal.save(op);return op;}
   async function latest(){const rows=(await journal.all()).sort((a,b)=>b.createdAt-a.createdAt);return rows.find(r=>!TERMINAL.has(r.status))||rows.find(r=>acceptedActions.has(r.action))||null;}
@@ -159,7 +166,7 @@ export function createFourTrader({cli=createFastTradeCli(),reader=createFourRout
     if(!active&&!automatic?.isRunning()&&operation&&acceptedActions.has(operation.action)&&!TERMINAL.has(operation.status)){
       try{operation=await journal.exclusive(async()=>reconcile(await journal.read(operation.intentId)));}catch(e){reconcileError=errorCode(e);}
     }
-    return {wallet:await wallet(),operation,...(reconcileError?{reconcileError}:{})};
+    return {wallet:await readWallet(),operation,...(reconcileError?{reconcileError}:{})};
   }
   async function prepare(p,internal=false,expectedWallet,execution){
     const start=performance.now();
@@ -222,7 +229,13 @@ export function createFourTrader({cli=createFastTradeCli(),reader=createFourRout
     if(panel&&method==='panelTrade')return automatic.start(p);
     if(panel){validatePanelParams(method,p);method=method.replace('panel','four');}else validateFourParams(method,p);
     if(method==='fourStatus')return status();
-    if(method==='fourQuery')return readScope(async()=>{const [market,w]=await Promise.all([reader.inspect(p.tokenAddress),wallet()]);return {market,wallet:w,holdings:w.connected?await reader.holdings(market,w.address):null};});
+    if(method==='fourQuery')return readScope(async()=>{
+      if(p.marketOnly)return {market:await reader.inspect(p.tokenAddress)};
+      const [market,w]=await Promise.all([reader.inspect(p.tokenAddress),readWallet()]);
+      let holdings=null,holdingsError;
+      if(w.connected)try{holdings=await reader.holdings(market,w.address);}catch(e){holdingsError=errorCode(e);}
+      return {market,wallet:w,holdings,...(holdingsError?{holdingsError}:{})};
+    });
     if(method==='fourPrepare')return prepare(p);
     if(method==='fourExecute')return execute(p);
     return journal.exclusive(async()=>{const op=await journal.read(p.intentId);if(!op||!acceptedActions.has(op.action))throw fault('INVALID_INTENT');return {operation:await reconcile(op,p.txHash)};});
