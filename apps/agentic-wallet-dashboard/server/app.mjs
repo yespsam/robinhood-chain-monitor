@@ -19,6 +19,7 @@ const files = new Map([['/', ['index.html', 'text/html']], ['/app.js', ['app.js'
   ['/connection-state.js', ['connection-state.js', 'text/javascript']],
   ['/official-error-catalog.js', ['official-error-catalog.js', 'text/javascript']],
   ['/style.css', ['style.css', 'text/css']], ['/research.json', ['research.json', 'application/json']],
+  ['/mint.css', ['mint.css', 'text/css']],
   ['/official-checklist.txt', ['official-checklist.txt', 'text/plain']]]);
 function json(res, status, value) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(value)); }
 async function readBody(req) {
@@ -29,14 +30,17 @@ async function readBody(req) {
   try { const value = JSON.parse(Buffer.concat(chunks).toString()); if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error(); return value; }
   catch { throw new Denied('INVALID_JSON', 400); }
 }
-export async function createApplication({ sessions, wallet = new OfficialWallet(), binding = null, port = 0, localAccess = false, walletAccess = false, localAccessKey = null, manualTradeFactory = null } = {}) {
+export async function createApplication({ sessions, wallet = new OfficialWallet(), binding = null, port = 0, localAccess = false, walletAccess = false, localAccessKey = null, manualTradeFactory = null, mintFactory = null } = {}) {
   if (localAccessKey !== null && !/^[a-f0-9]{64}$/.test(localAccessKey)) throw new Error('INVALID_LOCAL_ACCESS_KEY');
   if (localAccess && (binding !== null || Object.values(DEVELOPMENT).some(Boolean))) throw new Error('LOCAL_ACCESS_REQUIRES_DEMO_ONLY');
   const gate = new WalletGate({ sessions, wallet, binding });
   const localWallet = localAccess && walletAccess ? new LocalWalletAccess(wallet) : null;
   if (manualTradeFactory && (!localWallet || !localAccessKey)) throw new Error('MANUAL_TRADES_REQUIRE_LOCAL_ACCESS_KEY');
+  if (mintFactory && (!localWallet || !localAccessKey)) throw new Error('MINTING_REQUIRES_LOCAL_ACCESS_KEY');
   const manualTrades = manualTradeFactory ? manualTradeFactory({ wallet, gate: localWallet.gate }) : null;
+  const mints = mintFactory ? mintFactory({ wallet, gate: localWallet.gate }) : null;
   if (localWallet) localWallet.tradeService = manualTrades;
+  if (localWallet) localWallet.mintService = mints;
   const cli = await cliVersionInfo();
   let origin, cookieName;
   const streams = new Map();
@@ -64,7 +68,7 @@ export async function createApplication({ sessions, wallet = new OfficialWallet(
       if (url.pathname === '/api/status' && req.method === 'GET') {
         if (localAccess) {
           json(res, 200, { product: 'yesp-wallet', version: '0.4.0', localAccessRequired: localAccessKey !== null, accessMode: 'local', loginRequired: false, authenticated: false, identityVerified: false,
-            walletConnected: false, mode: localWallet ? 'wallet-read-quote' : 'development', capabilities: localWallet ? { ...LOCAL_CAPABILITIES, manualTrades: !!manualTrades, liveTrades: !!manualTrades } : DEVELOPMENT, cli }); return;
+            walletConnected: false, mode: localWallet ? 'wallet-read-quote' : 'development', capabilities: localWallet ? { ...LOCAL_CAPABILITIES, manualTrades: !!manualTrades, liveTrades: !!manualTrades, tokenMinting: !!mints } : DEVELOPMENT, cli }); return;
         }
         let state = { authenticated: false }; try {
           const current = sessions.fromToken(token); sessions.checkCsrf(current, req.headers['x-csrf-token']);
@@ -90,6 +94,11 @@ export async function createApplication({ sessions, wallet = new OfficialWallet(
           if (manualTrades && tradeMethod) {
             localWallet.check(key); localWallet.touch(key);
             json(res, 200, await manualTrades[tradeMethod](key, body)); return;
+          }
+          const mintMethod = new Map([['/api/mint/preview', 'preview'], ['/api/mint/submit', 'submit'], ['/api/mint/status', 'status'], ['/api/mint/list', 'list']]).get(url.pathname);
+          if (mints && mintMethod) {
+            localWallet.check(key); localWallet.touch(key);
+            json(res, 200, await mints[mintMethod](key, body)); return;
           }
           json(res, 200, await localWallet.handle(url.pathname, key, body, { reuseSession: localAccessKey !== null })); return;
         }
@@ -126,7 +135,7 @@ export async function createApplication({ sessions, wallet = new OfficialWallet(
       if (url.pathname === '/api/demo/quote') { const q = demoQuote(body); json(res, 200, { ...q, blockers: reviewBlockers(q) }); return; }
       // All actual authorization changes and financial writes are blocked BEFORE calling the vendor CLI.
       if (['/api/wallet/signin', '/api/wallet/verify', '/api/wallet/signout', '/api/trade/submit', '/api/limit/submit',
-        '/api/limit/cancel', '/api/approval/revoke', '/api/trade/enable', '/api/strategy/start', '/api/strategy/stop'].includes(url.pathname)) gate.rejectWrite(session.key);
+        '/api/limit/cancel', '/api/approval/revoke', '/api/trade/enable', '/api/mint/submit', '/api/strategy/start', '/api/strategy/stop'].includes(url.pathname)) gate.rejectWrite(session.key);
       if (url.pathname === '/api/wallet/read') {
         if (Object.keys(body).some(k => !['chainId', 'contract', 'kind'].includes(k))) throw new Denied('CLIENT_WALLET_REJECTED', 400);
         const chain = validChain(body.chainId);
@@ -159,5 +168,5 @@ export async function createApplication({ sessions, wallet = new OfficialWallet(
   const timer = setInterval(() => { for (const key of sessions.items.keys()) {
     try { sessions.byKey(key); for (const stream of streams.get(key) || []) stream.res.write(': heartbeat\n\n'); } catch { /* expired */ }
   } }, 1000); timer.unref();
-  return { origin, sessions, gate, server, localWallet, manualTrades, async close() { clearInterval(timer); localWallet?.lock(); sessions.invalidateAll('SERVER_STOPPED'); server.closeAllConnections(); await new Promise(r => server.close(r)); } };
+  return { origin, sessions, gate, server, localWallet, manualTrades, mints, async close() { clearInterval(timer); localWallet?.lock(); sessions.invalidateAll('SERVER_STOPPED'); server.closeAllConnections(); await new Promise(r => server.close(r)); } };
 }

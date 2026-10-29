@@ -1,0 +1,15 @@
+.mint-platform-note{border:1px solid #38392f;background:#1d1e1b;border-radius:6px;padding:15px 16px;margin:20px 0;color:#bbc0c4}
+.mint-platform-note strong{font-size:11px;font-weight:550;color:#e1d596}
+.mint-platform-note p{font-size:10px;line-height:1.8;color:#929b9f;margin:7px 0 0}
+.mint-value-note{display:grid;grid-template-columns:1fr auto;gap:5px 10px;border:1px solid var(--line);padding:14px;margin-top:19px;border-radius:5px;font-size:10px}
+.mint-value-note span{color:#899198}
+.mint-value-note strong{color:#d7c97d;font:12px var(--mono)}
+.mint-value-note small{grid-column:1/-1;color:#737c83;font-size:9px}
+.mint-screen .section-note{max-width:360px}
+.mint-screen .trade-history-section,.mint-screen .quote-scope{max-width:600px}
+.mint-screen input{font-family:var(--font);font-size:12px}
+.mint-screen #mint-symbol{text-transform:uppercase}
+.mint-screen #mint-metadata{font-family:var(--mono);font-size:10px}
+.quote-dialog pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto;font:9px/1.6 var(--mono);color:#aeb7bd;background:#111315;padding:12px;border-radius:5px}
+.quote-dialog .check-label{line-height:1.65}
+.mint-screen #mint-preview-button{margin-top:20px}

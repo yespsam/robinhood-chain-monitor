@@ -1,5 +1,6 @@
 const $ = id => document.getElementById(id);
-const views = { overview: ['钱包总览', '钱包总览'], history: ['交易记录', '交易记录'], quote: ['手动交易', '手动交易'] };
+const mintStyles = document.createElement('link'); mintStyles.rel = 'stylesheet'; mintStyles.href = '/mint.css'; document.head.append(mintStyles);
+const views = { overview: ['钱包总览', '钱包总览'], history: ['交易记录', '交易记录'], quote: ['兑换 Swap', '兑换代币'], mint: ['创建代币 Mint', '创建代币'] };
 let currentView = 'overview';
 function navigate(view) {
   if (!Object.hasOwn(views, view)) return;
