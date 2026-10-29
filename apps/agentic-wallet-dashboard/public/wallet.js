@@ -2,6 +2,7 @@ import { PHASES, STAGES, activePhases, diagnosticText, safeDiagnosticExport } fr
 import { AUTH_URL_ISSUES } from './official-error-catalog.js';
 import { renderAuthQr } from './auth-qr.js';
 import { readLocalSession, saveLocalSession, clearLocalSession } from './session-recovery.js';
+import { COMMON_TOKENS, createBscTradePair } from './trade-pair.js';
 const $ = id => document.getElementById(id);
 // The launch capability is transient. Never persist it, display it, or send it to external origins.
 const accessMatch = /^#access=([a-f0-9]{64})$/.exec(location.hash);
@@ -441,7 +442,41 @@ $('live-kind').onchange = () => { readVersion++; readBusy = false; void refreshC
 $('asset-search').oninput = renderHoldings;
 document.querySelectorAll('[data-asset-tab]').forEach(button => button.addEventListener('click', () => { assetTab = button.dataset.assetTab; document.querySelectorAll('[data-asset-tab]').forEach(node => node.setAttribute('aria-selected', String(node === button))); renderHoldings(); }));
 document.addEventListener('wallet:view', event => { const before = currentView; currentView = event.detail.view; $('read-wallet').hidden = currentView === 'quote'; if (before !== currentView && state?.walletConnected) { if (currentView === 'history') { readVersion++; readBusy = false; void refreshCurrent(); } else if (currentView === 'overview') { if (assetSnapshot || portfolioSnapshot) renderAssets(); else { readVersion++; readBusy = false; void refreshCurrent(); } } } });
-const COMMON_TOKENS = { BNB: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', USDT: '0x55d398326f99059fF775485246999027B3197955', USDC: '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d' };
+function installCaTradeHelper() {
+  const form = $('live-quote-form'); if (!form) return;
+  const panel = el('div', undefined, 'quote-scope'), direction = el('select'), token = el('input'), quoteAsset = el('select');
+  panel.append(el('strong', '单 CA 快捷买入 / 卖出'));
+  const directionLabel = el('label', '方向'), tokenLabel = el('label', '代币 CA'), quoteLabel = el('label', '报价资产');
+  direction.id = 'quick-ca-direction'; directionLabel.htmlFor = direction.id;
+  direction.append(new Option('买入该 CA', 'buy'), new Option('卖出该 CA', 'sell'));
+  token.id = 'quick-ca-address'; token.type = 'text'; token.autocomplete = 'off'; token.spellcheck = false; token.placeholder = '粘贴 BNB Chain 代币合约地址'; tokenLabel.htmlFor = token.id;
+  quoteAsset.id = 'quick-ca-quote'; quoteLabel.htmlFor = quoteAsset.id;
+  for (const [id, label] of [['BNB', 'BNB'], ['USDT', 'USDT'], ['USDC', 'USDC']]) quoteAsset.append(new Option(label, id));
+  const hint = el('p', '买入：用报价资产支付并接收 CA；卖出：支付 CA 并换回报价资产。', 'small muted');
+  const apply = el('button', '填入交易对', 'quiet-button full'); apply.type = 'button';
+  const status = el('p', '', 'small muted'); status.setAttribute('role', 'status');
+  direction.onchange = () => { hint.textContent = direction.value === 'buy'
+    ? '买入：支付数量填写报价资产数量。'
+    : '卖出：支付数量填写要卖出的 CA 数量。'; };
+  apply.onclick = () => {
+    try {
+      if ($('live-chain').value !== '56') throw new Error('BSC_ONLY');
+      const pair = createBscTradePair({ direction: direction.value, tokenAddress: token.value.trim(), quoteAsset: quoteAsset.value });
+      for (const [side, address] of [['from', pair.fromToken], ['to', pair.toToken]]) {
+        const preset = Object.entries(COMMON_TOKENS).find(([, contract]) => contract.toLowerCase() === address.toLowerCase());
+        $(side + '-preset').value = preset?.[0] || 'custom'; $('live-' + side).value = address;
+      }
+      $('live-amount').value = '';
+      invalidateReview('交易对已填入；请填写支付数量、滑点并获取最新报价。');
+      status.textContent = '已填入。CA 仍须通过官方报价、审计和手动确认；不能据此认定一定可交易。';
+    } catch (error) { status.textContent = error.message === 'BSC_ONLY'
+      ? '此快捷入口只适用于 BNB Smart Chain；其他网络当前仅可查询报价。'
+      : 'CA 格式或报价资产无效，请核对完整合约地址。'; }
+  };
+  panel.append(directionLabel, direction, tokenLabel, token, quoteLabel, quoteAsset, apply, hint, status);
+  form.prepend(panel);
+}
+installCaTradeHelper();
 function invalidateReview(message = '') {
   quoteVersion++; displayedIntentId = null;
   tradeReview = null; clearTimeout(reviewTimer);
