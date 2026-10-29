@@ -28,6 +28,10 @@ test('manual trading cannot be enabled without a protected local launch', async 
   await assert.rejects(createApplication({ sessions: new Sessions(), localAccess: true, walletAccess: true, manualTradeFactory: () => ({}) }), /MANUAL_TRADES_REQUIRE_LOCAL_ACCESS_KEY/);
 });
 
+test('minting cannot be enabled without a protected local launch', async () => {
+  await assert.rejects(createApplication({ sessions: new Sessions(), localAccess: true, walletAccess: true, mintFactory: () => ({}) }), /MINTING_REQUIRES_LOCAL_ACCESS_KEY/);
+});
+
 test('manual endpoints require local session even after launch secret is known', async t => {
   let called = 0;
   const app = await createApplication({ sessions: new Sessions(), localAccess: true, walletAccess: true, localAccessKey: accessKey,
@@ -35,6 +39,17 @@ test('manual endpoints require local session even after launch secret is known',
   t.after(() => app.close());
   const res = await post(app, '/api/trade/preview', {}, { 'X-Local-Access': accessKey });
   assert.equal(res.status, 401); assert.equal(called, 0);
+});
+
+test('mint endpoints require a protected local session and report capability explicitly', async t => {
+  let called = 0;
+  const app = await createApplication({ sessions: new Sessions(), localAccess: true, walletAccess: true, localAccessKey: accessKey,
+    mintFactory: () => ({ async preview() { called++; return {}; } }) });
+  t.after(() => app.close());
+  const status = await (await fetch(app.origin + '/api/status')).json();
+  assert.equal(status.capabilities.tokenMinting, true);
+  const res = await post(app, '/api/mint/preview', {}, { 'X-Local-Access': accessKey });
+  assert.equal(res.status, 401); assert.equal((await res.json()).error, 'LOCAL_SESSION_EXPIRED'); assert.equal(called, 0);
 });
 
 test('reopening a protected launcher preserves the QR waiter, review and binding', async t => {

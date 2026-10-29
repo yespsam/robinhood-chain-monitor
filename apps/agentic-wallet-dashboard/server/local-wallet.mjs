@@ -9,7 +9,7 @@ const id = () => randomBytes(32).toString('hex');
 const BOUND_SESSION_LIFETIME_MS = 24 * 60 * 60 * 1000;
 const fields = (body, allowed) => { if (Object.keys(body).some(k => !allowed.includes(k))) throw new Denied('UNEXPECTED_FIELD', 400); };
 export const LOCAL_CAPABILITIES = Object.freeze({ liveWalletAuth: true, walletRead: true, livePortfolio: true, swapQuotes: true,
-  liveTrades: false, manualTrades: false, tokenRevocation: false, automation: false, offlineAutomation: false });
+  liveTrades: false, manualTrades: false, tokenMinting: false, customContractCalls: false, tokenRevocation: false, automation: false, offlineAutomation: false });
 
 // No dashboard password or Binance credentials. The browser may retain this short-lived
 // local capability in origin-scoped sessionStorage to recover across refreshes.
@@ -18,7 +18,7 @@ export class LocalWalletAccess {
   constructor(wallet, clock = Date.now, { portfolioReader = createPortfolioReader({ clock }), tradeService = null } = {}) {
     this.wallet = wallet; this.clock = clock; this.client = null; this.flow = null; this.busy = false; this.nextAuth = 0;
     this.portfolioReader = portfolioReader;
-    this.tradeService = tradeService;
+    this.tradeService = tradeService; this.mintService = null; this.contractCallService = null;
     this.gate = new WalletGate({ wallet, clock, sessions: {
       byKey: key => this.check(key), invalidateAll: () => this.lock()
     } });
@@ -76,7 +76,8 @@ export class LocalWalletAccess {
   state(key) {
     const c = this.check(key), f = this.flow, binding = this.gate.binding, connected = !!binding && !f?.bindingInProgress;
     const state = { expiresAt: c.expiresAt, walletConnected: connected,
-      capabilities: { ...LOCAL_CAPABILITIES, manualTrades: this.tradeService !== null, liveTrades: this.tradeService !== null },
+      capabilities: { ...LOCAL_CAPABILITIES, manualTrades: this.tradeService !== null, liveTrades: this.tradeService !== null,
+        tokenMinting: this.mintService !== null, customContractCalls: this.contractCallService !== null },
       phase: connected ? 'CONNECTED' : f?.phase || 'DISCONNECTED', error: f?.error || null,
       stage: f?.stage || 'LOCAL', diagnostic: f?.diagnostic || null, operationPending: this.busy,
       nextSignInAt: this.nextAuth,
@@ -155,7 +156,7 @@ export class LocalWalletAccess {
     if (this.gate.binding) throw new Denied('WALLET_ALREADY_BOUND', 409);
     if (!f || f.phase !== 'REVIEW' || body.candidateId !== f.candidateId || body.confirmed !== true)
       throw new Denied('WALLET_CONFIRMATION_REQUIRED');
-    const binding = { sessionKey: key, owner: this.check(key).owner, userConfirmed: true, permissions: this.tradeService ? ['read', 'manual'] : ['read'],
+    const binding = { sessionKey: key, owner: this.check(key).owner, userConfirmed: true, permissions: this.tradeService || this.mintService || this.contractCallService ? ['read', 'manual'] : ['read'],
       addresses: Object.fromEntries(f.addresses.map(x => [x.chainId, x.address])) };
     f.phase = 'VERIFYING'; f.stage = 'BIND'; f.bindingInProgress = true; this.gate.binding = binding;
     try {

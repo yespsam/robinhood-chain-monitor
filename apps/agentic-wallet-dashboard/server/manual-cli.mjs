@@ -5,6 +5,7 @@ import { resolveCliInstallation, DOCUMENTED_CLI_VERSION } from './official-cli.m
 import { validChain, validContract, decimal, decimalExceedsInteger, addressKey, CORE_CHAINS } from './model.mjs';
 import { Denied } from './auth.mjs';
 import { safeOfficialIdentity } from '../public/official-error-catalog.js';
+import { FLAP_BSC_PORTAL, FLAP_NEW_TOKEN_SELECTOR } from './flap-mint.mjs';
 
 const runFile = promisify(execFile);
 export const MANUAL_CHAINS = Object.freeze(CORE_CHAINS.map(c => c.id));
@@ -40,6 +41,32 @@ function swapArguments(trade) {
   if (decimalExceedsInteger(slippage, '100')) throw new Denied('INVALID_SLIPPAGE', 400);
   return ['market-order', 'swap', '--fromTokenQty', amount, '--fromToken', fromToken, '--toToken', toToken,
     '--binanceChainId', chainId, '--slippage', slippage, '--mev', 'true', '--gasLevel', 'MEDIUM'];
+}
+function externalCallPreviewArguments(request) {
+  fields(request, ['chainId', 'from', 'to', 'value', 'inputData']);
+  if (request.chainId !== '56' || request.value !== '0' || !sameAddress(validContract('56', request.to), FLAP_BSC_PORTAL))
+    throw new Denied('EXTERNAL_CALL_NOT_ALLOWED', 400);
+  const from = validContract('56', request.from);
+  if (typeof request.inputData !== 'string' || !new RegExp('^0x' + FLAP_NEW_TOKEN_SELECTOR + '[0-9a-f]{192,8192}$', 'i').test(request.inputData))
+    throw new Denied('EXTERNAL_CALL_NOT_ALLOWED', 400);
+  return ['contract-call', 'preview', '--binanceChainId', '56', '--from', from, '--to', FLAP_BSC_PORTAL,
+    '--value', '0', '--inputData', request.inputData];
+}
+function customCallPreviewArguments(request) {
+  fields(request, ['chainId', 'from', 'to', 'value', 'inputData']);
+  const chainId = validChain(request.chainId);
+  if (chainId === 'CT_501' || typeof request.value !== 'string' || !/^(0|[1-9][0-9]{0,77})$/.test(request.value) || BigInt(request.value) >= 2n ** 256n)
+    throw new Denied('EXTERNAL_CALL_NOT_ALLOWED', 400);
+  const from = validContract(chainId, request.from), to = validContract(chainId, request.to);
+  if (typeof request.inputData !== 'string' || request.inputData.length > 32_768 || !/^0x(?:[0-9a-f]{2})+$/i.test(request.inputData) || request.inputData.length < 10)
+    throw new Denied('EXTERNAL_CALL_NOT_ALLOWED', 400);
+  return ['contract-call', 'preview', '--binanceChainId', chainId, '--from', from, '--to', to,
+    '--value', request.value, '--inputData', request.inputData];
+}
+function sameAddress(a, b) { return typeof a === 'string' && typeof b === 'string' && a.toLowerCase() === b.toLowerCase(); }
+function checkedRequestId(value) {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{7,127}$/.test(value)) throw new Denied('INVALID_EXTERNAL_PREVIEW_ID', 400);
+  return value;
 }
 function rejectionIdentity(value) {
   return safeOfficialIdentity({ officialName: value?.error?.name, officialCode: value?.error?.code });
@@ -101,6 +128,27 @@ export function createManualCli({ execute = runFile, resolveInstallation = resol
       const code = status === 'SUBMITTED' ? 'ORDER_SUBMITTED' : status === 'UNKNOWN' ? 'SUBMISSION_UNKNOWN' : result.code;
       return { status, outcome: status, orderId, code, ...result.identity, submitted: status === 'SUBMITTED' ? true : status === 'REJECTED' ? false : null,
         retryAllowed: false, message: status === 'SUBMITTED' ? '订单已提交，尚未确认成交。' : fixedMessages[code], source: SOURCE, observedAt };
+    },
+    async previewContractCall(request) {
+      const args = externalCallPreviewArguments(request);
+      return run(args, false);
+    },
+    async previewCustomContractCall(request) {
+      const args = customCallPreviewArguments(request);
+      return run(args, false);
+    },
+    async executeContractCall(requestId, chainId = '56') {
+      chainId = validChain(chainId);
+      if (chainId === 'CT_501') throw new Denied('EXTERNAL_CALL_NOT_ALLOWED', 400);
+      const result = await run(['contract-call', 'execute', '--requestId', checkedRequestId(requestId)], true);
+      if (result.kind === 'not-started' || result.kind === 'rejected') return { status: 'REJECTED', code: result.code };
+      if (result.kind !== 'success') return { status: 'UNKNOWN', code: result.code || 'SUBMISSION_RESULT_UNKNOWN' };
+      const data = result.data;
+      const oid = orderIdText(data.orderId);
+      const hash = cleanHash(chainId, data.txHash);
+      if (data.status === 'PENDING_CONFIRMATION' && oid) return { status: 'PENDING_CONFIRMATION', orderId: oid, txHash: hash };
+      if (data.status === 'BROADCASTED' && oid && hash) return { status: 'BROADCASTED', orderId: oid, txHash: hash };
+      return { status: 'UNKNOWN', orderId: oid, txHash: hash, code: 'SUBMISSION_RESULT_UNKNOWN' };
     },
     async readOrder(request) {
       fields(request, ['orderId', 'chainId']); const chainId = checkedChain(request.chainId), orderId = orderIdText(request.orderId);

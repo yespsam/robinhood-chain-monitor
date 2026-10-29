@@ -14,9 +14,12 @@ let authQrVersion = 0, authExpiryTimer;
 let restoreBusy = false, restoreRetryNeeded = false, suspended = false, sessionExpiresAt = 0;
 let recoveryTimer, recoveryAttempts = 0;
 const readControllers = new Set();
-const abortablePaths = new Set(['/api/local/session', '/api/local/state', '/api/wallet/check', '/api/wallet/read', '/api/wallet/quote', '/api/trade/preview', '/api/trade/list', '/api/trade/status']);
+const abortablePaths = new Set(['/api/local/session', '/api/local/state', '/api/wallet/check', '/api/wallet/read', '/api/wallet/quote', '/api/trade/preview', '/api/trade/list', '/api/trade/status', '/api/mint/preview', '/api/mint/list', '/api/mint/status', '/api/contract-call/preview', '/api/contract-call/list', '/api/contract-call/status']);
 let quoteBusy = false, quoteVersion = 0, displayedIntentId = null;
 let tradeReview = null, tradeTimer, reviewTimer, tradeSubmitting = false, trackedIntentId = null, tradePollBusy = false, trades = [];
+let mintReview = null, mintBusy = false, mintSubmitting = false, mintRecords = [], mintExpiryTimer;
+let customCallReview = null, customCallBusy = false, customCallSubmitting = false, customCallRecords = [], customCallExpiryTimer, customCallVersion = 0;
+const isEvmChain = value => typeof value === 'string' && /^[1-9][0-9]{0,9}$/.test(value);
 let currentView = 'overview', assetTab = 'tokens', assetSnapshot = null, portfolioSnapshot = null, mergedAssets = [], readBusy = false;
 const launchMessage = '请通过本机启动器打开看板：双击“打开钱包.command”，或在项目目录运行 npm run open。';
 const messages = {
@@ -38,6 +41,37 @@ const messages = {
   AUTH_IN_PROGRESS: '官方验证正在进行，请等待完成或超时后重试。',
   AUTH_STATUS_UNCONFIRMED: '钱包连接暂未核实，正在重新核对；不会重新登录或提交交易。',
   AUTH_RATE_LIMIT: '请稍等片刻再生成新的配对码。',
+  DEVELOPER_MODE_REQUIRED: '请先在 Binance App 中启用 Developer Mode，再重新预览。',
+  MINT_PREVIEW_REJECTED: 'Binance Agentic Wallet 未接受这笔预览；未提交交易。',
+  MINT_PREVIEW_INCOMPLETE: '官方预览信息不完整或无法核验；已停止，未提交交易。',
+  MINT_PREVIEW_BLOCKED: '官方模拟或风险检查未通过；已拦截，未提交交易。',
+  MINT_REVIEW_EXPIRED: 'Mint 预览已过期，请重新预览。',
+  UNKNOWN_MINT_REVIEW: 'Mint 预览不存在或已失效，请重新预览。',
+  MINT_CONFIRMATION_REQUIRED: '请先勾选并核对这笔真实链上创建交易。',
+  MINT_RISK_ACKNOWLEDGMENT_REQUIRED: '请先阅读预览风险并确认是否继续。',
+  MINT_BALANCE_UNCONFIRMED: 'BNB 余额未能唯一核实，暂不能创建。',
+  UNRESOLVED_MINT_EXISTS: '已有一笔 Mint 结果待核验；先核对交易状态，不会自动重发。',
+  MINT_JOURNAL_BUSY: '本机正在处理一笔 Mint，请稍后查看记录。',
+  CONTRACT_CALL_CHAIN_UNSUPPORTED: '当前绑定钱包没有可用的受支持 EVM 网络。',
+  CONTRACT_CALL_ABI_INVALID: 'ABI 必须是有效且受支持的函数 ABI JSON。',
+  CONTRACT_CALL_FUNCTION_INVALID: '函数签名无法从 ABI 唯一解析；请填写规范签名，例如 mint(address,uint256)。',
+  CONTRACT_CALL_NOT_STATE_CHANGING: '只允许调用非 view 或 payable 的状态变更函数。',
+  CONTRACT_CALL_PRIVILEGE_METHOD_BLOCKED: '授权、所有权、角色或升级类高权限函数在此界面被拦截。',
+  CONTRACT_CALL_ARGUMENTS_INVALID: '参数必须是可按 ABI 编码的 JSON 数组。',
+  CONTRACT_CALL_VALUE_NOT_PAYABLE: '该函数不是 payable；附带原生币必须为 0。',
+  CONTRACT_CALL_DATA_TOO_LARGE: '编码后的调用数据超出安全长度限制。',
+  CONTRACT_CALL_BALANCE_UNCONFIRMED: '目标网络的原生币余额无法唯一核实。',
+  CONTRACT_CALL_PREVIEW_REJECTED: 'Agentic Wallet 未接受该合约调用预览；未提交。',
+  CONTRACT_CALL_PREVIEW_INCOMPLETE: '官方模拟返回字段缺失或不完整；已停止，未提交。',
+  CONTRACT_CALL_PREVIEW_BLOCKED: '模拟失败、地址/金额不匹配、风险过高或检测到权限变化；已拦截。',
+  CONTRACT_CALL_REVIEW_EXPIRED: '预览已过期，请重新进行模拟。',
+  UNKNOWN_CONTRACT_CALL_REVIEW: '自定义合约预览不存在或已经失效。',
+  CONTRACT_CALL_CONFIRMATION_REQUIRED: '请核对并确认本次自定义合约调用。',
+  CONTRACT_CALL_RISK_ACKNOWLEDGMENT_REQUIRED: '请先阅读并确认模拟返回的风险提示。',
+  UNRESOLVED_CONTRACT_CALL_EXISTS: '已有一笔合约调用结果待核验；先核对记录，不会自动重发。',
+  CONTRACT_CALL_JOURNAL_BUSY: '本机正在处理一笔合约调用，请稍后刷新状态。',
+  CONTRACT_CALL_WALLET_CHANGED: '钱包地址或会话发生变化，预览已作废。',
+  INSUFFICIENT_GAS_RESERVE: 'BNB 余额需高于预留 Gas 门槛；请核对钱包余额和官方预览。',
   INVALID_AMOUNT: '请输入正十进制数量，并明确填写滑点。',
   INVALID_CONTRACT: '请填写该网络的完整有效合约地址。',
   INVALID_SLIPPAGE: '滑点必须在 0–100% 范围内。',
@@ -150,6 +184,10 @@ function connectionControls(v, message) {
   const showAuth = phase === 'WAITING' && typeof v?.urlForWeb === 'string' && v.urlForWeb.length > 0 && Number.isFinite(authExpiry) && !expired;
   if (showAuth) showAuthQr(v); else clearAuthQr();
   $('stop-wallet-wait').hidden = !active; $('stop-wallet-wait').disabled = v?.stage === 'BIND'; $('drawer-stop-wallet-wait').disabled = v?.stage === 'BIND';
+  if ($('mint-preview-button')) $('mint-preview-button').disabled = !v?.walletConnected || mintBusy || mintSubmitting;
+  if ($('refresh-mints')) $('refresh-mints').disabled = !v?.walletConnected;
+  if ($('custom-preview-button')) $('custom-preview-button').disabled = !v?.walletConnected || customCallBusy || customCallSubmitting || !v?.chains?.some(chain => isEvmChain(chain.id));
+  if ($('refresh-custom-calls')) $('refresh-custom-calls').disabled = !v?.walletConnected;
   if (expired && phase === 'WAITING') authExpiredMessage();
   else if (phase === 'WAITING' && !showAuth) { $('top-wallet-message').textContent = '官方登录信息或有效期尚未确认，暂不展示二维码。'; $('wallet-message').textContent = $('top-wallet-message').textContent; }
 
@@ -167,7 +205,7 @@ function clearBalances() {
 }
 function clearPrivateData() {
   clearAuthQr();
-  clearTradeUI();
+  clearTradeUI(); clearMintUI(); clearCustomCallUI();
   readVersion++; readBusy = false; clearBalances(); emptyState('live-table', '暂无已读取的记录', '连接钱包后刷新当前列表。');
   $('live-review-details').replaceChildren(); $('live-review-blockers').replaceChildren(); if ($('live-review').open) $('live-review').close();
   $('candidate-addresses').replaceChildren(); $('live-address').textContent = '尚未绑定'; $('copy-wallet-address').disabled = true; $('copy-address-message').textContent = '';
@@ -185,9 +223,11 @@ function wipe(message = '本页已断开，官方 CLI 会话保持不变。', { 
   $('wallet-candidate').hidden = true; $('read-permission').textContent = '待绑定'; $('wallet-notice').textContent = '连接本机钱包'; $('live-data-badge').textContent = '等待连接';
   $('global-state').textContent = '本机直开 · 钱包待连接'; $('confirm-wallet-address').checked = false;
   for (const name of ['lock-wallet', 'signout-wallet', 'bind-wallet', 'read-wallet', 'live-chain', 'live-quote-button']) $(name).disabled = true;
+  $('mint-preview-button').disabled = true; $('refresh-mints').disabled = true;
+  $('custom-preview-button').disabled = true; $('refresh-custom-calls').disabled = true; $('custom-chain').replaceChildren(new Option('请先连接钱包', ''));
   $('live-chain').replaceChildren(el('option', '等待连接'));
   for (const name of ['live-from', 'live-to', 'live-amount', 'live-slippage', 'asset-search']) $(name).value = '';
-  $('live-quote-message').textContent = '请先连接并核对钱包。'; $('quote-chain-label').textContent = '等待连接'; setReadMessage(message);
+  $('live-quote-message').textContent = '请先连接并核对钱包。'; $('mint-message').textContent = '连接并核对钱包后可预览。'; $('mint-state-message').textContent = '连接钱包后读取本机 Mint 记录。'; $('custom-call-message').textContent = '连接钱包后可进行只读预览。'; $('custom-call-state-message').textContent = '连接钱包后读取本机记录。'; $('quote-chain-label').textContent = '等待连接'; setReadMessage(message);
   connectionControls({ phase: 'DISCONNECTED' }, message);
 }
 function suspendSession(message = '页面已暂停，返回后将恢复连接。') {
@@ -267,7 +307,7 @@ function render(v) {
     if (!wasReview) document.dispatchEvent(new CustomEvent('wallet:show-settings'));
   } else $('candidate-addresses').replaceChildren();
   if (v.diagnostic) lastDiagnostic = v.diagnostic;
-  const message = connected ? '钱包地址已核对，可读取资产并逐笔确认 BSC 兑换。' : v.diagnostic ? describeDiagnostic(v.diagnostic)
+  const message = connected ? '钱包地址已核对，可读取资产、Swap、Flap Mint 或预览自定义 EVM 合约。' : v.diagnostic ? describeDiagnostic(v.diagnostic)
     : v.phase === 'WAITING' ? '用币安 App 扫描下方二维码，核对配对码并确认。二维码到期后会自动清除。'
     : v.phase === 'REVIEW' ? '已找到官方钱包会话，请在连接设置中核对地址。'
     : v.phase === 'PAUSED' ? '本页等待已停止，远端授权未撤销。核验结束后可重查状态。'
@@ -276,12 +316,13 @@ function render(v) {
   connectionControls(v, message);
   if (v.phase === 'WAITING' && !wasWaiting && !$('wallet-auth').hidden) document.dispatchEvent(new CustomEvent('wallet:show-settings'));
   $('read-permission').textContent = connected ? '已绑定' : '待绑定'; $('wallet-notice').textContent = connected ? '我的 Agentic Wallet' : '连接本机钱包';
-  $('global-state').textContent = connected ? '真实钱包 · 手动交易逐笔确认' : '本机直开 · 钱包待连接';
+  $('global-state').textContent = connected ? '真实钱包 · Swap / Mint 逐笔确认' : '本机直开 · 钱包待连接';
   for (const name of ['live-chain', 'read-wallet', 'live-quote-button']) $(name).disabled = !connected || (name === 'read-wallet' && readBusy) || (name === 'live-quote-button' && (tradeSubmitting || hasOpenTrade()));
   if (connected && !wasConnected) {
     $('live-chain').replaceChildren(...v.chains.map(c => { const o = el('option', c.name); o.value = c.id; return o; }));
+    populateCustomChains(v);
     if (v.chains.some(c => c.id === '56')) $('live-chain').value = '56';
-    changeChain(false); $('live-data-badge').textContent = '已绑定 · 待读取'; document.dispatchEvent(new CustomEvent('wallet:bound')); void refreshCurrent(); void loadTrades();
+    changeChain(false); $('live-data-badge').textContent = '已绑定 · 待读取'; document.dispatchEvent(new CustomEvent('wallet:bound')); void refreshCurrent(); void loadTrades(); void loadMints(); void loadCustomCalls();
   }
   if (connected && !wasConnected) $('live-quote-message').textContent = '填好合约、数量和滑点后，点击一次买入/卖出按钮即可核验并提交。';
   clearTimeout(pollTimer);
@@ -441,7 +482,7 @@ $('live-chain').onchange = () => changeChain(); $('read-wallet').onclick = refre
 $('live-kind').onchange = () => { readVersion++; readBusy = false; void refreshCurrent(); };
 $('asset-search').oninput = renderHoldings;
 document.querySelectorAll('[data-asset-tab]').forEach(button => button.addEventListener('click', () => { assetTab = button.dataset.assetTab; document.querySelectorAll('[data-asset-tab]').forEach(node => node.setAttribute('aria-selected', String(node === button))); renderHoldings(); }));
-document.addEventListener('wallet:view', event => { const before = currentView; currentView = event.detail.view; $('read-wallet').hidden = currentView === 'quote'; if (before !== currentView && state?.walletConnected) { if (currentView === 'history') { readVersion++; readBusy = false; void refreshCurrent(); } else if (currentView === 'overview') { if (assetSnapshot || portfolioSnapshot) renderAssets(); else { readVersion++; readBusy = false; void refreshCurrent(); } } } });
+document.addEventListener('wallet:view', event => { const before = currentView; currentView = event.detail.view; $('read-wallet').hidden = ['quote', 'mint', 'custom-call'].includes(currentView); if (before !== currentView && state?.walletConnected) { if (currentView === 'history') { readVersion++; readBusy = false; void refreshCurrent(); } else if (currentView === 'overview') { if (assetSnapshot || portfolioSnapshot) renderAssets(); else { readVersion++; readBusy = false; void refreshCurrent(); } } else if (currentView === 'mint') void loadMints(); else if (currentView === 'custom-call') void loadCustomCalls(); } });
 function installCaTradeHelper() {
   const form = $('live-quote-form'); if (!form) return;
   const panel = el('div', undefined, 'quote-scope'), direction = el('select'), token = el('input'), quoteAsset = el('select');
@@ -642,6 +683,255 @@ $('live-quote-button').onclick = async () => {
 $('close-live-review').onclick = () => { if (!tradeSubmitting) invalidateReview(); };
 $('live-review').addEventListener('cancel', event => { if (tradeSubmitting) event.preventDefault(); else invalidateReview(); });
 $('refresh-trades').onclick = async () => { if (!trackedIntentId) trackedIntentId = intentIdOf(trades.find(intent => ['UNKNOWN', 'SUBMISSION_UNKNOWN'].includes(stateOf(intent)))); if (trackedIntentId) await pollTrade(); await loadTrades(); };
+let mintListBusy = false, mintVersion = 0;
+function clearMintReview(message = '') {
+  mintVersion++; clearTimeout(mintExpiryTimer); mintReview = null;
+  $('mint-cost-ack').checked = false; $('mint-risk-ack').checked = false; $('confirm-mint').disabled = true;
+  if (!mintSubmitting && $('mint-review').open) $('mint-review').close();
+  if (message) $('mint-message').textContent = message;
+}
+function clearMintUI() {
+  clearMintReview(); mintBusy = false; mintSubmitting = false; mintRecords = []; mintListBusy = false;
+  $('mint-list').replaceChildren(); $('mint-state-message').textContent = '连接钱包后读取本机 Mint 记录。';
+  $('mint-message').textContent = '连接并核对钱包后可预览。'; $('mint-submit-message').textContent = '请逐项核对；如果 Binance App 要求确认，还需在 App 内确认。';
+  $('mint-name').value = ''; $('mint-symbol').value = ''; $('mint-metadata').value = '';
+  $('mint-review-details').replaceChildren(); $('mint-review-risks').replaceChildren(); $('mint-simulation-details').textContent = '';
+  if ($('mint-review').open) $('mint-review').close();
+}
+function mintStateLabel(value) {
+  return ({ SUBMITTING: '正在提交', BROADCASTED: '已广播 · 待链上确认', PENDING_CONFIRMATION: '等待 Binance App 确认', UNKNOWN: '结果未知 · 请核对历史', FAILED: '提交失败' })[value] || '状态待核对';
+}
+function renderMintRecords() {
+  $('mint-list').replaceChildren(...mintRecords.map(record => {
+    const item = el('article', undefined, 'trade-item'), heading = el('div', undefined, 'trade-item-head');
+    heading.append(el('strong', `${record.name || 'Token'} (${record.symbol || '—'}) · BSC`), el('span', mintStateLabel(record.status), 'badge')); item.append(heading);
+    item.append(el('p', 'CA 尚未从 TokenCreated 事件解析；不根据交易哈希猜测合约地址。'));
+    if (record.orderId) item.append(el('p', '官方订单 ' + record.orderId));
+    if (record.txHash && /^0x[a-fA-F0-9]{64}$/.test(record.txHash)) { const link = el('a', '在 BscScan 核对交易 ↗', 'small'); link.href = 'https://bscscan.com/tx/' + record.txHash; link.target = '_blank'; link.rel = 'noopener noreferrer'; item.append(link); }
+    if (record.note) item.append(el('p', record.note));
+    if (record.metadataUri) item.append(el('p', 'Metadata: ' + record.metadataUri));
+    return item;
+  }));
+  $('mint-state-message').textContent = mintRecords.length ? '提交不等于创建成功；请在链上核对回执与 TokenCreated 事件。未知结果不会自动重发。' : '本机尚无已读取的 Mint 记录。';
+}
+async function loadMints() {
+  if (!state?.walletConnected || mintListBusy) return;
+  const current = epoch; mintListBusy = true; $('refresh-mints').disabled = true;
+  try {
+    const result = await api('/api/mint/list');
+    if (current !== epoch) return;
+    mintRecords = Array.isArray(result?.list) ? result.list : []; renderMintRecords();
+  } catch (error) { if (current === epoch) $('mint-state-message').textContent = 'Mint 记录暂未读取：' + error.message; }
+  finally { mintListBusy = false; if (current === epoch) $('refresh-mints').disabled = !state?.walletConnected; }
+}
+function mintDetails(details) {
+  $('mint-review-details').replaceChildren(...details.map(([key, value]) => { const row = el('div'); row.append(el('dt', key), el('dd', value ?? '未返回')); return row; }));
+}
+function updateMintConfirm() {
+  const review = mintReview, riskRequired = review?.requiresRiskAcknowledgment === true;
+  const fresh = review && Number.isFinite(review.expiresAt) && review.expiresAt > Date.now();
+  $('confirm-mint').disabled = mintSubmitting || !review?.executable || !fresh || !$('mint-cost-ack').checked || (riskRequired && !$('mint-risk-ack').checked);
+}
+function showMintReview(review) {
+  mintReview = review; $('mint-cost-ack').checked = false; $('mint-risk-ack').checked = false;
+  $('mint-review-state').textContent = review.requireConfirmation ? '预览通过 · 执行后还需在 Binance App 确认' : '预览通过 · 最后一步将通过钱包提交';
+  mintDetails([['网络', 'BNB Smart Chain / 56'], ['钱包', review.walletAddress], ['发射平台', 'Flap Standard'], ['代币', `${review.name} (${review.symbol})`],
+    ['Metadata URI', review.metadataUri], ['Portal 合约', review.portal], ['附带 BNB', '0 BNB（不含最终 Gas）'], ['预留燃料余额', `${review.gasReserve} BNB`],
+    ['预览有效期', localTime(review.expiresAt)], ['App 二次确认', review.requireConfirmation ? '需要' : '预览未要求；最终点击仍是本页明确授权']]);
+  const riskRows = [];
+  for (const risk of review.risks?.riskDetails || []) riskRows.push(el('p', `${risk.riskType}: ${risk.title || risk.code || '风险提示'} — ${risk.description || '未提供说明'}`));
+  for (const [address, info] of Object.entries(review.risks?.addresses || {})) {
+    if (info.riskLevel > 0) riskRows.push(el('p', `地址 ${address} 风险级别 ${info.riskLevel}: ${(info.riskDetails || []).map(x => x.title || x.description || x.code).filter(Boolean).join('；') || '无详细说明'}`));
+  }
+  for (const risk of review.risks?.riskBehaviors || []) riskRows.push(el('p', `${risk.riskType}: ${risk.title || risk.code || '行为提示'} — ${risk.description || '未提供说明'}`));
+  $('mint-review-risks').replaceChildren(...(riskRows.length ? riskRows : [el('p', '官方预览未返回可展示的风险提示；这不构成安全保证。')]));
+  $('mint-risk-label').hidden = !review.requiresRiskAcknowledgment;
+  $('mint-simulation-details').textContent = JSON.stringify({ parsedTx: review.parsedTx, risks: review.risks,
+    authorityChanges: review.authorityChanges, allowanceChanges: review.allowanceChanges, balanceChanges: review.balanceChanges }, null, 2);
+  $('mint-submit-message').textContent = review.warning;
+  $('mint-review').showModal(); updateMintConfirm();
+  clearTimeout(mintExpiryTimer); mintExpiryTimer = setTimeout(() => { updateMintConfirm(); $('mint-submit-message').textContent = '预览已过期，请关闭后重新预览。'; }, Math.max(0, review.expiresAt - Date.now()));
+}
+function currentMintInput() { return JSON.stringify({ name: $('mint-name').value.trim(), symbol: $('mint-symbol').value.trim(), metadataUri: $('mint-metadata').value.trim() }); }
+$('mint-form').addEventListener('input', () => { if (mintReview) clearMintReview('Mint 参数已变化；旧预览已作废，请重新预览。'); });
+$('mint-platform').onchange = () => { if ($('mint-platform').value !== 'flap') $('mint-message').textContent = '该平台暂未接入 Agentic Wallet 签名；没有调用或保存私钥。'; };
+$('mint-preview-button').onclick = async () => {
+  if (!$('mint-form').reportValidity() || mintBusy || mintSubmitting || !state?.walletConnected) return;
+  if (!state.chains?.some(chain => chain.id === '56')) { $('mint-message').textContent = '当前 Agentic Wallet 未报告 BNB Smart Chain，已停止预览。'; return; }
+  clearMintReview(); mintBusy = true; const version = ++mintVersion, current = epoch, input = currentMintInput();
+  $('mint-preview-button').disabled = true; $('mint-preview-button').textContent = '正在安全预览…';
+  $('mint-message').textContent = '核对 Developer Mode、BSC 钱包、交易锁与 BNB 余额，并通过官方 CLI 模拟固定 Flap 调用…';
+  try {
+    const result = await api('/api/mint/preview', JSON.parse(input));
+    if (current !== epoch || version !== mintVersion || input !== currentMintInput()) return;
+    if (result.chainId !== '56' || result.portal?.toLowerCase() !== '0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0' || result.executable !== true || !/^[a-f0-9]{32}$/.test(result.reviewId || '') || !/^[a-f0-9]{32}$/.test(result.intentId || '')) throw Error('官方预览信息未通过完整性核验，已停止。');
+    showMintReview(result); $('mint-message').textContent = '官方模拟预览已返回；尚未提交，确认按钮会触发本笔真实链上调用。';
+  } catch (error) { if (current === epoch && version === mintVersion) $('mint-message').textContent = error.message; }
+  finally { mintBusy = false; if (current === epoch) { $('mint-preview-button').disabled = !state?.walletConnected; $('mint-preview-button').innerHTML = '预览创建交易 <span>→</span>'; } }
+};
+$('mint-cost-ack').onchange = updateMintConfirm; $('mint-risk-ack').onchange = updateMintConfirm;
+$('confirm-mint').onclick = async () => {
+  if (mintSubmitting || !mintReview || $('confirm-mint').disabled) return;
+  const review = mintReview, current = epoch; mintSubmitting = true; updateMintConfirm();
+  $('mint-submit-message').textContent = '正在通过 Binance Agentic Wallet 提交；不要关闭页面或重复点击。';
+  $('mint-preview-button').disabled = true;
+  let responseReceived = false;
+  try {
+    const result = await api('/api/mint/submit', { reviewId: review.reviewId, confirmed: true, costAcknowledged: true, riskAcknowledged: $('mint-risk-ack').checked });
+    responseReceived = true; if (current !== epoch) return;
+    mintReview = null; clearTimeout(mintExpiryTimer); mintRecords = [result, ...mintRecords.filter(x => x.intentId !== result.intentId)]; renderMintRecords();
+    $('mint-review-state').textContent = mintStateLabel(result.status); $('mint-submit-message').textContent = result.note || '已处理；请核对状态，不会自动重发。';
+    $('mint-message').textContent = result.note || mintStateLabel(result.status);
+    $('mint-cost-ack').checked = false; $('mint-risk-ack').checked = false; $('confirm-mint').disabled = true;
+  } catch (error) {
+    if (current === epoch) {
+      const definite = new Set(['DEVELOPER_MODE_REQUIRED', 'MINT_REVIEW_EXPIRED', 'UNKNOWN_MINT_REVIEW', 'MINT_CONFIRMATION_REQUIRED', 'MINT_RISK_ACKNOWLEDGMENT_REQUIRED', 'WALLET_TRANSACTION_LOCKED', 'MINT_BALANCE_UNCONFIRMED', 'INSUFFICIENT_GAS_RESERVE', 'UNRESOLVED_MINT_EXISTS', 'MINT_PREVIEW_BLOCKED', 'MINT_PREVIEW_INCOMPLETE']);
+      if (!responseReceived && !definite.has(error.code)) {
+        const unknown = { ...review, status: 'UNKNOWN', txHash: null, orderId: null, note: '本机未收到最终响应；只查询 Mint 记录，不会自动重发。' };
+        mintRecords = [unknown, ...mintRecords.filter(x => x.intentId !== unknown.intentId)]; renderMintRecords();
+        $('mint-submit-message').textContent = '提交结果未知。请刷新记录并核对 Binance App / 链上历史；本机不会自动重发。';
+      } else $('mint-submit-message').textContent = error.message;
+    }
+  } finally {
+    mintSubmitting = false; if (current === epoch) { $('mint-preview-button').disabled = !state?.walletConnected; $('confirm-mint').disabled = true; void loadMints(); }
+  }
+};
+$('close-mint-review').onclick = () => { if (!mintSubmitting) clearMintReview(); };
+$('mint-review').addEventListener('cancel', event => { if (mintSubmitting) event.preventDefault(); else clearMintReview(); });
+$('refresh-mints').onclick = loadMints;
+function populateCustomChains(walletState = state) {
+  const choices = (walletState?.chains || []).filter(chain => isEvmChain(chain.id) && walletState.addresses?.some(address => address.chainId === chain.id));
+  $('custom-chain').replaceChildren(...(choices.length ? choices.map(chain => { const option = el('option', `${chain.name} · ${chain.id}`); option.value = chain.id; return option; }) : [new Option('没有可用的 EVM 网络', '')]));
+  $('custom-chain').disabled = !walletState?.walletConnected || choices.length === 0;
+  if (choices.some(chain => chain.id === '56')) $('custom-chain').value = '56';
+  updateCustomNativeLabel();
+}
+function updateCustomNativeLabel() {
+  const label = ({ '56': 'BNB', '1': 'ETH', '8453': 'ETH' })[$('custom-chain').value] || '该网络原生币';
+  $('custom-native-label').textContent = `(${label})`;
+}
+function clearCustomCallReview(message = '') {
+  customCallVersion++; clearTimeout(customCallExpiryTimer); customCallReview = null;
+  $('custom-call-risk-ack').checked = false; $('custom-call-cost-ack').checked = false; $('custom-call-caution-ack').checked = false; $('confirm-custom-call').disabled = true;
+  if (!customCallSubmitting && $('custom-call-review').open) $('custom-call-review').close();
+  if (message) $('custom-call-message').textContent = message;
+}
+function clearCustomCallUI() {
+  clearCustomCallReview(); customCallBusy = false; customCallSubmitting = false; customCallRecords = [];
+  $('custom-call-list').replaceChildren(); $('custom-call-state-message').textContent = '连接钱包后读取本机记录。';
+  $('custom-call-message').textContent = '连接钱包后可进行只读预览。'; $('custom-call-submit-message').textContent = '确认后只提交当前预览一次；结果未知时不会自动重发。';
+  for (const name of ['custom-contract', 'custom-abi', 'custom-function', 'custom-arguments']) $(name).value = '';
+  $('custom-value').value = '0'; $('custom-call-review-details').replaceChildren(); $('custom-call-review-risks').replaceChildren(); $('custom-call-simulation-details').textContent = '';
+  if ($('custom-call-review').open) $('custom-call-review').close();
+}
+function customCallStateLabel(value) {
+  return ({ SUBMITTING: '正在提交', BROADCASTED: '已广播 · 待链上确认', PENDING_CONFIRMATION: '等待 Binance App 确认', UNKNOWN: '结果未知 · 先核对', FAILED: '提交失败' })[value] || '状态待核对';
+}
+function explorerTx(chainId, txHash) {
+  const base = ({ '56': 'https://bscscan.com/tx/', '1': 'https://etherscan.io/tx/', '8453': 'https://basescan.org/tx/' })[chainId];
+  return base && /^0x[a-fA-F0-9]{64}$/.test(txHash || '') ? base + txHash : null;
+}
+function renderCustomCallRecords() {
+  $('custom-call-list').replaceChildren(...customCallRecords.map(record => {
+    const item = el('article', undefined, 'trade-item'), heading = el('div', undefined, 'trade-item-head');
+    heading.append(el('strong', `${record.functionSignature || record.functionName || '合约调用'} · ${record.chainId}`), el('span', customCallStateLabel(record.status), 'badge')); item.append(heading);
+    item.append(el('p', `合约 ${record.contractAddress || '未返回'} · selector ${record.selector || '未返回'}`));
+    if (record.valueWei !== '0') item.append(el('p', `附带原生币 ${record.valueWei} wei`));
+    if (record.orderId) item.append(el('p', '官方订单 ' + record.orderId));
+    const href = explorerTx(record.chainId, record.txHash); if (href) { const link = el('a', '在区块浏览器核对交易 ↗', 'small'); link.href = href; link.target = '_blank'; link.rel = 'noopener noreferrer'; item.append(link); }
+    if (record.note) item.append(el('p', record.note)); return item;
+  }));
+  $('custom-call-state-message').textContent = customCallRecords.length ? '已广播不代表合约执行成功；请核对链上状态与事件。未知结果不会自动重发。' : '本机尚无已读取的自定义合约调用记录。';
+}
+async function loadCustomCalls() {
+  if (!state?.walletConnected || customCallBusy) return;
+  const current = epoch; customCallBusy = true; $('refresh-custom-calls').disabled = true;
+  try { const result = await api('/api/contract-call/list'); if (current !== epoch) return;
+    customCallRecords = Array.isArray(result?.list) ? result.list : []; renderCustomCallRecords();
+  } catch (error) { if (current === epoch) $('custom-call-state-message').textContent = '调用记录暂未读取：' + error.message; }
+  finally { customCallBusy = false; if (current === epoch) $('refresh-custom-calls').disabled = !state?.walletConnected; }
+}
+function customCallDetails(details) {
+  $('custom-call-review-details').replaceChildren(...details.map(([key, value]) => { const row = el('div'); row.append(el('dt', key), el('dd', value ?? '未返回')); return row; }));
+}
+function updateCustomCallConfirm() {
+  const review = customCallReview, fresh = review && Number.isFinite(review.expiresAt) && review.expiresAt > Date.now();
+  $('confirm-custom-call').disabled = customCallSubmitting || !review?.executable || !fresh || !$('custom-call-risk-ack').checked ||
+    !$('custom-call-cost-ack').checked || (review?.requiresRiskAcknowledgment && !$('custom-call-caution-ack').checked);
+}
+function showCustomCallReview(review) {
+  customCallReview = review; for (const id of ['custom-call-risk-ack', 'custom-call-cost-ack', 'custom-call-caution-ack']) $(id).checked = false;
+  $('custom-call-review-state').textContent = review.requireConfirmation ? '模拟通过 · 提交后还需在 Binance App 确认' : '模拟通过 · 本次确认将通过 Agentic Wallet 提交';
+  const chainName = state?.chains?.find(x => x.id === review.chainId)?.name || review.chainId;
+  customCallDetails([['网络', `${chainName} / ${review.chainId}`], ['钱包', review.walletAddress], ['目标合约', review.contractAddress],
+    ['函数', review.functionSignature], ['参数', JSON.stringify(review.decodedArguments)], ['函数选择器', review.selector],
+    ['附带原生币', `${review.valueNative} · ${review.valueWei} wei`], ['calldata', review.inputData],
+    ['预览有效期', localTime(review.expiresAt)], ['App 二次确认', review.requireConfirmation ? '需要' : '预览未要求；仍需本页明确确认']]);
+  const rows = [];
+  for (const risk of review.risks?.riskDetails || []) rows.push(el('p', `${risk.riskType}: ${risk.title || risk.code || '风险提示'} — ${risk.description || '未提供说明'}`));
+  for (const [address, info] of Object.entries(review.risks?.addresses || {})) if (info.riskLevel > 0)
+    rows.push(el('p', `地址 ${address} 风险级别 ${info.riskLevel}: ${(info.riskDetails || []).map(x => x.title || x.description || x.code).filter(Boolean).join('；') || '无详细说明'}`));
+  for (const risk of review.risks?.riskBehaviors || []) rows.push(el('p', `${risk.riskType}: ${risk.title || risk.code || '行为提示'} — ${risk.description || '未提供说明'}`));
+  $('custom-call-review-risks').replaceChildren(...(rows.length ? rows : [el('p', '官方没有返回已知风险项；这不构成安全保证。')]));
+  $('custom-call-risk-label').hidden = !review.requiresRiskAcknowledgment;
+  $('custom-call-simulation-details').textContent = JSON.stringify({ parsedTx: review.parsedTx, risks: review.risks,
+    authorityChanges: review.authorityChanges, allowanceChanges: review.allowanceChanges, balanceChanges: review.balanceChanges }, null, 2);
+  $('custom-call-submit-message').textContent = review.warning; $('custom-call-review').showModal(); updateCustomCallConfirm();
+  clearTimeout(customCallExpiryTimer); customCallExpiryTimer = setTimeout(() => { updateCustomCallConfirm(); $('custom-call-submit-message').textContent = '预览已过期，请关闭后重新模拟。'; }, Math.max(0, review.expiresAt - Date.now()));
+}
+function currentCustomCallInput() { return JSON.stringify({ chainId: $('custom-chain').value, contractAddress: $('custom-contract').value.trim(),
+  abiJson: $('custom-abi').value.trim(), functionSignature: $('custom-function').value.trim(), argumentsJson: $('custom-arguments').value.trim(), valueNative: $('custom-value').value.trim() }); }
+$('custom-call-form').addEventListener('input', () => { if (customCallReview) clearCustomCallReview('参数已变化；旧预览已作废，请重新模拟。'); });
+$('custom-chain').onchange = () => { updateCustomNativeLabel(); if (customCallReview) clearCustomCallReview('网络已变化；旧预览已作废，请重新模拟。'); };
+$('custom-call-form').onsubmit = event => event.preventDefault();
+$('custom-preview-button').onclick = async () => {
+  if (!$('custom-call-form').reportValidity() || customCallBusy || customCallSubmitting || !state?.walletConnected) return;
+  const input = currentCustomCallInput(), parsed = JSON.parse(input);
+  if (!state.chains?.some(chain => chain.id === parsed.chainId && isEvmChain(chain.id)) || !state.addresses?.some(address => address.chainId === parsed.chainId)) { $('custom-call-message').textContent = '当前钱包未报告并绑定此 EVM 网络；已停止预览。'; return; }
+  clearCustomCallReview(); customCallBusy = true; const version = ++customCallVersion, current = epoch;
+  $('custom-preview-button').disabled = true; $('custom-preview-button').textContent = '正在解析并模拟…';
+  $('custom-call-message').textContent = '核对 Developer Mode、绑定网络、交易锁、原生币余额与燃料预留，并调用 Agentic Wallet 预览…';
+  try {
+    const result = await api('/api/contract-call/preview', parsed);
+    if (current !== epoch || version !== customCallVersion || input !== currentCustomCallInput()) return;
+    if (result.chainId !== parsed.chainId || result.contractAddress?.toLowerCase() !== parsed.contractAddress.toLowerCase() ||
+        result.executable !== true || !/^[a-f0-9]{32}$/.test(result.reviewId || '') || !/^[a-f0-9]{32}$/.test(result.intentId || '') ||
+        !/^0x[0-9a-f]{8}$/i.test(result.selector || '') || !/^0x[0-9a-f]+$/i.test(result.inputData || '')) throw Error('官方预览信息未通过完整性核验，已停止。');
+    showCustomCallReview(result); $('custom-call-message').textContent = '模拟预览已返回；尚未提交。确认按钮只提交当前这一次调用。';
+  } catch (error) { if (current === epoch && version === customCallVersion) $('custom-call-message').textContent = error.message; }
+  finally { customCallBusy = false; if (current === epoch) { $('custom-preview-button').disabled = !state?.walletConnected; $('custom-preview-button').innerHTML = '解析 ABI 并模拟预览 <span>→</span>'; } }
+};
+for (const id of ['custom-call-risk-ack', 'custom-call-cost-ack', 'custom-call-caution-ack']) $(id).onchange = updateCustomCallConfirm;
+$('confirm-custom-call').onclick = async () => {
+  if (customCallSubmitting || !customCallReview || $('confirm-custom-call').disabled) return;
+  const review = customCallReview, current = epoch; customCallSubmitting = true; updateCustomCallConfirm();
+  $('custom-call-submit-message').textContent = '正在通过 Agentic Wallet 提交本次预览；不要重复点击。'; $('custom-preview-button').disabled = true;
+  let responseReceived = false;
+  try {
+    const result = await api('/api/contract-call/submit', { reviewId: review.reviewId, confirmed: true, costAcknowledged: true,
+      riskAcknowledged: $('custom-call-caution-ack').checked, customCallAcknowledged: $('custom-call-risk-ack').checked });
+    responseReceived = true; if (current !== epoch) return;
+    customCallReview = null; clearTimeout(customCallExpiryTimer); customCallRecords = [result, ...customCallRecords.filter(x => x.intentId !== result.intentId)]; renderCustomCallRecords();
+    $('custom-call-review-state').textContent = customCallStateLabel(result.status); $('custom-call-submit-message').textContent = result.note || '已处理；请核对记录，不会自动重发。';
+    $('custom-call-message').textContent = result.note || customCallStateLabel(result.status);
+    for (const id of ['custom-call-risk-ack', 'custom-call-cost-ack', 'custom-call-caution-ack']) $(id).checked = false;
+    $('confirm-custom-call').disabled = true;
+  } catch (error) {
+    if (current === epoch) {
+      const definite = new Set(['DEVELOPER_MODE_REQUIRED', 'CONTRACT_CALL_REVIEW_EXPIRED', 'UNKNOWN_CONTRACT_CALL_REVIEW', 'CONTRACT_CALL_CONFIRMATION_REQUIRED',
+        'CONTRACT_CALL_RISK_ACKNOWLEDGMENT_REQUIRED', 'WALLET_TRANSACTION_LOCKED', 'CONTRACT_CALL_BALANCE_UNCONFIRMED', 'INSUFFICIENT_GAS_RESERVE',
+        'UNRESOLVED_CONTRACT_CALL_EXISTS', 'CONTRACT_CALL_PREVIEW_BLOCKED', 'CONTRACT_CALL_PREVIEW_INCOMPLETE']);
+      if (!responseReceived && !definite.has(error.code)) {
+        const unknown = { ...review, status: 'UNKNOWN', txHash: null, orderId: null, note: '本机未收到最终响应；只查询记录，不会自动重发。' };
+        customCallRecords = [unknown, ...customCallRecords.filter(x => x.intentId !== unknown.intentId)]; renderCustomCallRecords();
+        $('custom-call-submit-message').textContent = '提交结果未知。请刷新记录并核对 Binance App / 链上历史；本机不会自动重发。';
+      } else $('custom-call-submit-message').textContent = error.message;
+    }
+  } finally { customCallSubmitting = false; if (current === epoch) { $('custom-preview-button').disabled = !state?.walletConnected; $('confirm-custom-call').disabled = true; void loadCustomCalls(); } }
+};
+$('close-custom-call-review').onclick = () => { if (!customCallSubmitting) clearCustomCallReview(); };
+$('custom-call-review').addEventListener('cancel', event => { if (customCallSubmitting) event.preventDefault(); else clearCustomCallReview(); });
+$('refresh-custom-calls').onclick = loadCustomCalls;
 window.addEventListener('offline', () => suspendSession('网络已离线，已隐藏资产；恢复网络后继续当前会话。'));
 window.addEventListener('online', () => { void restoreSession(); });
 document.addEventListener('visibilitychange', () => {

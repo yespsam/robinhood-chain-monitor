@@ -146,7 +146,8 @@ export class OfficialWallet {
     const v = await this.call(['wallet', 'settings']);
     return { sessionExpireTime: text(v?.sessionExpireTime), inactiveSignOutTime: text(v?.inactiveSignOutTime),
       dailyLimit: quota(v?.dailyLimit), quotaLeft: quota(v?.quotaLeft), tradeAllTokens: v?.tradeAllTokens === true,
-      abnormalTxnHandling: ['AutoReject', 'NeedConfirmation'].includes(v?.abnormalTxnHandling) ? v.abnormalTxnHandling : null };
+      abnormalTxnHandling: ['AutoReject', 'NeedConfirmation'].includes(v?.abnormalTxnHandling) ? v.abnormalTxnHandling : null,
+      devMode: { enabled: v?.devMode?.enabled === true, balanceExceeded: v?.devMode?.balanceExceeded === true } };
   }
   async balance(chain, contract) {
     const args = ['wallet', 'balance', '--binanceChainId', validChain(chain)];
