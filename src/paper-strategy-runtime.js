@@ -38,6 +38,8 @@ import { advanceNarrativeAcademy, validNarrativeAcademy } from './paper-narrativ
 import { readNarrativeLearningSource } from './paper-narrative-learning-source.js';
 import { NARRATIVE_ADMISSION_VERSION } from './paper-narrative-thesis.js';
 import { OPPORTUNITY_VERSION, OPPORTUNITY_ROUTES, canResearchExternal, opportunityChart, MAIN_CHART_WINDOW_VERSION } from './paper-opportunity-policy.js';
+import { createPaperStrategyFocusShadowStore } from './paper-strategy-focus-shadow-store.js';
+import { createPaperStrategyFocusSimulator, PAPER_STRATEGY_FOCUS_SIMULATION_VERSION } from './paper-strategy-focus-simulator.js';
 import { MEME_STRUCTURE_ENTRY_VERSION, PULLBACK_TARGET_SELECTION_VERSION } from './paper-opportunity-review.js';
 import { STRUCTURE_COST_POLICY_VERSION, STRUCTURE_COST_TEXT, MAIN_STRUCTURE_MAX_COST_RATE, GAS_ACCOUNT_ONLY_TEXT } from './paper-cost-policy.js';
 import { planHotResearch, selectResearchChart, quoteCandidatePool, selectQuoteTarget, chartRefreshDue, advanceEntryFocus, RESEARCH_SCHEDULER_VERSION } from './paper-research-scheduler.js';
@@ -96,9 +98,12 @@ async function atomicWrite(file, value) {
 }
 
 export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe = null, internalTradeMonitor = null, gasMonitor = null, jevResearch = null, chainGasAccounting = false, lossRepairMode = false, enforceLossGuards = lossRepairMode, session = null, chain = 'robinhood', chains = [chain], discoveryMode = 'all_sources', now = Date.now, intervalMs = 1000, marketIntervalMs = 1000, twitterNarrativeSnapshot = () => null, learningReportSnapshot = null,
-  evidenceLoader = createPaperEvidenceLoader(dataDir), evaluate = evaluatePaperStrategies, learningLoader = () => null, narrativeSourceReader = readNarrativeLearningSource, allowExploratory = false, compoundEntries = false, fixedEntryUsd = null, upsideMode = false, pvpMode = false, diagnosticMode = false, confirmedMode = false, evidenceHoldMode = false, continuousPaperMode = false, opportunityMode = false, thesisExitExperiment = false, activeEntrySampling = false, tradeReviewEvery = null, higherFrequencyResearch = false, memeExitMode = false, recoveryMode = false, minimalEntryMode = false, evidenceGapExitMode = true, narrativeAdmissionGate = false, profitRetentionShadow = false, ...legacyOptions } = {}) {
+  evidenceLoader = createPaperEvidenceLoader(dataDir), evaluate = evaluatePaperStrategies, learningLoader = () => null, narrativeSourceReader = readNarrativeLearningSource, allowExploratory = false, compoundEntries = false, fixedEntryUsd = null, upsideMode = false, pvpMode = false, diagnosticMode = false, confirmedMode = false, evidenceHoldMode = false, continuousPaperMode = false, opportunityMode = false, thesisExitExperiment = false, activeEntrySampling = false, tradeReviewEvery = null, higherFrequencyResearch = false, memeExitMode = false, recoveryMode = false, minimalEntryMode = false, evidenceGapExitMode = true, narrativeAdmissionGate = false, profitRetentionShadow = false, strategyFocusSimulation = false, ...legacyOptions } = {}) {
   if(typeof recoveryMode!=='boolean'||recoveryMode&&!memeExitMode)throw new TypeError('recovery requires meme paper main');
   if(typeof narrativeAdmissionGate!=='boolean'||narrativeAdmissionGate&&!recoveryMode)throw new TypeError('narrative admission requires recovered paper main');
+  const focusSimulationReady = confirmedMode && opportunityMode && recoveryMode && narrativeAdmissionGate;
+  if(typeof strategyFocusSimulation!=='boolean'||strategyFocusSimulation&&!focusSimulationReady)
+    throw new TypeError('focus paper simulation requires confirmed multi-setup narrative-gated paper mode');
   const estimatedFeeMode=session?.costModel===ESTIMATED_COST_VERSION;
   if(typeof profitRetentionShadow!=='boolean'||profitRetentionShadow&&(!estimatedFeeMode||!confirmedMode||!session))throw new TypeError('profit retention study requires an estimated confirmed paper session');
   if(['profitRetentionPriceMultiple','profitRetentionPriceMultiples','triggerPriceMultiple','triggerPriceMultiples'].some(key=>Object.hasOwn(legacyOptions,key)))throw new TypeError('profit retention multiarm has fixed multiples 2, 3 and 5; single-multiple options are retired');
@@ -139,6 +144,8 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
   }
   const stateFile = path.join(dataDir, session ? paperSessionLedgerFile(session) : 'yesp-atm-strategy-paper.json'), lockFile = `${stateFile}.lock`;
   const profitRetentionObserver = profitRetentionShadow ? createProfitRetentionObserver({dataDir,sessionId:session.id,sourceLedgerName:path.basename(stateFile),now}) : null;
+  const focusShadowStore = opportunityMode ? createPaperStrategyFocusShadowStore({dataDir,sessionId:session?.id||null,now}) : null;
+  const focusSimulator = strategyFocusSimulation ? createPaperStrategyFocusSimulator({dataDir,now}) : null;
   const owner = randomUUID();
   const researchReader = createPaperResearchReader({ evidenceLoader, learningLoader, now });
   let account = null, enabled = !lossRepairMode, initialized = false, stopped = false, started = false, lockHeld = false, timer, tail = Promise.resolve(), cycle = null;
@@ -451,6 +458,8 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       if (activeEntrySampling) exitComparison = activateExitEntrySampling(exitComparison, now());
       if (tradeReviewEvery && tradeCountReview == null) tradeCountReview = createTradeReview(account,now());
       await profitRetentionObserver?.initialize({account,persistedAccount:stored?.account||account});
+      await focusShadowStore?.initialize();
+      await focusSimulator?.initialize();
       initialized = true; publicState = { ...publicState, enabled, account: clone(account), updatedAt: account.updatedAt,
         tradeCountReview: tradeReviewSummary(tradeCountReview,tradeCountReviewError) };
     } catch (error) { errorState(error); await releaseLock(); throw error; }
@@ -1036,6 +1045,11 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
           ...(recoveryMode?{holdingTier:prior?.holdingTier==='main'||ledger===account?'main':'comparison'}:{})});
       }
     }
+    for(const p of focusSimulator?.openPositions()||[]) {
+      const key=keyOf(p),prior=holdings.get(key);
+      holdings.set(key,{...(prior||p),requiresStructureChart:true,focusPaperPosition:true,
+        ...(prior?.holdingTier?{holdingTier:prior.holdingTier}:{holdingTier:'focus_paper'})});
+    }
     return [...holdings.values()]; // Main-account exit needs cannot be overwritten by a legacy control lot.
   }
 
@@ -1079,6 +1093,13 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
           narrative: ledger.exitExperimentVersion || position.memeExitPolicy ? buildPaperNarrativeEvidence({ chain: position.chain, address: position.address, token: position, events: latestEvidence.events, nowMs }) : null,
           flow: positionFlow(position,latestEvidence,nowMs) }] : [];
       });
+      if(focusSimulator) {
+        const focusMarks=focusSimulator.openPositions().map(position=>{
+          const quote=recentQuote(position,nowMs);
+          return {...position,...(quote||{status:'unavailable'}),chart:quote?holdingChart(position,quote):null};
+        });
+        await focusSimulator.advance({marks:focusMarks,nowMs});
+      }
       if (holdings.length && fastQuotes) {
         const mainMarks = marksFor(account);
         const next = advancePaperStrategyAccount(account, { marks: mainMarks, enabled: false, nowMs, confirmedMode, continuousPaperMode, lossRepairMode, enforceLossGuards, evidenceGapExitMode,
@@ -1586,6 +1607,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     });
     const evaluations=memeExitMode?originalEvaluations.map(row=>memeExitEvaluation(row,row.decision==='可模拟'
       ?memeEntryContext(row.token,finalEvidence.get(keyOf(row.token)),nowMs):null)):originalEvaluations;
+    if(focusSimulator) await focusSimulator.advance({evaluations,nowMs});
     // Local research only. This casebook never changes evaluations, account
     // permissions or paid-call budgets. Persist under the existing ledger lock.
     if (confirmedMode && !narrativeAcademyState?.error && nowMs-lastNarrativeAcademyAt>=15000) {
@@ -1668,6 +1690,31 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
         realizedPnl: trades.reduce((sum, trade) => sum + trade.realizedPnl, 0), entries: trades.filter(t => t.side === 'buy').length,
         costsUsd: trades.reduce((sum, trade) => sum + trade.costsUsd, 0) };
     });
+    const focusShadowRows = opportunityMode ? evaluations.filter(item=>item.evidence?.strategyFocusShadow)
+      .map(item=>({chain:item.token?.chain,address:item.token?.address,symbol:item.token?.symbol||null,
+        marketStage:item.evidence?.marketStage||null,
+        ...item.evidence.strategyFocusShadow})) : [];
+    const focusShadowPersistence = focusShadowStore?.record(focusShadowRows,nowMs)||null;
+    const strategyFocusShadow = opportunityMode ? {
+      version:'smartmoney_second_breakout_shadow_v1',researchOnly:true,entryAllowed:false,paperFillAllowed:false,
+      durability:'bounded_persistent_journal_plus_latest_scan_snapshot',persistence:focusShadowPersistence,
+      checkedAt:new Date(nowMs).toISOString(),evaluatedCandidates:focusShadowRows.length,
+      internalSmartMoneyWatchCount:focusShadowRows.filter(r=>r.internalSmartMoney?.status==='watch_smart_money_only').length,
+      externalSecondBreakoutCandidateCount:focusShadowRows.filter(r=>r.externalSecondBreakout?.signalReady===true).length,
+      byChain:Object.fromEntries(chains.map(currentChain=>{
+        const rows=focusShadowRows.filter(r=>r.chain===currentChain);
+        return [currentChain,{evaluated:rows.length,
+          internalSmartMoneyWatch:rows.filter(r=>r.internalSmartMoney?.status==='watch_smart_money_only').length,
+          secondBreakoutCandidates:rows.filter(r=>r.externalSecondBreakout?.signalReady===true).length,
+          dataIncomplete:rows.filter(r=>r.externalSecondBreakout?.status==='data_incomplete').length}];
+      })),
+      candidates:focusShadowRows.filter(r=>r.internalSmartMoney?.status==='watch_smart_money_only'
+        ||r.externalSecondBreakout?.signalReady===true).slice(0,20),
+      note:'候选/未触发/拒绝原因保存在独立有界研究文件并提供当前快照；不进入买卖路由、不生成模拟成交。'
+    } : null;
+    const strategyFocusSimulation = focusSimulator?.snapshot() || {
+      version:PAPER_STRATEGY_FOCUS_SIMULATION_VERSION,enabled:false,status:'disabled',mode:'paper_sidecar',
+      execution:false,signing:false,broadcast:false,note:'需确认的独立纸面前向实验；不进入主账本'};
     tickCount += 1;
     const marketSourceAges = scanChains.map(currentChain => {
       const source = marketSnapshots.get(currentChain)[0];
@@ -1729,7 +1776,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     }) : null;
     const taxChecks = [...candidates.values()].map(({token}) => ({chain:token.chain,address:token.address,symbol:token.symbol,...paperTaxScreen(token)}));
     const taxBlocked = taxChecks.filter(row => row.blocked);
-    publicState = { ...publicState, status: 'ok', lastError: null, enabled, updatedAt: account.updatedAt, account: clone(account), strategies, cadence, opportunityRoutes,
+    publicState = { ...publicState, status: 'ok', lastError: null, enabled, updatedAt: account.updatedAt, account: clone(account), strategies, cadence, opportunityRoutes, strategyFocusShadow, strategyFocusSimulation,
       lossRepair:lossRepairMode?lossRepairReport(account,evaluations,nowMs,{estimatedFees:estimatedFeeMode}):null,
       recovery:recoveryMode?{version:PAPER_RECOVERY_VERSION,activation:clone(account.recoveryActivation),
         entriesEnabled:enabled,entryText:RECOVERY_ENTRY_TEXT,evidenceGapPolicy:{...EVIDENCE_GAP_POLICY},
@@ -1898,6 +1945,12 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
   return {
     stateFile,
     snapshot: () => ({...clone(publicState),
+      ...(opportunityMode?{strategyFocusShadow:{...(clone(publicState.strategyFocusShadow)||{
+        version:'smartmoney_second_breakout_shadow_v1',researchOnly:true,entryAllowed:false,paperFillAllowed:false,
+        durability:'bounded_persistent_journal_plus_latest_scan_snapshot'}),persistence:focusShadowStore?.snapshot()||null}}:{}),
+      strategyFocusSimulation:focusSimulator?.snapshot()||clone(publicState.strategyFocusSimulation)||{
+        version:PAPER_STRATEGY_FOCUS_SIMULATION_VERSION,enabled:false,status:'disabled',mode:'paper_sidecar',
+        execution:false,signing:false,broadcast:false},
       profitRetentionShadow:profitRetentionObserver?.snapshot()||{version:PROFIT_RETENTION_MULTIARM_VERSION,enabled:false,status:'disabled',configuredPriceMultiples:[2,3,5],mode:'multiarm_paired_observation_only',execution:false,signing:false,broadcast:false},
       ...(recoveryMode&&memeExitMode?{strategyValidationRequirements:{entryFlowVersion:ENTRY_FLOW_VERSION,
         narrativeAdmissionVersion:NARRATIVE_ADMISSION_VERSION,narrativeAdmissionGate,
@@ -1950,6 +2003,6 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       return clone(publicState);
     }),
     stop: async () => { stopped = true; clearTimeout(timer); clearTimeout(refreshTimer); clearTimeout(quoteTimer); clearTimeout(exitTimer); clearTimeout(eventTimer);
-      await Promise.allSettled([internalTradeMonitor?.stop(),jevResearch?.stop(),cycle, fastCycle, quoteEvaluationJob, eventRefreshJob, depthJob, ...quotePreparationJobs, exitJob, refreshJob, ...marketJobs.values(), ...auxiliaryJobs.values(), ...[...quoteJobs.values()].map(x=>x.job), detailJob, narrativeLearningJob, ...chartJobs.values()]); await tail; await profitRetentionObserver?.flush(); await releaseLock(); },
+      await Promise.allSettled([internalTradeMonitor?.stop(),jevResearch?.stop(),cycle, fastCycle, quoteEvaluationJob, eventRefreshJob, depthJob, ...quotePreparationJobs, exitJob, refreshJob, ...marketJobs.values(), ...auxiliaryJobs.values(), ...[...quoteJobs.values()].map(x=>x.job), detailJob, narrativeLearningJob, ...chartJobs.values()]); await tail; await profitRetentionObserver?.flush(); await focusShadowStore?.flush(); await focusSimulator?.flush(); await releaseLock(); },
   };
 }

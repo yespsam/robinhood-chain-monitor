@@ -253,6 +253,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
     evidenceGapExitMode: process.env.PAPER_EVIDENCE_GAP_EXIT !== '0',
     // New v3 opt-in only. Retired v1/v2 flags cannot activate or select an arm.
     profitRetentionShadow: process.env.PAPER_PROFIT_RETENTION_MULTIARM_SHADOW === '1',
+    // Isolated forward paper experiment; the simulator itself remains fail-closed
+    // and writes only its own bounded sidecar, never the production paper ledger.
+    strategyFocusSimulation: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0'
+      && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0'
+      && process.env.PAPER_RECOVERY_MODE !== '0' && process.env.PAPER_STRATEGY_FOCUS_SIMULATION !== '0',
     memeExitMode: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0',
     recoveryMode: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0' && process.env.PAPER_RECOVERY_MODE !== '0',
     narrativeAdmissionGate: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0' && process.env.PAPER_RECOVERY_MODE !== '0',
