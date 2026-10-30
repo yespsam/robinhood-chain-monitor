@@ -31,11 +31,43 @@ test('BSC scan overlay rejects other-chain cached/event candidates without rewri
   try {
     for(let i=0;i<6;i++)await runtime.runOnce();await runtime.refreshDetails();
     const s=runtime.snapshot();assert.deepEqual(s.scanScope.scanChains,['bsc']);assert.deepEqual(s.chains,chains);
+    assert.equal(s.strategyFocusShadow?.durability,'bounded_persistent_journal_plus_latest_scan_snapshot');
+    assert.equal(s.strategyFocusShadow?.entryAllowed,false);
     assert.equal(s.cadence.marketChains,1);assert.ok(s.evaluations.length>0);
     assert.ok(s.evaluations.every(e=>e.token.chain==='bsc'));assert.ok(calls.every(c=>c[1]==='bsc'));
     assert.equal(s.chainCoverage.base.scanning,false);assert.equal(s.chainCoverage.bsc.scanning,true);
     const stored=JSON.parse(await fs.readFile(runtime.stateFile,'utf8'));assert.deepEqual(stored.chains,chains);
     assert.equal(s.execution,false);assert.equal(s.signing,false);assert.equal(s.broadcast,false);
+    await runtime.stop();
+    const shadow=JSON.parse(await fs.readFile(path.join(dataDir,'paper-strategy-focus-shadow-v1.json'),'utf8'));
+    assert.ok(shadow.samples.length>0,'research observations persist in their independent bounded file');
+    assert.ok(shadow.samples.every(sample=>sample.latest.entryAllowed===false&&sample.latest.paperFillAllowed===false));
+  }finally{await runtime.stop();}
+});
+
+test('focus simulator is exposed only for confirmed recovery paper mode and stays separate from the main ledger',async t=>{
+  let clock=NOW;const dataDir=await directory(t),candidate={...token,chain:'bsc',marketStage:'external',price:1.42};
+  const feed={...market(()=>clock),
+    trending:async()=>({status:'ok',observedAt:iso(clock),tokens:[candidate]}),
+    trenches:async()=>({status:'ok',observedAt:iso(clock),tokens:[]}),
+    quote:async({chain,address})=>({chain,address,status:'ok',price:1.42,observedAt:iso(clock)}),
+    kline:async({chain,address})=>({chain,address,resolution:'1m',status:'ok',candles:candles(clock)})};
+  const runtime=createPaperStrategyRuntime({dataDir,market:feed,chain:'bsc',chains:['bsc'],now:()=>clock,
+    evidenceLoader:()=>({}),allowExploratory:true,pvpMode:true,confirmedMode:true,
+    evidenceHoldMode:true,continuousPaperMode:true,opportunityMode:true,memeExitMode:true,recoveryMode:true,
+    strategyFocusSimulation:true});
+  try{
+    await runtime.runOnce();
+    const state=runtime.snapshot();
+    assert.equal(state.strategyFocusSimulation.mode,'paper_sidecar');
+    assert.equal(state.strategyFocusSimulation.enabled,true);
+    assert.equal(state.strategyFocusSimulation.status,'ready');
+    assert.equal(state.strategyFocusSimulation.execution,false);
+    assert.equal(state.strategyFocusSimulation.signing,false);
+    assert.equal(state.strategyFocusSimulation.broadcast,false);
+    assert.equal(state.account.trades.length,0,'strictly incomplete fixture does not create a main-ledger trade');
+    assert.throws(()=>createPaperStrategyRuntime({market:feed,strategyFocusSimulation:true}),
+      /confirmed multi-setup recovery paper mode/);
   }finally{await runtime.stop();}
 });
 

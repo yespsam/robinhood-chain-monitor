@@ -5,6 +5,7 @@ import { reviewStructurePattern, structureEconomics, OPPORTUNITY_REVIEW_VERSION,
 import {alphaPaperEntry} from './paper-alpha-entry.js';
 import {monitoredPaperEntry} from './paper-monitor-entry.js';
 import {collectivePaperEntry} from './paper-collective-entry.js';
+import {evaluatePaperStrategyFocusShadow} from './paper-strategy-focus-shadow.js';
 
 export const OPPORTUNITY_VERSION = 'multi_setup_v2';
 export const OPPORTUNITY_ROUTES = Object.freeze([
@@ -205,6 +206,9 @@ export function multiOpportunityEntry(base, options) {
       entryPathAllowed:r.evidence.lossRepair.entryPathAllowed,entryPath:r.evidence.lossRepair.entryPath,
       reentry:{ready:r.evidence.lossRepair.reentry.ready}}}:{}),
     ...(r.evidence.recoveryCheck?{recoveryCheck:r.evidence.recoveryCheck}:{}) }));
+  if (reviewed) result.evidence.strategyFocusShadow = evaluatePaperStrategyFocusShadow({
+    token:base.token,marketStage:base.evidence.marketStage,chart,quoteHistory:options.quoteHistory,nowMs:options.nowMs,
+    costAssumptions:base.evidence.costAssumptions,budgetUsd:base.entryUsd,collectiveSignal:options.collectiveSignal });
   if(options.finalizeRoute)result.evidence.routeSelectionVersion='recovery_per_route_v1';
   if (result.decision==='可模拟'||result.evidence.traderDecision) result.evidence.traderDecision=traderDecision(result,nowMs);
   return result;

@@ -246,6 +246,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
     higherFrequencyResearch: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0',
     minimalEntryMode: confirmedMode && process.env.PAPER_MINIMAL_ENTRY === '1',
     evidenceGapExitMode: process.env.PAPER_EVIDENCE_GAP_EXIT !== '0',
+    // Isolated forward paper experiment; the simulator itself remains fail-closed
+    // and writes only its own bounded sidecar, never the production paper ledger.
+    strategyFocusSimulation: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0'
+      && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0'
+      && process.env.PAPER_RECOVERY_MODE !== '0' && process.env.PAPER_STRATEGY_FOCUS_SIMULATION !== '0',
     memeExitMode: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0',
     recoveryMode: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0' && process.env.PAPER_RECOVERY_MODE !== '0',
     continuousPaperMode: confirmedMode && process.env.PAPER_CONTINUOUS_MODE !== '0',

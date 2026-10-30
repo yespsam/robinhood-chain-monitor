@@ -33,6 +33,11 @@ import { paperLossGuard } from './paper-loss-guard.js';
 const MINUTE = 60_000;
 const FRESH_MS = 2 * MINUTE;
 const SCHEMA = 'yesp_atm_strategy_paper_v1';
+const persistedEntryEvidence = evidence => {
+  const persisted = structuredClone(evidence);
+  delete persisted.strategyFocusShadow;
+  return persisted;
+};
 const CHAINS = { sol: 'sol', solana: 'sol', eth: 'eth', ethereum: 'eth', base: 'base', bsc: 'bsc', robinhood: 'robinhood', '4663': 'robinhood' };
 const STRATEGY_PRIORITY = Object.freeze(['launch_sniper', 'internal', 'narrative_pvp', 'smart_money']);
 function validOnchainExitCohort(evidence) {
@@ -808,7 +813,7 @@ export function advancePaperStrategyAccount(account, { evaluations = [], marks =
     const actualRewardRisk = actualLoss > 0 && actualGain > 0 ? actualGain / actualLoss : null;
     if (!(diagnostic || confirmed) && proposedSize && (!Number.isFinite(actualRewardRisk) || actualRewardRisk < 1.5)) continue;
     const qualifiedStrategyIds = unique(qualifiedByToken.get(key).map(item => item.strategyId));
-    const position = { chain, address, symbol: clean(token.symbol) || '未知', strategyId: policy.id, strategyLabel: diagnostic ? '诊断试仓' : policy.label, qualifiedStrategyIds, quantity, initialQuantity: quantity, entryPrice: price, entryUsd: budget, entryCostsUsd: budget - costs.notionalUsd, costBasisUsd: budget, costAssumptions: costs, entryLogic: evaluation.entryLogic, entryReasons: [...(evaluation.reasons || [])], entryEvidence: structuredClone(evaluation.evidence), exitLogic: evaluation.exitLogic, openedAt: iso(nowMs), markAt: iso(time(evaluation.observedAt)), markPrice: price, markStatus: 'ok', peakPrice: price, profitTiersTaken: [], realizedPnl: 0 };
+    const position = { chain, address, symbol: clean(token.symbol) || '未知', strategyId: policy.id, strategyLabel: diagnostic ? '诊断试仓' : policy.label, qualifiedStrategyIds, quantity, initialQuantity: quantity, entryPrice: price, entryUsd: budget, entryCostsUsd: budget - costs.notionalUsd, costBasisUsd: budget, costAssumptions: costs, entryLogic: evaluation.entryLogic, entryReasons: [...(evaluation.reasons || [])], entryEvidence: persistedEntryEvidence(evaluation.evidence), exitLogic: evaluation.exitLogic, openedAt: iso(nowMs), markAt: iso(time(evaluation.observedAt)), markPrice: price, markStatus: 'ok', peakPrice: price, profitTiersTaken: [], realizedPnl: 0 };
     // Freeze the actual engine mode, never infer authority from a candidate row.
     if (continuousPaperMode) position.entryEvidence.accountPolicy = paperOperatingPolicy(true, enforceLossGuards);
     if (positionSizing) {

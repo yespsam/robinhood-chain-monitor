@@ -54,6 +54,9 @@ function breakoutFlowInput(kind='breakout') {
 test('recovered BSC breakout observes fresh scoped net outflow before quote admission and serialized fill',()=>{
   const good=breakoutFlowInput(),row=evaluate(good);
   assert.equal(row.decision,'可模拟');assert.equal(row.evidence.opportunity.id,'external_breakout');
+  assert.equal(row.evidence.strategyFocusShadow?.entryAllowed,false,
+    'research-only focus overlay cannot veto or authorize the existing paper route');
+  assert.equal(row.evidence.strategyFocusShadow?.paperFillAllowed,false);
   assert.equal(row.evidence.opportunity.breakoutFlow.version,'bsc_breakout_observed_outflow_v1');
   const i=structuredClone(good);i.flow.netBuyUsd=-375.21;
   const bad=evaluate(i),route=bad.evidence.opportunityRoutes.find(r=>r.id==='external_breakout');
@@ -63,7 +66,10 @@ test('recovered BSC breakout observes fresh scoped net outflow before quote admi
   assert.equal(readyForPaperQuote(bad),false,'outflow does not reserve independent quote capacity');
   const settings={memeExitMode:true,recoveryMode:true};
   const account=createPaperStrategyAccount({nowMs:NOW});
-  assert.equal(advance(account,[row],NOW,settings).trades.length,1);
+  const filled=advance(account,[row],NOW,settings);
+  assert.equal(filled.trades.length,1);
+  assert.equal(filled.trades[0].entryEvidence.strategyFocusShadow,undefined,
+    'the independent shadow journal is not copied into the trading ledger');
   const fallback=advance(account,[bad],NOW,settings);
   assert.ok(fallback.trades.every(t=>t.entryEvidence.opportunity.id!=='external_breakout'),
     'a different independently qualified route is not the rejected breakout');
