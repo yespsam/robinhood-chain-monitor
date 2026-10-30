@@ -28,12 +28,14 @@
 
 ## 接入与安全验收
 
-`strategyFocusSimulation` 只允许在已确认的多路线、连续、恢复与叙事准入模拟配置下启用；dashboard 有独立环境开关 `PAPER_STRATEGY_FOCUS_SIMULATION=0` 可关闭。侧车通过独立 JSON 文件原子落盘，文件无效/损坏时只禁用侧车写入并保留原文件，不重建账户。侧车状态显式记录 `mode=paper_sidecar`、`execution=false`、`signing=false`、`broadcast=false`；实验成交不会进入主模拟账本。
+`strategyFocusSimulation` 只允许在已确认的多路线、连续恢复模拟配置下启用；dashboard 有独立环境开关 `PAPER_STRATEGY_FOCUS_SIMULATION=0` 可关闭。每个侧车候选还会独立校验新鲜原文、精确 CA 关联、催化时效、近期买盘与结构证据；缺失即拒绝，不依赖主账本的准入字段。侧车通过独立 JSON 文件原子落盘，文件无效/损坏时只禁用侧车写入并保留原文件，不重建账户。侧车状态显式记录 `mode=paper_sidecar`、`execution=false`、`signing=false`、`broadcast=false`；实验成交不会进入主模拟账本。
 
-首次重载后的实际状态：待运行验收补记。新进程启动前不宣称已开始前向采样。旧进程观察到的状态不作为新版已运行证据。
+本地前向运行验收（2026-10-30T08:38:44.909Z）：dashboard 重载后 API 报告侧车 `enabled=true`、`status=ready`、`mode=paper_sidecar`，初始现金 100 美元，`execution/signing/broadcast=false`；当时影子候选数为 0、侧车买入/卖出/持仓均为 0，尚无合格样本，因此没有生成侧车 JSON 文件。主模拟账本仍为 352 笔成交、4 个持仓，与重载前摘要一致。该观测只证明该时点的本机运行状态，不证明持续在线或已产生策略成绩。
+
+运行版本说明：本机 dashboard 从工作副本的 `817ff9f` 集成版启动；GitHub 上传分支 `codex/paper-focus-forward-simulation-upstream`（提交 `b533cfa`）是基于当时 `origin/main` 的独立审阅分支，尚未合并到 `main`。上传分支定向测试通过后，仍需合并并按运行时检查点重新验收，不能把本地旧集成版的状态冒称为该提交已部署。
 
 ## 验证
 
-待运行完成后的定向回归记录于本文件后续版本；主要测试覆盖严格准入、内盘/阶段冲突拒绝、税费/安全拒绝、独立持仓文件、K 线同根止损优先，以及缺失新鲜估值时浮盈亏为 `null`。
+定向回归在上传分支通过 186 项（2026-10-30）；本地工作副本通过 188 项。测试覆盖严格叙事门槛、内盘/阶段冲突拒绝、税费/安全拒绝、独立持仓文件、未收盘 K 线不得退出、同根止损优先，以及缺失新鲜估值时浮盈亏为 `null`。
 
 研究结论仍需至少 30 个完整回合、10 个不同 CA、7 天以上且另设后续留出期，再复核胜率、盈亏比、净收益、回撤、CA 集中度及最大赢家剔除结果；不足时只报告样本，不据此晋升/改主盘。
