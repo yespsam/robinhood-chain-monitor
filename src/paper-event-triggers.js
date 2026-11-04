@@ -2,6 +2,8 @@ import {createPaperEvidenceIndex} from './paper-strategy-evidence.js';
 import {gmgnFlowAddress} from './gmgn-flow-signal.js';
 import {validBinanceFlowState, BINANCE_FLOW_KINDS} from './binance-flow-evidence.js';
 import {buildPoolFirstThreeWire} from './paper-pool-signal.js';
+import {buildFlapPoolLaunchWire} from './flap-pool-launch-signal.js';
+import {liveFlapPoolLaunchEnabled} from './flap-pool-launch.js';
 import {walletBuyResearchHint} from './paper-wallet-priority.js';
 import {buildCollectiveWire} from './paper-collective-signal.js';
 
@@ -9,6 +11,7 @@ import {buildCollectiveWire} from './paper-collective-signal.js';
 // does not manufacture a catalyst, wallet profile, quote or permission to buy.
 export function paperEventTriggers({evidence={},account,chains,nowMs,allowPrequalified=false,allowBurst=false}) {
   const pool=buildPoolFirstThreeWire({events:evidence.events||[],account,nowMs});
+  const poolLaunch=buildFlapPoolLaunchWire({events:evidence.events||[],account,nowMs,enabled:liveFlapPoolLaunchEnabled()});
   const binanceState=validBinanceFlowState(evidence.binanceState)?evidence.binanceState:null;
   const index=createPaperEvidenceIndex({...evidence,binanceState});
   const wallets=chains.flatMap(chain=>{
@@ -44,5 +47,7 @@ export function paperEventTriggers({evidence={},account,chains,nowMs,allowPrequa
     sourceAt:s.sourceAt,sourceObservedAt:s.sourceObservedAt,sourceWindowEndAt:s.sourceObservedAt})),
     ...pool.signals.filter(s=>chains.includes(s.chain)).map(s=>({chain:s.chain,address:s.address,id:s.id,
     source:'new_pool_first_three',sourceAt:s.sourceAt,sourceObservedAt:s.poolEvent.observedAt})),
+    ...poolLaunch.signals.filter(s=>chains.includes(s.chain)).map(s=>({chain:s.chain,address:s.address,id:s.id,
+    source:'flap_pool_launch',sourceAt:s.sourceAt,sourceObservedAt:s.poolEvent.observedAt})),
     ...wallets.filter(w=>!collective.some(s=>s.chain===w.chain&&s.address===w.address))];
 }
