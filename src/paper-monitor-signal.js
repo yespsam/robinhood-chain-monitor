@@ -2,6 +2,7 @@ import {gmgnFlowAddress} from './gmgn-flow-signal.js';
 import {KOL_THEME_VERSION,KOL_THEME_TTL_MS} from './paper-kol-theme.js';
 import {TWITTER_EVENT_TTL_MS,validTwitterEventCandidate} from './paper-twitter-event.js';
 import {validPoolSignal} from './paper-pool-signal.js';
+import {validFlapPoolLaunchSignal} from './flap-pool-launch-signal.js';
 
 export const MONITOR_ENTRY_VERSION='monitored_event_entry_v1';
 export const MONITOR_SIGNAL_TTL_MS=120000;
@@ -12,6 +13,7 @@ export const monitorSignalId=s=>`${MONITOR_ENTRY_VERSION}:${s.source}:${s.source
 // contract safety, a live-trade permission or proof that a sell can execute.
 export function validMonitorSignal(s,token,nowMs) {
   if(s?.source==='new_pool_first_three')return validPoolSignal(s,token,nowMs);
+  if(s?.source==='flap_pool_launch')return validFlapPoolLaunchSignal(s,token,nowMs);
   if(!s||s.version!==MONITOR_ENTRY_VERSION||s.paperOnly!==true||s.chain!==token?.chain||s.address!==token?.address
     ||!gmgnFlowAddress(s.chain,s.address)||gmgnFlowAddress(s.chain,s.address)!==s.address
     ||typeof s.sourceId!=='string'||!s.sourceId||s.sourceId.length>500||s.id!==monitorSignalId(s)

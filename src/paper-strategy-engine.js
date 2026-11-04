@@ -782,7 +782,7 @@ export function advancePaperStrategyAccount(account, { evaluations = [], marks =
     if(alphaEntry&&(!validAlphaSignal(evaluation.evidence.opportunity.event,token,nowMs)
       ||!confirmAlphaQuotes((evaluation.evidence.confirmedPolicy?.confirmation?.rows||[]).map(q=>({...q,chain,address,status:'ok'})),
         token,evaluation.evidence.opportunity.event,nowMs).ready))continue;
-    if(monitorEntry&&evaluation.evidence.opportunity.event?.source==='new_pool_first_three'
+    if(monitorEntry&&['new_pool_first_three','flap_pool_launch'].includes(evaluation.evidence.opportunity.event?.source)
       &&(!lossRepairMode||minimalEntryMode||!estimatedFeeMode||!evaluation.evidence.newLaunch?.pool))continue;
     if(monitorEntry&&(!validMonitorSignal(evaluation.evidence.opportunity.event,token,nowMs)
       ||!confirmMonitorQuote((evaluation.evidence.confirmedPolicy?.confirmation?.rows||[]).map(q=>({...q,chain,address,status:'ok'})),

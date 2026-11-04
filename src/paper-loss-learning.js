@@ -26,7 +26,7 @@ const summary = rounds => {
     losses: rounds.filter(r=>r.pnl<0).length, netPnlUsd, modelCostsUsd,
     grossPricePnlUsd: costsComplete ? netPnlUsd+modelCostsUsd : null };
 };
-const laneLabels={event_narrative:'事件叙事',new_pool_first_three:'新底池前三 CA',collective_smart_money:'集体聪明钱算法',prequalified_wallet:'内盘预核验地址',internal_burst:'内盘逐笔放量',onchain_internal_burst:'内盘链上普通地址放量',verified_wallet:'核实盈利钱包',
+const laneLabels={event_narrative:'事件叙事',new_pool_first_three:'新底池前三 CA',flap_pool_launch:'Flap Pool Launch',collective_smart_money:'集体聪明钱算法',prequalified_wallet:'内盘预核验地址',internal_burst:'内盘逐笔放量',onchain_internal_burst:'内盘链上普通地址放量',verified_wallet:'核实盈利钱包',
   price_only:'外盘纯量价',tagged_or_unknown_wallet:'标签 / 未核实钱包',unknown:'未记录路线'};
 // Record which route was used, not a hindsight reassessment of its truth.
 const laneOf=r=>Object.hasOwn(laneLabels,r.entry.entryEvidence?.lossRepair?.group)
