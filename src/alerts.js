@@ -38,6 +38,7 @@ import {
   withTradingPriority,
 } from "./trading-priority.js";
 import { verifyNarrativeTradeSignalIntegrity } from "./narrative-trade-signal.js";
+import { isCanonicalFlapPoolLaunchUpdate } from "./flap-pool-launch.js";
 import {
   isKolSelfLaunchEvent,
   kolTokenLaunchCanonicalSignalIds,
@@ -1403,6 +1404,32 @@ const compact = (event) => {
         `状态: ${shadow ? "预发行原型变更，尚未正式启用" : "链上升级事件已确认；新增功能尚未解析"}`,
         `证据: ${shadow ? "源码与链上因果匹配" : corroborated ? "官网、部署清单与链上交叉一致" : "官方地址 + 链上升级事件"}`,
         compactAlertEventTime(event, event.blockTimestamp || event.timestamp, event.alertQueuedAt || event.observedAt),
+      ]);
+    }
+    if (event.kind === "flap_pool_launch" && isCanonicalFlapPoolLaunchUpdate(event)) {
+      const launch = event.poolLaunches?.[0] || {};
+      const sample = event.tokens?.[0]?.metadata || {};
+      const name = sample.name || launch.name || "未命名";
+      const symbol = sample.symbol || launch.symbol || "?";
+      const graduated = launch.graduated === true
+        ? "已毕业（同一笔交易内达到门槛）"
+        : launch.graduationFinal === true
+          ? "未毕业（该类型不会稍后补毕业）"
+          : "本笔未毕业（后续仍可能毕业）";
+      const vault = launch.vault ? `${launch.vault} · factory ${launch.vaultFactory || "未取得"}` : "无";
+      const price = launch.initialPriceQuotePerToken
+        ? `${launch.initialPriceQuotePerToken} ${launch.quoteLabel || "quote"}/token`
+        : "事件未携带（schema 未识别或字段缺失）";
+      return compactCard("👀 Flap Pool Launch", [
+        `代币: ${name} (${symbol}) · CA ${launch.token || event.tokens?.[0]?.token || "未取得"}`,
+        `池: ${launch.pool || "未取得"} · 创建者 ${launch.creator || "未取得"}`,
+        `报价: ${launch.quoteLabel || "未取得"} · 开盘价 ${price}`,
+        `供应: ${launch.totalSupply || "未取得"} · 毕业 ${graduated}`,
+        `Vault: ${vault}`,
+        "流动性: FlapDirectLaunched 给出开盘价和总供应，不包含报价种子数量",
+        "状态: 仅观察/告警，不自动买入",
+        `证据: Portal ${event.launcher} · ${launch.launchKindName || "kind 未知"} · ${launch.schemaName || "schema 未识别"}`,
+        compactAlertEventTime(event, event.blockTimestamp, event.observedAt),
       ]);
     }
     if (event.mode?.selector === "v4-hook") {
@@ -6550,6 +6577,7 @@ export function isRelevantAlert(event) {
       && event.structural?.eligible === true;
   }
   if (event.type === "bsc_launchpad_update") {
+    if (event.kind === "flap_pool_launch") return isCanonicalFlapPoolLaunchUpdate(event);
     if (claimsFourRegistryUpdate(event)) return isStrictFourRegistryFirstTokenUpdate(event);
     if (event.kind === "flap_pool_token") return Boolean(flapTrackedTokenIdentity(event));
     if (claimsBscOpenFourFirstTokenUpdate(event)) return isStrictBscOpenFourFirstTokenUpdate(event);

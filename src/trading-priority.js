@@ -781,6 +781,9 @@ function category(event = {}, text = eventText(event)) {
     if (event.type === "bsc_launchpad_update" && event.kind === "flap_pool_token") {
       return isClosedFlapTrackedTokenMonitor(event) ? "focus_onchain" : "information";
     }
+    // Pool Launch is an observe/alert record. It must not enter the on-chain
+    // trading tier used for new launch modes and first-three curve tokens.
+    if (event.type === "bsc_launchpad_update" && event.kind === "flap_pool_launch") return "information";
     if (["bsc_launchpad_update", "evm_launchpad_update", "token_launch"].includes(event.type)) return "focus_onchain";
     if (event.type === "github_module_update" && !materialFocusGithub(event)) return "developer_maintenance";
     return "focus_official";

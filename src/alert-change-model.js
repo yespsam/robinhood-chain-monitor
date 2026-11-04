@@ -905,12 +905,39 @@ function flapTrackedPoolTokenModel(event) {
   });
 }
 
+function flapPoolLaunchModel(event) {
+  const launch = event?.poolLaunches?.[0] || {};
+  const metadata = event?.tokens?.[0]?.metadata || {};
+  const name = metadata.name || launch.name || "未命名";
+  const symbol = metadata.symbol || launch.symbol || "?";
+  const token = launch.token || event?.tokens?.[0]?.token || "未取得";
+  const graduated = launch.graduated === true ? "已毕业" : "未毕业";
+  return model({
+    kind: "addition",
+    basis: "exact_snapshot",
+    before: { state: "not_observed" },
+    after: {
+      state: "known",
+      items: [
+        `Pool Launch: ${name} (${symbol}) · CA ${token}`,
+        `池 ${launch.pool || "未取得"} · 报价 ${launch.quoteLabel || "未取得"} · 开盘价 ${launch.initialPriceQuotePerToken || "未取得"}`,
+        `毕业 ${graduated} · Vault ${launch.vault || "无"}`,
+      ],
+    },
+    evidence: [
+      event?.transactionHash || null,
+      event?.docsUrl || null,
+    ].filter(Boolean),
+  });
+}
+
 export function deriveAlertChangeModel(event = {}) {
   if (event.type === "pon_fun_update") return ponFunUpdateModel(event);
   if (event.type === "platform_capability_update") return platformChangeModel(event);
   if (event.type === "bsc_launchpad_update"
     && event.kind === "flap_pool_token"
     && event.featureTrackedToken === true) return flapTrackedPoolTokenModel(event);
+  if (event.type === "bsc_launchpad_update" && event.kind === "flap_pool_launch") return flapPoolLaunchModel(event);
   if (event.type === "bsc_launchpad_update" && event.mode?.selector === "official-template") return fourMemeTemplateModel(event);
   if (event.type === "binance_official_update" && event.kind === "developer_update") return developerUpdateModel(event);
   if (event.currentSnapshot && typeof event.currentSnapshot === "object") return explicitSnapshotModel(event);

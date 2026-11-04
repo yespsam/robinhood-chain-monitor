@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { isMaterialFlapQuoteConfigurationChange, validFlapQuoteConfigurationLog } from "./flap-quote-generation.js";
+import { isCanonicalFlapPoolLaunchUpdate } from "./flap-pool-launch.js";
 import { isCancelledFomoPlatformEvent } from "./monitor-source-policy.js";
 import { FLAP_PORTAL_VERIFIED_VERSION as FLAP_QUOTE_PORTAL_VERSION,
   FLAP_PORTAL_VERIFIED_IMPLEMENTATION as FLAP_QUOTE_PORTAL_IMPLEMENTATION,
@@ -4611,6 +4612,7 @@ function focus3EventAllowed(source) {
   const officialFlapQuotePair = isOfficialFlapQuotePairUpdate(source);
   const strictFlapQuoteAsset = isStrictFlapQuoteAssetUpdate(source);
   const strictFlapTrackedToken = isStrictFlapTrackedPoolTokenUpdate(source);
+  const flapPoolLaunch = isCanonicalFlapPoolLaunchUpdate(source);
   const strictBscOpenFourFirstToken = isStrictBscOpenFourFirstTokenUpdate(source);
   const strictFourRegistryCapability = isStrictFourRegistryCapabilityUpdate(source);
   const strictFourRegistryFirstToken = isStrictFourRegistryFirstTokenUpdate(source);
@@ -4625,6 +4627,7 @@ function focus3EventAllowed(source) {
     && !officialFlapQuotePair
     && !strictFlapQuoteAsset
     && !strictFlapTrackedToken
+    && !flapPoolLaunch
     && !strictBscOpenFourFirstToken
     && !strictFourRegistryCapability
     && !strictFourRegistryFirstToken
@@ -4633,6 +4636,7 @@ function focus3EventAllowed(source) {
   if (source.type === "bsc_launchpad_update") {
     if (claimsFourRegistryUpdate(source)) return strictFourRegistryFirstToken;
     if (source.kind === FLAP_TRACKED_TOKEN_KIND) return strictFlapTrackedToken;
+    if (source.kind === "flap_pool_launch") return flapPoolLaunch;
     if (claimsBscOpenFourFirstTokenUpdate(source)) return strictBscOpenFourFirstToken;
     if (source.kind === "new_mode" && source.structural?.source === "official_api") {
       return isOfficialFourMemeCapabilityUpdate(source);

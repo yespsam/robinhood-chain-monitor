@@ -10,6 +10,14 @@ import { inferBscLaunchpadAttribution, parseBscScanAttribution, parseDexScreener
 import { isStrictFlapTrackedPoolTokenUpdate } from "./source-controls.js";
 import { isMaterialFlapQuoteConfigurationChange, sameFlapQuoteConfiguration, validFlapQuoteConfigurationLog } from "./flap-quote-generation.js";
 import { createFlapCanonicalProjectionWriter, FLAP_CANONICAL_PROJECTION_FILE } from "./flap-canonical-projection.js";
+import {
+  FLAP_DIRECT_LAUNCHED_TOPIC,
+  FLAP_POOL_LAUNCH_PORTAL,
+  buildFlapPoolLaunchUpdate,
+  decodeFlapPoolLaunchReceipt,
+  flapDirectLaunchedEvidence,
+  isFlapPoolLaunchObservation,
+} from "./flap-pool-launch.js";
 import { createCooperativeTurn } from "./cooperative-turn.js";
 import { bscQueueLimits, bscQueuePressure, bscQueueAdmission, bscClassificationMustYield, bscPressureReliefWorkClass, createBscQueueAgeIndex } from "./bsc-queue-pressure.js";
 import { sharedRpcHostCoordinator } from "./rpc-host-coordinator.js";
@@ -33,6 +41,7 @@ export const PANCAKE_INFINITY_BIN_INITIALIZE_TOPIC = "0xddfde5903015c0eb1671976c
 export const UNISWAP_V4_INITIALIZE_TOPIC = "0xdd466e674ea557f56295e2d0218a125ea4b4f0f6f3307b95f85e6110838d6438";
 export const FLAP_TOKEN_CREATED_TOPIC = "0x504e7f360b2e5fe33cbaaae4c593bc55305328341bf79009e43e0e3b7f699603";
 export const FLAP_VAULT_TOKEN_CREATED_TOPIC = "0x1a9fe01bcb4855c926d7757a81014e36cae596a0e3047d297d2cf88ca298a77d";
+export { FLAP_DIRECT_LAUNCHED_TOPIC, FLAP_POOL_LAUNCH_PORTAL };
 const FLAP_PORTAL_ADDRESS = "0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0";
 const FLAP_VAULT_PORTAL_ADDRESS = "0x90497450f2a706f1951b5bdda52b4e5d16f34c06";
 export const FOUR_MEME_TOKEN_CREATE_TOPIC = "0x396d5e902b675b032348d3d2e9517ee8f0c4a926603fbc075d3d282ff00cad20";
@@ -109,6 +118,7 @@ export const BSC_POOL_TOPICS = [
 export const BSC_LAUNCH_TOPICS = [
   FLAP_TOKEN_CREATED_TOPIC,
   FLAP_VAULT_TOKEN_CREATED_TOPIC,
+  FLAP_DIRECT_LAUNCHED_TOPIC,
   FOUR_MEME_TOKEN_CREATE_TOPIC,
   FOUR_MEME_PRESALE_TOKEN_CREATE_TOPIC,
   OPENFOUR_TOKEN_CREATED_TOPIC,
@@ -146,15 +156,17 @@ export const BSC_TRIGGER_TOPICS = [...BSC_POOL_TOPICS, ...BSC_LAUNCH_TOPICS, ...
 const BSC_FOCUS3_LAUNCH_TOPICS = [
   FLAP_TOKEN_CREATED_TOPIC,
   FLAP_VAULT_TOKEN_CREATED_TOPIC,
+  FLAP_DIRECT_LAUNCHED_TOPIC,
   FOUR_MEME_TOKEN_CREATE_TOPIC,
   FOUR_MEME_PRESALE_TOKEN_CREATE_TOPIC,
   OPENFOUR_TOKEN_CREATED_TOPIC,
 ];
 // In focus3, global DEX pool topics are both noisy and unnecessary: Flap and
 // Four.Meme emit exact creation events, while their quote/pool capabilities
-// are independently tracked from the official Board/config sources. Keeping
-// this filter at nine topics also stays within the public BlockRazor fallback
-// limit, so a transient BlastAPI failure cannot force slow per-block recovery.
+// are independently tracked from the official Board/config sources. The
+// combined filter is ten topics (curve + vault + Pool Launch + three Four
+// creation topics + four upgrade topics), which is the public BlockRazor
+// fallback ceiling. Do not add another topic here without splitting the filter.
 const BSC_FOCUS3_TRIGGER_TOPICS = [...BSC_FOCUS3_LAUNCH_TOPICS, ...BSC_UPGRADE_TOPICS];
 const BSC_REALTIME_QUEUE_REASONS = new Set(["zero_mint", "known_launch", "official_upgrade", "official_lifecycle", "pool_created", "http_tail", "near_head_gap_recovery"]);
 const BSC_UNSCOPED_LOG_MAX_BLOCKS = 10;
@@ -547,6 +559,7 @@ export function compactFocus3LiveCoverageState(targetState, {
 const BSC_EXACT_TOKEN_CREATION_TOPICS = new Set([
   FLAP_TOKEN_CREATED_TOPIC,
   FLAP_VAULT_TOKEN_CREATED_TOPIC,
+  FLAP_DIRECT_LAUNCHED_TOPIC,
   FOUR_MEME_TOKEN_CREATE_TOPIC,
   FOUR_MEME_PRESALE_TOKEN_CREATE_TOPIC,
   OPENFOUR_TOKEN_CREATED_TOPIC,
@@ -1384,6 +1397,8 @@ export function parseKnownBscLaunchEvidence(logs = []) {
       } else if (log.topics?.[0] === FLAP_VAULT_TOKEN_CREATED_TOPIC) {
         const args = flapVaultPortal.parseLog(log).args;
         item = { token: args.token, vault: args.vault, vaultFactory: args.vaultFactory, event: "FlapTaxVaultTokenCreated" };
+      } else if (String(log.topics?.[0] || "").toLowerCase() === FLAP_DIRECT_LAUNCHED_TOPIC) {
+        item = flapDirectLaunchedEvidence(log);
       } else if (log.topics?.[0] === FOUR_MEME_TOKEN_CREATE_TOPIC) {
         const args = fourMemeManager.parseLog(log).args;
         item = { token: args.token, creator: args.creator, requestId: args.requestId.toString(), name: args.name, symbol: args.symbol, launchType: "fourmeme_curve", event: "TokenCreate" };
@@ -3696,6 +3711,11 @@ async function atomicWrite(file, state, fsImpl = fs) {
 
 export function platformForAddress(address) {
   const normalized = String(address || "").toLowerCase();
+  // Pool Launch uses a distinct Portal. Attribute it to Flap without adding
+  // the proxy to the curve/vault upgrade-address shards.
+  if (normalized === FLAP_POOL_LAUNCH_PORTAL.toLowerCase()) {
+    return BSC_LAUNCHPAD_CATALOG.find((entry) => entry.id === "flap") || null;
+  }
   const shared = BSC_SHARED_LAUNCH_ROOTS.get(normalized);
   if (shared) return shared;
   return BSC_LAUNCHPAD_CATALOG.find((entry) => entry.launchers.includes(normalized)) || null;
@@ -4470,6 +4490,10 @@ export function evaluateBscObservation(state, observation, current = Date.now())
     if (infrastructureSafetyPassed(assessment.security) && !mode.safeTokens.includes(assessment.token.toLowerCase())) mode.safeTokens = [...mode.safeTokens, assessment.token.toLowerCase()].slice(-20);
   }
   launcher.baselineModeFingerprint ||= fingerprint;
+
+  // Pool Launch is alerted on its own monitor-only event. Keep the launcher
+  // audit trail above, but do not promote the receipt to a tradable new mode.
+  if (isFlapPoolLaunchObservation(observation)) return null;
 
   const uniqueTokens = Number(launcher.uniqueTokenCount || Object.keys(launcher.tokens).length);
   const uniqueTransactions = launcher.transactions.length;
@@ -12705,6 +12729,20 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     const dynamic = dynamicOfficialRoots.get(transaction.to?.toLowerCase());
     if (dynamic) return { address: getAddress(transaction.to), platform: dynamic, kind: "official_direct", causalTokenEvent: exactKnownEmitters.has(transaction.to.toLowerCase()), correlated, launchEvidence: knownEvidence };
 
+    // A Preparation (or any other caller) can invoke launchTaxTokenV2, so
+    // transaction.to is not always the Portal. The event emitter is.
+    if (exactKnownEmitters.has(FLAP_POOL_LAUNCH_PORTAL.toLowerCase())) {
+      const flap = BSC_LAUNCHPAD_CATALOG.find((entry) => entry.id === "flap");
+      return {
+        address: getAddress(FLAP_POOL_LAUNCH_PORTAL),
+        platform: publicPlatform(flap),
+        kind: "official_event_emitter",
+        causalTokenEvent: true,
+        correlated,
+        launchEvidence: knownEvidence,
+      };
+    }
+
     for (const platform of BSC_LAUNCHPAD_CATALOG.filter((entry) => entry.trust === "official_verified")) {
       const launcher = platform.launchers.find((address) => exactKnownEmitters.has(address));
       if (launcher) {
@@ -13716,6 +13754,21 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
       }
     }
     tokens = tokens.filter((token) => !poolAddresses.has(token.token.toLowerCase()) && (token.isNewContract || verifiedNewContracts.has(token.token.toLowerCase())));
+    const poolLaunch = decodeFlapPoolLaunchReceipt(receipt.logs || []);
+    for (const launch of poolLaunch) {
+      if (poolAddresses.has(launch.token.toLowerCase())) continue;
+      if (tokens.some((token) => token.token.toLowerCase() === launch.token.toLowerCase())) continue;
+      tokens.push({
+        token: launch.token,
+        isNewContract: true,
+        metadata: launch.name || launch.symbol || launch.meta ? {
+          name: launch.name,
+          symbol: launch.symbol,
+          metadataUri: launch.meta,
+          totalSupply: launch.totalSupply,
+        } : null,
+      });
+    }
     if (!tokens.length) return null;
 
     const relevantPools = mergePools(parsed.launch?.pools || [], bscPools)
@@ -13841,7 +13894,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
     // Keep the original promise so consumers below still receive the failure;
     // this does not turn a missing block into a successful observation.
     void blockPromise.catch(() => {});
-    if (profileBlock !== null && canUseOrdinaryFlapReceiptFastPath(entry, {
+    if (!poolLaunch.length && profileBlock !== null && canUseOrdinaryFlapReceiptFastPath(entry, {
       controller,
       flapModeContext,
       bscPools,
@@ -14068,6 +14121,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         || [...(entry.reasons || [])].some((reason) => ["official_discovery_replay", "fourmeme_feature_replay", "flap_feature_replay"].includes(reason)),
       launchEvidence: controller.launchEvidence || [],
       security: null,
+      poolLaunch: poolLaunch.length ? poolLaunch : null,
       sampleToken: tokens[0].token,
       observedAt: transactionObservedAt,
       deliverySla: normalizeBscWebsocketDeliverySla(entry.deliverySla),
@@ -14544,9 +14598,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         }
         const draft = structuredClone(state);
         const decision = evaluateBscObservation(draft, observation, now());
+        const poolLaunchEvent = buildFlapPoolLaunchUpdate(observation);
         draft.seenTransactions[observation.transactionHash] = observation.blockNumber;
         pruneState(draft, now());
-        if (!decision) {
+        if (!decision && !poolLaunchEvent) {
           state = draft;
           return {
             done: true,
@@ -14556,7 +14611,7 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         }
         return {
           done: false,
-          event: eventFromDecision(decision, observation),
+          event: poolLaunchEvent || eventFromDecision(decision, observation),
           evaluatedRevision: revision,
         };
       });
@@ -14597,6 +14652,10 @@ export function createBscLaunchpadMonitor(config, dependencies = {}) {
         }
         try {
           try {
+            if (phase.event?.kind === "flap_pool_launch") {
+              const launch = phase.event.poolLaunches?.[0];
+              logger.info?.(`[bsc][flap-pool-launch] ${launch?.name || "unnamed"} (${launch?.symbol || "?"}) token=${launch?.token} pool=${launch?.pool || "n/a"} creator=${launch?.creator} quote=${launch?.quoteLabel || "n/a"} price=${launch?.initialPriceQuotePerToken || "n/a"} graduated=${launch?.graduated} vault=${launch?.vault || "none"} tx=${phase.event.transactionHash}`);
+            }
             await alertSender(config, phase.event);
           } catch (error) {
             error.code ||= "ALERT_DELIVERY_PENDING";

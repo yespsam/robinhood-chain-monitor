@@ -2173,7 +2173,8 @@ function focusTitle(event, language = "zh") {
   else if (event?.type === "ai_official_update") label = zh ? "产品更新" : "Product update";
   else if (event?.type === "bsc_launchpad_update") {
     const tracked = flapTrackedPoolTokenDetails(event);
-    if (tracked) label = zh ? `第 ${tracked.ordinal}/${tracked.target} 个代币` : `Token ${tracked.ordinal}/${tracked.target}`;
+    if (event?.kind === "flap_pool_launch") label = "Pool Launch";
+    else if (tracked) label = zh ? `第 ${tracked.ordinal}/${tracked.target} 个代币` : `Token ${tracked.ordinal}/${tracked.target}`;
     else if (event?.featureFirstToken || event?.officialFirstToken) label = zh ? "首个代币" : "First token";
     else if (["new_launchpad", "new_factory"].includes(event?.kind)) label = zh ? "新发射台" : "New launchpad";
     else label = zh ? "新模式" : "New mode";
@@ -2654,6 +2655,15 @@ function bscModeFacts(event) {
 function bscFocusKey(event, language) {
   if (event?.type !== "bsc_launchpad_update") return null;
   const zh = language === "zh";
+  if (event?.kind === "flap_pool_launch") {
+    const launch = event.poolLaunches?.[0] || {};
+    const token = event.tokens?.[0]?.metadata || {};
+    const label = token.name || token.symbol || launch.name || launch.symbol || (zh ? "未命名代币" : "Unnamed token");
+    const graduated = launch.graduated === true ? (zh ? "已毕业" : "graduated") : (zh ? "未毕业" : "not graduated");
+    return zh
+      ? `Pool Launch ${label} · ${launch.quoteLabel || "报价未取得"} · ${graduated}`
+      : `Pool Launch ${label} · ${launch.quoteLabel || "quote n/a"} · ${graduated}`;
+  }
   const tracked = flapTrackedPoolTokenDetails(event);
   if (tracked) return zh
     ? `${tracked.quoteSymbol} 底池第 ${tracked.ordinal}/${tracked.target} 个代币 ${tracked.tokenLabel || "未命名代币"}`
@@ -3144,6 +3154,14 @@ function focusEvidence(event) {
 
   const token = firstTokenAddress(event);
   if (event?.type === "bsc_launchpad_update") {
+    if (event?.kind === "flap_pool_launch") {
+      const launch = event.poolLaunches?.[0] || {};
+      const token = launch.token || event.tokens?.[0]?.token;
+      return [
+        token ? { zh: `CA ${token}`, en: `CA ${token}` } : null,
+        launch.pool ? { zh: `池 ${launch.pool}`, en: `Pool ${launch.pool}` } : null,
+      ].filter(Boolean).slice(0, 2);
+    }
     const tracked = flapTrackedPoolTokenDetails(event);
     if (tracked) return [{ zh: `CA ${tracked.token}`, en: `CA ${tracked.token}` }];
     const mode = bscModeFacts(event);
@@ -3366,6 +3384,9 @@ function fomoStage(event, language) {
 
 function bscStage(event, language) {
   const zh = language === "zh";
+  if (event?.kind === "flap_pool_launch") return zh
+    ? "Portal FlapDirectLaunched；仅观察，不自动买入"
+    : "Portal FlapDirectLaunched; observe only, no automatic buy";
   const tracked = flapTrackedPoolTokenDetails(event);
   if (tracked) return zh
     ? `官方 TokenCreated + ${tracked.quoteSymbol} 配对；非自动交易`
