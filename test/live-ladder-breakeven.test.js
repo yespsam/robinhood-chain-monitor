@@ -58,7 +58,7 @@ test("principal-out is the partial that returns the entry budget while size rema
   assert.equal(principalOutConfirmed({ entryUsd: 10, returnedUsd: 1, remainingQuantity: 4, explicit: true }), true);
 });
 
-test("a confirmed paper partial that recovers principal raises the live ladder stop", () => {
+function flapAccount() {
   const NOW = Date.parse("2026-09-20T10:00:00Z");
   const CA = `0x${"c".repeat(40)}`;
   const iso = (value) => new Date(value).toISOString();
@@ -70,29 +70,75 @@ test("a confirmed paper partial that recovers principal raises the live ladder s
     candles: breakoutCandles(NOW),
   };
   const row = evaluatePaperStrategies(input).find((item) => item.strategyId === "internal");
-  assert.equal(row.decision, "可模拟");
-  let account = advancePaperStrategyAccount(createPaperStrategyAccount({ nowMs: NOW }), { evaluations: [row], nowMs: NOW });
-  let position = Object.values(account.positions)[0];
-  assert.equal(position.liveLadder.semantics, "price_scale");
+  const account = advancePaperStrategyAccount(createPaperStrategyAccount({ nowMs: NOW }), { evaluations: [row], nowMs: NOW, gmgnStopClient: null });
+  const position = Object.values(account.positions)[0];
+  position.liveLadder.wallet = `0x${"1".repeat(40)}`;
+  position.liveLadder.quoteToken = `0x${"2".repeat(40)}`;
+  position.liveLadder.stopOrderId = "old-stop";
+  return { NOW, CA, iso, account };
+}
+
+function gmgnMock({ failCreate = false, failCancel = false } = {}) {
+  const calls = [];
+  return {
+    calls,
+    run(args) {
+      calls.push(args);
+      if (args[2] === "create") {
+        if (failCreate) return { exitCode: 1, stdout: JSON.stringify({ code: 40001, msg: "strategy rejected" }) };
+        return { exitCode: 0, stdout: JSON.stringify({ code: 0, data: { order_id: "new-stop", is_update: false } }) };
+      }
+      if (failCancel) return { exitCode: 1, stdout: JSON.stringify({ code: 1, error: "cancel rejected" }) };
+      return { exitCode: 0, stdout: JSON.stringify({ code: 0, data: { order_id: "old-stop" } }) };
+    },
+  };
+}
+
+test("a confirmed principal-out amends the GMGN stop before the local price_scale moves", () => {
+  const { NOW, CA, iso, account: opened } = flapAccount();
+  const gmgn = gmgnMock();
+  const mark = (price, nowMs) => ({ chain: "robinhood", address: CA, price, status: "ok", observedAt: iso(nowMs) });
+  let account = advancePaperStrategyAccount(opened, { marks: [mark(5, NOW + 2_000)], nowMs: NOW + 2_000, gmgnStopClient: gmgn });
+  const position = Object.values(account.positions)[0];
+  assert.ok(position, "a 5x partial should leave a runner");
+  assert.equal(validatePaperStrategyAccount(account), true);
+  assert.equal(position.liveLadder.breakevenApplied, true);
+  assert.equal(position.liveLadder.stopPriceScale, 1);
+  assert.equal(position.liveLadder.stopOrderId, "new-stop");
+  assert.equal(position.liveLadder.absoluteStopPrice, position.entryPrice);
+  const create = gmgn.calls.find((args) => args[2] === "create");
+  const cancel = gmgn.calls.find((args) => args[2] === "cancel");
+  assert.ok(create.includes("--sub-order-type") && create[create.indexOf("--sub-order-type") + 1] === "stop_loss");
+  assert.equal(create[create.indexOf("--check-price") + 1], String(position.entryPrice));
+  assert.equal(create[create.indexOf("--slippage") + 1], "15");
+  assert.equal(create.includes("--auto-slippage"), false);
+  assert.equal(create.includes("--tip-fee"), false, "robinhood must not send a SOL tip");
+  assert.equal(create.includes("--priority-fee"), false);
+  assert.ok(cancel.includes("old-stop"));
+  assert.ok(gmgn.calls.indexOf(create) < gmgn.calls.indexOf(cancel), "create the tighter stop before cancelling the old one");
+  const decision = account.liveDecisions.at(-1);
+  assert.equal(decision.kind, "gmgn_stop_amend");
+  assert.equal(decision.ok, true);
+  assert.equal(decision.orderId, "new-stop");
+  assert.equal(decision.cancelledOrderId, "old-stop");
+  assert.equal(decision.requestedStopPriceScale, 1);
+  assert.ok(account.trades.some((trade) => trade.exitEvidence?.liveDecision?.ok === true || trade.liveDecision?.ok === true));
+});
+
+test("a failed GMGN amend keeps the original stop and logs the error", () => {
+  const { NOW, CA, iso, account: opened } = flapAccount();
+  const gmgn = gmgnMock({ failCreate: true });
+  const mark = (price, nowMs) => ({ chain: "robinhood", address: CA, price, status: "ok", observedAt: iso(nowMs) });
+  const account = advancePaperStrategyAccount(opened, { marks: [mark(5, NOW + 2_000)], nowMs: NOW + 2_000, gmgnStopClient: gmgn });
+  const position = Object.values(account.positions)[0];
   assert.equal(position.liveLadder.stopPriceScale, 0.8);
   assert.equal(position.liveLadder.breakevenApplied, false);
-  const mark = (price, nowMs) => ({ chain: "robinhood", address: CA, price, status: "ok", observedAt: iso(nowMs) });
-  account = advancePaperStrategyAccount(account, { marks: [mark(2, NOW + 1_000)], nowMs: NOW + 1_000 });
-  position = Object.values(account.positions)[0];
-  assert.equal(validatePaperStrategyAccount(account), true);
-  const returned = account.trades.filter((trade) => trade.side === "sell").reduce((sum, trade) => sum + trade.netUsd, 0);
-  if (returned + 1e-6 >= position.entryUsd) {
-    assert.equal(position.liveLadder.stopPriceScale, 1);
-    assert.equal(position.liveLadder.absoluteStopPrice, position.entryPrice);
-    assert.equal(account.trades.filter((trade) => trade.side === "sell").at(-1).exitEvidence.liveLadder.stopPriceScale, 1);
-  } else {
-    assert.equal(position.liveLadder.stopPriceScale, 0.8);
-    account = advancePaperStrategyAccount(account, { marks: [mark(5, NOW + 2_000)], nowMs: NOW + 2_000 });
-    position = Object.values(account.positions)[0];
-    assert.ok(position, "a 5x partial should leave a runner");
-    assert.equal(position.liveLadder.breakevenApplied, true);
-    assert.equal(position.liveLadder.stopPriceScale, 1);
-    assert.equal(position.liveLadder.absoluteStopPrice, position.entryPrice);
-    assert.equal(position.liveLadder.semantics, "price_scale");
-  }
+  assert.equal(position.liveLadder.stopOrderId, "old-stop");
+  assert.equal(gmgn.calls.some((args) => args[2] === "cancel"), false, "do not cancel the live stop if the replacement was rejected");
+  const decision = account.liveDecisions.at(-1);
+  assert.equal(decision.ok, false);
+  assert.equal(decision.error, "strategy rejected");
+  assert.equal(decision.previousStopPriceScale, 0.8);
+  assert.equal(decision.requestedStopPriceScale, 1);
+  assert.match(position.liveLadder.reason, /仍为 price_scale 0.8/);
 });

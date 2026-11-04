@@ -39,11 +39,20 @@ CURVE_PROGRESS_MIN=30
 CURVE_PROGRESS_MAX=70
 ```
 
-The LIVE ladder still starts at price_scale `0.8` (−20% from entry/cost). `price_scale` is a multiplier of the entry price, not an absolute token price. Absolute trigger = `entryPrice * price_scale`. After the principal-out / TP1 partial is confirmed and size remains, the remaining stop moves to price_scale `1` (entry/cost). This is not the paper engine's fee-adjusted breakeven. A flat fill does not create a new stop. If TP1 never fills, the stop stays at `0.8`. This process still does not send the GMGN amend; the position records `liveLadder` for the mirror.
+The LIVE ladder still starts at local price_scale `0.8` (−20% from entry/cost). That local field is a multiplier of the entry price. Absolute trigger = `entryPrice * price_scale`. GMGN's `loss_stop` condition field is a different number: a drop percent (`"20"` = −20%). A breakeven stop is not a drop, so the amend is `gmgn-cli order strategy create` with `--order-type limit_order --sub-order-type stop_loss` and `--check-price` set to the absolute breakeven (entry, plus cushion). The new stop is created before the previous order id is cancelled. If create fails, the old stop stays on GMGN and the local price_scale stays at `0.8`. The attempt is appended to `account.liveDecisions` (`kind: gmgn_stop_amend`, `ok`, `error`, `checkPrice`, `orderId`, fees, slippage).
+
+SOL sends `--priority-fee` and `--tip-fee` (each at least `0.00001`). BSC sends `--gas-price` (at least `0.05` gwei) and does not send a SOL priority fee. Base, ETH, and Robinhood send neither tip nor priority fee. The protective sell uses `LIVE_SL_SLIPPAGE_PERCENT` (default `15`), not buy slippage and not `--auto-slippage`. `GMGN_PRIVATE_KEY` stays in the CLI environment.
 
 ```bash
 LIVE_BREAKEVEN_AFTER_PRINCIPAL=true   # false keeps the −20% stop after TP1
-LIVE_BREAKEVEN_CUSHION_BPS=0          # 100 → price_scale 1.01
+LIVE_BREAKEVEN_CUSHION_BPS=0          # 100 → price_scale 1.01, check price = entry * 1.01
+LIVE_GMGN_STOP_AMEND=true             # false does not call GMGN and does not move the local stop
+LIVE_GMGN_WALLET=                     # wallet bound to the GMGN API key
+LIVE_GMGN_QUOTE_TOKEN=                # used when the entry has no pool quote (WSOL / WBNB)
+LIVE_GMGN_PRIORITY_FEE=0.00001        # SOL only
+LIVE_GMGN_TIP_FEE=0.00001             # SOL required; optional on BSC if >= 0.000001
+LIVE_GMGN_GAS_PRICE=0.05              # BSC gwei
+LIVE_SL_SLIPPAGE_PERCENT=15           # stop sells only
 ```
 
 Unknown schemas stay observe-only (`liveEligible: false`). Curve `TokenCreated` / first-three without a progress figure is unchanged.

@@ -1,17 +1,16 @@
-// Stop update for the LIVE ladder that mirrors paper-atm-confirmed-pvp-v2.
-// This file does not sign, broadcast, or call GMGN. It is the condition-order
-// instruction for the remaining size after the principal-out / TP1 partial.
+// Local ladder state for the LIVE mirror of paper-atm-confirmed-pvp-v2.
+// The exchange amend lives in gmgn-stop-amend.js. Local price_scale is a
+// multiplier of entry/cost and is updated only after that amend succeeds.
 //
-// Semantics: price_scale, not an absolute token price.
-// GMGN condition orders express the trigger as a multiplier of entry/cost:
 //   0.8 = the original −20% stop
 //   1.4 = the +~40% principal-out (TP1) leg
 //   1.0 = breakeven at entry/cost
-// Absolute trigger price, when a caller needs one, is entryPrice * price_scale.
-// An optional cushion is added in basis points of that scale (100 bps → 1.01).
-// price_scale 1 is the entry/cost price. It is not the paper engine's
-// fee-adjusted breakeven, which also loads gas and modeled sell friction
-// onto the remaining quantity.
+// Absolute trigger price is entryPrice * price_scale.
+// GMGN's own loss_stop price_scale field is a drop percent ("20" = −20%),
+// not this multiplier. The amend translates and sends an absolute check price.
+// An optional cushion is basis points above cost (100 bps → 1.01).
+// price_scale 1 is the entry price. It is not the paper engine's
+// fee-adjusted breakeven, which also loads gas and modeled sell friction.
 
 export const LIVE_LADDER_VERSION = "live_ladder_v1";
 export const LIVE_LADDER_STOP_PRICE_SCALE = 0.8;
@@ -39,12 +38,21 @@ export function liveBreakevenConfig(env = process.env) {
   };
 }
 
-export function createLiveLadder({ entryPrice } = {}) {
+export function liveStopSlippagePercent(env = process.env) {
+  const raw = env?.LIVE_SL_SLIPPAGE_PERCENT;
+  if (raw === undefined || raw === null || raw === "") return 15;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1 || value > 100) return 15;
+  return value;
+}
+
+export function createLiveLadder({ entryPrice, chain = null, baseToken = null, quoteToken = null, wallet = null, stopOrderId = null } = {}) {
   const price = Number(entryPrice);
   return {
     version: LIVE_LADDER_VERSION,
     semantics: "price_scale",
     entryPrice: Number.isFinite(price) && price > 0 ? price : null,
+    chain, baseToken, quoteToken, wallet, stopOrderId,
     originalStopPriceScale: LIVE_LADDER_STOP_PRICE_SCALE,
     tp1PriceScale: LIVE_LADDER_TP1_PRICE_SCALE,
     stopPriceScale: LIVE_LADDER_STOP_PRICE_SCALE,

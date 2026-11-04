@@ -30,6 +30,7 @@ import {COLLECTIVE_SIGNAL_VERSION,PREQUALIFIED_WALLET_VERSION,INTERNAL_BURST_VER
 import {internalDepthCheck} from './paper-internal-depth.js';
 import { curveProgressEntryDecision, curveProgressBlocksEntry } from './curve-progress-entry.js';
 import { applyPrincipalOutStop, createLiveLadder, principalOutConfirmed } from './live-ladder-breakeven.js';
+import { buildGmgnStopReplacePlan, runGmgnStopAmend, createGmgnCliStopClient } from './gmgn-stop-amend.js';
 import {verifiedLaunchContext,LAUNCH_THESIS_VERSION} from './paper-launch-policy.js';
 import { paperLossGuard } from './paper-loss-guard.js';
 const MINUTE = 60_000;
@@ -488,6 +489,49 @@ export function resetPaperCash(account, { operationId, nowMs = Date.now() } = {}
   return next;
 }
 
+let gmgnStopClientSlot;
+function resolveGmgnStopClient() {
+  if (gmgnStopClientSlot === null) return null;
+  if (gmgnStopClientSlot && typeof gmgnStopClientSlot.run === 'function') return gmgnStopClientSlot;
+  return createGmgnCliStopClient();
+}
+function recordLiveDecision(account, decision) {
+  account.liveDecisions = [...(Array.isArray(account.liveDecisions) ? account.liveDecisions : []), decision];
+  const trade = account.trades.at(-1);
+  if (!trade) return;
+  if (trade.exitEvidence) trade.exitEvidence.liveDecision = decision;
+  else trade.liveDecision = decision;
+}
+function amendBreakevenStop(account, position, proposed) {
+  const prior = position.liveLadder;
+  const plan = buildGmgnStopReplacePlan({
+    chain: prior.chain || position.chain,
+    wallet: prior.wallet || process.env.LIVE_GMGN_WALLET || null,
+    baseToken: prior.baseToken || position.address,
+    quoteToken: prior.quoteToken || process.env.LIVE_GMGN_QUOTE_TOKEN || null,
+    entryPrice: proposed.entryPrice, stopPriceScale: proposed.stopPriceScale,
+    previousOrderId: prior.stopOrderId,
+  });
+  const client = resolveGmgnStopClient();
+  let result;
+  try { result = runGmgnStopAmend(plan, client?.run?.bind(client)); }
+  catch (error) { result = { ok: false, error: 'gmgn_amend_threw', stage: 'create', orderId: null, detail: String(error?.message || error).slice(0, 200) }; }
+  const decision = {
+    kind: 'gmgn_stop_amend', atMs: account.trades.at(-1)?.atMs ?? null, ok: result.ok === true,
+    error: result.ok ? null : result.error || 'gmgn_amend_failed', stage: result.stage || null,
+    chain: position.chain, address: position.address,
+    previousStopPriceScale: prior.stopPriceScale, requestedStopPriceScale: proposed.stopPriceScale,
+    checkPrice: plan.checkPrice, gmgnLossStopDropPercent: plan.gmgnLossStopDropPercent,
+    slippagePercent: plan.slippagePercent, priorityFee: plan.priorityFee, tipFee: plan.tipFee, gasPrice: plan.gasPrice,
+    orderId: result.orderId || null, cancelledOrderId: result.cancelledOrderId || null, cancelError: result.cancelError || null,
+  };
+  recordLiveDecision(account, decision);
+  if (!result.ok) {
+    position.liveLadder = { ...prior, amend: decision, reason: `GMGN 止损未改，仍为 price_scale ${prior.stopPriceScale}：${decision.error}` };
+    return;
+  }
+  position.liveLadder = { ...proposed, stopOrderId: result.orderId, previousStopOrderId: prior.stopOrderId || null, exchangeAmended: true, amend: decision };
+}
 function sell(account, key, quantity, markPrice, reason, nowMs, { writeoff = false, principalOut = false } = {}) {
   const position = account.positions[key];
   const amount = Math.min(position.quantity, quantity);
@@ -520,12 +564,15 @@ function sell(account, key, quantity, markPrice, reason, nowMs, { writeoff = fal
   if (position.liveLadder && !writeoff && position.quantity > position.initialQuantity * 1e-10) {
     const returned = account.trades.filter(trade => trade.side === 'sell' && trade.chain === position.chain && trade.address === position.address && trade.atMs >= time(position.openedAt))
       .reduce((sum, trade) => sum + trade.netUsd, 0);
-    if (principalOutConfirmed({ entryUsd: position.entryUsd, returnedUsd: returned, remainingQuantity: position.quantity, explicit: principalOut === true })) {
-      position.liveLadder = applyPrincipalOutStop(position.liveLadder, {
+    if (!position.liveLadder.breakevenApplied && principalOutConfirmed({ entryUsd: position.entryUsd, returnedUsd: returned, remainingQuantity: position.quantity, explicit: principalOut === true })) {
+      const proposed = applyPrincipalOutStop(position.liveLadder, {
         tp1Confirmed: true, remainingQuantity: position.quantity, entryPrice: position.entryPrice });
+      if (proposed.breakevenApplied) amendBreakevenStop(account, position, proposed);
+      else position.liveLadder = proposed;
       const evidence = account.trades.at(-1).exitEvidence;
-      if (evidence) evidence.liveLadder = structuredClone(position.liveLadder);
-      else account.trades.at(-1).liveLadder = structuredClone(position.liveLadder);
+      const snapshot = structuredClone(position.liveLadder);
+      if (evidence) evidence.liveLadder = snapshot;
+      else account.trades.at(-1).liveLadder = snapshot;
     }
   }
   if (position.quantity <= position.initialQuantity * 1e-10) {
@@ -578,7 +625,7 @@ function structuralExit(position, mark, policy, nowMs) {
 }
 
 /** New entries can pause independently; fresh-price exits are always evaluated. */
-export function advancePaperStrategyAccount(account, { evaluations = [], marks = [], nowMs = Date.now(), enabled = true, distilledPolicy = null, diagnosticMode = false, confirmedMode = false, continuousPaperMode = false, opportunityMode = false, opportunityReviewMode = true, memeExitMode = false, recoveryMode = false, minimalEntryMode = false, chainGasAccounting = false, lossRepairMode = false, enforceLossGuards = lossRepairMode, estimatedFeeMode = false, evidenceGapExitMode = true } = {}) {
+function advancePaperStrategyBody(account, { evaluations = [], marks = [], nowMs = Date.now(), enabled = true, distilledPolicy = null, diagnosticMode = false, confirmedMode = false, continuousPaperMode = false, opportunityMode = false, opportunityReviewMode = true, memeExitMode = false, recoveryMode = false, minimalEntryMode = false, chainGasAccounting = false, lossRepairMode = false, enforceLossGuards = lossRepairMode, estimatedFeeMode = false, evidenceGapExitMode = true } = {}) {
   assertNow(nowMs);
   validatePaperStrategyAccount(account);
   if(typeof lossRepairMode!=='boolean'||lossRepairMode&&(!recoveryMode||!memeExitMode||account.variant))throw new TypeError('loss repair is paper-main only');
@@ -898,7 +945,11 @@ export function advancePaperStrategyAccount(account, { evaluations = [], marks =
       position.exitStatus = { activeStopPrice: null, checkedAt: position.markAt, holdingMode: '独立实验 · 量价逻辑退出',
         holdReason: '等待入场后的量价与完整资金流证据', fixedStopEnabled: false, fixedProfitEnabled: false };
     }
-    if (flapLiveLadderEntry(evaluation)) position.liveLadder = createLiveLadder({ entryPrice: price });
+    if (flapLiveLadderEntry(evaluation)) position.liveLadder = createLiveLadder({
+      entryPrice: price, chain, baseToken: address,
+      quoteToken: evaluation.evidence?.opportunity?.event?.pool?.quoteAddress || evaluation.evidence?.opportunity?.event?.pool?.quoteToken || null,
+      wallet: typeof process.env.LIVE_GMGN_WALLET === 'string' && process.env.LIVE_GMGN_WALLET ? process.env.LIVE_GMGN_WALLET : null,
+    });
     if (account.variant === 'distilled_shadow') {
       position.distilledHabit = structuredClone(distilledPolicy);
       position.entryEvidence.distilledHabit = structuredClone(distilledPolicy);
@@ -922,4 +973,11 @@ export function advancePaperStrategyAccount(account, { evaluations = [], marks =
   next.updatedAt = iso(nowMs);
   validatePaperStrategyAccount(next);
   return next;
+}
+
+export function advancePaperStrategyAccount(account, options = {}) {
+  const previous = gmgnStopClientSlot;
+  gmgnStopClientSlot = Object.hasOwn(options, 'gmgnStopClient') ? options.gmgnStopClient : undefined;
+  try { return advancePaperStrategyBody(account, options); }
+  finally { gmgnStopClientSlot = previous; }
 }
