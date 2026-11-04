@@ -73,6 +73,7 @@ import {
   waifuModeFingerprint,
 } from "../src/bsc-launchpad-monitor.js";
 import { classifyAlertFreshness, sendAlerts } from "../src/alerts.js";
+import { FLAP_DIRECT_LAUNCHED_TOPIC, FLAP_POOL_LAUNCH_PORTAL } from "../src/flap-pool-launch.js";
 import {
   isStrictBscOpenFourFirstTokenUpdate,
   isStrictFlapTrackedPoolTokenUpdate,
@@ -8476,6 +8477,7 @@ test("focus3 realtime recovery excludes ordinary BSC mints and unrelated launchp
   assert.ok(upgradeRequests.length >= 1, "official upgrades must use exact address shards");
   const topics = launchRequests[0].topics[0];
   assert.ok(topics.includes(FLAP_TOKEN_CREATED_TOPIC));
+  assert.ok(topics.includes(FLAP_DIRECT_LAUNCHED_TOPIC));
   assert.ok(topics.includes(FOUR_MEME_TOKEN_CREATE_TOPIC));
   assert.ok(topics.includes(OPENFOUR_TOKEN_CREATED_TOPIC));
   assert.equal(topics.includes(MOONSALE_TOKEN_CREATED_TOPIC), false);
@@ -8489,6 +8491,7 @@ test("focus3 realtime recovery excludes ordinary BSC mints and unrelated launchp
   assert.equal(new Set(upgradeAddresses).size, 28);
   assert.ok(upgradeRequests.every((request) => BSC_UPGRADE_TOPICS.every((topic) => request.topics[0].includes(topic))));
   assert.ok(upgradeAddresses.includes("0xe2ce6ab80874fa9fa2aae65d277dd6b8e65c9de0"));
+  assert.equal(upgradeAddresses.includes(FLAP_POOL_LAUNCH_PORTAL.toLowerCase()), false);
   assert.ok(upgradeAddresses.includes("0x90497450f2a706f1951b5bdda52b4e5d16f34c06"));
   assert.ok(upgradeAddresses.includes("0x5c952063c7fc8610ffdb798152d69f0b9550762b"));
   assert.ok(upgradeAddresses.includes("0xebe7b6c1089d9f72ad07f34e36d898e44e5e27f3"));
