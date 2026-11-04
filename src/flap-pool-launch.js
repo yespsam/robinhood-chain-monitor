@@ -12,6 +12,15 @@ export const FLAP_POOL_LAUNCH_DOCS_URL = "https://docs.flap.sh/en/docs/pool-laun
 export const FLAP_POOL_LAUNCH_PORTAL = getAddress("0x000042108465206185A077Edc3F3fd2b49060000");
 export const FLAP_POOL_LAUNCH_CHAIN_ID = 56;
 export const FLAP_POOL_LAUNCH_KIND = "flap_pool_launch";
+// Live buys are not sent from this monitor. The confirmed paper session is
+// what LIVE_SIGNAL_SOURCE=paper-atm-confirmed-pvp-v2 already mirrors to GMGN.
+export const FLAP_POOL_LAUNCH_LIVE_SIGNAL_SOURCE = "paper-atm-confirmed-pvp-v2";
+
+export function liveFlapPoolLaunchEnabled(env = process.env) {
+  const raw = env?.LIVE_FLAP_POOL_LAUNCH;
+  if (raw === undefined || raw === null || raw === "") return true;
+  return !/^false$/i.test(String(raw));
+}
 export const V2_POOL_LAUNCH_SCHEMA_V1 = id("DirectLaunchV2(DirectLaunchV2Data)");
 
 const LAUNCH_KINDS = new Map([[0, "DIRECT_V2_POOL_TAX"]]);
@@ -266,7 +275,15 @@ function hash(value) {
   return String(value || "").toLowerCase();
 }
 
-export function buildFlapPoolLaunchUpdate(observation) {
+function liveTradeAllowed(launches, liveTrading) {
+  const launch = launches[0];
+  return liveTrading === true
+    && launch?.schemaKnown === true
+    && launch?.launchKindName === "DIRECT_V2_POOL_TAX"
+    && Boolean(checksum(launch.pool));
+}
+
+export function buildFlapPoolLaunchUpdate(observation, { liveTrading = liveFlapPoolLaunchEnabled() } = {}) {
   const launches = Array.isArray(observation?.poolLaunch) ? observation.poolLaunch : [];
   if (!isFlapPoolLaunchObservation(observation)) return null;
   const transactionHash = hash(observation.transactionHash);
@@ -295,6 +312,7 @@ export function buildFlapPoolLaunchUpdate(observation) {
       twitter: "https://x.com/flapdotsh",
       evidenceUrl: FLAP_POOL_LAUNCH_DOCS_URL,
     };
+  const liveEligible = liveTradeAllowed(launches, liveTrading);
   return {
     type: "bsc_launchpad_update",
     kind: FLAP_POOL_LAUNCH_KIND,
@@ -302,9 +320,13 @@ export function buildFlapPoolLaunchUpdate(observation) {
     chainId: FLAP_POOL_LAUNCH_CHAIN_ID,
     launcher: FLAP_POOL_LAUNCH_PORTAL,
     platform,
-    informationalOnly: true,
-    autoTradeEligible: false,
-    automaticExecution: false,
+    // The monitor still does not sign or broadcast. liveEligible means the
+    // confirmed paper session may admit the token; that session is the live mirror.
+    informationalOnly: !liveEligible,
+    autoTradeEligible: liveEligible,
+    automaticExecution: liveEligible,
+    liveEligible,
+    ...(liveEligible ? { liveSignalSource: FLAP_POOL_LAUNCH_LIVE_SIGNAL_SOURCE } : {}),
     strong: true,
     launchCount: launches.length,
     uniqueTokens: launches.length,
@@ -346,7 +368,7 @@ export function buildFlapPoolLaunchUpdate(observation) {
       initialPriceQuotePerToken: launches[0].initialPriceQuotePerToken,
       graduated: launches[0].graduated,
       graduationFinal: launches[0].graduationFinal,
-      monitorOnly: true,
+      monitorOnly: !liveEligible,
       docsUrl: FLAP_POOL_LAUNCH_DOCS_URL,
       creationTopics: [FLAP_DIRECT_LAUNCHED_TOPIC],
     },
@@ -370,11 +392,20 @@ export function isCanonicalFlapPoolLaunchUpdate(event) {
   if (!event || event.type !== "bsc_launchpad_update" || event.kind !== FLAP_POOL_LAUNCH_KIND) return false;
   if (event.chainId !== FLAP_POOL_LAUNCH_CHAIN_ID) return false;
   if (!sameAddress(event.launcher, FLAP_POOL_LAUNCH_PORTAL)) return false;
-  if (event.informationalOnly !== true || event.autoTradeEligible !== false || event.automaticExecution !== false) return false;
+  const live = event.liveEligible === true;
+  if (live) {
+    if (event.informationalOnly !== false || event.autoTradeEligible !== true || event.automaticExecution !== true) return false;
+    if (event.liveSignalSource !== FLAP_POOL_LAUNCH_LIVE_SIGNAL_SOURCE) return false;
+    if (event.mode?.monitorOnly !== false) return false;
+  } else {
+    if (event.liveEligible !== false || event.informationalOnly !== true
+      || event.autoTradeEligible !== false || event.automaticExecution !== false) return false;
+    if (event.liveSignalSource != null || event.mode?.monitorOnly !== true) return false;
+  }
   if (event.strong !== true) return false;
   if (event.platform?.id !== "flap" || event.platform?.trust !== "official_verified") return false;
   if (event.docsUrl !== FLAP_POOL_LAUNCH_DOCS_URL || event.mode?.docsUrl !== FLAP_POOL_LAUNCH_DOCS_URL) return false;
-  if (event.mode?.monitorOnly !== true || event.mode?.componentMode !== "Flap Pool Launch") return false;
+  if (event.mode?.componentMode !== "Flap Pool Launch") return false;
   const launches = Array.isArray(event.poolLaunches) ? event.poolLaunches : [];
   const tokens = Array.isArray(event.tokens) ? event.tokens : [];
   const transactionHash = hash(event.transactionHash);
@@ -386,6 +417,11 @@ export function isCanonicalFlapPoolLaunchUpdate(event) {
   if (Number(launches[0].logIndex) !== logIndex) return false;
   return launches.every((launch, index) => {
     const token = tokens[index]?.token;
+    const tradable = live
+      && launch?.schemaKnown === true
+      && launch?.launchKindName === "DIRECT_V2_POOL_TAX"
+      && Boolean(checksum(launch.pool));
+    if (live !== tradable) return false;
     return launch?.event === "FlapDirectLaunched"
       && launch.monitorOnly === true
       && launch.autoTradeEligible === false
@@ -396,4 +432,8 @@ export function isCanonicalFlapPoolLaunchUpdate(event) {
       && typeof launch.graduationFinal === "boolean"
       && (launch.schemaKnown === true || launch.schemaKnown === false);
   });
+}
+
+export function isLiveFlapPoolLaunchUpdate(event) {
+  return isCanonicalFlapPoolLaunchUpdate(event) && event.liveEligible === true;
 }

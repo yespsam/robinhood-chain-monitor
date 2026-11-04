@@ -1427,7 +1427,9 @@ const compact = (event) => {
         `供应: ${launch.totalSupply || "未取得"} · 毕业 ${graduated}`,
         `Vault: ${vault}`,
         "流动性: FlapDirectLaunched 给出开盘价和总供应，不包含报价种子数量",
-        "状态: 仅观察/告警，不自动买入",
+        event.liveEligible === true
+          ? "状态: 可进入确认型模拟盘；实盘只镜像已通过现有报价、流动性、税费、成本和亏损闸门的买入。本监控不签名、不广播"
+          : "状态: 仅观察/告警，不自动买入",
         `证据: Portal ${event.launcher} · ${launch.launchKindName || "kind 未知"} · ${launch.schemaName || "schema 未识别"}`,
         compactAlertEventTime(event, event.blockTimestamp, event.observedAt),
       ]);

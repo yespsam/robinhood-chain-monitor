@@ -20,6 +20,13 @@ import {
 import { isMonitoringSourceEnabled } from "../src/source-controls.js";
 import { isRelevantAlert } from "../src/alerts.js";
 import { deriveTradingPriority } from "../src/trading-priority.js";
+import { buildFlapPoolLaunchWire, validFlapPoolLaunchSignal } from "../src/flap-pool-launch-signal.js";
+import { buildPoolFirstThreeWire } from "../src/paper-pool-signal.js";
+import { validMonitorSignal } from "../src/paper-monitor-signal.js";
+import { launchContext } from "../src/paper-launch-policy.js";
+import { evaluatePaperStrategies, advancePaperStrategyAccount, createPaperStrategyAccount } from "../src/paper-strategy-engine.js";
+import { ESTIMATED_COST_VERSION } from "../src/paper-estimated-cost.js";
+import { paperEventTriggers } from "../src/paper-event-triggers.js";
 
 const coder = AbiCoder.defaultAbiCoder();
 const TOKEN = getAddress("0x2222222222222222222222222222222222227777");
@@ -196,18 +203,20 @@ test("a missing graduation event is final for DIRECT_V2_POOL_TAX and an unknown 
   assert.deepEqual(parseKnownBscLaunchEvidence([directLog({ address: CREATOR })]), []);
 });
 
-test("the alert is monitor-only and does not become a tradable launch mode", () => {
+test("a canonical V2 pool launch is a live-eligible paper signal; unknown schemas and curve events are not", () => {
   const launches = decodeFlapPoolLaunchReceipt([
     directLog(),
     eventLog("FlapTokenGraduated", [TOKEN], 5),
     eventLog("FlapLaunchVaultResolved", [TOKEN, VAULT, VAULT_FACTORY], 6),
   ]);
-  const event = buildFlapPoolLaunchUpdate(observationFrom(launches));
+  const event = buildFlapPoolLaunchUpdate(observationFrom(launches), { liveTrading: true });
   assert.equal(isCanonicalFlapPoolLaunchUpdate(event), true);
   assert.equal(event.kind, "flap_pool_launch");
-  assert.equal(event.informationalOnly, true);
-  assert.equal(event.autoTradeEligible, false);
-  assert.equal(event.automaticExecution, false);
+  assert.equal(event.liveEligible, true);
+  assert.equal(event.liveSignalSource, "paper-atm-confirmed-pvp-v2");
+  assert.equal(event.informationalOnly, false);
+  assert.equal(event.autoTradeEligible, true);
+  assert.equal(event.automaticExecution, true);
   assert.equal(event.mode.componentMode, "Flap Pool Launch");
   assert.equal(event.poolLaunches[0].graduated, true);
   assert.equal(event.poolLaunches[0].vault, VAULT);
@@ -215,13 +224,20 @@ test("the alert is monitor-only and does not become a tradable launch mode", () 
   assert.equal(event.pools[0].pool, POOL);
   assert.equal(isMonitoringSourceEnabled({ monitorScope: "focus3" }, event), true);
   assert.equal(isRelevantAlert(event), true);
-  assert.equal(isMonitoringSourceEnabled({ monitorScope: "focus3" }, { ...event, autoTradeEligible: true }), false);
-  assert.equal(isRelevantAlert({ ...event, autoTradeEligible: true }), false);
+  assert.equal(isRelevantAlert({ ...event, autoTradeEligible: false }), false);
 
   const priority = deriveTradingPriority(event, { nowMs: Date.parse("2026-08-02T01:00:05.000Z") });
-  assert.equal(priority.category, "information");
-  assert.equal(priority.hardGates.explicitPath, false);
+  assert.equal(priority.category, "focus_onchain");
+  assert.equal(priority.hardGates.explicitPath, true);
+  assert.equal(priority.hardGates.t1Eligible, true);
+  assert.equal(priority.tier, "T1");
   assert.equal(priority.plan.automaticExecution, false);
+
+  const quiet = buildFlapPoolLaunchUpdate(observationFrom(launches), { liveTrading: false });
+  assert.equal(quiet.liveEligible, false);
+  assert.equal(quiet.autoTradeEligible, false);
+  assert.equal(quiet.automaticExecution, false);
+  assert.equal(deriveTradingPriority(quiet, { nowMs: Date.parse("2026-08-02T01:00:05.000Z") }).category, "information");
 
   const current = Date.parse("2026-08-02T01:00:00.000Z");
   const state = { initializedAt: "2020-01-01T00:00:00.000Z", launchers: {}, seenTransactions: {}, coverageGaps: [] };
@@ -255,4 +271,51 @@ test("the alert is monitor-only and does not become a tradable launch mode", () 
   monitored.tokens[0].token = monitored.sampleToken;
   assert.equal(evaluateBscObservation(state, monitored, current), null);
   assert.equal(state.launchers[FLAP_POOL_LAUNCH_PORTAL.toLowerCase()].tokens[monitored.sampleToken.toLowerCase()].token, monitored.sampleToken);
+
+  const nowMs = Date.parse(event.observedAt) + 2_000;
+  const wire = buildFlapPoolLaunchWire({ events: [event], account: { trades: [] }, nowMs, enabled: true });
+  assert.equal(wire.signals.length, 1);
+  assert.equal(wire.signals[0].source, "flap_pool_launch");
+  assert.equal(wire.signals[0].liveSignalSource, "paper-atm-confirmed-pvp-v2");
+  const paperToken = {
+    chain: "bsc", address: TOKEN, symbol: "POOL", price: 1, marketStage: "external",
+    liquidity: 60_000, volume: 10_000, buyTax: 0, sellTax: 0, isHoneypot: false, isWashTrading: false,
+    rugRatio: 0.01, top10HolderRate: 0.15, devTeamHoldRate: 0.01, bundlerRate: 0.01,
+  };
+  assert.equal(validFlapPoolLaunchSignal(wire.signals[0], paperToken, nowMs), true);
+  assert.equal(validMonitorSignal(wire.signals[0], paperToken, nowMs), true);
+  assert.equal(launchContext(paperToken, wire.signals[0], nowMs).pool.launchKind, "DIRECT_V2_POOL_TAX");
+  const modes = {
+    allowExploratory: true, pvpMode: true, confirmedMode: true, evidenceHoldMode: true,
+    continuousPaperMode: true, opportunityMode: true, memeExitMode: true, recoveryMode: true,
+    lossRepairMode: true, estimatedFeeMode: true, evidenceGapExitMode: false,
+  };
+  const row = evaluatePaperStrategies({
+    ...modes, token: paperToken, marketStatus: "ok", observedAt: event.observedAt,
+    priceObservedAt: new Date(nowMs).toISOString(), nowMs, compoundingCash: 100, requireFastQuote: true,
+    flow: {}, candles: [], klineStatus: "unavailable", monitorSignal: wire.signals[0],
+    quoteHistory: [{ ...paperToken, status: "ok", observedAt: new Date(nowMs).toISOString() }],
+  })[0];
+  assert.equal(row.decision, "可模拟", JSON.stringify({ missing: row.missing, reasons: row.reasons }));
+  const filled = advancePaperStrategyAccount({
+    ...createPaperStrategyAccount({ nowMs }), estimatedCostModel: ESTIMATED_COST_VERSION,
+  }, { ...modes, evaluations: [row], nowMs });
+  assert.equal(filled.trades.length, 1);
+  assert.equal(filled.cash, 90);
+  assert.equal(Object.values(filled.positions)[0].entryUsd, 10);
+  assert.equal(filled.execution, false);
+  assert.equal(filled.signing, false);
+  assert.equal(filled.broadcast, false);
+  assert.ok(paperEventTriggers({
+    evidence: { events: [event] }, account: { trades: [] }, chains: ["bsc"], nowMs,
+  }).some((trigger) => trigger.source === "flap_pool_launch" && trigger.address === TOKEN));
+
+  const unknownEvent = buildFlapPoolLaunchUpdate(observationFrom(decodeFlapPoolLaunchReceipt([directLog({
+    schemaId: id("DirectLaunchV2(Future)"), data: "0x", kind: 4,
+  })])), { liveTrading: true });
+  assert.equal(unknownEvent.liveEligible, false);
+  assert.equal(buildFlapPoolLaunchWire({ events: [unknownEvent], nowMs, enabled: true }).signals.length, 0);
+  assert.equal(deriveTradingPriority(unknownEvent, { nowMs }).category, "information");
+  assert.equal(buildPoolFirstThreeWire({ events: [event], account: { trades: [] }, nowMs }).signals.length, 0);
+  assert.equal(buildFlapPoolLaunchWire({ events: [event], nowMs, enabled: false }).signals.length, 0);
 });

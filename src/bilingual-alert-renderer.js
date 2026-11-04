@@ -3384,9 +3384,13 @@ function fomoStage(event, language) {
 
 function bscStage(event, language) {
   const zh = language === "zh";
-  if (event?.kind === "flap_pool_launch") return zh
-    ? "Portal FlapDirectLaunched；仅观察，不自动买入"
-    : "Portal FlapDirectLaunched; observe only, no automatic buy";
+  if (event?.kind === "flap_pool_launch") return event?.liveEligible === true
+    ? (zh
+      ? "Portal FlapDirectLaunched；可进入确认型模拟盘，实盘沿用现有闸门"
+      : "Portal FlapDirectLaunched; eligible for the confirmed paper session under existing live gates")
+    : (zh
+      ? "Portal FlapDirectLaunched；仅观察，不自动买入"
+      : "Portal FlapDirectLaunched; observe only, no automatic buy");
   const tracked = flapTrackedPoolTokenDetails(event);
   if (tracked) return zh
     ? `官方 TokenCreated + ${tracked.quoteSymbol} 配对；非自动交易`

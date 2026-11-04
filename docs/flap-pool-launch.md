@@ -25,15 +25,29 @@ An unrecognized `schemaId` still alerts with token, kind, and creator. The struc
 
 Optional reads on the same Portal, not required to index a launch: `getLaunchToken(token)`, `getLaunchVault(token)`, `graduationFloorV2(...)`.
 
+## How it trades
+
+A canonical `DIRECT_V2_POOL_TAX` launch is a `bsc_launchpad_update` / `flap_pool_launch` with `liveEligible`, `autoTradeEligible: true`, and `automaticExecution: true`. That does **not** make this process sign or broadcast. It admits the token to the confirmed paper session `paper-atm-confirmed-pvp-v2`, which is the ledger `LIVE_SIGNAL_SOURCE=paper-atm-confirmed-pvp-v2` already mirrors into live GMGN buys.
+
+The buy still has to pass that session's existing gates: fresh quote, liquidity, tax, cost, balance, open positions, and loss limits. Size stays the session's fixed 10 U ticket. Exit stays the main-session policy (including its ladder and −20% stop where that runtime already applies them). No new size is introduced.
+
+Unknown schemas stay observe-only (`liveEligible: false`). Curve `TokenCreated` / first-three is unchanged.
+
+Turn Pool Launch trading off without stopping the rest of live:
+
+```bash
+LIVE_FLAP_POOL_LAUNCH=false
+```
+
+Unset or any value other than `false` leaves it on.
+
 ## How to run
 
-Pool Launch uses the existing BSC monitor. It is on when that monitor is on (`BSC_MONITOR_ENABLED` defaults to true):
+Indexing is on with the BSC monitor (`BSC_MONITOR_ENABLED` defaults to true):
 
 ```bash
 BSC_MONITOR_ENABLED=true npm start
 ```
-
-No extra flag and no live-buy switch. Each launch is an observe/alert event (`bsc_launchpad_update` / `flap_pool_launch`) with `informationalOnly`, `autoTradeEligible: false`, and `automaticExecution: false`. It does not enter the curve first-three paper lane.
 
 Logs look like:
 

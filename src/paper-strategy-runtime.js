@@ -53,6 +53,8 @@ import { createNarrativeResearchIndex, narrativeDeskReport } from './paper-narra
 import { walletBuyResearchHint, WALLET_BUY_PRIORITY_VERSION } from './paper-wallet-priority.js';
 import { HOT_RESEARCH_VERSION, HOT_WATCH_MS, hotWatchEligible, advanceHotWatch, marketLeaderHint, selectHotQuoteResearch } from './paper-hot-research.js';
 import { paperEventTriggers } from './paper-event-triggers.js';
+import { buildFlapPoolLaunchWire, validFlapPoolLaunchSignal } from './flap-pool-launch-signal.js';
+import { liveFlapPoolLaunchEnabled } from './flap-pool-launch.js';
 import {buildCollectiveWire,COLLECTIVE_POLICY,COLLECTIVE_SIGNAL_VERSION,PREQUALIFIED_WALLET_POLICY,INTERNAL_BURST_POLICY,ONCHAIN_BURST_POLICY,ONCHAIN_BURST_VERSION,validCollectiveSignal} from './paper-collective-signal.js';
 import {buildOnchainTradeFlow} from './paper-onchain-flow.js';
 import { tradingScanChains } from './trading-scan-scope.js';
@@ -269,6 +271,23 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
   // list membership or a persistent CA allowlist. Rebuild on every evidence
   // read; missing/disabled/conflicting/consumed evidence removes permission.
   let poolDiscoverySignals=new Map(),poolEvidenceSequence=0;
+  let flapLaunchSignals=new Map(),flapLaunchSequence=0;
+  function installFlapPoolLaunchWire(evidence,nowMs,research) {
+    const enabled=lossRepairMode&&estimatedFeeMode&&liveFlapPoolLaunchEnabled();
+    const wire=buildFlapPoolLaunchWire({events:enabled?evidence.events||[]:[],account,nowMs,enabled});
+    const sequence=researchSequences.get(research)||0;
+    if(sequence>=flapLaunchSequence) {
+      flapLaunchSequence=sequence;
+      flapLaunchSignals=new Map(wire.signals.filter(s=>scanChains.includes(s.chain)
+        &&validFlapPoolLaunchSignal(s,s,nowMs)).slice(0,64).map(s=>[keyOf(s),s]));
+    }
+    return wire;
+  }
+  const flapLaunchDiscovery=token=>{
+    if(!lossRepairMode||!estimatedFeeMode||!liveFlapPoolLaunchEnabled()||!scanChains.includes(token.chain))return null;
+    const signal=flapLaunchSignals.get(keyOf(token));
+    return validFlapPoolLaunchSignal(signal,token,now())?signal:null;
+  };
   function installPoolWire(evidence,nowMs,research) {
     const wire=buildPoolFirstThreeWire({events:lossRepairMode&&estimatedFeeMode?evidence.events||[]:[],
       account,sourceHealth:evidence.poolSourceHealth,launchSourceHealth:evidence.launchSourceHealth,nowMs});
@@ -304,8 +323,15 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     return collectiveWireState?.signals.find(s=>keyOf(s)===keyOf(token)&&fresh(s.sourceAt,now(),30000)
       &&fresh(s.sourceObservedAt,now(),30000))||null;
   };
-  const canResearchEntry=token=>listedForEntry(token)||!!walletDiscoverySignal(token)||!!poolDiscoverySignal(token);
-  const canEnterRow=row=>listedForEntry(row.token)||poolEntryRow(row)||['internal','near_completion'].includes(row.evidence?.marketStage)
+  const canResearchEntry=token=>listedForEntry(token)||!!walletDiscoverySignal(token)||!!poolDiscoverySignal(token)||!!flapLaunchDiscovery(token);
+  const flapLaunchEntryRow=row=>{
+    const signal=row.evidence?.opportunity?.event,current=flapLaunchDiscovery(row.token);
+    return !!current&&row.evidence?.opportunity?.id==='monitored_event'
+      &&row.evidence.opportunity.basis==='monitored_event'&&row.evidence.opportunity.signalId===current.id
+      &&signal?.id===current.id&&validFlapPoolLaunchSignal(signal,row.token,now())
+      &&JSON.stringify(signal.poolEvent)===JSON.stringify(current.poolEvent);
+  };
+  const canEnterRow=row=>listedForEntry(row.token)||poolEntryRow(row)||flapLaunchEntryRow(row)||['internal','near_completion'].includes(row.evidence?.marketStage)
     &&row.evidence?.opportunity?.basis==='wallet_signal'&&walletDiscoverySignal(row.token)?.id===row.evidence.collectiveSignal?.id
     &&validCollectiveSignal(row.evidence.collectiveSignal,row.token,now());
   let marketOffset = 0, refreshJob = null, refreshTimer, quoteTimer, fastCycle = null;
@@ -406,7 +432,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
         enabled = stored.enabled && (!lossRepairMode || estimatedFeeMode) && account.stats.dailyLossGuard !== true;
         if(Array.isArray(stored.algorithmSignalJournal))algorithmSignalJournal=stored.algorithmSignalJournal.filter(r=>
           r&&typeof r.id==='string'&&r.chain==='bsc'&&gmgnFlowAddress('bsc',r.address)===r.address
-          &&['collective_smart_money','prequalified_wallet','internal_burst','onchain_internal_burst','new_pool_first_three'].includes(r.source)&&Number.isFinite(Date.parse(r.sourceAt))
+          &&['collective_smart_money','prequalified_wallet','internal_burst','onchain_internal_burst','new_pool_first_three','flap_pool_launch'].includes(r.source)&&Number.isFinite(Date.parse(r.sourceAt))
           &&Number.isFinite(Date.parse(r.firstDetectedAt))).slice(-200);
         if (stored.tradeCountReview != null) {
           tradeCountReview = stored.tradeCountReview;
@@ -945,6 +971,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       const evidence=withLearningEvidence(research),allowPrequalified=lossRepairMode&&estimatedFeeMode;
       collectiveWireState=buildCollectiveWire({state:evidence.flowState,onchainState:evidence.innerTradeState,account,nowMs:now(),allowPrequalified,allowBurst:allowPrequalified});
       installPoolWire(evidence,now(),research);
+      installFlapPoolLaunchWire(evidence,now(),research);
       const triggers=paperEventTriggers({evidence,account,chains:scanChains,nowMs:now(),allowPrequalified,allowBurst:allowPrequalified});
       let admitted=0;
       for(const trigger of triggers) {
@@ -1227,6 +1254,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       account,nowMs:now(),allowPrequalified:lossRepairMode&&estimatedFeeMode,allowBurst:lossRepairMode&&estimatedFeeMode});
     collectiveWireState=collectiveWire;
     const poolWire=installPoolWire(evidence,now(),currentResearch);
+    const flapLaunchWire=installFlapPoolLaunchWire(evidence,now(),currentResearch);
     if(quoteRequest&&!canResearchEntry(quoteRequest))return;
     latestEvidence = evidence;
     const evidenceIndex = createPaperEvidenceIndex(evidence);
@@ -1290,17 +1318,17 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       candidates:newsCandidates.filter(item=>!paperTaxScreen(item.token).blocked),nowMs});
     phaseTiming.newsWireMs=Math.max(0,now()-newsWireStartedAt);
     const buys=account.trades.filter(t=>t.side==='buy'),consumedEvents=new Set(buys.map(t=>t.entryEvidence?.opportunity?.signalId).filter(Boolean));
-    observeAlgorithmSignals([...collectiveWire.signals.filter(canResearchEntry),...poolWire.signals.filter(canResearchEntry)],nowMs);
+    observeAlgorithmSignals([...collectiveWire.signals.filter(canResearchEntry),...poolWire.signals.filter(canResearchEntry),...flapLaunchWire.signals.filter(canResearchEntry)],nowMs);
     for(const s of collectiveWire.signals)if(canResearchEntry(s)&&!candidates.has(keyOf(s)))candidates.set(keyOf(s),{
       token:{chain:s.chain,address:s.address},observedAt:null,marketStatus:'unavailable',discoverySource:'collective_signal'});
     const alphaSignals=memeExitMode?alphaListingSignals(evidence.alphaCatalog,nowMs)
       .filter(s=>scanChains.includes(s.chain)&&!consumedEvents.has(s.id)):[];
-    const monitorSignals=memeExitMode?[...poolWire.signals,...newsWire.paperSignals].filter(s=>scanChains.includes(s.chain)&&!consumedEvents.has(s.id)
+    const monitorSignals=memeExitMode?[...poolWire.signals,...flapLaunchWire.signals,...newsWire.paperSignals].filter(s=>scanChains.includes(s.chain)&&!consumedEvents.has(s.id)
       &&!buys.some(t=>keyOf(t)===keyOf(s)&&t.atMs>=Date.parse(s.sourceAt))):[];
     for(const signal of alphaSignals)if(!focusedDiscovery&&!candidates.has(keyOf(signal)))candidates.set(keyOf(signal),{
       token:{chain:signal.chain,address:signal.address,symbol:signal.symbol,name:signal.name},
       observedAt:null,marketStatus:'unavailable',discoverySource:'binance_alpha'});
-    for(const token of [...poolWire.seeds,...newsWire.seeds])if((!focusedDiscovery||poolDiscoverySignal(token))
+    for(const token of [...poolWire.seeds,...flapLaunchWire.seeds,...newsWire.seeds])if((!focusedDiscovery||poolDiscoverySignal(token)||flapLaunchDiscovery(token))
       &&scanChains.includes(token.chain)&&!candidates.has(keyOf(token))) {
       // No signal snapshot is promoted to a fresh price, safety check or thesis.
       candidates.set(keyOf(token),{token,observedAt:null,marketStatus:'unavailable',discoverySource:'news_hint'});
