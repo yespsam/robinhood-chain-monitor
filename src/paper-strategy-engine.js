@@ -28,6 +28,8 @@ import { ESTIMATED_COST_VERSION, estimatedPaperCosts } from './paper-estimated-c
 import { applyLossRepair, repairEntryReview, validEntryBoundThesis, validLaunchEventThesis } from './paper-loss-repair.js';
 import {COLLECTIVE_SIGNAL_VERSION,PREQUALIFIED_WALLET_VERSION,INTERNAL_BURST_VERSION,ONCHAIN_BURST_VERSION,internalOnlySignal,isWalletSignalVersion,walletSignalRoute,COLLECTIVE_THESIS_VERSION,validCollectiveSignal,validCollectiveThesis,collectiveQuote} from './paper-collective-signal.js';
 import {internalDepthCheck} from './paper-internal-depth.js';
+import { curveProgressEntryDecision, curveProgressBlocksEntry } from './curve-progress-entry.js';
+import { applyPrincipalOutStop, createLiveLadder, principalOutConfirmed } from './live-ladder-breakeven.js';
 import {verifiedLaunchContext,LAUNCH_THESIS_VERSION} from './paper-launch-policy.js';
 import { paperLossGuard } from './paper-loss-guard.js';
 const MINUTE = 60_000;
@@ -82,6 +84,20 @@ const iso = nowMs => new Date(nowMs).toISOString();
 const keyOf = token => `${chainName(token?.chain)}:${chainName(token?.chain) === 'sol' ? token?.address : clean(token?.address).toLowerCase()}`;
 const validAddress = (chain, address) => chain === 'sol' ? /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address) : /^0x[\da-f]{40}$/i.test(address);
 const unique = values => [...new Set(values)];
+function withCurveProgressGate(row, token, event) {
+  const gate = curveProgressEntryDecision({ token, event });
+  if (!gate.applied) return row;
+  if (gate.allow) return { ...row, evidence: { ...row.evidence, curveProgressGate: gate } };
+  const entryPlan = row.evidence?.entryPlan ? { ...row.evidence.entryPlan, eligible: false } : row.evidence?.entryPlan;
+  return { ...row, decision: row.decision === '不买' ? '不买' : '观察', reasons: unique([...(row.reasons || []), gate.reason]),
+    evidence: { ...row.evidence, paperEligible: false, entryPlan, curveProgressGate: gate } };
+}
+function flapLiveLadderEntry(evaluation) {
+  const event = evaluation?.evidence?.opportunity?.event;
+  if (event?.source === 'flap_pool_launch' || event?.pool?.launchKind === 'DIRECT_V2_POOL_TAX') return true;
+  if (event?.source === 'new_pool_first_three' && event?.pool?.platform === 'flap') return true;
+  return evaluation?.evidence?.curveProgressGate?.venue === 'flap_bonding_curve' && evaluation.evidence.curveProgressGate.allow === true;
+}
 
 function assertNow(nowMs) {
   if (!Number.isFinite(nowMs) || nowMs < 0 || nowMs > 8.64e15) throw new TypeError('invalid nowMs');
@@ -272,7 +288,7 @@ export function evaluatePaperStrategies({ token = {}, marketStatus, observedAt, 
       : confirmedMode ? confirmedPaperEntry(result, { sourceSafety, pulse: flow.pulse, quoteHistory, narrativeRecall, continuousPaperMode, lossRepairMode, memeExitMode, nowMs }) : diagnosticMode ? diagnosticPaperEntry(result, sourceSafety) : result;
     const final = !minimalEntryMode&&!opportunityMode&&finalizeRoute?finalizeRoute(evaluated):evaluated;
     if (final.evidence?.accountPolicy) final.evidence.accountPolicy = paperOperatingPolicy(continuousPaperMode, enforceLossGuards);
-    return final;
+    return withCurveProgressGate(final, token, monitorSignal);
   });
 }
 
@@ -472,7 +488,7 @@ export function resetPaperCash(account, { operationId, nowMs = Date.now() } = {}
   return next;
 }
 
-function sell(account, key, quantity, markPrice, reason, nowMs, { writeoff = false } = {}) {
+function sell(account, key, quantity, markPrice, reason, nowMs, { writeoff = false, principalOut = false } = {}) {
   const position = account.positions[key];
   const amount = Math.min(position.quantity, quantity);
   const ratio = amount / position.quantity;
@@ -501,6 +517,17 @@ function sell(account, key, quantity, markPrice, reason, nowMs, { writeoff = fal
     exitPolicyVersion:position.thesisStatus.recoveryExit.version,
     evidenceRecovery:structuredClone(position.thesisStatus.recoveryExit),
     recoveryActivatedAt:position.evidenceGapActivatedAt});
+  if (position.liveLadder && !writeoff && position.quantity > position.initialQuantity * 1e-10) {
+    const returned = account.trades.filter(trade => trade.side === 'sell' && trade.chain === position.chain && trade.address === position.address && trade.atMs >= time(position.openedAt))
+      .reduce((sum, trade) => sum + trade.netUsd, 0);
+    if (principalOutConfirmed({ entryUsd: position.entryUsd, returnedUsd: returned, remainingQuantity: position.quantity, explicit: principalOut === true })) {
+      position.liveLadder = applyPrincipalOutStop(position.liveLadder, {
+        tp1Confirmed: true, remainingQuantity: position.quantity, entryPrice: position.entryPrice });
+      const evidence = account.trades.at(-1).exitEvidence;
+      if (evidence) evidence.liveLadder = structuredClone(position.liveLadder);
+      else account.trades.at(-1).liveLadder = structuredClone(position.liveLadder);
+    }
+  }
   if (position.quantity <= position.initialQuantity * 1e-10) {
     account.stats.exits += 1;
     if (position.realizedPnl > 0) account.stats.wins += 1;
@@ -710,6 +737,7 @@ export function advancePaperStrategyAccount(account, { evaluations = [], marks =
     const price = positive(token.price);
     if (account.variant === 'distilled_shadow' && !validLearningPolicy(distilledPolicy, chain, nowMs)) continue;
     if (!policy || !chain || !validAddress(chain, address) || !price || evaluation.evidence?.paperEligible !== true || evaluation.missing?.length || !fresh(evaluation.observedAt, nowMs) || next.positions[key] || !continuousPaperMode && (next.cooldowns[key] || 0) > nowMs) continue;
+    if (curveProgressBlocksEntry(evaluation.evidence, evaluation.evidence?.opportunity?.event)) continue;
     // Recheck authority at the single ledger writer. A forged ready row or a
     // stale in-flight quote cannot bypass the unavailable order-fee adapter.
     if(account.estimatedCostModel&&!estimatedFeeMode)continue;
@@ -870,6 +898,7 @@ export function advancePaperStrategyAccount(account, { evaluations = [], marks =
       position.exitStatus = { activeStopPrice: null, checkedAt: position.markAt, holdingMode: '独立实验 · 量价逻辑退出',
         holdReason: '等待入场后的量价与完整资金流证据', fixedStopEnabled: false, fixedProfitEnabled: false };
     }
+    if (flapLiveLadderEntry(evaluation)) position.liveLadder = createLiveLadder({ entryPrice: price });
     if (account.variant === 'distilled_shadow') {
       position.distilledHabit = structuredClone(distilledPolicy);
       position.entryEvidence.distilledHabit = structuredClone(distilledPolicy);

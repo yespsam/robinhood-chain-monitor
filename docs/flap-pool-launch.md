@@ -31,7 +31,22 @@ A canonical `DIRECT_V2_POOL_TAX` launch is a `bsc_launchpad_update` / `flap_pool
 
 The buy still has to pass that session's existing gates: fresh quote, liquidity, tax, cost, balance, open positions, and loss limits. Size stays the session's fixed 10 U ticket. Exit stays the main-session policy (including its ladder and −20% stop where that runtime already applies them). No new size is introduced.
 
-Unknown schemas stay observe-only (`liveEligible: false`). Curve `TokenCreated` / first-three is unchanged.
+Pool Launch does not use the bonding curve, so the curve-progress gate below does not apply to it. A graduated or other external market is also left alone. Flap inner-curve entries (`launchpad` / `launchpadPlatform` of `flap`, `flap_stocks`, or `flap_aioracle`, still `internal` or `near_completion`) are skipped when `bondingCurveProgress` is outside 30–70, or when that figure is missing. GMGN stores `bondingCurveProgress` as a fraction of 1 (`0.35` = 35%). The bounds are percentages. Missing progress skips the entry; that is the safer LIVE default, not a pass. `new_pool_first_three` without a progress figure stays a creation-order lane. A known progress on that flap signal is still checked.
+
+```bash
+CURVE_PROGRESS_ENTRY_FILTER=true   # false turns the gate off
+CURVE_PROGRESS_MIN=30
+CURVE_PROGRESS_MAX=70
+```
+
+The LIVE ladder still starts at price_scale `0.8` (−20% from entry/cost). `price_scale` is a multiplier of the entry price, not an absolute token price. Absolute trigger = `entryPrice * price_scale`. After the principal-out / TP1 partial is confirmed and size remains, the remaining stop moves to price_scale `1` (entry/cost). This is not the paper engine's fee-adjusted breakeven. A flat fill does not create a new stop. If TP1 never fills, the stop stays at `0.8`. This process still does not send the GMGN amend; the position records `liveLadder` for the mirror.
+
+```bash
+LIVE_BREAKEVEN_AFTER_PRINCIPAL=true   # false keeps the −20% stop after TP1
+LIVE_BREAKEVEN_CUSHION_BPS=0          # 100 → price_scale 1.01
+```
+
+Unknown schemas stay observe-only (`liveEligible: false`). Curve `TokenCreated` / first-three without a progress figure is unchanged.
 
 Turn Pool Launch trading off without stopping the rest of live:
 
