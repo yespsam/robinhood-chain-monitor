@@ -31,7 +31,31 @@ A canonical `DIRECT_V2_POOL_TAX` launch is a `bsc_launchpad_update` / `flap_pool
 
 The buy still has to pass that session's existing gates: fresh quote, liquidity, tax, cost, balance, open positions, and loss limits. Size stays the session's fixed 10 U ticket. Exit stays the main-session policy (including its ladder and −20% stop where that runtime already applies them). No new size is introduced.
 
-Unknown schemas stay observe-only (`liveEligible: false`). Curve `TokenCreated` / first-three is unchanged.
+Pool Launch does not use the bonding curve, so the curve-progress gate below does not apply to it. A graduated or other external market is also left alone. Flap inner-curve entries (`launchpad` / `launchpadPlatform` of `flap`, `flap_stocks`, or `flap_aioracle`, still `internal` or `near_completion`) are skipped when `bondingCurveProgress` is outside 30–70, or when that figure is missing. GMGN stores `bondingCurveProgress` as a fraction of 1 (`0.35` = 35%). The bounds are percentages. Missing progress skips the entry; that is the safer LIVE default, not a pass. `new_pool_first_three` without a progress figure stays a creation-order lane. A known progress on that flap signal is still checked.
+
+```bash
+CURVE_PROGRESS_ENTRY_FILTER=true   # false turns the gate off
+CURVE_PROGRESS_MIN=30
+CURVE_PROGRESS_MAX=70
+```
+
+The LIVE ladder still starts at local price_scale `0.8` (−20% from entry/cost). That local field is a multiplier of the entry price. Absolute trigger = `entryPrice * price_scale`. GMGN's `loss_stop` condition field is a different number: a drop percent (`"20"` = −20%). A breakeven stop is not a drop, so the amend is `gmgn-cli order strategy create` with `--order-type limit_order --sub-order-type stop_loss` and `--check-price` set to the absolute breakeven (entry, plus cushion). The new stop is created before the previous order id is cancelled. If create fails, the old stop stays on GMGN and the local price_scale stays at `0.8`. The attempt is appended to `account.liveDecisions` (`kind: gmgn_stop_amend`, `ok`, `error`, `checkPrice`, `orderId`, fees, slippage).
+
+SOL sends `--priority-fee` and `--tip-fee` (each at least `0.00001`). BSC sends `--gas-price` (at least `0.05` gwei) and does not send a SOL priority fee. Base, ETH, and Robinhood send neither tip nor priority fee. The protective sell uses `LIVE_SL_SLIPPAGE_PERCENT` (default `15`), not buy slippage and not `--auto-slippage`. `GMGN_PRIVATE_KEY` stays in the CLI environment.
+
+```bash
+LIVE_BREAKEVEN_AFTER_PRINCIPAL=true   # false keeps the −20% stop after TP1
+LIVE_BREAKEVEN_CUSHION_BPS=0          # 100 → price_scale 1.01, check price = entry * 1.01
+LIVE_GMGN_STOP_AMEND=true             # false does not call GMGN and does not move the local stop
+LIVE_GMGN_WALLET=                     # wallet bound to the GMGN API key
+LIVE_GMGN_QUOTE_TOKEN=                # used when the entry has no pool quote (WSOL / WBNB)
+LIVE_GMGN_PRIORITY_FEE=0.00001        # SOL only
+LIVE_GMGN_TIP_FEE=0.00001             # SOL required; optional on BSC if >= 0.000001
+LIVE_GMGN_GAS_PRICE=0.05              # BSC gwei
+LIVE_SL_SLIPPAGE_PERCENT=15           # stop sells only
+```
+
+Unknown schemas stay observe-only (`liveEligible: false`). Curve `TokenCreated` / first-three without a progress figure is unchanged.
 
 Turn Pool Launch trading off without stopping the rest of live:
 
