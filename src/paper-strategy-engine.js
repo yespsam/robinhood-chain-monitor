@@ -8,7 +8,7 @@ import { PVP_EXIT_POLICY, CONFIRMED_PVP_EXIT_POLICY, EVIDENCE_HOLD_EXIT_POLICY, 
 import { PAPER_ENTRY_POLICY_VERSION, LEGACY_PAPER_ENTRY_POLICY_VERSION, exploratoryEntryPolicy, meetsPaperEntryFlow } from './paper-entry-policy.js';
 import { paperSafetyForEntry, unavailablePaperAuditFields, paperTaxScreen } from './paper-safety-policy.js';
 import { diagnosticPaperEntry, isDiagnosticPaperEntry } from './paper-diagnostic-entry.js';
-import { confirmedPaperEntry, minimalPaperEntry, isConfirmedPaperEntry, isMinimalPaperEntry, confirmedAccountGate, CONFIRMED_PAPER_POLICY, CONTINUOUS_PAPER_VERSION, paperOperatingPolicy } from './paper-confirmed-policy.js';
+import { confirmedPaperEntry, minimalPaperEntry, isConfirmedPaperEntry, isMinimalPaperEntry, confirmedAccountGate, completedPaperRounds, CONFIRMED_PAPER_POLICY, CONTINUOUS_PAPER_VERSION, paperOperatingPolicy } from './paper-confirmed-policy.js';
 import { freshNarrativeRecall } from './paper-narrative-recall.js';
 import { traderDecision, compareConfirmedCandidates } from './paper-trader-reasoning.js';
 import { multiOpportunityEntry, OPPORTUNITY_VERSION } from './paper-opportunity-policy.js';
@@ -28,7 +28,8 @@ import { ESTIMATED_COST_VERSION, estimatedPaperCosts } from './paper-estimated-c
 import { applyLossRepair, repairEntryReview, validEntryBoundThesis, validLaunchEventThesis } from './paper-loss-repair.js';
 import {COLLECTIVE_SIGNAL_VERSION,PREQUALIFIED_WALLET_VERSION,INTERNAL_BURST_VERSION,ONCHAIN_BURST_VERSION,internalOnlySignal,isWalletSignalVersion,walletSignalRoute,COLLECTIVE_THESIS_VERSION,validCollectiveSignal,validCollectiveThesis,collectiveQuote} from './paper-collective-signal.js';
 import {internalDepthCheck} from './paper-internal-depth.js';
-import { curveProgressEntryDecision, curveProgressBlocksEntry } from './curve-progress-entry.js';
+import { curveProgressEntryDecision, curveProgressBlocksEntry, curveProgressSnapshot, curveProgressTracked } from './curve-progress-entry.js';
+import { checkGates } from './live-entry-gates.js';
 import { applyPrincipalOutStop, createLiveLadder, principalOutConfirmed } from './live-ladder-breakeven.js';
 import { buildGmgnStopReplacePlan, runGmgnStopAmend, createGmgnCliStopClient } from './gmgn-stop-amend.js';
 import {verifiedLaunchContext,LAUNCH_THESIS_VERSION} from './paper-launch-policy.js';
@@ -87,17 +88,24 @@ const validAddress = (chain, address) => chain === 'sol' ? /^[1-9A-HJ-NP-Za-km-z
 const unique = values => [...new Set(values)];
 function withCurveProgressGate(row, token, event) {
   const gate = curveProgressEntryDecision({ token, event });
-  if (!gate.applied) return row;
-  if (gate.allow) return { ...row, evidence: { ...row.evidence, curveProgressGate: gate } };
-  const entryPlan = row.evidence?.entryPlan ? { ...row.evidence.entryPlan, eligible: false } : row.evidence?.entryPlan;
+  const tracked = curveProgressTracked(token, event, { strategyId: row?.strategyId });
+  const snapshot = tracked ? curveProgressSnapshot(token, event) : null;
+  const evidence = { ...row.evidence, ...(snapshot || {}), ...(gate.applied ? { curveProgressGate: gate } : {}) };
+  if (!gate.applied || gate.allow) return snapshot || gate.applied ? { ...row, evidence } : row;
+  const entryPlan = evidence.entryPlan ? { ...evidence.entryPlan, eligible: false } : evidence.entryPlan;
   return { ...row, decision: row.decision === '不买' ? '不买' : '观察', reasons: unique([...(row.reasons || []), gate.reason]),
-    evidence: { ...row.evidence, paperEligible: false, entryPlan, curveProgressGate: gate } };
+    evidence: { ...evidence, paperEligible: false, entryPlan } };
 }
 function flapLiveLadderEntry(evaluation) {
   const event = evaluation?.evidence?.opportunity?.event;
   if (event?.source === 'flap_pool_launch' || event?.pool?.launchKind === 'DIRECT_V2_POOL_TAX') return true;
   if (event?.source === 'new_pool_first_three' && event?.pool?.platform === 'flap') return true;
   return evaluation?.evidence?.curveProgressGate?.venue === 'flap_bonding_curve' && evaluation.evidence.curveProgressGate.allow === true;
+}
+function closedLiveTrades(account) {
+  return completedPaperRounds(account?.trades || [])
+    .filter((round) => round.entry?.entryEvidence?.liveEntryGate?.allow === true)
+    .map((round) => ({ realizedPnl: round.pnl, closedAtMs: round.at, symbol: round.entry?.symbol || null }));
 }
 
 function assertNow(nowMs) {
@@ -625,7 +633,7 @@ function structuralExit(position, mark, policy, nowMs) {
 }
 
 /** New entries can pause independently; fresh-price exits are always evaluated. */
-function advancePaperStrategyBody(account, { evaluations = [], marks = [], nowMs = Date.now(), enabled = true, distilledPolicy = null, diagnosticMode = false, confirmedMode = false, continuousPaperMode = false, opportunityMode = false, opportunityReviewMode = true, memeExitMode = false, recoveryMode = false, minimalEntryMode = false, chainGasAccounting = false, lossRepairMode = false, enforceLossGuards = lossRepairMode, estimatedFeeMode = false, evidenceGapExitMode = true } = {}) {
+function advancePaperStrategyBody(account, { evaluations = [], marks = [], nowMs = Date.now(), enabled = true, distilledPolicy = null, diagnosticMode = false, confirmedMode = false, continuousPaperMode = false, opportunityMode = false, opportunityReviewMode = true, memeExitMode = false, recoveryMode = false, minimalEntryMode = false, chainGasAccounting = false, lossRepairMode = false, enforceLossGuards = lossRepairMode, estimatedFeeMode = false, evidenceGapExitMode = true, env = process.env } = {}) {
   assertNow(nowMs);
   validatePaperStrategyAccount(account);
   if(typeof lossRepairMode!=='boolean'||lossRepairMode&&(!recoveryMode||!memeExitMode||account.variant))throw new TypeError('loss repair is paper-main only');
@@ -945,11 +953,29 @@ function advancePaperStrategyBody(account, { evaluations = [], marks = [], nowMs
       position.exitStatus = { activeStopPrice: null, checkedAt: position.markAt, holdingMode: '独立实验 · 量价逻辑退出',
         holdReason: '等待入场后的量价与完整资金流证据', fixedStopEnabled: false, fixedProfitEnabled: false };
     }
-    if (flapLiveLadderEntry(evaluation)) position.liveLadder = createLiveLadder({
-      entryPrice: price, chain, baseToken: address,
-      quoteToken: evaluation.evidence?.opportunity?.event?.pool?.quoteAddress || evaluation.evidence?.opportunity?.event?.pool?.quoteToken || null,
-      wallet: typeof process.env.LIVE_GMGN_WALLET === 'string' && process.env.LIVE_GMGN_WALLET ? process.env.LIVE_GMGN_WALLET : null,
-    });
+    if (flapLiveLadderEntry(evaluation)) {
+      // Daily-loss `guard` already skipped this loop when it fired. checkGates
+      // still takes that result first so a later edit cannot reorder it behind
+      // the consecutive-loss pause. This does not enable LIVE execution.
+      const liveGate = checkGates({
+        closedTrades: closedLiveTrades(next), trades: next.trades, sessionPresent: true, nowMs, env,
+        dailyLoss: guard ? { allow: false, reason: 'UTC 当日或累计亏损保护已触发，拒绝 LIVE 新开仓' } : { allow: true, reason: null },
+      });
+      const progress = position.entryEvidence.bondingCurveProgress ?? null;
+      position.entryEvidence.liveEntryGate = {
+        version: 'live_entry_gate_v1', allow: liveGate.allow === true, gate: liveGate.gate, reason: liveGate.reason,
+        paperClosed: liveGate.promotion?.closed ?? null, paperSqn: liveGate.promotion?.sqn ?? null,
+        consecutiveLosses: liveGate.consecutive?.streak ?? null,
+        bondingCurveProgress: progress,
+        bondingCurveProgressStatus: position.entryEvidence.bondingCurveProgressStatus ?? (progress === null ? 'unknown' : 'known'),
+        curveProgressGate: position.entryEvidence.curveProgressGate ?? null,
+      };
+      if (liveGate.allow === true) position.liveLadder = createLiveLadder({
+        entryPrice: price, chain, baseToken: address,
+        quoteToken: evaluation.evidence?.opportunity?.event?.pool?.quoteAddress || evaluation.evidence?.opportunity?.event?.pool?.quoteToken || null,
+        wallet: typeof env.LIVE_GMGN_WALLET === 'string' && env.LIVE_GMGN_WALLET ? env.LIVE_GMGN_WALLET : null,
+      });
+    }
     if (account.variant === 'distilled_shadow') {
       position.distilledHabit = structuredClone(distilledPolicy);
       position.entryEvidence.distilledHabit = structuredClone(distilledPolicy);
@@ -959,6 +985,17 @@ function advancePaperStrategyBody(account, { evaluations = [], marks = [], nowMs
     next.cash -= budget;
     next.stats.entries += 1;
     next.trades.push({ id: `${nowMs}:${next.trades.length}`, side: 'buy', strategyId: policy.id, ...(evaluation.evidence.opportunity ? {strategyLabel:position.strategyLabel} : {}), chain, address, symbol: position.symbol, quantity, price, grossUsd: costs.notionalUsd, costsUsd: position.entryCostsUsd, netUsd: -budget, costBasisUsd: budget, realizedPnl: 0, reason: position.entryLogic, atMs: nowMs, observedAt: evaluation.observedAt, costSource: 'assumption', entryLogic: position.entryLogic, exitLogic: position.exitLogic, entryEvidence: structuredClone(position.entryEvidence) });
+    if (position.entryEvidence.liveEntryGate?.allow === false) {
+      recordLiveDecision(next, {
+        kind: 'live_entry_refused', atMs: nowMs, ok: false,
+        reason: position.entryEvidence.liveEntryGate.reason,
+        gate: position.entryEvidence.liveEntryGate.gate,
+        chain, address,
+        bondingCurveProgress: position.entryEvidence.liveEntryGate.bondingCurveProgress,
+        bondingCurveProgressStatus: position.entryEvidence.liveEntryGate.bondingCurveProgressStatus,
+        curveProgressGate: position.entryEvidence.liveEntryGate.curveProgressGate,
+      });
+    }
   }
   let markedValue = 0, unrealizedPnl = 0;
   for (const position of Object.values(next.positions)) {

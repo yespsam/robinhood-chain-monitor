@@ -7,6 +7,9 @@ node_modules/
 
 # Durable cursors, outboxes, event history, and local browser artifacts.
 data/
+# Graduation samples are appended under data/ and can grow. data/ already
+# ignores them; this names the file the telemetry CLI writes.
+data/flap-graduation-telemetry.jsonl
 .playwright-cli/
 
 # Local logs and package-manager diagnostics.

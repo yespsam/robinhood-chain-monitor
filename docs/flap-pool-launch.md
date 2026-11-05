@@ -39,6 +39,45 @@ CURVE_PROGRESS_MIN=30
 CURVE_PROGRESS_MAX=70
 ```
 
+Flap and internal decisions now store `bondingCurveProgress` on the entry evidence. The value is the GMGN fraction of 1 (`0.35` = 35%). A percent figure already in `(1, 100]` is converted back to that fraction. If the feed has no usable figure, the field is `null` and `bondingCurveProgressStatus` is `unknown`. That is not a guess of 0%. `curveProgressGate` is stored when the 30–70 check actually ran.
+
+## LIVE entry gates
+
+These gates refuse a new LIVE ladder. They do not set execution, signing, or broadcast, and they do not stop the paper buy. Paper's own consecutive-loss switch stays review-only (`losingPauseMs=0`). There is no `live-gmgn-trader.js` in this tree; `checkGates` in `src/live-entry-gates.js` is what the paper engine calls when a flap / inner-curve entry would otherwise open the LIVE ladder. The already-computed daily-loss guard is the first input. Then:
+
+1. Consecutive LIVE losses. The last N closed rounds that were admitted to LIVE must not all be losses. A win or a scratch resets the streak. Default N is 3. `0` or `false` disables it. `LIVE_CONSECUTIVE_LOSS_PAUSE_MINUTES` (default `0`) is an optional cool-down; `0` means the pause lasts until the streak breaks.
+2. Paper promotion. The active paper ledger needs closed rounds `>= 30` and SQN `>= 1.6`. SQN is `(mean closed-round PnL / sample standard deviation) * sqrt(N)`. Partial sells stay inside one round. A missing ledger is refused. `LIVE_REQUIRE_PAPER_SQN=0` and `LIVE_REQUIRE_PAPER_CLOSED=0` disable the checks for an emergency.
+
+A refusal is logged on `account.liveDecisions` as `kind: live_entry_refused` with the reason, the progress figure, and the curve gate when one was computed.
+
+```bash
+LIVE_CONSECUTIVE_LOSS_PAUSE=3
+LIVE_CONSECUTIVE_LOSS_PAUSE_MINUTES=0
+LIVE_REQUIRE_PAPER_SQN=1.6
+LIVE_REQUIRE_PAPER_CLOSED=30
+```
+
+Print the current paper SQN without a key or a wallet:
+
+```bash
+npm run paper:sqn
+node scripts/paper-sqn-report.js --file data/yesp-atm-confirmed-pvp-v2-estimated-20260928.json
+```
+
+The command prefers the estimated-session pointer, then the active paper pointer, then `yesp-atm-strategy-paper.json`. Exit code 1 means the ledger is missing or is not a paper book.
+
+## Flap graduation telemetry
+
+`scripts/flap-graduation-telemetry.js` polls tokens and appends `data/flap-graduation-telemetry.jsonl` (gitignored with the rest of `data/`). Each line is one token's latest snapshot: first-seen time, create time or `null`, progress samples from the same reader as the curve gate, and `watching`, `graduated`, or `timeout`. Dry-run does not write a file and does not use the network or `.env`.
+
+```bash
+node scripts/flap-graduation-telemetry.js --dry-run
+node scripts/flap-graduation-telemetry.js --once --tokens ./tokens.json
+node scripts/flap-graduation-telemetry.js --poll --tokens ./tokens.json --max-polls 4 --interval-ms 15000
+```
+
+`tokens.json` is an array of objects. `bondingCurveProgress` is a fraction of 1, or `null` when unknown. A later poll that shows `marketStage: "external"` (or progress `1`) records `graduated`.
+
 The LIVE ladder still starts at local price_scale `0.8` (−20% from entry/cost). That local field is a multiplier of the entry price. Absolute trigger = `entryPrice * price_scale`. GMGN's `loss_stop` condition field is a different number: a drop percent (`"20"` = −20%). A breakeven stop is not a drop, so the amend is `gmgn-cli order strategy create` with `--order-type limit_order --sub-order-type stop_loss` and `--check-price` set to the absolute breakeven (entry, plus cushion). The new stop is created before the previous order id is cancelled. If create fails, the old stop stays on GMGN and the local price_scale stays at `0.8`. The attempt is appended to `account.liveDecisions` (`kind: gmgn_stop_amend`, `ok`, `error`, `checkPrice`, `orderId`, fees, slippage).
 
 SOL sends `--priority-fee` and `--tip-fee` (each at least `0.00001`). BSC sends `--gas-price` (at least `0.05` gwei) and does not send a SOL priority fee. Base, ETH, and Robinhood send neither tip nor priority fee. The protective sell uses `LIVE_SL_SLIPPAGE_PERCENT` (default `15`), not buy slippage and not `--auto-slippage`. `GMGN_PRIVATE_KEY` stays in the CLI environment.

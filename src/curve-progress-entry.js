@@ -45,23 +45,14 @@ export function curveProgressPercent(value) {
   return null;
 }
 
-function readProgress(token, event) {
-  const candidates = [
-    token?.bondingCurveProgress,
-    token?.curveProgress,
-    event?.bondingCurveProgress,
-    event?.curveProgress,
-    event?.pool?.bondingCurveProgress,
-    event?.pool?.curveProgress,
-  ];
-  for (const value of candidates) {
-    if (value === undefined) continue;
-    return curveProgressPercent(value);
-  }
-  return null;
+// GMGN bondingCurveProgress is a fraction of 1. A percent figure in (1, 100]
+// is converted back to that fraction. Anything else stays unknown — never a guess.
+export function bondingCurveProgressFraction(value) {
+  const pct = curveProgressPercent(value);
+  return pct === null ? null : pct / 100;
 }
 
-function hasProgressInput(token, event) {
+function progressCandidates(token, event) {
   return [
     token?.bondingCurveProgress,
     token?.curveProgress,
@@ -69,7 +60,45 @@ function hasProgressInput(token, event) {
     event?.curveProgress,
     event?.pool?.bondingCurveProgress,
     event?.pool?.curveProgress,
-  ].some((value) => value !== undefined);
+  ];
+}
+
+function readProgress(token, event) {
+  for (const value of progressCandidates(token, event)) {
+    if (value === undefined) continue;
+    return curveProgressPercent(value);
+  }
+  return null;
+}
+
+function hasProgressInput(token, event) {
+  return progressCandidates(token, event).some((value) => value !== undefined);
+}
+
+// Fraction stored for later bucket analysis. Null means the figure was absent
+// or not a usable progress, not that the curve is at 0%.
+export function curveProgressSnapshot(token = {}, event = null) {
+  let fraction = null;
+  for (const value of progressCandidates(token, event)) {
+    if (value === undefined) continue;
+    const next = bondingCurveProgressFraction(value);
+    if (next !== null) { fraction = next; break; }
+  }
+  return {
+    bondingCurveProgress: fraction,
+    bondingCurveProgressStatus: fraction === null ? "unknown" : "known",
+  };
+}
+
+// Flap / inner-curve rows, plus the internal lane, keep an explicit progress
+// field even when the 30–70 gate does not apply.
+export function curveProgressTracked(token = {}, event = null, { strategyId = null } = {}) {
+  if (strategyId === "internal") return true;
+  if (["internal", "near_completion"].includes(token?.marketStage)) return true;
+  if (["new_creation", "near_completion"].includes(token?.marketCategory)) return true;
+  if (FLAP_CURVE_LAUNCHPAD.test(flapLaunchpad(token))) return true;
+  if (event?.source === "flap_pool_launch" || event?.pool?.platform === "flap" || event?.pool?.launchKind === "DIRECT_V2_POOL_TAX") return true;
+  return flapCurveProgressApplies(token, event);
 }
 
 function isPoolLaunch(event) {

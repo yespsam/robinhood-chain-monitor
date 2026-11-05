@@ -91,6 +91,8 @@ test("strategy decisions log the skip and do not open a paper position", () => {
   const open = evaluatePaperStrategies(base).find((row) => row.strategyId === "internal");
   assert.equal(open.decision, "可模拟");
   assert.equal(open.evidence.curveProgressGate, undefined);
+  assert.equal(open.evidence.bondingCurveProgress, null);
+  assert.equal(open.evidence.bondingCurveProgressStatus, "unknown");
   const low = evaluatePaperStrategies({ ...base, token: { ...base.token, launchpadPlatform: "flap", bondingCurveProgress: 0.1 } }).find((row) => row.strategyId === "internal");
   assert.equal(low.decision, "观察");
   assert.equal(low.evidence.paperEligible, false);
@@ -100,11 +102,17 @@ test("strategy decisions log the skip and do not open a paper position", () => {
   const inside = evaluatePaperStrategies({ ...base, token: { ...base.token, launchpadPlatform: "flap", bondingCurveProgress: 0.5 } }).find((row) => row.strategyId === "internal");
   assert.equal(inside.decision, "可模拟");
   assert.equal(inside.evidence.curveProgressGate.allow, true);
+  assert.equal(inside.evidence.bondingCurveProgress, 0.5);
+  assert.equal(inside.evidence.bondingCurveProgressStatus, "known");
   const missing = evaluatePaperStrategies({ ...base, token: { ...base.token, launchpadPlatform: "flap", bondingCurveProgress: null } }).find((row) => row.strategyId === "internal");
   assert.match(missing.reasons.join("\n"), /进度未知/);
+  assert.equal(missing.evidence.bondingCurveProgress, null);
+  assert.equal(missing.evidence.bondingCurveProgressStatus, "unknown");
   assert.equal(curveProgressBlocksEntry(missing.evidence), true);
   assert.equal(curveProgressBlocksEntry(inside.evidence), false);
   const graduated = evaluatePaperStrategies({ ...base, token: { ...base.token, marketStage: "external", launchpadPlatform: "flap", bondingCurveProgress: 0.05 } }).find((row) => row.strategyId === "smart_money");
   assert.equal(graduated.evidence.curveProgressGate, undefined);
+  assert.equal(graduated.evidence.bondingCurveProgress, 0.05);
+  assert.equal(graduated.evidence.bondingCurveProgressStatus, "known");
   assert.equal(graduated.decision, "可模拟");
 });

@@ -20,6 +20,26 @@
 
 本次代码发布、配置保全及验证边界见 [维护发布说明](docs/maintenance-release-2026-10-09.md)。Git 仅用于代码、测试和脱敏文档；`.env`、`data/`、账本、队列、凭证和私有 RPC 完整 URL 不得提交，即使目标仓库是私有仓库。
 
+## LIVE 开仓闸门（执行保持关闭）
+
+模拟盘连亏仍只记复盘（`losingPauseMs=0`）。LIVE 梯子在新开仓前另有两道闸门，默认开启，**不会**把 `execution` / `signing` / `broadcast` 打开：
+
+| 变量 | 默认 | 关闭 |
+| --- | --- | --- |
+| `LIVE_CONSECUTIVE_LOSS_PAUSE` | `3` | `0` 或 `false`。最近 N 笔已准入 LIVE 的平仓全亏则拒绝新 LIVE 开仓；盈利或打平清零 |
+| `LIVE_CONSECUTIVE_LOSS_PAUSE_MINUTES` | `0` | 大于 0 时，连亏只冷却这么多分钟 |
+| `LIVE_REQUIRE_PAPER_SQN` | `1.6` | `0` 或 `false` |
+| `LIVE_REQUIRE_PAPER_CLOSED` | `30` | `0` 或 `false` |
+
+SQN =（已平仓单笔盈亏均值 / 样本标准差）× √N。账本缺失时拒绝晋升。纸面买入仍可记下；被拒的 LIVE 开仓写入 `liveDecisions`（`live_entry_refused`）。
+
+```bash
+npm run paper:sqn
+node scripts/flap-graduation-telemetry.js --dry-run
+```
+
+曲线进度、环境变量和 telemetry 文件格式见 [Flap Pool Launch](docs/flap-pool-launch.md)。
+
 ## yesp atm 四策略服务端模拟盘（2026-09-21）
 
 页面由统一服务端账本驱动，提供内盘抢先、聪明钱跟踪、外盘叙事 PVP、新币狙击四类实验策略。该版本最初以 Robinhood 为重点；后续新机会扫描收敛到 BSC，实际范围由持久策略控制，见 [BSC 单链交易扫描](docs/bsc-only-trading-scan-2026-10-04.md)。每笔保存入场/退出依据及成本；关闭浏览器不会停止后台进程内评估。旧浏览器账户只读保留，旧 `paper:100` CLI 通道仍独立运行，均不与新账户合并。
