@@ -70,7 +70,12 @@ function flapAccount() {
     candles: breakoutCandles(NOW),
   };
   const row = evaluatePaperStrategies(input).find((item) => item.strategyId === "internal");
-  const account = advancePaperStrategyAccount(createPaperStrategyAccount({ nowMs: NOW }), { evaluations: [row], nowMs: NOW, gmgnStopClient: null });
+  const account = advancePaperStrategyAccount(createPaperStrategyAccount({ nowMs: NOW }), {
+    evaluations: [row], nowMs: NOW, gmgnStopClient: null,
+    // This case exercises the stop amend. The promotion gate is covered separately
+    // and would refuse a brand-new paper book.
+    env: { LIVE_REQUIRE_PAPER_SQN: "0", LIVE_REQUIRE_PAPER_CLOSED: "0", LIVE_CONSECUTIVE_LOSS_PAUSE: "0" },
+  });
   const position = Object.values(account.positions)[0];
   position.liveLadder.wallet = `0x${"1".repeat(40)}`;
   position.liveLadder.quoteToken = `0x${"2".repeat(40)}`;

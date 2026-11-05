@@ -17,6 +17,7 @@
     "demo:shadow-lifecycle": "node scripts/narrative-shadow-lifecycle-demo.js",
     "shadow:soak": "node scripts/narrative-shadow-soak.js",
     "paper:100": "node scripts/paper-100.js",
+    "paper:sqn": "node scripts/paper-sqn-report.js",
     "test:paper-100": "node --test test/paper-100-*.test.js",
     "bot:replay": "node scripts/trade-bot.js --demo",
     "bot:status": "node scripts/trade-bot.js --status",
