@@ -24,6 +24,7 @@ import { loadPaperSession, loadEstimatedPaperSession, paperSessionLedgerFile } f
 import { loadPaperLossGuardPolicy } from '../src/paper-loss-guard.js';
 import { ESTIMATED_COST_VERSION } from '../src/paper-estimated-cost.js';
 import { createTwitterNarrativeMonitor } from '../src/twitter-narrative-monitor.js';
+import { createNarrativeLiveRuntime, readFastDevDashboard, readHotNarrativeDashboard } from '../src/narrative-live-sniper.js';
 import { createEthGasMonitor } from '../src/paper-eth-gas.js';
 import { createChainGasMonitor } from '../src/paper-chain-gas.js';
 import { createJevResearchMonitor } from '../src/jev-research-pilot.js';
@@ -185,6 +186,12 @@ export function createDashboardServer({ host = '127.0.0.1', port = 4173, market 
         try { json(response, await market.kline({ chain, address, resolution, from: now - hours * 3600, to: now })); } catch { json(response, { status: 'unavailable', source: 'gmgn-cli', reason: 'invalid_request', candles: [] }, 400); }
         return;
       }
+      if (url.pathname === '/api/fast-devs') {
+        json(response, await readFastDevDashboard(path.join(PROJECT, 'data'))); return;
+      }
+      if (url.pathname === '/api/hot-narratives') {
+        json(response, await readHotNarrativeDashboard(path.join(PROJECT, 'data'))); return;
+      }
       if (url.pathname === '/api/research-team') {
         const chain = (url.searchParams.get('chain') || 'robinhood').toLowerCase();
         const address = url.searchParams.get('address') || '';
@@ -223,7 +230,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
     researchContextLoader:()=>strategyRuntime.walletResearchContext(),researchChartLoader:query=>readonlyMarket.kline(query) });
   const socialMonitor=process.env.PAPER_GMGN_SOCIAL_MONITOR==='0'?null:createGmgnSocialMonitor({dataDir:path.join(PROJECT,'data')});
   const alphaMonitor=process.env.PAPER_ALPHA_MONITOR==='0'?null:createAlphaCatalogMonitor({dataDir:path.join(PROJECT,'data')});
-  const twitterNarrativeMonitor=createTwitterNarrativeMonitor({dataDir:path.join(PROJECT,'data')});
+  const narrativeLive=createNarrativeLiveRuntime({dataDir:path.join(PROJECT,'data')});
+  const twitterNarrativeMonitor=createTwitterNarrativeMonitor({dataDir:path.join(PROJECT,'data'),
+    onPost:post=>narrativeLive.observePost(post)});
   const chain = session?.chain || process.env.PAPER_STRATEGY_CHAIN || 'robinhood';
   const confirmedMode = process.env.PAPER_PVP_MODE !== '0' && process.env.PAPER_EXPLORATORY_ENTRIES !== '0';
   const chains = session?.chains || (process.env.PAPER_STRATEGY_CHAINS ? process.env.PAPER_STRATEGY_CHAINS.split(',').map(value => value.trim()) : [chain, ...GMGN_CHAINS.filter(value => value !== chain)]);
@@ -268,6 +277,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
     try { await learner.start(); } catch { console.error('钱包学习启动失败，原模拟引擎继续运行；请检查学习账本及锁'); }
   }).catch(error => { console.error(`dashboard failed: ${error.message}`); process.exitCode = 1; });
   let closing = false;
-  const shutdown = async () => { if (closing) return; closing = true; await Promise.all([app.close(), strategyRuntime.stop(), learner.stop(),socialMonitor?.stop(),alphaMonitor?.stop(),twitterNarrativeMonitor.stop(),gasMonitor?.stop()]); await readonlyMarket.close(); };
+  const shutdown = async () => { if (closing) return; closing = true; await Promise.all([app.close(), strategyRuntime.stop(), learner.stop(),socialMonitor?.stop(),alphaMonitor?.stop(),twitterNarrativeMonitor.stop(),narrativeLive.stop(),gasMonitor?.stop()]); await readonlyMarket.close(); };
   process.once('SIGTERM', shutdown); process.once('SIGINT', shutdown);
 }

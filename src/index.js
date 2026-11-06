@@ -35,6 +35,7 @@ import { createUniswapMonitor } from "./uniswap-monitor.js";
 import { createXaiOfficialMonitor } from "./xai-official-monitor.js";
 import { createTelegramNewsMonitor } from "./telegram-news-monitor.js";
 import { createNarrativeSniperRuntime } from "./narrative-sniper-runtime.js";
+import { createNarrativeLiveRuntime } from "./narrative-live-sniper.js";
 import { createNarrativeSourceAdapter } from "./narrative-source-adapter.js";
 import { createProductionNarrativeShadowQuoteProvider } from "./narrative-shadow-quote-runtime.js";
 import { isMonitoringSourceEnabled, isThreePlatformScope } from "./source-controls.js";
@@ -164,6 +165,7 @@ let uniswapMonitor;
 let xaiOfficialMonitor;
 let telegramNewsMonitor;
 let narrativeSniperRuntime;
+let narrativeLiveRuntime;
 let narrativeEvidenceRpcProvider;
 let alertOutboxWorker;
 const PONS_V1_TOKEN_LAUNCHED_TOPIC = "0xdb51ea9ad51ab453a65a4cb7e60c3cb378c9501bb002609f8f97778fb6c4235a";
@@ -272,6 +274,14 @@ async function deliverAlert(runtimeConfig, event) {
   // delivery failures and historical outbox size must not hide fresh CA proof.
   try { await recordPaperLaunchEvidence(event); }
   catch { console.error('[paper-launch-evidence] canonical projection write failed; notification continues'); }
+  try {
+    narrativeLiveRuntime ||= createNarrativeLiveRuntime({ dataDir: config.dataDir });
+    void narrativeLiveRuntime.observeEvent(event).catch((error) => {
+      console.error(`[narrative-live] ${error?.message || error}`);
+    });
+  } catch (error) {
+    console.error(`[narrative-live] ${error?.message || error}`);
+  }
   if (narrativeSniperRuntime?.enabled === true) {
     return narrativeSniperRuntime.sendAlert(runtimeConfig, event);
   }
@@ -863,6 +873,7 @@ function createdMonitorEntries() {
   return [
     ["alert-outbox", alertOutboxWorker],
     ["narrative-sniper", narrativeSniperRuntime],
+    ["narrative-live", narrativeLiveRuntime],
     ["github", githubMonitor],
     ["site", siteMonitor],
     ["early-activity", earlyActivityMonitor],

@@ -14,7 +14,7 @@
     <div class="app-shell">
       <header class="topbar">
         <div class="brand-lockup"><div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div><div><div class="brand-name">yesp atm</div><div class="brand-caption">决策大脑 · 自动模拟交易</div></div></div>
-        <nav class="brain-nav" aria-label="工作台导航"><a href="#brainDesk">决策大脑</a><a href="#mainPositions">持仓</a><a href="#recentTrades">成交</a><a href="#researchArchive">研究档案</a></nav>
+        <nav class="brain-nav" aria-label="工作台导航"><a href="#brainDesk">决策大脑</a><a href="#mainPositions">持仓</a><a href="#recentTrades">成交</a><a href="#fastDevRegistry">快开发</a><a href="#researchArchive">研究档案</a></nav>
         <div class="topbar-controls"><span class="chain-label" id="chainLabel">多链模拟</span><div class="data-status" id="streamStatus"><span class="status-dot"></span><span id="streamLabel">策略引擎同步中</span></div><time id="clock">--:--:--</time><a class="settings-link" href="#squareSettings">广场设置</a></div>
       </header>
       <main class="focus-shell" aria-label="自动模拟交易工作台">
@@ -53,6 +53,7 @@
         </details>
         <section id="recentTrades" class="trades-section" aria-label="模拟交易记录"><div class="section-heading"><h2>最近成交</h2><span id="tradeCount">等待同步</span></div><div class="trades-scroll"><table><thead><tr><th>代币 / 时间</th><th>方向 / 策略</th><th>总支出或净回款 / 成本</th><th>已实现净盈亏</th><th>成交原因</th></tr></thead><tbody id="tradeRows"><tr><td colspan="5" class="trade-empty">等待成交记录</td></tr></tbody></table></div><p class="section-note">显示最近 10 笔模拟成交。买入显示含成本总支出，卖出显示扣成本净回款；成本为模型估算，成交记录保存在服务端。</p></section>
         <details class="research-panel" id="researchPanel"><summary class="section-heading"><h2>AI 投研团队 <span class="summary-caption">查看六部门依据</span></h2><span id="researchTeamStatus">展开查看</span></summary><div class="research-content"><div class="research-team-summary"><div><span>综合结论</span><strong id="researchTeamConclusion">观察</strong></div><div><span>机会分</span><strong id="researchTeamScore">—</strong></div><div><span>置信度</span><strong id="researchTeamConfidence">—</strong></div><div><span>数据时间</span><strong id="researchTeamUpdated">—</strong></div></div><div class="research-departments" id="researchTeamDepartments"></div><p class="research-team-brief" id="researchTeamBrief">投研依据随真实证据更新。</p></div></details>
+        <details class="research-panel" id="fastDevRegistry"><summary class="section-heading"><h2>热点与快开发钱包 <span class="summary-caption">本机记录 · 页面不下单</span></h2></summary><div class="research-content" id="fastDevRegistryBody"><p class="section-note">展开后读取本机热点和开发钱包记录。</p></div></details>
         <details class="research-panel" id="walletLearning"><summary class="section-heading"><h2>聪明钱习惯学习 <span class="summary-caption">真实记录 · 独立蒸馏对照</span></h2><span id="walletLearningStatus">等待采集</span></summary><div class="research-content" id="walletLearningContent"><p class="section-note">等待真实钱包交易记录。</p></div></details>
         <details class="research-panel square-settings" id="squareSettings">
           <summary class="section-heading"><h2>币安广场 <span class="summary-caption">本机密钥设置</span></h2><span id="squareKeyStatus">展开配置</span></summary>
@@ -81,6 +82,7 @@
       <footer class="bottom-status"><span>统一模拟账本 <strong id="paperStateLabel">待同步</strong></span><span>仅模拟盘 · 不连接钱包 · 不签名 · 不广播</span><span>yesp atm</span></footer>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/fast-devs.js"></script>
     <script type="module" src="/app.js"></script>
     <script type="module" src="/paper-diagnostic.js"></script>
     <script type="module" src="/square-settings.js"></script>
