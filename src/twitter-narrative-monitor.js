@@ -40,7 +40,7 @@ async function boundedJson(response) {
   return JSON.parse(Buffer.concat(parts).toString('utf8'));
 }
 export function createTwitterNarrativeMonitor({dataDir,fetchImpl=fetch,sourceReader=readNarrativeLearningSource,now=Date.now,
-  targets=TWITTER_NARRATIVE_TARGETS}={}) {
+  targets=TWITTER_NARRATIVE_TARGETS,onPost=null}={}) {
   if(!Array.isArray(targets)||!targets.length||targets.some(t=>!TWITTER_NARRATIVE_TARGETS.some(v=>v.id===t.id&&v.handle===t.handle))
     ||new Set(targets.map(t=>t.id)).size!==targets.length)throw new TypeError('Unknown narrative target identity');
   const file=path.join(dataDir,'twitter-narrative-state.json');
@@ -97,7 +97,8 @@ export function createTwitterNarrativeMonitor({dataDir,fetchImpl=fetch,sourceRea
         const p={id:tweet.id,userId:target.id,author:result.author,url:result.url,text:result.text,
           at:result.at,observedAt:result.observedAt,verifiedBy:result.sourceVerifiedBy,
           isReply:tweet.isReply===true,isQuote:tweet.isQuote===true,simulationOnly:true};
-        if(validPost(p,now())){posts.push(p);verified++;delete verificationBackoff[retryKey];}else failed++;
+        if(validPost(p,now())){posts.push(p);verified++;delete verificationBackoff[retryKey];
+          if(typeof onPost==='function'){try{await onPost(p);}catch{/* hotspot history must not fail source verification */}}}else failed++;
       }
       const unresolved=pending.length-verified;
       health[target.handle]={status:unresolved?'partial':'ok',checkedAt,lastSuccessAt:now(),verified,

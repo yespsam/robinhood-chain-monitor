@@ -363,6 +363,21 @@ test('repair maintenance exposes an explicit 409 when order-level accounting is 
   assert.equal((await(await fetch(`${base}/api/strategy-state`)).json()).enabled,false);
 });
 
+test('fast-dev and hotspot routes are read-only local records', async t => {
+  const app = createDashboardServer({ port: 0 });
+  const address = await app.listen();
+  t.after(() => app.close());
+  const base = `http://${address.address}:${address.port}`;
+  const devs = await (await fetch(`${base}/api/fast-devs`)).json();
+  const hot = await (await fetch(`${base}/api/hot-narratives`)).json();
+  assert.equal(devs.execution, false);
+  assert.equal(devs.signing, false);
+  assert.equal(Array.isArray(devs.ranked), true);
+  assert.equal(hot.execution, false);
+  assert.equal(Array.isArray(hot.hotspots), true);
+  assert.equal((await fetch(`${base}/api/fast-devs`, { method: 'POST' })).status, 405);
+});
+
 test('retained original main is a separate read-only view, never a second writer',async t=>{
   const main={mode:'paper',enabled:false,account:{cash:34.75}},estimated={mode:'paper',enabled:true,account:{cash:100}};
   const app=createDashboardServer({port:0,strategyRuntime:{snapshot:()=>estimated},mainPaperSnapshot:async()=>main});
