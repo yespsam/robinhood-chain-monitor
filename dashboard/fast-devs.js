@@ -56,7 +56,7 @@ async function render() {
       ));
     }
     const rugs = Array.isArray(devs?.rugs) ? devs.rugs : [];
-    if (rugs.length) nodes.push(line(`已标记跑路钱包 ${rugs.length} 个。开启 NARRATIVE_LIVE_BLOCK_RUG_DEVS 后会拒绝它们。`));
+    if (rugs.length) nodes.push(line(`已标记跑路钱包 ${rugs.length} 个。NARRATIVE_LIVE_BLOCK_RUG_DEVS=true 时沿用同一 LIVE 闸门拒绝它们。`));
     const hotspots = Array.isArray(hot?.hotspots) ? hot.hotspots : [];
     nodes.push(line(hotspots.length ? `最近热点 ${hotspots.length} 条。` : "还没有热点记录。"));
     for (const hotspot of hotspots.slice(0, 8)) {
@@ -64,7 +64,7 @@ async function render() {
       const matches = (hotspot.matches || []).map((match) => `${match.symbol || match.name || match.address} +${match.lagSeconds}s`).join("，") || "尚无代币";
       nodes.push(line(`${hotspot.priority ? "优先 " : ""}${hotspot.author} · ${when(hotspot.publishedAt)} · ${keywords} · ${matches}`));
     }
-    nodes.push(line("买入只在监控进程里、并且 NARRATIVE_LIVE_ENABLED=true 时发生。这个页面只展示记录。"));
+    nodes.push(line("买入走现有 LIVE 闸门和固定 10 U，不在这个页面下单。"));
     body.replaceChildren(...nodes);
   } catch {
     body.replaceChildren(line("本机热点记录暂不可用。"));

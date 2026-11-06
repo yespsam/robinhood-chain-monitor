@@ -1,17 +1,20 @@
-// Live buys for a token that launches inside a fresh narrative hotspot.
-// Default off. This lane does not wait for a paper position. It still uses
-// the consecutive-loss pause, the 0.8 / 1.4 live ladder, honeypot and tax
-// checks, and a per-token dedupe. Decisions append to live-decisions.jsonl.
+// Hotspot match is another LIVE entry signal. It does not wait for a paper
+// position in that token, and it does not have its own enable switch, ticket
+// size, or daily cap. Authorization is checkGates (daily-loss guard,
+// consecutive-loss pause, paper SQN). Size is the shared fixed 10 U ticket.
+// The stop is the shared 0.8 / 1.4 ladder. Decisions append to live-decisions.jsonl.
 import fs from "node:fs/promises";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { isTradeBotRawAmount } from "./trade-bot-protocol.js";
 import { paperTaxScreen } from "./paper-safety-policy.js";
-import { consecutiveLossPauseDecision } from "./live-entry-gates.js";
+import { PAPER_FIXED_ENTRY_USD, paperPositionSize } from "./paper-position-sizing.js";
+import { checkGates } from "./live-entry-gates.js";
 import { createLiveLadder } from "./live-ladder-breakeven.js";
 import { buildGmgnStopReplacePlan, chainStopFeeArgs, createGmgnCliStopClient, gmgnAmendEnabled, runGmgnStopAmend } from "./gmgn-stop-amend.js";
 import { createHotNarrativeStore } from "./hot-narrative-record.js";
 import { createFastDevStore, fastDevSignal, isRugDev, listRugDevs, normalizeDevWallet, rankFastDevs, recordFastDevLaunch } from "./fast-dev-registry.js";
+import { resolvePaperLedgerPath } from "./paper-sqn.js";
 
 export const NARRATIVE_LIVE_DECISION_FILE = "live-decisions.jsonl";
 export const NARRATIVE_LIVE_DEFAULT_QUOTES = Object.freeze({
@@ -21,6 +24,7 @@ export const NARRATIVE_LIVE_DEFAULT_QUOTES = Object.freeze({
 
 const EVM = /^0x[0-9a-fA-F]{40}$/;
 const SOL = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const BUY_SLIPPAGE_PERCENT = 1;
 const LAUNCH_TYPES = new Set([
   "bsc_launchpad_update",
   "flap_pool_launch",
@@ -38,13 +42,6 @@ function offFlag(raw) {
   return ["0", "false", "off", "no"].includes(String(raw ?? "").trim().toLowerCase());
 }
 
-function readNumber(raw, fallback, max) {
-  if (raw === undefined || raw === null || raw === "") return fallback;
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value <= 0 || value > max) return null;
-  return value;
-}
-
 function readInt(raw, fallback, max, min = 1) {
   if (raw === undefined || raw === null || raw === "") return fallback;
   const value = Number(raw);
@@ -55,18 +52,42 @@ function readInt(raw, fallback, max, min = 1) {
 export function narrativeLiveConfig(env = process.env) {
   const priorityRaw = env?.NARRATIVE_LIVE_PRIORITY_ONLY;
   return {
-    enabled: onFlag(env?.NARRATIVE_LIVE_ENABLED),
-    sizeUsd: readNumber(env?.NARRATIVE_LIVE_SIZE_USD, 5, 50),
-    dailyCount: readInt(env?.NARRATIVE_LIVE_DAILY_COUNT, 3, 100),
-    dailyBudgetUsd: readNumber(env?.NARRATIVE_LIVE_DAILY_BUDGET_USD, 15, 200),
+    sizeUsd: PAPER_FIXED_ENTRY_USD,
     windowMs: readInt(env?.NARRATIVE_LIVE_WINDOW_MS, 600_000, 86_400_000),
     priorityOnly: priorityRaw === undefined || priorityRaw === null || priorityRaw === "" ? true : !offFlag(priorityRaw),
-    slippagePercent: readInt(env?.NARRATIVE_LIVE_SLIPPAGE_PERCENT, 10, 20),
     requireFastDev: onFlag(env?.NARRATIVE_LIVE_REQUIRE_FAST_DEV),
     blockRugDevs: onFlag(env?.NARRATIVE_LIVE_BLOCK_RUG_DEVS),
     fastDevMinLaunches: readInt(env?.NARRATIVE_FAST_DEV_MIN_LAUNCHES, 2, 100),
     fastDevMaxMedianSeconds: readInt(env?.NARRATIVE_FAST_DEV_MAX_MEDIAN_SECONDS, 180, 3_600),
   };
+}
+
+function dayStartMs(nowMs) {
+  return Math.floor(nowMs / 86_400_000) * 86_400_000;
+}
+
+// Same 10% daily / round / cash stop the paper engine feeds to checkGates.
+export function sharedDailyLoss(account, nowMs) {
+  if (!account || typeof account !== "object") return { allow: true, reason: null };
+  const initial = Number(account.initialCash);
+  if (!(initial > 0)) return { allow: true, reason: null };
+  const dailyRealizedPnl = (Array.isArray(account.trades) ? account.trades : [])
+    .filter((trade) => trade?.atMs >= dayStartMs(nowMs) && trade.atMs <= nowMs)
+    .reduce((sum, trade) => sum + (Number(trade.realizedPnl) || 0), 0);
+  const tripped = dailyRealizedPnl <= -initial * 0.1
+    || Number(account.realizedPnl) <= -initial * 0.1
+    || Number(account.cash) <= initial * 0.1;
+  if (!tripped) return { allow: true, reason: null };
+  return { allow: false, reason: "UTC 当日或累计亏损保护已触发，拒绝 LIVE 新开仓" };
+}
+
+function sharedTicket(account, token, sizeUsd) {
+  const cash = Number(account?.cash);
+  const liquidity = Number(token?.liquidity);
+  if (!Number.isFinite(cash) || !Number.isFinite(liquidity)) return { sizeUsd, sizing: null };
+  const sizing = paperPositionSize({ cash, liquidity, baseEntryUsd: 4, fixedEntryUsd: sizeUsd });
+  if (!sizing || !(sizing.budgetUsd > 0)) return { sizeUsd: 0, sizing };
+  return { sizeUsd: sizing.budgetUsd, sizing };
 }
 
 export function narrativeTokenKey(chain, address) {
@@ -78,11 +99,6 @@ export function narrativeTokenKey(chain, address) {
 function addressOk(chain, value) {
   if (chain === "sol") return SOL.test(String(value || ""));
   return EVM.test(String(value || ""));
-}
-
-function utcDay(ms) {
-  if (!Number.isFinite(ms)) return null;
-  return new Date(ms).toISOString().slice(0, 10);
 }
 
 export function usdToRawAmount(sizeUsd, quoteUsd, decimals) {
@@ -135,6 +151,41 @@ function latestBuyByToken(priorBuys = []) {
   return [...byToken.values()];
 }
 
+function paperLiveClosedTrades(account) {
+  const open = new Map();
+  const closed = [];
+  for (const trade of account?.trades || []) {
+    if (!trade || typeof trade !== "object") continue;
+    const key = `${trade.chain}:${trade.address}`;
+    if (trade.side === "buy") {
+      open.set(key, { pnl: 0, left: Number(trade.quantity), quantity: Number(trade.quantity), entry: trade });
+    } else {
+      const lot = open.get(key);
+      if (!lot) continue;
+      lot.pnl += Number(trade.realizedPnl) || 0;
+      lot.left -= Number(trade.quantity) || 0;
+      if (lot.left <= lot.quantity * 1e-9) {
+        if (lot.entry?.entryEvidence?.liveEntryGate?.allow === true) closed.push({ realizedPnl: lot.pnl, closedAtMs: trade.atMs });
+        open.delete(key);
+      }
+    }
+  }
+  return closed;
+}
+
+async function loadPaperBook(dataDir, fsImpl) {
+  try {
+    const ledgerPath = await resolvePaperLedgerPath({ dataDir });
+    if (!ledgerPath) return { account: null, enabled: true };
+    const doc = JSON.parse(await fsImpl.readFile(ledgerPath, "utf8"));
+    const account = doc?.account && typeof doc.account === "object" ? doc.account : null;
+    const enabled = typeof doc?.enabled === "boolean" ? doc.enabled : true;
+    return { account, enabled };
+  } catch {
+    return { account: null, enabled: true };
+  }
+}
+
 export function narrativeLiveClosedTrades(decisions = []) {
   return decisions.filter((row) => row?.kind === "narrative_live_close" && (Number.isFinite(Number(row.realizedPnl)) || Number.isFinite(Number(row.pnl))))
     .map((row) => ({
@@ -144,8 +195,8 @@ export function narrativeLiveClosedTrades(decisions = []) {
 }
 
 function quoteTokenFor(chain, token, env) {
-  const override = chain === "sol" ? env?.NARRATIVE_LIVE_SOL_QUOTE_TOKEN : env?.NARRATIVE_LIVE_BSC_QUOTE_TOKEN;
-  const candidate = token?.quoteToken || (override ? String(override).trim() : "") || NARRATIVE_LIVE_DEFAULT_QUOTES[chain];
+  const shared = typeof env?.LIVE_GMGN_QUOTE_TOKEN === "string" ? env.LIVE_GMGN_QUOTE_TOKEN.trim() : "";
+  const candidate = token?.quoteToken || (addressOk(chain, shared) ? shared : "") || NARRATIVE_LIVE_DEFAULT_QUOTES[chain];
   return addressOk(chain, candidate) ? (chain === "sol" ? candidate : candidate.toLowerCase()) : null;
 }
 
@@ -202,15 +253,30 @@ function refuse(base, gate, reason) {
   return { allow: false, gate, reason, plan: null, decision: { ...base, kind: "narrative_live_refused", ok: false, submitted: false, gate, reason } };
 }
 
+function positionOpen(account, chain, address) {
+  const positions = account?.positions;
+  if (!positions || typeof positions !== "object") return false;
+  const key = narrativeTokenKey(chain, address);
+  return Object.values(positions).some((position) => narrativeTokenKey(position?.chain, position?.address) === key);
+}
+
 export function evaluateNarrativeLiveEntry({
   hotspot, token = {}, matchedKeywords = [], nowMs = Date.now(), env = process.env,
-  priorBuys = [], closedTrades = [], dev = null,
+  priorBuys = [], closedTrades = [], dev = null, account = null, enabled = true, trades = null,
 } = {}) {
   const config = narrativeLiveConfig(env);
   const chain = String(token.chain || "").toLowerCase();
   const address = chain === "sol" ? String(token.address || "").trim() : String(token.address || "").trim().toLowerCase();
   const lagMs = Number(token.launchedAt) - Number(hotspot?.publishedAt);
   const wallet = typeof env?.LIVE_GMGN_WALLET === "string" ? env.LIVE_GMGN_WALLET.trim() : "";
+  const book = account && typeof account === "object" ? account : null;
+  const ticket = sharedTicket(book, token, config.sizeUsd);
+  const sessionTrades = book?.trades ?? trades;
+  const sessionPresent = book != null || trades != null;
+  const liveGate = checkGates({
+    closedTrades, trades: sessionTrades, sessionPresent, nowMs, env,
+    dailyLoss: sharedDailyLoss(book, nowMs),
+  });
   const base = {
     atMs: nowMs,
     chain,
@@ -225,16 +291,16 @@ export function evaluateNarrativeLiveEntry({
     keywords: matchedKeywords,
     lagSeconds: Number.isFinite(lagMs) ? Math.max(0, Math.round(lagMs / 1000)) : null,
     creator: token.creator || null,
-    sizeUsd: config.sizeUsd,
+    sizeUsd: ticket.sizeUsd || config.sizeUsd,
     windowMs: config.windowMs,
+    signal: "hot_narrative",
     fastDev: dev?.knownFast === true ? {
       wallet: dev.wallet, rank: dev.rank, count: dev.count, medianLagSeconds: dev.medianLagSeconds,
     } : null,
     rugDev: dev?.rug === true,
   };
-  if (!config.enabled) return refuse(base, "disabled", "NARRATIVE_LIVE_ENABLED 未打开，只记录不买入");
-  if ([config.sizeUsd, config.dailyCount, config.dailyBudgetUsd, config.windowMs, config.slippagePercent, config.fastDevMinLaunches, config.fastDevMaxMedianSeconds].some((value) => value == null)) {
-    return refuse(base, "config", "叙事 LIVE 配置超出允许范围");
+  if ([config.windowMs, config.fastDevMinLaunches, config.fastDevMaxMedianSeconds].some((value) => value == null)) {
+    return refuse(base, "config", "热点窗口或快开发阈值超出允许范围");
   }
   if (config.priorityOnly && hotspot?.priority !== true) return refuse(base, "priority_source", "当前只允许何一引用或 CZ 短回复触发 LIVE");
   if (!matchedKeywords.length) return refuse(base, "match", "代币名称未命中热点关键词");
@@ -248,27 +314,22 @@ export function evaluateNarrativeLiveEntry({
   if (!security.allow) return refuse(base, security.gate, security.reason);
   if (config.blockRugDevs && dev?.rug === true) return refuse(base, "rug_dev", "创建者在已知跑路开发钱包名单中");
   const buys = latestBuyByToken(priorBuys);
-  if (buys.some((row) => narrativeTokenKey(row.chain, row.address) === narrativeTokenKey(chain, address))) {
-    return refuse(base, "dedupe", "同一代币已有 LIVE 买入，拒绝重复下单");
+  if (buys.some((row) => narrativeTokenKey(row.chain, row.address) === narrativeTokenKey(chain, address)) || positionOpen(book, chain, address)) {
+    return refuse(base, "dedupe", "同一代币已有 LIVE 买入或持仓，拒绝重复下单");
   }
-  const today = buys.filter((row) => row.ok === true && utcDay(row.atMs) === utcDay(nowMs));
-  if (today.length >= config.dailyCount) return refuse(base, "daily_count", `已达当日叙事 LIVE 笔数上限 ${config.dailyCount}`);
-  const spent = today.reduce((sum, row) => sum + (Number(row.sizeUsd) || 0), 0);
-  if (spent + config.sizeUsd > config.dailyBudgetUsd) {
-    return refuse(base, "daily_budget", `当日叙事 LIVE 预算 ${config.dailyBudgetUsd} U 不足（已用 ${spent} U）`);
-  }
-  const consecutive = consecutiveLossPauseDecision({ closedTrades, nowMs, env });
-  if (!consecutive.allow) return refuse(base, consecutive.gate, consecutive.reason);
+  if (enabled === false) return refuse(base, "enabled", "策略引擎已暂停新开仓，热点信号不单独放行");
+  if (!liveGate.allow) return refuse(base, liveGate.gate, liveGate.reason);
+  if (!(ticket.sizeUsd > 0)) return refuse(base, "sizing", "余额或流动性额度不够固定 10 U，沿用现有仓位规则拒绝开仓");
   if (config.requireFastDev && dev?.knownFast !== true) return refuse(base, "fast_dev", "未由已知快开发钱包发射");
   if (chain !== "bsc" && chain !== "sol") return refuse(base, "unsupported_chain", "叙事 LIVE 目前只下 BSC 与 SOL");
   if (!addressOk(chain, address)) return refuse(base, "token", "代币地址无效");
   const quoteToken = quoteTokenFor(chain, token, env);
   if (!quoteToken) return refuse(base, "quote", "缺少可用的报价代币");
   if (!addressOk(chain, wallet)) return refuse(base, "wallet", "缺少 LIVE_GMGN_WALLET");
-  const amountRaw = amountFor(token, chain, config.sizeUsd);
+  const amountRaw = amountFor(token, chain, ticket.sizeUsd);
   if (!amountRaw) return refuse(base, "amount", "无法把下单金额换算成报价代币数量");
   const plan = buildNarrativeGmgnBuyPlan({
-    chain, wallet, inputToken: quoteToken, outputToken: address, amountRaw, slippagePercent: config.slippagePercent, env,
+    chain, wallet, inputToken: quoteToken, outputToken: address, amountRaw, slippagePercent: BUY_SLIPPAGE_PERCENT, env,
   });
   if (plan.errors.length) return refuse(base, "plan", plan.errors[0]);
   const entryPrice = Number(token.entryPrice ?? token.price);
@@ -282,12 +343,15 @@ export function evaluateNarrativeLiveEntry({
     submitted: false,
     gate: null,
     reason: null,
+    sizeUsd: ticket.sizeUsd,
     quoteToken,
     amountRaw,
     wallet,
-    slippagePercent: config.slippagePercent,
+    slippagePercent: BUY_SLIPPAGE_PERCENT,
     liveLadder,
-    consecutiveLosses: consecutive.streak,
+    consecutiveLosses: liveGate.consecutive?.streak ?? null,
+    paperClosed: liveGate.promotion?.closed ?? null,
+    paperSqn: liveGate.promotion?.sqn ?? null,
   };
   return { allow: true, gate: null, reason: null, plan, decision };
 }
@@ -311,9 +375,6 @@ function parseBuy(result) {
 export function createNarrativeGmgnBuyClient({ env = process.env, execFile = execFileSync } = {}) {
   return {
     run(args) {
-      if (!narrativeLiveConfig(env).enabled) {
-        return { exitCode: 1, stdout: JSON.stringify({ code: 1, error: "narrative_live_disabled" }), stderr: "" };
-      }
       const bin = env.GMGN_CLI_PATH || "gmgn-cli";
       try {
         const stdout = execFile(bin, args, { encoding: "utf8", timeout: 20_000, env, stdio: ["ignore", "pipe", "pipe"], shell: false });
@@ -488,11 +549,14 @@ export function createNarrativeLiveRuntime({
     }
     const decisions = await readLiveDecisions(decisionFile, fsImpl);
     const registry = await devs.load();
+    const book = await loadPaperBook(dataDir, fsImpl);
     const verdict = evaluateNarrativeLiveEntry({
       hotspot, token, matchedKeywords, nowMs: now(), env,
       priorBuys: decisions.filter((row) => row.kind === "narrative_live_buy"),
-      closedTrades: narrativeLiveClosedTrades(decisions),
+      closedTrades: [...paperLiveClosedTrades(book.account), ...narrativeLiveClosedTrades(decisions)],
       dev: devView(registry, token, config, env),
+      account: book.account,
+      enabled: book.enabled,
     });
     if (!verdict.allow) {
       await appendDecision(decisionFile, verdict.decision, fsImpl);

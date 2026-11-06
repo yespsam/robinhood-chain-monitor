@@ -27,9 +27,10 @@ const T0 = Date.parse("2026-11-06T09:00:00Z");
 
 function liveEnv(extra = {}) {
   return {
-    NARRATIVE_LIVE_ENABLED: "true",
     LIVE_GMGN_WALLET: WALLET,
     LIVE_CONSECUTIVE_LOSS_PAUSE: "0",
+    LIVE_REQUIRE_PAPER_SQN: "0",
+    LIVE_REQUIRE_PAPER_CLOSED: "0",
     NARRATIVE_LIVE_PRIORITY_ONLY: "true",
     LIVE_GMGN_STOP_AMEND: "false",
     ...extra,
@@ -85,6 +86,9 @@ function decide(extra = {}, env = liveEnv(), nowMs = T0 + 30_000) {
     priorBuys: extra.priorBuys || [],
     closedTrades: extra.closedTrades || [],
     dev: extra.dev || { knownFast: false, rug: false },
+    account: extra.account ?? null,
+    enabled: extra.enabled !== false,
+    trades: extra.trades,
   });
 }
 
@@ -103,13 +107,15 @@ test("何一 quote and a short CZ reply are priority hooks; keywords keep the pi
   assert.equal(reply.hook, "cz_reply");
   assert.equal(classifyNarrativeHook({ author: "cz_binance", isReply: true, text: "x".repeat(141) }).priority, false);
   assert.equal(classifyNarrativeHook({ author: "elonmusk", isQuote: true, text: "pill" }).hook, "watched_account");
-  assert.equal(narrativeLiveConfig({}).enabled, false);
   assert.equal(narrativeLiveConfig({}).priorityOnly, true);
-  assert.equal(narrativeLiveConfig({}).sizeUsd, 5);
-  assert.equal(narrativeLiveConfig({}).dailyCount, 3);
-  assert.equal(narrativeLiveConfig({}).dailyBudgetUsd, 15);
+  assert.equal(narrativeLiveConfig({}).sizeUsd, 10);
   assert.equal(narrativeLiveConfig({}).windowMs, 600_000);
+  assert.equal(openTicket().decision.sizeUsd, 10);
 });
+
+function openTicket() {
+  return decide();
+}
 
 test("the buy window refuses a launch before the post, a late launch, and a late read", () => {
   const open = decide();
@@ -127,23 +133,38 @@ test("the buy window refuses a launch before the post, a late launch, and a late
   assert.equal(lateRead.gate, "window");
 });
 
-test("daily count, daily budget, and token dedupe each refuse on their own", () => {
-  const buy = (address, atMs, sizeUsd = 5) => ({ kind: "narrative_live_buy", ok: true, submitted: true, chain: "bsc", address, atMs, sizeUsd });
-  const counted = decide({
-    priorBuys: [buy(TOKEN_B, T0 + 1_000), buy(`0x${"e".repeat(40)}`, T0 + 2_000), buy(`0x${"f".repeat(40)}`, T0 + 3_000)],
-  });
-  assert.equal(counted.allow, false);
-  assert.equal(counted.gate, "daily_count");
-  const budget = decide({
-    priorBuys: [buy(TOKEN_B, T0 + 1_000, 6), buy(`0x${"e".repeat(40)}`, T0 + 2_000, 6)],
-  }, liveEnv({ NARRATIVE_LIVE_DAILY_BUDGET_USD: "12", NARRATIVE_LIVE_DAILY_COUNT: "10" }));
-  assert.equal(budget.allow, false);
-  assert.equal(budget.gate, "daily_budget");
+test("shared loss guard, fixed ticket, engine pause, and token dedupe", () => {
+  const buy = (address, atMs) => ({ kind: "narrative_live_buy", ok: true, submitted: true, chain: "bsc", address, atMs, sizeUsd: 10 });
   const duplicate = decide({ priorBuys: [buy(TOKEN, T0 - 86_400_000)] });
   assert.equal(duplicate.allow, false);
   assert.equal(duplicate.gate, "dedupe");
-  const refusedOnly = decide({ priorBuys: [{ kind: "narrative_live_refused", ok: false, submitted: false, chain: "bsc", address: TOKEN, atMs: T0, sizeUsd: 5 }] });
+  const openPosition = decide({
+    account: { initialCash: 100, cash: 90, realizedPnl: 0, trades: [], positions: { bsc: { chain: "bsc", address: TOKEN } } },
+  });
+  assert.equal(openPosition.gate, "dedupe");
+  const refusedOnly = decide({ priorBuys: [{ kind: "narrative_live_refused", ok: false, submitted: false, chain: "bsc", address: TOKEN, atMs: T0, sizeUsd: 10 }] });
   assert.equal(refusedOnly.allow, true);
+  const loss = decide({
+    account: { initialCash: 100, cash: 90, realizedPnl: -10, trades: [] },
+  });
+  assert.equal(loss.allow, false);
+  assert.equal(loss.gate, "daily_loss");
+  const pausedEngine = decide({ enabled: false });
+  assert.equal(pausedEngine.gate, "enabled");
+  const tooThin = decide({
+    account: { initialCash: 100, cash: 100, realizedPnl: 0, trades: [] },
+    token: pill(T0 + 5_000, { liquidity: 1_000 }),
+  });
+  assert.equal(tooThin.gate, "sizing");
+  const promoted = evaluateNarrativeLiveEntry({
+    hotspot: hotspot(),
+    token: pill(),
+    matchedKeywords: ["colored pill"],
+    nowMs: T0 + 30_000,
+    env: { LIVE_GMGN_WALLET: WALLET, LIVE_CONSECUTIVE_LOSS_PAUSE: "0" },
+  });
+  assert.equal(promoted.allow, false);
+  assert.equal(promoted.gate, "paper_promotion");
 });
 
 test("honeypot, tax, missing security, and the consecutive-loss pause stay in front of a buy", () => {
@@ -188,19 +209,19 @@ test("fast devs rank by median lag, a single launch is not a repeat, and a rug i
   assert.equal(after[0].knownFast, true);
 });
 
-test("a disabled lane records the match and does not call GMGN", async () => {
+test("the shared promotion gate records the match and does not call GMGN", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "narrative-live-"));
   const calls = [];
   const runtime = createNarrativeLiveRuntime({
     dataDir: dir,
     now: () => T0 + 30_000,
-    env: liveEnv({ NARRATIVE_LIVE_ENABLED: "false" }),
+    env: { LIVE_GMGN_WALLET: WALLET, NARRATIVE_LIVE_PRIORITY_ONLY: "true", LIVE_GMGN_STOP_AMEND: "false" },
     buyClient: { run(args) { calls.push(args); return { exitCode: 0, stdout: "{}" }; } },
   });
   assert.equal((await runtime.observePost(heyi())).status, "recorded");
   const result = await runtime.observeLaunch(pill());
   assert.equal(result.status, "refused");
-  assert.equal(result.gate, "disabled");
+  assert.equal(result.gate, "paper_promotion");
   assert.equal(calls.length, 0);
   const rows = await readLiveDecisions(path.join(dir, "live-decisions.jsonl"));
   assert.equal(rows.at(-1).kind, "narrative_live_refused");
@@ -222,7 +243,7 @@ test("an armed buy is deduped, keeps the ladder, and ranks the dev that repeated
   const runtime = createNarrativeLiveRuntime({
     dataDir: dir,
     now: () => clock,
-    env: liveEnv({ NARRATIVE_LIVE_DAILY_COUNT: "10", NARRATIVE_LIVE_BLOCK_RUG_DEVS: "true", NARRATIVE_LIVE_RUG_WALLETS: DEV_SLOW, LIVE_GMGN_STOP_AMEND: "true" }),
+    env: liveEnv({ NARRATIVE_LIVE_BLOCK_RUG_DEVS: "true", NARRATIVE_LIVE_RUG_WALLETS: DEV_SLOW, LIVE_GMGN_STOP_AMEND: "true" }),
     buyClient: { run(args) { calls.push(args); return { exitCode: 0, stdout: JSON.stringify({ code: 0, data: { order_id: `buy-${calls.length}` } }) }; } },
     stopClient: { run(args) { stops.push(args); return { exitCode: 0, stdout: JSON.stringify({ code: 0, data: { order_id: "stop-1" } }) }; } },
   });
@@ -287,8 +308,8 @@ test("non-priority posts stay recorded but do not buy while priority-only is on"
 });
 
 test("quote USD converts to a raw GMGN amount and the plan never carries a key", () => {
-  const raw = usdToRawAmount(5, 600, 18);
-  assert.equal(raw, "8333333333333333");
+  const raw = usdToRawAmount(10, 600, 18);
+  assert.equal(raw, "16666666666666667");
   const plan = buildNarrativeGmgnBuyPlan({
     chain: "sol",
     wallet: "1".repeat(32),
