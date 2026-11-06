@@ -11,9 +11,10 @@ export const HOT_NARRATIVE_FILE = "hot-narratives.json";
 export const HOT_NARRATIVE_MATCH_FILE = "hot-narrative-matches.jsonl";
 export const HEYI_HANDLE = "heyibinance";
 export const CZ_HANDLE = "cz_binance";
-export const CZ_SHORT_REPLY_MAX_CHARS = 140;
+export const MEME_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 
 const FUNCTION_WORDS = new Set("a an the of to and or you your do does is are was were which what this that with for from on in it we our their they choose choose? just very really about into over after before".split(" "));
+const MEME_POST_MAX_CHARS = 32;
 const STATUS_URL = /^https:\/\/x\.com\/([A-Za-z0-9_]{1,15})\/status\/(\d{1,25})$/;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -21,21 +22,27 @@ function cleanText(value) {
   return String(value ?? "").normalize("NFKC").replace(/https?:\/\/\S+/gu, " ").replace(/\s+/gu, " ").trim();
 }
 
-function pushKeyword(found, text, kind) {
-  const term = String(text ?? "").normalize("NFKC").trim().toLowerCase();
-  if (term.length < 2 || term.length > 40) return;
-  if (found.some((item) => item.text === term && item.kind === kind)) return;
-  found.push({ text: term, kind });
+function contentWords(text) {
+  return cleanText(text).toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/u).filter(Boolean);
+}
+
+// A whole short post is the meme. "gm" is a ticker even though it is only two letters.
+export function memeTickers(text) {
+  const stripped = cleanText(text);
+  const words = contentWords(stripped).filter((word) => !FUNCTION_WORDS.has(word));
+  if (!stripped || stripped.length > MEME_POST_MAX_CHARS || words.length < 1 || words.length > 3) return [];
+  return words.filter((word) => word.length >= 1 && word.length <= 12);
 }
 
 export function extractHotKeywords(text) {
   const stripped = cleanText(text);
   if (!stripped || stripped.length > 4000) return [];
   const found = [];
-  for (const match of stripped.matchAll(/[#$]([A-Za-z][A-Za-z0-9]{1,15})/g)) pushKeyword(found, match[1], "phrase");
+  for (const ticker of memeTickers(stripped)) pushKeyword(found, ticker, "phrase", { meme: true });
+  for (const match of stripped.matchAll(/[#$]([A-Za-z][A-Za-z0-9]{1,15})/g)) pushKeyword(found, match[1], "phrase", { meme: true });
+  if (found.some((item) => item.meme === true)) return found.slice(0, 12);
   for (const match of stripped.matchAll(/\p{Script=Han}{2,12}/gu)) pushKeyword(found, match[0], "phrase");
-  const words = stripped.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/u).filter(Boolean);
-  const content = words.filter((word) => word.length >= 3 && !FUNCTION_WORDS.has(word));
+  const content = contentWords(stripped).filter((word) => word.length >= 3 && !FUNCTION_WORDS.has(word));
   if (content.length >= 2) {
     const phrase = content.slice(0, 4).join(" ");
     pushKeyword(found, phrase, "phrase");
@@ -51,18 +58,76 @@ export function extractHotKeywords(text) {
   return found.slice(0, 12);
 }
 
+function pushKeyword(found, text, kind, extra = {}) {
+  const term = String(text ?? "").normalize("NFKC").trim().toLowerCase();
+  if (term.length < 1 || term.length > 40) return;
+  if (found.some((item) => item.text === term && item.kind === kind)) return;
+  found.push({ text: term, kind, ...extra });
+}
+
 export function classifyNarrativeHook(post = {}) {
   const author = String(post.author || "").toLowerCase();
-  const text = String(post.text || "");
-  if (author === HEYI_HANDLE && post.isQuote === true) return { priority: true, hook: "heyi_quote" };
-  if (author === CZ_HANDLE && post.isReply === true && text.length > 0 && text.length <= CZ_SHORT_REPLY_MAX_CHARS) {
-    return { priority: true, hook: "cz_reply" };
-  }
-  if (author === HEYI_HANDLE || author === CZ_HANDLE) return { priority: false, hook: "binance_person" };
+  const quote = post.isQuote === true;
+  const reply = post.isReply === true;
+  if (author === HEYI_HANDLE) return { priority: true, hook: quote ? "heyi_quote" : reply ? "heyi_reply" : "heyi_post" };
+  if (author === CZ_HANDLE) return { priority: true, hook: quote ? "cz_quote" : reply ? "cz_reply" : "cz_post" };
   return { priority: false, hook: "watched_account" };
 }
 
-export function hotspotFromPost(post, nowMs = Date.now()) {
+function memeKeywordTexts(hotspot) {
+  return keywordList(hotspot).filter((item) => item.meme === true).map((item) => item.text);
+}
+
+function quotedBits(post) {
+  const quotedText = post?.quotedText || post?.quote?.text || "";
+  const quotedAuthor = post?.quotedAuthor || post?.quote?.author || post?.quote?.author?.screen_name || "";
+  return { quotedText: String(quotedText), quotedAuthor: String(quotedAuthor) };
+}
+
+// 何一 quoting a picture often has no ticker of her own. The tradeable meme is
+// CZ's earlier short post ("gm"), unless her quote text names a specific one.
+export function linkCzMeme(post, prior = []) {
+  if (String(post?.author || "").toLowerCase() !== HEYI_HANDLE || post?.isQuote !== true) return null;
+  const at = Number(post.at ?? post.publishedAt);
+  if (!Number.isFinite(at)) return null;
+  const { quotedText, quotedAuthor } = quotedBits(post);
+  const haystack = `${post.text || ""} ${quotedText} ${quotedAuthor}`.toLowerCase();
+  const candidates = (Array.isArray(prior) ? prior : []).filter((item) => {
+    return String(item?.author || "").toLowerCase() === CZ_HANDLE
+      && Number.isFinite(item.publishedAt)
+      && item.publishedAt < at
+      && at - item.publishedAt <= MEME_LOOKBACK_MS
+      && memeKeywordTexts(item).length > 0;
+  });
+  let best = null;
+  let bestScore = 0;
+  for (const item of candidates) {
+    let score = 0;
+    for (const keyword of memeKeywordTexts(item)) {
+      if (haystack.includes(keyword)) score += 5;
+    }
+    if (quotedAuthor.toLowerCase() === CZ_HANDLE) score += 10;
+    if (score > bestScore || (score > 0 && score === bestScore && item.publishedAt > best.publishedAt)) {
+      best = item;
+      bestScore = score;
+    }
+  }
+  const ownMeme = memeTickers(post.text).length > 0 || /[#$][A-Za-z]/u.test(String(post.text || ""));
+  if (!best && !ownMeme) {
+    best = candidates.sort((left, right) => right.publishedAt - left.publishedAt)[0] || null;
+  }
+  if (!best) return null;
+  const keyword = memeKeywordTexts(best)[0];
+  if (!keyword) return null;
+  return { hotspotId: best.id, keyword, author: CZ_HANDLE };
+}
+
+function binancePerson(author) {
+  const name = String(author || "").toLowerCase();
+  return name === HEYI_HANDLE || name === CZ_HANDLE;
+}
+
+export function hotspotFromPost(post, nowMs = Date.now(), prior = []) {
   const url = String(post?.url || "");
   const parsed = STATUS_URL.exec(url);
   if (!parsed) return null;
@@ -73,9 +138,14 @@ export function hotspotFromPost(post, nowMs = Date.now()) {
   if (!Number.isFinite(publishedAt) || !Number.isFinite(observedAt)) return null;
   if (publishedAt > observedAt || observedAt > nowMs + 60_000) return null;
   const text = cleanText(post.text).slice(0, 4000);
-  const keywords = extractHotKeywords(text);
-  if (!keywords.length) return null;
+  const captionKeywords = extractHotKeywords(text);
+  const link = linkCzMeme({ ...post, author, text, at: publishedAt }, prior);
+  const keywords = link
+    ? [{ text: link.keyword, kind: "phrase", meme: true, source: "cz_link" }]
+    : captionKeywords;
+  if (!keywords.length && !binancePerson(author)) return null;
   const hook = classifyNarrativeHook({ ...post, author, text });
+  const { quotedText, quotedAuthor } = quotedBits(post);
   const authorId = typeof post.userId === "string" ? post.userId : (typeof post.authorId === "string" ? post.authorId : null);
   return {
     id: `${author.toLowerCase()}:${parsed[2]}`,
@@ -85,6 +155,11 @@ export function hotspotFromPost(post, nowMs = Date.now()) {
     postId: parsed[2],
     text,
     keywords,
+    captionKeywords,
+    linkedHotspotId: link?.hotspotId || null,
+    linkedKeyword: link?.keyword || null,
+    quotedText: quotedText || null,
+    quotedAuthor: quotedAuthor || null,
     publishedAt,
     observedAt,
     isQuote: post.isQuote === true,
@@ -179,7 +254,7 @@ export function createHotNarrativeStore({ dataDir, fs: fsImpl = fs, now = Date.n
   async function recordPost(post) {
     await load();
     const nowMs = now();
-    const hotspot = hotspotFromPost(post, nowMs);
+    const hotspot = hotspotFromPost(post, nowMs, state.hotspots);
     if (!hotspot) return { status: "ignored", reason: "no_hotspot" };
     const existing = state.hotspots.find((item) => item.id === hotspot.id);
     if (existing) return { status: "duplicate", hotspot: existing };

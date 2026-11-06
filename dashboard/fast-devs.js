@@ -61,8 +61,9 @@ async function render() {
     nodes.push(line(hotspots.length ? `最近热点 ${hotspots.length} 条。` : "还没有热点记录。"));
     for (const hotspot of hotspots.slice(0, 8)) {
       const keywords = (hotspot.keywords || []).join(" / ") || "无关键词";
+      const link = hotspot.linkedKeyword ? ` · 连到 CZ「${hotspot.linkedKeyword}」` : "";
       const matches = (hotspot.matches || []).map((match) => `${match.symbol || match.name || match.address} +${match.lagSeconds}s`).join("，") || "尚无代币";
-      nodes.push(line(`${hotspot.priority ? "优先 " : ""}${hotspot.author} · ${when(hotspot.publishedAt)} · ${keywords} · ${matches}`));
+      nodes.push(line(`${hotspot.priority ? "优先 " : ""}${hotspot.author} · ${when(hotspot.publishedAt)} · ${keywords}${link} · ${matches}`));
     }
     nodes.push(line("买入走现有 LIVE 闸门和固定 10 U，不在这个页面下单。"));
     body.replaceChildren(...nodes);
