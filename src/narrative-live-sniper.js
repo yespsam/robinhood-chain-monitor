@@ -11,7 +11,7 @@ import { paperTaxScreen } from "./paper-safety-policy.js";
 import { PAPER_FIXED_ENTRY_USD, paperPositionSize } from "./paper-position-sizing.js";
 import { checkGates } from "./live-entry-gates.js";
 import { createLiveLadder } from "./live-ladder-breakeven.js";
-import { buildGmgnStopReplacePlan, chainStopFeeArgs, createGmgnCliStopClient, gmgnAmendEnabled, runGmgnStopAmend } from "./gmgn-stop-amend.js";
+import { buildGmgnStopReplacePlan, createGmgnCliStopClient, gmgnAmendEnabled, runGmgnStopAmend } from "./gmgn-stop-amend.js";
 import { createHotNarrativeStore } from "./hot-narrative-record.js";
 import { createFastDevStore, fastDevSignal, isRugDev, listRugDevs, normalizeDevWallet, rankFastDevs, recordFastDevLaunch } from "./fast-dev-registry.js";
 import { resolvePaperLedgerPath } from "./paper-sqn.js";
@@ -25,6 +25,13 @@ export const NARRATIVE_LIVE_DEFAULT_QUOTES = Object.freeze({
 const EVM = /^0x[0-9a-fA-F]{40}$/;
 const SOL = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const BUY_SLIPPAGE_PERCENT = 1;
+// Aggressive default so a 何一 / CZ snipe pays to land before the copy bots.
+// normal < high < turbo. BSC value is gwei. SOL values are SOL.
+export const NARRATIVE_LIVE_GAS_TIERS = Object.freeze({
+  normal: { bscGasGwei: 0.1, solPriorityFee: 0.00005, solTipFee: 0.00005, bscTipFee: null },
+  high: { bscGasGwei: 1, solPriorityFee: 0.0005, solTipFee: 0.0005, bscTipFee: 0.0005 },
+  turbo: { bscGasGwei: 5, solPriorityFee: 0.002, solTipFee: 0.002, bscTipFee: 0.002 },
+});
 const LAUNCH_TYPES = new Set([
   "bsc_launchpad_update",
   "flap_pool_launch",
@@ -59,7 +66,18 @@ export function narrativeLiveConfig(env = process.env) {
     blockRugDevs: onFlag(env?.NARRATIVE_LIVE_BLOCK_RUG_DEVS),
     fastDevMinLaunches: readInt(env?.NARRATIVE_FAST_DEV_MIN_LAUNCHES, 2, 100),
     fastDevMaxMedianSeconds: readInt(env?.NARRATIVE_FAST_DEV_MAX_MEDIAN_SECONDS, 180, 3_600),
+    gasLevel: narrativeLiveGasLevel(env),
   };
+}
+
+export function narrativeLiveGasLevel(env = process.env) {
+  const raw = String(env?.NARRATIVE_LIVE_GAS_LEVEL ?? "").trim().toLowerCase();
+  if (raw === "normal" || raw === "high" || raw === "turbo") return raw;
+  return "turbo";
+}
+
+export function narrativeLiveGasTier(env = process.env) {
+  return NARRATIVE_LIVE_GAS_TIERS[narrativeLiveGasLevel(env)];
 }
 
 function dayStartMs(nowMs) {
@@ -222,21 +240,28 @@ export function buildNarrativeGmgnBuyPlan({
   }
   if (!isTradeBotRawAmount(amountRaw)) errors.push("invalid_amount");
   if (!Number.isInteger(slippagePercent) || slippagePercent < 1 || slippagePercent > 20) errors.push("invalid_slippage");
+  const gasLevel = narrativeLiveGasLevel(env);
+  const tier = NARRATIVE_LIVE_GAS_TIERS[gasLevel];
   let feeArgs = [];
   let priorityFee = null;
   let tipFee = null;
+  let gasPrice = null;
   if (name === "sol") {
-    const fees = chainStopFeeArgs(name, env);
-    if (fees.error) errors.push(fees.error);
-    else {
-      feeArgs = fees.args;
-      priorityFee = fees.priorityFee;
-      tipFee = fees.tipFee;
+    priorityFee = String(tier.solPriorityFee);
+    tipFee = String(tier.solTipFee);
+    feeArgs = ["--priority-fee", priorityFee, "--tip-fee", tipFee];
+  } else if (name === "bsc") {
+    gasPrice = String(tier.bscGasGwei);
+    feeArgs = ["--gas-price", gasPrice];
+    if (tier.bscTipFee != null) {
+      tipFee = String(tier.bscTipFee);
+      feeArgs.push("--tip-fee", tipFee);
     }
   }
   return {
     errors,
     binary: "gmgn-cli",
+    gasLevel,
     args: [
       "swap", "--chain", name, "--from", wallet || "",
       "--input-token", inputToken || "", "--output-token", outputToken || "",
@@ -246,6 +271,7 @@ export function buildNarrativeGmgnBuyPlan({
     slippagePercent: slippagePercent ?? null,
     priorityFee,
     tipFee,
+    gasPrice,
   };
 }
 
@@ -302,7 +328,7 @@ export function evaluateNarrativeLiveEntry({
   if ([config.windowMs, config.fastDevMinLaunches, config.fastDevMaxMedianSeconds].some((value) => value == null)) {
     return refuse(base, "config", "热点窗口或快开发阈值超出允许范围");
   }
-  if (config.priorityOnly && hotspot?.priority !== true) return refuse(base, "priority_source", "当前只允许何一引用或 CZ 短回复触发 LIVE");
+  if (config.priorityOnly && hotspot?.priority !== true) return refuse(base, "priority_source", "当前只允许何一或 CZ 的帖子、引用和回复触发 LIVE");
   if (!matchedKeywords.length) return refuse(base, "match", "代币名称未命中热点关键词");
   if (!Number.isFinite(nowMs) || !Number.isFinite(Number(hotspot?.publishedAt)) || !Number.isFinite(Number(token.launchedAt))) {
     return refuse(base, "window", "热点或发射时间无效");
@@ -348,6 +374,10 @@ export function evaluateNarrativeLiveEntry({
     amountRaw,
     wallet,
     slippagePercent: BUY_SLIPPAGE_PERCENT,
+    gasLevel: plan.gasLevel,
+    gasPrice: plan.gasPrice,
+    priorityFee: plan.priorityFee,
+    tipFee: plan.tipFee,
     liveLadder,
     consecutiveLosses: liveGate.consecutive?.streak ?? null,
     paperClosed: liveGate.promotion?.closed ?? null,
@@ -679,6 +709,7 @@ export async function readHotNarrativeDashboard(dataDir) {
     url: hotspot.url,
     text: String(hotspot.text || "").slice(0, 280),
     keywords: (hotspot.keywords || []).map((item) => (typeof item === "string" ? item : item.text)),
+    linkedKeyword: hotspot.linkedKeyword || null,
     publishedAt: hotspot.publishedAt,
     hook: hotspot.hook,
     priority: hotspot.priority === true,

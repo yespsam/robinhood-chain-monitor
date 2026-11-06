@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { classifyNarrativeHook, extractHotKeywords, hotspotFromPost, tokenMatchesHotspot } from "../src/hot-narrative-record.js";
+import { classifyNarrativeHook, createHotNarrativeStore, extractHotKeywords, hotspotFromPost, linkCzMeme, tokenMatchesHotspot } from "../src/hot-narrative-record.js";
 import { markFastDevRug, rankFastDevs, recordFastDevLaunch } from "../src/fast-dev-registry.js";
 import {
   buildNarrativeGmgnBuyPlan,
@@ -105,11 +105,14 @@ test("何一 quote and a short CZ reply are priority hooks; keywords keep the pi
   const reply = classifyNarrativeHook({ author: "cz_binance", isReply: true, text: "giggle" });
   assert.equal(reply.priority, true);
   assert.equal(reply.hook, "cz_reply");
-  assert.equal(classifyNarrativeHook({ author: "cz_binance", isReply: true, text: "x".repeat(141) }).priority, false);
+  assert.equal(classifyNarrativeHook({ author: "cz_binance", isReply: true, text: "x".repeat(141) }).priority, true);
+  assert.equal(classifyNarrativeHook({ author: "cz_binance", isReply: false, isQuote: false, text: "gm" }).hook, "cz_post");
+  assert.equal(classifyNarrativeHook({ author: "heyibinance", isReply: true, text: "gm" }).hook, "heyi_reply");
   assert.equal(classifyNarrativeHook({ author: "elonmusk", isQuote: true, text: "pill" }).hook, "watched_account");
   assert.equal(narrativeLiveConfig({}).priorityOnly, true);
   assert.equal(narrativeLiveConfig({}).sizeUsd, 10);
   assert.equal(narrativeLiveConfig({}).windowMs, 600_000);
+  assert.equal(narrativeLiveConfig({}).gasLevel, "turbo");
   assert.equal(openTicket().decision.sizeUsd, 10);
 });
 
@@ -333,4 +336,103 @@ test("quote USD converts to a raw GMGN amount and the plan never carries a key",
   assert.equal(launch.chain, "bsc");
   assert.equal(launch.address, TOKEN);
   assert.equal(launch.launchedAt, T0);
+  assert.equal(plan.gasLevel, "turbo");
+  assert.equal(plan.args[plan.args.indexOf("--priority-fee") + 1], "0.002");
+  const bsc = buildNarrativeGmgnBuyPlan({
+    chain: "bsc", wallet: WALLET, inputToken: `0x${"b".repeat(40)}`, outputToken: TOKEN,
+    amountRaw: raw, slippagePercent: 1, env: {},
+  });
+  assert.equal(bsc.gasLevel, "turbo");
+  assert.equal(bsc.args[bsc.args.indexOf("--gas-price") + 1], "5");
+  assert.equal(bsc.args[bsc.args.indexOf("--tip-fee") + 1], "0.002");
+  const high = buildNarrativeGmgnBuyPlan({
+    chain: "bsc", wallet: WALLET, inputToken: `0x${"b".repeat(40)}`, outputToken: TOKEN,
+    amountRaw: raw, slippagePercent: 1, env: { NARRATIVE_LIVE_GAS_LEVEL: "high" },
+  });
+  assert.equal(high.args[high.args.indexOf("--gas-price") + 1], "1");
+});
+
+test("every 何一 and CZ post is recorded, and her pill quote links CZ's gm meme", async () => {
+  const gmWords = extractHotKeywords("gm").map((item) => item.text);
+  assert.deepEqual(gmWords, ["gm"]);
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "hot-narrative-"));
+  const store = createHotNarrativeStore({ dataDir: dir, now: () => T0 + 60_000 });
+  const cz = await store.recordPost({
+    author: "cz_binance",
+    url: "https://x.com/cz_binance/status/2118000000000000001",
+    text: "gm",
+    at: T0 - 3_600_000,
+    observedAt: T0 - 3_600_000,
+    isQuote: false,
+    isReply: false,
+  });
+  assert.equal(cz.status, "recorded");
+  assert.equal(cz.hotspot.hook, "cz_post");
+  assert.equal(cz.hotspot.priority, true);
+  assert.equal(cz.hotspot.keywords[0].text, "gm");
+  const reply = await store.recordPost({
+    author: "cz_binance",
+    url: "https://x.com/cz_binance/status/2118000000000000002",
+    text: "4",
+    at: T0 - 1_000_000,
+    observedAt: T0 - 1_000_000,
+    isQuote: false,
+    isReply: true,
+  });
+  assert.equal(reply.hotspot.hook, "cz_reply");
+  assert.equal(reply.hotspot.keywords[0].text, "4");
+  const quote = await store.recordPost({
+    author: "heyibinance",
+    url: "https://x.com/heyibinance/status/2118626855976931477",
+    text: "Which colored pill do you choose?",
+    at: T0,
+    observedAt: T0,
+    isQuote: true,
+    isReply: false,
+    quotedText: "@BillyM2k",
+    quotedAuthor: "elonmusk",
+  });
+  assert.equal(quote.hotspot.hook, "heyi_quote");
+  assert.equal(quote.hotspot.linkedKeyword, "4");
+  assert.equal(quote.hotspot.linkedHotspotId, reply.hotspot.id);
+  assert.equal(quote.hotspot.captionKeywords.some((item) => item.text === "colored pill"), true);
+  const olderOnly = linkCzMeme({
+    author: "heyibinance",
+    text: "Which colored pill do you choose?",
+    at: T0,
+    isQuote: true,
+    quotedText: "@BillyM2k",
+    quotedAuthor: "elonmusk",
+  }, [cz.hotspot]);
+  assert.equal(olderOnly.keyword, "gm");
+  const linked = hotspotFromPost({
+    author: "heyibinance",
+    url: "https://x.com/heyibinance/status/2118626855976931477",
+    text: "Which colored pill do you choose?",
+    at: T0,
+    observedAt: T0,
+    isQuote: true,
+  }, T0, [cz.hotspot]);
+  assert.deepEqual(linked.keywords.map((item) => item.text), ["gm"]);
+  assert.equal(tokenMatchesHotspot(linked, { name: "Green Morning", symbol: "GM" }).includes("gm"), true);
+  assert.equal(tokenMatchesHotspot(linked, { name: "Colored Pill", symbol: "PILL" }).length, 0);
+  const named = linkCzMeme({
+    author: "heyibinance",
+    text: "the gm one",
+    at: T0,
+    isQuote: true,
+  }, [cz.hotspot, reply.hotspot]);
+  assert.equal(named.keyword, "gm");
+  const original = await store.recordPost({
+    author: "heyibinance",
+    url: "https://x.com/heyibinance/status/2118626855976931499",
+    text: "👍",
+    at: T0 + 1_000,
+    observedAt: T0 + 1_000,
+    isQuote: false,
+    isReply: false,
+  });
+  assert.equal(original.status, "recorded");
+  assert.equal(original.hotspot.hook, "heyi_post");
+  assert.equal(original.hotspot.keywords.length, 0);
 });
