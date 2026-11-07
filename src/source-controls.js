@@ -541,6 +541,7 @@ const AI_REPOSITORY_DISCOVERY_SIGNAL = /(?:^|[^a-z0-9])(?:products?|models?|apis
 
 const FOCUS3_SCOPE = "focus3";
 const FOCUS3_IDENTITIES = new Set([
+  "hyperevm",
   "flap",
   "flapsh",
   "flapdotsh",
@@ -566,6 +567,8 @@ const FOCUS3_UNISWAP_REPOSITORIES = new Set([
 ]);
 const FOCUS3_UNISWAP_NEW_REPOSITORY = /^uniswap\/(?:(?:deploy|chain|network)[a-z0-9_.-]*|[a-z0-9_.-]*(?:launch|hook|pool|auction|bonding|factory|robinhood)[a-z0-9_.-]*|(?:uniswap[-_.]?)?ai)$/i;
 const FOCUS3_DOMAINS = new Set([
+  "hyperliquid.gitbook.io",
+  "hyperliquid.xyz",
   "flap.sh",
   "docs.flap.sh",
   "four.meme",
@@ -715,6 +718,94 @@ function parsedHttpsUrl(value) {
   } catch {
     return null;
   }
+}
+
+const HYPERLIQUID_DOC_PATHS = new Set([
+  "/hyperliquid-docs/sitemap.xml",
+  "/hyperliquid-docs/for-developers/hyperevm",
+  "/hyperliquid-docs/for-developers/hyperevm/json-rpc",
+  "/hyperliquid-docs/for-developers/hyperevm/raw-hyperevm-block-data",
+  "/hyperliquid-docs/for-developers/hyperevm/dual-block-architecture",
+  "/hyperliquid-docs/for-developers/hyperevm/interacting-with-hypercore",
+  "/hyperliquid-docs/onboarding/how-to-use-the-hyperevm",
+  "/hyperliquid-docs/builder-tools/hyperevm-tools",
+]);
+
+export function isOfficialHyperEvmDocumentUrl(value) {
+  const url = parsedHttpsUrl(value);
+  if (!url
+    || url.hostname !== "hyperliquid.gitbook.io"
+    || url.port
+    || url.search
+    || url.hash
+    || /[%\\]/.test(url.pathname)
+    || url.pathname.split("/").some((part) => part === "." || part === "..")) return false;
+  const pathname = url.pathname.replace(/\/+$/, "") || "/";
+  return HYPERLIQUID_DOC_PATHS.has(pathname)
+    || /^\/hyperliquid-docs\/for-developers\/hyperevm\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/i.test(pathname)
+    || /^\/hyperliquid-docs\/sitemap-[a-z0-9_-]+\.xml$/i.test(pathname);
+}
+
+function validHyperEvmBodyDelta(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)
+    || Object.keys(value).sort().join(",") !== "added,removed,url"
+    || !isOfficialHyperEvmDocumentUrl(value.url)) return false;
+  const validFacts = (items) => Array.isArray(items)
+    && items.length <= 4
+    && items.every((fact) => typeof fact === "string"
+      && fact.length >= 1
+      && fact.length <= 240
+      && !/[<>\u0000-\u001f\u007f]/.test(fact));
+  return validFacts(value.added) && validFacts(value.removed) && (value.added.length + value.removed.length > 0);
+}
+
+export function isOfficialHyperEvmCapabilityUpdate(source) {
+  if (!source || typeof source !== "object" || Array.isArray(source)
+    || source.type !== "platform_capability_update"
+    || source.kind !== "hyperevm_official_document_change_observed"
+    || source.platform?.id !== "hyperevm"
+    || source.platform?.name !== "HyperEVM"
+    || source.platform?.website !== "https://hyperliquid.xyz"
+    || !isOfficialHyperEvmDocumentUrl(source.source)
+    || source.url !== source.source
+    || !Array.isArray(source.sources)
+    || source.sources.length < 1
+    || source.sources.length > 8
+    || source.sources.some((url) => !isOfficialHyperEvmDocumentUrl(url))
+    || !source.sources.includes(source.source)
+    || typeof source.eventKey !== "string"
+    || !source.eventKey.startsWith("platform-capability:hyperevm:")
+    || !Number.isFinite(Date.parse(source.observedAt || ""))) return false;
+  const forbiddenClaims = ["chainId", "transactionHash", "onchainProof", "contractAddress", "deployment", "tradable", "launchpad"];
+  if (forbiddenClaims.some((key) => Object.hasOwn(source, key))) return false;
+  const changes = source.changes;
+  if (!changes || typeof changes !== "object" || Array.isArray(changes)
+    || Object.values(changes).some((items) => !Array.isArray(items))) return false;
+  const nonEmpty = Object.entries(changes).filter(([, items]) => items.length > 0);
+  const allowedChangeKeys = new Set(["documentBodyChanges", "newPages", "removedPages", "changedSources", "newContentFingerprints"]);
+  if (!nonEmpty.length || nonEmpty.some(([key]) => !allowedChangeKeys.has(key))) return false;
+  const bodyChanges = changes.documentBodyChanges || [];
+  if (bodyChanges.length > 8 || !bodyChanges.every(validHyperEvmBodyDelta)) return false;
+  if (bodyChanges.some((change) => !source.sources.includes(change.url))) return false;
+  for (const key of ["newPages", "removedPages", "changedSources"]) {
+    const values = changes[key] || [];
+    if (values.length > 12 || values.some((url) => !isOfficialHyperEvmDocumentUrl(url))) return false;
+  }
+  const fingerprints = changes.newContentFingerprints || [];
+  if (fingerprints.length > 12 || fingerprints.some((value) => {
+    if (typeof value !== "string") return true;
+    const index = value.lastIndexOf("#");
+    return index < 0
+      || !isOfficialHyperEvmDocumentUrl(value.slice(0, index))
+      || !/^[a-f0-9]{64}$/i.test(value.slice(index + 1));
+  })) return false;
+  for (const snapshot of [source.previous, source.current]) {
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return false;
+    for (const key of ["quoteTokens", "quoteConfigs", "flapPools", "contracts", "versions", "modules", "chains", "packages"]) {
+      if (Array.isArray(snapshot[key]) && snapshot[key].length) return false;
+    }
+  }
+  return bodyChanges.length > 0 || (changes.newPages || []).length > 0 || (changes.removedPages || []).length > 0;
 }
 
 function flapRecord(value) {
@@ -4601,6 +4692,22 @@ function focus3FomoCallAllowed(config, source) {
 }
 
 function focus3EventAllowed(source) {
+  const hyperEvmIdentity = [
+    source?.kind,
+    source?.platform?.id,
+    source?.platform?.name,
+    source?.platform?.website,
+    source?.platform?.docs,
+    source?.platformId,
+    source?.platformName,
+    source?.website,
+    source?.docs,
+  ].some((value) => compact(value) === "hyperevm"
+    || ["hyperliquid.gitbook.io", "hyperliquid.xyz"].includes(parsedHttpsUrl(value)?.hostname));
+  const hyperEvmSourceUrl = [source?.source, source?.url, ...(Array.isArray(source?.sources) ? source.sources : [])]
+    .some((candidate) => ["hyperliquid.gitbook.io", "hyperliquid.xyz"].includes(parsedHttpsUrl(candidate)?.hostname));
+  const claimsHyperEvm = hyperEvmIdentity || hyperEvmSourceUrl;
+  if (claimsHyperEvm) return isOfficialHyperEvmCapabilityUpdate(source);
   if (!source?.type) return isThreePlatformSource(source);
   if (FOCUS3_BLOCKED_EVENT_TYPES.has(source.type) || !isThreePlatformSource(source)) return false;
   // A recovery envelope is a privileged, finite migration lane. Its mere
@@ -4660,6 +4767,9 @@ function focus3EventAllowed(source) {
       && Number(source.modeConfirmation?.observations || 0) >= 2;
   }
   if (source.type === "platform_capability_update") {
+    if (source.platform?.id === "hyperevm" || source.kind === "hyperevm_official_document_change_observed") {
+      return isOfficialHyperEvmCapabilityUpdate(source);
+    }
     if (claimsFourRegistryUpdate(source)) return strictFourRegistryCapability;
     if (claimsFlapQuoteAssetCapability(source)) return strictFlapQuoteAsset;
     return hasFocus3CapabilityChange(source);

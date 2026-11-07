@@ -21,6 +21,7 @@ import {
   renderKolTokenLaunchLanguageLines,
 } from "./kol-token-launch-alert.js";
 import {
+  isOfficialHyperEvmCapabilityUpdate,
   isStrictBscOpenFourFirstTokenUpdate,
   isStrictFourRegistryCapabilityUpdate,
   isStrictFourRegistryCanonicalRestoration,
@@ -1064,6 +1065,9 @@ function officialSourceKind(event) {
 
 function structuredStatus(event, language = "en") {
   const zh = language === "zh";
+  if (isOfficialHyperEvmCapabilityUpdate(event)) return zh
+    ? "仅观察到官方文档正文变化，待核验；不代表已部署、已上线、发射台开放或代币可交易。"
+    : "Official documentation text changed; pending verification only—not proof of deployment, launchpad availability, or tradability.";
   if (event?.type === "platform_capability_update") {
     const deployed = list(event?.changes?.chainStageChanges).some((item) => item?.toStage === "deployed")
       || list(event?.changes?.newChains).some((item) => item?.stage === "deployed");
@@ -2076,6 +2080,9 @@ function flapAgenticFirstTokenCandidate(event) {
 
 function focusTitle(event, language = "zh") {
   const zh = language === "zh";
+  if (isOfficialHyperEvmCapabilityUpdate(event)) return zh
+    ? "HyperEVM｜官方文档变化（待核验）"
+    : "HyperEVM | Official docs change (pending verification)";
   if (isPonFunRenderEvent(event)) return `pon.fun｜${zh ? "官方更新" : "Official update"}`;
   const trackedToken = flapTrackedPoolTokenDetails(event);
   if (trackedToken) return zh
@@ -2787,6 +2794,14 @@ function uniswapGithubReleaseFocus(event, language = "zh") {
 
 function focusKey(event, changeModel, language = "zh", priority = null) {
   const zh = language === "zh";
+  if (isOfficialHyperEvmCapabilityUpdate(event)) {
+    const change = (event.changes?.documentBodyChanges || [])[0];
+    const excerpt = change?.added?.[0] || change?.removed?.[0] || "官方文档索引变化";
+    const line = [...String(excerpt)].slice(0, zh ? 84 : 42).join("");
+    return zh
+      ? `文档变化待核验（非部署/可交易证明）：${line}`
+      : `Docs change only; unverified—not proof of deployment/tradability: ${line}`;
+  }
   if (priority?.category === "binance_security_emergency") {
     const text = [event?.title, event?.signal?.headline, event?.message].filter(Boolean).join(" ");
     const actions = [
@@ -4454,6 +4469,7 @@ function usesLocalStructuredChineseFocus(event) {
 
 function usesLocalStructuredBilingualFocus(event) {
   return event?.type === "fomo_monitor_health_update"
+    || isOfficialHyperEvmCapabilityUpdate(event)
     || Boolean(flapTrackedPoolTokenDetails(event))
     || Boolean(publishedFomoCallDetails(event))
     || isPonFunRenderEvent(event)

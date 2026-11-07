@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { sendAlerts } from "./alerts.js";
 import { extractChainSupportSignals } from "./chain-support.js";
+import { isOfficialHyperEvmDocumentUrl } from "./source-controls.js";
 
 const FOUR_MEME_CONFIG_URL = "https://four.meme/meme-api/v1/public/config";
 const FOUR_MEME_NPM_URL = "https://registry.npmjs.org/@four-meme%2Ffour-meme-ai/latest";
@@ -19,6 +20,19 @@ const FLAP_QUOTE_METADATA_RETRY_MAX_MS = 15 * 60_000;
 const FLAP_QUOTE_METADATA_NOTIFICATION_VERSION = 1;
 const FLAP_QUOTE_BOARD_OBSERVED_KIND = "flap_quote_asset_board_observed";
 const FLAP_SITEMAP_URL = "https://docs.flap.sh/sitemap.xml";
+const HYPEREVM_POLL_INTERVAL_MS = 15 * 60_000;
+const HYPEREVM_RETRY_BASE_MS = 60_000;
+const HYPEREVM_RETRY_MAX_MS = 15 * 60_000;
+const HYPEREVM_DOC_URLS = [
+  "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm",
+  "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm/json-rpc",
+  "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm/raw-hyperevm-block-data",
+  "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm/dual-block-architecture",
+  "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm/interacting-with-hypercore",
+  "https://hyperliquid.gitbook.io/hyperliquid-docs/onboarding/how-to-use-the-hyperevm",
+  "https://hyperliquid.gitbook.io/hyperliquid-docs/builder-tools/hyperevm-tools",
+];
+const HYPEREVM_PAGE_PATTERN = /\/hyperliquid-docs\/(?:for-developers\/(?:hyperevm(?:\/|$)|json-rpc$|raw-hyperevm-block-data$|dual-block-architecture$|interacting-with-hypercore$)|onboarding\/how-to-use-the-hyperevm$|builder-tools\/hyperevm-tools$)/i;
 const FLAP_DOC_URLS = [
   "https://docs.flap.sh/flap/developers/deployed-contract-addresses",
   "https://docs.flap.sh/flap/developers/vault-developers/vault-and-vaultfactory-specification",
@@ -295,7 +309,47 @@ export const PLATFORM_CAPABILITY_TARGETS = [
       },
     },
   },
+  {
+    id: "hyperevm", name: "HyperEVM", website: "https://hyperliquid.xyz", twitter: null,
+    capabilitySchemaVersion: 1,
+    sources: HYPEREVM_DOC_URLS,
+    pagePattern: HYPEREVM_PAGE_PATTERN,
+  },
 ];
+
+const decodeHtmlText = (value) => String(value)
+  .replace(/&nbsp;|&#160;/gi, " ")
+  .replace(/&amp;/gi, "&")
+  .replace(/&lt;/gi, "<")
+  .replace(/&gt;/gi, ">")
+  .replace(/&quot;/gi, '"')
+  .replace(/&#39;|&apos;/gi, "'")
+  .replace(/&#(\d+);/g, (_match, code) => {
+    const point = Number(code);
+    return point <= 0x10ffff ? String.fromCodePoint(point) : " ";
+  })
+  .replace(/&#x([0-9a-f]+);/gi, (_match, code) => {
+    const point = Number.parseInt(code, 16);
+    return point <= 0x10ffff ? String.fromCodePoint(point) : " ";
+  });
+
+export function extractHyperEvmDocumentFacts(text) {
+  const visible = decodeHtmlText(String(text || "")
+    .replace(/<(script|style|svg|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<(?:p|li|h[1-6]|tr|blockquote|section|article)\b[^>]*>/gi, "\n")
+    .replace(/<\/(?:p|li|h[1-6]|tr|blockquote|section|article)>/gi, "\n")
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<[^>]+>/g, " "))
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]+/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s*\n\s*/g, "\n")
+    .trim();
+  const candidates = visible.split(/\n|(?<=[.!?。！？])\s+/u)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => line.length >= 24)
+    .map((line) => [...line].slice(0, 240).join(""));
+  return uniqueStrings(candidates).slice(0, 200);
+}
 
 export function extractPlatformCapabilities(text, pagePattern = /$a/) {
   const visible = text.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ").replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&(?:nbsp|amp|quot|#39);/g, " ");
@@ -1163,6 +1217,7 @@ async function fetchResponse(
     return {
       text: null,
       notModified: true,
+      finalUrl: typeof response.url === "string" ? response.url : null,
       etag: response.headers?.get?.("etag") || options.etag || null,
       lastModified: response.headers?.get?.("last-modified") || options.lastModified || null,
     };
@@ -1176,6 +1231,7 @@ async function fetchResponse(
   return {
     text: await response.text(),
     notModified: false,
+    finalUrl: typeof response.url === "string" ? response.url : null,
     etag: response.headers?.get?.("etag") || null,
     lastModified: response.headers?.get?.("last-modified") || null,
   };
@@ -1199,16 +1255,26 @@ export async function crawlSitemap(
   initialText,
   timeoutMs = 20_000,
   deadlineMs = Date.now() + Math.max(1_000, Number(timeoutMs) || 20_000),
+  options = {},
 ) {
   const seen = new Set();
   const pages = new Map();
   const failures = [];
+  const validateUrl = typeof options.validateUrl === "function" ? options.validateUrl : null;
   const crawl = async (url, suppliedText, depth, ancestry = []) => {
     const canonical = canonicalUrl(url);
+    if (validateUrl && !validateUrl(canonical)) throw new Error(`sitemap URL rejected by source policy: ${canonical}`);
     if (seen.has(canonical)) return;
     if (depth > 5 || seen.size >= 100) throw new Error(`sitemap recursion limit reached at ${canonical}`);
     seen.add(canonical);
-    const xml = suppliedText ?? await fetchResponseText(canonical, fetchImpl, "application/xml,text/xml", timeoutMs, deadlineMs);
+    let xml = suppliedText;
+    if (xml === undefined) {
+      const response = await fetchResponse(canonical, fetchImpl, "application/xml,text/xml", timeoutMs, deadlineMs);
+      if (validateUrl && (!validateUrl(response.finalUrl) || canonicalUrl(response.finalUrl) !== canonicalUrl(canonical))) {
+        throw new Error(`sitemap redirect rejected by source policy: ${response.finalUrl || "missing final URL"}`);
+      }
+      xml = response.text;
+    }
     if (!/<(?:sitemapindex|urlset)\b/i.test(xml)) throw new Error(`sitemap schema: ${canonical} is not a sitemap`);
     const sitemapBlocks = extractSitemapBlocks(xml, "sitemap");
     if (sitemapBlocks.length) {
@@ -1234,7 +1300,7 @@ export async function crawlSitemap(
       const location = extractXmlValue(block, "loc");
       if (!location) continue;
       const pageUrl = canonicalUrl(location);
-      if (!pagePattern.test(pageUrl) || /\.(?:md|xml)$/i.test(pageUrl)) continue;
+      if ((validateUrl && !validateUrl(pageUrl)) || !pagePattern.test(pageUrl) || /\.(?:md|xml)$/i.test(pageUrl)) continue;
       const lastmod = extractXmlValue(block, "lastmod");
       pages.set(pageUrl, {
         url: pageUrl,
@@ -1298,6 +1364,13 @@ function fourMemeOptionalWebCircuitBackoffMs(consecutiveFailures) {
 }
 
 export async function fetchPlatformSource(platform, descriptor, fetchImpl = globalThis.fetch, timeoutMs = 20_000, options = {}) {
+  const isHyperEvm = platform?.id === "hyperevm";
+  if (isHyperEvm && descriptor?.kind !== "docs") {
+    throw new Error("HyperEVM source policy accepts documentation descriptors only");
+  }
+  if (isHyperEvm && !isOfficialHyperEvmDocumentUrl(descriptor?.url)) {
+    throw new Error(`HyperEVM document URL rejected by source policy: ${descriptor?.url || "missing URL"}`);
+  }
   const deadlineMs = Date.now() + Math.max(1_000, Number(timeoutMs) || 20_000);
   const accepts = descriptor.kind === "api" || descriptor.kind === "package"
     ? "application/json"
@@ -1310,6 +1383,10 @@ export async function fetchPlatformSource(platform, descriptor, fetchImpl = glob
     allowNotModified: options.allowNotModified === true,
     currentTimeMs: options.currentTimeMs,
   });
+  if (isHyperEvm && (!isOfficialHyperEvmDocumentUrl(fetched.finalUrl)
+    || canonicalUrl(fetched.finalUrl) !== canonicalUrl(descriptor.url))) {
+    throw new Error(`HyperEVM document redirect rejected by source policy: ${fetched.finalUrl || "missing final URL"}`);
+  }
   if (fetched.notModified) {
     if (!options.priorSource?.initialized) {
       const error = new Error(`${descriptor.url} returned HTTP 304 without an initialized baseline`);
@@ -1321,14 +1398,22 @@ export async function fetchPlatformSource(platform, descriptor, fetchImpl = glob
       url: descriptor.url,
       kind: descriptor.kind,
       notModified: true,
+      finalUrl: fetched.finalUrl,
       etag: fetched.etag,
       lastModified: fetched.lastModified,
     };
   }
   const text = fetched.text;
   let capabilities;
+  let documentBodyFacts = null;
   let contentForFingerprint = normalizeFingerprintContent(text);
-  if (descriptor.parser === "fourmeme-config") {
+  if (isHyperEvm && descriptor.kind === "docs" && !/(?:sitemap\.xml(?:$|\?)|<(?:sitemapindex|urlset)\b)/i.test(`${descriptor.url}\n${text}`)) {
+    // Hyperliquid docs are watched as source text only. Do not turn prose into
+    // inferred deployments, chains, contracts, or executable trading claims.
+    documentBodyFacts = extractHyperEvmDocumentFacts(text);
+    capabilities = emptyCapabilities();
+    contentForFingerprint = stableStringify(documentBodyFacts);
+  } else if (descriptor.parser === "fourmeme-config") {
     capabilities = extractFourMemeConfigCapabilities(text, descriptor.url);
     contentForFingerprint = stableStringify(capabilities.quoteConfigs);
   } else if (descriptor.parser === "fourmeme-npm") {
@@ -1369,7 +1454,9 @@ export async function fetchPlatformSource(platform, descriptor, fetchImpl = glob
   } else if (descriptor.kind === "live") {
     capabilities = extractFourMemeLiveCapabilities(text);
   } else if (/<(?:sitemapindex|urlset)\b/i.test(text) || /sitemap\.xml(?:$|\?)/i.test(descriptor.url)) {
-    const pageMetadata = await crawlSitemap(descriptor.url, fetchImpl, platform.pagePattern, text, timeoutMs, deadlineMs);
+    const pageMetadata = await crawlSitemap(descriptor.url, fetchImpl, platform.pagePattern, text, timeoutMs, deadlineMs, isHyperEvm
+      ? { validateUrl: isOfficialHyperEvmDocumentUrl }
+      : {});
     capabilities = { ...emptyCapabilities(), pages: pageMetadata.map((item) => item.url), pageMetadata };
     contentForFingerprint = stableStringify(pageMetadata);
   } else {
@@ -1382,7 +1469,7 @@ export async function fetchPlatformSource(platform, descriptor, fetchImpl = glob
       source: chain.source || { kind: descriptor.kind, url: descriptor.url },
     }))),
   };
-  if (!["fourmeme-config", "fourmeme-npm"].includes(descriptor.parser) && !/(?:sitemap\.xml(?:$|\?)|<(?:sitemapindex|urlset)\b)/i.test(`${descriptor.url}\n${text}`)) {
+  if (!isHyperEvm && !["fourmeme-config", "fourmeme-npm"].includes(descriptor.parser) && !/(?:sitemap\.xml(?:$|\?)|<(?:sitemapindex|urlset)\b)/i.test(`${descriptor.url}\n${text}`)) {
     contentForFingerprint = stableStringify(normalizeCapabilities(capabilities));
   }
   return {
@@ -1396,6 +1483,8 @@ export async function fetchPlatformSource(platform, descriptor, fetchImpl = glob
     optionalForHealth: Boolean(descriptor.optionalForHealth),
     fingerprint: fingerprint(contentForFingerprint),
     capabilities: normalizeCapabilities(capabilities),
+    ...(documentBodyFacts ? { documentBodyFacts } : {}),
+    finalUrl: fetched.finalUrl,
     partialFailures: capabilities.pageMetadata?.failures || [],
     etag: fetched.etag,
     lastModified: fetched.lastModified,
@@ -2500,6 +2589,9 @@ function platformEventDeliverySla(platform, changes, boardCandidateState, fallba
 
 const eventSources = (changes, current) => {
   const urls = new Set(changes.changedSources || []);
+  for (const change of changes.documentBodyChanges || []) {
+    if (typeof change?.url === "string") urls.add(change.url);
+  }
   const additions = {
     quoteTokens: changes.newQuoteTokens,
     contracts: changes.newContracts,
@@ -2883,7 +2975,9 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
             failureKind: null,
             consecutiveFailures: 0,
             backoffMs: 0,
-            nextAttemptAt: null,
+            nextAttemptAt: platform.id === "hyperevm"
+              ? new Date(observedMs + HYPEREVM_POLL_INTERVAL_MS).toISOString()
+              : null,
             sourceRateLimited: false,
             retryAfterMs: 0,
             rateLimitResetAt: null,
@@ -2907,7 +3001,9 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
             ? fourMemeOptionalWebCircuitBackoffMs(consecutiveFailures)
             : [403, 429].includes(failureStatus)
               ? 15 * 60_000
-            : Math.min(transportFailure ? 60_000 : retryMaxMs, retryBaseMs * (2 ** Math.min(20, consecutiveFailures - 1)));
+            : platform.id === "hyperevm"
+              ? Math.min(HYPEREVM_RETRY_MAX_MS, HYPEREVM_RETRY_BASE_MS * (2 ** Math.min(20, consecutiveFailures - 1)))
+              : Math.min(transportFailure ? 60_000 : retryMaxMs, retryBaseMs * (2 ** Math.min(20, consecutiveFailures - 1)));
           const failureBackoffMs = Math.max(localBackoffMs, retryAfterMs);
           const rateLimitResetAt = failureStatus === 429
             ? new Date(observedMs + failureBackoffMs).toISOString()
@@ -3001,6 +3097,8 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
         }
         return persistPlatformState({ durable: durable || !previousEntry });
       };
+
+      if (!successfulKeys.length && !attemptedKeys.length && !failures.length) return state;
 
       if (!successfulKeys.length) {
         const optionalCircuitOnly = failures.length > 0
@@ -3116,6 +3214,29 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
         const finalizedChains = finalizeChainChanges(previousEntry, current, changes);
         changes = finalizedChains.changes;
         observedChains = finalizedChains.observedChains;
+      if (platform.id === "hyperevm" && previousEntry) {
+        const documentBodyChanges = [];
+        const successful = new Set(successfulKeys);
+        for (const descriptor of descriptors) {
+          if (descriptor.kind !== "docs"
+            || !successful.has(descriptor.key)
+            || /sitemap\.xml(?:$|\?)/i.test(descriptor.url)) continue;
+          const beforeSource = previousSources[descriptor.key];
+          const afterSource = nextSources[descriptor.key];
+          if (!beforeSource?.initialized
+            || !Array.isArray(beforeSource.documentBodyFacts)
+            || !Array.isArray(afterSource?.documentBodyFacts)) continue;
+          const before = new Set(beforeSource.documentBodyFacts);
+          const after = new Set(afterSource.documentBodyFacts);
+          const added = [...after].filter((fact) => !before.has(fact)).slice(0, 4);
+          const removed = [...before].filter((fact) => !after.has(fact)).slice(0, 4);
+          if (added.length || removed.length) documentBodyChanges.push({ url: descriptor.url, added, removed });
+        }
+        if (documentBodyChanges.length) {
+          changes ||= emptyChanges();
+          changes.documentBodyChanges = documentBodyChanges.slice(0, 8);
+        }
+      }
       }
 
       const nextEntry = {
@@ -3203,6 +3324,7 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
             : null;
           const event = {
             type: "platform_capability_update",
+            ...(platform.id === "hyperevm" ? { kind: "hyperevm_official_document_change_observed" } : {}),
             eventKey,
             platform,
             previous: previousEntry.capabilities,
@@ -3250,7 +3372,8 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
               ...auditBase,
               delivery: { status: delivery?.status || "delivered", eventId: delivery?.eventId || event.eventKey, baselineCommitted: false },
             });
-            if (fourMemeQuoteChild && !platformAlertDeliveryDurablyAccepted(delivery)) {
+            if ((fourMemeQuoteChild || event.platform?.id === "hyperevm")
+              && !platformAlertDeliveryDurablyAccepted(delivery)) {
               deliveryFailed = true;
               logger.error(`[platform-capability] ${platform.id} delivery was not durably accepted: ${delivery?.reason || delivery?.status || "unknown"}`);
             }
@@ -3263,7 +3386,41 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
           });
           logger.error(`[platform-capability] ${platform.id} delivery: ${result.reason?.message || result.reason}`);
         }
-        if (deliveryFailed) return state;
+        if (deliveryFailed) {
+          if (platform.id === "hyperevm" && previousEntry) {
+            const retrySourceUrls = new Set(alertRecords.flatMap(({ event }) => event.sources || []));
+            const retrySources = { ...previousSources };
+            for (const descriptor of allDescriptors) {
+              if (!retrySourceUrls.has(descriptor.url)) continue;
+              const prior = retrySources[descriptor.key];
+              if (!prior) continue;
+              const consecutiveFailures = Number(prior.deliveryFailures || 0) + 1;
+              const backoffMs = Math.min(
+                HYPEREVM_RETRY_MAX_MS,
+                HYPEREVM_RETRY_BASE_MS * (2 ** Math.min(20, consecutiveFailures - 1)),
+              );
+              retrySources[descriptor.key] = {
+                ...prior,
+                status: "degraded",
+                failureKind: "delivery",
+                deliveryFailures: consecutiveFailures,
+                lastAttemptAt: observedAt,
+                lastErrorAt: observedAt,
+                lastError: "HyperEVM document change was not durably accepted by the existing alert queue",
+                backoffMs,
+                nextAttemptAt: new Date(observedMs + backoffMs).toISOString(),
+              };
+            }
+            state.hyperevm = {
+              ...previousEntry,
+              sources: retrySources,
+              sourceHealth: sourceHealth(retrySources),
+              lastAttemptAt: observedAt,
+            };
+            await writeState(stateFile, state, fsImpl);
+          }
+          return state;
+        }
 
         const auditBase = alertRecords[0].auditBase;
         if (changes.newContracts?.length && dependencies.onContractDiscovery) {

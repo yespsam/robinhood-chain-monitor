@@ -212,6 +212,10 @@ function platformChangeModel(event) {
     ["newAnnouncements", "公告", "removedAnnouncements"],
     ["newCampaigns", "活动", "removedCampaigns"],
   ];
+  for (const change of array(changes.documentBodyChanges)) {
+    for (const fact of array(change?.added)) add.push(`官方文档正文新增（待核验）: ${oneLine(fact, 150)}`);
+    for (const fact of array(change?.removed)) remove.push(`官方文档正文移除（待核验）: ${oneLine(fact, 150)}`);
+  }
   const updatedPages = new Set(array(changes.updatedPages).map(String));
   for (const [addedKey, label, removedKey] of definitions) {
     for (const value of array(changes[addedKey])) {

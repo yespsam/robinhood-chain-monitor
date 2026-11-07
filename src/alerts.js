@@ -8,6 +8,7 @@ import {
   isFomoMonitorHealthUpdateAllowed,
   isFourMemePolicyFixRecoveryEvent,
   isOfficialFourMemeCapabilityUpdate,
+  isOfficialHyperEvmCapabilityUpdate,
   isOfficialMonitoringNews,
   isOfficialPonFunUpdate,
   isStrictBscOpenFourFirstTokenUpdate,
@@ -67,7 +68,7 @@ const SMART_WALLET_BLOCKED_TAG = /(?:^|[_-])(?:wash(?:[_-]?trader)?|arbitrager|a
 const FRESHNESS_VERSION = 1;
 const ALERT_RENDER_VERSION = BILINGUAL_RENDER_VERSION;
 const LEGACY_ALERT_RENDER_VERSION = 2;
-const FOCUS_PLATFORMS = new Set(["flap", "fourmeme"]);
+const FOCUS_PLATFORMS = new Set(["flap", "fourmeme", "hyperevm"]);
 const BINANCE_PLATFORMS = new Set(["binance", "binancewallet", "binancefutures"]);
 const PON_FUN_ALLOWED_KINDS = new Set([
   "market_created", "market_lifecycle", "factory_config", "curve_params", "stock_listing",
@@ -119,6 +120,7 @@ const STRONG_PLATFORM_CHANGE_KEYS = [
   "newCampaigns",
   "newChains",
   "chainStageChanges",
+  "documentBodyChanges",
 ];
 
 export function officialTokenDedupKey(event) {
@@ -188,7 +190,9 @@ function eventPlatform(event) {
 }
 
 export function isFocusPlatformEvent(event) {
-  return FOCUS_PLATFORMS.has(eventPlatform(event));
+  const platform = eventPlatform(event);
+  if (platform === "hyperevm") return isOfficialHyperEvmCapabilityUpdate(event);
+  return FOCUS_PLATFORMS.has(platform);
 }
 
 export function isBinancePlatformEvent(event) {
@@ -1093,6 +1097,17 @@ function platformCapabilityFacts(event) {
   const list = (key) => Array.isArray(changes[key]) ? changes[key] : [];
   const facts = [];
 
+  if (isOfficialHyperEvmCapabilityUpdate(event)) {
+    for (const change of list("documentBodyChanges")) {
+      for (const fact of (change.added || []).slice(0, 2)) facts.push(`官方文档正文新增（待核验）：${oneLine(fact, 170)}`);
+      for (const fact of (change.removed || []).slice(0, 2)) facts.push(`官方文档正文移除（待核验）：${oneLine(fact, 170)}`);
+    }
+    facts.push("仅为官方文档正文变化观察；不代表已部署、已上线、发射台已开放或代币可交易。");
+    for (const page of list("newPages").slice(0, 2)) facts.push(`官方文档索引新增页面（待核验）：${pageName(page)}`);
+    for (const page of list("removedPages").slice(0, 2)) facts.push(`官方文档索引移除页面（待核验）：${pageName(page)}`);
+    return [...new Set(facts)];
+  }
+
   // A Flap pool is a first-class platform capability, not a rotating token
   // card. Keep the complete technical addresses in the alert so translation
   // and Telegram delivery cannot make the pool identity ambiguous.
@@ -1166,6 +1181,7 @@ function platformCapabilityFacts(event) {
 }
 
 function platformCapabilityStage(event) {
+  if (isOfficialHyperEvmCapabilityUpdate(event)) return "官方文档文本变更待核验；部署、上线与可交易性均未确认";
   const changes = event.changes || {};
   const sourceText = [...(event.sources || []), event.source, event.url].filter(Boolean).join(" ").toLowerCase();
   const sourceKind = /github\.com|githubusercontent\.com/.test(sourceText)
@@ -1672,7 +1688,10 @@ const compact = (event) => {
     const facts = platformCapabilityFacts(event);
     const chainChange = Boolean(event.changes?.newChains?.length || event.changes?.chainStageChanges?.length);
     const visibleFacts = facts.slice(0, 3);
-    return compactCard(`${chainChange ? "🌐" : "🧩"} ${event.platform?.name || "发射台"} 官方能力更新`, [
+    const hyperevmDocs = isOfficialHyperEvmCapabilityUpdate(event);
+    return compactCard(hyperevmDocs
+      ? "📄 HyperEVM 官方文档变化（待核验）"
+      : `${chainChange ? "🌐" : "🧩"} ${event.platform?.name || "发射台"} 官方能力更新`, [
       `具体更新: ${visibleFacts.join("；") || "检测到来源变化，但具体内容尚未解析"}${facts.length > visibleFacts.length ? `；另有${facts.length - visibleFacts.length}项` : ""}`,
       `状态: ${platformCapabilityStage(event)}`,
       compactEventTime(event.observedAt, event.alertQueuedAt || event.observedAt),
