@@ -192,6 +192,6 @@ test('focused hot deadlines keep a bounded parallel chart batch, then resume det
     assert.ok(s.researchPipeline.hotCandidates.filter(x=>x.watchSince).length<=2);
     assert.equal(s.account.trades.length,0);assert.equal(s.execution,false);
     assert.equal(s.algorithmSignals.fullMarketTradesCovered,false);
-    assert.equal(s.researchPipeline.chartHealth.version,'chart_health_v1');
+    assert.equal(s.researchPipeline.chartHealth.version,'chart_health_v2');
   }finally{waiting.splice(0).forEach(resolve=>resolve());await r.stop();}
 });

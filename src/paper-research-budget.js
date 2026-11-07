@@ -38,6 +38,12 @@ export function chartPullBudget({ policy = { plan: 'free', normalConcurrency: 1 
 
 // At most `maxCharts` hot chart turns before an ordinary detail turn. No new
 // shared-gate concurrency or persistent work queue; a late/failed source still backs off.
+// A research-only hot quote must not collapse the chart budget. An admitted
+// candidate quote still yields, because it shares the normal read seats.
+export function quoteBlocksChartBudget(job) {
+  return job?.purpose === 'candidate' && job?.token?.researchOnly !== true;
+}
+
 export function reserveHotChartTurn({demand,nowMs,listed,due,chartsSinceDetail=0,maxCharts=2}) {
   const cap = Number.isInteger(maxCharts) && maxCharts >= 1 && maxCharts <= 12 ? maxCharts : 2;
   return chartsSinceDetail<cap && !!demand && demand.selectedAt<=nowMs

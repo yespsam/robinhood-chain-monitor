@@ -79,49 +79,91 @@ const waitMs = row => {
   return Number.isFinite(queued) && Number.isFinite(received) && received >= queued ? received - queued : null;
 };
 
-// Telemetry for the K-line stall. Rates describe the current evaluation and
-// the candles already fetched; they never loosen an entry gate.
-export function summarizeChartHealth({ evaluations = [], chartRows = [], queueRecent = [], funnels = [] } = {}) {
+const chartKey = row => row?.chartKey || (row?.chain && row?.address ? `${row.chain}:${row.address}` : null);
+const tokenKey = token => `${token.chain}:${token.address}`;
+
+// Telemetry only. Never-fetched names are not source failures, and confirmed
+// funnel.chartReady is quote confirmation, not this OHLCV count.
+export function summarizeChartHealth({ evaluations = [], chartRows = [], queueRecent = [], funnels = [], hotKeys = [], chartDispatchCount = 0 } = {}) {
+  const fetched = new Map();
+  for (const row of chartRows) {
+    const key = chartKey(row);
+    if (!key) continue;
+    const prior = fetched.get(key) || { status: null, stale: false, short: false };
+    const status = row.status || row.sourceStatus || null;
+    if (status) prior.status = status;
+    fetched.set(key, prior);
+  }
   const byToken = new Map();
   for (const row of evaluations) {
     const token = row?.token;
     if (!token?.chain || !token.address) continue;
-    const key = `${token.chain}:${token.address}`;
-    const item = byToken.get(key) || { ready: false, klineOk: false, unavailable: false, stale: false };
+    const key = tokenKey(token);
+    const item = byToken.get(key) || { ready: false, klineOk: false, unavailable: false, stale: false, short: false };
     const code = row.evidence?.opportunity?.chartWindow?.code;
     const recoveryStatus = row.evidence?.recoveryEntry?.klineStatus;
-    if (row.evidence?.chart?.ready === true) item.ready = true;
+    if (row.evidence?.chart?.ready === true || code === 'ready') item.ready = true;
     if (recoveryStatus === 'ok' || code === 'ready') item.klineOk = true;
     if (recoveryStatus === 'unavailable' || code === 'source_unavailable') item.unavailable = true;
     if (code === 'stale_closed_bars') item.stale = true;
+    if (code === 'insufficient_closed_bars' || code === 'insufficient_contiguous_tail') item.short = true;
     byToken.set(key, item);
   }
   const rows = [...byToken.values()];
   const evaluated = rows.length;
   const chartReady = rows.filter(row => row.ready).length;
   const klineOk = rows.filter(row => row.klineOk).length;
-  const sourceUnavailable = rows.filter(row => row.unavailable && !row.klineOk).length;
-  const cachedUnavailable = chartRows.filter(row => row && row.status !== 'ok' && row.sourceStatus !== 'ok').length;
+  let notRequested = 0, fetchedCount = 0, fetchedUnavailable = 0, staleClosedBars = 0, insufficientClosedBars = 0;
+  for (const [key, item] of byToken) {
+    const cache = fetched.get(key);
+    const didFetch = !!cache || item.klineOk || item.stale || item.short || (item.ready && !item.unavailable);
+    if (!didFetch) { notRequested++; continue; }
+    fetchedCount++;
+    const empty = cache ? cache.status !== 'ok' && cache.status !== null : item.unavailable && !item.klineOk && !item.stale && !item.short;
+    if (empty) fetchedUnavailable++;
+    if (item.stale) staleClosedBars++;
+    if (item.short) insufficientClosedBars++;
+  }
+  const hot = [...new Set(hotKeys.filter(key => typeof key === 'string' && key.includes(':')))];
+  const hotFetched = hot.filter(key => {
+    const item = byToken.get(key), cache = fetched.get(key);
+    return !!cache || item?.klineOk || item?.stale || item?.short || item?.ready;
+  }).length;
+  const hotChartReady = hot.filter(key => byToken.get(key)?.ready).length;
+  const hotKlineOk = hot.filter(key => byToken.get(key)?.klineOk).length;
   const waits = [...chartRows.map(waitMs), ...queueRecent.filter(row => row?.kind === 'market:kline').map(row => row.localQueueMs)]
     .filter(value => finite(value) && value >= 0);
   const queueWaitMedianMs = median(waits);
-  const chartReadyRate = ratio(chartReady, evaluated);
-  const klineOkRate = ratio(klineOk, evaluated);
-  const sourceUnavailableRatio = ratio(sourceUnavailable, evaluated);
-  const alert = evaluated >= 20 && (
-    (klineOkRate !== null && klineOkRate < 0.15)
-    || (sourceUnavailableRatio !== null && sourceUnavailableRatio >= 0.5)
-    || (queueWaitMedianMs !== null && queueWaitMedianMs >= 20000));
+  const warmup = hot.length > 0 && hotFetched < hot.length && chartDispatchCount < hot.length * 2;
+  const hotStarved = hot.length >= 3 && !warmup && hotFetched / hot.length < 0.8 && chartDispatchCount >= hot.length;
+  const fetchedBad = fetchedCount >= 8 && fetchedUnavailable / fetchedCount >= 0.5;
+  const queueBad = queueWaitMedianMs !== null && queueWaitMedianMs >= 20000;
+  const alert = hotStarved || fetchedBad || queueBad;
+  const funnelOhlcvReady = funnels.reduce((sum, funnel) => sum + (finite(funnel?.ohlcvReady) ? funnel.ohlcvReady : 0), 0);
+  const note = warmup
+    ? '热点 K 线仍在首轮拉取，未请求的广谱候选不算来源失败。确认型漏斗的 chartReady 是连续报价，不是 K 线。买卖条件未放宽。'
+    : hotStarved
+      ? '热点候选里仍有较多 CA 没有第一次 K 线请求。广谱未请求不计入来源失败。买卖条件未放宽。'
+      : fetchedBad
+        ? '已请求的 K 线里空响应偏多。过期或根数不足仍按原门槛拒绝，不补造 K 线。'
+        : queueBad
+          ? 'K 线排队中位数达到 20 秒。买卖条件未放宽。'
+          : '未请求的广谱候选单独计数。确认型漏斗 chartReady 是连续报价确认，ohlcvReady 才是 K 线结构。不代表可以开仓。';
   return {
-    version: 'chart_health_v1', alert, evaluated, chartReady, klineOk, sourceUnavailable,
-    staleClosedBars: rows.filter(row => row.stale).length,
-    chartReadyRate, klineOkRate, sourceUnavailableRatio,
+    version: 'chart_health_v2', alert, warmup, evaluated, chartReady, klineOk,
+    notRequested, notRequestedRatio: ratio(notRequested, evaluated),
+    fetched: fetchedCount, fetchedUnavailable, fetchedUnavailableRatio: ratio(fetchedUnavailable, fetchedCount),
+    sourceUnavailable: fetchedUnavailable, sourceUnavailableRatio: ratio(fetchedUnavailable, fetchedCount),
+    staleClosedBars, insufficientClosedBars,
+    hotCount: hot.length, hotFetched, hotKlineOk, hotChartReady,
+    hotChartReadyRate: ratio(hotChartReady, hot.length),
+    chartReadyRate: ratio(chartReady, evaluated), klineOkRate: ratio(klineOk, evaluated),
     funnelChartReady: funnels.reduce((sum, funnel) => sum + (finite(funnel?.chartReady) ? funnel.chartReady : 0), 0),
-    chartCacheCount: chartRows.length, cachedUnavailable,
+    funnelOhlcvReady, chartDispatchCount,
+    chartCacheCount: chartRows.length,
+    cachedUnavailable: chartRows.filter(row => row && (row.status || row.sourceStatus) && (row.status || row.sourceStatus) !== 'ok').length,
     queueWaitMedianMs, queueWaitMaxMs: waits.length ? Math.max(...waits) : null, queueSamples: waits.length,
-    note: alert
-      ? 'K 线就绪率偏低、来源不可用偏高或排队超过 20 秒。买卖条件未放宽；请看 chartHealth 与 chartDiagnostics。'
-      : '当前评估与已取得 K 线的供给统计，不代表可以开仓。',
+    note,
   };
 }
 
@@ -144,5 +186,18 @@ export function paperEntryFunnel(evaluations = []) {
     ['quoteFresh', row => row.evidence?.priceFresh === true],
     ['eligible', row => row.decision === '可模拟' && row.evidence?.paperEligible === true],
   ]) { rows = rows.filter(pass); result[name] = count(); }
+  const seen = new Set();
+  result.ohlcvReady = 0;
+  for (const row of evaluations) {
+    if (!row?.token?.chain || !row.token.address) continue;
+    const key = `${row.token.chain}:${row.token.address}`;
+    if (seen.has(key)) continue;
+    const ohlcv = row.evidence?.chart?.ready === true || row.evidence?.opportunity?.chartWindow?.code === 'ready';
+    if (!ohlcv) continue;
+    seen.add(key); result.ohlcvReady++;
+  }
+  // Confirmed mode stores quote-path confirmation in chartReady. This alias
+  // makes that explicit; ohlcvReady is the candle structure count.
+  result.confirmationReady = result.chartReady;
   return result;
 }
