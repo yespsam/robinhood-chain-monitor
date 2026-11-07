@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {detailGapRetry, waitsForChartTurn,reserveHotChartTurn,chartPullBudget} from '../src/paper-research-budget.js';
+import {detailGapRetry, waitsForChartTurn,reserveHotChartTurn,chartPullBudget,quoteBlocksChartBudget} from '../src/paper-research-budget.js';
 import {missingRequestedDetailFields} from '../src/paper-candidate-research.js';
 
 test('unchanged missing response fields use bounded backoff and progress resets it without mutating evidence',()=>{
@@ -41,6 +41,13 @@ test('chart budget raises hot pulls on Plus and yields during an admitted quote 
   const ignored=chartPullBudget({policy:free,env:{PAPER_CHART_CONCURRENCY:'0',PAPER_CHART_PER_ROUND:'99',PAPER_CHART_DISPATCH_INTERVAL_MS:'fast'}});
   assert.equal(ignored.concurrency,quiet.concurrency);assert.equal(ignored.perRound,quiet.perRound);
   assert.equal(ignored.dispatchIntervalMs,quiet.dispatchIntervalMs);
+});
+
+test('research-only hot quotes do not collapse the chart budget',()=>{
+  assert.equal(quoteBlocksChartBudget({purpose:'candidate',token:{researchOnly:true}}),false);
+  assert.equal(quoteBlocksChartBudget({purpose:'candidate',token:{researchOnly:false}}),true);
+  assert.equal(quoteBlocksChartBudget({purpose:'exit',token:{}}),false);
+  assert.equal(quoteBlocksChartBudget({purpose:'candidate'}),true);
 });
 
 test('hot deadlines may reserve only two chart turns, never raising priority or keeping obsolete demand',()=>{

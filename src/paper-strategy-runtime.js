@@ -24,7 +24,7 @@ import { UPSIDE_EXIT_POLICY } from './paper-upside-policy.js';
 import { PVP_EXIT_POLICY, CONFIRMED_PVP_EXIT_POLICY, EVIDENCE_HOLD_EXIT_POLICY } from './paper-pvp-policy.js';
 import { PAPER_ENTRY_POLICY_VERSION, EXPLORATORY_FLOW } from './paper-entry-policy.js';
 import { mergePaperCandidateSnapshots, planPaperCandidateResearch, readyForPaperQuote, researchReadyForQuote, canPrefetchPaperFlow, onlyPricingOrFlowWarmupMissing, missingRequestedDetailFields } from './paper-candidate-research.js';
-import { FOCUSED_RESEARCH_BUDGET_VERSION, chartPullBudget, detailGapRetry, waitsForChartTurn, reserveHotChartTurn } from './paper-research-budget.js';
+import { FOCUSED_RESEARCH_BUDGET_VERSION, chartPullBudget, quoteBlocksChartBudget, detailGapRetry, waitsForChartTurn, reserveHotChartTurn } from './paper-research-budget.js';
 import { paperEntryFunnel, paperEntryDiagnostics, summarizeChartHealth } from './paper-entry-funnel.js';
 import { gmgnReadonlyPolicy, oneSecondKlineEnabled } from './gmgn-readonly-pacing.js';
 import { PAPER_AUX_AUDIT_VERSION, PAPER_TAX_FILTER_VERSION, PAPER_MAX_TAX_RATE, PAPER_TAX_FILTER_TEXT, paperTaxScreen } from './paper-safety-policy.js';
@@ -260,7 +260,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
   const exploratoryChartKeys=new Set();
   let lastExploratoryKind=null,exploratoryDetailDeferrals=0,exploratoryChartDeferrals=0;
   let exploratoryChartDemand=null,chartTurnDeferrals=0;
-  let chartsSinceDetail=0,hotDeadlineDeferrals=0,hotWatch=new Map(),hotWatchRows=[];
+  let chartsSinceDetail=0,hotDeadlineDeferrals=0,hotDetailSkips=0,hotWatch=new Map(),hotWatchRows=[];
   const detailGapRetries=new Map();
   const quoteHistories = new Map();
   const unavailable = { status: 'unavailable', tokens: [], observedAt: null };
@@ -486,10 +486,11 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     if (chartJobs.has(key)) return chartJobs.get(key);
     const exploratory=focusedDiscovery && token.purpose!=='exit' && token.researchLane!=='entry';
     const budget=researchLimits();
-    if(exploratory&&(detailJob||exploratoryChartKeys.size>=budget.focusedExploratory||chartsSinceDetail>=budget.maxChartsBeforeDetail)) {
+    const firstHot=!cached && (token.researchLane==='hot'||token.researchLane==='wallet');
+    if(exploratory&&(detailJob||exploratoryChartKeys.size>=budget.focusedExploratory||(chartsSinceDetail>=budget.maxChartsBeforeDetail && !firstHot))) {
       exploratoryChartDeferrals++;return cached||{};
     }
-    if(exploratory){exploratoryChartKeys.add(key);lastExploratoryKind='chart';chartsSinceDetail=Math.min(budget.maxChartsBeforeDetail,chartsSinceDetail+1);}
+    if(exploratory){exploratoryChartKeys.add(key);lastExploratoryKind='chart';if(!firstHot)chartsSinceDetail=Math.min(budget.maxChartsBeforeDetail,chartsSinceDetail+1);}
     const job = loadChart(token, nowMs).finally(() => {
       chartJobs.delete(key);exploratoryChartKeys.delete(key);
       // Give due details the next turn after a chart batch. No persistent CA
@@ -578,7 +579,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       policy: gmgnReadonlyPolicy(dataDir),
       higherFrequency: higherFrequencyResearch,
       entryFocused: !!focusedEntry(),
-      candidateQuoteInFlight: [...quoteJobs.values()].some(job => job.purpose === 'candidate'),
+      candidateQuoteInFlight: [...quoteJobs.values()].some(quoteBlocksChartBudget),
       env: process.env,
     });
   }
@@ -701,6 +702,9 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     if(focusedDiscovery && !signalPending && hotDeadlineReservation()) {
       hotDeadlineDeferrals++;return Promise.resolve();
     }
+    if(focusedDiscovery && !signalPending && hotAwaitingFirstFetch() && hotDetailSkips<hotResearchKeys.length+2) {
+      hotDetailSkips++;hotDeadlineDeferrals++;return Promise.resolve();
+    }
     if(focusedDiscovery && !signalPending && waitsForChartTurn({lastKind:lastExploratoryKind,demand:exploratoryChartDemand,nowMs:now(),
       listed:exploratoryChartDemand&&listedForEntry(exploratoryChartDemand.token),
       due:exploratoryChartDemand&&chartRefreshDue(charts.get(keyOf(exploratoryChartDemand.token)),now(),{active:true})})) {
@@ -733,7 +737,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     const signalFast=!!(walletDiscoverySignal(selected)||poolDiscoverySignal(selected));
     if(focusedDiscovery&&!signalFast&&exploratoryChartKeys.size){exploratoryDetailDeferrals++;return Promise.resolve();}
     const key = keyOf(selected); lastDetailStart = now(); detailDispatchCount += 1;
-    if(focusedDiscovery&&!signalFast){lastExploratoryKind='details';chartsSinceDetail=0;}
+    if(focusedDiscovery&&!signalFast){lastExploratoryKind='details';chartsSinceDetail=0;hotDetailSkips=0;}
     lastDetail = { chain: selected.chain, address: selected.address, symbol: selected.symbol, reason: selected.researchReason,
       startedAt: new Date(lastDetailStart).toISOString(), status: 'pending', priority: selected.researchPriority };
     detailJob = Promise.resolve().then(() => market.details(focusedDiscovery&&!signalFast?{...selected,purpose:'research'}:selected)).catch(() => ({ status: 'unavailable' })).then(result => {
@@ -753,6 +757,10 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       if(success)requestEventRecheck(selected,'details_ready');
     }).finally(() => { detailJob = null; });
     return detailJob;
+  }
+
+  function hotAwaitingFirstFetch() {
+    return hotResearchKeys.some(key => !charts.has(key) && !chartJobs.has(key));
   }
 
   function hotDeadlineReservation() {
@@ -1604,8 +1612,9 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
           pendingKeys });
         if(!target)break;
         const exploratory=focusedDiscovery && target.purpose!=='exit' && target.researchLane!=='entry';
+        const firstHot=!charts.has(keyOf(target)) && (target.researchLane==='hot'||target.researchLane==='wallet');
         if(exploratory)exploratoryChartDemand={token:target,selectedAt:nowMs};
-        if(exploratory && (detailJob||exploratoryChartKeys.size>=chartLimits.focusedExploratory||chartsSinceDetail>=chartLimits.maxChartsBeforeDetail)) {
+        if(exploratory && (detailJob||exploratoryChartKeys.size>=chartLimits.focusedExploratory||(chartsSinceDetail>=chartLimits.maxChartsBeforeDetail && !firstHot))) {
           exploratoryChartDeferrals++;break;
         }
         const row=externalResearch.find(r=>keyOf(r.input.token)===keyOf(target));
@@ -1891,7 +1900,8 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
         }),
         nearEntryRefreshPending: detailTargets.filter(token => token.researchPriority === 2).length, chartReadyCandidates: new Set(chartReady.map(r=>keyOf(r.input.token))).size,
         externalResearchCandidates:externalResearch.length,chartCacheCount:charts.size,chartRequestsPending:chartJobs.size,
-        chartHealth:summarizeChartHealth({evaluations,chartRows:[...charts.values()],
+        chartHealth:summarizeChartHealth({evaluations,chartRows:[...charts.entries()].map(([chartKey,chart])=>({...chart,chartKey})),
+          hotKeys:hotResearchKeys,chartDispatchCount:['holding','entry','hot','wallet','discovery'].reduce((sum,lane)=>sum+(chartDispatches[lane]||0),0),
           queueRecent:market.diagnostics?.().recent||[],funnels:Object.values(chainCoverage).map(row=>row.funnel)}),
         pending: detailTargets.slice(0, 20).map(token => ({ chain: token.chain, address: token.address, symbol: token.symbol, priority: token.researchPriority, reason: token.researchReason })) },
       positionSizing: recoveryMode?{mode:'cash_fraction_cap',version:PAPER_RECOVERY_SIZING_VERSION,
