@@ -66,6 +66,65 @@ export function paperEntryDiagnostics(evaluations=[],{quoteTargets=[]}={}) {
     blockers:stages.map(([code,label])=>({code,label,count:counts.get(code)||0})).filter(s=>s.count).sort((a,b)=>b.count-a.count),
     note:'按链与 CA 去重的当前快照；每个候选只计一个主要状态。没有有效候选不代表市场没有机会，调度与条件通过均不等于成交。'};
 }
+const finite = value => typeof value === 'number' && Number.isFinite(value);
+const ratio = (part, whole) => whole > 0 ? part / whole : null;
+const median = values => {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor((sorted.length - 1) / 2)];
+};
+const waitMs = row => {
+  const queued = Date.parse(row?.queuedAt || '');
+  const received = Date.parse(row?.receivedAt || '');
+  return Number.isFinite(queued) && Number.isFinite(received) && received >= queued ? received - queued : null;
+};
+
+// Telemetry for the K-line stall. Rates describe the current evaluation and
+// the candles already fetched; they never loosen an entry gate.
+export function summarizeChartHealth({ evaluations = [], chartRows = [], queueRecent = [], funnels = [] } = {}) {
+  const byToken = new Map();
+  for (const row of evaluations) {
+    const token = row?.token;
+    if (!token?.chain || !token.address) continue;
+    const key = `${token.chain}:${token.address}`;
+    const item = byToken.get(key) || { ready: false, klineOk: false, unavailable: false, stale: false };
+    const code = row.evidence?.opportunity?.chartWindow?.code;
+    const recoveryStatus = row.evidence?.recoveryEntry?.klineStatus;
+    if (row.evidence?.chart?.ready === true) item.ready = true;
+    if (recoveryStatus === 'ok' || code === 'ready') item.klineOk = true;
+    if (recoveryStatus === 'unavailable' || code === 'source_unavailable') item.unavailable = true;
+    if (code === 'stale_closed_bars') item.stale = true;
+    byToken.set(key, item);
+  }
+  const rows = [...byToken.values()];
+  const evaluated = rows.length;
+  const chartReady = rows.filter(row => row.ready).length;
+  const klineOk = rows.filter(row => row.klineOk).length;
+  const sourceUnavailable = rows.filter(row => row.unavailable && !row.klineOk).length;
+  const cachedUnavailable = chartRows.filter(row => row && row.status !== 'ok' && row.sourceStatus !== 'ok').length;
+  const waits = [...chartRows.map(waitMs), ...queueRecent.filter(row => row?.kind === 'market:kline').map(row => row.localQueueMs)]
+    .filter(value => finite(value) && value >= 0);
+  const queueWaitMedianMs = median(waits);
+  const chartReadyRate = ratio(chartReady, evaluated);
+  const klineOkRate = ratio(klineOk, evaluated);
+  const sourceUnavailableRatio = ratio(sourceUnavailable, evaluated);
+  const alert = evaluated >= 20 && (
+    (klineOkRate !== null && klineOkRate < 0.15)
+    || (sourceUnavailableRatio !== null && sourceUnavailableRatio >= 0.5)
+    || (queueWaitMedianMs !== null && queueWaitMedianMs >= 20000));
+  return {
+    version: 'chart_health_v1', alert, evaluated, chartReady, klineOk, sourceUnavailable,
+    staleClosedBars: rows.filter(row => row.stale).length,
+    chartReadyRate, klineOkRate, sourceUnavailableRatio,
+    funnelChartReady: funnels.reduce((sum, funnel) => sum + (finite(funnel?.chartReady) ? funnel.chartReady : 0), 0),
+    chartCacheCount: chartRows.length, cachedUnavailable,
+    queueWaitMedianMs, queueWaitMaxMs: waits.length ? Math.max(...waits) : null, queueSamples: waits.length,
+    note: alert
+      ? 'K 线就绪率偏低、来源不可用偏高或排队超过 20 秒。买卖条件未放宽；请看 chartHealth 与 chartDiagnostics。'
+      : '当前评估与已取得 K 线的供给统计，不代表可以开仓。',
+  };
+}
+
 // Diagnostic counts only; never used to approve a trade. Every stage is a
 // subset of the preceding one, deduplicated by chain + exact normalized CA.
 export function paperEntryFunnel(evaluations = []) {

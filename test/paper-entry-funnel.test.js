@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { paperEntryFunnel, paperEntryDiagnostics } from '../src/paper-entry-funnel.js';
+import { paperEntryFunnel, paperEntryDiagnostics, summarizeChartHealth } from '../src/paper-entry-funnel.js';
 const ready = () => ({ token: { chain: 'sol', address: 'example' }, decision: '可模拟', evidence: {
   marketFresh: true, flowFresh: true, flow: { uniqueBuyerCount: 1, highProfitCount: 0, smartMoneyCount: 1, netBuyUsd: 200 },
   entryThresholds: { minBuyers: 1, minHighProfit: 0, minSmartMoney: 1, minNetBuy: 200 },
@@ -16,6 +16,31 @@ test('diagnostics distinguish missing, stale, short and invalid charts from a ge
     const before=structuredClone(row);assert.equal(paperEntryDiagnostics([row]).blockers[0].code,expected);assert.deepEqual(row,before);
   }
 });
+test('chart health reports ready rate, unavailable ratio and queue wait without changing eligibility', () => {
+  const row = (address, patch) => ({ token: { chain: 'bsc', address }, evidence: patch });
+  const missing = row('0x1', { chart: { ready: false }, recoveryEntry: { klineStatus: 'unavailable' }, opportunity: { chartWindow: { code: 'source_unavailable' } } });
+  const stale = row('0x2', { chart: { ready: false }, recoveryEntry: { klineStatus: 'ok' }, opportunity: { chartWindow: { code: 'stale_closed_bars' } } });
+  const readyChart = row('0x3', { chart: { ready: true }, recoveryEntry: { klineStatus: 'ok' }, opportunity: { chartWindow: { code: 'ready' } } });
+  const evaluations = [missing, stale, readyChart, ...Array.from({ length: 17 }, (_, i) => missing && row(`0x${i + 10}`, missing.evidence))];
+  const quiet = summarizeChartHealth({ evaluations: [readyChart], chartRows: [{ status: 'ok', queuedAt: '2026-11-07T00:00:00.000Z', receivedAt: '2026-11-07T00:00:01.000Z' }] });
+  assert.equal(quiet.alert, false); assert.equal(quiet.chartReadyRate, 1); assert.equal(quiet.queueWaitMedianMs, 1000);
+  const health = summarizeChartHealth({
+    evaluations,
+    chartRows: [{ status: 'unavailable', queuedAt: '2026-11-07T00:00:00.000Z', receivedAt: '2026-11-07T00:00:26.000Z' }],
+    queueRecent: [{ kind: 'market:kline', localQueueMs: 27000 }, { kind: 'address:notes', localQueueMs: 1 }],
+    funnels: [{ chartReady: 0 }, { chartReady: 0 }],
+  });
+  assert.equal(health.alert, true);
+  assert.equal(health.evaluated, 20);
+  assert.equal(health.chartReady, 1);
+  assert.ok(health.klineOkRate < 0.15);
+  assert.ok(health.sourceUnavailableRatio >= 0.5);
+  assert.equal(health.funnelChartReady, 0);
+  assert.ok(health.queueWaitMedianMs >= 20000);
+  assert.match(health.note, /买卖条件未放宽/);
+  assert.equal(paperEntryFunnel(evaluations.map(item => ({ ...item, decision: '观察', evidence: { ...item.evidence, marketFresh: false } }))).eligible, 0);
+});
+
 test('entry funnel deduplicates strategy lanes and counts nested evidence gates without approving anything', () => {
   const good = ready(), old = ready(), unknown = ready(), small = ready();
   old.token.address = 'old'; old.evidence.marketFresh = false;

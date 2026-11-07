@@ -16,7 +16,11 @@ X 监控的 KOL 地址发现改用统一只读客户端，保留原结果数量�
 
 ## 可观测性和回滚
 
-`/api/strategy-state` 的 `cadence.sharedReadonlyPolicy` 显示本地套餐调度、并发及保守权重，**不是服务端套餐认证结果**；`oneSecondKlineEnabled=false`。页面显示 Plus 调度，报价仍显示真实排队/请求耗时与各链数据年龄，不把本地一秒评估当成每币一秒新数据。
+`/api/strategy-state` 的 `cadence.sharedReadonlyPolicy` 显示本地套餐调度、并发及保守权重，**不是服务端套餐认证结果**。`oneSecondKlineEnabled` 仅在环境变量 `GMGN_ONE_SECOND_KLINE=1` 时为 true，用来放行只读 `resolution=1s`（Pro 接口）。默认 false，模拟入场仍只认 1 分钟收盘线，不因该开关放宽止损、仓位或 LIVE 安全条件。页面显示 Plus 调度，报价仍显示真实排队/请求耗时与各链数据年龄，不把本地一秒评估当成每币一秒新数据。
+
+K 线供给看 `researchPipeline.chartHealth`：`chartReadyRate`、`klineOkRate`、`sourceUnavailableRatio`、`queueWaitMedianMs`。`alert=true` 表示评估样本至少 20 个且真实 K 线占比低于 15%、来源不可用占比达到 50%，或最近 K 线排队中位数达到 20 秒。这是告警，不是开仓许可。
+
+图表预算（不提高共享门禁并发）：`PAPER_CHART_CONCURRENCY`（1–6）、`PAPER_CHART_PER_ROUND`（1–8）、`PAPER_CHART_DISPATCH_INTERVAL_MS`（250–15000）、`PAPER_FOCUSED_CHART_CONCURRENCY`（1–4）、`PAPER_CHARTS_BEFORE_DETAIL`（1–12）、`PAPER_CHART_CACHE_LIMIT`（100–500）。未设置时，Plus 且高频研究为每轮最多 3 张热点图、间隔 1500ms，连续 4 张后让普通详情；仅 Plus 为 2 张、2500ms；Free 仍为 1 张、5000ms，避免在 1.2 秒单请求门禁上堆队列。已准入的入场窗口或候选报价在途时退回单张，避免挤占报价席。非法取值回退默认，不抛错。
 
 ### 多持仓报价并行（2026-09-25 04 时后）
 

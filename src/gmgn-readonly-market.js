@@ -7,7 +7,7 @@ import { parseGmgnFlowRateLimit } from './gmgn-flow-client.js';
 import { createGmgnAccountGate } from './gmgn-account-gate.js';
 import { gmgnFlowAddress } from './gmgn-flow-signal.js';
 import { enqueueReadonly, readonlyQueueSnapshot } from './readonly-priority-queue.js';
-import { GMGN_READONLY_INTERVAL_MS, gmgnReadonlyPolicy } from './gmgn-readonly-pacing.js';
+import { GMGN_READONLY_INTERVAL_MS, gmgnReadonlyPolicy, oneSecondKlineEnabled } from './gmgn-readonly-pacing.js';
 import { createReadonlyProcessRunner } from './gmgn-readonly-process.js';
 import {classifyGmgnReadError} from './gmgn-read-error.js';
 
@@ -49,7 +49,8 @@ function assertInterval(interval) {
 }
 
 function assertResolution(resolution) {
-  if (!validChoice(resolution, GMGN_RESOLUTIONS)) throw new TypeError('invalid resolution');
+  const allowed = oneSecondKlineEnabled() ? [...GMGN_RESOLUTIONS, '1s'] : GMGN_RESOLUTIONS;
+  if (!validChoice(resolution, allowed)) throw new TypeError('invalid resolution');
 }
 
 function assertAddress(address) {
@@ -349,7 +350,7 @@ function createQueuedRunner({ cliPath, timeoutMs, dataDir, execute, now, sleep, 
       catch(error) { return failSafely(error); }
       finally { record.preflightMs=Math.max(0,now()-preflightStartedAt); }
       const gateQueuedAt=now();
-      return accountGate(()=>executeWork(true),controller.signal,{priority,onAdmitted:admission=>{
+      return accountGate(()=>executeWork(true),controller.signal,{priority,kind,onAdmitted:admission=>{
         record.accountWaitMs=Math.max(0,now()-gateQueuedAt);record.accountQueueScans=admission.queueScans;
       }});
     };

@@ -256,7 +256,7 @@ export function createGmgnFlowClient(config = {}, dependencies = {}) {
         throw failure(configuration ? "GMGN_CONFIG_FAILED" : "GMGN_CLI_FAILED", configuration ? "GMGN CLI configuration check failed" : "GMGN CLI request failed");
       }
     };
-    const execution = accountGate && !configuration ? accountGate(work,controller.signal,{priority})
+    const execution = accountGate && !configuration ? accountGate(work,controller.signal,{priority,kind:`${args[0]}:${args[1]}`})
       : scheduler.tail.catch(() => {}).then(work);
     job.execution = execution;
     // Legacy/no-gate callers still serialize complete responses. Gated calls
@@ -301,7 +301,7 @@ export function createGmgnFlowClient(config = {}, dependencies = {}) {
       if (!Number.isSafeInteger(fromSec) || !Number.isSafeInteger(toSec) || fromSec < 0 || toSec <= fromSec) {
         throw failure("GMGN_INVALID_ARGUMENT", "Invalid GMGN candle time range");
       }
-      return request(["market", "kline", "--chain", chain, "--address", address, "--resolution", "1m", "--from", String(fromSec), "--to", String(toSec)]);
+      return request(["market", "kline", "--chain", chain, "--address", address, "--resolution", "1m", "--from", String(fromSec), "--to", String(toSec)], {priority:1});
     },
     stats(chain, walletOrArray, period) {
       chainValue(chain);

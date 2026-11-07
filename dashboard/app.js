@@ -260,7 +260,10 @@ function renderCoverage() {
   const coverage = state.snapshot?.coverage || {};
   const confirmed = state.snapshot?.entryMode === 'confirmed_pvp_v2';
   if (state.snapshot?.chains?.length > 1 && state.snapshot.chainCoverage) {
-    $('#coverageList').innerHTML = (state.snapshot.scanScope?.scanChains || state.snapshot.chains).map(chain => {
+    const health = state.snapshot?.researchPipeline?.chartHealth;
+    const pct = rate => Number.isFinite(rate) ? `${Math.round(rate * 100)}%` : '待测';
+    const healthNote = health ? `<div class="coverage-item"><span class="coverage-dot ${health.alert ? '' : 'fresh'}"></span><div><strong>K 线供给${health.alert ? ' · 告警' : ''}</strong><span>图表就绪 ${pct(health.chartReadyRate)} · 真实 K 线 ${pct(health.klineOkRate)} · 来源不可用 ${pct(health.sourceUnavailableRatio)} · 排队 ${health.queueWaitMedianMs == null ? '待测' : `${Math.round(health.queueWaitMedianMs)} ms`}</span><span>${escapeHtml(health.note || '')}</span></div></div>` : '';
+    $('#coverageList').innerHTML = healthNote + (state.snapshot.scanScope?.scanChains || state.snapshot.chains).map(chain => {
       const feed = state.snapshot.chainCoverage[chain] || {};
       const now = Date.now(), external = marketCoverageStatus(feed.market, now), internal = marketCoverageStatus(feed.trenches, now);
       const flow = flowCoverageStatus(feed.flow, now);
