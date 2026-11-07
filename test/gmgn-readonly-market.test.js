@@ -449,6 +449,27 @@ test('readonly market accepts only supported read-only chains and resolutions', 
   await assert.rejects(() => client.trending({ chain: 'polygon', interval: '1m' }), /invalid chain/);
   await assert.rejects(() => client.trending({ chain: 'bsc', interval: '10m' }), /invalid interval/);
   await assert.rejects(() => client.kline({ chain: 'bsc', address: '0xabc12345', resolution: '10m' }), /invalid resolution/);
+  await assert.rejects(() => client.kline({ chain: 'bsc', address: '0xabc12345', resolution: '1s' }), /invalid resolution/);
+});
+
+test('1s kline is accepted only when GMGN_ONE_SECOND_KLINE=1 and is not a latest-closed entry window', async () => {
+  const previous = process.env.GMGN_ONE_SECOND_KLINE;
+  process.env.GMGN_ONE_SECOND_KLINE = '1';
+  try {
+    const calls = [];
+    const client = createReadonlyMarketClient({ runner: async args => {
+      calls.push(args);
+      return JSON.stringify({ list: [{ time: 1700000000000, open: '1', close: '2', high: '3', low: '0.5', volume: '10' }] });
+    } });
+    const result = await client.kline({ chain: 'bsc', address: '0xabc12345', resolution: '1s', from: 1700000000, to: 1700000060 });
+    assert.equal(result.status, 'ok');
+    assert.equal(result.resolution, '1s');
+    assert.equal(calls[0][calls[0].indexOf('--resolution') + 1], '1s');
+    await assert.rejects(() => client.kline({ chain: 'bsc', address: '0xabc12345', resolution: '1s', latestClosed: true }), /invalid latest closed window/);
+  } finally {
+    if (previous === undefined) delete process.env.GMGN_ONE_SECOND_KLINE;
+    else process.env.GMGN_ONE_SECOND_KLINE = previous;
+  }
 });
 
 const trenchesPayload = (categories = {}) => ({ code: 0, data: { new_creation: [], pump: [], completed: [], ...categories } });

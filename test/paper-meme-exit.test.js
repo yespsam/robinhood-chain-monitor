@@ -198,7 +198,8 @@ test('runtime persists activation and main policy through restart, prioritizes h
     await runtime.runOnce();await runtime.runOnce();await runtime.refreshQuote();now+=4000;price=1.03;await runtime.refreshQuote();await runtime.runOnce();
     let s=runtime.snapshot();assert.equal(s.account.trades.length,1);assert.equal(s.mainExitPolicy.version,MEME_EXIT_VERSION);assert.equal(s.tradeCountReview.pendingFills,1);
     assert.equal(s.account.positions[`base:${CA}`].memeExitPolicy.version,MEME_EXIT_VERSION);
-    now+=61000;price=.8;await runtime.runOnce();assert.equal(chartCalls.at(-1).purpose,'exit');
+    const beforeCharts=chartCalls.length;
+    now+=61000;price=.8;await runtime.runOnce();assert.equal(chartCalls[beforeCharts].purpose,'exit');
     await runtime.refreshQuote();await runtime.exitOnce();assert.equal(runtime.snapshot().account.trades.length,1);
     await runtime.setEnabled(false);stored=JSON.parse(await fs.readFile(runtime.stateFile,'utf8'));
   }finally{await runtime.stop();}

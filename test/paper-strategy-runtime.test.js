@@ -429,12 +429,13 @@ test('higher research cadence admits two distinct Plus charts while Free/downgra
       allowExploratory:true,pvpMode:true,confirmedMode:true,evidenceHoldMode:true,opportunityMode:true,higherFrequencyResearch:true});
     try{
       for(let i=0;i<3;i++)await runtime.refreshMarket({background:true});
-      await runtime.fastOnce();assert.equal(calls.length,1);
-      clock+=2500;await runtime.fastOnce();assert.equal(calls.length,plan==='plus'?2:1);
-      clock+=2500;await runtime.fastOnce();assert.equal(calls.length,plan==='plus'?2:1);
+      const cap=plan==='plus'?3:1;
+      await runtime.fastOnce();assert.equal(calls.length,cap);
+      clock+=2500;await runtime.fastOnce();assert.equal(calls.length,cap,'pending charts fill the budget instead of multiplying every tick');
+      clock+=2500;await runtime.fastOnce();assert.equal(calls.length,cap);
       assert.equal(new Set(calls.map(c=>`${c.target.chain}:${c.target.address}`)).size,calls.length);
       await fs.writeFile(planFile,JSON.stringify({version:1,plan:'free'}));clock+=10000;await runtime.fastOnce();
-      assert.equal(calls.length,plan==='plus'?2:1);assert.equal(runtime.snapshot().researchPipeline.chartConcurrency,1);
+      assert.equal(calls.length,cap);assert.equal(runtime.snapshot().researchPipeline.chartConcurrency,1);
       let drained=false;const stopping=runtime.stop().then(()=>{drained=true;});await new Promise(resolve=>setImmediate(resolve));assert.equal(drained,false);
       calls.forEach(c=>c.resolve({status:'unavailable'}));await stopping;
       assert.equal(runtime.snapshot().account.trades.length,0);

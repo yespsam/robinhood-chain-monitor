@@ -28,8 +28,9 @@ export function createGmgnAccountGate(dataDir, {intervalMs=null, waitMs=30_000, 
       if(dead||(!raw&&Date.now()-stat.mtimeMs>60_000))await fs.unlink(lock);
     } finally {await fs.rmdir(recovery);}
   }
-  return async function gate(work, signal, {priority=0,onAdmitted}={}) {
+  return async function gate(work, signal, {priority=0,onAdmitted,kind}={}) {
     if (![0,1,2].includes(priority)) throw failure('GMGN_INVALID_ARGUMENT');
+    const ticketKind = typeof kind === 'string' && /^[a-z0-9:_-]{1,48}$/.test(kind) ? kind : undefined;
     if(onAdmitted!==undefined&&typeof onAdmitted!=='function')throw failure('GMGN_INVALID_ARGUMENT');
     const token=randomUUID(),started=Date.now();let handle,owned=false,temp,leased=false,serialWorkStartedAt=0;
     let queueScans=0,queueHighWater=0;
@@ -61,7 +62,8 @@ export function createGmgnAccountGate(dataDir, {intervalMs=null, waitMs=30_000, 
       active();
       await fs.mkdir(queue,{recursive:true,mode:0o700});
       temp=`${ticket}.tmp`;
-      await fs.writeFile(temp,JSON.stringify({version:1,token,pid:process.pid,queuedAt:started,expiresAt:started+waitMs,priority}),{mode:0o600});
+      await fs.writeFile(temp,JSON.stringify({version:1,token,pid:process.pid,queuedAt:started,expiresAt:started+waitMs,priority,
+        ...(ticketKind?{kind:ticketKind}:{})}),{mode:0o600});
       await fs.rename(temp,ticket);temp=null;
       while(true) {
         active();
@@ -92,7 +94,8 @@ export function createGmgnAccountGate(dataDir, {intervalMs=null, waitMs=30_000, 
           } catch(e) {if(e.code==='ENOENT')return null;throw failure('GMGN_STATE_INVALID');}
           if(item?.version!==1||`${item.token}.json`!==name||!Number.isSafeInteger(item.pid)||item.pid<=0
             ||!Number.isFinite(item.queuedAt)||!Number.isFinite(item.expiresAt)||item.expiresAt<=item.queuedAt
-            ||item.queuedAt>at+1000||![0,1,2].includes(item.priority))throw failure('GMGN_STATE_INVALID');
+            ||item.queuedAt>at+1000||![0,1,2].includes(item.priority)
+            ||(item.kind!==undefined&&(typeof item.kind!=='string'||!/^[a-z0-9:_-]{1,48}$/.test(item.kind))))throw failure('GMGN_STATE_INVALID');
           if(item.expiresAt<=at||!alive(item.pid)) {await fs.unlink(file).catch(e=>{if(e.code!=='ENOENT')throw e;});return null;}
           return item;
         };

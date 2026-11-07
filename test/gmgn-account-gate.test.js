@@ -55,6 +55,22 @@ async function waitTickets(dir, count) {
  }
  assert.fail('fixture tickets not registered');
 }
+test('shared tickets record market:kline and admit it ahead of an older address note',async t=>{
+ const dir=await directory(t);let release,entered;
+ const ready=new Promise(resolve=>{entered=resolve;});
+ const active=createGmgnAccountGate(dir,{intervalMs:1000})(async()=>{entered();await new Promise(resolve=>{release=resolve;});});
+ await ready;
+ const note=createGmgnAccountGate(dir,{intervalMs:1000,agingMs:10000})(async()=>'note',undefined,{priority:0,kind:'address:notes'});
+ await waitTickets(dir,1);
+ const kline=createGmgnAccountGate(dir,{intervalMs:1000,agingMs:10000})(async()=>'kline',undefined,{priority:0,kind:'market:kline'});
+ await waitTickets(dir,2);
+ const names=(await fs.readdir(path.join(dir,'gmgn-account-queue'))).filter(name=>name.endsWith('.json'));
+ const tickets=await Promise.all(names.map(name=>fs.readFile(path.join(dir,'gmgn-account-queue',name),'utf8').then(JSON.parse)));
+ assert.deepEqual(tickets.map(ticket=>ticket.kind).sort(),['address:notes','market:kline']);
+ release();
+ assert.equal(await Promise.race([note,kline]),'kline');
+ await Promise.all([active,note,kline]);
+});
 test('a later exit in another process wins the next shared slot without interrupting active work',async t=>{
  const dir=await directory(t),module=new URL('../src/gmgn-account-gate.js',import.meta.url).href;
  let release, entered;

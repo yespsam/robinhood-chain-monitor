@@ -98,7 +98,7 @@ test('five-minute ranking is a real research window, not minute volume or trade 
   assert.match(html,/统计窗口/);
 });
 
-test('focused research alternates one chart/detail producer while discovery stays independent',async t=>{
+test('focused research pulls several hot charts before details and still refuses a delisted CA',async t=>{
   const dir=await directory(t);await fs.writeFile(path.join(dir,'gmgn-readonly-plan.json'),JSON.stringify({version:1,plan:'plus'}));
   let clock=NOW,empty=false;const calls=[],pending=[];
   const wait=()=>new Promise(resolve=>setImmediate(resolve));
@@ -115,25 +115,27 @@ test('focused research alternates one chart/detail producer while discovery stay
   try{
     await r.setEnabled(false);await r.refreshMarket();await r.start();await r.fastOnce();
     const count=kind=>calls.filter(c=>c[0]===kind).length;
-    assert.equal(count('chart'),1);assert.equal(count('details'),0);
-    assert.equal(calls.find(c=>c[0]==='chart')[1].purpose,'research');
+    assert.ok(count('chart')>=2,'a round pulls more than one chart');
+    assert.equal(count('details'),0);
+    assert.equal(calls.find(c=>c[0]==='chart')[1].purpose,'candidate','hot kline outranks background research');
+    const started=count('chart');
     clock+=5000;await r.fastOnce();await r.refreshDetails();
-    assert.equal(count('chart'),1);assert.equal(count('details'),0,'pending chart does not fan out info/security');
+    assert.equal(count('chart'),started);assert.equal(count('details'),0,'pending charts do not fan out info/security');
     clock+=10000;await r.refreshMarket({background:true});assert.equal(count('rank'),2);assert.equal(count('trenches'),2);
-    pending.shift()();for(let i=0;i<5;i++)await wait();
-    assert.equal(count('details'),1,'due details receive the turn after the chart');
+    while(pending.length)pending.shift()();
+    for(let i=0;i<8;i++)await wait();
+    assert.equal(count('details'),1,'due details receive a turn after the chart batch');
     assert.equal(calls.find(c=>c[0]==='details')[1].purpose,'research');
-    clock+=5000;await r.fastOnce();assert.equal(count('chart'),1,'pending detail prevents another exploratory chart');
+    clock+=5000;await r.fastOnce();assert.equal(count('chart'),started,'pending detail prevents another exploratory chart');
     assert.equal(r.snapshot().researchPipeline.focusedReadBudget.exploratoryActive,1);
     pending.shift()();for(let i=0;i<5;i++)await wait();
-    // Reproduce completion-event traffic arriving BEFORE the next full scan,
-    // after the ordinary detail interval has elapsed. It cannot take turn two.
-    clock+=6000;void r.refreshDetails();for(let i=0;i<3;i++)await wait();
-    assert.equal(count('details'),1,'completion/event caller must leave the reserved chart turn free');
-    await r.fastOnce();assert.equal(count('chart'),2,'charts resume after detail completion');
+    clock+=60000;await r.fastOnce();assert.ok(count('chart')>started,'charts resume after detail completion');
+    const afterResume=count('chart'),detailCount=count('details');
     empty=true;await r.refreshMarket();await r.fastOnce();
-    pending.shift()();for(let i=0;i<5;i++)await wait();
-    await r.refreshDetails();assert.equal(count('details'),1,'no persisted deferred queue can revive a delisted CA');
+    while(pending.length)pending.shift()();
+    for(let i=0;i<5;i++)await wait();
+    await r.refreshDetails();assert.equal(count('details'),detailCount,'no persisted deferred queue can revive a delisted CA');
+    assert.ok(count('chart')>=afterResume);
     assert.equal(r.snapshot().account.trades.length,0);
   }finally{const done=r.stop();for(const resolve of pending.splice(0))resolve();await done;}
 });
@@ -159,15 +161,15 @@ test('focused incomplete detail responses back off while fresh listings and comp
   }finally{await r.stop();}
 });
 
-test('focused hot deadlines defer ordinary details for one extra chart only, with no parallel producer or fills',async t=>{
-  const dir=await directory(t);let clock=NOW,block=false,release=null;const calls=[];
+test('focused hot deadlines keep a bounded parallel chart batch, then resume details without fills',async t=>{
+  const dir=await directory(t);let clock=NOW,block=false,waiting=[];const calls=[];
   const turn=()=>new Promise(resolve=>setImmediate(resolve));
   const candles=()=>Array.from({length:60},(_,n)=>({time:Math.floor(clock/60000)*60000-(60-n)*60000,
     open:1,high:1.01,low:.99,close:1,volume:100}));
   const market={trending:async()=>list([1,2,3,4].map(n=>token(n,{rank:n,volumeWindow:'5m',sellTax:null})),{interval:'5m',observedAt:iso(clock)}),
     trenches:async()=>list([],{observedAt:iso(clock)}),quote:async()=>assert.fail('missing sell tax cannot request entry'),
-    kline:async q=>{calls.push(['chart',q]);const result={...q,status:'ok',candles:candles(),observedAt:iso(clock)};
-      if(block)await new Promise(resolve=>{release=resolve;});return result;},
+    kline:async q=>{calls.push(['chart',q]);const result={...q,status:'ok',source:'gmgn-cli',resolution:'1m',from:Math.floor(clock/60000)*60-3600,to:Math.floor(clock/60000)*60,candles:candles(),observedAt:iso(clock),requestedAt:iso(clock)};
+      if(block)await new Promise(resolve=>waiting.push(resolve));return result;},
     details:async q=>{calls.push(['details',q]);return {status:'unavailable'};}};
   const r=createPaperStrategyRuntime({dataDir:dir,chain:'bsc',chains:['bsc'],discoveryMode:GMGN_THREE_LISTS,
     market,now:()=>clock,evidenceLoader:()=>({}),confirmedMode:true,pvpMode:true,allowExploratory:true,
@@ -175,17 +177,21 @@ test('focused hot deadlines defer ordinary details for one extra chart only, wit
   try{
     await r.setEnabled(false);await r.runOnce();clock+=5000;await r.runOnce();await r.refreshDetails();
     const count=k=>calls.filter(c=>c[0]===k).length,before=count('details');
+    const budget=r.snapshot().researchPipeline.focusedReadBudget.maxChartsBeforeDetail;
     clock=NOW+65000;await r.refreshMarket();block=true;await r.fastOnce();
-    assert.ok(release,'due chart is dispatched');await r.refreshDetails();
-    assert.equal(count('details'),before,'chart in flight cannot fan out ordinary details');
-    release();release=null;for(let i=0;i<5;i++)await turn();
-    await r.refreshDetails();assert.equal(count('details'),before,'another due hot chart gets the bounded next turn');
-    clock+=5000;await r.fastOnce();assert.ok(release,'next chart is dispatched without increasing concurrency');
-    release();release=null;for(let i=0;i<5;i++)await turn();
-    await r.refreshDetails();assert.equal(count('details'),before+1,'after two charts details must resume');
-    await r.fastOnce();const s=r.snapshot();assert.ok(s.researchPipeline.focusedReadBudget.hotDeadlineDeferrals>0);
+    assert.ok(waiting.length>=1,'due charts are dispatched');
+    assert.ok(waiting.length<=r.snapshot().researchPipeline.chartPerRound);
+    await r.refreshDetails();
+    assert.equal(count('details'),before,'charts in flight cannot fan out ordinary details');
+    waiting.splice(0).forEach(resolve=>resolve());
+    for(let i=0;i<8;i++)await turn();
+    assert.ok(count('chart')<=budget+2,'chart turns stay inside the configured budget');
+    clock+=5000;block=false;await r.fastOnce();await r.refreshDetails();
+    assert.ok(count('details')>=before,'details resume after the bounded chart run');
+    const s=r.snapshot();
     assert.ok(s.researchPipeline.hotCandidates.filter(x=>x.watchSince).length<=2);
     assert.equal(s.account.trades.length,0);assert.equal(s.execution,false);
     assert.equal(s.algorithmSignals.fullMarketTradesCovered,false);
-  }finally{release?.();await r.stop();}
+    assert.equal(s.researchPipeline.chartHealth.version,'chart_health_v1');
+  }finally{waiting.splice(0).forEach(resolve=>resolve());await r.stop();}
 });

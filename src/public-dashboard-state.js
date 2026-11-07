@@ -77,6 +77,7 @@ const schema = {
   researchPipeline: { ...fields('detailsSucceeded detailsRequested chartRequestsPending'), lastDetail: task, lastChartDispatch: task,
     focusedReadBudget: fields('version exploratoryConcurrency exploratoryActive lastKind chartDeferrals detailDeferrals chartTurnDeferrals chartTurnReserved detailBackoffCandidates note'),
     entryDiagnostics:{...fields('version detected verifiedCatalyst quoteResearchReady quoteScheduled eligible note'),blockers:[fields('code label count')]},
+    chartHealth:fields('version alert evaluated chartReady klineOk sourceUnavailable staleClosedBars chartReadyRate klineOkRate sourceUnavailableRatio funnelChartReady chartCacheCount cachedUnavailable queueWaitMedianMs queueWaitMaxMs queueSamples note'),
     hotCandidates: [task], pending: [task], stageSnapshot: [fields('chain status')], chartDiagnostics: [task], entryFocus: fields('active until key') },
   newsWire: {...fields('updatedAt ownDocumentCount gmgnSignalCount fullTwitterConnected'),poolFirstThree:{
     ...fields('version updatedAt verifiedEvents uniqueEvents expiredOnArrivalEvents conflictingAssets disabledAssets readySignals coverageNote lastVerifiedEventAt'),

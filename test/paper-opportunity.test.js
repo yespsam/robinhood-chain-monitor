@@ -419,8 +419,9 @@ test('runtime researches external charts without wallets, fetches hourly discove
     assert.equal(s.account.trades[0].entryEvidence.costAssumptions.version,REFERENCE_COST_VERSION);
     for(let n=0;n<3;n++)await runtime.refreshMarket();
     assert.ok(calls.some(c=>c[1]==='1h'),'hourly discovery is retained on the slower schedule');
+    const beforeKline=calls.filter(c=>c[0]==='kline').length;
     now+=61000;await runtime.runOnce();
-    assert.equal(calls.filter(c=>c[0]==='kline').at(-1)[2],'exit','main v2 holding wins chart priority over same-token legacy control');
+    assert.equal(calls.filter(c=>c[0]==='kline').slice(beforeKline)[0]?.[2],'exit','main v2 holding wins the first chart slot over same-token legacy control');
   } finally {await runtime.stop();}
   const resumed=createPaperStrategyRuntime(options);
   try{await resumed.runOnce();assert.equal(resumed.snapshot().account.trades.length,1);assert.equal(resumed.snapshot().account.cash,90);
@@ -601,14 +602,14 @@ test('an old non-setup is refreshed and reevaluated on the next close despite un
 
 test('runtime rotates hot-chart chains even when earlier chains keep offering unseen candidates',async t=>{
   const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'yesp-hot-chain-fair-'));t.after(()=>fs.rm(dataDir,{recursive:true,force:true}));
-  let now=NOW;const chains=['base','bsc','robinhood'],dispatches=[];
+  let now=NOW;const chains=['base','bsc','robinhood'];
   const market={trending:async({chain})=>({status:'ok',observedAt:iso(now),tokens:Array.from({length:12},(_,i)=>({...token,chain,address:`0x${(i+1).toString(16).padStart(40,'0')}`}))}),
     kline:async args=>{const candles=bars('breakout',args.to*1000);candles.at(-1).volume=0;return {...args,status:'ok',observedAt:iso(now),candles};},
     quote:async args=>({...args,status:'unavailable'})};
   const runtime=createPaperStrategyRuntime({...modes,dataDir,chain:'base',chains,market,now:()=>now,evidenceLoader:()=>({}),fixedEntryUsd:10});
   try{
-    for(let i=0;i<6;i++){await runtime.runOnce();const d=runtime.snapshot().researchPipeline.lastChartDispatch;if(d?.lane==='hot')dispatches.push(d.chain);now+=6000;}
-    assert.deepEqual(dispatches.slice(0,3),chains,'one hot seat per chain must translate into fair actual requests');
+    for(let i=0;i<6;i++){await runtime.runOnce();now+=6000;}
+    assert.deepEqual(runtime.snapshot().researchPipeline.recentHotChains.slice(0,3),chains,'one hot seat per chain must translate into fair actual requests');
     assert.equal(runtime.snapshot().account.trades.length,0);
   }finally{await runtime.stop();}
 });

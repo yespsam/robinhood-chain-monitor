@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {detailGapRetry, waitsForChartTurn,reserveHotChartTurn} from '../src/paper-research-budget.js';
+import {detailGapRetry, waitsForChartTurn,reserveHotChartTurn,chartPullBudget} from '../src/paper-research-budget.js';
 import {missingRequestedDetailFields} from '../src/paper-candidate-research.js';
 
 test('unchanged missing response fields use bounded backoff and progress resets it without mutating evidence',()=>{
@@ -24,10 +24,31 @@ test('reserved chart turn is queue-free and released for delisted, fresh, expire
     assert.equal(waitsForChartTurn({...p,...patch}),false);
 });
 
+test('chart budget raises hot pulls on Plus and yields during an admitted quote without accepting unsafe env',()=>{
+  const plus={plan:'plus',normalConcurrency:2},free={plan:'free',normalConcurrency:1};
+  const hot=chartPullBudget({policy:plus,higherFrequency:true});
+  assert.equal(hot.concurrency,3);assert.equal(hot.perRound,3);assert.equal(hot.dispatchIntervalMs,1500);
+  assert.equal(hot.focusedExploratory,3);assert.equal(hot.maxChartsBeforeDetail,4);assert.equal(hot.cacheLimit,240);
+  const quiet=chartPullBudget({policy:free});
+  assert.equal(quiet.concurrency,1);assert.equal(quiet.perRound,1);assert.equal(quiet.dispatchIntervalMs,5000);
+  assert.equal(quiet.maxChartsBeforeDetail,2);assert.equal(quiet.cacheLimit,160);
+  const plusQuiet=chartPullBudget({policy:plus});
+  assert.equal(plusQuiet.concurrency,2);assert.equal(plusQuiet.perRound,2);assert.equal(plusQuiet.dispatchIntervalMs,2500);
+  const yielded=chartPullBudget({policy:plus,higherFrequency:true,entryFocused:true,candidateQuoteInFlight:true});
+  assert.equal(yielded.concurrency,1);assert.equal(yielded.perRound,1);assert.equal(yielded.yielded,true);
+  const tuned=chartPullBudget({policy:plus,higherFrequency:true,env:{PAPER_CHART_CONCURRENCY:'4',PAPER_CHART_PER_ROUND:'5',PAPER_CHART_CACHE_LIMIT:'400'}});
+  assert.equal(tuned.concurrency,4);assert.equal(tuned.perRound,5);assert.equal(tuned.cacheLimit,400);
+  const ignored=chartPullBudget({policy:free,env:{PAPER_CHART_CONCURRENCY:'0',PAPER_CHART_PER_ROUND:'99',PAPER_CHART_DISPATCH_INTERVAL_MS:'fast'}});
+  assert.equal(ignored.concurrency,quiet.concurrency);assert.equal(ignored.perRound,quiet.perRound);
+  assert.equal(ignored.dispatchIntervalMs,quiet.dispatchIntervalMs);
+});
+
 test('hot deadlines may reserve only two chart turns, never raising priority or keeping obsolete demand',()=>{
   const p={demand:{selectedAt:100000,closedAtMs:40000,token:{researchLane:'hot'}},nowMs:100001,listed:true,due:true,chartsSinceDetail:1};
   const before=structuredClone(p);assert.equal(reserveHotChartTurn(p),true);assert.deepEqual(p,before);
   for(const patch of [{chartsSinceDetail:2},{listed:false},{due:false},{nowMs:110001},{nowMs:99999},{demand:null},
     {demand:{...p.demand,closedAtMs:50000}},{demand:{...p.demand,closedAtMs:null}},
     {demand:{...p.demand,token:{researchLane:'discovery'}}}])assert.equal(reserveHotChartTurn({...p,...patch}),false);
+  assert.equal(reserveHotChartTurn({...p,chartsSinceDetail:3,maxCharts:4}),true);
+  assert.equal(reserveHotChartTurn({...p,chartsSinceDetail:4,maxCharts:4}),false);
 });

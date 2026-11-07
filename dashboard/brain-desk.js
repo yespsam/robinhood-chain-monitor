@@ -22,8 +22,11 @@ export function renderBrainTelemetry(snapshot, online) {
   const scanChains=snapshot?.scanScope?.scanChains;
   const discovery=snapshot?.discoveryScope;
   const ages=rows(c.marketSourceAges).filter(s=>(!scanChains||scanChains.includes(s.chain))&&Number.isFinite(s.ageMs)&&s.ageMs>=0);
+  const health=p.chartHealth,pct=rate=>Number.isFinite(rate)?`${Math.round(rate*100)}%`:'待测';
   const fields=[['本地扫描间隔',seconds(c.actualTickGapMs)],['本轮计算耗时',seconds(c.lastTickDurationMs)],
-    ['最近报价排队',seconds(c.lastQuoteTiming?.queueMs)],['K 线处理中',Number.isFinite(p.chartRequestsPending)?`${p.chartRequestsPending} 个`:'待测']];
+    ['最近报价排队',seconds(c.lastQuoteTiming?.queueMs)],['K 线处理中',Number.isFinite(p.chartRequestsPending)?`${p.chartRequestsPending} 个`:'待测'],
+    ...(health?[['K 线就绪率',pct(health.chartReadyRate)],['来源不可用',pct(health.sourceUnavailableRatio)],
+      ['K 线排队',Number.isFinite(health.queueWaitMedianMs)?seconds(health.queueWaitMedianMs):'待测']]:[])];
   return `<dl class="brain-telemetry-metrics">${fields.map(([label,v])=>`<div><dt>${esc(label)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
     <div class="brain-feed-strip"><span>${scanChains?`交易扫描：${scanChains.map(c=>esc(chain(c))).join('、')} · `:''}${online?'行情年龄':'上次记录 · 连接待恢复'}</span>${ages.map(s=>`<span data-stale="${s.status!=='ok'||s.ageMs>120000}">${esc(chain(s.chain))}<b>${Math.round(s.ageMs/1000)}s</b></span>`).join('')||'<span>等待来源时间</span>'}<small>${scanChains?'TG 新闻保持；其他链旧仓只做退出管理。':''}本地扫描 ≠ 每个 CA 的上游刷新</small></div>
     ${discovery?.version==='gmgn_three_lists_v1'?`<div class="brain-feed-strip"><span>GMGN 战壕/热门＋内盘快线</span>${rows(discovery.feeds).map(f=>`<span data-stale="${f.status!=='ok'}">${esc(f.label)}<b>${value(f.count)}</b></span>`).join('')}<small>四类去重 ${value(discovery.uniqueCandidates)} 个 · 5分钟是榜单统计窗口 · 内盘地址与逐笔放量可独立发现</small></div>`:''}`;
@@ -51,7 +54,8 @@ export function buildBrainView(snapshot, now=Date.now(), connected=true, selecte
     news:[['自有原文',`${value(s.newsWire?.ownDocumentCount)} 条已收录`],['GMGN 消息',`${value(s.newsWire?.gmgnSignalCount)} 条平台信号`],['覆盖说明',s.newsWire?.fullTwitterConnected?'以记录的来源范围为准':'非全量推特；平台喊单不等于原始推文']],
     narrative:[['带来源候选',`${value(s.narrativeDesk?.withSources)} 个`],['社区题材关联',`${value(s.narrativeDesk?.communityLinked)} 个`],['明确 CA 对应',`${value(s.narrativeDesk?.directCa)} 个；不等于作者发行`]],
     wallet:[['深采样钱包',`${value(s.learning?.walletCount)} 个`],['教师候选',`${value(s.learning?.roles?.teacher)} 个；不等于可直接跟单`],['当前局限','标签、单币盈利、长期盈利分开记录；同源资金不是控盘证明。']],
-    market:[['资料成功 / 请求',`${value(p.detailsSucceeded)} / ${value(p.detailsRequested)}`],['K 线待处理',`${value(p.chartRequestsPending)} 个`],['行情覆盖',`${rows(s.scanScope?.scanChains||p.stageSnapshot).length} 条扫描链；逐币上游更新速度不同`]],
+    market:[['资料成功 / 请求',`${value(p.detailsSucceeded)} / ${value(p.detailsRequested)}`],['K 线待处理',`${value(p.chartRequestsPending)} 个`],['行情覆盖',`${rows(s.scanScope?.scanChains||p.stageSnapshot).length} 条扫描链；逐币上游更新速度不同`],
+      ...(p.chartHealth?[['K 线供给',`${p.chartHealth.alert?'告警':'正常'} · 就绪 ${value(Number.isFinite(p.chartHealth.chartReadyRate)?p.chartHealth.chartReadyRate*100:null)}% · 不可用 ${value(Number.isFinite(p.chartHealth.sourceUnavailableRatio)?p.chartHealth.sourceUnavailableRatio*100:null)}% · 排队 ${value(Number.isFinite(p.chartHealth.queueWaitMedianMs)?p.chartHealth.queueWaitMedianMs/1000:null)} 秒`],['供给说明',p.chartHealth.note]]:[]),],
     decision:[['本轮候选',`${items.length} 个（非全链代币总数）`],['显示条件通过',`${ready} 个；${entry.blocked?'账户暂停或受阻，不会提交新仓':'不是已下单'}`],['开仓状态',entry.label],...(entry.blocked?entry.metrics:[])],
     execution:[['主盘持仓',`${held} 个`],['账本成交',`${s.publicSummary?.totalTrades??rows(s.account?.trades).length} 条；买卖各计一笔`],['百笔复盘',`${value(s.tradeCountReview?.pendingFills)} / 100；${value(s.tradeCountReview?.completedBatches)} 批完成`]]
   };
