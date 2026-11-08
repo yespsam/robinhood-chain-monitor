@@ -97,8 +97,19 @@ async function atomicWrite(file, value) {
   }
 }
 
+export const liveMirrorCapability = (mirror) => ({ enabled: mirror?.cfg?.enabled === true, chains: mirror?.cfg?.chains || [], signalSource: mirror?.cfg?.signalSource || null, strategyAllowlist: mirror?.cfg?.strategyAllowlist || null });
+
 export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe = null, internalTradeMonitor = null, gasMonitor = null, jevResearch = null, chainGasAccounting = false, lossRepairMode = false, enforceLossGuards = lossRepairMode, session = null, chain = 'robinhood', chains = [chain], discoveryMode = 'all_sources', now = Date.now, intervalMs = 1000, marketIntervalMs = 1000, twitterNarrativeSnapshot = () => null, learningReportSnapshot = null,
   evidenceLoader = createPaperEvidenceLoader(dataDir), evaluate = evaluatePaperStrategies, learningLoader = () => null, narrativeSourceReader = readNarrativeLearningSource, allowExploratory = false, compoundEntries = false, fixedEntryUsd = null, upsideMode = false, pvpMode = false, diagnosticMode = false, confirmedMode = false, evidenceHoldMode = false, continuousPaperMode = false, opportunityMode = false, thesisExitExperiment = false, activeEntrySampling = false, tradeReviewEvery = null, higherFrequencyResearch = false, memeExitMode = false, recoveryMode = false, minimalEntryMode = false, evidenceGapExitMode = true, narrativeAdmissionGate = false, profitRetentionShadow = false, strategyFocusSimulation = false, ...legacyOptions } = {}) {
+  const liveMirror = legacyOptions.liveMirror ?? null;
+  const liveMirrorJobs = new Set();
+  const mirrorLive = liveMirror ? (beforeCount, acct, sess) => {
+    let job;
+    job = Promise.resolve().then(() => liveMirror(beforeCount, acct, sess))
+      .catch(error => console.error(`[live-gmgn] ${error.message}`))
+      .finally(() => liveMirrorJobs.delete(job));
+    liveMirrorJobs.add(job);
+  } : () => {};
   if(typeof recoveryMode!=='boolean'||recoveryMode&&!memeExitMode)throw new TypeError('recovery requires meme paper main');
   if(typeof narrativeAdmissionGate!=='boolean'||narrativeAdmissionGate&&!recoveryMode)throw new TypeError('narrative admission requires recovered paper main');
   const focusSimulationReady = confirmedMode && opportunityMode && recoveryMode && narrativeAdmissionGate;
@@ -374,6 +385,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     lastError: null, account: null, strategies: STRATEGY_POLICIES.map(p => ({ ...p, decision: '观察', eligibleCount: 0, observedCount: 0, reasons: ['等待首轮真实数据'], candidate: null })), coverage: {}, evaluations: [], pollIntervalMs: intervalMs,
     costModel: estimatedFeeMode ? ESTIMATED_COST_TEXT : lossRepairMode ? LOSS_REPAIR_TEXT : chainGasAccounting ? '主盘新仓 Gas 取近期链上 swap 实付费用样本，扣账但不因 Gas 高拒绝入场；费用样本不是本订单实际费用，平台费/滑点仍为模型。旧仓及对照盘保留原成本口径' : '费用、滑点及 gas 按模型估算；非实际成交报价', accountNote: session ? '独立虚拟实验；历史亏损账本单独保留，不合并成绩或自动补款' : '独立的服务端 100 美元模拟账户；旧浏览器账户只读保留',
     executionModel: `本地每 ${intervalMs / 1000} 秒检查；五分钟为滚动证据窗口，不是每笔等待；上游延迟另计，非毫秒抢跑` };
+  publicState.liveMirror = liveMirrorCapability(liveMirror);
   const serial = fn => { const result = tail.then(fn); tail = result.catch(() => {}); return result; };
   const errorState = error => { publicState = { ...publicState, status: 'error', lastError: String(error?.message || error).slice(0, 160), account: account && clone(account) }; };
 
@@ -1174,6 +1186,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     recordAlgorithmDecision(rows,commitAt);
     await atomicWrite(stateFile,{schema:'yesp_atm_runtime_v1',session,chain,chains,enabled,account:next,algorithmSignalJournal,learningShadow,narrativeMemory,
       narrativeLearningMemory,narrativeAcademyMemory,reviewComparison,exitComparison,tradeCountReview:nextReview});
+    mirrorLive(beforeCount,next,session);
     profitRetentionObserver?.observeCommitted({beforeAccount:account,afterAccount:next,marks,nowMs:commitAt,path:'targeted_entry'});
     account=next;tradeCountReview=nextReview;
     const row=rows.find(r=>r.decision==='可模拟')||rows[0];
@@ -1650,6 +1663,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     recordAlgorithmDecision(evaluations,nowMs);
     const ledgerWriteStartedAt = now();
     await atomicWrite(stateFile, { schema: 'yesp_atm_runtime_v1', session, chain, chains, enabled, account: next, algorithmSignalJournal, learningShadow: nextShadow, narrativeMemory, narrativeLearningMemory,narrativeAcademyMemory,reviewComparison:nextComparison, exitComparison: nextExits, tradeCountReview: nextReview });
+    mirrorLive(account.trades.length,next,session);
     profitRetentionObserver?.observeCommitted({beforeAccount:account,afterAccount:next,marks:mainMarks,nowMs,path:'scan'});
     phaseTiming.ledgerWriteMs = Math.max(0, now() - ledgerWriteStartedAt);
     tradeCountReview = nextReview;
@@ -2003,6 +2017,6 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       return clone(publicState);
     }),
     stop: async () => { stopped = true; clearTimeout(timer); clearTimeout(refreshTimer); clearTimeout(quoteTimer); clearTimeout(exitTimer); clearTimeout(eventTimer);
-      await Promise.allSettled([internalTradeMonitor?.stop(),jevResearch?.stop(),cycle, fastCycle, quoteEvaluationJob, eventRefreshJob, depthJob, ...quotePreparationJobs, exitJob, refreshJob, ...marketJobs.values(), ...auxiliaryJobs.values(), ...[...quoteJobs.values()].map(x=>x.job), detailJob, narrativeLearningJob, ...chartJobs.values()]); await tail; await profitRetentionObserver?.flush(); await focusShadowStore?.flush(); await focusSimulator?.flush(); await releaseLock(); },
+      await Promise.allSettled([internalTradeMonitor?.stop(),jevResearch?.stop(),cycle, fastCycle, quoteEvaluationJob, eventRefreshJob, depthJob, ...quotePreparationJobs, exitJob, refreshJob, ...marketJobs.values(), ...auxiliaryJobs.values(), ...[...quoteJobs.values()].map(x=>x.job), detailJob, narrativeLearningJob, ...chartJobs.values(), ...liveMirrorJobs]); await tail; await profitRetentionObserver?.flush(); await focusShadowStore?.flush(); await focusSimulator?.flush(); await releaseLock(); },
   };
 }

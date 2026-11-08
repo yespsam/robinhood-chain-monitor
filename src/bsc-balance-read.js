@@ -1,0 +1,187 @@
+// Read-only BSC balance probes for the local studio precheck.
+// Isolated reference: the main monitor process does not import this file.
+// It cannot sign, submit, or unlock a wallet.
+
+export const BSC_BALANCE_READ_URLS = Object.freeze([
+  "https://bsc-dataseed.bnbchain.org",
+  "https://bsc.nodereal.io",
+  "https://bsc-dataseed.ninicoin.io",
+]);
+export const BSC_CHAIN_ID_HEX = "0x38";
+export const BSC_USDT = "0x55d398326f99059ff775485246999027b3197955";
+export const READ_ATTEMPT_TIMEOUT_MS = 2_500;
+export const READ_BUDGET_MS = 8_000;
+export const MAX_BALANCE_READ_ATTEMPTS = 3;
+
+const NATIVE_QUANTITY_RE = /^0x[0-9a-f]{1,64}$/;
+const WORD_RE = /^0x[0-9a-f]{64}$/;
+const WALLET_RE = /^0x[0-9a-f]{40}$/;
+
+function finitePos(value, what) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) throw new Error(`bad ${what}`);
+  return number;
+}
+
+export function bnbFromWei(hex) {
+  return finitePos(Number(BigInt(hex) / 10n ** 9n) / 1e9, "BNB balance");
+}
+
+export function usdtFromRaw(hex) {
+  return finitePos(Number(BigInt(hex) / 10n ** 12n) / 1e6, "USDT balance");
+}
+
+export function redactObservationError(error) {
+  const text = String(error?.message || "读取失败")
+    .replace(/0x[0-9a-f]{20,}/gi, "[redacted]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
+  return text || "读取失败";
+}
+
+function fail(code, status) {
+  const error = new Error(code === "HTTP" ? "http" : code === "CHAIN" ? "chain mismatch" : "bad result");
+  error.code = code;
+  if (status != null) error.status = status;
+  return error;
+}
+
+function failureLabel(error) {
+  if (error?.name === "TimeoutError" || error?.name === "AbortError" || error?.code === "TIMEOUT") return "timeout";
+  if (error?.code === "CHAIN") return "chain mismatch";
+  if (error?.code === "HTTP" && Number.isInteger(error.status)) return `http ${error.status}`;
+  if (error?.code === "SHAPE") return "bad result";
+  return "rejected";
+}
+
+function normalizeWallet(wallet) {
+  const account = String(wallet || "").toLowerCase();
+  if (!WALLET_RE.test(account)) throw new Error("bad wallet");
+  return account;
+}
+
+function normalizeToken(token) {
+  const account = String(token || BSC_USDT).toLowerCase();
+  if (!WALLET_RE.test(account) || /^0x0{40}$/.test(account)) throw new Error("bad token");
+  return account;
+}
+
+function boundedTiming(value, fallback) {
+  if (value == null) return fallback;
+  if (!Number.isSafeInteger(value) || value < 1 || value > READ_BUDGET_MS) {
+    throw new TypeError("balance read timing is out of bounds");
+  }
+  return value;
+}
+
+function hostnameOf(value) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password || !url.hostname) return null;
+    return { href: url.href, origin: url.origin, hostname: url.hostname };
+  } catch {
+    return null;
+  }
+}
+
+function pick(items, id) {
+  if (!Array.isArray(items)) return null;
+  const found = items.filter((item) => item && typeof item === "object" && !Array.isArray(item) && item.id === id);
+  return found.length === 1 ? found[0] : null;
+}
+
+async function execute(target, fetchImpl, signal, spec) {
+  const response = await fetchImpl(target.href, {
+    method: "POST",
+    headers: { accept: "application/json", "content-type": "application/json" },
+    body: JSON.stringify([
+      { jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] },
+      { jsonrpc: "2.0", id: 2, method: spec.method, params: spec.params },
+    ]),
+    redirect: "error",
+    signal,
+  });
+  if (!response || response.status !== 200) throw fail("HTTP", Number.isInteger(response?.status) ? response.status : 0);
+  if (response.redirected === true) throw fail("SHAPE");
+  if (response.url) {
+    let got;
+    try { got = new URL(response.url); } catch { throw fail("SHAPE"); }
+    if (got.origin !== target.origin) throw fail("SHAPE");
+  }
+  let body;
+  try { body = await response.json(); } catch { throw fail("SHAPE"); }
+  const chain = pick(body, 1);
+  const value = pick(body, 2);
+  if (!chain || Object.prototype.hasOwnProperty.call(chain, "error") || chain.result !== BSC_CHAIN_ID_HEX) throw fail("CHAIN");
+  if (!value || Object.prototype.hasOwnProperty.call(value, "error") || typeof value.result !== "string" || !spec.accept.test(value.result)) {
+    throw fail("SHAPE");
+  }
+  return value.result;
+}
+
+async function attemptOnce(target, fetchImpl, timeoutMs, spec) {
+  const controller = new AbortController();
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error("timeout");
+      error.name = "TimeoutError";
+      controller.abort(error);
+      reject(error);
+    }, timeoutMs);
+  });
+  const pending = execute(target, fetchImpl, controller.signal, spec);
+  pending.catch(() => {});
+  try {
+    return await Promise.race([timeout, pending]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function readVerified(account, fetchImpl, options, spec) {
+  if (typeof fetchImpl !== "function") throw new TypeError("fetchImpl must be a function");
+  const attemptTimeoutMs = boundedTiming(options?.attemptTimeoutMs, READ_ATTEMPT_TIMEOUT_MS);
+  const budgetMs = boundedTiming(options?.budgetMs, READ_BUDGET_MS);
+  const urls = (options?.urls || BSC_BALANCE_READ_URLS).slice(0, MAX_BALANCE_READ_ATTEMPTS);
+  const started = Date.now();
+  const failures = [];
+  for (const candidate of urls) {
+    const left = budgetMs - (Date.now() - started);
+    if (left <= 0) break;
+    const target = hostnameOf(candidate);
+    if (!target) {
+      failures.push("invalid-url rejected");
+      continue;
+    }
+    try {
+      return await attemptOnce(target, fetchImpl, Math.min(attemptTimeoutMs, left), spec);
+    } catch (error) {
+      failures.push(`${target.hostname} ${failureLabel(error)}`);
+    }
+  }
+  throw new Error(`balance read failed: ${failures.join("; ") || "no attempt"}`);
+}
+
+export async function readVerifiedBnbBalance(wallet, fetchImpl = fetch, options = {}) {
+  const account = normalizeWallet(wallet);
+  const hex = await readVerified(account, fetchImpl, options, {
+    method: "eth_getBalance",
+    params: [account, "latest"],
+    accept: NATIVE_QUANTITY_RE,
+  });
+  return bnbFromWei(hex);
+}
+
+export async function readVerifiedUsdtBalance(wallet, fetchImpl = fetch, options = {}) {
+  const account = normalizeWallet(wallet);
+  const token = normalizeToken(options.token);
+  const data = `0x70a08231${account.slice(2).padStart(64, "0")}`;
+  const hex = await readVerified(account, fetchImpl, options, {
+    method: "eth_call",
+    params: [{ to: token, data }, "latest"],
+    accept: WORD_RE,
+  });
+  return usdtFromRaw(hex);
+}

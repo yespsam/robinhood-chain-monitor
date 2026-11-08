@@ -11,6 +11,7 @@ import { createResearchTeamReport, renderResearchTeamBrief } from '../src/ai-res
 import { gmgnFlowAddress } from '../src/gmgn-flow-signal.js';
 import { buildPaperFlowEvidence, buildPaperNarrativeEvidence, loadPaperEvidence } from '../src/paper-strategy-evidence.js';
 import { createPaperStrategyRuntime } from '../src/paper-strategy-runtime.js';
+import { createLiveMirror } from '../src/live-gmgn-mirror.js';
 import {createInternalDepthProbe} from '../src/paper-internal-depth.js';
 import {createInnerTradeMonitor} from '../src/bsc-inner-trade-monitor.js';
 import {loadPrivateBscRpcConfig,privateBscRpcEndpoints} from '../src/bsc-private-rpc.js';
@@ -235,8 +236,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
   const chainGasAccounting=!estimatedFeeMode && confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0';
   const gasMonitor = estimatedFeeMode?null:chainGasAccounting?createChainGasMonitor({chains}):createEthGasMonitor();
   const jevResearch = createJevResearchMonitor({ dataDir: path.join(PROJECT, 'data'), sessionId: session?.id || 'default' });
+  const liveMirror = createLiveMirror();
   const internalRpcEndpoints=privateBscRpcEndpoints(loadPrivateBscRpcConfig({dataDir:path.join(PROJECT,'data')}));
-  const strategyRuntime = createPaperStrategyRuntime({ market: readonlyMarket, gasMonitor, jevResearch, chainGasAccounting,
+  const strategyRuntime = createPaperStrategyRuntime({ liveMirror, market: readonlyMarket, gasMonitor, jevResearch, chainGasAccounting,
     internalDepthProbe:estimatedFeeMode?createInternalDepthProbe({dataDir:path.join(PROJECT,'data'),rpcEndpoints:internalRpcEndpoints}):null,
     internalTradeMonitor:estimatedFeeMode?createInnerTradeMonitor({dataDir:path.join(PROJECT,'data'),rpcEndpoints:internalRpcEndpoints}):null,
     discoveryMode:'gmgn_three_lists_v1', enforceLossGuards:await loadPaperLossGuardPolicy(path.join(PROJECT,'data'),session),
