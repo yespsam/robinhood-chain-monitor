@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>逐笔实盘确认</title>
+  <link rel="stylesheet" href="/live-confirm.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">LOCAL · MANUAL ONLY</p>
+      <h1>策略实盘候选</h1>
+      <p class="lede">策略信号只生成候选。每笔必须查看实时安全与报价预览，并输入确认语后单独提交；页面不会自动下单。</p>
+    </header>
+    <section class="status-card" aria-live="polite">
+      <div><span class="dot"></span><strong id="status-title">正在检查实盘门控…</strong></div>
+      <p id="status-detail">本地只读状态检查中。</p>
+      <p class="mode">自动镜像：关闭　·　仅 BSC　·　逐笔确认</p>
+    </section>
+    <section>
+      <div class="section-head"><h2>符合策略的候选</h2><button id="refresh" type="button">刷新</button></div>
+      <div id="candidates" class="candidate-list" aria-live="polite"></div>
+      <p id="list-detail" class="muted"></p>
+    </section>
+    <section id="approval" class="approval hidden" aria-live="polite">
+      <div class="section-head"><h2>订单预览</h2><button id="cancel" type="button" class="quiet">取消预览</button></div>
+      <dl id="preview"></dl>
+      <p class="warning">报价有效期仅 15 秒。提交时会重新检查策略、余额、门控与安全，并再次报价；任一数值变化都会拒绝并要求重新预览。成交与最终状态仍需在 GMGN/账本核验。</p>
+      <label for="confirm-text">逐笔确认语：<code>I_CONFIRM_THIS_TRADE</code></label>
+      <input id="confirm-text" autocomplete="off" spellcheck="false" placeholder="输入上方确认语">
+      <button id="confirm" type="button" class="danger" disabled>确认并提交这一笔</button>
+      <p id="action-result" class="muted"></p>
+    </section>
+    <footer>任何安全数据、链上余额、报价或账本状态缺失时，本页面拒绝提交。不得把“可确认”理解为保证成交或盈利。</footer>
+  </main>
+  <script type="module" src="/live-confirm.js"></script>
+</body>
+</html>

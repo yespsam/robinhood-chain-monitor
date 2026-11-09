@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import http from 'node:http';
+import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +12,9 @@ import { createResearchTeamReport, renderResearchTeamBrief } from '../src/ai-res
 import { gmgnFlowAddress } from '../src/gmgn-flow-signal.js';
 import { buildPaperFlowEvidence, buildPaperNarrativeEvidence, loadPaperEvidence } from '../src/paper-strategy-evidence.js';
 import { createPaperStrategyRuntime } from '../src/paper-strategy-runtime.js';
-import { createLiveMirror } from '../src/live-gmgn-mirror.js';
+import { readBnbBalance, readBnbPriceUsd, readUsdtBalanceUsd, logLiveDecision } from '../src/live-gmgn-mirror.js';
+import { createLiveTrader, loadLiveConfig } from '../src/live-gmgn-trader.js';
+import { createLiveManualApproval, createGmgnManualClient, LIVE_APPROVAL_CONFIRMATION } from '../src/live-manual-approval.js';
 import {createInternalDepthProbe} from '../src/paper-internal-depth.js';
 import {createInnerTradeMonitor} from '../src/bsc-inner-trade-monitor.js';
 import {loadPrivateBscRpcConfig,privateBscRpcEndpoints} from '../src/bsc-private-rpc.js';
@@ -123,7 +126,7 @@ async function researchTeamSnapshot({ market, chain, address } = {}) {
   };
 }
 
-export function createDashboardServer({ host = '127.0.0.1', port = 4173, market = readonlyMarket, strategyRuntime = null, mainPaperSnapshot = null, launchUpdateCoverage = null, squareKeyStore = createSquareKeyStore({ publicationReceiptFile: path.join(PROJECT, 'data', 'binance-square-test-20260922.json') }) } = {}) {
+export function createDashboardServer({ host = '127.0.0.1', port = 4173, market = readonlyMarket, strategyRuntime = null, mainPaperSnapshot = null, launchUpdateCoverage = null, manualLiveApproval = null, squareKeyStore = createSquareKeyStore({ publicationReceiptFile: path.join(PROJECT, 'data', 'binance-square-test-20260922.json') }) } = {}) {
   const squareKeyRoute = createSquareKeyRoute(squareKeyStore);
   const server = http.createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store'); response.setHeader('X-Content-Type-Options', 'nosniff');
@@ -134,6 +137,38 @@ export function createDashboardServer({ host = '127.0.0.1', port = 4173, market 
       const url = new URL(request.url || '/', authority);
       if (!['127.0.0.1', 'localhost', '[::1]'].includes(authority.hostname) || url.origin !== authority.origin) { json(response, { error: '仅允许本机访问' }, 403); return; }
       if (await squareKeyRoute(request, response, url)) return;
+      if (url.pathname.startsWith('/api/live-approval/')) {
+        if (!manualLiveApproval) { json(response, { error: '逐笔确认服务未启用' }, 503); return; }
+        if (request.method === 'GET' && url.pathname === '/api/live-approval/status') {
+          if (url.search) { json(response, { error: '无效请求' }, 400); return; }
+          json(response, { ...manualLiveApproval.status(), manualOnly: true, mirrorEnabled: false }); return;
+        }
+        if (request.method === 'GET' && url.pathname === '/api/live-approval/candidates') {
+          if (url.search) { json(response, { error: '无效请求' }, 400); return; }
+          try { json(response, { candidates: await manualLiveApproval.listCandidates() }); }
+          catch { json(response, { error: '策略候选暂不可用' }, 503); }
+          return;
+        }
+        if (request.method !== 'POST' || !['/api/live-approval/prepare', '/api/live-approval/confirm', '/api/live-approval/cancel'].includes(url.pathname)) { json(response, { error: '无效逐笔确认请求' }, 405); return; }
+        if (request.headers.origin !== url.origin || (request.headers['sec-fetch-site'] && request.headers['sec-fetch-site'] !== 'same-origin')) { json(response, { error: '不允许跨站修改' }, 403); return; }
+        if (!String(request.headers['content-type'] || '').toLowerCase().startsWith('application/json')) { json(response, { error: '需要 JSON 请求' }, 415); return; }
+        let body = '', size = 0;
+        for await (const chunk of request) { size += chunk.length; if (size > 2048) { json(response, { error: '请求过大' }, 413); return; } body += chunk; }
+        let payload;
+        try { payload = JSON.parse(body); } catch { json(response, { error: '无效 JSON' }, 400); return; }
+        if (url.pathname === '/api/live-approval/prepare') {
+          if (typeof payload?.candidateId !== 'string' || Object.keys(payload).some(key => key !== 'candidateId')) { json(response, { error: '候选参数无效' }, 400); return; }
+          const result = await manualLiveApproval.prepare(payload.candidateId);
+          json(response, result, result.ok ? 200 : 409); return;
+        }
+        if (url.pathname === '/api/live-approval/confirm') {
+          if (typeof payload?.approvalId !== 'string' || payload?.confirmation !== LIVE_APPROVAL_CONFIRMATION || Object.keys(payload).some(key => !['approvalId', 'confirmation'].includes(key))) { json(response, { error: '必须逐笔明确确认该订单' }, 400); return; }
+          const result = await manualLiveApproval.confirm(payload.approvalId, payload.confirmation);
+          json(response, result, result.ok ? 200 : 409); return;
+        }
+        if (typeof payload?.approvalId !== 'string' || Object.keys(payload).some(key => key !== 'approvalId')) { json(response, { error: '确认单参数无效' }, 400); return; }
+        json(response, manualLiveApproval.cancel(payload.approvalId)); return;
+      }
       if (url.pathname === '/api/square-preview') {
         if (request.method !== 'GET') { json(response, { error: '仅支持本地只读预览' }, 405); return; }
         if (url.search || (request.headers.origin && request.headers.origin !== url.origin) || (request.headers['sec-fetch-site'] && !['same-origin', 'none'].includes(request.headers['sec-fetch-site']))) { json(response, { error: '仅允许本机同源预览' }, 403); return; }
@@ -236,9 +271,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
   const chainGasAccounting=!estimatedFeeMode && confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0';
   const gasMonitor = estimatedFeeMode?null:chainGasAccounting?createChainGasMonitor({chains}):createEthGasMonitor();
   const jevResearch = createJevResearchMonitor({ dataDir: path.join(PROJECT, 'data'), sessionId: session?.id || 'default' });
-  const liveMirror = createLiveMirror();
   const internalRpcEndpoints=privateBscRpcEndpoints(loadPrivateBscRpcConfig({dataDir:path.join(PROJECT,'data')}));
-  const strategyRuntime = createPaperStrategyRuntime({ liveMirror, market: readonlyMarket, gasMonitor, jevResearch, chainGasAccounting,
+  // Live entries are never mirrored from paper. The only LIVE submission path
+  // below is the short-lived, quote-bound, per-order confirmation endpoint.
+  const strategyRuntime = createPaperStrategyRuntime({ market: readonlyMarket, gasMonitor, jevResearch, chainGasAccounting,
     internalDepthProbe:estimatedFeeMode?createInternalDepthProbe({dataDir:path.join(PROJECT,'data'),rpcEndpoints:internalRpcEndpoints}):null,
     internalTradeMonitor:estimatedFeeMode?createInnerTradeMonitor({dataDir:path.join(PROJECT,'data'),rpcEndpoints:internalRpcEndpoints}):null,
     discoveryMode:'gmgn_three_lists_v1', enforceLossGuards:await loadPaperLossGuardPolicy(path.join(PROJECT,'data'),session),
@@ -270,15 +306,42 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
     upsideMode: process.env.PAPER_PVP_MODE === '0' && process.env.PAPER_UPSIDE_MODE !== '0',
     learningLoader: estimatedFeeMode ? learner.tradingEvidence : learner.snapshot,
     learningReportSnapshot: estimatedFeeMode ? learner.snapshot : null });
+  const liveDataDir = path.resolve(process.env.DATA_DIR || path.join(PROJECT, 'data'));
+  const liveCfg = loadLiveConfig(process.env, liveDataDir);
+  const liveTrader = createLiveTrader(liveCfg);
+  const manualLiveApproval = createLiveManualApproval({
+    cfg: liveCfg,
+    trader: liveTrader,
+    strategyProvider: async () => strategyRuntime.snapshot(),
+    gmgn: createGmgnManualClient(),
+    env: process.env,
+    audit: entry => logLiveDecision(liveCfg, entry),
+    readinessProvider: async () => {
+      const base = { enabled: liveCfg.enabled, killed: fsSync.existsSync(liveCfg.killFile), spendAsset: liveCfg.spendAsset,
+        observations: { bnb: { status: 'unavailable' }, bnbPriceUsd: { status: 'unavailable' }, spendBalance: { status: 'unavailable' } } };
+      if (liveCfg.enabled !== true || base.killed || !liveCfg.chains.includes('bsc') || !/^0x[0-9a-f]{40}$/.test(liveCfg.wallet || '')) return { live: base };
+      try {
+        const observedAt = new Date().toISOString();
+        const [bnb, bnbPriceUsd] = await Promise.all([readBnbBalance(liveCfg.wallet), readBnbPriceUsd()]);
+        const spendBalance = liveCfg.spendAsset === 'usdt' ? await readUsdtBalanceUsd(liveCfg.wallet) : null;
+        const balanceUsd = liveCfg.spendAsset === 'usdt' ? spendBalance : Math.max(0, bnb - liveCfg.gasReserveBnb) * bnbPriceUsd;
+        base.bnb = bnb; base.bnbPriceUsd = bnbPriceUsd; base.balanceUsd = balanceUsd;
+        base.observations.bnb = { status: 'fresh', observedAt };
+        base.observations.bnbPriceUsd = { status: 'fresh', observedAt };
+        if (liveCfg.spendAsset === 'usdt') base.observations.spendBalance = { status: 'fresh', observedAt };
+        return { live: base };
+      } catch { return { live: base }; }
+    },
+  });
   const mainPaperSnapshot=estimatedFeeMode?async()=>{
     const old=JSON.parse(await fs.readFile(path.join(PROJECT,'data',paperSessionLedgerFile(mainSession)),'utf8'));
     return {status:'retained_readonly',mode:'paper',execution:false,signing:false,broadcast:false,
       enabled:old.enabled,session:old.session,account:old.account,updatedAt:old.account.updatedAt,
       costModel:'原主盘只读保留；估算费用测试盘为独立账本，不合并成绩'};
   }:null;
-  const app = createDashboardServer({ port, strategyRuntime,mainPaperSnapshot, launchUpdateCoverage: createLaunchUpdateCoverageReader({dataDir:path.resolve(process.env.DATA_DIR || path.join(PROJECT,'data'))}) });
+  const app = createDashboardServer({ port, strategyRuntime, mainPaperSnapshot, manualLiveApproval, launchUpdateCoverage: createLaunchUpdateCoverageReader({dataDir:path.resolve(process.env.DATA_DIR || path.join(PROJECT,'data'))}) });
   app.listen().then(async address => {
-    console.log(`yesp atm 模拟盘：http://${address.address}:${address.port}（仅模拟盘）`);
+    console.log(`yesp atm dashboard：http://${address.address}:${address.port}（LIVE 不自动镜像；仅逐笔人工确认入口可提交）`);
     try { await strategyRuntime.start(); await socialMonitor?.start(); await alphaMonitor?.start(); twitterNarrativeMonitor.start(); } catch (error) { console.error(`模拟引擎/消息发现启动失败：${error.message}`); }
     try { await learner.start(); } catch { console.error('钱包学习启动失败，原模拟引擎继续运行；请检查学习账本及锁'); }
   }).catch(error => { console.error(`dashboard failed: ${error.message}`); process.exitCode = 1; });
