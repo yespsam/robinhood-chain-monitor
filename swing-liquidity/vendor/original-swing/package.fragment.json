@@ -1,0 +1,17 @@
+{
+  "name": "robinhood-chain-launchpad-monitor",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "ethers": "^6.15.0",
+    "dotenv": "^16.6.1"
+  },
+  "notes": {
+    "swingRuntimeNode": "v25.8.0 (Homebrew /opt/homebrew/bin/node on the Mac)",
+    "swingDirectNpmDeps": ["ethers"],
+    "dotenv": "Not imported by swing modules. scripts/swing-paper.js manually reads only lines matching ^SWING_[A-Z0-9_]+ from repo-root .env if present. Do not copy or require the user's .env.",
+    "unusedBySwing": ["@netlify/blobs", "ws"],
+    "nodeBuiltinsUsed": ["node:fs", "node:fs/promises", "node:path", "node:url", "node:assert/strict", "node:test"]
+  }
+}
