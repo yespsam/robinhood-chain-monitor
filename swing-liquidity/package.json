@@ -1,0 +1,19 @@
+{
+  "name": "swing-liquidity-paper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Isolated paper-only liquidity-first BSC low-cap swing. No wallet and no order path.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node scripts/paper.js",
+    "offline": "node scripts/paper.js --offline",
+    "once": "node scripts/paper.js --once",
+    "dry": "node scripts/paper.js --dry",
+    "backtest": "node scripts/backtest.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "ethers": "^6.15.0"
+  }
+}

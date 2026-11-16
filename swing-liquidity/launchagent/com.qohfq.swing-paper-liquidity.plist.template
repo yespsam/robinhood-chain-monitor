@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.qohfq.swing-paper-liquidity</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/bin/node</string>
+		<string>--max-old-space-size=256</string>
+		<string>__ISOLATED_ROOT__/scripts/paper.js</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>__ISOLATED_ROOT__</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>SWING_DATA_DIR</key>
+		<string>__ISOLATED_ROOT__/data/swing-liquidity</string>
+		<key>SWING_STRATEGY_ID</key>
+		<string>paper-lowcap-swing-liquidity</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>30</integer>
+	<key>StandardOutPath</key>
+	<string>__ISOLATED_ROOT__/data/swing-liquidity/run.log</string>
+	<key>StandardErrorPath</key>
+	<string>__ISOLATED_ROOT__/data/swing-liquidity/run.log</string>
+</dict>
+</plist>
