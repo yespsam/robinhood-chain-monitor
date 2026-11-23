@@ -74,6 +74,73 @@ test("uses browser-compatible headers for public launchpad capability pages", as
   );
   assert.equal(request.options.headers["accept-language"], "en-US,en;q=0.9");
   assert.match(request.options.headers["user-agent"], /Mozilla\/5\.0/);
+  assert.equal(request.options.headers.connection, undefined, "fast live probes keep their existing transport behavior");
+});
+
+test("HyperEVM slow docs are staggered, low-concurrency, and still advance body baselines", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "platform-hyperevm-slow-docs-"));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const target = PLATFORM_CAPABILITY_TARGETS.find((item) => item.id === "hyperevm");
+  let current = Date.parse("2026-08-21T10:00:00.000Z");
+  let active = 0;
+  let maxActive = 0;
+  let sourceRequests = 0;
+  let bodyRequests = 0;
+  const fetchImpl = async (url, options = {}) => {
+    active += 1;
+    maxActive = Math.max(maxActive, active);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      if (options.redirect === "manual") bodyRequests += 1;
+      else sourceRequests += 1;
+      const text = url.endsWith("/sitemap.xml")
+        ? "<urlset></urlset>"
+        : "<main>HyperEVM JSON RPC mainnet documentation and chain support.</main>";
+      return response(text, { url });
+    } finally {
+      active -= 1;
+    }
+  };
+  const check = () => runPlatformCapabilityCheck({
+    dataDir,
+    platformCapabilityPollIntervalMs: 5_000,
+    platformCapabilityRequestTimeoutMs: 8_000,
+    platformCapabilityConcurrency: 4,
+  }, {
+    targets: [target], sourceLane: "slow", now: () => new Date(current), fetchImpl,
+    sendAlertsImpl: async () => {}, logger: quietLogger,
+  });
+
+  await check();
+  let state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  const sourceKeys = Object.keys(state.hyperevm.sources);
+  assert.equal(sourceKeys.length, target.sources.length);
+  for (const key of sourceKeys) {
+    assert.equal(Date.parse(state.hyperevm.sources[key].nextAttemptAt) - current, 5 * 60_000);
+  }
+  assert.ok(maxActive <= 2, "HYPE doc-source requests respect their isolated concurrency cap");
+  assert.equal(bodyRequests, 1, "one HYPE body page is advanced per slow cycle");
+
+  const seededState = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  const retiredUrl = "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm";
+  const retiredKey = `docs:${retiredUrl}`;
+  seededState.hyperevm.sources[retiredKey] = {
+    key: retiredKey, url: retiredUrl, kind: "docs", initialized: true, status: "degraded",
+    failureKind: "transport", lastError: "fetch failed", lastErrorStatus: null,
+    consecutiveFailures: 3, nextAttemptAt: new Date(current + 60_000).toISOString(),
+  };
+  await fs.writeFile(path.join(dataDir, "platform-capability-state.json"), JSON.stringify(seededState));
+
+  current += 60_000;
+  const priorSourceRequests = sourceRequests;
+  await check();
+  state = JSON.parse(await fs.readFile(path.join(dataDir, "platform-capability-state.json"), "utf8"));
+  assert.equal(sourceRequests, priorSourceRequests, "the capability sources wait for their persisted 5-minute due time");
+  assert.equal(bodyRequests, 2, "body observation continues independently while sources are staggered");
+  assert.equal(Object.values(state.hyperevm.documentWatch.pages).filter((page) => page.fingerprint).length, 2);
+  assert.equal(state.hyperevm.sources[retiredKey].status, "degraded", "retired source history is retained");
+  assert.equal(state._health.platforms.hyperevm.status, "healthy", "retired source failures do not poison active-source health");
+  assert.equal(state._health.platforms.hyperevm.coverageStatus, "complete");
 });
 
 test("extracts quote tokens, deployments, versions and platform modules", () => {

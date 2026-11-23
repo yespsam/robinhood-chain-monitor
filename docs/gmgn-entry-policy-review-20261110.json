@@ -1,0 +1,1234 @@
+{
+  "version": "offline_entry_policy_audit_v1",
+  "input": "/tmp/gmgn-gap-followup-before.json",
+  "collection": {
+    "networkRequests": 0,
+    "tradeRequests": 0,
+    "runtimeMutations": 0
+  },
+  "current": {
+    "snapshotAt": "2026-11-10T04:41:29.072Z",
+    "evaluations": 308,
+    "baselineParity": {
+      "checked": 308,
+      "mismatches": 0
+    },
+    "liveDiagnostics": {
+      "version": "paper_entry_diagnostics_v1",
+      "detected": 308,
+      "verifiedCatalyst": 0,
+      "externalStructure": 190,
+      "quoteResearchReady": 0,
+      "quoteScheduled": 0,
+      "eligible": 0,
+      "blockers": [
+        {
+          "code": "safety_blocked",
+          "label": "明确不可交易或安全检查未通过",
+          "count": 110
+        },
+        {
+          "code": "catalyst",
+          "label": "缺少有效原文催化或核实盈利钱包",
+          "count": 74
+        },
+        {
+          "code": "chart_incomplete",
+          "label": "买点K线不足或断档，等待补齐",
+          "count": 36
+        },
+        {
+          "code": "research_excluded",
+          "label": "未进入常规 K 线研究：阶段、流动性或成交量条件未达标",
+          "count": 30
+        },
+        {
+          "code": "chart_stale",
+          "label": "买点K线已过期，等待刷新",
+          "count": 20
+        },
+        {
+          "code": "safety_data",
+          "label": "该入口所需安全字段尚未补齐",
+          "count": 14
+        },
+        {
+          "code": "chart_missing",
+          "label": "买点数据未取得，尚不能判断有无机会",
+          "count": 12
+        },
+        {
+          "code": "reentry",
+          "label": "上次亏损后的重入证据不足",
+          "count": 10
+        },
+        {
+          "code": "structure",
+          "label": "入场结构或退出依据尚未建立",
+          "count": 1
+        },
+        {
+          "code": "setup",
+          "label": "买盘、形态或其他入场条件尚未成立",
+          "count": 1
+        }
+      ],
+      "note": "按链与 CA 去重的当前快照；每个候选只计一个主要状态。没有有效候选不代表市场没有机会，调度与条件通过均不等于成交。"
+    },
+    "sequential": [
+      {
+        "stage": "all_current_unique_candidates",
+        "count": 308
+      },
+      {
+        "stage": "no_hard_safety_block",
+        "count": 198
+      },
+      {
+        "stage": "fresh_market",
+        "count": 198
+      },
+      {
+        "stage": "external_stage_and_regular_research_admission",
+        "count": 80
+      },
+      {
+        "stage": "reentry_allowed",
+        "count": 70
+      },
+      {
+        "stage": "required_safety_fields_complete",
+        "count": 70
+      },
+      {
+        "stage": "fee_model_available",
+        "count": 70
+      },
+      {
+        "stage": "fresh_valid_closed_window",
+        "count": 2
+      },
+      {
+        "stage": "at_least_24_real_closed_bars",
+        "count": 2
+      },
+      {
+        "stage": "any_reviewed_pattern_ready",
+        "count": 0
+      },
+      {
+        "stage": "same_route_net_economics_ready",
+        "count": 0
+      },
+      {
+        "stage": "same_route_entry_thesis_ready",
+        "count": 0
+      },
+      {
+        "stage": "actual_quote_research_ready",
+        "count": 0
+      },
+      {
+        "stage": "actual_paper_eligible",
+        "count": 0
+      },
+      {
+        "stage": "actual_primary_evidence_gate",
+        "count": 0
+      }
+    ],
+    "sourceWindowCounts": {
+      "source_unavailable": 235,
+      "insufficient_closed_bars": 42,
+      "ready": 2,
+      "stale_closed_bars": 26,
+      "insufficient_contiguous_tail": 3
+    },
+    "sensitivity": [
+      {
+        "name": "baseline",
+        "limits": {},
+        "all": {
+          "windowReady": 2,
+          "patternReady": 0,
+          "shapeAndEconomics": 0
+        },
+        "regularResearch": {
+          "candidates": 80,
+          "windowReady": 2,
+          "patternReady": 0,
+          "shapeAndEconomics": 0,
+          "structureResearchReady": 0
+        },
+        "newlyStructuralCandidates": []
+      },
+      {
+        "name": "breakout_volume_1_2",
+        "limits": {
+          "breakoutVolume": 1.2
+        },
+        "all": {
+          "windowReady": 2,
+          "patternReady": 0,
+          "shapeAndEconomics": 0
+        },
+        "regularResearch": {
+          "candidates": 80,
+          "windowReady": 2,
+          "patternReady": 0,
+          "shapeAndEconomics": 0,
+          "structureResearchReady": 0
+        },
+        "newlyStructuralCandidates": []
+      },
+      {
+        "name": "breakout_volume_1_0",
+        "limits": {
+          "breakoutVolume": 1
+        },
+        "all": {
+          "windowReady": 2,
+          "patternReady": 0,
+          "shapeAndEconomics": 0
+        },
+        "regularResearch": {
+          "candidates": 80,
+          "windowReady": 2,
+          "patternReady": 0,
+          "shapeAndEconomics": 0,
+          "structureResearchReady": 0
+        },
+        "newlyStructuralCandidates": []
+      },
+      {
+        "name": "pullback_minimum_10pct",
+        "limits": {
+          "pullbackMinimum": 0.1
+        },
+        "all": {
+          "windowReady": 2,
+          "patternReady": 0,
+          "shapeAndEconomics": 0
+        },
+        "regularResearch": {
+          "candidates": 80,
+          "windowReady": 2,
+          "patternReady": 0,
+          "shapeAndEconomics": 0,
+          "structureResearchReady": 0
+        },
+        "newlyStructuralCandidates": []
+      },
+      {
+        "name": "chase_maximum_12pct",
+        "limits": {
+          "chaseMaximum": 0.12
+        },
+        "all": {
+          "windowReady": 2,
+          "patternReady": 0,
+          "shapeAndEconomics": 0
+        },
+        "regularResearch": {
+          "candidates": 80,
+          "windowReady": 2,
+          "patternReady": 0,
+          "shapeAndEconomics": 0,
+          "structureResearchReady": 0
+        },
+        "newlyStructuralCandidates": []
+      },
+      {
+        "name": "trend_review_volume_0_8",
+        "limits": {
+          "trendReviewVolume": 0.8
+        },
+        "all": {
+          "windowReady": 2,
+          "patternReady": 0,
+          "shapeAndEconomics": 0
+        },
+        "regularResearch": {
+          "candidates": 80,
+          "windowReady": 2,
+          "patternReady": 0,
+          "shapeAndEconomics": 0,
+          "structureResearchReady": 0
+        },
+        "newlyStructuralCandidates": []
+      },
+      {
+        "name": "closed_freshness_120s",
+        "limits": {
+          "maxAgeMs": 120000
+        },
+        "all": {
+          "windowReady": 2,
+          "patternReady": 0,
+          "shapeAndEconomics": 0
+        },
+        "regularResearch": {
+          "candidates": 80,
+          "windowReady": 2,
+          "patternReady": 0,
+          "shapeAndEconomics": 0,
+          "structureResearchReady": 0
+        },
+        "newlyStructuralCandidates": []
+      },
+      {
+        "name": "closed_freshness_180s",
+        "limits": {
+          "maxAgeMs": 180000
+        },
+        "all": {
+          "windowReady": 2,
+          "patternReady": 0,
+          "shapeAndEconomics": 0
+        },
+        "regularResearch": {
+          "candidates": 80,
+          "windowReady": 2,
+          "patternReady": 0,
+          "shapeAndEconomics": 0,
+          "structureResearchReady": 0
+        },
+        "newlyStructuralCandidates": []
+      },
+      {
+        "name": "post_gap_tail_13_only",
+        "limits": {
+          "postGapMin": 13
+        },
+        "all": {
+          "windowReady": 3,
+          "patternReady": 0,
+          "shapeAndEconomics": 0
+        },
+        "regularResearch": {
+          "candidates": 80,
+          "windowReady": 3,
+          "patternReady": 0,
+          "shapeAndEconomics": 0,
+          "structureResearchReady": 0
+        },
+        "newlyStructuralCandidates": []
+      },
+      {
+        "name": "post_gap_and_thesis_13",
+        "limits": {
+          "postGapMin": 13,
+          "thesisMinimum": 13
+        },
+        "all": {
+          "windowReady": 3,
+          "patternReady": 0,
+          "shapeAndEconomics": 0
+        },
+        "regularResearch": {
+          "candidates": 80,
+          "windowReady": 3,
+          "patternReady": 0,
+          "shapeAndEconomics": 0,
+          "structureResearchReady": 0
+        },
+        "newlyStructuralCandidates": []
+      },
+      {
+        "name": "combined_research_relaxation",
+        "limits": {
+          "breakoutVolume": 1.2,
+          "pullbackMinimum": 0.1,
+          "chaseMaximum": 0.12,
+          "maxAgeMs": 180000,
+          "postGapMin": 13,
+          "thesisMinimum": 13
+        },
+        "all": {
+          "windowReady": 3,
+          "patternReady": 0,
+          "shapeAndEconomics": 0
+        },
+        "regularResearch": {
+          "candidates": 80,
+          "windowReady": 3,
+          "patternReady": 0,
+          "shapeAndEconomics": 0,
+          "structureResearchReady": 0
+        },
+        "newlyStructuralCandidates": []
+      }
+    ],
+    "evidenceGate": {
+      "enabled": true,
+      "accountVariant": null,
+      "tiers": {
+        "shadow_only": 289,
+        "base": 19
+      },
+      "primaryAllowedIgnoringEarlierChecks": 2,
+      "externalResearchCandidates": 80,
+      "externalResearchShadowOnly": 79,
+      "externalResearchPrimaryAllowedForCurrentlySelectedRoute": 0,
+      "externalResearchPrimaryAllowedByHypotheticalRoute": {
+        "external_breakout": 0,
+        "external_pullback": 1,
+        "external_trend": 0
+      },
+      "removeEvidenceGateOnlyActualEligible": 0
+    },
+    "freshWindowExamples": [
+      {
+        "identity": {
+          "chain": "bsc",
+          "address": "0x99c8f3ec34c89b067a0dca66bfb0d7ff82717777",
+          "symbol": "AICoin",
+          "price": 0.00012141
+        },
+        "chartCode": "ready",
+        "windowReady": true,
+        "bars": 60,
+        "tailBars": 60,
+        "shapeReady": false,
+        "shapeAndEconomics": false,
+        "structureResearchReady": false,
+        "routes": [
+          {
+            "id": "external_breakout",
+            "patternReady": false,
+            "thesis": false,
+            "economicsReady": false,
+            "reviewedShapeAndEconomics": false,
+            "referenceGainRate": 0.02562284820031291,
+            "pattern": {
+              "closedAt": 1794285660000,
+              "close": 0.00012355832,
+              "volumeUsd": 1582.062398707,
+              "baselineVolumeUsd": 1754.92725012,
+              "volumeMultiple": 0.9014974259467566,
+              "resistance": 0.00015534137,
+              "ready": false,
+              "support": 0.00010368750766666666,
+              "reason": "等待收盘放量突破并站稳前 12 根压力位",
+              "reviewVersion": "opportunity_review_v2",
+              "atr": 1.4177993866666666e-05,
+              "rangeHigh": 0.00015534137,
+              "rangeLow": 3.8248286e-05,
+              "targetPrice": 0.00012452087,
+              "targetKind": "已观察历史压力位，非保证可达",
+              "reclaimPrice": 0.00015534137
+            },
+            "economics": {
+              "version": "opportunity_review_v2",
+              "ready": false,
+              "breakEvenPrice": 0.0001299553980871941,
+              "breakEvenRate": 0.07038463130873973,
+              "estimatedStopLossUsd": 2.029385648491071,
+              "netRewardRisk": null,
+              "netReferenceGainUsd": -0.419856833948673,
+              "reason": "已观察结构空间不足以覆盖往返成本及失效损失，继续观察"
+            }
+          },
+          {
+            "id": "external_pullback",
+            "patternReady": false,
+            "thesis": false,
+            "economicsReady": false,
+            "reviewedShapeAndEconomics": false,
+            "referenceGainRate": 0.02562284820031291,
+            "pattern": {
+              "closedAt": 1794285660000,
+              "close": 0.00012355832,
+              "volumeUsd": 1582.062398707,
+              "baselineVolumeUsd": 1754.92725012,
+              "volumeMultiple": 0.9014974259467566,
+              "peak": 0.00015941762,
+              "base": 4.0356682e-05,
+              "trough": 3.8248286e-05,
+              "rise": 2.9502162244160712,
+              "pullback": 0.7600749151818977,
+              "ready": false,
+              "support": 0.00010368750766666666,
+              "reason": "等待拉升后有效回踩、抬高低点及放量收复",
+              "reviewVersion": "opportunity_review_v2",
+              "atr": 1.4177993866666666e-05,
+              "rangeHigh": 0.00015534137,
+              "rangeLow": 3.8248286e-05,
+              "targetPrice": 0.00012452087,
+              "targetKind": "近端已观察上方价位，非确认强阻力或保证可达",
+              "targetSelectionVersion": "pullback_nearest_observed_level_v1",
+              "nearbyObservedLevel": 0.00012452087,
+              "upsideScenarioTargetPrice": 0.00015941762,
+              "reclaimPrice": 0.00013851003
+            },
+            "economics": {
+              "version": "opportunity_review_v2",
+              "ready": false,
+              "breakEvenPrice": 0.0001299553980871941,
+              "breakEvenRate": 0.07038463130873973,
+              "estimatedStopLossUsd": 2.029385648491071,
+              "netRewardRisk": null,
+              "netReferenceGainUsd": -0.419856833948673,
+              "reason": "已观察结构空间不足以覆盖往返成本及失效损失，继续观察"
+            }
+          },
+          {
+            "id": "external_trend",
+            "patternReady": false,
+            "thesis": true,
+            "economicsReady": false,
+            "reviewedShapeAndEconomics": false,
+            "referenceGainRate": 0.02562284820031291,
+            "pattern": {
+              "closedAt": 1794285660000,
+              "close": 0.00012355832,
+              "volumeUsd": 1582.062398707,
+              "baselineVolumeUsd": 1754.92725012,
+              "volumeMultiple": 0.9014974259467566,
+              "ema8": 0.0001199661289036814,
+              "ema21": 0.00011007837063701457,
+              "priorEma8": 0.0001189397885904475,
+              "ready": false,
+              "support": 0.00010368750766666666,
+              "reason": "均线差、斜率或放量不足，弱趋势只观察",
+              "reviewVersion": "opportunity_review_v2",
+              "atr": 1.4177993866666666e-05,
+              "rangeHigh": 0.00015534137,
+              "rangeLow": 3.8248286e-05,
+              "targetPrice": 0.00012452087,
+              "targetKind": "已观察历史压力位，非保证可达",
+              "reclaimPrice": 0.0001199661289036814
+            },
+            "economics": {
+              "version": "opportunity_review_v2",
+              "ready": false,
+              "breakEvenPrice": 0.0001299553980871941,
+              "breakEvenRate": 0.07038463130873973,
+              "estimatedStopLossUsd": 2.029385648491071,
+              "netRewardRisk": null,
+              "netReferenceGainUsd": -0.419856833948673,
+              "reason": "已观察结构空间不足以覆盖往返成本及失效损失，继续观察"
+            }
+          }
+        ],
+        "actualReasons": [
+          "已观察结构空间不足以覆盖往返成本及失效损失，继续观察",
+          "均线差、斜率或放量不足，弱趋势只观察"
+        ],
+        "actualMissing": [
+          "五秒内的独立报价",
+          "等待新鲜结构验证扣费后的空间",
+          "连续新鲜报价确认"
+        ],
+        "costRate": 0.06601941747572806,
+        "gate": {
+          "version": "evidence_tier_chase_gate_v1",
+          "tier": "shadow_only",
+          "canChaseBreakout": false,
+          "breakout": true,
+          "frictionBudget": 0,
+          "costRate": 0.06601941747572806,
+          "narrative": {
+            "ok": false,
+            "score": 0,
+            "sources": 0,
+            "eligible": false
+          },
+          "control": {
+            "version": "paper_control_score_v1",
+            "status": "weak",
+            "ok": false,
+            "score": 20,
+            "parts": [
+              "筹码分散，不视为控盘",
+              "打包占比可接受",
+              "开发团队持仓可接受"
+            ],
+            "unknown": [],
+            "meaning": "控盘质量分是规则估算，不代表庄家意图或收益；缺字段一律 unknown。"
+          },
+          "mainAllowed": false,
+          "shadowOnly": true,
+          "reasons": [
+            "叙事证据不足（无叙事/exploratory），只进影子研究账本，不占主盘现金"
+          ]
+        }
+      },
+      {
+        "identity": {
+          "chain": "sol",
+          "address": "B9FgqHbtccsgcL6YPfUhNd81qveNtrTbsfLvcjxtpump",
+          "symbol": "AICoin",
+          "price": 0.000254385
+        },
+        "chartCode": "ready",
+        "windowReady": true,
+        "bars": 60,
+        "tailBars": 60,
+        "shapeReady": false,
+        "shapeAndEconomics": false,
+        "structureResearchReady": false,
+        "routes": [
+          {
+            "id": "external_breakout",
+            "patternReady": false,
+            "thesis": false,
+            "economicsReady": false,
+            "reviewedShapeAndEconomics": false,
+            "referenceGainRate": 0.023089057924012835,
+            "pattern": {
+              "closedAt": 1794285660000,
+              "close": 0.0002495134,
+              "volumeUsd": 5375.22272021,
+              "baselineVolumeUsd": 4738.084686693,
+              "volumeMultiple": 1.1344716432161743,
+              "resistance": 0.00027909877,
+              "ready": false,
+              "support": 0.00021665889583333332,
+              "reason": "等待收盘放量突破并站稳前 12 根压力位",
+              "reviewVersion": "opportunity_review_v2",
+              "atr": 3.018088333333333e-05,
+              "rangeHigh": 0.00042713632,
+              "rangeLow": 0.00022860445,
+              "targetPrice": 0.00026025851,
+              "targetKind": "已观察历史压力位，非保证可达",
+              "reclaimPrice": 0.00027909877
+            },
+            "economics": {
+              "version": "opportunity_review_v2",
+              "ready": false,
+              "breakEvenPrice": 0.0002652981274131274,
+              "breakEvenRate": 0.04290004290004279,
+              "estimatedStopLossUsd": 1.8352135119128121,
+              "netRewardRisk": null,
+              "netReferenceGainUsd": -0.19015049520816518,
+              "reason": "已观察结构空间不足以覆盖往返成本及失效损失，继续观察"
+            }
+          },
+          {
+            "id": "external_pullback",
+            "patternReady": false,
+            "thesis": false,
+            "economicsReady": false,
+            "reviewedShapeAndEconomics": false,
+            "referenceGainRate": 0.023089057924012835,
+            "pattern": {
+              "closedAt": 1794285660000,
+              "close": 0.0002495134,
+              "volumeUsd": 5375.22272021,
+              "baselineVolumeUsd": 4738.084686693,
+              "volumeMultiple": 1.1344716432161743,
+              "peak": 0.0004511091,
+              "base": 0.00019310693,
+              "trough": 0.00022860445,
+              "rise": 1.3360585764581314,
+              "pullback": 0.49323910779011104,
+              "ready": false,
+              "support": 0.00021665889583333332,
+              "reason": "等待拉升后有效回踩、抬高低点及放量收复",
+              "reviewVersion": "opportunity_review_v2",
+              "atr": 3.018088333333333e-05,
+              "rangeHigh": 0.00042713632,
+              "rangeLow": 0.00022860445,
+              "targetPrice": 0.00026025851,
+              "targetKind": "近端已观察上方价位，非确认强阻力或保证可达",
+              "targetSelectionVersion": "pullback_nearest_observed_level_v1",
+              "nearbyObservedLevel": 0.00026025851,
+              "upsideScenarioTargetPrice": 0.0004511091,
+              "reclaimPrice": 0.00027200271
+            },
+            "economics": {
+              "version": "opportunity_review_v2",
+              "ready": false,
+              "breakEvenPrice": 0.0002652981274131274,
+              "breakEvenRate": 0.04290004290004279,
+              "estimatedStopLossUsd": 1.8352135119128121,
+              "netRewardRisk": null,
+              "netReferenceGainUsd": -0.19015049520816518,
+              "reason": "已观察结构空间不足以覆盖往返成本及失效损失，继续观察"
+            }
+          },
+          {
+            "id": "external_trend",
+            "patternReady": false,
+            "thesis": false,
+            "economicsReady": false,
+            "reviewedShapeAndEconomics": false,
+            "referenceGainRate": 0.023089057924012835,
+            "pattern": {
+              "closedAt": 1794285660000,
+              "close": 0.0002495134,
+              "volumeUsd": 5375.22272021,
+              "baselineVolumeUsd": 4738.084686693,
+              "volumeMultiple": 1.1344716432161743,
+              "ema8": 0.00025940651231097354,
+              "ema21": 0.0002759531041497894,
+              "priorEma8": 0.0002622331158283945,
+              "ready": false,
+              "support": 0.00021665889583333332,
+              "reason": "均线差、斜率或放量不足，弱趋势只观察",
+              "reviewVersion": "opportunity_review_v2",
+              "atr": 3.018088333333333e-05,
+              "rangeHigh": 0.00042713632,
+              "rangeLow": 0.00022860445,
+              "targetPrice": 0.00026025851,
+              "targetKind": "已观察历史压力位，非保证可达",
+              "reclaimPrice": 0.00025940651231097354
+            },
+            "economics": {
+              "version": "opportunity_review_v2",
+              "ready": false,
+              "breakEvenPrice": 0.0002652981274131274,
+              "breakEvenRate": 0.04290004290004279,
+              "estimatedStopLossUsd": 1.8352135119128121,
+              "netRewardRisk": null,
+              "netReferenceGainUsd": -0.19015049520816518,
+              "reason": "已观察结构空间不足以覆盖往返成本及失效损失，继续观察"
+            }
+          }
+        ],
+        "actualReasons": [
+          "已观察结构空间不足以覆盖往返成本及失效损失，继续观察",
+          "等待收盘放量突破并站稳前 12 根压力位",
+          "等待可绑定入场的真实结构失效位，不能用买入前已有弱势作为新退出理由"
+        ],
+        "actualMissing": [
+          "五秒内的独立报价",
+          "等待新鲜结构验证扣费后的空间",
+          "连续新鲜报价确认"
+        ],
+        "costRate": 0.041176470588235224,
+        "gate": {
+          "version": "evidence_tier_chase_gate_v1",
+          "tier": "shadow_only",
+          "canChaseBreakout": false,
+          "breakout": true,
+          "frictionBudget": 0,
+          "costRate": 0.041176470588235224,
+          "narrative": {
+            "ok": false,
+            "score": 0,
+            "sources": 0,
+            "eligible": false
+          },
+          "control": {
+            "version": "paper_control_score_v1",
+            "status": "weak",
+            "ok": false,
+            "score": 20,
+            "parts": [
+              "筹码分散，不视为控盘",
+              "打包占比可接受",
+              "开发团队持仓可接受"
+            ],
+            "unknown": [],
+            "meaning": "控盘质量分是规则估算，不代表庄家意图或收益；缺字段一律 unknown。"
+          },
+          "mainAllowed": false,
+          "shadowOnly": true,
+          "reasons": [
+            "叙事证据不足（无叙事/exploratory），只进影子研究账本，不占主盘现金"
+          ]
+        }
+      }
+    ]
+  },
+  "archive": {
+    "sourceFiles": [
+      "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+      "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+      "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+      "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+      "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+      "docs/gmgn-chart-backlog-20261110-last-audit.json"
+    ],
+    "uniqueSourceObservations": 58,
+    "excludedFailedOrUnvalidatedResponses": 4,
+    "baselineParity": {
+      "checked": 58,
+      "mismatches": 0
+    },
+    "uniqueContracts": 54,
+    "priceBasis": "last closed candle close proxy; no quote/fees/safety/narrative/entry inference",
+    "sensitivity": [
+      {
+        "name": "baseline",
+        "windowReady": 12,
+        "patternReady": 1,
+        "byRoute": {
+          "external_breakout": 1,
+          "external_pullback": 0,
+          "external_trend": 0
+        },
+        "passingObservations": [
+          {
+            "identity": {
+              "chain": "sol",
+              "address": "2UfvRT4TyVTQSi8xUzPyNxqFjHoRoG2z8PLEFwzhLupT",
+              "symbol": "NVIDIOT"
+            },
+            "sourceFile": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+            "observedAt": "2026-11-09T17:58:12.919Z",
+            "priceProxy": 4.5744944e-05,
+            "routes": [
+              {
+                "id": "external_breakout",
+                "volumeMultiple": 1.5054187534592594
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "breakout_volume_1_2",
+        "windowReady": 12,
+        "patternReady": 2,
+        "byRoute": {
+          "external_breakout": 2,
+          "external_pullback": 0,
+          "external_trend": 0
+        },
+        "passingObservations": [
+          {
+            "identity": {
+              "chain": "sol",
+              "address": "2UfvRT4TyVTQSi8xUzPyNxqFjHoRoG2z8PLEFwzhLupT",
+              "symbol": "NVIDIOT"
+            },
+            "sourceFile": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+            "observedAt": "2026-11-09T17:58:12.919Z",
+            "priceProxy": 4.5744944e-05,
+            "routes": [
+              {
+                "id": "external_breakout",
+                "volumeMultiple": 1.5054187534592594
+              }
+            ]
+          },
+          {
+            "identity": {
+              "chain": "sol",
+              "address": "A31fDS2KH1sHUEcuXHkmmnqQk89CUBeFuB7JFWhTHGoT",
+              "symbol": "PUSSY"
+            },
+            "sourceFile": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+            "observedAt": "2026-11-09T18:02:45.642Z",
+            "priceProxy": 4.8891578e-05,
+            "routes": [
+              {
+                "id": "external_breakout",
+                "volumeMultiple": 1.3344993280679383
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "breakout_volume_1_0",
+        "windowReady": 12,
+        "patternReady": 2,
+        "byRoute": {
+          "external_breakout": 2,
+          "external_pullback": 0,
+          "external_trend": 0
+        },
+        "passingObservations": [
+          {
+            "identity": {
+              "chain": "sol",
+              "address": "2UfvRT4TyVTQSi8xUzPyNxqFjHoRoG2z8PLEFwzhLupT",
+              "symbol": "NVIDIOT"
+            },
+            "sourceFile": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+            "observedAt": "2026-11-09T17:58:12.919Z",
+            "priceProxy": 4.5744944e-05,
+            "routes": [
+              {
+                "id": "external_breakout",
+                "volumeMultiple": 1.5054187534592594
+              }
+            ]
+          },
+          {
+            "identity": {
+              "chain": "sol",
+              "address": "A31fDS2KH1sHUEcuXHkmmnqQk89CUBeFuB7JFWhTHGoT",
+              "symbol": "PUSSY"
+            },
+            "sourceFile": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+            "observedAt": "2026-11-09T18:02:45.642Z",
+            "priceProxy": 4.8891578e-05,
+            "routes": [
+              {
+                "id": "external_breakout",
+                "volumeMultiple": 1.3344993280679383
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "pullback_minimum_10pct",
+        "windowReady": 12,
+        "patternReady": 1,
+        "byRoute": {
+          "external_breakout": 1,
+          "external_pullback": 0,
+          "external_trend": 0
+        },
+        "passingObservations": [
+          {
+            "identity": {
+              "chain": "sol",
+              "address": "2UfvRT4TyVTQSi8xUzPyNxqFjHoRoG2z8PLEFwzhLupT",
+              "symbol": "NVIDIOT"
+            },
+            "sourceFile": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+            "observedAt": "2026-11-09T17:58:12.919Z",
+            "priceProxy": 4.5744944e-05,
+            "routes": [
+              {
+                "id": "external_breakout",
+                "volumeMultiple": 1.5054187534592594
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "chase_maximum_12pct",
+        "windowReady": 12,
+        "patternReady": 1,
+        "byRoute": {
+          "external_breakout": 1,
+          "external_pullback": 0,
+          "external_trend": 0
+        },
+        "passingObservations": [
+          {
+            "identity": {
+              "chain": "sol",
+              "address": "2UfvRT4TyVTQSi8xUzPyNxqFjHoRoG2z8PLEFwzhLupT",
+              "symbol": "NVIDIOT"
+            },
+            "sourceFile": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+            "observedAt": "2026-11-09T17:58:12.919Z",
+            "priceProxy": 4.5744944e-05,
+            "routes": [
+              {
+                "id": "external_breakout",
+                "volumeMultiple": 1.5054187534592594
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "limitations": [
+    "Single snapshot sensitivity is not a profit backtest.",
+    "New passes are research candidates only; no quotes are invented and no gates are changed.",
+    "Each source is evaluated alone, using original candle and observation times; no cross-provider splicing."
+  ],
+  "review": {
+    "verdict": "当前零合格主要由有效数据覆盖与未成立的形态/净空间解释；同时存在必须明确的“独立外盘路线”与“主账本统一叙事门槛”策略整合冲突。未发现 1.5 倍放量、15% 回踩、8% 追高在数学上互相矛盾；不支持仅为增加交易频率盲目放宽。",
+    "scope": {
+      "localCodeOnly": true,
+      "liveThresholdChanges": false,
+      "serviceRestarts": 0,
+      "agentInstructions": "No AGENTS.md in checked ancestors or repository search.",
+      "frozen64Note": "本报告统计指定 04:41:29Z 的动态 308 候选和其 80 个常规外盘研究候选；用户冻结 64 个数据目标是另一个集合，不把两者混为同一分母。",
+      "initialAuditRuntimeSourceChanges": false,
+      "preparedCodeChanges": true,
+      "runningProcessChanged": false
+    },
+    "findings": [
+      {
+        "id": "independent_route_vs_primary_narrative_gate",
+        "classification": "confirmed_policy_integration_and_reporting_mismatch",
+        "severity": "material downstream gate; not the immediate cause for the two current windows",
+        "evidence": {
+          "externalPolicyText": "外盘量价路线不要求新闻原文",
+          "externalResearchCandidates": 80,
+          "shadowOnlyAmongExternal": 79,
+          "baseAmongExternal": 1,
+          "currentlySelectedRoutePrimaryAllowed": 0,
+          "hypotheticalPullbackPrimaryAllowed": 1,
+          "gateRemovedOnlyActualEligible": 0
+        },
+        "explanation": "repairEntryReview 允许外盘结构作为独立研究路线；主账本 writer 仍统一要求 narrativeTier 合格，突破/趋势进一步要求控盘。当前选中外盘路线全不满足主账本 gate，但只取消此 gate 仍然没有合格买入。不能把移除保护门槛称为无行为变化的 bug 修复。",
+        "sources": [
+          "src/paper-loss-repair.js:19",
+          "src/paper-loss-repair.js:143",
+          "src/paper-chase-gate.js:22",
+          "src/paper-strategy-engine.js:872",
+          "src/paper-opportunity-policy.js:231"
+        ]
+      },
+      {
+        "id": "window_readiness_is_not_primary_thesis_readiness",
+        "classification": "layered_policy_with_misleading_aggregate_metric",
+        "evidence": {
+          "baseClosedWindowMinimum": 13,
+          "postGapContiguousMinimum": 24,
+          "primaryEntryThesisMinimum": 24,
+          "hotFreshnessMetricMs": 120000,
+          "actualWindowFreshnessMs": 90000,
+          "baselineFreshWindowCount": 2,
+          "postGap13FreshWindowCount": 3,
+          "newPatternCount": 0,
+          "extraWindow": {
+            "chain": "sol",
+            "address": "34DXEU2ttEtBSb1TqGJm7izgvYTTkqKcCoiNWdPDpump",
+            "symbol": "BIG",
+            "actualContiguousTail": 14
+          }
+        },
+        "explanation": "13 根只足够基础图表校验/12 根突破比较；主账本结构失效位要求至少 24 根，缺口后也要求 24 根。单改图表尾部为 13 不会绕过 thesis 的 24 根，且这次新增 BIG 的形态仍不成立。热门新鲜 3/3 的 120 秒统计也不等于 90 秒完整窗口 3/3。",
+        "sources": [
+          "src/paper-opportunity-policy.js:54",
+          "src/paper-opportunity-policy.js:82",
+          "src/paper-loss-repair.js:41",
+          "src/paper-entry-funnel.js:99"
+        ]
+      },
+      {
+        "id": "effective_net_reward_requirement",
+        "classification": "mathematical_redundancy_and_conservative_policy_not_contradiction",
+        "derivation": {
+          "definitions": "B=budget, q=notional/price, a=1-fee-slippage-sellTax, g=gas, S=support, T=target, P=current price; BE=(B+g)/(q*a). Assumes q*a>0, S<P, break-even rate r>=0.",
+          "equations": [
+            "loss=B+g-q*a*S",
+            "gain=q*a*T-(B+g)",
+            "gain/loss>=1.2 implies T>=2.2*BE-1.2*S",
+            "T/P-1 >= 2.2*(BE/P-1)+1.2*(1-S/P)"
+          ],
+          "implication": "在有效支持位 S<P 且非负成本下，净盈亏比 >=1.2 已比“参考涨幅至少为保本涨幅 1.5 倍”更严格；删去后者单独不会增加通过数。",
+          "assumptions": "loss>0, q*a>0, support S<P, break-even rate r>=0; not valid outside those conditions."
+        },
+        "currentExamples": [
+          {
+            "identity": {
+              "chain": "bsc",
+              "address": "0x99c8f3ec34c89b067a0dca66bfb0d7ff82717777",
+              "symbol": "AICoin",
+              "price": 0.00012141
+            },
+            "costRate": 0.06601941747572806,
+            "breakEvenGainRate": 0.07038463130873973,
+            "supportDistanceRate": 0.14597226203223246,
+            "netR1_2MinimumTargetGainRate": 0.33001290331790634,
+            "explicit1_5BreakEvenMinimumGainRate": 0.1055769469631096,
+            "selectedObservedReferenceGainRate": 0.02562284820031291,
+            "netReferenceGainUsd": -0.419856833948673
+          },
+          {
+            "identity": {
+              "chain": "sol",
+              "address": "B9FgqHbtccsgcL6YPfUhNd81qveNtrTbsfLvcjxtpump",
+              "symbol": "AICoin",
+              "price": 0.000254385
+            },
+            "costRate": 0.041176470588235224,
+            "breakEvenGainRate": 0.04290004290004279,
+            "supportDistanceRate": 0.14830317890860967,
+            "netR1_2MinimumTargetGainRate": 0.2723439090704257,
+            "explicit1_5BreakEvenMinimumGainRate": 0.06435006435006418,
+            "selectedObservedReferenceGainRate": 0.023089057924012835,
+            "netReferenceGainUsd": -0.19015049520816518
+          }
+        ],
+        "explanation": "当前 BSC/SOL AICoin 的近端单根历史 high 仅给出约 2.56%/2.31% 参考空间，而按现有 ATR 支持位及成本模型，净盈亏比门槛要求约 33.0%/27.2%。这是很保守的费用+空间政策；两个当前参考情景甚至在扣费后为负，直接去掉经济性校验没有本次数据支持。单根 high 是否应当作最近参考压力位是可研究的策略选择，不是已证实程序错误。",
+        "sources": [
+          "src/paper-opportunity-review.js:34",
+          "src/paper-opportunity-review.js:58",
+          "src/paper-cost-policy.js:34"
+        ]
+      },
+      {
+        "id": "threshold_sensitivity",
+        "classification": "no_current_evidence_for_broad_relaxation",
+        "evidence": "完整逐参数结果见 current.sensitivity。当前基线2窗口/0形态；放量1.2或1.0、回踩10%、追高12%、新鲜120/180秒均不增加形态；尾部和thesis13根只增加1窗口；测试组合仍0。",
+        "archive": "58份原始来源观察、54CA；12窗口通过，1.5倍放量有1个形态，降到1.2有2个。新增为 SOL PUSSY、当时量比1.3345；只用当时最后收盘价作形态代理，未伪造独立报价或费用/准入。样本来自已排除/离榜补查，存在选择偏差，不能推断收益或优劣。",
+        "sources": [
+          "src/paper-opportunity-policy.js:103",
+          "src/paper-opportunity-policy.js:111",
+          "scripts/audit-entry-policy.js"
+        ]
+      },
+      {
+        "id": "quote_research_is_waiting_for_structure",
+        "classification": "expected_staged_pipeline_in_this_snapshot",
+        "explanation": "当前外盘 reviewed pattern/signal 为0，quoteResearchReady与quoteScheduled为0符合研究顺序；本次不存在“形态已过且合格报价被漏调度”的证据。缺少报价不能当作报价接口坏了，也不能用补造报价证明可买。",
+        "sources": [
+          "src/paper-candidate-research.js:82",
+          "src/paper-confirmed-policy.js:226"
+        ]
+      }
+    ],
+    "minimalProposals": [
+      {
+        "priority": 1,
+        "type": "diagnostic_consistency_no_threshold_change",
+        "proposal": "每条候选/路线分别展示 researchReady 与 primaryCommitAllowed（含现有 evidenceTier/chase 拒绝原因），同时让独立外盘路线文案明确主账本是否仍要求叙事；writer 复核继续保留。",
+        "why": "当前外盘研究通过与实际主账本许可是两个不同概念，统一 eligible 展示会掩盖主账本 gate。",
+        "validation": "合成已过结构/报价的无叙事行应显示研究通过、主账本拒绝；有叙事无控盘的回踩行与突破行应显示不同结果；账本余额/交易数完全不变。"
+      },
+      {
+        "priority": 2,
+        "type": "diagnostic_consistency_no_threshold_change",
+        "proposal": "新增 primaryStructureWindowReady/entryThesisBarsReady 指标明确至少24根、90秒、连续真实尾部；保留原13根图表兼容指标与120秒热门源监控指标。",
+        "why": "区分来源成功、时间新鲜、图表可用、主账本结构证据，避免“已补齐”误等于可交易。",
+        "validation": "13–23根无缺口只可基础图表通过，主账本结构指标仍false；缺口后14根同样false；不伪造缺失分钟。"
+      },
+      {
+        "priority": 3,
+        "type": "data_quality_first",
+        "proposal": "先完成当前冻结64的来源边界/备用源核验，按链+CA+池与原始时钟隔离来源，不通过降低新鲜度或拼接缺口伪装补齐。",
+        "why": "70个安全/重入通过的常规外盘候选只有2个有效窗口，当前主要识别能力受数据覆盖限制。"
+      },
+      {
+        "priority": 4,
+        "type": "explicit_policy_decision_required_before_execution_change",
+        "proposal": "若产品目标确实是允许纯外盘量价在主账本交易，另行定义 route-specific primary admission，清楚说明适用账本、成本及资金限额；先独立影子评估，不能简单全局关闭 evidenceTierGate。",
+        "why": "这是实质改变买入许可的策略决策，当前快照并未证明解除叙事门槛能产生有效交易或更好表现。"
+      },
+      {
+        "priority": 5,
+        "type": "offline_or_isolated_shadow_experiment_only",
+        "proposal": "可优先比较1.5/1.2倍放量及“最近单根high”参考目标政策；保留成本、结构、报价与来源验证，记录扣费后的前瞻结果及未成交样本。暂不建议同时放宽15%回踩、8%追高、24根或90秒。",
+        "why": "历史样本只显示1.2倍增加1个形态，未有收益证据；同时改多个条件无法归因。"
+      }
+    ],
+    "verification": {
+      "offlineTests": "node --test test/audit-entry-policy.test.js",
+      "testsPassed": 4,
+      "testsFailed": 0,
+      "realCurrentBaselineParity": 308,
+      "realArchivedBaselineParity": 58,
+      "baselineMismatches": 0,
+      "executionLog": "/tmp/gmgn-entry-policy-review-run-20261110.log",
+      "changedFiles": [
+        "scripts/audit-entry-policy.js",
+        "test/audit-entry-policy.test.js",
+        "docs/gmgn-entry-policy-review-20261110.json"
+      ]
+    }
+  },
+  "preparedOptIn": {
+    "version": "external_structure_main_admission_v1",
+    "state": "implemented_default_off_not_enabled",
+    "configuration": {
+      "environment": "PAPER_EXTERNAL_STRUCTURE_MAIN_ADMISSION",
+      "enableValue": "1",
+      "allOtherValues": "disabled",
+      "engineParameter": "externalStructureMainAdmission",
+      "default": false,
+      "runtimeWiringOwner": "runtime integrated by current_blockers; dashboard/environment wiring by root"
+    },
+    "userReviewChoice": {
+      "keepDisabled": "保持当前统一叙事门槛；继续独立修复数据。",
+      "enableAfterApproval": "允许已完整验证的 external_breakout / external_pullback / external_trend 走独立主账本准入，不再因无叙事或控盘单独否决；所有以下条件仍须通过。",
+      "liveConsequence": "当前实盘镜像开启，启用后满足全部条件的新主账本信号可能被现有实盘链/策略镜像执行；这不是仅修改展示。不会手动补单或重放旧成交。"
+    },
+    "allowedScope": [
+      "三条既有 OHLCV 外盘路线",
+      "明确 external 阶段",
+      "原恢复模式的估算主账本，非 shadow/comparison/minimal/diagnostic"
+    ],
+    "retainedRequirements": [
+      "完整安全字段且无明确风险",
+      "真实新鲜行情和独立报价",
+      "即时重新验证亏损重入与退出结构依据",
+      "至少24根真实连续收盘K线；原90秒窗口新鲜度",
+      "由原始闭合K线与报价重建形态、support/target及确认，chain/CA/provenance一致",
+      "原形态数值完全保留：突破1.5倍放量、回踩15%-65%、突破最多8%追高等",
+      "可用现金10%、最高10U预算及原现金/流动性/账户约束",
+      "原有税率、15%总成本上限及净盈亏比/结构空间检查",
+      "writer后续所有计划、费用、去重与账户复核"
+    ],
+    "unchangedScope": [
+      "事件、官方消息、内盘、钱包、普通动量与其他追涨路线仍使用原统一叙事/控盘门槛",
+      "原paperChaseGate不改、不全局关闭 evidenceTierGate",
+      "原持仓与退出逻辑不变",
+      "拒绝明确 synthetic/no-trade/forward-filled/gap-filled 替代K线；备用源需要同一proof的来源验证"
+    ],
+    "auditRecord": "保留原 chaseGate 的 shadow_only/mainAllowed=false，另存 externalStructureMainAdmission 授权依据及 reconstructed structureValidation；不会伪称叙事或控盘合格。",
+    "files": [
+      "src/paper-external-structure-main-admission.js",
+      "src/paper-strategy-engine.js",
+      "test/paper-external-structure-main-admission.test.js",
+      "src/paper-strategy-runtime.js"
+    ],
+    "validation": {
+      "focusedPassed": 32,
+      "focusedFailed": 0,
+      "focusedLog": "/tmp/gmgn-external-structure-focused-tests-20261110.log",
+      "broaderPassed": 128,
+      "broaderFailed": 1,
+      "broaderLog": "/tmp/gmgn-external-structure-optin-tests-20261110.log",
+      "knownBaselineFailure": "test/paper-opportunity.test.js:71 expects strategyFocusShadow absent from saved ledger; same failure confirmed by root on baseline, unrelated to this opt-in; not modified.",
+      "defaultOffEqualsExplicitFalse": true,
+      "chainsAndRoutes": "BSC/SOL/Robinhood × breakout/pullback/trend",
+      "negativeCases": "wrong routes/stage/event, incomplete/blocked safety, stale market/quote, fewer bars/gaps, synthetic/no-trade, forged target/support/CA, higher actual serialized costs, wrong mode and oversized budget are rejected.",
+      "realRuntimeReachability": "同一个无叙事但结构合格候选，两种配置均取得至少2次真实调度的mock独立报价；default/off主账本0笔，explicit/on主账本1笔且有严格结构证明。只用临时离线账本，没有liveMirror注入。",
+      "integratedRuntimeSuite": {
+        "passed": 164,
+        "failed": 0,
+        "log": "/tmp/gmgn-v29-runtime-fallback-tests-20261110.log"
+      },
+      "finalSourceFallbackOptInSuite": {
+        "passed": 23,
+        "failed": 0,
+        "log": "/tmp/gmgn-v29-fallback-focused-tests-20261110.log"
+      }
+    },
+    "activation": {
+      "envEdited": false,
+      "serviceRestarted": false,
+      "liveOrderRequested": false,
+      "userChoicePending": true
+    },
+    "evidenceLimit": "当前反事实仍0；历史放量阈值敏感性仅58个有偏来源快照，不构成盈利证据。独立选项解决准入意图冲突，不保证触发交易或提高收益。"
+  },
+  "preparedDataFallback": {
+    "version": "bounded_secondary_chart_v1",
+    "provider": "geckoterminal",
+    "defaultRuntimeClient": null,
+    "operatorEnvironment": "PAPER_SECONDARY_KLINE=1 wired by root; separate from the trading-admission option",
+    "policy": [
+      "只对当前fresh/listed/safe且常规研究合格的hot/catchup候选触发",
+      "主GMGN读取不等待备用；备用全局单flight、每CA至少60秒、cache最多32条",
+      "provider独立共享file/account gate，waitForSlot:false；不会持有GMGN并发slot等待30秒",
+      "source+chain+CA+pool+metadata+原始request/receive/from/to+digest严格校验，整段使用一个来源，不拼K线",
+      "只有至少24根完整连续且原90秒内真实收盘数据可采用",
+      "回调再查当前资格及最新primary；完整新鲜primary永远优先；失效/排除/过期备用不采用",
+      "记录原receivedAt作为fetchedAt，不续源时钟；失败只写研究诊断",
+      "stop关闭/abort/drain备用client；不新增独立交易逻辑"
+    ],
+    "observableFields": [
+      "researchPipeline.chartFallback.enabled/pending/accepted/attempts/last/provider",
+      "chartDiagnostics.source/chartProvenance",
+      "walletResearchContext source/provenance",
+      "chartCatchup items source/sourceDigest/poolId"
+    ],
+    "tests": {
+      "controllerAndActualRuntime": 6,
+      "latestCombinedSourceAndOptIn": 23,
+      "runtimeSchedulerSourceOptInRegression": 164,
+      "failures": 0
+    },
+    "independentReview": "runtime_review inspected singleflight, source clocks, membership recheck, primary preference and shutdown; no blocker. Its catchup-source-trace suggestion was implemented and tested.",
+    "files": [
+      "src/paper-chart-fallback.js",
+      "src/paper-strategy-runtime.js",
+      "test/paper-chart-fallback.test.js"
+    ],
+    "activationByThisAgent": {
+      "networkRequests": 0,
+      "envChanges": 0,
+      "restart": 0,
+      "trades": 0
+    }
+  }
+}

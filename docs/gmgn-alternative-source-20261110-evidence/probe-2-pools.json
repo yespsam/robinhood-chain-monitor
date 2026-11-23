@@ -1,0 +1,151 @@
+{
+  "target": {
+    "chain": "bsc",
+    "network": "bsc",
+    "address": "0x2aad9bbc151659db46d379d44d9bf5e8d1888888",
+    "symbol": "MISU",
+    "diagnostic": "insufficient_closed_bars",
+    "historicalArtifact": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+    "historicalFrom": 1794243720,
+    "historicalTo": 1794247320
+  },
+  "url": "https://api.geckoterminal.com/api/v2/networks/bsc/tokens/0x2aad9bbc151659db46d379d44d9bf5e8d1888888/pools?include=base_token%2Cquote_token%2Cdex&include_inactive_source=true&page=1",
+  "requestedAt": "2026-11-10T04:43:58.060273+00:00",
+  "receivedAt": "2026-11-10T04:43:59.204254+00:00",
+  "httpStatus": 200,
+  "headers": {
+    "Date": "Tue, 10 Nov 2026 04:44:01 GMT",
+    "Cache-Control": "max-age=30, public, must-revalidate, s-maxage=60"
+  },
+  "rawResponse": {
+    "data": [
+      {
+        "id": "bsc_0xfcf53337ddcea7e1eadeb0c99be4c6c33302e0eb50d3ef7c57142bbe07e6f7cf",
+        "type": "pool",
+        "attributes": {
+          "base_token_price_usd": "0.00001063334683",
+          "base_token_price_native_currency": "0.00000001561971792666",
+          "quote_token_price_usd": "687.83",
+          "quote_token_price_native_currency": "1.0",
+          "base_token_price_quote_token": "0.00000001561971793",
+          "quote_token_price_base_token": "64021642.6887699",
+          "address": "0xfcf53337ddcea7e1eadeb0c99be4c6c33302e0eb50d3ef7c57142bbe07e6f7cf",
+          "name": "MISU / WBNB 0.034%",
+          "pool_created_at": "2026-11-09T00:29:18Z",
+          "token_price_usd": "0.00001063334683",
+          "fdv_usd": "10633.34683",
+          "market_cap_usd": null,
+          "price_change_percentage": {
+            "m5": "0",
+            "m15": "0",
+            "m30": "0",
+            "h1": "0",
+            "h6": "-1.87",
+            "h24": "-10.16"
+          },
+          "transactions": {
+            "m5": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m15": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m30": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h1": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h6": {
+              "buys": 2,
+              "sells": 10,
+              "buyers": 2,
+              "sellers": 5
+            },
+            "h24": {
+              "buys": 129,
+              "sells": 143,
+              "buyers": 64,
+              "sellers": 94
+            }
+          },
+          "volume_usd": {
+            "m5": "0.0",
+            "m15": "0.0",
+            "m30": "0.0",
+            "h1": "0.0",
+            "h6": "186.8953398161",
+            "h24": "17824.6308358233"
+          },
+          "reserve_in_usd": "9533.99",
+          "last_trade_timestamp": "1794282008"
+        },
+        "relationships": {
+          "base_token": {
+            "data": {
+              "id": "bsc_0x2aad9bbc151659db46d379d44d9bf5e8d1888888",
+              "type": "token"
+            }
+          },
+          "quote_token": {
+            "data": {
+              "id": "bsc_0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+              "type": "token"
+            }
+          },
+          "dex": {
+            "data": {
+              "id": "pancakeswap-infinity-clmm",
+              "type": "dex"
+            }
+          }
+        }
+      }
+    ],
+    "included": [
+      {
+        "id": "bsc_0x2aad9bbc151659db46d379d44d9bf5e8d1888888",
+        "type": "token",
+        "attributes": {
+          "address": "0x2aad9bbc151659db46d379d44d9bf5e8d1888888",
+          "name": "米苏",
+          "symbol": "MISU",
+          "decimals": 18,
+          "image_url": null,
+          "coingecko_coin_id": null
+        }
+      },
+      {
+        "id": "bsc_0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+        "type": "token",
+        "attributes": {
+          "address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+          "name": "Wrapped BNB",
+          "symbol": "WBNB",
+          "decimals": 18,
+          "image_url": "https://coin-images.coingecko.com/coins/images/12591/large/binance-coin-logo.png?1696512401",
+          "coingecko_coin_id": "wbnb"
+        }
+      },
+      {
+        "id": "pancakeswap-infinity-clmm",
+        "type": "dex",
+        "attributes": {
+          "name": "Pancakeswap Infinity (CLMM)"
+        }
+      }
+    ]
+  }
+}

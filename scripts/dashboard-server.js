@@ -7,11 +7,15 @@ import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { gzip } from 'node:zlib';
 import { readonlyMarket, GMGN_CHAINS } from '../src/gmgn-readonly-market.js';
+import { createGeckoTerminalMarketClient } from '../src/geckoterminal-market.js';
+import { externalStructureMainAdmissionEnabled } from '../src/paper-external-structure-main-admission.js';
 import { createResearchTeamReport, renderResearchTeamBrief } from '../src/ai-research-team.js';
 import { gmgnFlowAddress } from '../src/gmgn-flow-signal.js';
 import { buildPaperFlowEvidence, buildPaperNarrativeEvidence, loadPaperEvidence } from '../src/paper-strategy-evidence.js';
 import { createPaperStrategyRuntime } from '../src/paper-strategy-runtime.js';
-import { createLiveMirror } from '../src/live-gmgn-mirror.js';
+import { createLiveMirror, logLiveDecision } from '../src/live-gmgn-mirror.js';
+import { createLiveTrader, loadLiveConfig } from '../src/live-gmgn-trader.js';
+import { createLiveManualApproval, createGmgnManualClient, LIVE_APPROVAL_CONFIRMATION } from '../src/live-manual-approval.js';
 import {createInternalDepthProbe} from '../src/paper-internal-depth.js';
 import {createInnerTradeMonitor} from '../src/bsc-inner-trade-monitor.js';
 import {loadPrivateBscRpcConfig,privateBscRpcEndpoints} from '../src/bsc-private-rpc.js';
@@ -28,7 +32,6 @@ import { createTwitterNarrativeMonitor } from '../src/twitter-narrative-monitor.
 import { createEthGasMonitor } from '../src/paper-eth-gas.js';
 import { createChainGasMonitor } from '../src/paper-chain-gas.js';
 import { createJevResearchMonitor } from '../src/jev-research-pilot.js';
-import { createLaunchUpdateCoverageReader } from '../src/launch-update-coverage.js';
 
 const PROJECT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DASHBOARD = path.join(PROJECT, 'dashboard');
@@ -123,7 +126,13 @@ async function researchTeamSnapshot({ market, chain, address } = {}) {
   };
 }
 
-export function createDashboardServer({ host = '127.0.0.1', port = 4173, market = readonlyMarket, strategyRuntime = null, mainPaperSnapshot = null, launchUpdateCoverage = null, squareKeyStore = createSquareKeyStore({ publicationReceiptFile: path.join(PROJECT, 'data', 'binance-square-test-20260922.json') }) } = {}) {
+// Automatic execution requires both explicit switches; the existing trader
+// still enforces evidence, order limits, reconciliation and the kill file.
+export function createDashboardLiveMirror({ cfg = loadLiveConfig(process.env, path.join(PROJECT, 'data')), env = process.env, createMirror = createLiveMirror } = {}) {
+  return createMirror({ cfg: { ...cfg, enabled: cfg.enabled === true && env.LIVE_AUTO_MIRROR_ENABLED === 'true' }, env });
+}
+
+export function createDashboardServer({ host = '127.0.0.1', port = 4173, market = readonlyMarket, strategyRuntime = null, mainPaperSnapshot = null, manualLiveApproval = null, launchUpdateCoverage = null, squareKeyStore = createSquareKeyStore({ publicationReceiptFile: path.join(PROJECT, 'data', 'binance-square-test-20260922.json') }) } = {}) {
   const squareKeyRoute = createSquareKeyRoute(squareKeyStore);
   const server = http.createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store'); response.setHeader('X-Content-Type-Options', 'nosniff');
@@ -139,13 +148,83 @@ export function createDashboardServer({ host = '127.0.0.1', port = 4173, market 
         if (url.search || (request.headers.origin && request.headers.origin !== url.origin) || (request.headers['sec-fetch-site'] && !['same-origin', 'none'].includes(request.headers['sec-fetch-site']))) { json(response, { error: '仅允许本机同源预览' }, 403); return; }
         json(response, createSquarePreview(strategyRuntime?.snapshot())); return;
       }
+      if (url.pathname === '/api/live-runtime-status') {
+        if (request.method !== 'GET') { json(response, { error: '只读接口' }, 405); return; }
+        const state = strategyRuntime?.liveStatus?.() || strategyRuntime?.snapshot?.();
+        json(response, { status: state?.status || 'loading', enabled: state?.enabled ?? null,
+          updatedAt: state?.updatedAt || null, liveMirror: state?.liveMirror || null }); return;
+      }
+      if (url.pathname === '/api/research/chart-catchup') {
+        if (!strategyRuntime?.queueChartCatchup || !strategyRuntime?.chartCatchupStatus) {
+          json(response, { error: '补图队列尚未初始化' }, 503); return;
+        }
+        if (request.method === 'GET') { json(response, strategyRuntime.chartCatchupStatus()); return; }
+        if (request.method !== 'POST') { json(response, { error: '仅支持 GET/POST' }, 405); return; }
+        const loopback = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(String(request.socket?.remoteAddress || ''));
+        if (url.search || !loopback || request.headers.origin !== url.origin || request.headers['sec-fetch-site'] !== 'same-origin') {
+          json(response, { error: '仅允许本机同源补图请求' }, 403); return;
+        }
+        if (String(request.headers['content-type'] || '').split(';', 1)[0].trim().toLowerCase() !== 'application/json') {
+          json(response, { error: '需要 JSON 请求' }, 415); return;
+        }
+        let body = '', size = 0;
+        for await (const chunk of request) {
+          size += chunk.length;
+          if (size > 32768) { json(response, { error: '请求过大' }, 413); return; }
+          body += chunk;
+        }
+        let payload;
+        try { payload = JSON.parse(body); } catch { json(response, { error: '无效 JSON' }, 400); return; }
+        if (!payload || Object.keys(payload).some(key => key !== 'targets') || !Array.isArray(payload.targets)
+          || payload.targets.length < 1 || payload.targets.length > 100
+          || payload.targets.some(target => !target || typeof target.chain !== 'string' || typeof target.address !== 'string'
+            || Object.keys(target).some(key => !['chain', 'address'].includes(key)))) {
+          json(response, { error: '补图目标须为 1–100 个链和合约地址' }, 400); return;
+        }
+        try { json(response, await strategyRuntime.queueChartCatchup(payload.targets), 202); }
+        catch (error) { json(response, { error: error.message, code: error.code }, error.code === 'CHART_CATCHUP_ACTIVE' ? 409 : 400); }
+        return;
+      }
       if (url.pathname === '/api/strategy-state') {
         if (request.method !== 'GET') { json(response, { error: '只读接口' }, 405); return; }
         const snapshot = strategyRuntime?.snapshot() || { status: 'loading', mode: 'paper', execution: false, signing: false, broadcast: false, account: null, strategies: [], lastError: '模拟引擎未启动' };
-        // Coverage is a separate, cached read-only projection, never persisted to a ledger.
+        if (typeof launchUpdateCoverage !== 'function') { await strategyJson(request, response, snapshot); return; }
         let coverage;
-        if (launchUpdateCoverage) { try { coverage = await launchUpdateCoverage(); } catch { coverage = { version: 'launch_update_coverage_v1', status: 'unavailable' }; } }
-        await strategyJson(request, response, coverage ? { ...snapshot, launchUpdateCoverage: coverage } : snapshot); return;
+        try { coverage = await launchUpdateCoverage(); }
+        catch { coverage = { status: 'unavailable' }; }
+        await strategyJson(request, response, { ...snapshot, launchUpdateCoverage: coverage }); return;
+      }
+      if (url.pathname === '/api/live-approval/candidates') {
+        if (request.method !== 'GET') { json(response, { error: '仅支持 GET' }, 405); return; }
+        if ((request.headers.origin && request.headers.origin !== url.origin) || (request.headers['sec-fetch-site'] && !['same-origin', 'none'].includes(request.headers['sec-fetch-site']))) { json(response, { error: '仅允许本机同源读取' }, 403); return; }
+        if (!manualLiveApproval) { json(response, { enabled: false, candidates: [], reason: '逐笔确认入口未初始化' }, 503); return; }
+        const state = manualLiveApproval.status();
+        json(response, { enabled: state.ready, reason: state.reason, candidates: await manualLiveApproval.listCandidates() }); return;
+      }
+      if (['/api/live-approval/prepare', '/api/live-approval/confirm', '/api/live-approval/cancel'].includes(url.pathname)) {
+        if (request.method !== 'POST') { json(response, { error: '仅支持 POST' }, 405); return; }
+        const remote = String(request.socket?.remoteAddress || '');
+        const loopback = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(remote);
+        if (url.search || !loopback || request.headers.origin !== url.origin || request.headers['sec-fetch-site'] !== 'same-origin') { json(response, { error: '仅允许本机同源逐笔确认' }, 403); return; }
+        const contentType = String(request.headers['content-type'] || '').split(';', 1)[0].trim().toLowerCase();
+        if (contentType !== 'application/json') { json(response, { error: '需要 JSON 请求' }, 415); return; }
+        if (!manualLiveApproval) { json(response, { error: '逐笔确认入口未初始化' }, 503); return; }
+        let body = '', size = 0;
+        for await (const chunk of request) { size += chunk.length; if (size > 2048) { json(response, { error: '请求过大' }, 413); return; } body += chunk; }
+        let payload;
+        try { payload = JSON.parse(body); } catch { json(response, { error: '无效 JSON' }, 400); return; }
+        if (url.pathname === '/api/live-approval/prepare') {
+          if (typeof payload?.candidateId !== 'string' || Object.keys(payload).some(key => key !== 'candidateId')) { json(response, { error: '候选参数无效' }, 400); return; }
+          const result = await manualLiveApproval.prepare(payload.candidateId);
+          json(response, result, result.ok ? 200 : 409); return;
+        }
+        if (url.pathname === '/api/live-approval/confirm') {
+          if (typeof payload?.approvalId !== 'string' || payload?.confirmation !== LIVE_APPROVAL_CONFIRMATION || Object.keys(payload).some(key => !['approvalId', 'confirmation'].includes(key))) { json(response, { error: '必须逐笔明确确认该订单' }, 400); return; }
+          const result = await manualLiveApproval.confirm(payload.approvalId, payload.confirmation);
+          json(response, result, result.ok ? 200 : 409); return;
+        }
+        if (typeof payload?.approvalId !== 'string' || Object.keys(payload).some(key => key !== 'approvalId')) { json(response, { error: '确认单参数无效' }, 400); return; }
+        json(response, manualLiveApproval.cancel(payload.approvalId)); return;
       }
       if(url.pathname==='/api/main-paper-state'){
         if(request.method!=='GET'){json(response,{error:'原主盘只读'},405);return;}
@@ -174,6 +253,15 @@ export function createDashboardServer({ host = '127.0.0.1', port = 4173, market 
         return;
       }
       if (!['GET', 'HEAD'].includes(request.method)) { json(response, { error: '只读接口' }, 405); return; }
+      if (url.pathname === '/api/studio') {
+        if (request.method !== 'GET') { json(response, { error: '只读接口' }, 405); return; }
+        const { buildStudioSnapshot } = await import('../src/studio-snapshot.js');
+        const strategy = strategyRuntime?.snapshot?.();
+        const snapshot = await buildStudioSnapshot({ project: PROJECT, strategy });
+        snapshot.live.mirrorEnabled = strategy?.liveMirror?.enabled === true;
+        snapshot.live.manualOnly = !snapshot.live.mirrorEnabled;
+        json(response, snapshot); return;
+      }
       if (url.pathname === '/api/paper-state') { json(response, await readPaperState()); return; }
       if (url.pathname === '/api/market') {
         const chain = (url.searchParams.get('chain') || 'robinhood').toLowerCase();
@@ -188,7 +276,9 @@ export function createDashboardServer({ host = '127.0.0.1', port = 4173, market 
         const resolution = (url.searchParams.get('resolution') || '1m').toLowerCase();
         const now = Math.floor(Date.now() / 60_000) * 60;
         const hours = Math.min(24 * 7, Math.max(1, Number(url.searchParams.get('hours') || 6)));
-        try { json(response, await market.kline({ chain, address, resolution, from: now - hours * 3600, to: now })); } catch { json(response, { status: 'unavailable', source: 'gmgn-cli', reason: 'invalid_request', candles: [] }, 400); }
+        // This route requests a relative latest window. Bind its 1m close at
+        // actual dispatch so account-queue delay cannot age the requested end.
+        try { json(response, await market.kline({ chain, address, resolution, from: now - hours * 3600, to: now, latestClosed: resolution === '1m' })); } catch { json(response, { status: 'unavailable', source: 'gmgn-cli', reason: 'invalid_request', candles: [] }, 400); }
         return;
       }
       if (url.pathname === '/api/research-team') {
@@ -231,14 +321,27 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
   const alphaMonitor=process.env.PAPER_ALPHA_MONITOR==='0'?null:createAlphaCatalogMonitor({dataDir:path.join(PROJECT,'data')});
   const twitterNarrativeMonitor=createTwitterNarrativeMonitor({dataDir:path.join(PROJECT,'data')});
   const chain = session?.chain || process.env.PAPER_STRATEGY_CHAIN || 'robinhood';
+  // Keep manual approval available; automatic mirroring is explicitly opted in.
+  const manualLiveConfig = loadLiveConfig(process.env, path.join(PROJECT, 'data'));
+  const liveMirror = createDashboardLiveMirror({ cfg: manualLiveConfig });
+  const secondaryMarket = process.env.PAPER_SECONDARY_KLINE === '1'
+    ? createGeckoTerminalMarketClient({dataDir:path.join(PROJECT,'data')}) : null;
+  const manualGmgn = createGmgnManualClient();
+  const manualLiveTrader = createLiveTrader(manualLiveConfig, {
+    run: async (args) => { await manualGmgn.configCheck(); return manualGmgn.run(args); },
+  });
   const confirmedMode = process.env.PAPER_PVP_MODE !== '0' && process.env.PAPER_EXPLORATORY_ENTRIES !== '0';
   const chains = session?.chains || (process.env.PAPER_STRATEGY_CHAINS ? process.env.PAPER_STRATEGY_CHAINS.split(',').map(value => value.trim()) : [chain, ...GMGN_CHAINS.filter(value => value !== chain)]);
   const chainGasAccounting=!estimatedFeeMode && confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0';
+  const opportunityMode=confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0';
+  const continuousPaperMode=confirmedMode && process.env.PAPER_CONTINUOUS_MODE !== '0';
+  const memeExitMode=confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0';
+  const recoveryMode=confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0' && process.env.PAPER_RECOVERY_MODE !== '0';
+  const strategyFocusSimulation=recoveryMode && process.env.PAPER_STRATEGY_FOCUS_SIMULATION !== '0';
   const gasMonitor = estimatedFeeMode?null:chainGasAccounting?createChainGasMonitor({chains}):createEthGasMonitor();
   const jevResearch = createJevResearchMonitor({ dataDir: path.join(PROJECT, 'data'), sessionId: session?.id || 'default' });
-  const liveMirror = createLiveMirror();
   const internalRpcEndpoints=privateBscRpcEndpoints(loadPrivateBscRpcConfig({dataDir:path.join(PROJECT,'data')}));
-  const strategyRuntime = createPaperStrategyRuntime({ liveMirror, market: readonlyMarket, gasMonitor, jevResearch, chainGasAccounting,
+  const strategyRuntime = createPaperStrategyRuntime({ liveMirror, market: readonlyMarket, secondaryMarket, gasMonitor, jevResearch, chainGasAccounting,
     internalDepthProbe:estimatedFeeMode?createInternalDepthProbe({dataDir:path.join(PROJECT,'data'),rpcEndpoints:internalRpcEndpoints}):null,
     internalTradeMonitor:estimatedFeeMode?createInnerTradeMonitor({dataDir:path.join(PROJECT,'data'),rpcEndpoints:internalRpcEndpoints}):null,
     discoveryMode:'gmgn_three_lists_v1', enforceLossGuards:await loadPaperLossGuardPolicy(path.join(PROJECT,'data'),session),
@@ -253,36 +356,46 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
     higherFrequencyResearch: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0',
     minimalEntryMode: confirmedMode && process.env.PAPER_MINIMAL_ENTRY === '1',
     evidenceGapExitMode: process.env.PAPER_EVIDENCE_GAP_EXIT !== '0',
-    // New v3 opt-in only. Retired v1/v2 flags cannot activate or select an arm.
-    profitRetentionShadow: process.env.PAPER_PROFIT_RETENTION_MULTIARM_SHADOW === '1',
-    // Isolated forward paper experiment; the simulator itself remains fail-closed
-    // and writes only its own bounded sidecar, never the production paper ledger.
-    strategyFocusSimulation: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0'
-      && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0'
-      && process.env.PAPER_RECOVERY_MODE !== '0' && process.env.PAPER_STRATEGY_FOCUS_SIMULATION !== '0',
-    memeExitMode: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0',
-    recoveryMode: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0' && process.env.PAPER_RECOVERY_MODE !== '0',
-    narrativeAdmissionGate: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_MEME_EXIT_MODE !== '0' && process.env.PAPER_RECOVERY_MODE !== '0',
-    continuousPaperMode: confirmedMode && process.env.PAPER_CONTINUOUS_MODE !== '0',
-    opportunityMode: confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0',
+    // Main paper cash requires narrative evidence; chasing needs narrative+control (docs/evidence-tier-cost-chase-gate-2026-10-30.md).
+    evidenceTierGate: process.env.PAPER_EVIDENCE_TIER_GATE !== '0',
+    externalStructureMainAdmission: externalStructureMainAdmissionEnabled(process.env),
+    memeExitMode,
+    recoveryMode,
+    continuousPaperMode,
+    opportunityMode,
+    // Keep the existing main-paper admission path unchanged. The focus sidecar
+    // applies its own strict narrative gate before any isolated paper fill.
+    narrativeAdmissionGate:false,
+    strategyFocusSimulation,
     thesisExitExperiment: !estimatedFeeMode && confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_EXIT_COMPARISON !== '0',
     activeEntrySampling: !estimatedFeeMode && confirmedMode && process.env.PAPER_MULTI_SETUP_MODE !== '0' && process.env.PAPER_CONTINUOUS_MODE !== '0' && process.env.PAPER_EXIT_COMPARISON !== '0' && process.env.PAPER_ACTIVE_ENTRY_SAMPLING !== '0',
     upsideMode: process.env.PAPER_PVP_MODE === '0' && process.env.PAPER_UPSIDE_MODE !== '0',
     learningLoader: estimatedFeeMode ? learner.tradingEvidence : learner.snapshot,
     learningReportSnapshot: estimatedFeeMode ? learner.snapshot : null });
+  const manualLiveApproval = createLiveManualApproval({
+    cfg: manualLiveConfig,
+    trader: manualLiveTrader,
+    strategyProvider: () => strategyRuntime.snapshot(),
+    readinessProvider: async () => {
+      const { buildStudioSnapshot } = await import('../src/studio-snapshot.js');
+      return buildStudioSnapshot({ project: PROJECT, strategy: strategyRuntime.snapshot() });
+    },
+    gmgn: manualGmgn,
+    audit: (decision) => logLiveDecision(manualLiveConfig, { ...decision, source: manualLiveConfig.signalSource }),
+  });
   const mainPaperSnapshot=estimatedFeeMode?async()=>{
     const old=JSON.parse(await fs.readFile(path.join(PROJECT,'data',paperSessionLedgerFile(mainSession)),'utf8'));
     return {status:'retained_readonly',mode:'paper',execution:false,signing:false,broadcast:false,
       enabled:old.enabled,session:old.session,account:old.account,updatedAt:old.account.updatedAt,
       costModel:'原主盘只读保留；估算费用测试盘为独立账本，不合并成绩'};
   }:null;
-  const app = createDashboardServer({ port, strategyRuntime,mainPaperSnapshot, launchUpdateCoverage: createLaunchUpdateCoverageReader({dataDir:path.resolve(process.env.DATA_DIR || path.join(PROJECT,'data'))}) });
+  const app = createDashboardServer({ port, strategyRuntime, mainPaperSnapshot, manualLiveApproval });
   app.listen().then(async address => {
-    console.log(`yesp atm 模拟盘：http://${address.address}:${address.port}（仅模拟盘）`);
+    console.log(`yesp atm：http://${address.address}:${address.port}（自动实盘镜像${liveMirror.cfg.enabled ? '已开启' : '已关闭'}；逐笔确认入口${manualLiveConfig.enabled ? '已按配置启用' : '不可用（实盘总开关关闭）'}）`);
     try { await strategyRuntime.start(); await socialMonitor?.start(); await alphaMonitor?.start(); twitterNarrativeMonitor.start(); } catch (error) { console.error(`模拟引擎/消息发现启动失败：${error.message}`); }
     try { await learner.start(); } catch { console.error('钱包学习启动失败，原模拟引擎继续运行；请检查学习账本及锁'); }
   }).catch(error => { console.error(`dashboard failed: ${error.message}`); process.exitCode = 1; });
   let closing = false;
-  const shutdown = async () => { if (closing) return; closing = true; await Promise.all([app.close(), strategyRuntime.stop(), learner.stop(),socialMonitor?.stop(),alphaMonitor?.stop(),twitterNarrativeMonitor.stop(),gasMonitor?.stop()]); await readonlyMarket.close(); };
+  const shutdown = async () => { if (closing) return; closing = true; await Promise.all([app.close(), strategyRuntime.stop(), secondaryMarket?.close(), learner.stop(),socialMonitor?.stop(),alphaMonitor?.stop(),twitterNarrativeMonitor.stop(),gasMonitor?.stop()]); await readonlyMarket.close(); };
   process.once('SIGTERM', shutdown); process.once('SIGINT', shutdown);
 }

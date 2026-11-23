@@ -37,6 +37,41 @@ export function selectGmgnFlowChain(state,nowMs,allowedChains=CHAINS) {
   if(overdue.length)return overdue[0].chain;
   return ranked.filter(r=>r.age>=r.target).sort((a,b)=>b.age/b.target-a.age/a.target)[0]?.chain||due[0];
 }
+function applyGlobalRateLimit(state, retry, observedAt, message='GMGN account is cooling down') {
+  Object.assign(state.health, {
+    status: 'backoff',
+    checkedAt: observedAt,
+    nextAttemptAt: retry,
+    lastError: message,
+    lastErrorCode: 'GMGN_RATE_LIMITED',
+  });
+  const retryMs = Date.parse(retry);
+  for (const chain of Object.keys(state.chains || {})) {
+    const item = state.chains[chain];
+    const nextMs = Date.parse(item?.nextAttemptAt || '');
+    if (!Number.isFinite(nextMs) || nextMs < retryMs) {
+      Object.assign(item, {
+        status: 'backoff',
+        checkedAt: observedAt,
+        nextAttemptAt: retry,
+        lastError: message,
+        lastErrorCode: 'GMGN_RATE_LIMITED',
+      });
+    }
+  }
+  const hot = state.hotDiscovery;
+  if (hot) {
+    const nextMs = Date.parse(hot.nextAttemptAt || '');
+    if (!Number.isFinite(nextMs) || nextMs < retryMs) {
+      Object.assign(hot, {
+        status: 'backoff',
+        checkedAt: observedAt,
+        nextAttemptAt: retry,
+        lastError: message,
+      });
+    }
+  }
+}
 function sourceShape(h,global=false){return plain(h)&&['initializing','healthy','partial','backoff','unsupported'].includes(h.status)
  && nullableDate(h.checkedAt)&&nullableDate(h.nextAttemptAt)&&errorText(h.lastError)
  && (global||(nullableDate(h.lastSuccessAt)&&Number.isSafeInteger(h.tradeCount)&&h.tradeCount>=0
@@ -277,8 +312,7 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
       h.feedTiming[kind]={requestedAt:iso(requestedAt),dispatchedAt:dispatchedAt===null?null:iso(dispatchedAt),finishedAt:iso(now()),
         queueWaitMs:dispatchedAt===null?null:Math.max(0,dispatchedAt-requestedAt),status:'failed',code:error.code||'GMGN_FLOW_SOURCE_FAILED'};
       // Publish a limit immediately, even while the other page is draining.
-      if(error.code==='GMGN_RATE_LIMITED')Object.assign(state.health,{status:'backoff',nextAttemptAt:error.retryAt||iso(now()+MINUTE),
-        lastError:'GMGN account is cooling down',lastErrorCode:error.code});
+      if(error.code==='GMGN_RATE_LIMITED')applyGlobalRateLimit(state,error.retryAt||iso(now()+MINUTE),iso(now()));
       throw error;
     }
   };
@@ -363,8 +397,7 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
    logger.error?.(`[gmgn-flow][${chain}][research] ${code}`);
    // A real account limit still pauses every lane, including after metadata
    // or profile reads. A research timeout alone must not pause trade feeds.
-   if(e.code==='GMGN_RATE_LIMITED')Object.assign(state.health,{status:'backoff',nextAttemptAt:retry,
-    lastError:h.research.lastError,lastErrorCode:code});
+   if(e.code==='GMGN_RATE_LIMITED')applyGlobalRateLimit(state,retry,iso(now()),h.research.lastError||'GMGN account is cooling down');
   }
   if(!decoupled)h.status=h.coverageGap?'partial':'healthy';
  }
@@ -465,7 +498,7 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
    h.chains=blocks.filter(b=>GMGN_HOT_ONLY_CHAINS.includes(b.chain)).map(b=>({chain:b.chain,count:Array.isArray(b.tokens)?b.tokens.length:0,mode:'discovery_only'}));
    h.status=h.chains.length===GMGN_HOT_ONLY_CHAINS.length?'healthy':'partial';h.lastError=null;h.nextAttemptAt=iso(now()+5*MINUTE);
   }catch(e){if(stopped||writeFault)throw e;h.status='backoff';h.lastError=String(e.message).slice(0,200);h.nextAttemptAt=e.retryAt||iso(now()+5*MINUTE);
-   if(e.code==='GMGN_RATE_LIMITED')Object.assign(state.health,{status:'backoff',nextAttemptAt:h.nextAttemptAt,lastError:h.lastError,lastErrorCode:e.code});}
+   if(e.code==='GMGN_RATE_LIMITED')applyGlobalRateLimit(state,h.nextAttemptAt,iso(now()),h.lastError||'GMGN account is cooling down');}
  }
  async function run() {
   await load();if(writeFault)throw writeFault;
@@ -484,7 +517,7 @@ export function createGmgnFlowMonitor(config={},dependencies={}) {
    if(stopped){await persist();return {status:'stopped'};}
    const retry=e.retryAt||iso(now()+MINUTE),h=state.chains[chain];
    Object.assign(h,{status:'backoff',checkedAt:iso(now()),nextAttemptAt:retry,lastError:String(e.message).slice(0,300),lastErrorCode:e.code||/^GMGN_[A-Z_]+/.exec(e.message)?.[0]||'GMGN_FLOW_SOURCE_FAILED'});
-   if(e.code==='GMGN_RATE_LIMITED'){state.health.nextAttemptAt=retry;state.health.status='backoff';}
+   if(e.code==='GMGN_RATE_LIMITED')applyGlobalRateLimit(state,retry,iso(now()));
    state.health.lastError=h.lastError;state.health.lastErrorCode=h.lastErrorCode;
    logger.error?.(`[gmgn-flow][${chain}] ${h.lastErrorCode}`);
   }

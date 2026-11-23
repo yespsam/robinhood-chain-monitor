@@ -16,6 +16,33 @@ export const OPPORTUNITY_ROUTES = Object.freeze([
   { id: 'external_trend', label: '外盘趋势延续', basis: 'ohlcv', description: '均线差、斜率、放量与向上报价共同确认；真实结构空间须覆盖成本，弱趋势只观察。' },
   { id: 'narrative_recall', label: '叙事 OG 回流', basis: 'flow', description: '核实七天内历史主题、新催化出处及精确 CA，再由新增买盘和报价确认。' },
 ]);
+
+export const PAPER_ENTRY_ROUTE_ALLOWLIST_VERSION = 'paper_entry_route_allowlist_v1';
+export function paperEntryRouteAllowlist(env = process.env) {
+  const raw = env?.PAPER_ENTRY_ROUTE_ALLOWLIST;
+  if (raw == null || !String(raw).trim()) return null;
+  const allowed = [...new Set(String(raw).split(',').map(s => s.trim()).filter(Boolean))];
+  return allowed.length ? { version: PAPER_ENTRY_ROUTE_ALLOWLIST_VERSION, allowed } : null;
+}
+
+function applyPaperEntryRouteAllowlist(row, allowlist) {
+  if (!allowlist || row?.decision !== '可模拟') return row;
+  const id = row.evidence?.opportunity?.id;
+  if (!id || allowlist.allowed.includes(id)) return row;
+  const reason = `路线 ${id} 不在 PAPER_ENTRY_ROUTE_ALLOWLIST，仅影子观察`;
+  return {
+    ...row,
+    decision: '观察',
+    reasons: [...(row.reasons || []), reason],
+    evidence: {
+      ...row.evidence,
+      paperEligible: false,
+      entryPlan: { ...(row.evidence.entryPlan || {}), eligible: false },
+      routeAllowlist: { ...allowlist, blocked: id, paperFillAllowed: false, researchOnly: true },
+    },
+  };
+}
+
 const finite = n => typeof n === 'number' && Number.isFinite(n);
 const positive = n => finite(n) && n > 0;
 const stamp = n => typeof n === 'number' ? (n < 1e10 ? n * 1000 : n) : Date.parse(n || '');
@@ -199,7 +226,13 @@ export function multiOpportunityEntry(base, options) {
   // Every route must finish its own evidence checks BEFORE selecting a winner.
   // A monitored event's post-event buying requirements do not belong to an
   // independent OHLCV setup (nor may the OHLCV result validate the event).
-  const checkedRoutes=options.finalizeRoute?routes.map(options.finalizeRoute):routes;
+  const finalizedRoutes=options.finalizeRoute?routes.map(options.finalizeRoute):routes;
+  // Optional operator allowlist: keep research/shadow scoring, demote non-allowed
+  // paper fills after per-route finalizers. Empty/unset env preserves multi-route fills.
+  const routeAllowlist = paperEntryRouteAllowlist();
+  const checkedRoutes = routeAllowlist
+    ? finalizedRoutes.map(row => applyPaperEntryRouteAllowlist(row, routeAllowlist))
+    : finalizedRoutes;
   const ordered = checkedRoutes.toSorted((a,b) => Number(b.decision==='可模拟')-Number(a.decision==='可模拟')
     || Number(b.evidence.lossRepair?.entryPathAllowed===true)-Number(a.evidence.lossRepair?.entryPathAllowed===true)
     || (a.missing.length+a.reasons.length)-(b.missing.length+b.reasons.length));

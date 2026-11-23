@@ -2,7 +2,8 @@
 // bucket is 5 units/second (Plus 20, Pro 50). Serial 1.2s spacing leaves margin
 // even at weight 5; it is not an entitlement to ignore a returned 429/reset.
 // https://github.com/GMGNAI/gmgn-skills/tree/main/skills (verified 2026-09-23)
-// No signed follow-wallet/swap or Pro-only 1s K-line route uses this scheduler.
+// No signed follow-wallet/swap uses this scheduler. Pro-only 1s K-line stays
+// off unless GMGN_ONE_SECOND_KLINE=1; paper entries still decide on 1m bars.
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -12,6 +13,10 @@ const FREE = Object.freeze({ plan: 'free', intervalMs: 1200, concurrency: 1, nor
 // its worst-case weight (5), spaced 350ms apart: <=14.29 units/s, no burst.
 // This deliberately leaves headroom for CLI retries/other account consumers.
 const PLUS = Object.freeze({ plan: 'plus', intervalMs: 350, concurrency: 3, normalConcurrency: 2, chargedWeight: 5 });
+
+export function oneSecondKlineEnabled(env = process.env) {
+  return env.GMGN_ONE_SECOND_KLINE === '1';
+}
 
 export function gmgnReadonlyPolicy(dataDir) {
   const file = path.join(dataDir, 'gmgn-readonly-plan.json');

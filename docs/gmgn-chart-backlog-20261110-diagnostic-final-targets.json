@@ -1,0 +1,275 @@
+{
+  "updatedAt": "2026-11-09T17:44:01.965Z",
+  "purpose": "Read-only source check for 7 fresh-list delisted CAs; 4 post-fix window verification samples. No strategy injection.",
+  "candidates": [
+    {
+      "chain": "bsc",
+      "address": "0x7c8d5502b544ddaf8852fc46d1174e34876d545c",
+      "symbol": "BNC4",
+      "price": 4.73185,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 2146290,
+      "volume": {
+        "value": 1938.25,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 36,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x33fe24f4298a8659668e8d1f2044fd01e8a57777",
+      "symbol": "RM",
+      "price": 0.000108051,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 36919.6,
+      "volume": {
+        "value": 1283.75,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 29,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xf1c599e9a5fbdea408a7409c0176a2fe42c64444",
+      "symbol": "Hachiko",
+      "price": 0.000711867,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 109531,
+      "volume": {
+        "value": 1179.03,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 14,
+        "closedBars": 13,
+        "lastClosedAtMs": 1794246060000,
+        "firstOpenAtMs": 1794243060000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xe9320db4ddfc689470d09c768a4cb9b05cf97777",
+      "symbol": "牛逼",
+      "price": 8.02044e-05,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 26439.1,
+      "volume": {
+        "value": 723.564,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 60,
+        "closedBars": 37,
+        "lastClosedAtMs": 1794244860000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x2a06ddb8f82b2926ccd852d8cdc2348246857777",
+      "symbol": "涨醒",
+      "price": 0.000335687,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 54868,
+      "volume": {
+        "value": 693.235,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 48,
+        "closedBars": 44,
+        "lastClosedAtMs": 1794246000000,
+        "firstOpenAtMs": 1794242700000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xbab528425edb1e0e36d3719bc3307d9c8cce8888",
+      "symbol": "Moolah",
+      "price": 0.0602922,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 1621350,
+      "volume": {
+        "value": 573.561,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 54,
+        "closedBars": 47,
+        "lastClosedAtMs": 1794245700000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x6b2ce31a577d92f73516c7a91febc7672247e694",
+      "symbol": "Gangstar",
+      "price": 7.12333e-05,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 30554.6,
+      "volume": {
+        "value": 499.443,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 17,
+        "closedBars": 16,
+        "lastClosedAtMs": 1794246120000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+      "symbol": "MEME",
+      "price": 1.92203e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 9221.19,
+      "volume": {
+        "value": 8210.37,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x4d21483a44bf67a86b77e3da301411880797d452",
+      "symbol": "BA",
+      "price": 170.596,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 9958.93,
+      "volume": {
+        "value": 4952.56,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x608de3e89a6506b881125f67463623d7eb063fba",
+      "symbol": "NOVASI",
+      "price": 5.33658e-05,
+      "code": "chart_stale",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 19925.9,
+      "volume": {
+        "value": 1062.8,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 60,
+        "closedBars": 34,
+        "lastClosedAtMs": 1794244680000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x255979302fd6a5e2ff6dce0d8b018f51e06e243a",
+      "symbol": "UNIWALL",
+      "price": 0.0050968,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 17847.2,
+      "volume": {
+        "value": 933.158,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    }
+  ]
+}

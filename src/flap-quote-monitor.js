@@ -25,9 +25,9 @@ export const FLAP_PORTAL_IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db9
 // These values are deliberately not configurable: an arbitrary predecessor
 // would turn a local-state edit into authority to cross an implementation
 // boundary without first proving which monitor produced the cursor.
-export const FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION = "v5.25.0";
-export const FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION = "0xE13227370996f892a56d2Ff4a30f6026887B48Fb";
-export const FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH = "0xf8d56fe09f2ec5e3eeaabdbfeeb0faf55e4ed8996a55bc1b69a78e62dbb792e4";
+export const FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION = "v5.26.0";
+export const FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION = "0x7a94f37b61a82c395f9812CF266b444783cC5e8c";
+export const FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH = "0x3db27f98826706ac5ddedb919594d4670151874482dff23e31d2186858635194";
 // v5.24 is immutable historical evidence, not a direct predecessor accepted
 // by the v5.26 in-place state migration. v5.23.1 remains separately historical.
 export const FLAP_PORTAL_HISTORICAL_V524_VERSION = "v5.24.0";

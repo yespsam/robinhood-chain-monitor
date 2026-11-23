@@ -1,0 +1,586 @@
+{
+  "id": "chart-catchup-1794246680788",
+  "status": "complete",
+  "createdAt": "2026-11-09T17:51:20.788Z",
+  "deadlineAt": "2026-11-09T18:21:20.788Z",
+  "items": [
+    {
+      "chain": "bsc",
+      "address": "0xa0c56a8c0692bd10b3fa8f8ba79cf5332b7107f9",
+      "status": "cached",
+      "attempts": 0,
+      "completedAt": "2026-11-09T17:51:30.205Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "ready",
+      "ready": true,
+      "closedBars": 60,
+      "closedThroughAt": "2026-11-09T17:51:00.000Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x0c6302401aa5325c2e36f170f52c00b1d220b405",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-09T17:51:54.530Z",
+      "completedAt": "2026-11-09T17:52:04.168Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "ready",
+      "ready": true,
+      "closedBars": 59,
+      "closedThroughAt": "2026-11-09T17:52:00.000Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x8b9ee39195ea99d6ddd68030f44131116bc218f6",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-09T17:52:03.836Z",
+      "completedAt": "2026-11-09T17:52:07.188Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "insufficient_contiguous_tail",
+      "ready": false,
+      "closedBars": 19,
+      "closedThroughAt": "2026-11-09T17:52:00.000Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x0cee7a04355b2e2d7248d9566db8889cf44f7777",
+      "status": "cached",
+      "attempts": 0,
+      "completedAt": "2026-11-09T17:52:31.792Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "insufficient_contiguous_tail",
+      "ready": false,
+      "closedBars": 56,
+      "closedThroughAt": "2026-11-09T17:52:00.000Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x7c8d5502b544ddaf8852fc46d1174e34876d545c",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:52:26.153Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xcafdbce93477261db8250e42bdae6e66733f9e20",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-09T17:53:43.319Z",
+      "completedAt": "2026-11-09T17:53:48.097Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "stale_closed_bars",
+      "ready": false,
+      "closedBars": 35,
+      "closedThroughAt": "2026-11-09T17:53:00.000Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x8e6442663a4f8c50b6132c68d42a30e7dfe4ae15",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:53:47.600Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x33fe24f4298a8659668e8d1f2044fd01e8a57777",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:53:47.600Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xf1c599e9a5fbdea408a7409c0176a2fe42c64444",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:53:47.600Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x87acfa3fd7a6e0d48677d070644d76905c2bdc00",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-09T17:54:40.893Z",
+      "completedAt": "2026-11-09T17:54:58.942Z",
+      "chartStatus": "unavailable",
+      "reasonCode": "GMGN_NETWORK_FAILED",
+      "chartDiagnostic": "source_unavailable",
+      "ready": false,
+      "closedBars": 0,
+      "closedThroughAt": "2026-11-09T17:54:00.000Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x7083609fce4d1d8dc0c979aab8c869ea2c873402",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:54:58.696Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x9b8e987e6fec8cf1380c4dca7071e2c7853aeea1",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-09T17:54:58.696Z",
+      "completedAt": "2026-11-09T17:55:18.434Z",
+      "chartStatus": "unavailable",
+      "reasonCode": "GMGN_NETWORK_FAILED",
+      "chartDiagnostic": "source_unavailable",
+      "ready": false,
+      "closedBars": 0,
+      "closedThroughAt": "2026-11-09T17:55:00.000Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xe9320db4ddfc689470d09c768a4cb9b05cf97777",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:18.251Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x2a06ddb8f82b2926ccd852d8cdc2348246857777",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:18.251Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x91152b4ef635403efbae860edd0f8c321d7c035d",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-09T17:55:18.251Z",
+      "completedAt": "2026-11-09T17:55:24.618Z",
+      "chartStatus": "unavailable",
+      "reasonCode": "GMGN_NETWORK_FAILED",
+      "chartDiagnostic": "source_unavailable",
+      "ready": false,
+      "closedBars": 0,
+      "closedThroughAt": "2026-11-09T17:55:00.000Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xb305e6954e4e0cd021c06ec355681abc8a00dbd7",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:25.299Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xbab528425edb1e0e36d3719bc3307d9c8cce8888",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-09T17:55:25.299Z",
+      "completedAt": "2026-11-09T17:55:36.418Z",
+      "chartStatus": "unavailable",
+      "reasonCode": "GMGN_NETWORK_FAILED",
+      "chartDiagnostic": "source_unavailable",
+      "ready": false,
+      "closedBars": 0,
+      "closedThroughAt": "2026-11-09T17:55:00.000Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x6a3722e20d1c9727c290a1b3cccd5330180d9de4",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x6b2ce31a577d92f73516c7a91febc7672247e694",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x6a2608dabe09bc1128eec7275b92dfb939d5db3f",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x6d145722564aaa0dba3e104dd1d680b227927777",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x78573ab46e5436e126d3ea1fdef8766cce4efd2b",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xdd806e436dda5588bf54061c11590c77ddc87777",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "sol",
+      "address": "FDboCUrbwVgNVbuSXvhk9Atpay4UW6q3gPqAc6wH6bZD",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "sol",
+      "address": "FSzr1SzGZGSwU1mkkT4XRq82EciM86Y61c3xB2zXvFBJ",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "sol",
+      "address": "E4w4LG1UMzRVHch6YpBq7duCiRup1G6CrKW7Kg5ufV7N",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "sol",
+      "address": "p6o8NN4MiMrDW4LMucKj9fKoM4tQSFyzB7bEU3Upump",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "sol",
+      "address": "3AgytyBs815xU5JAbvpaXNscDqQ35N3325PsNABVpump",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "sol",
+      "address": "4yxrjPyGVsAYSMwxPPKirxJPegDjGKiTCPxWwkoFpump",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "sol",
+      "address": "6kmkcwKxxmoREhkxrbBvwDY3N2KSfpdMMtWtNoPpump",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "sol",
+      "address": "2Tef3P9qRhUTEAKTyQDHCdn67RK3yTbaLU72fcn5pump",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "sol",
+      "address": "GMvCfcZg8YvkkQmwDaAzCtHDrrEtgE74nQpQ7xNabonk",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "sol",
+      "address": "22JKmY9YZfnQfb3pGYb6hctL5Jyvv3zhL3nQ8oyNuoYp",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "sol",
+      "address": "Hh3oTaqDCKKfdBgsQEvxp9sUwyNf8x9qmKqEMLBWpump",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "sol",
+      "address": "D4CzGsZgusVj2K8R1its5H8WWdo9mazbDwBc6qvsmfun",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "sol",
+      "address": "8BnNS15Q6h6D5Vcq1sNPaUxhpRVdK8FGRbLvCrLxibSx",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x3cbbfc926a55d9751e78b91642b685c4e36479d5",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xc9a981fee1f9dec688bb123ccdecc63d0debfc4e",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xdf0992e440dd0be65bd8439b609d6d4366bf1cb5",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xcec185eb182c47d1ba1efc84e6959e18cd620be4",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x48e39e56acdba37b09020c0b734a613c9a2f100a",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x6330d8c3178a418788df01a47479c0ce7ccf450b",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x72be1277e198d0c476869253cb4e62807e14533c",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x9f4ba41f91a59a34e17ee8c9eb3a51363b11abd5",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x1b0e319c6a659f002271b69db8a7df2f911c153e",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xbc9e7b1c5c0081f4ae85e71ec95703d3dec9ffad",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x84cab63bc87912e71ad199ff14a0ba45de68fef8",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xa2753fd0bc86b8ceb55ffd2698679c7f214785f1",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x6511c233790ec10f7d673c64dc82c3f941d57828",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x15f3385625d7e364c5a6216fbbceadf10fa90e7d",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x94641b97010608c3827fb058074889f19868ff33",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xf0c4bf4c582cb3836e98394b1d4e7b7281101be8",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xdc45b71d7203c2e8baafc43a19bca0eb993bb54e",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xc9675fe679c7d4e1b94416f66d61c96127eb964a",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xff080c8ce2e5feadaca0da81314ae59d232d4afd",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x98096d17e191b3da1d5f99a6d7b3584351b11e18",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x58ffe4a942d3885baa22d7520691f611ef09e7aa",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x47569d49471bdbabfaf5531c0f74d9f2de82a11a",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x7fe995a80075df3dc8ae11a9b82c7fe4202cd87f",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xc72b96e0e48ecd4dc75e1e45396e26300bc39681",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xe8ffd7e24187f72afb08d75b1bb13088a989a791",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x2fc6de9c65a620f918ca7d1191d3afa495ca2898",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+      "completedAt": "2026-11-09T17:55:41.343Z"
+    }
+  ],
+  "completedAt": "2026-11-09T17:55:41.343Z",
+  "counts": {
+    "cached": 2,
+    "fetched": 7,
+    "skipped": 56
+  }
+}

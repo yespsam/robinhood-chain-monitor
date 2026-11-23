@@ -289,19 +289,27 @@ function renderStrategies() {
 function renderCoverage() {
   const coverage = state.snapshot?.coverage || {};
   const confirmed = state.snapshot?.entryMode === 'confirmed_pvp_v2';
+  const health = state.snapshot?.researchPipeline?.chartHealth;
+  const pct = rate => Number.isFinite(rate) ? `${Math.round(rate * 100)}%` : '待测';
+  const hotMaxAge = Number.isFinite(health?.hotKlineMaxClosedAgeMs) ? `${Math.round(health.hotKlineMaxClosedAgeMs / 1000)} 秒` : '待测';
+  const healthNote = health ? `<div class="coverage-item"><span class="coverage-dot ${health.alert ? '' : 'fresh'}"></span><div><strong>K 线供给${health.warmup ? ' · 预热' : health.alert ? ' · 告警' : ''}</strong><span>热点结构 ${num(health.hotChartReady)}/${num(health.hotCount)} · 热点 1m 新鲜 ${num(health.hotKlineFresh)}/${num(health.hotCount)} · 热点已请求 ${num(health.hotFetched)}/${num(health.hotCount)}（覆盖 ${pct(health.hotRequestCoverageRate)}，未请求 ${num(health.hotNotRequested)}） · 陈旧 ${num(health.hotKlineStale)} · 新鲜度未证实 ${num(health.hotKlineUnknown)} · 最旧收盘 ${hotMaxAge} · 全部已取/缓存 ${num(health.fetched)} · 全部未请求 ${num(health.notRequested)} · 已请求空响应 ${pct(health.fetchedUnavailableRatio)} · 过期线 ${num(health.staleClosedBars)} · 根数不足 ${num(health.insufficientClosedBars)} · 排队中位 ${health.queueWaitMedianMs == null ? '待测' : `${Math.round(health.queueWaitMedianMs)} ms`} / 最大 ${health.queueWaitMaxMs == null ? '待测' : `${Math.round(health.queueWaitMaxMs)} ms`}</span><span>${escapeHtml(health.note || '')}</span></div></div>` : '';
+  const focus = state.snapshot?.strategyFocusSimulation;
+  const fallback = state.snapshot?.researchPipeline?.chartFallback;
+  const fallbackNote = fallback?.enabled ? `<div class="coverage-item"><span class="coverage-dot ${fallback.accepted > 0 ? 'fresh' : ''}"></span><div><strong>备用 K 线 · <a href="https://www.geckoterminal.com/" target="_blank" rel="noopener noreferrer">Powered by GeckoTerminal</a></strong><span>已采用 ${num(fallback.accepted)} 个完整窗口 · ${fallback.pending ? '正在补查' : '按需补查'}；逐链与 CA 核对来源，空缺分钟不补造。公共限流期间保留原数据状态。</span></div></div>` : '';
+  const focusNote = focus?.enabled ? `<div class="coverage-item"><span class="coverage-dot ${focus.status === 'ready' ? 'fresh' : ''}"></span><div><strong>外盘二段突破 · 独立影子模拟</strong><span>状态 ${escapeHtml(focus.status || '未知')} · 入场 ${num(focus.entries)} · 平仓 ${num(focus.completedTrades)} · 持仓 ${num(focus.openPositions)} · 已实现 ${focus.realizedPnlUsd == null ? '待计' : signedMoney(focus.realizedPnlUsd)} · 未实现 ${focus.unrealizedPnlUsd == null ? '待估' : signedMoney(focus.unrealizedPnlUsd)} · 主盘/实盘不跟单</span><span>${escapeHtml(focus.note || focus.lastError || '')}</span></div></div>` : '';
   if (state.snapshot?.chains?.length > 1 && state.snapshot.chainCoverage) {
-    $('#coverageList').innerHTML = (state.snapshot.scanScope?.scanChains || state.snapshot.chains).map(chain => {
+    $('#coverageList').innerHTML = healthNote + fallbackNote + focusNote + (state.snapshot.scanScope?.scanChains || state.snapshot.chains).map(chain => {
       const feed = state.snapshot.chainCoverage[chain] || {};
       const now = Date.now(), external = marketCoverageStatus(feed.market, now), internal = marketCoverageStatus(feed.trenches, now);
       const flow = flowCoverageStatus(feed.flow, now);
       const summary = `候选 ${num(feed.candidates)} · 资金流发现 ${num(feed.flowDiscovered)} · 待补查 ${num(feed.researchPending)} · 达标 ${num(feed.eligible)}`;
       const diagnostic = state.snapshot?.entryMode === 'paper_diagnostic_entry_v1';
-      const funnel = feed.funnel ? `<span>逐关剩余：新鲜行情 ${num(feed.funnel.marketFresh)} → ${state.snapshot?.opportunityMode ? '路线信号达标' : '资金流达标'} ${num(feed.funnel.flowReady)} → ${diagnostic ? '成交模型可用' : '基础检查通过'} ${num(feed.funnel.safetyReady)} → ${confirmed ? '连续报价确认' : diagnostic ? '形态免筛选' : 'K 线齐全'} ${num(feed.funnel.chartReady)} → 新鲜报价 ${num(feed.funnel.quoteFresh)} → 可开仓 ${num(feed.funnel.eligible)}</span>` : '';
+      const funnel = feed.funnel ? `<span>逐关剩余：新鲜行情 ${num(feed.funnel.marketFresh)} → ${state.snapshot?.opportunityMode ? '路线信号达标' : '资金流达标'} ${num(feed.funnel.flowReady)} → ${diagnostic ? '成交模型可用' : '基础检查通过'} ${num(feed.funnel.safetyReady)} → K 线结构 ${num(feed.funnel.ohlcvReady)} → ${confirmed ? '连续报价确认' : diagnostic ? '形态免筛选' : 'K 线齐全'} ${num(feed.funnel.chartReady)} → 新鲜报价 ${num(feed.funnel.quoteFresh)} → 可开仓 ${num(feed.funnel.eligible)}</span>` : '';
       return `<div class="coverage-item"><span class="coverage-dot ${external.fresh && internal.fresh && flow.fresh ? 'fresh' : ''}"></span><div><strong>${escapeHtml(chainName(chain))} · ${escapeHtml(summary)}</strong><span>外盘：${external.label} · 内盘：${internal.label}</span><span>资金流：${escapeHtml(flow.label || humanText(feed.flow?.coverageGap || '等待采集'))}${feed.flow?.providerLabel ? ` · ${escapeHtml(feed.flow.providerLabel)}` : ''}</span>${funnel}</div><time>${feed.flow?.observedAt ? clock(feed.flow.observedAt) : '—'}</time></div>`;
     }).join('');
     return;
   }
-  $('#coverageList').innerHTML = [['market', '外盘行情'], ['trenches', '内盘 / 新发'], ['flow', '聪明钱资金流']].map(([key, label]) => {
+  $('#coverageList').innerHTML = healthNote + fallbackNote + focusNote + [['market', '外盘行情'], ['trenches', '内盘 / 新发'], ['flow', '聪明钱资金流']].map(([key, label]) => {
     const feed = coverage[key];
     const live = key === 'flow' ? flowCoverageStatus(feed) : marketCoverageStatus(feed);
     const good = live.fresh;

@@ -85,6 +85,8 @@ test('speed instrument uses measured values, distinguishes source age and never 
   assert.match(html,/1.06 秒/);assert.match(html,/0.20 秒/);assert.match(html,/42.00 秒/);
   assert.match(html,/data-stale="true"/);assert.match(html,/180s/);assert.doesNotMatch(html,/<bad>/);
   assert.match(html,/本地扫描 ≠ 每个 CA 的上游刷新/);
+  const alerted=renderBrainTelemetry({researchPipeline:{chartRequestsPending:4,chartHealth:{alert:true,warmup:false,hotChartReady:3,hotCount:8,hotKlineFresh:2,hotKlineStale:1,hotKlineUnknown:5,hotKlineMaxClosedAgeMs:150000,notRequested:310,fetchedUnavailableRatio:0.8,queueWaitMedianMs:26000,note:'热点收盘 K 线陈旧'}}},true);
+  assert.match(alerted,/热点 K 线结构/);assert.match(alerted,/3\/8/);assert.match(alerted,/热点 1m 新鲜/);assert.match(alerted,/2\/8 · 陈旧 1 · 未证实 5/);assert.match(alerted,/150.00 秒/);assert.match(alerted,/310 个/);assert.match(alerted,/80%/);assert.match(alerted,/26.00 秒/);
 });
 test('shows actual pending job separately from candidate decision; preserves exact chain and CA selection',()=>{
   const s=snapshot(),v=buildBrainView(s,NOW,true);

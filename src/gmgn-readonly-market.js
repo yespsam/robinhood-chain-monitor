@@ -7,7 +7,7 @@ import { parseGmgnFlowRateLimit } from './gmgn-flow-client.js';
 import { createGmgnAccountGate } from './gmgn-account-gate.js';
 import { gmgnFlowAddress } from './gmgn-flow-signal.js';
 import { enqueueReadonly, readonlyQueueSnapshot } from './readonly-priority-queue.js';
-import { GMGN_READONLY_INTERVAL_MS, gmgnReadonlyPolicy } from './gmgn-readonly-pacing.js';
+import { GMGN_READONLY_INTERVAL_MS, gmgnReadonlyPolicy, oneSecondKlineEnabled } from './gmgn-readonly-pacing.js';
 import { createReadonlyProcessRunner } from './gmgn-readonly-process.js';
 import {classifyGmgnReadError} from './gmgn-read-error.js';
 
@@ -49,7 +49,8 @@ function assertInterval(interval) {
 }
 
 function assertResolution(resolution) {
-  if (!validChoice(resolution, GMGN_RESOLUTIONS)) throw new TypeError('invalid resolution');
+  const allowed = oneSecondKlineEnabled() ? [...GMGN_RESOLUTIONS, '1s'] : GMGN_RESOLUTIONS;
+  if (!validChoice(resolution, allowed)) throw new TypeError('invalid resolution');
 }
 
 function assertAddress(address) {
@@ -220,7 +221,7 @@ function candleItems(payload) {
   if (Array.isArray(payload?.list)) return payload.list;
   if (Array.isArray(payload?.data?.list)) return payload.data.list;
   if (Array.isArray(payload)) return payload;
-  return [];
+  return null;
 }
 
 const unavailable = (extra = {}) => ({ status: 'unavailable', source: 'gmgn-cli', reason: 'gmgn_unavailable', observedAt: null, ...extra });
@@ -349,7 +350,7 @@ function createQueuedRunner({ cliPath, timeoutMs, dataDir, execute, now, sleep, 
       catch(error) { return failSafely(error); }
       finally { record.preflightMs=Math.max(0,now()-preflightStartedAt); }
       const gateQueuedAt=now();
-      return accountGate(()=>executeWork(true),controller.signal,{priority,onAdmitted:admission=>{
+      return accountGate(()=>executeWork(true),controller.signal,{priority,kind,onAdmitted:admission=>{
         record.accountWaitMs=Math.max(0,now()-gateQueuedAt);record.accountQueueScans=admission.queueScans;
       }});
     };
@@ -433,6 +434,7 @@ export function createReadonlyMarketClient({ runner = null, ttlMs = DEFAULT_TTL_
     entry.promise = Promise.resolve().then(load).then(result => {
       entry.succeeded = result?.status === 'ok';
       if (result?.status === 'ok') entry.lastSuccess = result;
+      else if (result?.reasonCode) entry.failureCode = result.reasonCode;
       return result;
     }).catch(error => { entry.failureCode = safeFailureCode(error); return null; }).finally(() => {
       entry.pending = false;
@@ -561,31 +563,54 @@ export function createReadonlyMarketClient({ runner = null, ttlMs = DEFAULT_TTL_
       && Math.floor(now()/60000)*60>previous.lastSuccess.to
       && now()-Date.parse(previous.lastSuccess.receivedAt)>=5000)previous.expiresAt=0;
     const result = await cached(key, async () => {
-      const queuedAt=now();let requestedAt=queuedAt,requestEnd=end,requestStart=start;
+      const queuedAt=now();let requestedAt=queuedAt,requestEnd=end,requestStart=start,dispatched=false,receivedAt=null;
       const args=['market', 'kline', '--chain', chain, '--address', address, '--resolution', resolution, '--from', String(start), '--to', String(end), '--raw'];
       const bindWindow=at=>{
-        requestedAt=at;
+        requestedAt=at;dispatched=true;
         if(latestClosed){requestEnd=Math.floor(at/60000)*60;requestStart=requestEnd-duration;
           args[args.indexOf('--from')+1]=String(requestStart);args[args.indexOf('--to')+1]=String(requestEnd);}
       };
       bindWindow(queuedAt);
-      const stdout = await run(args,
-        { priority: ['exit','entry_confirmation'].includes(purpose) ? 2 : purpose === 'candidate' ? 1 : 0, onRequestStart:bindWindow,
-          ...(latestClosed?{latestClosedDuration:duration}:{}) });
+      dispatched=false;
+      const failed=(reasonCode,reason='gmgn_unavailable')=>{
+        const lastAttempt={queuedAt:new Date(queuedAt).toISOString(),requestedAt:dispatched?new Date(requestedAt).toISOString():null,
+          receivedAt:receivedAt===null?null:new Date(receivedAt).toISOString(),completedAt:new Date(now()).toISOString(),
+          from:dispatched?requestStart:null,to:dispatched?requestEnd:null,
+          requestWindow:dispatched&&latestClosed?'latest_closed_at_dispatch':null};
+        return unavailable({chain,address,resolution,reasonCode,reason,lastAttempt,
+          ...(dispatched?{from:requestStart,to:requestEnd,queuedAt:lastAttempt.queuedAt,requestedAt:lastAttempt.requestedAt,
+            receivedAt:lastAttempt.receivedAt,...(latestClosed?{requestWindow:lastAttempt.requestWindow}:{})}:{})});
+      };
+      let stdout;
+      try {
+        stdout = await run(args,
+          { priority: ['exit','entry_confirmation'].includes(purpose) ? 2 : purpose === 'candidate' ? 1 : 0, onRequestStart:bindWindow,
+            ...(latestClosed?{latestClosedDuration:duration}:{}) });
+        receivedAt=now();
+      } catch(error) { return failed(safeFailureCode(error)); }
       const payload = parseJson(stdout);
-      assertEnvelope(payload, chain, address);
-      const candles = candleItems(payload).map(item => { assertIdentity(item, chain, address);const candle=normalizeCandle(item);
-        if(!candle)throw new TypeError('invalid candle');return candle; });
-      if (!candles.length) return unavailable({ chain, address, resolution });
+      let candles;
+      try {
+        assertEnvelope(payload, chain, address);
+        const items=candleItems(payload);
+        if(!items)throw new TypeError('invalid candle list');
+        candles=items.map(item=>{assertIdentity(item,chain,address);const candle=normalizeCandle(item);
+          if(!candle)throw new TypeError('invalid candle');return candle;});
+      } catch(error) {
+        return safeFailureCode(error)==='GMGN_IDENTITY_MISMATCH'
+          ? failed('GMGN_IDENTITY_MISMATCH') : failed('GMGN_INVALID_KLINE_PAYLOAD','invalid_kline_payload');
+      }
+      if (!candles.length) return failed('GMGN_EMPTY_KLINE','empty_kline');
       return { status: 'ok', source: 'gmgn-cli', chain, address, resolution, from: requestStart, to: requestEnd,
         ...(latestClosed?{requestWindow:'latest_closed_at_dispatch'}:{}),queuedAt:new Date(queuedAt).toISOString(),
-        requestedAt:new Date(requestedAt).toISOString(),receivedAt:new Date(now()).toISOString(),observedAt: new Date(now()).toISOString(), candles };
+        requestedAt:new Date(requestedAt).toISOString(),receivedAt:new Date(receivedAt).toISOString(),observedAt: new Date(receivedAt).toISOString(), candles };
     });
     if (result?.status === 'ok') return result;
     const lastSuccess = cache.get(key)?.lastSuccess;
     return lastSuccess
-      ? { ...lastSuccess, status: 'stale', stale: true, staleReason: 'gmgn_unavailable', reasonCode:cache.get(key)?.failureCode||'GMGN_UNAVAILABLE',staleAt: new Date(now()).toISOString() }
-      : unavailable({ chain, address, resolution,reasonCode:cache.get(key)?.failureCode||'GMGN_UNAVAILABLE' });
+      ? { ...lastSuccess, status: 'stale', stale: true, staleReason: result?.reason||'gmgn_unavailable',
+        reasonCode:cache.get(key)?.failureCode||'GMGN_UNAVAILABLE',...(result?.lastAttempt?{lastAttempt:result.lastAttempt}:{}),staleAt: new Date(now()).toISOString() }
+      : result || unavailable({ chain, address, resolution,reasonCode:cache.get(key)?.failureCode||'GMGN_UNAVAILABLE' });
   }
 
   async function trenches({ chain, limit = 20, purpose = 'research', types = Object.keys(TRENCHES_CATEGORIES) } = {}) {

@@ -1,0 +1,193 @@
+{
+  "version": "gmgn_gap_followup_v1",
+  "updatedAt": "2026-11-10T05:01:07.053190+00:00",
+  "scope": {
+    "frozenTargets": 64,
+    "identity": "chain plus exact CA",
+    "targetFile": "docs/gmgn-source-gap-followup-20261110-targets.json",
+    "historicalVsCurrent": "Original UTC windows are audited independently; older bars never count as current signals."
+  },
+  "before": {
+    "updatedAt": "2026-11-10T04:53:08.170Z",
+    "enabled": true,
+    "liveMirrorEnabled": true,
+    "entryDiagnostics": {
+      "version": "paper_entry_diagnostics_v1",
+      "detected": 308,
+      "verifiedCatalyst": 0,
+      "externalStructure": 191,
+      "quoteResearchReady": 0,
+      "quoteScheduled": 0,
+      "eligible": 0,
+      "blockers": [
+        {
+          "code": "safety_blocked",
+          "label": "明确不可交易或安全检查未通过",
+          "count": 114
+        },
+        {
+          "code": "catalyst",
+          "label": "缺少有效原文催化或核实盈利钱包",
+          "count": 71
+        },
+        {
+          "code": "chart_incomplete",
+          "label": "买点K线不足或断档，等待补齐",
+          "count": 37
+        },
+        {
+          "code": "research_excluded",
+          "label": "未进入常规 K 线研究：阶段、流动性或成交量条件未达标",
+          "count": 30
+        },
+        {
+          "code": "chart_stale",
+          "label": "买点K线已过期，等待刷新",
+          "count": 19
+        },
+        {
+          "code": "safety_data",
+          "label": "该入口所需安全字段尚未补齐",
+          "count": 15
+        },
+        {
+          "code": "reentry",
+          "label": "上次亏损后的重入证据不足",
+          "count": 11
+        },
+        {
+          "code": "chart_missing",
+          "label": "买点数据未取得，尚不能判断有无机会",
+          "count": 8
+        },
+        {
+          "code": "setup",
+          "label": "买盘、形态或其他入场条件尚未成立",
+          "count": 3
+        }
+      ],
+      "note": "按链与 CA 去重的当前快照；每个候选只计一个主要状态。没有有效候选不代表市场没有机会，调度与条件通过均不等于成交。"
+    },
+    "chartHealth": {
+      "version": "chart_health_v2",
+      "alert": false,
+      "warmup": false,
+      "evaluated": 308,
+      "chartReady": 4,
+      "klineOk": 73,
+      "legacyChartReady": 4,
+      "externalWindowReady": 4,
+      "hotLegacyChartReady": 2,
+      "hotExternalWindowReady": 2,
+      "chartReadinessNote": "chartReady 保留旧图表或外盘窗口任一通过的兼容计数；externalWindowReady 才是外盘实际收盘窗口校验通过数，仍不代表形态或买入条件通过。",
+      "notRequested": 233,
+      "notRequestedRatio": 0.7564935064935064,
+      "fetched": 75,
+      "fetchedUnavailable": 1,
+      "fetchedUnavailableRatio": 0.013333333333333334,
+      "sourceUnavailable": 1,
+      "sourceUnavailableRatio": 0.013333333333333334,
+      "staleClosedBars": 23,
+      "insufficientClosedBars": 46,
+      "hotCount": 3,
+      "hotFetched": 3,
+      "hotNotRequested": 0,
+      "hotRequestCoverageRate": 1,
+      "hotKlineOk": 3,
+      "hotChartReady": 2,
+      "hotKlineFresh": 3,
+      "hotKlineStale": 0,
+      "hotKlineUnknown": 0,
+      "hotKlineFreshRate": 1,
+      "hotKlineMaxClosedAgeMs": 68169,
+      "hotKlineFreshnessMaxAgeMs": 120000,
+      "hotChartReadyRate": 0.6666666666666666,
+      "chartReadyRate": 0.012987012987012988,
+      "klineOkRate": 0.237012987012987,
+      "funnelChartReady": 0,
+      "funnelOhlcvReady": 4,
+      "chartDispatchCount": 4160,
+      "chartCacheCount": 240,
+      "cachedUnavailable": 5,
+      "queueWaitMedianMs": 15156,
+      "queueWaitMaxMs": 57758,
+      "queueSamples": 246,
+      "note": "未请求的广谱候选单独计数。确认型漏斗 chartReady 是连续报价确认，ohlcvReady 才是 K 线结构。不代表可以开仓。"
+    }
+  },
+  "otherProviderChecks": [
+    {
+      "provider": "RobinFinite",
+      "url": "https://www.robinfinite.com/api/v1/tokens?limit=100",
+      "result": "HTTP_403",
+      "attempts": 1,
+      "effect": "No bypass attempted; no coverage claim. Native ETH candles also need verified historical FX before USD use."
+    },
+    {
+      "provider": "DexPaprika",
+      "url": "https://api.dexpaprika.com/networks",
+      "result": "HTTP_403",
+      "attempts": 1,
+      "effect": "No bypass attempted; network/pool coverage not verified."
+    }
+  ],
+  "liveLedgerBefore": {
+    "data/live-decisions.jsonl": {
+      "lines": 14
+    },
+    "data/live-orders.jsonl": {
+      "lines": 1
+    }
+  },
+  "currentPrimaryCatchup": {
+    "id": "chart-catchup-1794286389118",
+    "status": "complete",
+    "createdAt": "2026-11-10T04:53:09.118Z",
+    "completedAt": "2026-11-10T04:57:49.687Z",
+    "counts": {
+      "skipped": 46,
+      "fetched": 18
+    },
+    "artifact": "docs/gmgn-gap-followup-current-catchup-20261110.json",
+    "readiness": {
+      "ready": 1,
+      "insufficient_contiguous_tail": 13,
+      "stale_closed_bars": 3,
+      "insufficient_closed_bars": 1
+    }
+  },
+  "validation": {
+    "rootSourceDashboardRegression": {
+      "passed": 89,
+      "failed": 0,
+      "log": "/tmp/gmgn-source-followup-focused-tests-20261110.log"
+    },
+    "runtimeAndSchedulerRegression": {
+      "passed": 164,
+      "failed": 0,
+      "log": "/tmp/gmgn-v29-runtime-fallback-tests-20261110.log"
+    },
+    "scopeNote": "Suite totals overlap; do not sum as distinct tests. Prior engine evidence-field expectation failure remains separate, documented in entry policy review."
+  },
+  "executionScope": {
+    "liveChains": [
+      "bsc",
+      "sol"
+    ],
+    "original64ByChain": {
+      "bsc": 21,
+      "sol": 11,
+      "robinhood": 32
+    },
+    "currentPrimaryReadByChain": {
+      "bsc": 4,
+      "robinhood": 14
+    },
+    "onlyCurrentWindowReady": {
+      "chain": "robinhood",
+      "symbol": "GLD",
+      "completedAt": "2026-11-10T04:55:07.962Z"
+    },
+    "effect": "Repairing research OHLCV on Robinhood does not grant live execution on a chain outside the configured live mirror scope. Scope remains unchanged."
+  }
+}

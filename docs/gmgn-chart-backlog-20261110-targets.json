@@ -1,0 +1,2095 @@
+{
+  "updatedAt": "2026-11-09T17:44:01.965Z",
+  "counters": {
+    "chart_missing:false": 18,
+    "chart_incomplete:true": 32,
+    "chart_stale:true": 22,
+    "chart_stale:false": 3,
+    "chart_missing:true": 11
+  },
+  "candidates": [
+    {
+      "chain": "bsc",
+      "address": "0xe6c2021a443efb5d18c8cabb0cd930aa81ee7777",
+      "symbol": "ELON2028",
+      "price": 8.22297e-06,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 8005.95,
+      "volume": {
+        "value": 1573.62,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xa0c56a8c0692bd10b3fa8f8ba79cf5332b7107f9",
+      "symbol": "MERL",
+      "price": 0.0337414,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 2542280,
+      "volume": {
+        "value": 140174,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 60,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x0c6302401aa5325c2e36f170f52c00b1d220b405",
+      "symbol": "GANG",
+      "price": 0.00406376,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 278648,
+      "volume": {
+        "value": 21583.4,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 59,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+      "symbol": "MEME",
+      "price": 2.22736e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 10556.6,
+      "volume": {
+        "value": 11415.6,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x8b9ee39195ea99d6ddd68030f44131116bc218f6",
+      "symbol": "PEAQ",
+      "price": 0.0286212,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 565959,
+      "volume": {
+        "value": 7867.26,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 11,
+        "closedBars": 11,
+        "lastClosedAtMs": 1794246060000,
+        "firstOpenAtMs": 1794243240000,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x0cee7a04355b2e2d7248d9566db8889cf44f7777",
+      "symbol": "MI",
+      "price": 4.79748e-05,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 21722.3,
+      "volume": {
+        "value": 3649.73,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 53,
+        "closedBars": 53,
+        "lastClosedAtMs": 1794246120000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x7c8d5502b544ddaf8852fc46d1174e34876d545c",
+      "symbol": "BNC4",
+      "price": 4.73185,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 2146290,
+      "volume": {
+        "value": 1938.25,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 36,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xcafdbce93477261db8250e42bdae6e66733f9e20",
+      "symbol": "GSTOCK",
+      "price": 0.00366527,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 170558,
+      "volume": {
+        "value": 1873.72,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 32,
+        "closedBars": 28,
+        "lastClosedAtMs": 1794245760000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x8e6442663a4f8c50b6132c68d42a30e7dfe4ae15",
+      "symbol": "JAGENT",
+      "price": 1.46265e-06,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 723038,
+      "volume": {
+        "value": 1337.89,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 60,
+        "closedBars": 36,
+        "lastClosedAtMs": 1794244800000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x33fe24f4298a8659668e8d1f2044fd01e8a57777",
+      "symbol": "RM",
+      "price": 0.000108051,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 36919.6,
+      "volume": {
+        "value": 1283.75,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 29,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xf1c599e9a5fbdea408a7409c0176a2fe42c64444",
+      "symbol": "Hachiko",
+      "price": 0.000711867,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 109531,
+      "volume": {
+        "value": 1179.03,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 14,
+        "closedBars": 13,
+        "lastClosedAtMs": 1794246060000,
+        "firstOpenAtMs": 1794243060000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x87acfa3fd7a6e0d48677d070644d76905c2bdc00",
+      "symbol": "SPACE",
+      "price": 0.00324664,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 855529,
+      "volume": {
+        "value": 996.718,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 51,
+        "closedBars": 35,
+        "lastClosedAtMs": 1794245280000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x7083609fce4d1d8dc0c979aab8c869ea2c873402",
+      "symbol": "DOT",
+      "price": 0.877429,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 210564,
+      "volume": {
+        "value": 973.647,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 22,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x0da27398e363adb801300b4d36d600631fae7777",
+      "symbol": "spyless",
+      "price": 2.6095e-05,
+      "code": "chart_stale",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 14883.1,
+      "volume": {
+        "value": 933.171,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 59,
+        "closedBars": 28,
+        "lastClosedAtMs": 1794244320000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x2aad9bbc151659db46d379d44d9bf5e8d1888888",
+      "symbol": "MISU",
+      "price": 1.35239e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 8005.85,
+      "volume": {
+        "value": 848.947,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x9b8e987e6fec8cf1380c4dca7071e2c7853aeea1",
+      "symbol": "FXIon",
+      "price": 34.7985,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 203731,
+      "volume": {
+        "value": 767.067,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 60,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xe9320db4ddfc689470d09c768a4cb9b05cf97777",
+      "symbol": "牛逼",
+      "price": 8.02044e-05,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 26439.1,
+      "volume": {
+        "value": 723.564,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 60,
+        "closedBars": 37,
+        "lastClosedAtMs": 1794244860000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x2a06ddb8f82b2926ccd852d8cdc2348246857777",
+      "symbol": "涨醒",
+      "price": 0.000335687,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 54868,
+      "volume": {
+        "value": 693.235,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 48,
+        "closedBars": 44,
+        "lastClosedAtMs": 1794246000000,
+        "firstOpenAtMs": 1794242700000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x91152b4ef635403efbae860edd0f8c321d7c035d",
+      "symbol": "IRYS",
+      "price": 0.0173816,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 935039,
+      "volume": {
+        "value": 675.928,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 54,
+        "closedBars": 5,
+        "lastClosedAtMs": 1794242940000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xb305e6954e4e0cd021c06ec355681abc8a00dbd7",
+      "symbol": "TAC",
+      "price": 0.000926641,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 55340.5,
+      "volume": {
+        "value": 673.752,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 47,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xbab528425edb1e0e36d3719bc3307d9c8cce8888",
+      "symbol": "Moolah",
+      "price": 0.0602922,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 1621350,
+      "volume": {
+        "value": 573.561,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 54,
+        "closedBars": 47,
+        "lastClosedAtMs": 1794245700000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x6a3722e20d1c9727c290a1b3cccd5330180d9de4",
+      "symbol": "BAN",
+      "price": 9.08756e-08,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 78396.7,
+      "volume": {
+        "value": 545.666,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 51,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x6b2ce31a577d92f73516c7a91febc7672247e694",
+      "symbol": "Gangstar",
+      "price": 7.12333e-05,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 30554.6,
+      "volume": {
+        "value": 499.443,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 17,
+        "closedBars": 16,
+        "lastClosedAtMs": 1794246120000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x6a2608dabe09bc1128eec7275b92dfb939d5db3f",
+      "symbol": "TOSHI",
+      "price": 9.05746e-05,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 91715.8,
+      "volume": {
+        "value": 449.78,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 26,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x6d145722564aaa0dba3e104dd1d680b227927777",
+      "symbol": "FATCAT",
+      "price": 0.00451387,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 201686,
+      "volume": {
+        "value": 432.242,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 35,
+        "closedBars": 4,
+        "lastClosedAtMs": 1794243120000,
+        "firstOpenAtMs": 1794242700000,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x78573ab46e5436e126d3ea1fdef8766cce4efd2b",
+      "symbol": "SHIB",
+      "price": 2.8717e-06,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 151076,
+      "volume": {
+        "value": 390.607,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 59,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xdd806e436dda5588bf54061c11590c77ddc87777",
+      "symbol": "SAFU",
+      "price": 0.000724102,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 120935,
+      "volume": {
+        "value": 355.228,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 45,
+        "closedBars": 16,
+        "lastClosedAtMs": 1794243660000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "sol",
+      "address": "9j9zMCfQNZwo3qzUiWyRKju7mDeFMtUMW8WoQHsrhMP1",
+      "symbol": "AI",
+      "price": 3.882613641826341e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 2041.1707654931,
+      "volume": {
+        "value": 19698.94,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "GCA6XC9GCv1ecBBsQScjQhM4dENabkd1D5Hc9efVpump",
+      "symbol": "NVIDIOT",
+      "price": 3.749070125942987e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 14708.3913933578,
+      "volume": {
+        "value": 0.06,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "FDboCUrbwVgNVbuSXvhk9Atpay4UW6q3gPqAc6wH6bZD",
+      "symbol": "NVIDIOT",
+      "price": 6.626003e-05,
+      "code": "chart_missing",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 20076.71754175246,
+      "volume": {
+        "value": 46442.69,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "A31fDS2KH1sHUEcuXHkmmnqQk89CUBeFuB7JFWhTHGoT",
+      "symbol": "PUSSY",
+      "price": 3.8196196e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 14844.47538450948,
+      "volume": {
+        "value": 77.56,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "FSzr1SzGZGSwU1mkkT4XRq82EciM86Y61c3xB2zXvFBJ",
+      "symbol": "NVIDIOT",
+      "price": 9.405861011460523e-05,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 24015.12441469896,
+      "volume": {
+        "value": 69142.22,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 2,
+        "closedBars": 2,
+        "lastClosedAtMs": 1794246180000,
+        "firstOpenAtMs": 1794246060000,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "sol",
+      "address": "2UfvRT4TyVTQSi8xUzPyNxqFjHoRoG2z8PLEFwzhLupT",
+      "symbol": "NVIDIOT",
+      "price": 3.847610816043007e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 14899.10286476858,
+      "volume": {
+        "value": 100.4,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "51S5XBuGHQAnugqU85P3v5Kq3RzZ8nEa4NTynZ8MrsuQ",
+      "symbol": "NVIDIOT",
+      "price": 2.8304639e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 0.02783099448,
+      "volume": {
+        "value": 22267.08,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "GpFVhKtqjFiMtoS2SpfYNNRLTwe42DWUZ5fN7LkiL6se",
+      "symbol": "TREMP",
+      "price": 1.4125006e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 0.01913377202,
+      "volume": {
+        "value": 2506.95,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "J1p5JR1vC48djzmPYXiX5ME9MKnXofkaeTc6CXtSs7X5",
+      "symbol": "POLLY",
+      "price": 1.6888316e-09,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 2.95462392652,
+      "volume": {
+        "value": 7446.27,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "CTKeXCVboLuAxHHHLDP5cc6JKSRKxYHBZSnbvcZaYkaU",
+      "symbol": "KALYX",
+      "price": 1.0195591e-09,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 4.72647142164,
+      "volume": {
+        "value": 21791.89,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "E4w4LG1UMzRVHch6YpBq7duCiRup1G6CrKW7Kg5ufV7N",
+      "symbol": "BabyPunch",
+      "price": 7.7657368e-05,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 29959.61297828738,
+      "volume": {
+        "value": 380.58,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 1,
+        "closedBars": 1,
+        "lastClosedAtMs": 1794245760000,
+        "firstOpenAtMs": 1794245700000,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "sol",
+      "address": "3bxHm72mrkvE6eQ6iV5Yua8n3eDQUSenMxn75vpqvY8z",
+      "symbol": "NZS",
+      "price": 1.4362619e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 98.67515180316,
+      "volume": {
+        "value": 4831.17,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "B1wk5PYYUAAA7YasYW3WhrTprKH1fmMHto9H567epump",
+      "symbol": "SI",
+      "price": 4.9832817e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 14588.7756542226,
+      "volume": {
+        "value": 25831.6,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "p6o8NN4MiMrDW4LMucKj9fKoM4tQSFyzB7bEU3Upump",
+      "symbol": "FOTF",
+      "price": 0.12664722,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 874208.9652604088,
+      "volume": {
+        "value": 441068.56,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 10,
+        "closedBars": 10,
+        "lastClosedAtMs": 1794246180000,
+        "firstOpenAtMs": 1794245580000,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "sol",
+      "address": "3AgytyBs815xU5JAbvpaXNscDqQ35N3325PsNABVpump",
+      "symbol": "GTA6",
+      "price": 0.00011206372,
+      "code": "chart_missing",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 23236.02059694996,
+      "volume": {
+        "value": 18496.35,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "HxC7wnsYYb3gqRtk684i82SKXCXB2hYtjusGZHpPGd8g",
+      "symbol": "BabyPunch",
+      "price": 5.64041671727472e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 14850.04819192676,
+      "volume": {
+        "value": 337086.03,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "4yxrjPyGVsAYSMwxPPKirxJPegDjGKiTCPxWwkoFpump",
+      "symbol": "BABYPUNCH",
+      "price": 6.8053e-05,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 22752.6,
+      "volume": {
+        "value": 186978,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 11,
+        "closedBars": 11,
+        "lastClosedAtMs": 1794246060000,
+        "firstOpenAtMs": 1794245400000,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "sol",
+      "address": "6kmkcwKxxmoREhkxrbBvwDY3N2KSfpdMMtWtNoPpump",
+      "symbol": "LASTTRUCK",
+      "price": 0.00014097,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 52356.2,
+      "volume": {
+        "value": 130675,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 60,
+        "closedBars": 53,
+        "lastClosedAtMs": 1794245820000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "sol",
+      "address": "Aygw2Y2Bs9VQnvjNURgjrv1McPUHDxuvQhrzNwcBpump",
+      "symbol": "BabyPunch",
+      "price": 4.50761e-05,
+      "code": "chart_stale",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 16660.1,
+      "volume": {
+        "value": 84735.8,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 17,
+        "closedBars": 17,
+        "lastClosedAtMs": 1794245940000,
+        "firstOpenAtMs": 1794244920000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "sol",
+      "address": "2Tef3P9qRhUTEAKTyQDHCdn67RK3yTbaLU72fcn5pump",
+      "symbol": "BMT",
+      "price": 9.18271e-05,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 22490,
+      "volume": {
+        "value": 18797.1,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 28,
+        "closedBars": 20,
+        "lastClosedAtMs": 1794243840000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "sol",
+      "address": "GMvCfcZg8YvkkQmwDaAzCtHDrrEtgE74nQpQ7xNabonk",
+      "symbol": "1",
+      "price": 0.000298027,
+      "code": "chart_missing",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 148951,
+      "volume": {
+        "value": 18154,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "22JKmY9YZfnQfb3pGYb6hctL5Jyvv3zhL3nQ8oyNuoYp",
+      "symbol": "Pepetide",
+      "price": 0.000720662,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 204800,
+      "volume": {
+        "value": 6554.54,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 60,
+        "closedBars": 40,
+        "lastClosedAtMs": 1794245040000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "sol",
+      "address": "Hh3oTaqDCKKfdBgsQEvxp9sUwyNf8x9qmKqEMLBWpump",
+      "symbol": "HODL",
+      "price": 0.00358969,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 487742,
+      "volume": {
+        "value": 4919.03,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 60,
+        "closedBars": 47,
+        "lastClosedAtMs": 1794245460000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "sol",
+      "address": "D4CzGsZgusVj2K8R1its5H8WWdo9mazbDwBc6qvsmfun",
+      "symbol": "LAMPORT",
+      "price": 0.000125466,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 32889.9,
+      "volume": {
+        "value": 3703.16,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 28,
+        "closedBars": 28,
+        "lastClosedAtMs": 1794246180000,
+        "firstOpenAtMs": 1794242940000,
+        "code": "insufficient_contiguous_tail",
+        "issue": {
+          "index": 15,
+          "openAtMs": 1794245400000,
+          "previousOpenAtMs": 1794245280000,
+          "gapMs": 120000,
+          "missingIntervals": 1
+        }
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "sol",
+      "address": "XeaWBDDBxj5Qf6S6TshMC1SKaxSccJfRZUDj26opump",
+      "symbol": "MERLYN",
+      "price": 3.35483e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 11440,
+      "volume": {
+        "value": 3696.5,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "8BnNS15Q6h6D5Vcq1sNPaUxhpRVdK8FGRbLvCrLxibSx",
+      "symbol": "ELON2028",
+      "price": 6.85765e-05,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 27999.5,
+      "volume": {
+        "value": 3208.81,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 43,
+        "closedBars": 18,
+        "lastClosedAtMs": 1794243960000,
+        "firstOpenAtMs": 1794242700000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x3cbbfc926a55d9751e78b91642b685c4e36479d5",
+      "symbol": "AI",
+      "price": 0.000131642,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 29365.3,
+      "volume": {
+        "value": 81129,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 17,
+        "closedBars": 17,
+        "lastClosedAtMs": 1794245940000,
+        "firstOpenAtMs": 1794244920000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xc9a981fee1f9dec688bb123ccdecc63d0debfc4e",
+      "symbol": "GLD",
+      "price": 376.869,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 1294970,
+      "volume": {
+        "value": 25412.6,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 58,
+        "closedBars": 19,
+        "lastClosedAtMs": 1794243780000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xdf0992e440dd0be65bd8439b609d6d4366bf1cb5",
+      "symbol": "CRCL",
+      "price": 67.5865,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 769880,
+      "volume": {
+        "value": 25322.9,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 59,
+        "closedBars": 6,
+        "lastClosedAtMs": 1794243000000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xcec185eb182c47d1ba1efc84e6959e18cd620be4",
+      "symbol": "cbBTC",
+      "price": 74467.7,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 1403940,
+      "volume": {
+        "value": 14120.2,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 57,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x48e39e56acdba37b09020c0b734a613c9a2f100a",
+      "symbol": "BB",
+      "price": 9.06558,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 91767.3,
+      "volume": {
+        "value": 8909.11,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 32,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+      "symbol": "MEME",
+      "price": 1.92203e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 9221.19,
+      "volume": {
+        "value": 8210.37,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x6330d8c3178a418788df01a47479c0ce7ccf450b",
+      "symbol": "COIN",
+      "price": 136.368,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 487443,
+      "volume": {
+        "value": 7706.79,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 35,
+        "closedBars": 33,
+        "lastClosedAtMs": 1794246120000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+      "symbol": "QQQ",
+      "price": 677.671,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 1455270,
+      "volume": {
+        "value": 6220.19,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 39,
+        "closedBars": 35,
+        "lastClosedAtMs": 1794245880000,
+        "firstOpenAtMs": 1794242760000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x72be1277e198d0c476869253cb4e62807e14533c",
+      "symbol": "RAETO",
+      "price": 0.00208161,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 181397,
+      "volume": {
+        "value": 6147.2,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 26,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x9f4ba41f91a59a34e17ee8c9eb3a51363b11abd5",
+      "symbol": "GRIFT",
+      "price": 0.000597256,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 65803.3,
+      "volume": {
+        "value": 5525.09,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 15,
+        "closedBars": 13,
+        "lastClosedAtMs": 1794245040000,
+        "firstOpenAtMs": 1794242880000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x4d21483a44bf67a86b77e3da301411880797d452",
+      "symbol": "BA",
+      "price": 170.596,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 9958.93,
+      "volume": {
+        "value": 4952.56,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "symbol": "TSLA",
+      "price": 377.234,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 1274050,
+      "volume": {
+        "value": 4300.61,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 56,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
+      "symbol": "AAPL",
+      "price": 349.642,
+      "code": "chart_missing",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 737490,
+      "volume": {
+        "value": 3497.81,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x1b0e319c6a659f002271b69db8a7df2f911c153e",
+      "symbol": "GME",
+      "price": 25.5716,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 446843,
+      "volume": {
+        "value": 3262.73,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 50,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xbc9e7b1c5c0081f4ae85e71ec95703d3dec9ffad",
+      "symbol": "Bucket",
+      "price": 0.000764923,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 69338.7,
+      "volume": {
+        "value": 3260.41,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 4,
+        "closedBars": 4,
+        "lastClosedAtMs": 1794246000000,
+        "firstOpenAtMs": 1794243600000,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x84cab63bc87912e71ad199ff14a0ba45de68fef8",
+      "symbol": "SKHY",
+      "price": 133.264,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 451843,
+      "volume": {
+        "value": 2757.51,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 42,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xa2753fd0bc86b8ceb55ffd2698679c7f214785f1",
+      "symbol": "LETRO",
+      "price": 0.000475792,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 58828.3,
+      "volume": {
+        "value": 2468.47,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 24,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x6511c233790ec10f7d673c64dc82c3f941d57828",
+      "symbol": "OAK",
+      "price": 0.000788209,
+      "code": "chart_missing",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 75719.6,
+      "volume": {
+        "value": 2162.49,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x15f3385625d7e364c5a6216fbbceadf10fa90e7d",
+      "symbol": "ABYSS",
+      "price": 2.28345e-05,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 153161,
+      "volume": {
+        "value": 2039.52,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 10,
+        "closedBars": 6,
+        "lastClosedAtMs": 1794243960000,
+        "firstOpenAtMs": 1794243120000,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x94641b97010608c3827fb058074889f19868ff33",
+      "symbol": "VRAX",
+      "price": 0.00353737,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 180206,
+      "volume": {
+        "value": 1886.79,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 27,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xf0c4bf4c582cb3836e98394b1d4e7b7281101be8",
+      "symbol": "RBLX",
+      "price": 51.683,
+      "code": "chart_missing",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 296721,
+      "volume": {
+        "value": 1808.56,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xdc45b71d7203c2e8baafc43a19bca0eb993bb54e",
+      "symbol": "DARK",
+      "price": 0.00197059,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 109136,
+      "volume": {
+        "value": 1790.49,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 21,
+        "closedBars": 20,
+        "lastClosedAtMs": 1794246000000,
+        "firstOpenAtMs": 1794242700000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xc9675fe679c7d4e1b94416f66d61c96127eb964a",
+      "symbol": "GIGATENEV",
+      "price": 0.00111615,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 75287.2,
+      "volume": {
+        "value": 1576.73,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 53,
+        "closedBars": 27,
+        "lastClosedAtMs": 1794244440000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xff080c8ce2e5feadaca0da81314ae59d232d4afd",
+      "symbol": "MU",
+      "price": 733.511,
+      "code": "chart_missing",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 663100,
+      "volume": {
+        "value": 1351.05,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x98096d17e191b3da1d5f99a6d7b3584351b11e18",
+      "symbol": "BONER",
+      "price": 0.0039163,
+      "code": "chart_missing",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 543066,
+      "volume": {
+        "value": 1190.97,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x58ffe4a942d3885baa22d7520691f611ef09e7aa",
+      "symbol": "TSM",
+      "price": 391.267,
+      "code": "chart_missing",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 313933,
+      "volume": {
+        "value": 1177.89,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x47569d49471bdbabfaf5531c0f74d9f2de82a11a",
+      "symbol": "PROPHET",
+      "price": 0.000282317,
+      "code": "chart_missing",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 45326.4,
+      "volume": {
+        "value": 1098.87,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x608de3e89a6506b881125f67463623d7eb063fba",
+      "symbol": "NOVASI",
+      "price": 5.33658e-05,
+      "code": "chart_stale",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 19925.9,
+      "volume": {
+        "value": 1062.8,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 60,
+        "closedBars": 34,
+        "lastClosedAtMs": 1794244680000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x7fe995a80075df3dc8ae11a9b82c7fe4202cd87f",
+      "symbol": "HMM",
+      "price": 0.00544275,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 265580,
+      "volume": {
+        "value": 1033.53,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 13,
+        "closedBars": 6,
+        "lastClosedAtMs": 1794244320000,
+        "firstOpenAtMs": 1794243480000,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xc72b96e0e48ecd4dc75e1e45396e26300bc39681",
+      "symbol": "INTC",
+      "price": 58.2303,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 317908,
+      "volume": {
+        "value": 940.418,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 59,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x255979302fd6a5e2ff6dce0d8b018f51e06e243a",
+      "symbol": "UNIWALL",
+      "price": 0.0050968,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 17847.2,
+      "volume": {
+        "value": 933.158,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xe8ffd7e24187f72afb08d75b1bb13088a989a791",
+      "symbol": "DELTA",
+      "price": 0.00406205,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 249182,
+      "volume": {
+        "value": 904.643,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 55,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x2fc6de9c65a620f918ca7d1191d3afa495ca2898",
+      "symbol": "LOCKRA",
+      "price": 0.000225605,
+      "code": "chart_missing",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 31663.2,
+      "volume": {
+        "value": 902.192,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    }
+  ]
+}

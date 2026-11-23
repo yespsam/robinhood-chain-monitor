@@ -8,7 +8,8 @@ const capacityError = () => Object.assign(new Error("shared capacity wait deadli
 });
 
 function fixture({ standard, archive = [], admit = async (_host, callback) => callback(),
-  read = async (kind, method, args) => method === "send" ? [] : ({ kind, method, args }), options = {} }) {
+  read = async (kind, method, args) => method === "send" ? [] : ({ kind, method, args }),
+  snapshot = () => ({ leases: [], circuits: [] }), options = {} }) {
   const admissions = [], physical = [], cooldowns = [], registry = new Map();
   const pool = createRpcPool(standard, archive, 1, {
     requestTimeoutMs: 100, physicalWaitMs: 100, standardConcurrency: 1,
@@ -22,7 +23,7 @@ function fixture({ standard, archive = [], admit = async (_host, callback) => ca
       return read(kind, method, args);
     }])),
     hostCoordinator: {
-      snapshot: () => ({ leases: [], circuits: [] }),
+      snapshot,
       run: async (host, operation, lane, callback, wait) => {
         admissions.push({ host, operation, lane, wait });
         return admit(host, callback);
@@ -33,6 +34,21 @@ function fixture({ standard, archive = [], admit = async (_host, callback) => ca
   });
   return { pool, admissions, physical, cooldowns, registry };
 }
+
+test("a known-saturated preferred paid host yields to an available secondary for a bounded state read", async t => {
+  const f = fixture({
+    standard: ["https://paid.test", "https://secondary.test"],
+    snapshot: () => ({ leases: [{ host: "paid.test", lane: "background" }], circuits: [] }),
+    options: { preferredHosts: ["paid.test"] },
+  });
+  t.after(() => f.pool.destroy());
+
+  assert.deepEqual(await f.pool.getCode("0x1234", "latest"), {
+    kind: "standard", method: "getCode", args: ["0x1234", "latest"],
+  });
+  assert.deepEqual(f.admissions.map(item => item.host), ["secondary.test"]);
+  assert.equal(f.physical.length, 1);
+});
 
 test("pure shared-capacity refusal retains its type and retry deadline when the attempt budget ends", async t => {
   const f = fixture({ standard: ["https://a.test", "https://b.test", "https://c.test"],

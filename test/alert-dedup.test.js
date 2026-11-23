@@ -4968,7 +4968,7 @@ test("30h BSC and 22h BNBS discoveries are audited without Telegram delivery", a
   assert.equal(fetchCalls, 0);
 });
 
-test("1h X and GitHub updates become silent backfills while 3h updates are audit-only", async (t) => {
+test("1h X remains suppressed, official GitHub updates backfill silently, and 3h updates stay audit-only", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-stale-social-code-"));
   const payloads = [];
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -4989,7 +4989,7 @@ test("1h X and GitHub updates become silent backfills while 3h updates are audit
   const githubEvent = (commit, hours) => ({
     type: "github_module_update",
     launchpad: "Flap",
-    repository: "flap-sh/contracts",
+    repository: "flap-sh/flap-skills",
     sourceTrust: "official_verified",
     commit,
     committedAt: new Date(now - hours * 60 * 60_000).toISOString(),
@@ -5002,17 +5002,55 @@ test("1h X and GitHub updates become silent backfills while 3h updates are audit
 
   assert.equal((await sendAlerts(config, twitterEvent("late-x", 1))).status, "suppressed");
   assert.equal((await sendAlerts(config, twitterEvent("stale-x", 3))).status, "suppressed");
-  assert.equal((await sendAlerts(config, githubEvent("late-github", 1))).status, "suppressed");
+  assert.equal((await sendAlerts(config, githubEvent("late-github", 1))).status, "delivered");
   assert.equal((await sendAlerts(config, githubEvent("stale-github", 3))).status, "suppressed");
 
-  assert.equal(payloads.length, 0);
+  assert.equal(payloads.length, 1, "a recent-but-delayed official repository update should still reach the Telegram watch channel");
   const outbox = JSON.parse(await fs.readFile(path.join(dataDir, "alert-outbox.json"), "utf8"));
   assert.equal(outbox.events["twitter:flapdotsh:late-x"].deliveryDisposition.mode, "audit_only");
-  assert.equal(outbox.events["github:flap-sh/contracts:late-github"].deliveryDisposition.mode, "audit_only");
+  assert.equal(outbox.events["github:flap-sh/flap-skills:late-github"].deliveryDisposition.reason, "official_github_repository_watch_only");
+  assert.equal(outbox.events["github:flap-sh/flap-skills:late-github"].event.freshness.decision, "late");
   assert.equal(outbox.events["twitter:flapdotsh:stale-x"].event.freshness.scope, "twitter");
   assert.equal(outbox.events["twitter:flapdotsh:stale-x"].status, "suppressed");
-  assert.equal(outbox.events["github:flap-sh/contracts:stale-github"].event.freshness.scope, "github");
-  assert.equal(outbox.events["github:flap-sh/contracts:stale-github"].status, "suppressed");
+  assert.equal(outbox.events["github:flap-sh/flap-skills:stale-github"].event.freshness.scope, "github");
+  assert.equal(outbox.events["github:flap-sh/flap-skills:stale-github"].status, "suppressed");
+});
+
+test("GitHub update alerts can persist and deliver through an isolated outbox", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-github-isolated-outbox-"));
+  const dedicatedOutbox = path.join(dataDir, "github-alert-outbox.json");
+  const payloads = [];
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    payloads.push(JSON.parse(options.body));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: payloads.length } }) };
+  });
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    alertOutboxPath: dedicatedOutbox,
+    telegramStrongAlerts: true,
+    alertChineseTranslationEnabled: false,
+  };
+  const event = {
+    type: "github_module_update",
+    launchpad: "Four.Meme",
+    repository: "four-meme-community/openfour-docs",
+    sourceTrust: "official_verified",
+    commit: "a".repeat(40),
+    committedAt: new Date().toISOString(),
+    observedAt: new Date().toISOString(),
+    message: "Document the new Agent skill behavior",
+    files: [{ filename: "docs/agent-skill.md", status: "added", additions: 20, deletions: 0 }],
+    modeChange: { candidate: true },
+    url: `https://github.com/four-meme-community/openfour-docs/commit/${"a".repeat(40)}`,
+  };
+
+  assert.equal((await sendAlerts(config, event)).status, "delivered");
+  assert.equal(payloads.length, 1);
+  const outbox = JSON.parse(await fs.readFile(dedicatedOutbox, "utf8"));
+  assert.equal(outbox.events[`github:four-meme-community/openfour-docs:${"a".repeat(40)}`].status, "delivered");
+  await assert.rejects(fs.stat(path.join(dataDir, "alert-outbox.json")), { code: "ENOENT" });
 });
 
 test("a realtime chain event keeps strong delivery and records its freshness evidence", async (t) => {
@@ -5567,6 +5605,75 @@ test("an idle outbox drain does not rewrite a terminal-only outbox", async (t) =
   assert.equal(await drainAlertOutbox(config), 0);
   const after = await fs.stat(file);
   assert.equal(after.ino, before.ino, "atomic outbox writer must not replace an unchanged idle file");
+  assert.equal(after.mtimeMs, before.mtimeMs);
+});
+
+test("not-yet-due failed outbox work neither rewrites the file nor blocks a fresh signal", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-deferred-outbox-"));
+  const file = path.join(dataDir, "alert-outbox.json");
+  const now = Date.now();
+  const deferredEvent = publicTelegramNewsEvent({
+    messageId: "300001", sourceOccurredAt: new Date(now - 1_000).toISOString(),
+    news: { headline: "Flap launches Vault Clock v2", summary: "The new Vault Clock version adds a distinct release and compatibility update.", storyKey: "flap:vault-clock:v2" },
+  });
+  const readyEvent = publicTelegramNewsEvent({
+    messageId: "300002", sourceOccurredAt: new Date(now - 1_000).toISOString(),
+    news: { headline: "Binance launches Agentic Wallet workflow", summary: "The wallet workflow release adds a distinct compatibility and monitoring update.", storyKey: "binance:agentic-wallet-workflow" },
+  });
+  const payloads = [];
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    payloads.push(JSON.parse(options.body));
+    const ok = payloads.length > 2;
+    return { ok, status: ok ? 200 : 503, text: async () => JSON.stringify(ok
+      ? { ok: true, result: { message_id: payloads.length } }
+      : { ok: false, description: "temporary test failure" }) };
+  });
+  t.mock.method(console, "info", () => {});
+  const config = {
+    ...alertConfig(dataDir),
+    monitorScope: "focus3",
+    telegramNewsMonitorEnabled: true,
+    alertBilingualEnabled: false,
+    alertChineseTranslationEnabled: false,
+  };
+
+  assert.equal((await sendAlerts(config, deferredEvent)).status, "queued");
+  assert.equal((await sendAlerts(config, readyEvent)).status, "queued");
+  const savedBeforeDrain = JSON.parse(await fs.readFile(file, "utf8"));
+  savedBeforeDrain.events[deferredEvent.eventKey].destinations.telegram.nextAttemptAt = new Date(now + 60_000).toISOString();
+  savedBeforeDrain.events[readyEvent.eventKey].destinations.telegram.nextAttemptAt = null;
+  await fs.writeFile(file, JSON.stringify(savedBeforeDrain));
+
+  assert.equal(await drainAlertOutbox(config), 1, "only currently due work enters the delivery batch");
+  assert.equal(payloads.length, 3);
+  assert.equal(payloads[2].reply_markup.inline_keyboard[0][0].url, readyEvent.messageUrl,
+    "an older deferred retry cannot starve a newer due signal");
+  const saved = JSON.parse(await fs.readFile(file, "utf8"));
+  assert.equal(saved.events[deferredEvent.eventKey].destinations.telegram.status, "failed");
+  assert.equal(saved.events[readyEvent.eventKey].destinations.telegram.status, "delivered");
+});
+
+test("a queue with only future retries is not rewritten on every drain tick", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "alerts-future-retry-idle-"));
+  const file = path.join(dataDir, "alert-outbox.json");
+  const event = publicTelegramNewsEvent({ messageId: "300003", sourceOccurredAt: new Date().toISOString() });
+  await fs.writeFile(file, JSON.stringify({ version: 2, events: {
+    retry: {
+      id: event.eventKey, event, eventType: event.type, status: "pending",
+      destinations: { telegram: {
+        status: "failed", attempts: 1, nextAttemptAt: new Date(Date.now() + 60_000).toISOString(),
+        leaseUntil: null, lastError: "temporary test failure",
+      } },
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    },
+  } }));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const before = await fs.stat(file);
+
+  assert.equal(await drainAlertOutbox({ ...alertConfig(dataDir), telegramNewsMonitorEnabled: true }), 0);
+  const after = await fs.stat(file);
+  assert.equal(after.ino, before.ino, "a no-op retry scan does not atomically replace the outbox");
   assert.equal(after.mtimeMs, before.mtimeMs);
 });
 

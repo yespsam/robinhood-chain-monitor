@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { execFile as execFileCallback } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { sendAlerts } from "./alerts.js";
@@ -6,6 +7,121 @@ import { extractChainSupportSignals } from "./chain-support.js";
 import { PLATFORM_DOCUMENT_MAX_PER_RUN, planPlatformDocumentWatch, fetchPlatformDocument,
   applyPlatformDocumentResult, platformDocumentOriginCooldown, isPlatformDocumentOrigin } from "./platform-document-watch.js";
 export { platformDocumentCoverage } from "./platform-document-watch.js";
+
+// Slow, human-reviewed documentation sources must not inherit the launchpad
+// fast-poll cadence. Give public docs time to respond and keep failure retries
+// bounded so a slow provider cannot turn the main monitor into a tight loop.
+const PLATFORM_CAPABILITY_SLOW_POLL_MIN_MS = 60_000;
+const PLATFORM_CAPABILITY_SLOW_REQUEST_TIMEOUT_MIN_MS = 20_000;
+const HYPEREVM_DOC_POLL_INTERVAL_MS = 5 * 60_000;
+const HYPEREVM_DOC_CONCURRENCY = 2;
+
+function safeTransportCode(error) {
+  const code = error?.cause?.code ?? error?.transportCode ?? error?.code;
+  return typeof code === "string" && /^[A-Z0-9_]{2,64}$/i.test(code) ? code : null;
+}
+
+const HYPERLIQUID_DOC_ORIGIN = "https://hyperliquid.gitbook.io";
+const HYPERLIQUID_DOC_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
+const HYPERLIQUID_DOC_CURL = "/usr/bin/curl";
+const HYPERLIQUID_DOC_CURL_TIMEOUT_MS = 18_000;
+const HYPERLIQUID_DOC_CURL_MAX_BUFFER = HYPERLIQUID_DOC_MAX_RESPONSE_BYTES + 64 * 1024;
+
+function parseCurlDocumentResponse(stdout) {
+  const bytes = Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout || "");
+  const boundary = bytes.indexOf(Buffer.from("\r\n\r\n"));
+  if (boundary < 0) throw Object.assign(new Error("official document response headers unavailable"), { code: "HYPE_CURL_INVALID_RESPONSE" });
+  const headerText = bytes.subarray(0, boundary).toString("latin1");
+  const headerLines = headerText.split(/\r?\n/);
+  const statusMatch = headerLines.shift()?.match(/^HTTP\/\S+\s+(\d{3})\b/i);
+  if (!statusMatch) throw Object.assign(new Error("official document response status unavailable"), { code: "HYPE_CURL_INVALID_RESPONSE" });
+  const headers = new Map();
+  for (const line of headerLines) {
+    const colon = line.indexOf(":");
+    if (colon <= 0) continue;
+    const name = line.slice(0, colon).trim().toLowerCase();
+    const value = line.slice(colon + 1).trim();
+    headers.set(name, headers.has(name) ? `${headers.get(name)}, ${value}` : value);
+  }
+  const body = bytes.subarray(boundary + 4);
+  if (body.length > HYPERLIQUID_DOC_MAX_RESPONSE_BYTES) {
+    throw Object.assign(new Error("official documentation response too large"), { code: "body_too_large" });
+  }
+  return { status: Number(statusMatch[1]), headers, body };
+}
+
+function runOfficialDocumentCurl(url, headers, options, execFileImpl) {
+  const args = [
+    "--disable", "--silent", "--show-error", "--max-redirs", "0",
+    "--connect-timeout", "8", "--max-time", String(HYPERLIQUID_DOC_CURL_TIMEOUT_MS / 1000),
+    "--max-filesize", String(HYPERLIQUID_DOC_MAX_RESPONSE_BYTES), "--dump-header", "-", "--output", "-",
+  ];
+  const safeHeaderNames = new Set(["accept", "accept-language", "connection", "if-none-match", "if-modified-since", "user-agent"]);
+  const requestHeaders = { "user-agent": "Mozilla/5.0 (compatible; HyperEVM-doc-monitor/1.0)", ...headers };
+  for (const [rawName, rawValue] of Object.entries(requestHeaders)) {
+    const name = String(rawName).toLowerCase();
+    const value = String(rawValue ?? "");
+    if (!safeHeaderNames.has(name) || !value || value.length > 1024 || /[\r\n\0]/.test(value)) continue;
+    args.push("--header", `${name}: ${value}`);
+  }
+  args.push("--url", url.href);
+  return new Promise((resolve, reject) => {
+    execFileImpl(HYPERLIQUID_DOC_CURL, args, {
+      encoding: "buffer",
+      maxBuffer: HYPERLIQUID_DOC_CURL_MAX_BUFFER,
+      timeout: HYPERLIQUID_DOC_CURL_TIMEOUT_MS + 1_000,
+      killSignal: "SIGKILL",
+      windowsHide: true,
+      signal: options.signal,
+      env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin", LANG: "en_US.UTF-8" },
+    }, (error, stdout) => {
+      if (error) {
+        const rawCode = typeof error.code === "string" && /^[A-Z0-9_]{2,48}$/i.test(error.code) ? error.code : null;
+        const fallbackCode = error.killed ? "HYPE_CURL_TIMEOUT" : Number.isInteger(error.code) ? `HYPE_CURL_EXIT_${error.code}` : "HYPE_CURL_FAILED";
+        reject(Object.assign(new Error("official document transport failed"), { code: rawCode || fallbackCode }));
+        return;
+      }
+      try { resolve(parseCurlDocumentResponse(stdout)); }
+      catch (parseError) { reject(parseError); }
+    });
+  });
+}
+
+// The long-running monitor shares Undici's global pool with high-frequency RPC
+// traffic. Production evidence showed repeated timeouts in the long-running
+// monitor while isolated requests to these pages succeed. Use a bounded,
+// short-lived curl transport for this low-frequency lane; it cannot invoke a
+// shell, read credentials, follow redirects automatically, or leave the exact
+// official GitBook origin/path.
+export async function fetchHyperliquidOfficialDocument(input, options = {}, redirectCount = 0, execFileImpl = execFileCallback) {
+  const url = new URL(input);
+  const allowedPath = /^\/hyperliquid-docs\//i.test(url.pathname);
+  if (url.origin !== HYPERLIQUID_DOC_ORIGIN || url.username || url.password || url.hash || !allowedPath) {
+    throw Object.assign(new Error("Hyperliquid documentation URL rejected"), { code: "source_not_allowed" });
+  }
+  if (options.signal?.aborted) throw options.signal.reason || new Error("request aborted");
+  const response = await runOfficialDocumentCurl(url, options.headers || {}, options, execFileImpl);
+  const status = response.status;
+  const location = response.headers.get("location");
+  if (options.redirect !== "manual" && status >= 300 && status < 400 && status !== 304 && location) {
+    if (redirectCount >= 3) throw Object.assign(new Error("Hyperliquid documentation redirect limit reached"), { code: "redirect_rejected" });
+    let next;
+    try { next = new URL(location, url); }
+    catch { throw Object.assign(new Error("Hyperliquid documentation redirect rejected"), { code: "redirect_rejected" }); }
+    if (next.origin !== HYPERLIQUID_DOC_ORIGIN || !/^\/hyperliquid-docs\//i.test(next.pathname) || next.username || next.password || next.hash) {
+      throw Object.assign(new Error("Hyperliquid documentation redirect rejected"), { code: "redirect_rejected" });
+    }
+    return fetchHyperliquidOfficialDocument(next.href, options, redirectCount + 1, execFileImpl);
+  }
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    url: url.href,
+    redirected: false,
+    headers: { get: (name) => response.headers.get(String(name).toLowerCase()) ?? null },
+    text: async () => response.body.toString("utf8"),
+  };
+}
 
 const FOUR_MEME_CONFIG_URL = "https://four.meme/meme-api/v1/public/config";
 const FOUR_MEME_NPM_URL = "https://registry.npmjs.org/@four-meme%2Ffour-meme-ai/latest";
@@ -27,6 +143,19 @@ const FLAP_DOC_URLS = [
   "https://docs.flap.sh/flap/developers/vault-developers/vault-and-vaultfactory-specification",
   FLAP_SITEMAP_URL,
 ];
+const HYPEREVM_DOC_SITEMAP_URL = "https://hyperliquid.gitbook.io/hyperliquid-docs/sitemap.xml";
+const HYPEREVM_DOC_URLS = [
+  "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm",
+  "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm/json-rpc",
+  "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm/raw-hyperevm-block-data",
+  "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm/dual-block-architecture",
+  "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm/interacting-with-hypercore",
+  "https://hyperliquid.gitbook.io/hyperliquid-docs/onboarding/how-to-use-the-hyperevm",
+  "https://hyperliquid.gitbook.io/hyperliquid-docs/builder-tools/hyperevm-tools",
+  HYPEREVM_DOC_SITEMAP_URL,
+];
+const HYPEREVM_DOC_CHANGE_RELEVANCE = /\b(?:launchpad|launch\s+platform|token\s+launcher|factory|chain(?:\s*id)?|network|mainnet|testnet|json[-\s]?rpc|deployed|deployment|support(?:s|ed)?|exchange|dex|amm|pool|bridge|ecosystem|protocol|contract|token)\b/i;
+const HYPEREVM_DOC_CHANGE_MEANING = "官方文档正文变化待核验；不代表新部署、发射台启用或可交易";
 const FOUR_MEME_LIVE_URLS = [
   "https://four.meme/en",
   "https://four.meme/en/create-token",
@@ -91,6 +220,7 @@ const CHAIN_CATALOG = [
   { name: "Blast", aliases: ["Blast"], codes: ["BLAST"], ids: { "81457": "mainnet", "168587773": "testnet" } },
   { name: "Mantle", aliases: ["Mantle"], codes: ["MANTLE"], ids: { "5000": "mainnet", "5003": "testnet" } },
   { name: "Berachain", aliases: ["Berachain"], codes: ["BERA", "BERACHAIN"], ids: { "80094": "mainnet", "80069": "testnet" } },
+  { name: "HyperEVM", aliases: ["HyperEVM", "Hyperliquid EVM"], codes: ["HYPEREVM", "HYPERLIQUIDEVM"], ids: { "999": "mainnet", "998": "testnet" } },
   { name: "zkSync Era", aliases: ["zkSync Era", "zkSync"], codes: ["ZKSYNC"], ids: { "324": "mainnet", "300": "testnet" } },
 ];
 const CHAIN_BY_ID = new Map(CHAIN_CATALOG.flatMap((chain) => Object.entries(chain.ids).map(([chainId, environment]) => [chainId, { chain, environment }])));
@@ -247,6 +377,23 @@ const normalizeFingerprintContent = (text) => {
 
 export const PLATFORM_CAPABILITY_TARGETS = [
   {
+    // Keep the documentation-only HYPE baseline first in the slow lane. On a
+    // cold restart, other providers' stale transport failures can otherwise
+    // consume the shared probe window before HyperEVM is reached.
+    id: "hyperevm", name: "HyperEVM", website: "https://hyperliquid.xyz",
+    capabilitySchemaVersion: 1,
+    // The body watcher below already reads the configured HyperEVM pages.
+    // Keep only the official sitemap here for discovery instead of fetching
+    // the same seven pages again through the structured capability lane.
+    sources: [HYPEREVM_DOC_SITEMAP_URL],
+    pagePattern: /\/hyperliquid-docs\/(?:for-developers\/hyperevm(?:\/|$)|onboarding\/how-to-use-the-hyperevm(?:\/|$)|builder-tools\/hyperevm-tools(?:\/|$))/i,
+    fallbackOfficialSources: [
+      { name: "Hyperliquid 官方 HyperEVM 文档", url: HYPEREVM_DOC_URLS[0], coveredBy: "platform-capability-monitor" },
+      { name: "Hyperliquid 官方开发文档", url: HYPEREVM_DOC_URLS[1], coveredBy: "platform-capability-monitor" },
+      { name: "Hyperliquid 官方 GitHub 示例（文档交叉链接）", url: "https://github.com/hyperliquid-dex/hyperliquid-python-sdk/blob/master/examples/evm_block_indexer.py", coveredBy: "github-monitor" },
+    ],
+  },
+  {
     id: "flap", name: "Flap", website: "https://flap.sh", twitter: "https://x.com/flapdotsh",
     capabilitySchemaVersion: 4,
     sources: FLAP_DOC_URLS,
@@ -299,6 +446,40 @@ export const PLATFORM_CAPABILITY_TARGETS = [
     },
   },
 ];
+
+function hyperEvmDocumentChangeEvent(platform, change) {
+  if (platform?.id !== "hyperevm" || !change || typeof change.url !== "string") return null;
+  const added = (Array.isArray(change.added) ? change.added : [])
+    .filter((line) => HYPEREVM_DOC_CHANGE_RELEVANCE.test(line)).slice(0, 2);
+  const removed = (Array.isArray(change.removed) ? change.removed : [])
+    .filter((line) => HYPEREVM_DOC_CHANGE_RELEVANCE.test(line)).slice(0, 2);
+  if (!added.length && !removed.length) return null;
+  const observedAt = change.observedAt;
+  if (!Number.isFinite(Date.parse(observedAt || ""))) return null;
+  const documentBodyChange = { url: change.url, added, removed, meaning: HYPEREVM_DOC_CHANGE_MEANING };
+  return {
+    type: "platform_capability_update",
+    kind: "hyperevm_official_document_change_observed",
+    eventKey: `platform-capability:hyperevm:document:${change.id}`,
+    platform: { id: platform.id, name: platform.name, website: platform.website },
+    changes: { documentBodyChanges: [documentBodyChange] },
+    source: change.url,
+    sources: [change.url],
+    url: change.url,
+    sourceOccurredAt: observedAt,
+    observedAt,
+    signal: {
+      platformStructural: true,
+      category: "HyperEVM official-document change observed",
+      headline: "Official HyperEVM documentation changed in a chain/ecosystem-related passage; verification is pending.",
+    },
+  };
+}
+
+function hyperEvmDocumentChangeNeedsAlert(change) {
+  return Boolean(change && !change.telegramAlertStatus
+    && HYPEREVM_DOC_CHANGE_RELEVANCE.test([...(change.added || []), ...(change.removed || [])].join(" ")));
+}
 
 export function extractPlatformCapabilities(text, pagePattern = /$a/) {
   const visible = text.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ").replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&(?:nbsp|amp|quot|#39);/g, " ");
@@ -1156,12 +1337,25 @@ async function fetchResponse(
     // the same public pages remain available to ordinary browsers.
     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
   };
+  // Public documentation is fetched only on the slow lane. Do not reuse an
+  // idle keep-alive socket for these sources: the long-running monitor shares
+  // Undici's pool with high-frequency RPC traffic, and stale pooled sockets can
+  // make an entire documentation batch fail with the unhelpful `fetch failed`.
+  if (options.connectionClose === true) headers.connection = "close";
   if (options.etag) headers["if-none-match"] = options.etag;
   if (options.lastModified) headers["if-modified-since"] = options.lastModified;
-  const response = await fetchImpl(url, {
-    headers,
-    signal: AbortSignal.timeout(remainingMs),
-  });
+  let response;
+  try {
+    response = await fetchImpl(url, {
+      headers,
+      signal: AbortSignal.timeout(remainingMs),
+    });
+  } catch (error) {
+    const wrapped = new Error("fetch failed");
+    wrapped.code = "transport_fetch_failed";
+    wrapped.transportCode = safeTransportCode(error);
+    throw wrapped;
+  }
   if (response?.status === 304 && options.allowNotModified) {
     return {
       text: null,
@@ -1312,6 +1506,7 @@ export async function fetchPlatformSource(platform, descriptor, fetchImpl = glob
     lastModified: options.lastModified,
     allowNotModified: options.allowNotModified === true,
     currentTimeMs: options.currentTimeMs,
+    connectionClose: descriptor.kind === "docs",
   });
   if (fetched.notModified) {
     if (!options.priorSource?.initialized) {
@@ -2696,7 +2891,7 @@ function platformSourceCoverage(platform, descriptors, sources) {
     key,
     source,
     descriptor: descriptorByKey.get(key),
-  }));
+  })).filter(({ descriptor }) => Boolean(descriptor));
   const fastDescriptors = descriptors.filter((descriptor) => isPlatformStructuredFastSource(platform, descriptor));
   const structuredFastHealthy = fastDescriptors.length > 0 && fastDescriptors.every((descriptor) => {
     const source = sources?.[descriptor.key];
@@ -2761,6 +2956,10 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
   const retryBaseMs = Math.max(1_000, Number(sourceLane === "fast"
     ? config.platformCapabilityFastSourceIntervalMs
     : config.platformCapabilityPollIntervalMs) || 30_000);
+  const slowRequestTimeoutMs = Math.max(
+    PLATFORM_CAPABILITY_SLOW_REQUEST_TIMEOUT_MIN_MS,
+    Number(config.platformCapabilityRequestTimeoutMs) || 8_000,
+  );
   const retryMaxMs = Math.max(retryBaseMs, Number(config.platformCapabilityRetryMaxMs) || 120_000);
   const telemetryPersistIntervalMs = Math.max(1_000, Number(dependencies.telemetryPersistIntervalMs) || 30_000);
   const writeState = dependencies.atomicWriteJsonImpl || atomicWriteJson;
@@ -2789,7 +2988,9 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
     if (!descriptors.length) continue;
     const results = await settleBounded(
       descriptors,
-      sourceLane === "fast" ? 1 : Math.max(1, Number(config.platformCapabilityConcurrency) || 3),
+      sourceLane === "fast" ? 1 : platform.id === "hyperevm"
+        ? Math.min(HYPEREVM_DOC_CONCURRENCY, Math.max(1, Number(config.platformCapabilityConcurrency) || 3))
+        : Math.max(1, Number(config.platformCapabilityConcurrency) || 3),
       (descriptor) => {
       const prior = snapshotSources[descriptor.key];
       // The slow documentation observer shares an origin cooldown with the
@@ -2814,10 +3015,12 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
       return fetchPlatformSource(
         platform,
         descriptor,
-        fetchImpl,
+        platform.id === "hyperevm" && descriptor.kind === "docs" && fetchImpl === globalThis.fetch
+          ? fetchHyperliquidOfficialDocument
+          : fetchImpl,
         sourceLane === "fast"
           ? Math.max(1_000, Number(config.platformCapabilityFastRequestTimeoutMs) || 2_000)
-          : config.platformCapabilityRequestTimeoutMs,
+          : slowRequestTimeoutMs,
         sourceLane === "fast" ? {
           etag: prior?.etag,
           lastModified: prior?.lastModified,
@@ -2889,10 +3092,13 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
             lastErrorAt: prior?.lastErrorAt || null,
             lastError: null,
             lastErrorStatus: null,
+            lastTransportCode: null,
             failureKind: null,
             consecutiveFailures: 0,
             backoffMs: 0,
-            nextAttemptAt: null,
+            nextAttemptAt: platform.id === "hyperevm" && descriptor.kind === "docs"
+              ? new Date(observedMs + HYPEREVM_DOC_POLL_INTERVAL_MS).toISOString()
+              : null,
             sourceRateLimited: false,
             retryAfterMs: 0,
             rateLimitResetAt: null,
@@ -2947,6 +3153,7 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
             lastErrorAt: observedAt,
             lastError: errorMessage,
             lastErrorStatus: failureStatus,
+            lastTransportCode: safeTransportCode(result.reason),
             failureKind,
             consecutiveFailures,
             backoffMs: failureBackoffMs,
@@ -3375,7 +3582,8 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
       // Four additional bodies TOTAL per existing slow cycle, fairly divided
       // across platforms. No new timer, concurrent worker, recursive crawl,
       // trading activation, or outbound notification is introduced here.
-      const limit = Math.ceil(documentBudget / Math.max(1, targets.length-platformIndex));
+      const limit = platform.id === "hyperevm" ? Math.min(1, documentBudget)
+        : Math.ceil(documentBudget / Math.max(1, targets.length-platformIndex));
       const documentAt = now().getTime();
       const plan = planPlatformDocumentWatch(platform, latestState[platform.id], documentAt, { limit });
       const documentResults = [];
@@ -3383,11 +3591,14 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
         const checkedAtMs = now().getTime();
         let result;
         try {
-          result = await fetchPlatformDocument(platform, page, fetchImpl, {
-            nowMs:checkedAtMs, timeoutMs:config.platformCapabilityRequestTimeoutMs,
+          const documentFetchImpl = platform.id === "hyperevm" && fetchImpl === globalThis.fetch
+            ? fetchHyperliquidOfficialDocument
+            : fetchImpl;
+          result = await fetchPlatformDocument(platform, page, documentFetchImpl, {
+            nowMs:checkedAtMs, timeoutMs:slowRequestTimeoutMs,
           });
         } catch (error) { result = { error }; }
-        documentResults.push({ url:page.url, result, checkedAtMs });
+        documentResults.push({ url:page.url, page, result, checkedAtMs });
         documentBudget--;
         if ([403,429].includes(result.error?.status)) break;
       }
@@ -3402,6 +3613,52 @@ export async function runPlatformCapabilityCheck(config, dependencies = {}) {
         }
         return state;
       });
+      if (platform.id === "hyperevm") {
+        const pendingDocumentChanges = (latestState?.hyperevm?.documentWatch?.changes || [])
+          .filter(hyperEvmDocumentChangeNeedsAlert)
+          .sort((left, right) => Date.parse(left.observedAt || 0) - Date.parse(right.observedAt || 0))
+          .slice(0, 2);
+        for (const change of pendingDocumentChanges) {
+          const event = hyperEvmDocumentChangeEvent(platform, change);
+          if (!event) continue;
+          const auditBase = {
+            eventKey: event.eventKey,
+            type: event.type,
+            platform: platform.id,
+            source: event.source,
+            sources: event.sources,
+            changes: event.changes,
+            observedAt: event.observedAt,
+          };
+          await appendAudit(auditFile, fsImpl, { ...auditBase, delivery: { status: "pending", baselineCommitted: false } });
+          let delivery;
+          try {
+            delivery = await alertSender(config, event);
+            await appendAudit(auditFile, fsImpl, {
+              ...auditBase,
+              delivery: { status: delivery?.status || "accepted", eventId: delivery?.eventId || event.eventKey, baselineCommitted: false },
+            });
+          } catch (error) {
+            await appendAudit(auditFile, fsImpl, { ...auditBase, delivery: { status: "failed", baselineCommitted: false, error: error?.message || String(error) } });
+            logger.error(`[platform-capability] HyperEVM document alert: ${error?.message || error}`);
+            continue;
+          }
+          const accepted = platformAlertDeliveryDurablyAccepted(delivery);
+          const terminalSuppression = delivery?.status === "suppressed";
+          if (!accepted && !terminalSuppression) continue;
+          const acceptedAt = now().toISOString();
+          latestState = await stateCoordinator.run(async () => {
+            const state = await readPlatformCapabilityState(stateFile, fsImpl);
+            const stored = state.hyperevm?.documentWatch?.changes?.find((item) => item.id === change.id);
+            if (!stored || stored.telegramAlertStatus) return state;
+            stored.telegramAlertStatus = terminalSuppression ? "suppressed" : "accepted";
+            stored.telegramAlertEventKey = event.eventKey;
+            stored.telegramAlertAt = acceptedAt;
+            await writeState(stateFile, state, fsImpl);
+            return state;
+          });
+        }
+      }
     }
   }
   return latestState;
@@ -3541,7 +3798,10 @@ export function createPlatformCapabilityMonitor(config, dependencies = {}) {
   let fastTimer = null;
   if (dependencies.autoStart !== false) {
     void requestScheduledCheck();
-    timer = setInterval(requestScheduledCheck, config.platformCapabilityPollIntervalMs);
+    timer = setInterval(
+      requestScheduledCheck,
+      Math.max(PLATFORM_CAPABILITY_SLOW_POLL_MIN_MS, Number(config.platformCapabilityPollIntervalMs) || 30_000),
+    );
     timer.unref?.();
     if (hasFastLane) {
       void requestFastCheck();

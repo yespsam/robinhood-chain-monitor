@@ -33,6 +33,16 @@ test("chain events remain durable without duplicating every event into launchd s
   assert.match(source, /if \(config\.logEventsToStdout\) console\.log/);
 });
 
+test("GitHub watch alerts bypass trading-evidence and narrative sidecars and use their isolated outbox", async () => {
+  const source = await fs.readFile(new URL("../src/index.js", import.meta.url), "utf8");
+  const sender = source.slice(source.indexOf("async function deliverGithubAlert"), source.indexOf("async function processCandidate"));
+
+  assert.match(sender, /return sendAlerts\(/);
+  assert.match(sender, /alertOutboxPath: path\.join\(runtimeConfig\.dataDir, "github-alert-outbox\.json"\)/);
+  assert.doesNotMatch(sender, /return deliverAlert\(/);
+  assert.doesNotMatch(sender, /narrativeSniperRuntime/);
+});
+
 test("Four defaults retain two fixed log/state readers across three proven physical hosts", async () => {
   const source = await fs.readFile(new URL("../src/config.js", import.meta.url), "utf8");
   const config = source.slice(source.indexOf("fourRegistryLogRpcUrls:"), source.indexOf("ponsMonitorEnabled:"));

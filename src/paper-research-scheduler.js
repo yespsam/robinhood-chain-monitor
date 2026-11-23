@@ -4,7 +4,7 @@ import { compareConfirmedCandidates } from './paper-trader-reasoning.js';
 import { marketLeaderHint, compareMarketLeaders, hotWatchEligible, HOT_WATCH_MS } from './paper-hot-research.js';
 const key=t=>`${t.chain}:${t.address}`;
 const stamp=v=>typeof v==='number'?(v<1e10?v*1000:v):Date.parse(v||'');
-export const RESEARCH_SCHEDULER_VERSION='research_evidence_shortlist_v24';
+export const RESEARCH_SCHEDULER_VERSION='research_evidence_shortlist_v29';
 
 // Actual catalysts and independently admitted external patterns can receive
 // the main seat. Legacy/control price-only rows cannot borrow that admission.
@@ -142,7 +142,7 @@ export function selectQuoteTarget(targets, quotes, attempts, nowMs, { quoteProgr
     ||oldest(targets);
 }
 
-export function selectResearchChart({holdings,hot,broad,charts,nowMs,dispatch,chains,lastHotChain=null,focus=null,researchFocus=null,pendingKeys=new Set()}) {
+export function selectResearchChart({holdings,hot,broad,charts,nowMs,dispatch,chains,lastHotChain=null,focus=null,researchFocus=null,pendingKeys=new Set(),researchDispatch=dispatch,lastDiscoveryChain=null,firstSeen=new Map(),catchup=null}) {
   const oldest=(rows,active=false)=>rows.filter(t=>!pendingKeys.has(key(t)) && chartRefreshDue(charts.get(key(t)),nowMs,{active}))
     .sort((a,b)=>(charts.get(key(a))?.fetchedAt||0)-(charts.get(key(b))?.fetchedAt||0))[0];
   const needsChart=p=>p.requiresStructureChart || p.pvpPolicy?.version==='structure_hold_v2';
@@ -161,13 +161,24 @@ export function selectResearchChart({holdings,hot,broad,charts,nowMs,dispatch,ch
   if(comparison&&dispatch%4===3)return {...comparison,purpose:'comparison',researchLane:'holding'};
   const hotTokens=hot.map(r=>r.input.token), hotKeys=new Set(hotTokens.map(key));
   const cold=broad.map(r=>r.input.token).filter(t=>!hotKeys.has(key(t)));
+  const coldOldest=rows=>rows.filter(t=>!pendingKeys.has(key(t))&&chartRefreshDue(charts.get(key(t)),nowMs))
+    .sort((a,b)=>(charts.get(key(a))?.fetchedAt||0)-(charts.get(key(b))?.fetchedAt||0)
+      ||(firstSeen.get(key(a))??nowMs)-(firstSeen.get(key(b))??nowMs)||key(a).localeCompare(key(b)))[0];
   const fairCold=()=>{
     for(let i=0;i<chains.length;i++) {
-      const chain=chains[(Math.floor(dispatch/3)+i)%chains.length], t=oldest(cold.filter(t=>t.chain===chain));
+      const offset=lastDiscoveryChain===null?Math.floor(researchDispatch/3):(chains.indexOf(lastDiscoveryChain)+1);
+      const chain=chains[(offset+i)%chains.length], t=coldOldest(cold.filter(t=>t.chain===chain));
       if(t)return {...t,purpose:'candidate',researchLane:'discovery'};
     }
   };
-  if(dispatch%3===2) {const t=fairCold();if(t)return t;}
+  // Holdings cannot consume a research turn: a preempted discovery seat is
+  // still owed on the next noncritical dispatch. Finite catchup uses that seat.
+  const dueHot=oldest(hotTokens.filter(t=>{const c=charts.get(key(t));return c?.status==='ok'&&Number.isFinite(c.closedThroughAtMs)&&nowMs-c.closedThroughAtMs>=90000;}),true);
+  if(catchup&&dueHot)return {...dueHot,purpose:'candidate',researchLane:'hot'};
+  if(researchDispatch%3===2) {
+    if(catchup&&!pendingKeys.has(key(catchup)))return {...catchup,purpose:'candidate',researchLane:'catchup'};
+    const t=fairCold();if(t)return t;
+  }
   // Some verified event routes need an exit chart even outside the external
   // shortlist. Research can collect it in normal capacity, without acquiring
   // confirmation priority or suppressing the one-in-three discovery turn.
@@ -181,7 +192,7 @@ export function selectResearchChart({holdings,hot,broad,charts,nowMs,dispatch,ch
   // One of three chart dispatches may jump directly to a fresh wallet buy.
   // Holding exits, an admitted quote focus, cold discovery and chain rotation
   // keep their capacity. The existing cache/backoff and pending-key gates apply.
-  if(dispatch%3===0) {
+  if(researchDispatch%3===0) {
     const buying=hot.filter(r=>walletBuyResearchHint(r.input,nowMs));
     const target=oldest(buying.map(r=>r.input.token),true);
     if(target)return {...target,purpose:'candidate',researchLane:'wallet',
@@ -194,6 +205,7 @@ export function selectResearchChart({holdings,hot,broad,charts,nowMs,dispatch,ch
     const t=oldest(hotTokens.filter(t=>t.chain===chains[(start+i)%chains.length]),true);
     if(t)return {...t,purpose:'candidate',researchLane:'hot'};
   }
+  if(catchup&&!pendingKeys.has(key(catchup)))return {...catchup,purpose:'candidate',researchLane:'catchup'};
   return fairCold()||(comparison?{...comparison,purpose:'comparison',researchLane:'holding'}:undefined);
 }
 

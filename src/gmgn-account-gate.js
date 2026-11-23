@@ -7,6 +7,9 @@ import { compareReadonlyWork, canAdmitReadonly } from './readonly-admission-poli
 const failure = code => Object.assign(new Error(code), {code});
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const alive = pid => { try { process.kill(pid, 0); return true; } catch(e) { return e.code !== 'ESRCH'; } };
+// Current production work closures are bounded by GMGN CLI timeouts (12–18s).
+// Keep a generous margin, but never let a live-yet-hung process reserve a seat forever.
+const MAX_ACTIVE_LEASE_MS = 60_000;
 
 // Shared admission across monitor/dashboard processes. Free serializes entire
 // requests; explicit Plus permits bounded leases with one critical slot for
@@ -28,8 +31,9 @@ export function createGmgnAccountGate(dataDir, {intervalMs=null, waitMs=30_000, 
       if(dead||(!raw&&Date.now()-stat.mtimeMs>60_000))await fs.unlink(lock);
     } finally {await fs.rmdir(recovery);}
   }
-  return async function gate(work, signal, {priority=0,onAdmitted}={}) {
+  return async function gate(work, signal, {priority=0,onAdmitted,kind}={}) {
     if (![0,1,2].includes(priority)) throw failure('GMGN_INVALID_ARGUMENT');
+    const ticketKind = typeof kind === 'string' && /^[a-z0-9:_-]{1,48}$/.test(kind) ? kind : undefined;
     if(onAdmitted!==undefined&&typeof onAdmitted!=='function')throw failure('GMGN_INVALID_ARGUMENT');
     const token=randomUUID(),started=Date.now();let handle,owned=false,temp,leased=false,serialWorkStartedAt=0;
     let queueScans=0,queueHighWater=0;
@@ -49,8 +53,15 @@ export function createGmgnAccountGate(dataDir, {intervalMs=null, waitMs=30_000, 
         if(state?.version!==1||!Number.isFinite(state.startedAt)||state.startedAt>Date.now()+60_000
           || (state.active !== undefined && (!Array.isArray(state.active) || state.active.length>16)))throw failure('GMGN_STATE_INVALID');
         const entries=state.active || [];
-        for(const item of entries)if(!/^[0-9a-f-]{36}$/.test(item?.token)||!Number.isSafeInteger(item.pid)||item.pid<=0||![0,1,2].includes(item.priority))throw failure('GMGN_STATE_INVALID');
-        return {...state,active:entries.filter(item=>alive(item.pid))};
+        for(const item of entries)if(!/^[0-9a-f-]{36}$/.test(item?.token)||!Number.isSafeInteger(item.pid)||item.pid<=0||![0,1,2].includes(item.priority)
+          ||(item.admittedAt!==undefined&&(!Number.isFinite(item.admittedAt)||item.admittedAt>Date.now()+60_000)))throw failure('GMGN_STATE_INVALID');
+        const now=Date.now();
+        // Version-1 slots created before admittedAt use the last global admission
+        // timestamp conservatively. Since that timestamp is at least as new as
+        // every legacy active slot, expiry waits a full lease window after the
+        // most recent admission before reclaiming any legacy reservations.
+        return {...state,active:entries.filter(item=>alive(item.pid)
+          && now-(Number.isFinite(item.admittedAt)?item.admittedAt:state.startedAt)<=MAX_ACTIVE_LEASE_MS)};
       } catch(e) {if(e.code==='ENOENT')return {version:1,startedAt:0,active:[]};throw e;}
     }
     async function writeSlot(state) {
@@ -61,7 +72,8 @@ export function createGmgnAccountGate(dataDir, {intervalMs=null, waitMs=30_000, 
       active();
       await fs.mkdir(queue,{recursive:true,mode:0o700});
       temp=`${ticket}.tmp`;
-      await fs.writeFile(temp,JSON.stringify({version:1,token,pid:process.pid,queuedAt:started,expiresAt:started+waitMs,priority}),{mode:0o600});
+      await fs.writeFile(temp,JSON.stringify({version:1,token,pid:process.pid,queuedAt:started,expiresAt:started+waitMs,priority,
+        ...(ticketKind?{kind:ticketKind}:{})}),{mode:0o600});
       await fs.rename(temp,ticket);temp=null;
       while(true) {
         active();
@@ -92,7 +104,8 @@ export function createGmgnAccountGate(dataDir, {intervalMs=null, waitMs=30_000, 
           } catch(e) {if(e.code==='ENOENT')return null;throw failure('GMGN_STATE_INVALID');}
           if(item?.version!==1||`${item.token}.json`!==name||!Number.isSafeInteger(item.pid)||item.pid<=0
             ||!Number.isFinite(item.queuedAt)||!Number.isFinite(item.expiresAt)||item.expiresAt<=item.queuedAt
-            ||item.queuedAt>at+1000||![0,1,2].includes(item.priority))throw failure('GMGN_STATE_INVALID');
+            ||item.queuedAt>at+1000||![0,1,2].includes(item.priority)
+            ||(item.kind!==undefined&&(typeof item.kind!=='string'||!/^[a-z0-9:_-]{1,48}$/.test(item.kind))))throw failure('GMGN_STATE_INVALID');
           if(item.expiresAt<=at||!alive(item.pid)) {await fs.unlink(file).catch(e=>{if(e.code!=='ENOENT')throw e;});return null;}
           return item;
         };
@@ -108,7 +121,8 @@ export function createGmgnAccountGate(dataDir, {intervalMs=null, waitMs=30_000, 
         if(at>=last+policy.intervalMs&&waiting[0]?.token===token) {
           active();
           if(Date.now()-started>=waitMs)throw failure('GMGN_REQUEST_BUSY');
-          await writeSlot({version:1,startedAt:Date.now(),active:[...state.active,{token,pid:process.pid,priority}]});leased=true;
+          const admittedAt=Date.now();
+          await writeSlot({version:1,startedAt:admittedAt,active:[...state.active,{token,pid:process.pid,priority,admittedAt}]});leased=true;
           await fs.unlink(ticket);
           // The lock protects admission/state only under Plus. The lease keeps
           // network requests bounded while an exit may use the reserved slot.

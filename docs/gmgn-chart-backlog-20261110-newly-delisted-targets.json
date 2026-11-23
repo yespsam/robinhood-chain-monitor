@@ -1,0 +1,505 @@
+{
+  "updatedAt": "2026-11-09T17:44:01.965Z",
+  "selection": "operator_requested_source_audit",
+  "scope": "Frozen original targets skipped by v28 fresh research admission; source-only one pass, no strategy injection",
+  "candidates": [
+    {
+      "chain": "bsc",
+      "address": "0x6d145722564aaa0dba3e104dd1d680b227927777",
+      "symbol": "FATCAT",
+      "price": 0.00451387,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 201686,
+      "volume": {
+        "value": 432.242,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 35,
+        "closedBars": 4,
+        "lastClosedAtMs": 1794243120000,
+        "firstOpenAtMs": 1794242700000,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok",
+      "currentSkipReason": "DELISTED_FROM_FRESH_SOURCES",
+      "currentSkipObservedAt": "2026-11-09T18:12:18.570Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xdd806e436dda5588bf54061c11590c77ddc87777",
+      "symbol": "SAFU",
+      "price": 0.000724102,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 120935,
+      "volume": {
+        "value": 355.228,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 45,
+        "closedBars": 16,
+        "lastClosedAtMs": 1794243660000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok",
+      "currentSkipReason": "DELISTED_FROM_FRESH_SOURCES",
+      "currentSkipObservedAt": "2026-11-09T18:13:24.295Z"
+    },
+    {
+      "chain": "sol",
+      "address": "FDboCUrbwVgNVbuSXvhk9Atpay4UW6q3gPqAc6wH6bZD",
+      "symbol": "NVIDIOT",
+      "price": 6.626003e-05,
+      "code": "chart_missing",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 20076.71754175246,
+      "volume": {
+        "value": 46442.69,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable",
+      "currentSkipReason": "DELISTED_FROM_FRESH_SOURCES",
+      "currentSkipObservedAt": "2026-11-09T18:13:24.295Z"
+    },
+    {
+      "chain": "sol",
+      "address": "FSzr1SzGZGSwU1mkkT4XRq82EciM86Y61c3xB2zXvFBJ",
+      "symbol": "NVIDIOT",
+      "price": 9.405861011460523e-05,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 24015.12441469896,
+      "volume": {
+        "value": 69142.22,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 2,
+        "closedBars": 2,
+        "lastClosedAtMs": 1794246180000,
+        "firstOpenAtMs": 1794246060000,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok",
+      "currentSkipReason": "DELISTED_FROM_FRESH_SOURCES",
+      "currentSkipObservedAt": "2026-11-09T18:13:24.295Z"
+    },
+    {
+      "chain": "sol",
+      "address": "E4w4LG1UMzRVHch6YpBq7duCiRup1G6CrKW7Kg5ufV7N",
+      "symbol": "BabyPunch",
+      "price": 7.7657368e-05,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 29959.61297828738,
+      "volume": {
+        "value": 380.58,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 1,
+        "closedBars": 1,
+        "lastClosedAtMs": 1794245760000,
+        "firstOpenAtMs": 1794245700000,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok",
+      "currentSkipReason": "DELISTED_FROM_FRESH_SOURCES",
+      "currentSkipObservedAt": "2026-11-09T18:13:24.295Z"
+    },
+    {
+      "chain": "sol",
+      "address": "p6o8NN4MiMrDW4LMucKj9fKoM4tQSFyzB7bEU3Upump",
+      "symbol": "FOTF",
+      "price": 0.12664722,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 874208.9652604088,
+      "volume": {
+        "value": 441068.56,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 10,
+        "closedBars": 10,
+        "lastClosedAtMs": 1794246180000,
+        "firstOpenAtMs": 1794245580000,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok",
+      "currentSkipReason": "DELISTED_FROM_FRESH_SOURCES",
+      "currentSkipObservedAt": "2026-11-09T18:13:24.295Z"
+    },
+    {
+      "chain": "sol",
+      "address": "4yxrjPyGVsAYSMwxPPKirxJPegDjGKiTCPxWwkoFpump",
+      "symbol": "BABYPUNCH",
+      "price": 6.8053e-05,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 22752.6,
+      "volume": {
+        "value": 186978,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 11,
+        "closedBars": 11,
+        "lastClosedAtMs": 1794246060000,
+        "firstOpenAtMs": 1794245400000,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok",
+      "currentSkipReason": "DELISTED_FROM_FRESH_SOURCES",
+      "currentSkipObservedAt": "2026-11-09T18:13:41.238Z"
+    },
+    {
+      "chain": "sol",
+      "address": "2Tef3P9qRhUTEAKTyQDHCdn67RK3yTbaLU72fcn5pump",
+      "symbol": "BMT",
+      "price": 9.18271e-05,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 22490,
+      "volume": {
+        "value": 18797.1,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 28,
+        "closedBars": 20,
+        "lastClosedAtMs": 1794243840000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok",
+      "currentSkipReason": "CURRENT_RESEARCH_INELIGIBLE",
+      "currentSkipObservedAt": "2026-11-09T18:13:41.238Z"
+    },
+    {
+      "chain": "sol",
+      "address": "GMvCfcZg8YvkkQmwDaAzCtHDrrEtgE74nQpQ7xNabonk",
+      "symbol": "1",
+      "price": 0.000298027,
+      "code": "chart_missing",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 148951,
+      "volume": {
+        "value": 18154,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable",
+      "currentSkipReason": "DELISTED_FROM_FRESH_SOURCES",
+      "currentSkipObservedAt": "2026-11-09T18:13:41.238Z"
+    },
+    {
+      "chain": "sol",
+      "address": "D4CzGsZgusVj2K8R1its5H8WWdo9mazbDwBc6qvsmfun",
+      "symbol": "LAMPORT",
+      "price": 0.000125466,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 32889.9,
+      "volume": {
+        "value": 3703.16,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 28,
+        "closedBars": 28,
+        "lastClosedAtMs": 1794246180000,
+        "firstOpenAtMs": 1794242940000,
+        "code": "insufficient_contiguous_tail",
+        "issue": {
+          "index": 15,
+          "openAtMs": 1794245400000,
+          "previousOpenAtMs": 1794245280000,
+          "gapMs": 120000,
+          "missingIntervals": 1
+        }
+      },
+      "klineStatus": "ok",
+      "currentSkipReason": "DELISTED_FROM_FRESH_SOURCES",
+      "currentSkipObservedAt": "2026-11-09T18:14:27.412Z"
+    },
+    {
+      "chain": "sol",
+      "address": "8BnNS15Q6h6D5Vcq1sNPaUxhpRVdK8FGRbLvCrLxibSx",
+      "symbol": "ELON2028",
+      "price": 6.85765e-05,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 27999.5,
+      "volume": {
+        "value": 3208.81,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 43,
+        "closedBars": 18,
+        "lastClosedAtMs": 1794243960000,
+        "firstOpenAtMs": 1794242700000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok",
+      "currentSkipReason": "DELISTED_FROM_FRESH_SOURCES",
+      "currentSkipObservedAt": "2026-11-09T18:14:27.412Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x3cbbfc926a55d9751e78b91642b685c4e36479d5",
+      "symbol": "AI",
+      "price": 0.000131642,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 29365.3,
+      "volume": {
+        "value": 81129,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 17,
+        "closedBars": 17,
+        "lastClosedAtMs": 1794245940000,
+        "firstOpenAtMs": 1794244920000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok",
+      "currentSkipReason": "DELISTED_FROM_FRESH_SOURCES",
+      "currentSkipObservedAt": "2026-11-09T18:14:27.412Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x48e39e56acdba37b09020c0b734a613c9a2f100a",
+      "symbol": "BB",
+      "price": 9.06558,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 91767.3,
+      "volume": {
+        "value": 8909.11,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 32,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok",
+      "currentSkipReason": "DELISTED_FROM_FRESH_SOURCES",
+      "currentSkipObservedAt": "2026-11-09T18:16:20.489Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x6330d8c3178a418788df01a47479c0ce7ccf450b",
+      "symbol": "COIN",
+      "price": 136.368,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 487443,
+      "volume": {
+        "value": 7706.79,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 35,
+        "closedBars": 33,
+        "lastClosedAtMs": 1794246120000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok",
+      "currentSkipReason": "DELISTED_FROM_FRESH_SOURCES",
+      "currentSkipObservedAt": "2026-11-09T18:16:20.489Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x72be1277e198d0c476869253cb4e62807e14533c",
+      "symbol": "RAETO",
+      "price": 0.00208161,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 181397,
+      "volume": {
+        "value": 6147.2,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 26,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok",
+      "currentSkipReason": "DELISTED_FROM_FRESH_SOURCES",
+      "currentSkipObservedAt": "2026-11-09T18:17:09.187Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x9f4ba41f91a59a34e17ee8c9eb3a51363b11abd5",
+      "symbol": "GRIFT",
+      "price": 0.000597256,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 65803.3,
+      "volume": {
+        "value": 5525.09,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 15,
+        "closedBars": 13,
+        "lastClosedAtMs": 1794245040000,
+        "firstOpenAtMs": 1794242880000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok",
+      "currentSkipReason": "DELISTED_FROM_FRESH_SOURCES",
+      "currentSkipObservedAt": "2026-11-09T18:17:09.187Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x1b0e319c6a659f002271b69db8a7df2f911c153e",
+      "symbol": "GME",
+      "price": 25.5716,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 446843,
+      "volume": {
+        "value": 3262.73,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 50,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok",
+      "currentSkipReason": "DELISTED_FROM_FRESH_SOURCES",
+      "currentSkipObservedAt": "2026-11-09T18:18:31.201Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xbc9e7b1c5c0081f4ae85e71ec95703d3dec9ffad",
+      "symbol": "Bucket",
+      "price": 0.000764923,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 69338.7,
+      "volume": {
+        "value": 3260.41,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 4,
+        "closedBars": 4,
+        "lastClosedAtMs": 1794246000000,
+        "firstOpenAtMs": 1794243600000,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok",
+      "currentSkipReason": "DELISTED_FROM_FRESH_SOURCES",
+      "currentSkipObservedAt": "2026-11-09T18:18:31.201Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x84cab63bc87912e71ad199ff14a0ba45de68fef8",
+      "symbol": "SKHY",
+      "price": 133.264,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 451843,
+      "volume": {
+        "value": 2757.51,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 42,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok",
+      "currentSkipReason": "DELISTED_FROM_FRESH_SOURCES",
+      "currentSkipObservedAt": "2026-11-09T18:18:31.201Z"
+    }
+  ]
+}

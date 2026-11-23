@@ -1,0 +1,53 @@
+Read-only OHLCV source-boundary review, 2026-11-10
+
+The frozen 64 not-ready observations are historical evidence, not a current 64-token opportunity list. Their last observations were around 2026-11-09 17:51–18:25 UTC. The new baseline `/tmp/gmgn-gap-followup-before.json` was captured at 2026-11-10 04:41:29 UTC. No source candles, strategy gates, runtime configuration, or trades were changed during this review.
+
+| Chain | Insufficient contiguous tail | Stale closed bars | Insufficient closed bars | Total |
+| --- | ---: | ---: | ---: | ---: |
+| BSC | 14 | 6 | 1 | 21 |
+| Solana | 2 | 5 | 4 | 11 |
+| Robinhood Chain | 20 | 9 | 3 | 32 |
+| Total | 36 | 20 | 8 | 64 |
+
+Source: `docs/gmgn-chart-backlog-20261110-summary.json`. Full raw candle arrays survive for 42 of these observations in diagnostic audit artifacts; 22 runtime results retain summary fields only. Re-running the 42 raw arrays at their actual request-start and response-receipt clocks gives identical diagnostic classifications. Their counts are stale 16, insufficient contiguous tail 18, insufficient closed bars 8. This does not prove that every upstream gap means zero trades.
+
+Among the 18 raw insufficient-tail cases, the final consecutive real-bar lengths are 1 (8 cases), 2 (7), 3 (1), 13 (1), and 23 (1). No saved raw candle has zero volume; its per-candle `source` is the empty string. Six historical observations were not dispatch-window aligned, but the saved raw classifications do not become ready when evaluated at the real request-start clock. Most stale observations lack trades/bars for multiple minutes; LAMPORT, GRIFT, and OAK have their latest closed bar one minute behind the requested boundary and arrive in the latter part of the minute, exceeding the existing 90-second age gate. Do not confuse `closedThroughAt` (requested boundary) with `diagnostics.lastClosedAtMs` (actual last returned closed bar).
+
+The 13/24 distinction is deliberate in the current implementation. `src/paper-opportunity-policy.js:60` requires at least 13 closed bars for its general chart check; the breakout baseline uses the previous 12 bars. With `contiguousTail:true`, any older missing minute requires at least 24 real consecutive bars after the final gap. `src/paper-loss-repair.js:45` independently requires 24 bars for the main entry-bound thesis, and external collective recovery also requires 24. A general chart-ready value with 13–23 bars does not establish main-account eligibility. The structure proof freezes both evaluation and quote clocks; receipt time must not renew candle/source time.
+
+Reusable local components are limited:
+
+- `src/gmgn-readonly-market.js:551` already handles read pacing, exact requested chain/CA, source errors, stable latest-window cache, and binding the closed boundary at actual dispatch. Missing upstream identity fields are currently tolerated because this is a fixed CLI request path; a new provider needs its own explicit pool/token metadata proof.
+- `src/paper-strategy-runtime.js:630` clips unfinished provider candles to the requested boundary. Its dispatch-window branch explicitly trusts `source === 'gmgn-cli'`; a new provider must not impersonate that source.
+- `src/narrative-bsc-v2-quote-provider.js:462` proves chain 56, fixed PancakeSwap V2 factory, token0/token1, factory.getPair, common block identity, oracle age and quote-token orientation. It produces current quotes, not historical OHLCV. It cannot directly support V3/V4 pools or Robinhood Chain.
+- `src/pon-rpc-provider.js:128` offers a read-only facade with per-endpoint chain-ID checks, bounded concurrency, capability and transient backoff, and block/log reads. `src/config.js:297` supplies the existing Robinhood public endpoint pool. This is transport, not a complete historical swap decoder or USD candle builder.
+- `src/paper-chain-gas.js:6` records local network identities, including Robinhood chain ID 4663 and Solana's mainnet genesis hash; its receipt/block bindings are useful examples. Its current oracle prices and sampled fees cannot be turned into historical USD trade volume.
+- No existing generic alternate OHLCV implementation was found under `src` or `scripts`. DexScreener code in the repository supplies pair discovery/current market evidence, not a minute OHLCV replacement.
+
+The sibling's independent public-provider evidence in `docs/gmgn-alternative-source-20261110-evidence/` confirms GeckoTerminal's network list contains `bsc`, `solana`, and `robinhood`. Network support does not prove coverage of a particular CA. BSC MEME and Robinhood MEME share the exact same CA, `0x19993b3cf15c1055063468eb932f5e335a7526ea`; the BSC lookup has pools while the Robinhood lookup returned HTTP 429. The latter is unknown coverage, not an empty/no-pool success. Cache/identity keys must always contain the network. A Robinhood on-chain token may not be replaced by a US stock, a CEX symbol, or a token on another chain. All 16 pools across the four successful HTTP 200 samples pass a local check of network-prefixed pool ID, base/quote relationship IDs, included token addresses, and exact target membership. No OHLCV response was available at this review point because the probe stopped at rate limiting.
+
+BSC MEME and MISU primary pool IDs are 32-byte pool identifiers, not 20-byte pool contract addresses; their DEX IDs are `uniswap-v4-bsc` and `pancakeswap-infinity-clmm`, respectively. The provider adapter should preserve an opaque, exact pool identifier with network/dex metadata and token relationships, then verify the OHLCV response against that binding. Do not apply the V2 RPC factory/token0/token1 implementation to those pool IDs. POLLY's two discovered pools have effectively depleted reserves and no current hourly volume; choosing a second old pool price does not restore fresh activity.
+
+A minimal safe backup adapter should use the following contract before any production integration:
+
+1. Resolve exact network + CA to candidate pools. Check data IDs, pool identifiers, relationship token IDs, included token addresses, selected target side, and quote currency. EVM address case normalization is allowed; Solana case normalization is not. Bind one pool for the complete requested window. Pool changes create a new complete series rather than a splice.
+2. Return a source envelope containing provider/family, network, chain, CA, pool ID/kind/dex, base/quote addresses, target side, price/volume currency, resolution, requested start/end, actual requestedAt/receivedAt, last actual closed-bar time, identity evidence, and raw response digest. Preserve HTTP source Date/cache age as metadata, not as candle time. GeckoTerminal/CoinGecko on-chain endpoints are one provider family, not independent corroboration.
+3. Fetch real OHLCV with empty-interval filling disabled. Use one provider's complete, identity-bound series; never fill GMGN's missing minutes with a different provider's bars, mix pools, or convert current reserves/quotes into historical prices or volumes. A provider-proven empty interval may be stored as separate `no_trade` coverage evidence. Unknown omitted intervals stay unknown.
+4. If a diagnostic filled series is requested, keep it separate and mark its synthetic fields. Never pass filled bars to current strategy validation. A local reproduction shows `opportunityChart` accepts `synthetic:true` zero-volume fills and mixed per-bar source labels because it does not validate those metadata fields. The adapter must enforce this boundary, not merely annotate it.
+5. Validate each raw timestamp as a safe integer epoch and a one-minute boundary. Reject duplicate/conflicting timestamps, irregular intervals, non-finite values, invalid OHLC ranges, and negative volume. Preserve real zero-volume observations only when the provider semantics establish they are actual observations, not fills. Clip future/open bars once at the captured dispatch boundary; never let them become closed by aging in cache. Count excluded open/future bars explicitly. If historical data is only partially returned, retain the coverage failure rather than treating pagination or provider limits as no trades.
+6. Keep freshness separate from delivery success. `status:ok` may describe a successfully fetched stale/incomplete series; trade readiness still runs the unchanged 90-second and 13/24 checks. A provider response/cache lag of 60 seconds can remain too old for a 90-second gate; do not relabel receivedAt as a recent bar observation.
+7. Before strategy admission, carry frozen chart provenance into `recoveryEntry`, structural proof, diagnostics, and source digest. Today `src/paper-recovery-policy.js:140` copies candles/klineStatus only and `src/paper-structure-entry-proof.js:53` hashes values without provider/pool identity. A new provider must remain attributable through revalidation. Quote confirmation still uses independent exact-CA quotes and existing gates.
+8. Use bounded provider-specific rate limits, one in-flight backup job, maximum attempts/deadline and negative cache; do not increase GMGN's shared budget or bypass the runtime's holding/entry priority. Cache full source envelopes by network+CA+pool+resolution+window+fill mode. A failed refresh retains old evidence as stale, never a fresh success. Empty/no-pool/unsupported-source outcomes are explicit finite results.
+
+Required focused regressions for a future implementation:
+
+- Same CA on BSC and Robinhood cannot cross-bind or share a cache entry; same ticker with a different CA also rejects.
+- Solana address case and token-side inversion cannot be normalized away; mismatched OHLCV base/quote metadata rejects.
+- Both a 20-byte V2 pool address and an explicitly supported opaque 32-byte V4 pool ID bind without confusing pool ID and token CA.
+- GMGN incomplete plus Gecko complete selects the entire valid Gecko series; two incomplete sources may not combine to appear contiguous.
+- A zero-volume synthetic interval cannot change an insufficient tail to ready; genuine provider-empty coverage remains a gap for current admission.
+- A 30-second shifted series, duplicate bar, invalid timestamp, future bar, delayed response, stale cache and provider rate limit each preserve the relevant rejection/provenance.
+- An unfinished candle returned before the minute closes remains excluded after the response/cache crosses the next minute.
+- Reconstructed entry proof rejects altered provider/pool/window provenance and still enforces the existing price, volume, safety, quote, and size checks.
+
+This review performed only local file reads and isolated in-memory validator calls. No new provider request, GMGN request, restart, production code edit, or order was made by this reviewer.

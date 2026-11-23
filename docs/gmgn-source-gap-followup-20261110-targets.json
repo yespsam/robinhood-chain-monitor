@@ -1,0 +1,3668 @@
+{
+  "version": "frozen_source_gap_followup_v1",
+  "source": "docs/gmgn-chart-backlog-20261110-summary.json",
+  "frozenAt": "2026-11-09T18:25:25.026523+00:00",
+  "candidates": [
+    {
+      "chain": "bsc",
+      "address": "0xe6c2021a443efb5d18c8cabb0cd930aa81ee7777",
+      "symbol": "ELON2028",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": false,
+      "originalExclusions": [
+        "liquidity"
+      ],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T17:52:49.990Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 49,
+        "closedThroughAt": "2026-11-09T17:52:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": false
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T17:52:49.990Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 49,
+          "closedThroughAt": "2026-11-09T17:52:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": false
+        }
+      ],
+      "researchAdmissionHistory": [],
+      "historicalFrom": 1794243120,
+      "historicalTo": 1794246720,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+      "symbol": "MEME",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": false,
+      "originalExclusions": [
+        "liquidity"
+      ],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:02:38.509Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 38,
+        "closedThroughAt": "2026-11-09T18:02:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:02:38.509Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 38,
+          "closedThroughAt": "2026-11-09T18:02:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [],
+      "historicalFrom": 1794243720,
+      "historicalTo": 1794247320,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x8b9ee39195ea99d6ddd68030f44131116bc218f6",
+      "symbol": "PEAQ",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T17:52:07.188Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 19,
+        "closedThroughAt": "2026-11-09T17:52:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T17:52:07.188Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 19,
+          "closedThroughAt": "2026-11-09T17:52:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T17:52:07.188Z"
+        }
+      ],
+      "historicalFrom": 1794243120,
+      "historicalTo": 1794246720,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x0cee7a04355b2e2d7248d9566db8889cf44f7777",
+      "symbol": "MI",
+      "originalCode": "chart_stale",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T17:52:31.792Z",
+        "sourceStatus": "ok",
+        "sourceRead": false,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 56,
+        "closedThroughAt": "2026-11-09T17:52:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T17:52:31.792Z",
+          "sourceStatus": "ok",
+          "sourceRead": false,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 56,
+          "closedThroughAt": "2026-11-09T17:52:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "cached",
+          "reasonCode": null,
+          "at": "2026-11-09T17:52:31.792Z"
+        }
+      ],
+      "historicalFrom": 1794243120,
+      "historicalTo": 1794246720,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x7c8d5502b544ddaf8852fc46d1174e34876d545c",
+      "symbol": "BNC4",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:12:37.581Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 16,
+        "closedThroughAt": "2026-11-09T18:12:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:12:37.581Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 16,
+          "closedThroughAt": "2026-11-09T18:12:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:52:26.153Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:02:30.010Z"
+        }
+      ],
+      "historicalFrom": 1794244320,
+      "historicalTo": 1794247920,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xcafdbce93477261db8250e42bdae6e66733f9e20",
+      "symbol": "GSTOCK",
+      "originalCode": "chart_stale",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T17:53:48.097Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 35,
+        "closedThroughAt": "2026-11-09T17:53:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T17:53:48.097Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 35,
+          "closedThroughAt": "2026-11-09T17:53:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T17:53:48.097Z"
+        }
+      ],
+      "historicalFrom": 1794243180,
+      "historicalTo": 1794246780,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x33fe24f4298a8659668e8d1f2044fd01e8a57777",
+      "symbol": "RM",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:13:37.525Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 19,
+        "closedThroughAt": "2026-11-09T18:13:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:13:37.525Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 19,
+          "closedThroughAt": "2026-11-09T18:13:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:53:47.600Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:04:21.936Z"
+        }
+      ],
+      "historicalFrom": 1794244380,
+      "historicalTo": 1794247980,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xf1c599e9a5fbdea408a7409c0176a2fe42c64444",
+      "symbol": "Hachiko",
+      "originalCode": "chart_stale",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:15:03.957Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 24,
+        "closedThroughAt": "2026-11-09T18:15:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:15:03.957Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 24,
+          "closedThroughAt": "2026-11-09T18:15:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:53:47.600Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:04:21.936Z"
+        }
+      ],
+      "historicalFrom": 1794244500,
+      "historicalTo": 1794248100,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x87acfa3fd7a6e0d48677d070644d76905c2bdc00",
+      "symbol": "SPACE",
+      "originalCode": "chart_stale",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T18:05:12.094Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 50,
+        "closedThroughAt": "2026-11-09T18:05:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T18:05:12.094Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 50,
+          "closedThroughAt": "2026-11-09T18:05:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "fetched",
+          "reasonCode": "GMGN_NETWORK_FAILED",
+          "at": "2026-11-09T17:54:58.942Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T18:05:12.094Z"
+        }
+      ],
+      "historicalFrom": 1794243900,
+      "historicalTo": 1794247500,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x7083609fce4d1d8dc0c979aab8c869ea2c873402",
+      "symbol": "DOT",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T18:06:11.355Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 27,
+        "closedThroughAt": "2026-11-09T18:06:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T18:06:11.355Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 27,
+          "closedThroughAt": "2026-11-09T18:06:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:54:58.696Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T18:06:11.355Z"
+        }
+      ],
+      "historicalFrom": 1794243960,
+      "historicalTo": 1794247560,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x0da27398e363adb801300b4d36d600631fae7777",
+      "symbol": "spyless",
+      "originalCode": "chart_stale",
+      "originalResearchAllowed": false,
+      "originalExclusions": [
+        "liquidity"
+      ],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:02:39.632Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 57,
+        "closedThroughAt": "2026-11-09T18:02:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:02:39.632Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 57,
+          "closedThroughAt": "2026-11-09T18:02:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [],
+      "historicalFrom": 1794243720,
+      "historicalTo": 1794247320,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x2aad9bbc151659db46d379d44d9bf5e8d1888888",
+      "symbol": "MISU",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": false,
+      "originalExclusions": [
+        "liquidity"
+      ],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:02:43.711Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_closed_bars",
+        "closedBars": 12,
+        "closedThroughAt": "2026-11-09T18:02:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:02:43.711Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_closed_bars",
+          "closedBars": 12,
+          "closedThroughAt": "2026-11-09T18:02:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [],
+      "historicalFrom": 1794243720,
+      "historicalTo": 1794247320,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x2a06ddb8f82b2926ccd852d8cdc2348246857777",
+      "symbol": "涨醒",
+      "originalCode": "chart_stale",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:16:30.328Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 34,
+        "closedThroughAt": "2026-11-09T18:16:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:16:30.328Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 34,
+          "closedThroughAt": "2026-11-09T18:16:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:18.251Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:07:11.232Z"
+        }
+      ],
+      "historicalFrom": 1794244560,
+      "historicalTo": 1794248160,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x91152b4ef635403efbae860edd0f8c321d7c035d",
+      "symbol": "IRYS",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T18:08:28.157Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 44,
+        "closedThroughAt": "2026-11-09T18:08:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T18:08:28.157Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 44,
+          "closedThroughAt": "2026-11-09T18:08:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "fetched",
+          "reasonCode": "GMGN_NETWORK_FAILED",
+          "at": "2026-11-09T17:55:24.618Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T18:08:28.157Z"
+        }
+      ],
+      "historicalFrom": 1794244080,
+      "historicalTo": 1794247680,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xb305e6954e4e0cd021c06ec355681abc8a00dbd7",
+      "symbol": "TAC",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T18:09:26.737Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 41,
+        "closedThroughAt": "2026-11-09T18:09:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T18:09:26.737Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 41,
+          "closedThroughAt": "2026-11-09T18:09:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:25.299Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T18:09:26.737Z"
+        }
+      ],
+      "historicalFrom": 1794244140,
+      "historicalTo": 1794247740,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xbab528425edb1e0e36d3719bc3307d9c8cce8888",
+      "symbol": "Moolah",
+      "originalCode": "chart_stale",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:17:20.137Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 47,
+        "closedThroughAt": "2026-11-09T18:17:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:17:20.137Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 47,
+          "closedThroughAt": "2026-11-09T18:17:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "fetched",
+          "reasonCode": "GMGN_NETWORK_FAILED",
+          "at": "2026-11-09T17:55:36.418Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:09:28.480Z"
+        }
+      ],
+      "historicalFrom": 1794244620,
+      "historicalTo": 1794248220,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x6a3722e20d1c9727c290a1b3cccd5330180d9de4",
+      "symbol": "BAN",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T18:09:33.108Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 33,
+        "closedThroughAt": "2026-11-09T18:09:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T18:09:33.108Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 33,
+          "closedThroughAt": "2026-11-09T18:09:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T18:09:33.108Z"
+        }
+      ],
+      "historicalFrom": 1794244140,
+      "historicalTo": 1794247740,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x6b2ce31a577d92f73516c7a91febc7672247e694",
+      "symbol": "Gangstar",
+      "originalCode": "chart_stale",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:17:50.169Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 19,
+        "closedThroughAt": "2026-11-09T18:17:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:17:50.169Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 19,
+          "closedThroughAt": "2026-11-09T18:17:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:09:32.703Z"
+        }
+      ],
+      "historicalFrom": 1794244620,
+      "historicalTo": 1794248220,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x6a2608dabe09bc1128eec7275b92dfb939d5db3f",
+      "symbol": "TOSHI",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T18:12:17.323Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 15,
+        "closedThroughAt": "2026-11-09T18:12:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T18:12:17.323Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 15,
+          "closedThroughAt": "2026-11-09T18:12:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "in_flight",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T18:12:17.323Z"
+        }
+      ],
+      "historicalFrom": 1794244320,
+      "historicalTo": 1794247920,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x6d145722564aaa0dba3e104dd1d680b227927777",
+      "symbol": "FATCAT",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:22:27.882Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 37,
+        "closedThroughAt": "2026-11-09T18:22:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:22:27.882Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 37,
+          "closedThroughAt": "2026-11-09T18:22:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:12:18.570Z"
+        }
+      ],
+      "historicalFrom": 1794244920,
+      "historicalTo": 1794248520,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xdd806e436dda5588bf54061c11590c77ddc87777",
+      "symbol": "SAFU",
+      "originalCode": "chart_stale",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:22:29.842Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 33,
+        "closedThroughAt": "2026-11-09T18:22:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:22:29.842Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 33,
+          "closedThroughAt": "2026-11-09T18:22:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:13:24.295Z"
+        }
+      ],
+      "historicalFrom": 1794244920,
+      "historicalTo": 1794248520,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "sol",
+      "address": "FDboCUrbwVgNVbuSXvhk9Atpay4UW6q3gPqAc6wH6bZD",
+      "symbol": "NVIDIOT",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:22:32.836Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 13,
+        "closedThroughAt": "2026-11-09T18:22:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:22:32.836Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 13,
+          "closedThroughAt": "2026-11-09T18:22:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:13:24.295Z"
+        }
+      ],
+      "historicalFrom": 1794244920,
+      "historicalTo": 1794248520,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "sol",
+      "address": "51S5XBuGHQAnugqU85P3v5Kq3RzZ8nEa4NTynZ8MrsuQ",
+      "symbol": "NVIDIOT",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": false,
+      "originalExclusions": [
+        "liquidity"
+      ],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T17:58:42.485Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_closed_bars",
+        "closedBars": 2,
+        "closedThroughAt": "2026-11-09T17:58:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": false
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T17:58:42.485Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_closed_bars",
+          "closedBars": 2,
+          "closedThroughAt": "2026-11-09T17:58:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": false
+        }
+      ],
+      "researchAdmissionHistory": [],
+      "historicalFrom": 1794243480,
+      "historicalTo": 1794247080,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "sol",
+      "address": "GpFVhKtqjFiMtoS2SpfYNNRLTwe42DWUZ5fN7LkiL6se",
+      "symbol": "TREMP",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": false,
+      "originalExclusions": [
+        "liquidity"
+      ],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T17:59:11.874Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_closed_bars",
+        "closedBars": 1,
+        "closedThroughAt": "2026-11-09T17:58:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": false
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T17:59:11.874Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_closed_bars",
+          "closedBars": 1,
+          "closedThroughAt": "2026-11-09T17:58:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": false
+        }
+      ],
+      "researchAdmissionHistory": [],
+      "historicalFrom": 1794243480,
+      "historicalTo": 1794247080,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "sol",
+      "address": "J1p5JR1vC48djzmPYXiX5ME9MKnXofkaeTc6CXtSs7X5",
+      "symbol": "POLLY",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": false,
+      "originalExclusions": [
+        "liquidity"
+      ],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T17:59:52.955Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_closed_bars",
+        "closedBars": 10,
+        "closedThroughAt": "2026-11-09T17:59:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": false
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T17:59:52.955Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_closed_bars",
+          "closedBars": 10,
+          "closedThroughAt": "2026-11-09T17:59:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": false
+        }
+      ],
+      "researchAdmissionHistory": [],
+      "historicalFrom": 1794243540,
+      "historicalTo": 1794247140,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "sol",
+      "address": "CTKeXCVboLuAxHHHLDP5cc6JKSRKxYHBZSnbvcZaYkaU",
+      "symbol": "KALYX",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": false,
+      "originalExclusions": [
+        "liquidity"
+      ],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:03:37.062Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 30,
+        "closedThroughAt": "2026-11-09T18:03:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": false
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:03:37.062Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 30,
+          "closedThroughAt": "2026-11-09T18:03:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": false
+        }
+      ],
+      "researchAdmissionHistory": [],
+      "historicalFrom": 1794243780,
+      "historicalTo": 1794247380,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "sol",
+      "address": "E4w4LG1UMzRVHch6YpBq7duCiRup1G6CrKW7Kg5ufV7N",
+      "symbol": "BabyPunch",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:22:39.898Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_closed_bars",
+        "closedBars": 1,
+        "closedThroughAt": "2026-11-09T18:22:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:22:39.898Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_closed_bars",
+          "closedBars": 1,
+          "closedThroughAt": "2026-11-09T18:22:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:13:24.295Z"
+        }
+      ],
+      "historicalFrom": 1794244920,
+      "historicalTo": 1794248520,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "sol",
+      "address": "3bxHm72mrkvE6eQ6iV5Yua8n3eDQUSenMxn75vpqvY8z",
+      "symbol": "NZS",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": false,
+      "originalExclusions": [
+        "liquidity"
+      ],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:04:28.251Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 18,
+        "closedThroughAt": "2026-11-09T18:03:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": false
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:04:28.251Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 18,
+          "closedThroughAt": "2026-11-09T18:03:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": false
+        }
+      ],
+      "researchAdmissionHistory": [],
+      "historicalFrom": 1794243780,
+      "historicalTo": 1794247380,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "sol",
+      "address": "4yxrjPyGVsAYSMwxPPKirxJPegDjGKiTCPxWwkoFpump",
+      "symbol": "BABYPUNCH",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:22:44.468Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 38,
+        "closedThroughAt": "2026-11-09T18:22:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:22:44.468Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 38,
+          "closedThroughAt": "2026-11-09T18:22:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:13:41.238Z"
+        }
+      ],
+      "historicalFrom": 1794244920,
+      "historicalTo": 1794248520,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "sol",
+      "address": "GMvCfcZg8YvkkQmwDaAzCtHDrrEtgE74nQpQ7xNabonk",
+      "symbol": "1",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:22:47.210Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 34,
+        "closedThroughAt": "2026-11-09T18:22:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:22:47.210Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 34,
+          "closedThroughAt": "2026-11-09T18:22:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:13:41.238Z"
+        }
+      ],
+      "historicalFrom": 1794244920,
+      "historicalTo": 1794248520,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "sol",
+      "address": "D4CzGsZgusVj2K8R1its5H8WWdo9mazbDwBc6qvsmfun",
+      "symbol": "LAMPORT",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:22:48.901Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 58,
+        "closedThroughAt": "2026-11-09T18:22:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:22:48.901Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 58,
+          "closedThroughAt": "2026-11-09T18:22:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:14:27.412Z"
+        }
+      ],
+      "historicalFrom": 1794244920,
+      "historicalTo": 1794248520,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "sol",
+      "address": "8BnNS15Q6h6D5Vcq1sNPaUxhpRVdK8FGRbLvCrLxibSx",
+      "symbol": "ELON2028",
+      "originalCode": "chart_stale",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:22:50.792Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 53,
+        "closedThroughAt": "2026-11-09T18:22:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:22:50.792Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 53,
+          "closedThroughAt": "2026-11-09T18:22:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:14:27.412Z"
+        }
+      ],
+      "historicalFrom": 1794244920,
+      "historicalTo": 1794248520,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x3cbbfc926a55d9751e78b91642b685c4e36479d5",
+      "symbol": "AI",
+      "originalCode": "chart_stale",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:22:52.177Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 26,
+        "closedThroughAt": "2026-11-09T18:22:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:22:52.177Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 26,
+          "closedThroughAt": "2026-11-09T18:22:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:14:27.412Z"
+        }
+      ],
+      "historicalFrom": 1794244920,
+      "historicalTo": 1794248520,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xc9a981fee1f9dec688bb123ccdecc63d0debfc4e",
+      "symbol": "GLD",
+      "originalCode": "chart_stale",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T18:15:12.873Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 59,
+        "closedThroughAt": "2026-11-09T18:15:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T18:15:12.873Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 59,
+          "closedThroughAt": "2026-11-09T18:15:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T18:15:12.873Z"
+        }
+      ],
+      "historicalFrom": 1794244500,
+      "historicalTo": 1794248100,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xdf0992e440dd0be65bd8439b609d6d4366bf1cb5",
+      "symbol": "CRCL",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T18:15:29.247Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 46,
+        "closedThroughAt": "2026-11-09T18:15:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T18:15:29.247Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 46,
+          "closedThroughAt": "2026-11-09T18:15:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T18:15:29.247Z"
+        }
+      ],
+      "historicalFrom": 1794244500,
+      "historicalTo": 1794248100,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xcec185eb182c47d1ba1efc84e6959e18cd620be4",
+      "symbol": "cbBTC",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T18:16:20.054Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 51,
+        "closedThroughAt": "2026-11-09T18:16:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T18:16:20.054Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 51,
+          "closedThroughAt": "2026-11-09T18:16:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T18:16:20.054Z"
+        }
+      ],
+      "historicalFrom": 1794244560,
+      "historicalTo": 1794248160,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x48e39e56acdba37b09020c0b734a613c9a2f100a",
+      "symbol": "BB",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:22:53.435Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_closed_bars",
+        "closedBars": 6,
+        "closedThroughAt": "2026-11-09T18:22:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:22:53.435Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_closed_bars",
+          "closedBars": 6,
+          "closedThroughAt": "2026-11-09T18:22:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:16:20.489Z"
+        }
+      ],
+      "historicalFrom": 1794244920,
+      "historicalTo": 1794248520,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+      "symbol": "MEME",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": false,
+      "originalExclusions": [
+        "liquidity"
+      ],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:18:50.426Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 47,
+        "closedThroughAt": "2026-11-09T18:18:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:06:33.978Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 46,
+          "closedThroughAt": "2026-11-09T18:05:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": false
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:18:50.426Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 47,
+          "closedThroughAt": "2026-11-09T18:18:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [],
+      "historicalFrom": 1794244680,
+      "historicalTo": 1794248280,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x6330d8c3178a418788df01a47479c0ce7ccf450b",
+      "symbol": "COIN",
+      "originalCode": "chart_stale",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:22:55.115Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 33,
+        "closedThroughAt": "2026-11-09T18:22:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:22:55.115Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 33,
+          "closedThroughAt": "2026-11-09T18:22:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:16:20.489Z"
+        }
+      ],
+      "historicalFrom": 1794244920,
+      "historicalTo": 1794248520,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+      "symbol": "QQQ",
+      "originalCode": "chart_stale",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T18:17:07.877Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 35,
+        "closedThroughAt": "2026-11-09T18:17:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T18:17:07.877Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 35,
+          "closedThroughAt": "2026-11-09T18:17:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T18:17:07.877Z"
+        }
+      ],
+      "historicalFrom": 1794244620,
+      "historicalTo": 1794248220,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x72be1277e198d0c476869253cb4e62807e14533c",
+      "symbol": "RAETO",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:22:56.590Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 23,
+        "closedThroughAt": "2026-11-09T18:22:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:22:56.590Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 23,
+          "closedThroughAt": "2026-11-09T18:22:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:17:09.187Z"
+        }
+      ],
+      "historicalFrom": 1794244920,
+      "historicalTo": 1794248520,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x9f4ba41f91a59a34e17ee8c9eb3a51363b11abd5",
+      "symbol": "GRIFT",
+      "originalCode": "chart_stale",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:22:58.586Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 39,
+        "closedThroughAt": "2026-11-09T18:22:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:22:58.586Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 39,
+          "closedThroughAt": "2026-11-09T18:22:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:17:09.187Z"
+        }
+      ],
+      "historicalFrom": 1794244920,
+      "historicalTo": 1794248520,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x4d21483a44bf67a86b77e3da301411880797d452",
+      "symbol": "BA",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": false,
+      "originalExclusions": [
+        "liquidity"
+      ],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:19:38.740Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 19,
+        "closedThroughAt": "2026-11-09T18:19:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:07:54.102Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 17,
+          "closedThroughAt": "2026-11-09T18:06:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": false
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:19:38.740Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 19,
+          "closedThroughAt": "2026-11-09T18:19:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [],
+      "historicalFrom": 1794244740,
+      "historicalTo": 1794248340,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "symbol": "TSLA",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T18:17:40.535Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 43,
+        "closedThroughAt": "2026-11-09T18:17:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T18:17:40.535Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 43,
+          "closedThroughAt": "2026-11-09T18:17:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T18:17:40.535Z"
+        }
+      ],
+      "historicalFrom": 1794244620,
+      "historicalTo": 1794248220,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
+      "symbol": "AAPL",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T18:18:30.940Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 51,
+        "closedThroughAt": "2026-11-09T18:18:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T18:18:30.940Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 51,
+          "closedThroughAt": "2026-11-09T18:18:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T18:18:30.940Z"
+        }
+      ],
+      "historicalFrom": 1794244680,
+      "historicalTo": 1794248280,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x1b0e319c6a659f002271b69db8a7df2f911c153e",
+      "symbol": "GME",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:23:02.445Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 42,
+        "closedThroughAt": "2026-11-09T18:23:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:23:02.445Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 42,
+          "closedThroughAt": "2026-11-09T18:23:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:18:31.201Z"
+        }
+      ],
+      "historicalFrom": 1794244980,
+      "historicalTo": 1794248580,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xbc9e7b1c5c0081f4ae85e71ec95703d3dec9ffad",
+      "symbol": "Bucket",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:23:04.134Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_closed_bars",
+        "closedBars": 5,
+        "closedThroughAt": "2026-11-09T18:23:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:23:04.134Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_closed_bars",
+          "closedBars": 5,
+          "closedThroughAt": "2026-11-09T18:23:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:18:31.201Z"
+        }
+      ],
+      "historicalFrom": 1794244980,
+      "historicalTo": 1794248580,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x84cab63bc87912e71ad199ff14a0ba45de68fef8",
+      "symbol": "SKHY",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:23:06.206Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 28,
+        "closedThroughAt": "2026-11-09T18:23:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:23:06.206Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 28,
+          "closedThroughAt": "2026-11-09T18:23:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:18:31.201Z"
+        }
+      ],
+      "historicalFrom": 1794244980,
+      "historicalTo": 1794248580,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xa2753fd0bc86b8ceb55ffd2698679c7f214785f1",
+      "symbol": "LETRO",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T18:19:31.714Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 27,
+        "closedThroughAt": "2026-11-09T18:19:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T18:19:31.714Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 27,
+          "closedThroughAt": "2026-11-09T18:19:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T18:19:31.714Z"
+        }
+      ],
+      "historicalFrom": 1794244740,
+      "historicalTo": 1794248340,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x6511c233790ec10f7d673c64dc82c3f941d57828",
+      "symbol": "OAK",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-last-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:24:51.872Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 18,
+        "closedThroughAt": "2026-11-09T18:24:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-last-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:24:51.872Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 18,
+          "closedThroughAt": "2026-11-09T18:24:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:19:31.570Z"
+        }
+      ],
+      "historicalFrom": 1794245040,
+      "historicalTo": 1794248640,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x15f3385625d7e364c5a6216fbbceadf10fa90e7d",
+      "symbol": "ABYSS",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-last-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:24:54.255Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "stale_closed_bars",
+        "closedBars": 17,
+        "closedThroughAt": "2026-11-09T18:24:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-last-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:24:54.255Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 17,
+          "closedThroughAt": "2026-11-09T18:24:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:19:31.570Z"
+        }
+      ],
+      "historicalFrom": 1794245040,
+      "historicalTo": 1794248640,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x94641b97010608c3827fb058074889f19868ff33",
+      "symbol": "VRAX",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-last-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:24:55.928Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 32,
+        "closedThroughAt": "2026-11-09T18:24:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-last-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:24:55.928Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 32,
+          "closedThroughAt": "2026-11-09T18:24:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:19:31.570Z"
+        }
+      ],
+      "historicalFrom": 1794245040,
+      "historicalTo": 1794248640,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xf0c4bf4c582cb3836e98394b1d4e7b7281101be8",
+      "symbol": "RBLX",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T18:20:43.300Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 34,
+        "closedThroughAt": "2026-11-09T18:20:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T18:20:43.300Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 34,
+          "closedThroughAt": "2026-11-09T18:20:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T18:20:43.300Z"
+        }
+      ],
+      "historicalFrom": 1794244800,
+      "historicalTo": 1794248400,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xdc45b71d7203c2e8baafc43a19bca0eb993bb54e",
+      "symbol": "DARK",
+      "originalCode": "chart_stale",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T18:20:51.029Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 28,
+        "closedThroughAt": "2026-11-09T18:20:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T18:20:51.029Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 28,
+          "closedThroughAt": "2026-11-09T18:20:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T18:20:51.029Z"
+        }
+      ],
+      "historicalFrom": 1794244800,
+      "historicalTo": 1794248400,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xff080c8ce2e5feadaca0da81314ae59d232d4afd",
+      "symbol": "MU",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T18:21:39.902Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 52,
+        "closedThroughAt": "2026-11-09T18:21:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T18:21:39.902Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 52,
+          "closedThroughAt": "2026-11-09T18:21:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T18:21:39.902Z"
+        }
+      ],
+      "historicalFrom": 1794244860,
+      "historicalTo": 1794248460,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x98096d17e191b3da1d5f99a6d7b3584351b11e18",
+      "symbol": "BONER",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-last-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:24:57.648Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 17,
+        "closedThroughAt": "2026-11-09T18:24:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-last-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:24:57.648Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 17,
+          "closedThroughAt": "2026-11-09T18:24:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:22:09.092Z"
+        }
+      ],
+      "historicalFrom": 1794245040,
+      "historicalTo": 1794248640,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x58ffe4a942d3885baa22d7520691f611ef09e7aa",
+      "symbol": "TSM",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T18:21:44.986Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 26,
+        "closedThroughAt": "2026-11-09T18:21:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T18:21:44.986Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 26,
+          "closedThroughAt": "2026-11-09T18:21:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T18:21:44.986Z"
+        }
+      ],
+      "historicalFrom": 1794244860,
+      "historicalTo": 1794248460,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x47569d49471bdbabfaf5531c0f74d9f2de82a11a",
+      "symbol": "PROPHET",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-last-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:24:59.103Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 47,
+        "closedThroughAt": "2026-11-09T18:24:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-last-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:24:59.103Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 47,
+          "closedThroughAt": "2026-11-09T18:24:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:22:07.557Z"
+        }
+      ],
+      "historicalFrom": 1794245040,
+      "historicalTo": 1794248640,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x608de3e89a6506b881125f67463623d7eb063fba",
+      "symbol": "NOVASI",
+      "originalCode": "chart_stale",
+      "originalResearchAllowed": false,
+      "originalExclusions": [
+        "liquidity"
+      ],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:20:52.528Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 53,
+        "closedThroughAt": "2026-11-09T18:20:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:08:44.467Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 57,
+          "closedThroughAt": "2026-11-09T18:07:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": false
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:20:52.528Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 53,
+          "closedThroughAt": "2026-11-09T18:20:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [],
+      "historicalFrom": 1794244800,
+      "historicalTo": 1794248400,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x7fe995a80075df3dc8ae11a9b82c7fe4202cd87f",
+      "symbol": "HMM",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-last-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:25:01.587Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 36,
+        "closedThroughAt": "2026-11-09T18:25:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-last-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:25:01.587Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 36,
+          "closedThroughAt": "2026-11-09T18:25:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:22:07.557Z"
+        }
+      ],
+      "historicalFrom": 1794245100,
+      "historicalTo": 1794248700,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xc72b96e0e48ecd4dc75e1e45396e26300bc39681",
+      "symbol": "INTC",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T18:22:45.234Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 39,
+        "closedThroughAt": "2026-11-09T18:22:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T18:22:45.234Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 39,
+          "closedThroughAt": "2026-11-09T18:22:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T18:22:45.234Z"
+        }
+      ],
+      "historicalFrom": 1794244920,
+      "historicalTo": 1794248520,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x255979302fd6a5e2ff6dce0d8b018f51e06e243a",
+      "symbol": "UNIWALL",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": false,
+      "originalExclusions": [
+        "liquidity"
+      ],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:22:04.256Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 48,
+        "closedThroughAt": "2026-11-09T18:22:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:09:41.348Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "stale_closed_bars",
+          "closedBars": 50,
+          "closedThroughAt": "2026-11-09T18:08:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": false
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:22:04.256Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 48,
+          "closedThroughAt": "2026-11-09T18:22:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [],
+      "historicalFrom": 1794244920,
+      "historicalTo": 1794248520,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xe8ffd7e24187f72afb08d75b1bb13088a989a791",
+      "symbol": "DELTA",
+      "originalCode": "chart_incomplete",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+        "kind": "runtime_chart",
+        "at": "2026-11-09T18:23:56.076Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_contiguous_tail",
+        "closedBars": 49,
+        "closedThroughAt": "2026-11-09T18:23:00.000Z",
+        "entryThesisBarsReady": null
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "kind": "runtime_chart",
+          "at": "2026-11-09T18:23:56.076Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_contiguous_tail",
+          "closedBars": 49,
+          "closedThroughAt": "2026-11-09T18:23:00.000Z",
+          "entryThesisBarsReady": null
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "fetched",
+          "reasonCode": null,
+          "at": "2026-11-09T18:23:56.076Z"
+        }
+      ],
+      "historicalFrom": 1794244980,
+      "historicalTo": 1794248580,
+      "historicalWindowProvenance": "exact_runtime_closedThroughAtMs_window_runtime_loadChart_one_hour"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x2fc6de9c65a620f918ca7d1191d3afa495ca2898",
+      "symbol": "LOCKRA",
+      "originalCode": "chart_missing",
+      "originalResearchAllowed": true,
+      "originalExclusions": [],
+      "sourceCovered": true,
+      "latestSuccessfulObservation": {
+        "artifact": "docs/gmgn-chart-backlog-20261110-last-audit.json",
+        "kind": "diagnostic_only",
+        "at": "2026-11-09T18:25:03.059Z",
+        "sourceStatus": "ok",
+        "sourceRead": true,
+        "ready": false,
+        "diagnostic": "insufficient_closed_bars",
+        "closedBars": 10,
+        "closedThroughAt": "2026-11-09T18:25:00+00:00",
+        "entryThesisBarsReady": false,
+        "dispatchWindowAligned": true
+      },
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-last-audit.json",
+          "kind": "diagnostic_only",
+          "at": "2026-11-09T18:25:03.059Z",
+          "sourceStatus": "ok",
+          "sourceRead": true,
+          "ready": false,
+          "diagnostic": "insufficient_closed_bars",
+          "closedBars": 10,
+          "closedThroughAt": "2026-11-09T18:25:00+00:00",
+          "entryThesisBarsReady": false,
+          "dispatchWindowAligned": true
+        }
+      ],
+      "researchAdmissionHistory": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup.json",
+          "jobId": "chart-catchup-1794246680788",
+          "status": "skipped",
+          "reasonCode": "NO_LONGER_RESEARCH_ELIGIBLE",
+          "at": "2026-11-09T17:55:41.343Z"
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-recovery.json",
+          "jobId": "chart-catchup-1794247350010",
+          "status": "queued",
+          "reasonCode": null,
+          "at": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-catchup-final.json",
+          "jobId": "chart-catchup-1794247887026",
+          "status": "skipped",
+          "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+          "at": "2026-11-09T18:23:56.858Z"
+        }
+      ],
+      "historicalFrom": 1794245100,
+      "historicalTo": 1794248700,
+      "historicalWindowProvenance": "exact_raw_gmgn_request_window"
+    }
+  ]
+}

@@ -648,3 +648,49 @@ test("strict integrity verification detects payload and policy tampering", () =>
   assert.ok(hashCheck.reasons.includes("shadow_input_hash_mismatch"));
   assert.ok(hashCheck.reasons.includes("decision_hash_mismatch"));
 });
+
+test("noted wallet activity adjusts shadow scores before decisions and integrity hashes", () => {
+  const input = eligibleInput({
+    narrativeEvidence: { strength: 0, novelty: 0 },
+    marketEvidence: { momentumConfirmed: false, walletClusterConfirmed: false },
+  });
+  const baseline = deriveNarrativeTradeSignal(input);
+  assert.equal(baseline.decision, "watch");
+  const boosted = deriveNarrativeTradeSignal({ ...input, notedWallets: { shadowOnly: true, boostBuys: 1, avoid: 0 } });
+  assert.equal(boosted.score, baseline.score + 5);
+  assert.equal(boosted.decision, "do");
+  assert.equal(boosted.shadowOrder.executable, false);
+  assert.notEqual(boosted.inputHash, baseline.inputHash);
+  assert.equal(verifyNarrativeTradeSignalIntegrity(boosted).valid, true);
+  assert.deepEqual(deriveNarrativeTradeSignal({ ...input, notedWallets: boosted.notedWallets }), boosted);
+  const avoided = deriveNarrativeTradeSignal(eligibleInput({ notedWallets: { shadowOnly: true, boostBuys: 0, avoid: 3 } }));
+  assert.equal(avoided.scoreDetails.components.notedWallets, -30);
+  assert.equal(avoided.decision, "watch");
+  assert.equal(avoided.shadowOrder, null);
+  const tampered = structuredClone(boosted);
+  tampered.notedWallets.boostBuys = 2;
+  assert.equal(verifyNarrativeTradeSignalIntegrity(tampered).valid, false);
+});
+
+test("wallet adjustments are bounded, watch-neutral, and cannot bypass confirmation or hard gates", () => {
+  const baseline = deriveNarrativeTradeSignal(eligibleInput());
+  for (const notedWallets of [null, {}, { shadowOnly: false, boostBuys: 3 }]) {
+    assert.deepEqual(deriveNarrativeTradeSignal(eligibleInput({ notedWallets })), baseline);
+  }
+  for (const [boostBuys, avoid, adjustment] of [[0, 0, 0], [999, 0, 15], [0, 999, -30], [999, 999, -15], [-1, NaN, 0], [1.5, Infinity, 0]]) {
+    const signal = deriveNarrativeTradeSignal(eligibleInput({ notedWallets: { shadowOnly: true, boostBuys, avoid } }));
+    assert.equal(signal.scoreDetails.components.notedWallets, adjustment);
+    assert.equal(signal.score, Math.min(100, Math.max(0, Math.round((baseline.score + adjustment) * 100) / 100)));
+    assert.equal(verifyNarrativeTradeSignalIntegrity(signal).valid, true);
+  }
+  const notedWallets = { shadowOnly: true, boostBuys: 999, avoid: 0 };
+  for (const overrides of [
+    { riskEvidence: { sellability: "cannot_sell" } },
+    { narrativeEvidence: { verified: false } },
+    { marketEvidence: { marketConfirmed: false } },
+  ]) {
+    const signal = deriveNarrativeTradeSignal(eligibleInput({ ...overrides, notedWallets }));
+    assert.notEqual(signal.decision, "do");
+    assert.equal(signal.shadowOrder, null);
+  }
+});

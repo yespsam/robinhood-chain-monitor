@@ -48,6 +48,18 @@ const position = {
 const task = { ...identity, ...fields('key at status startedAt finishedAt fetchedAt receivedAt sourceStatus ready reason') };
 const schema = {
   ...fields('status mode execution signing broadcast enabled updatedAt costModel'),
+  narrativeAdmission:{...fields('version enabled evaluated ready blocked agenticClaims verifiedAgenticWalletBuys'),topBlockers:[fields('reason count')]},
+  strategyFocusShadow:{...fields('version status durability sampleCount droppedSamples oldestRetainedAt latestSampleAt lastPersistedAt lastError note entryAllowed paperFillAllowed'),
+    latestScan:{...fields('checkedAt candidateCount'),candidates:[{...identity,...fields('marketStage researchOnly entryAllowed paperFillAllowed'),
+      externalSecondBreakout:{...fields('version status signalReady'),reasons:[true],
+        metrics:fields('closedAt impulseRise impulsePeak pullback consolidationBars breakoutLevel lastClose volumeMultiple support targetPrice'),
+        quoteConfirmation:fields('ready count firstAt confirmedAt reason'),economics:fields('ready reason breakEvenPrice estimatedStopLossUsd netRewardRisk netReferenceGainUsd')},
+      internalSmartMoney:{...fields('status reason'),evidence:fields('version source observedAt netBuyUsd independentGroups')},
+      operatorFootprint:fields('status caveat reason')}] }},
+  strategyFocusSimulation:{...fields('version mode execution signing broadcast enabled status initialCashUsd cashUsd realizedPnlUsd unrealizedPnlUsd entries completedTrades wins losses openPositions maxOpenPositions ticketUsd droppedTrades droppedSignalKeys updatedAt lastError note'),
+    positions:[fields('chain address symbol strategyId signalVersion signalCandleClosedAt openedAt entryPrice ticketUsd quantity supportPrice targetPrice stopLossRate markPrice markAt markStatus unrealizedPnlUsd coverageStatus narrativeEvent narrativeSourceUrl operatorFootprintStatus requiresStructureChart')],
+    recentTrades:[fields('id side chain address symbol strategyId entryAt exitAt signalCandleClosedAt entryPrice exitPrice ticketUsd quantity supportPrice targetPrice entryCostsUsd exitCostsUsd realizedPnlUsd realizedReturnRate exitReason exitCandleClosedAt costModel execution signing broadcast')],
+    latestChecks:[{...fields('signalKey checkedAt result signature'),reasons:[true]}]},
   session: fields('id label'), entryGuard: { ...fields('allowed'), reasons: [true] },
   lossGuards: {...fields('version enforced threshold baselineTradeCount fundingId startedAt capitalUsd realizedPnlUsd dailyRealizedPnlUsd lossLimitUsd triggered newEntriesStop'),reasons:[true]},
   account: { ...fields('mode execution signing broadcast initialCash cash realizedPnl updatedAt'),
@@ -77,6 +89,7 @@ const schema = {
   researchPipeline: { ...fields('detailsSucceeded detailsRequested chartRequestsPending'), lastDetail: task, lastChartDispatch: task,
     focusedReadBudget: fields('version exploratoryConcurrency exploratoryActive lastKind chartDeferrals detailDeferrals chartTurnDeferrals chartTurnReserved detailBackoffCandidates note'),
     entryDiagnostics:{...fields('version detected verifiedCatalyst quoteResearchReady quoteScheduled eligible note'),blockers:[fields('code label count')]},
+    chartHealth:fields('version alert warmup evaluated chartReady klineOk notRequested notRequestedRatio fetched fetchedUnavailable fetchedUnavailableRatio sourceUnavailable sourceUnavailableRatio staleClosedBars insufficientClosedBars hotCount hotFetched hotNotRequested hotRequestCoverageRate hotKlineOk hotKlineFresh hotKlineStale hotKlineUnknown hotKlineFreshRate hotKlineMaxClosedAgeMs hotKlineFreshnessMaxAgeMs hotChartReady hotChartReadyRate chartReadyRate klineOkRate funnelChartReady funnelOhlcvReady chartDispatchCount chartCacheCount cachedUnavailable queueWaitMedianMs queueWaitMaxMs queueSamples note'),
     hotCandidates: [task], pending: [task], stageSnapshot: [fields('chain status')], chartDiagnostics: [task], entryFocus: fields('active until key') },
   newsWire: {...fields('updatedAt ownDocumentCount gmgnSignalCount fullTwitterConnected'),poolFirstThree:{
     ...fields('version updatedAt verifiedEvents uniqueEvents expiredOnArrivalEvents conflictingAssets disabledAssets readySignals coverageNote lastVerifiedEventAt'),

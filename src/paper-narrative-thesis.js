@@ -236,8 +236,16 @@ export function buildNarrativeThesis({token,narrative={},monitorSignal,alphaSign
     .flatMap(d=>{const binding=relation(d,token,links,terms);return binding?[{...d,binding}]:[];}));
   const related=[...(index?.relations?.get(cacheKey)||[])];
   const parsed=assessPaperNarrative({narrative,chain:token.chain,address:token.address,nowMs});
-  for(const s of parsed.sources.filter(s=>!s.contentConflict))related.push({id:narrativeSourceKey(s.sourceUrl)||s.sourceId,url:s.sourceUrl,
-    at:stamp(s.sourceAt),text:s.text,author:s.authorKey||s.authorLabel,binding:'direct_ca',frame:narrativeEventFrame(s.text)});
+  for(const s of parsed.sources.filter(s=>!s.contentConflict)) {
+    const id=narrativeSourceKey(s.sourceUrl)||s.sourceId;
+    // A source matched to this candidate by ticker is research, not a CA claim.
+    // Preserve explicit binding and the same project-link rules as index docs;
+    // narrative-plus-control admission independently uses narrativeAssessment.
+    const binding=s.matchKind==='ca'?'direct_ca':relation({id,text:s.text,evmAddresses:[],solAddresses:[]},token,links,terms)
+      ||(s.matchKind==='ticker'?'name_only':'unverified');
+    related.push({id,url:s.sourceUrl,at:stamp(s.sourceAt),text:s.text,author:s.authorKey||s.authorLabel,
+      binding,frame:narrativeEventFrame(s.text)});
+  }
   if(validMonitorSignal(monitorSignal,token,nowMs)&&monitorSignal.authenticated===true)related.push({id:narrativeSourceKey(monitorSignal.sourceUrl),
     url:monitorSignal.sourceUrl,at:stamp(monitorSignal.sourceAt),text:monitorSignal.text,author:monitorSignal.theme?.author||monitorSignal.narrativeCandidate?.author||null,
     binding:monitorSignal.source==='new_pool_first_three'?'onchain_pool':monitorSignal.source==='kol_theme_hypothesis'||monitorSignal.source==='twitter_narrative_event'&&monitorSignal.narrativeCandidate?.binding!=='direct_ca'?'community_link':'direct_ca',eventCandidate:true,

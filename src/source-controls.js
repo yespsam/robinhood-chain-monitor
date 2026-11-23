@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { isMaterialFlapQuoteConfigurationChange, validFlapQuoteConfigurationLog } from "./flap-quote-generation.js";
+import { isCanonicalFlapPoolLaunchUpdate } from "./flap-pool-launch.js";
 import { isCancelledFomoPlatformEvent } from "./monitor-source-policy.js";
 import { isVerifiedFlapPortalEvidenceIdentity } from './flap-portal-pins.js';
 import { claimsGeniusSource, isGeniusOfficialEvent } from "./genius-source-policy.js";
@@ -550,6 +551,7 @@ const FOCUS3_IDENTITIES = new Set([
   "tradepools",
   "long",
   "longdotxyz",
+  "hyperevm",
 ]);
 const FOCUS3_UNISWAP_REPOSITORIES = new Set([
   "uniswap/liquidity-launcher",
@@ -575,6 +577,7 @@ const FOCUS3_DOMAINS = new Set([
   "gov.uniswap.org",
   "long.xyz",
   "app.long.xyz",
+  "hyperliquid.gitbook.io",
 ]);
 const FOCUS3_BLOCKED_EVENT_TYPES = new Set([
   "binance_official_update",
@@ -606,6 +609,7 @@ const FOCUS3_CAPABILITY_KEYS = [
   "packageVersionChanges",
   "newChains",
   "chainStageChanges",
+  "documentBodyChanges",
 ];
 const FOCUS3_TWITTER_SIGNALS = new Set([
   "新发射/新模式",
@@ -712,6 +716,49 @@ function parsedHttpsUrl(value) {
   } catch {
     return null;
   }
+}
+
+const HYPEREVM_OFFICIAL_DOC_PATH = /^\/hyperliquid-docs\/(?:for-developers\/hyperevm(?:\/[a-z0-9._-]+)*|onboarding\/how-to-use-the-hyperevm|builder-tools\/hyperevm-tools|sitemap\.xml)$/i;
+const HYPEREVM_DOCUMENT_BODY_CHANGE_KIND = "hyperevm_official_document_change_observed";
+
+function isAllowedHyperEvmOfficialDocUrl(value) {
+  const url = parsedHttpsUrl(value);
+  if (!url || url.hostname.toLowerCase() !== "hyperliquid.gitbook.io" || url.search || url.hash
+    || /%2f|%5c|%2e|\\/i.test(url.pathname)) return false;
+  return HYPEREVM_OFFICIAL_DOC_PATH.test(url.pathname.replace(/\/+$/, "") || "/");
+}
+
+function claimsHyperEvmOfficialDoc(source) {
+  const values = [source?.source, source?.url, ...(Array.isArray(source?.sources) ? source.sources : [])];
+  return values.some((value) => typeof value === "string" && /hyperliquid\.gitbook\.io\/hyperliquid-docs/i.test(value));
+}
+
+export function isOfficialHyperEvmCapabilityUpdate(source) {
+  if (!source || typeof source !== "object" || Array.isArray(source)
+    || source.type !== "platform_capability_update"
+    || source.platform?.id !== "hyperevm"
+    || source.platform?.name !== "HyperEVM"
+    || source.platform?.website !== "https://hyperliquid.xyz"
+    || !hasFocus3CapabilityChange(source)) return false;
+
+  const sourceUrls = [source.source, source.url, ...(Array.isArray(source.sources) ? source.sources : [])];
+  if (!sourceUrls.length || sourceUrls.some((value) => !isAllowedHyperEvmOfficialDocUrl(value))
+    || !sourceUrls.some((value) => !/\/sitemap\.xml$/i.test(new URL(value).pathname))) return false;
+
+  if (source.kind !== HYPEREVM_DOCUMENT_BODY_CHANGE_KIND) return true;
+  if (Object.keys(source.changes || {}).some((key) => key !== "documentBodyChanges")) return false;
+  return Array.isArray(source.changes.documentBodyChanges)
+    && source.changes.documentBodyChanges.length > 0
+    && source.changes.documentBodyChanges.length <= 2
+    && source.changes.documentBodyChanges.every((change) => {
+      if (!change || typeof change !== "object" || Array.isArray(change)
+        || Object.keys(change).sort().join(",") !== "added,meaning,removed,url"
+        || !isAllowedHyperEvmOfficialDocUrl(change.url)
+        || change.meaning !== "官方文档正文变化待核验；不代表新部署、发射台启用或可交易"
+        || !Array.isArray(change.added) || !Array.isArray(change.removed)
+        || change.added.length > 2 || change.removed.length > 2) return false;
+      return [...change.added, ...change.removed].every((line) => typeof line === "string" && line.length > 0 && line.length <= 240);
+    });
 }
 
 function flapRecord(value) {
@@ -4607,6 +4654,7 @@ function focus3EventAllowed(source) {
   const officialFlapQuotePair = isOfficialFlapQuotePairUpdate(source);
   const strictFlapQuoteAsset = isStrictFlapQuoteAssetUpdate(source);
   const strictFlapTrackedToken = isStrictFlapTrackedPoolTokenUpdate(source);
+  const flapPoolLaunch = isCanonicalFlapPoolLaunchUpdate(source);
   const strictBscOpenFourFirstToken = isStrictBscOpenFourFirstTokenUpdate(source);
   const strictFourRegistryCapability = isStrictFourRegistryCapabilityUpdate(source);
   const strictFourRegistryFirstToken = isStrictFourRegistryFirstTokenUpdate(source);
@@ -4621,6 +4669,7 @@ function focus3EventAllowed(source) {
     && !officialFlapQuotePair
     && !strictFlapQuoteAsset
     && !strictFlapTrackedToken
+    && !flapPoolLaunch
     && !strictBscOpenFourFirstToken
     && !strictFourRegistryCapability
     && !strictFourRegistryFirstToken
@@ -4629,6 +4678,7 @@ function focus3EventAllowed(source) {
   if (source.type === "bsc_launchpad_update") {
     if (claimsFourRegistryUpdate(source)) return strictFourRegistryFirstToken;
     if (source.kind === FLAP_TRACKED_TOKEN_KIND) return strictFlapTrackedToken;
+    if (source.kind === "flap_pool_launch") return flapPoolLaunch;
     if (claimsBscOpenFourFirstTokenUpdate(source)) return strictBscOpenFourFirstToken;
     if (source.kind === "new_mode" && source.structural?.source === "official_api") {
       return isOfficialFourMemeCapabilityUpdate(source);
@@ -4652,6 +4702,9 @@ function focus3EventAllowed(source) {
       && Number(source.modeConfirmation?.observations || 0) >= 2;
   }
   if (source.type === "platform_capability_update") {
+    if (source.platform?.id === "hyperevm" || claimsHyperEvmOfficialDoc(source)) {
+      return isOfficialHyperEvmCapabilityUpdate(source);
+    }
     if (claimsFourRegistryUpdate(source)) return strictFourRegistryCapability;
     if (claimsFlapQuoteAssetCapability(source)) return strictFlapQuoteAsset;
     return hasFocus3CapabilityChange(source);
@@ -4829,6 +4882,16 @@ export function isFomoMonitorHealthUpdateAllowed(config, source, now = Date.now(
   return source.transition === "recovered" || source.reasonCodes.length > 0;
 }
 
+// User focus (2026-10-30): official BNB Chain (BSC) GitHub repositories are an
+// explicit, allowlisted GitHub-only lane inside the focus3 scope.
+const BSC_OFFICIAL_GITHUB_REPOSITORIES = new Set(["bnb-chain/bsc", "bnb-chain/beps", "bnb-chain/bsc-genesis-contract"]);
+function focus3BscOfficialGithubSourceAllowed(source) {
+  if (source?.type && !["github_module_update", "github_monitor_gap"].includes(source.type)) return false;
+  return BSC_OFFICIAL_GITHUB_REPOSITORIES.has(String(source?.repository || "").toLowerCase())
+    && source?.sourceTrust === "official_verified"
+    && String(source?.launchpad || "").toUpperCase() === "BSC";
+}
+
 export function isMonitoringSourceEnabled(config, source) {
   if (isCancelledFomoPlatformEvent(config, source)) return false;
   if (source?.type === "giwa_ecosystem_update") return config?.giwaMonitorEnabled === true && isGiwaEvent(source);
@@ -4888,6 +4951,7 @@ export function isMonitoringSourceEnabled(config, source) {
     if (!["fomo_published_call", "fomo_x_call", SMART_WALLET_SIGNAL_KIND].includes(source?.signalKind) && config?.fomoBuyMonitorEnabled === false) return false;
   }
   if (isThreePlatformScope(config)) {
+    if (focus3BscOfficialGithubSourceAllowed(source)) return true;
     if (focus3BinanceOfficialSourceAllowed(config, source)) return true;
     if (claimsBinanceIdentity(source)) return false;
     if (focus3AiOfficialSourceAllowed(config, source)) return true;

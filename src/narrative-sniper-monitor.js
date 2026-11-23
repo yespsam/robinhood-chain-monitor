@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { deriveNarrativeTradeSignal } from "./narrative-trade-signal.js";
+import { notedWalletEvidenceForTokens } from "./address-notes.js";
 import { deriveNewPoolContext } from "./new-pool-context.js";
 
 export const NARRATIVE_SNIPER_MONITOR_VERSION = 1;
@@ -1351,6 +1352,14 @@ export function createNarrativeSniperMonitor(config = {}, dependencies = {}) {
         riskEvidence: clone(assessment.riskEvidence || assessment.risk || {}),
         asOf,
       };
+      let notedWallets = null;
+      try {
+        notedWallets = notedWalletEvidenceForTokens([targetEvidence.ca], {
+          dataDir: config.dataDir || "data",
+          now: Date.parse(asOf),
+        });
+      } catch { notedWallets = null; }
+      if (notedWallets) signalInput.notedWallets = notedWallets;
       const derived = await deriveSignal(signalInput);
       if (!derived || typeof derived !== "object" || Array.isArray(derived)) {
         throw new Error("deriveSignal must return a signal object");
@@ -1382,6 +1391,7 @@ export function createNarrativeSniperMonitor(config = {}, dependencies = {}) {
             decision: signal.decision,
             signal,
             signalDigest,
+            ...(notedWallets ? { notedWallets } : {}),
             ledger: signal.decision === "do" ? { status: "pending" } : null,
             delivery: signal.decision === "do" ? { status: "pending" } : null,
             createdAt: persistedAt,

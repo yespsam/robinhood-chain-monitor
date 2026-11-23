@@ -2,6 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { gmgnFlowAddress, qualifiesGmgnFlowWallet, mergeGmgnFlowTrade } from './gmgn-flow-signal.js';
 import { flowWindowCoverage } from './gmgn-flow-coverage.js';
+import { createNarrativeLlmClassifier, setNarrativeLlmClassifier, narrativeLlmClassifier } from './paper-narrative-semantic.js';
+import { collectSocialNarrativeSources } from './paper-social-narrative.js';
 import { collectGmgnFlowNarratives, resolveGmgnFlowNarrative, indexGmgnNarrativeEvents } from './gmgn-flow-narrative.js';
 import { BINANCE_FLOW_KINDS, buildBinanceFlowEvidence, validBinanceFlowState } from './binance-flow-evidence.js';
 import { paperFlowPulse } from './paper-flow-pulse.js';
@@ -82,7 +84,7 @@ export async function readBoundedJson(file, maximumBytes = 24 * 1024 * 1024) {
 
 // Read once per evaluation cycle, never once per candidate. No API or wallet calls.
 export async function loadPaperEvidence(dataDir, read = readBoundedJson) {
-  const [flowState, fomo, main, secondary, social, gmgnSocial, alphaCatalog, reviewedNews, flapQuote, fourRegistry, launchEvidence,flapCanonical] = await Promise.all([
+  const [flowState, fomo, main, secondary, social, gmgnSocial, alphaCatalog, reviewedNews, flapQuote, fourRegistry, launchEvidence,flapCanonical,twitterNarrative] = await Promise.all([
     read(path.join(dataDir, 'gmgn-flow-state.json')),
     read(path.join(dataDir, 'fomo-alerts', 'alert-outbox.json'), 16 * 1024 * 1024),
     read(path.join(dataDir, 'alert-outbox.json'), 16 * 1024 * 1024),
@@ -95,6 +97,7 @@ export async function loadPaperEvidence(dataDir, read = readBoundedJson) {
     read(path.join(dataDir, 'four-registry-state.json'), 8 * 1024 * 1024),
     read(path.join(dataDir, LAUNCH_EVIDENCE_FILE), LAUNCH_EVIDENCE_MAX_BYTES),
     read(path.join(dataDir,'paper-flap-canonical-state.json'),2*1024*1024),
+    read(path.join(dataDir,'twitter-narrative-state.json'),8*1024*1024),
   ]);
   const pendingPoolBlocks=Number.isSafeInteger(flapQuote?.identity?.verifiedBlock)&&Number.isSafeInteger(flapQuote?.cursor?.nextBlock)
     ? Math.max(0,flapQuote.identity.verifiedBlock-flapQuote.cursor.nextBlock+1):null;
@@ -103,6 +106,7 @@ export async function loadPaperEvidence(dataDir, read = readBoundedJson) {
   const flapOwnership=canonicalFlapProjection(flapCanonical);
   return { flowState, binanceState: validBinanceFlowState(secondary) ? secondary : null,
     gmgnSocial, alphaCatalog,
+    socialPosts: Array.isArray(twitterNarrative?.posts) ? twitterNarrative.posts.slice(-600) : [],
     poolSourceHealth:flapQuote?{status:flapQuote._health?.status==='healthy'&&pendingPoolBlocks>0?'catching_up':flapQuote._health?.status||'unknown',
       pendingBlocks:pendingPoolBlocks,checkedAt:flapQuote.checkedAt||null,
       lastSuccessAt:flapQuote._health?.lastSuccessAt||null,lastErrorCode:flapQuote._health?.lastErrorCode||null}:null,
@@ -128,6 +132,7 @@ export async function loadPaperEvidence(dataDir, read = readBoundedJson) {
 // Fast local ticks stat unchanged files instead of reparsing large outboxes.
 // A missing, corrupt or concurrently replaced file invalidates its cached value.
 export function createPaperEvidenceLoader(dataDir) {
+  if (!narrativeLlmClassifier()) setNarrativeLlmClassifier(createNarrativeLlmClassifier({ dataDir }));
   const cache = new Map();
   const read = async (file, maximumBytes = 24 * 1024 * 1024) => {
     const identity = s => `${s.ino}:${s.size}:${s.mtimeMs}:${s.ctimeMs}`;
@@ -260,13 +265,14 @@ export function createPaperEvidenceIndex(evidence = {}) {
     // entry/holding provider selection above or adding their amounts together.
     flowSources: options => paperFlowSources({ state:evidence.flowState, binanceState:evidence.binanceState,
       ...options, indexedRows:feeds.get(key(options)) || empty }),
-    narrative: options => buildPaperNarrativeEvidence({ ...options, events:narratives.get(key(options)) || [] }),
+    narrative: options => buildPaperNarrativeEvidence({ ...options, events:narratives.get(key(options)) || [], socialPosts:evidence.socialPosts || [] }),
   };
 }
 
-export function buildPaperNarrativeEvidence({ chain, address, token, events = [], nowMs = Date.now() } = {}) {
-  const sources = collectGmgnFlowNarratives({ chain, tokenAddress: address, events, nowMs });
+export function buildPaperNarrativeEvidence({ chain, address, token, events = [], socialPosts = [], nowMs = Date.now() } = {}) {
+  const social = collectSocialNarrativeSources({ posts: socialPosts, chain, address, token, nowMs });
+  const sources = [...collectGmgnFlowNarratives({ chain, tokenAddress: address, events, nowMs }), ...social];
   const result = sources[0] || resolveGmgnFlowNarrative({ chain, tokenAddress: address, tokenInfo: token?.raw || token, nowMs });
   const ca = gmgnFlowAddress(chain, address);
-  return { ...result, sources, caBound: !!ca && result.status === 'sourced' && result.chain === chain && result.tokenAddress === ca };
+  return { ...result, sources, symbol: token?.symbol || null, name: token?.name || null, caBound: !!ca && result.status === 'sourced' && result.chain === chain && result.tokenAddress === ca };
 }

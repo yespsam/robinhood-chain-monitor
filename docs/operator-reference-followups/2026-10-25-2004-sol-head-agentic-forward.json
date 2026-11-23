@@ -1,0 +1,103 @@
+{
+  "scheduledAt": "2026-10-25T20:04:35.197Z",
+  "completedAt": "2026-10-25T20:12:15Z",
+  "group": "sol",
+  "question": "Refresh Solana D/E head pages and classify candidate CAYENNE activity without advancing verified evidence; review local paper-forward delta and Four/Flap qualification coverage.",
+  "requests": {
+    "gmgnConfigCheckPassed": true,
+    "gmgnBusinessRequests": 2,
+    "gmgnSucceeded": 2,
+    "gmgnFailed": 0,
+    "gmgnPriority": 0,
+    "publicRpcRequests": 2,
+    "publicRpcSucceededWithTransactionDetails": 0,
+    "publicRpcErrorCodes": [-32015],
+    "modelRequests": 0
+  },
+  "walletPages": {
+    "D": {
+      "providerHeadCheckedAt": "2026-10-25T20:06:33.420Z",
+      "providerLatestCandidateActivityAt": "2026-10-25T19:09:14Z",
+      "rows": 20,
+      "pageOverlap": null,
+      "newRows": null,
+      "identityEchoValidated": false,
+      "nextCursor": "NDY1MzU3MTUyMDAxNDAwNjQ6MDo6",
+      "coverageStatus": "provider_identity_and_row_key_diff_missing"
+    },
+    "E": {
+      "providerHeadCheckedAt": "2026-10-25T20:06:49.231Z",
+      "providerLatestCandidateActivityAt": null,
+      "rows": 20,
+      "pageOverlap": null,
+      "newRows": null,
+      "identityEchoValidated": false,
+      "nextCursor": "NDY1MzU5ODI1MDAyNjIwMzI6MDo6",
+      "coverageStatus": "provider_identity_and_row_key_diff_missing"
+    }
+  },
+  "candidateActivity": {
+    "ca": "5yGCQQqAaqYXdaJWP1v5McD3mPntvXM9hMCSsZpspump",
+    "symbol": "CAYENNE",
+    "candidateTimesUtc": ["2026-10-25T19:08:33Z", "2026-10-25T19:09:14Z"],
+    "sameSecondMatch": false,
+    "candidateWalletAttribution": null,
+    "transactionHashesRetainedInCheckpoint": false,
+    "publicRpcTransactionDetailsVerified": false,
+    "classification": "unverified_provider_candidate_only"
+  },
+  "lastNewEvidenceAt": "2026-10-23T19:09:25.981Z",
+  "lastNewEvidenceAtAdvanced": false,
+  "paperForward": {
+    "previousReportedTradeCount": 327,
+    "tradeCount": 332,
+    "lastTradeId": "1792925845094:331",
+    "tradePrefixHash": "271e9585a80535c19a7ed9640f745b737a15402e243a8616065bd5ce2973130f",
+    "newClosedPairIds": ["1792906557210:328", "1792925614778:330"],
+    "newClosedRounds": 2,
+    "newClosedRoundNetUsd": -0.8921709074651316,
+    "rounds": [
+      {"entryId":"1792906557210:328","exitId":"1792906872851:329","chain":"sol","ca":"7SL2VnfYsChvog5oQY9Nmtqu1wceaMiQzWoqoLQpump","netPnlUsd":-0.33065677428760587,"quoteObservations":45,"quoteGaps":15},
+      {"entryId":"1792925614778:330","exitId":"1792925845094:331","chain":"bsc","ca":"0x5f6a1ce1733fc4834a526798c0e8cf85137effff","symbol":"4AGENT","netPnlUsd":-0.5615141331775257,"quoteObservations":30,"quoteGaps":11}
+    ],
+    "shadowArms": {
+      "2x": {"newCompleteRounds":2,"netPnlUsd":-0.8921709074651316,"notTriggered":2,"failureCount":2,"deltaToActualUsd":0},
+      "3x": {"newCompleteRounds":2,"netPnlUsd":-0.8921709074651316,"notTriggered":2,"failureCount":2,"deltaToActualUsd":0},
+      "5x": {"newCompleteRounds":2,"netPnlUsd":-0.8921709074651316,"notTriggered":2,"failureCount":2,"deltaToActualUsd":0}
+    },
+    "newOpenPositionId": "1792890781999:327",
+    "openPositionCountAtSnapshot": 4,
+    "freshUnrealizedNetPnlUsdAtSnapshot": -9.63288675841601,
+    "currentVersionClosedRoundsSinceBoundary": 31,
+    "currentVersionWins": 5,
+    "currentVersionLosses": 26,
+    "currentVersionNetPnlUsd": -9.762578718704908,
+    "quoteCoverageStoredCounterPrevious": 386,
+    "quoteCoverageStoredCounterCurrent": 1491,
+    "quoteCoverageStoredCounterDelta": 1105,
+    "quoteGapReasonsCurrent": {"missing_quote":1091,"pre_entry_quote":26,"out_of_order_quote":299,"stale_quote":75},
+    "cursorMatchesMainLedger": true,
+    "schedulerLiveState": null
+  },
+  "fourFlap": {
+    "fourRegistryUpdatedAt": "2026-10-23T12:59:59.896Z",
+    "fourCursorNextBlock": 129326094,
+    "fourCurrentLagVerified": false,
+    "flapStatus": "degraded",
+    "flapFailureStreak": 594,
+    "flapLastSuccessAt": "2026-10-23T13:11:24.781Z",
+    "flapLastError": "FLAP_QUOTE_CHAIN_ID_UNAVAILABLE",
+    "flapCurrentLagVerified": false,
+    "qualifyingCandidateBuys": null,
+    "agenticWalletIdentityAndSuccessfulBuyBothVerified": false
+  },
+  "telegramHealthSample": {
+    "status": "healthy",
+    "consecutiveFailures": 0,
+    "lastSuccessAt": "2026-10-25T20:10:00.777Z",
+    "continuousUptimeProven": false,
+    "restartPerformed": false
+  },
+  "nextGroup": "bsc",
+  "nextQuestion": "Rotate to BSC A/B, attempt due latest head pages through the shared default-priority gate, and retain per-row tx hash/CA/side; keep GIWA off and classify Four/Flap lag without restarting services."
+}

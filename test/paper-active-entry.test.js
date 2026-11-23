@@ -90,9 +90,10 @@ test('runtime quotes basic candidates, fills both experiments with main blocked 
     assert.equal(state.exitComparison.dynamic.entries,1);assert.equal(state.exitComparison.control.entries,1);
     assert.equal(state.tradeCountReview.pendingFills,0,'paired comparison fills never inflate the main 100-fill trigger');
     baseline=state.exitComparison.entrySampling.activatedAt;
+    const beforeCharts=chartRequests.length;
     now+=61000;await runtime.runOnce();
-    assert.equal(chartRequests.at(-1).purpose,'exit','deduplicated legacy holding must retain the dynamic account chart requirement');
-    assert.equal(runtime.snapshot().researchPipeline.lastChartDispatch.lane,'holding');
+    assert.equal(chartRequests[beforeCharts].purpose,'exit','deduplicated legacy holding must retain the dynamic account chart requirement');
+    assert.ok(runtime.snapshot().researchPipeline.chartDispatches.holding>0);
     await runtime.setEnabled(false);
   } finally {await runtime.stop();}
   const resumed=createPaperStrategyRuntime(options);

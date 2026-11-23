@@ -72,11 +72,11 @@ function observation(overrides = {}) {
 
 test("reviewed seed covers all broad capital leader categories with pinned X ids", () => {
   const entries = listReviewedCapitalKols();
-  assert.equal(entries.length, 31);
+  assert.equal(entries.length, 32);
   assert.deepEqual(new Set(entries.map((entry) => entry.category)), new Set(CAPITAL_KOL_CATEGORIES));
-  assert.equal(new Set(entries.map((entry) => entry.id)).size, 31);
-  assert.equal(new Set(entries.map((entry) => entry.handle.toLowerCase())).size, 31);
-  assert.equal(new Set(entries.map((entry) => entry.expectedXUserId)).size, 31);
+  assert.equal(new Set(entries.map((entry) => entry.id)).size, 32);
+  assert.equal(new Set(entries.map((entry) => entry.handle.toLowerCase())).size, 32);
+  assert.equal(new Set(entries.map((entry) => entry.expectedXUserId)).size, 32);
   assert.deepEqual(ADDED_HANDLES.filter((handle) => !findReviewedCapitalKolByHandle(handle)), []);
   for (const entry of entries) {
     assert.match(entry.handle, /^[A-Za-z0-9_]{1,15}$/u);
@@ -93,7 +93,7 @@ test("catalog exposes deterministic versioned manifest and integrity result", ()
   const manifest = getCapitalKolCatalogManifest();
   assert.equal(manifest.version, CAPITAL_KOL_CATALOG_VERSION);
   assert.equal(manifest.hash, CAPITAL_KOL_CATALOG_HASH);
-  assert.equal(manifest.count, 31);
+  assert.equal(manifest.count, 32);
   assert.equal(manifest.publishedAt, CAPITAL_KOL_CATALOG_PUBLISHED_AT);
   assert.match(manifest.hash, /^sha256:[a-f0-9]{64}$/u);
   assert.equal(manifest.followersPolicy, "display_only");

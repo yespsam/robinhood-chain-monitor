@@ -23,6 +23,11 @@ const identities = {
     portalImplementation: "0x7a94f37b61a82c395f9812CF266b444783cC5e8c",
     portalImplementationCodeHash: "0x3db27f98826706ac5ddedb919594d4670151874482dff23e31d2186858635194",
   },
+  v527: {
+    portalVersion: "v5.27.2",
+    portalImplementation: "0x6FC1ac64c90A5A6d9E7EFc0d4064452AF3FC9968",
+    portalImplementationCodeHash: "0x90b3b19ddc87293d5bbd33167d7d977adf1cda5c078549b8cada05c6f9b3fa75",
+  },
 };
 const proof = (identity, head) => ({
   ...identity, configurationVerifiedAtBlock: head, finalizedHead: head,
@@ -50,6 +55,11 @@ test("Flap proof pins admit only complete tuples in established evidence windows
     ["v526", 128_914_178, false],
     ["v526", 128_914_179, true],
     ["v526", 128_920_137, true],
+    ["v526", 129_871_643, true],
+    ["v526", 129_871_644, false],
+    ["v527", 129_871_643, false],
+    ["v527", 129_871_644, true],
+    ["v527", 130_645_000, true],
   ]) {
     const value = proof(identities[version], head);
     const before = structuredClone(value);
@@ -59,9 +69,9 @@ test("Flap proof pins admit only complete tuples in established evidence windows
 });
 
 test("Flap proof pins reject stitched identities, unknown versions and missing fields", () => {
-  const valid = proof(identities.v526, 128_914_179);
+  const valid = proof(identities.v527, 129_871_644);
   for (const [field, value] of [
-    ["portalVersion", "v5.27.0"],
+    ["portalVersion", "v5.28.0"],
     ["portalVersion", identities.v524.portalVersion],
     ["portalImplementation", identities.v524.portalImplementation],
     ["portalImplementationCodeHash", identities.v524.portalImplementationCodeHash],
@@ -75,7 +85,7 @@ test("Flap proof pins reject stitched identities, unknown versions and missing f
 });
 
 test("Flap proof pins require equal nonnegative safe integer verification heights", () => {
-  const valid = proof(identities.v526, 128_914_179);
+  const valid = proof(identities.v527, 129_871_644);
   for (const head of [-1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, "128501895", null]) {
     assert.equal(isVerifiedFlapPortalEvidenceIdentity(proof(identities.v525, head)), false, String(head));
   }

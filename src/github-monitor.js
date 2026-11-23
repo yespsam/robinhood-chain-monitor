@@ -1,5 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import https from "node:https";
+import { Resolver } from "node:dns/promises";
 import { createHash } from "node:crypto";
 import { isTerminalAlertSuppression, sendAlerts } from "./alerts.js";
 import { extractChainSupportSignals } from "./chain-support.js";
@@ -163,6 +165,12 @@ export const DEFAULT_REPOSITORIES = [
     uniswapOfficial: true,
     officialEvidence: { source: "official_uniswap_github", url: "https://github.com/Uniswap" },
   },
+  ...["bnb-chain/bsc", "bnb-chain/BEPs", "bnb-chain/bsc-genesis-contract"].map((repository) => ({
+    repository,
+    launchpad: "BSC",
+    sourceTrust: "official_verified",
+    officialEvidence: { source: "official_bnb_chain_github", url: "https://github.com/bnb-chain" },
+  })),
   { repository: "hodldance/hodl-dance", launchpad: "HODL.DANCE", sourceTrust: "official_verified", baselineOnly: true },
   { repository: "moonsaleapp/moonsaleapp", launchpad: "MoonSale", sourceTrust: "official_verified", baselineOnly: true },
   { repository: "huksdotfun/bsc-contracts", launchpad: "Huks.fun", sourceTrust: "official_verified", baselineOnly: true },
@@ -210,6 +218,9 @@ export const PRIORITY_REPOSITORIES = new Set([
   "binance/binance-cli",
   "binance/binance-spot-api-docs",
   "binance/binance-api-swagger",
+  "bnb-chain/bsc",
+  "bnb-chain/beps",
+  "bnb-chain/bsc-genesis-contract",
   "xai-org/grok-build",
   "xai-org/plugin-marketplace",
   "xai-org/xai-sdk-python",
@@ -499,7 +510,10 @@ const GITHUB_CHAIN_SUPPORT_HEADLINE = /\b(?:support(?:s|ed|ing)?|deploy(?:s|ed|i
 const GITHUB_CHAIN_METADATA_NOISE_LINE = /^\s*["']?(?:_[a-z0-9]+|mined(?:at|for|zerobytes)|schemaversion)["']?\s*[:=]/i;
 const GITHUB_TRANSPORT_FAILURE = /(?:fetch failed|network|timed?\s*out|timeout|aborted|EADDRNOTAVAIL|ECONN[A-Z]*|ENETUNREACH|EHOSTUNREACH|socket\s+hang\s+up)/i;
 const GITHUB_TRANSPORT_RETRY_MAX_MS = 60_000;
-const GITHUB_FOCUS3_OFFICIAL_REPOSITORY = /^(?:flap-sh|four-meme-community|uniswap)\//i;
+const GITHUB_FOCUS3_OFFICIAL_REPOSITORY = /^(?:flap-sh|four-meme-community|binance|uniswap)\//i;
+const GITHUB_TELEGRAM_FOCUS_REPOSITORY = /^(?:flap-sh|four-meme-community|binance)\//i;
+const GITHUB_DNS_CACHE_TTL_MS = 60_000;
+const GITHUB_DNS_CACHE = new Map();
 
 function boundedInterval(value, fallback, minimum, maximum) {
   const parsed = Number(value);
@@ -571,6 +585,91 @@ function responseRetryAfterMs(response, currentTime = Date.now()) {
 
 function requestTimeoutMs(config) {
   return Math.max(1_000, Number(config?.githubRequestTimeoutMs) || 8_000);
+}
+
+export function createGithubDnsLookup(dnsServers, resolverFactory = () => new Resolver()) {
+  const configuredServers = [...new Set((dnsServers || []).map((server) => String(server).trim()).filter(Boolean))];
+  if (!configuredServers.length) throw new Error("GitHub DNS lookup requires at least one DNS server");
+  const serversKey = configuredServers.join(",");
+  return (hostname, options, callback) => {
+    const done = typeof options === "function" ? options : callback;
+    const lookupOptions = typeof options === "object" && options !== null ? options : {};
+    const family = Number(lookupOptions.family) === 6 ? 6 : 4;
+    const cacheKey = `${serversKey}|${hostname.toLowerCase()}|${family}`;
+    const deliver = (addresses) => {
+      if (lookupOptions.all) done(null, addresses.map((address) => ({ ...address })));
+      else done(null, addresses[0].address, addresses[0].family);
+    };
+    const cached = GITHUB_DNS_CACHE.get(cacheKey);
+    if (cached?.addresses && cached.expiresAt > Date.now()) {
+      deliver(cached.addresses);
+      return;
+    }
+    if (cached?.pending) {
+      void cached.pending.then(deliver, done);
+      return;
+    }
+
+    const resolver = resolverFactory();
+    try {
+      resolver.setServers(configuredServers);
+      resolver.setTimeout?.(2_000);
+      resolver.setTries?.(2);
+    } catch (error) {
+      done(error);
+      return;
+    }
+    const resolve = family === 6 ? resolver.resolve6.bind(resolver) : resolver.resolve4.bind(resolver);
+    const pending = Promise.resolve().then(() => resolve(hostname)).then((values) => {
+      const addresses = values.map((address) => ({ address, family }));
+      if (!addresses.length) throw new Error(`No GitHub DNS records returned for ${hostname}`);
+      GITHUB_DNS_CACHE.set(cacheKey, { addresses, expiresAt: Date.now() + GITHUB_DNS_CACHE_TTL_MS });
+      return addresses;
+    }).catch((error) => {
+      if (GITHUB_DNS_CACHE.get(cacheKey)?.pending === pending) GITHUB_DNS_CACHE.delete(cacheKey);
+      throw error;
+    });
+    GITHUB_DNS_CACHE.set(cacheKey, { pending });
+    void pending.then(deliver, done);
+  };
+}
+
+async function githubDomainFetch(url, { headers, signal } = {}, config) {
+  const parsed = new URL(url);
+  const dnsServers = config?.githubPublicDnsServers || [];
+  if (!dnsServers.length || !["github.com", "www.github.com"].includes(parsed.hostname.toLowerCase())) {
+    return fetch(url, { headers, signal });
+  }
+  return new Promise((resolve, reject) => {
+    const request = https.request(parsed, {
+      method: "GET",
+      headers,
+      signal,
+      agent: false,
+      lookup: createGithubDnsLookup(dnsServers),
+    }, (response) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+      response.on("error", reject);
+      response.on("end", () => {
+        const responseHeaders = response.headers || {};
+        const body = Buffer.concat(chunks).toString("utf8");
+        resolve({
+          status: Number(response.statusCode) || 0,
+          ok: Number(response.statusCode) >= 200 && Number(response.statusCode) < 300,
+          headers: {
+            get(name) {
+              const value = responseHeaders[String(name).toLowerCase()];
+              return Array.isArray(value) ? value.join(", ") : value ?? null;
+            },
+          },
+          async text() { return body; },
+        });
+      });
+    });
+    request.on("error", reject);
+    request.end();
+  });
 }
 
 function githubRestCircuit(config) {
@@ -667,10 +766,10 @@ async function githubCommitPage(config, repository, page = 1, { etag = null, wit
 const decodeXml = (value = "") => value.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
 
 async function publicText(url, config) {
-  const response = await fetch(url, {
+  const response = await githubDomainFetch(url, {
     headers: { "user-agent": "robinhood-launchpad-monitor" },
     signal: AbortSignal.timeout(requestTimeoutMs(config)),
-  });
+  }, config);
   if (!response.ok) {
     const error = new Error(`${url} returned HTTP ${response.status}`);
     error.status = response.status;
@@ -684,10 +783,10 @@ async function githubAtom(config, repository, branch, { etag = null } = {}) {
   const url = `https://github.com/${repository}/commits/${branch}.atom`;
   const headers = { "user-agent": "robinhood-launchpad-monitor" };
   if (etag) headers["if-none-match"] = etag;
-  const response = await fetch(url, {
+  const response = await githubDomainFetch(url, {
     headers,
     signal: AbortSignal.timeout(requestTimeoutMs(config)),
-  });
+  }, config);
   if (response.status === 304) {
     return {
       commits: [],
@@ -1341,7 +1440,24 @@ function atomRestFallbackReason(error) {
 }
 
 async function githubCommitRestFallback(config, repository, page, etag, atomError) {
-  const result = await githubCommitPage(config, repository, page, { etag });
+  let result;
+  try {
+    result = await githubCommitPage(config, repository, page, { etag });
+  } catch (fallbackError) {
+    const atomRetryable = Number(atomError?.status) === 503 || isGithubTransportFailure(atomError);
+    const restRateLimited = [403, 429].includes(Number(fallbackError?.status))
+      || fallbackError?.code === "GITHUB_REST_CIRCUIT_OPEN";
+    if (atomRetryable && restRateLimited) {
+      // A REST rate limit/circuit is not evidence that the independent public
+      // Atom feed is unavailable. Keep the Atom transport retry instead of
+      // inheriting the REST circuit's potentially hour-long cooldown.
+      if (Number(atomError?.status) === 503 && !(Number(atomError.retryAfterMs) > 0)) {
+        atomError.retryAfterMs = GITHUB_TRANSPORT_RETRY_MAX_MS;
+      }
+      throw atomError;
+    }
+    throw fallbackError;
+  }
   // Preserve the public-feed processing contract: downstream file inspection
   // continues through the public commit patch instead of silently changing the
   // event fields just because the commit list came from REST for this poll.
@@ -2193,6 +2309,7 @@ export function createGithubMonitor(config, dependencies = {}) {
   const startupPullRequestTransportProbePending = new Set();
   let startupTransportProbesInitialized = false;
   const checkLanes = {
+    focus: { runningPromise: null, rerunRequested: false },
     priority: { runningPromise: null, rerunRequested: false },
     regular: { runningPromise: null, rerunRequested: false },
   };
@@ -2410,6 +2527,18 @@ export function createGithubMonitor(config, dependencies = {}) {
     const key = entry.repository.toLowerCase();
     if (startupTransportProbePending.delete(key)) return true;
     const health = repositoryHealth(entry.repository);
+    const REST_RATE_LIMIT_STATUSES = new Set([403, 429]);
+    const REST_RATE_LIMIT_ERROR = /GitHub REST circuit is open|GitHub \/repos\/.* returned HTTP (?:403|429)/i;
+    if (sourceTrust(entry) === "official_verified"
+      && PRIORITY_REPOSITORIES.has(key)
+      && GITHUB_FOCUS3_OFFICIAL_REPOSITORY.test(key)
+      && REST_RATE_LIMIT_STATUSES.has(Number(health?.lastErrorStatus))
+      && REST_RATE_LIMIT_ERROR.test(String(health?.lastError || ""))) {
+      // The unauthenticated REST API circuit must not suppress public commit
+      // Atom polling for the priority platforms; those feeds have an
+      // independent rate limit and remain the preferred source for updates.
+      return true;
+    }
     if (organizationPushChanged(entry, health)) return true;
     const nextAttemptAt = Date.parse(health?.nextAttemptAt || "");
     return !Number.isFinite(nextAttemptAt) || now().getTime() >= nextAttemptAt;
@@ -3098,17 +3227,34 @@ export function createGithubMonitor(config, dependencies = {}) {
     return { commitRead: true, atom, commitApi };
   }
 
-  async function runCheckCycle(priorityOnly) {
+  function isFocusTelegramRepository(entry) {
+    const key = String(entry?.repository || "").toLowerCase();
+    return PRIORITY_REPOSITORIES.has(key)
+      && sourceTrust(entry) === "official_verified"
+      && GITHUB_TELEGRAM_FOCUS_REPOSITORY.test(key);
+  }
+
+  async function runCheckCycle(laneName) {
     try {
       await ensureState();
       const selected = [];
       for (const entry of repositories.values()) {
-        const { repository } = entry;
-        const priority = PRIORITY_REPOSITORIES.has(repository.toLowerCase());
-        if (priorityOnly !== priority) continue;
+        const priority = PRIORITY_REPOSITORIES.has(entry.repository.toLowerCase());
+        const focus = isFocusTelegramRepository(entry);
+        if (laneName === "regular" ? priority : !priority) continue;
+        if (laneName === "focus" ? !focus : laneName === "priority" && focus) continue;
         selected.push(entry);
       }
-      if (priorityOnly) {
+      if (laneName === "focus") {
+        selected.sort((left, right) => {
+          const lastSuccess = (entry) => {
+            const health = repositoryHealth(entry.repository);
+            const timestamp = Date.parse(health?.lastSuccessAt || health?.lastAttemptAt || "");
+            return Number.isFinite(timestamp) ? timestamp : 0;
+          };
+          return lastSuccess(left) - lastSuccess(right);
+        });
+      } else if (laneName === "priority") {
         selected.sort((left, right) => Number(isUnverifiedPonsRepository(left.repository)) - Number(isUnverifiedPonsRepository(right.repository)));
       }
       let healthDirty = false;
@@ -3117,7 +3263,9 @@ export function createGithubMonitor(config, dependencies = {}) {
         await withRepositoryLock(repository, async () => {
           const currentEntry = repositories.get(repository.toLowerCase()) || entry;
           const currentlyPriority = PRIORITY_REPOSITORIES.has(repository.toLowerCase());
-          if (priorityOnly !== currentlyPriority) return;
+          const currentlyFocus = isFocusTelegramRepository(currentEntry);
+          if (laneName === "regular" ? currentlyPriority : !currentlyPriority) return;
+          if (laneName === "focus" ? !currentlyFocus : laneName === "priority" && currentlyFocus) return;
           if (!canAttemptRepository(currentEntry)) return;
           try {
             const outcome = await checkRepository(currentEntry);
@@ -3130,21 +3278,23 @@ export function createGithubMonitor(config, dependencies = {}) {
           }
         });
       };
-      await runBounded(
-        selected,
-        priorityOnly
-          ? Math.max(1, Number(config.githubPriorityPollConcurrency) || PRIORITY_POLL_CONCURRENCY)
-          : regularPollConcurrency,
-        inspect,
-      );
+      const configuredPriorityConcurrency = Math.max(1, Number(config.githubPriorityPollConcurrency) || PRIORITY_POLL_CONCURRENCY);
+      const focusConcurrency = configuredPriorityConcurrency > 1
+        ? Math.max(1, Math.floor(configuredPriorityConcurrency / 2))
+        : 1;
+      const priorityConcurrency = Math.max(0, configuredPriorityConcurrency - focusConcurrency);
+      const concurrency = laneName === "regular"
+        ? regularPollConcurrency
+        : laneName === "focus" ? focusConcurrency : priorityConcurrency;
+      if (concurrency > 0) await runBounded(selected, concurrency, inspect);
       if (healthDirty) await writeState();
     } catch (error) {
       console.error(`[github] ${error.message}`);
     }
   }
 
-  function check(priorityOnly = false) {
-    const lane = priorityOnly ? checkLanes.priority : checkLanes.regular;
+  function checkLane(laneName) {
+    const lane = checkLanes[laneName];
     if (stopped) return lane.runningPromise || Promise.resolve();
     if (lane.runningPromise) {
       lane.rerunRequested = true;
@@ -3156,12 +3306,31 @@ export function createGithubMonitor(config, dependencies = {}) {
       // zero-delay loop while an upstream source is degraded.
       for (let cycle = 0; cycle < 2 && !stopped; cycle += 1) {
         lane.rerunRequested = false;
-        await runCheckCycle(priorityOnly);
+        await runCheckCycle(laneName);
         if (!lane.rerunRequested) break;
       }
       lane.rerunRequested = false;
     })().finally(() => { lane.runningPromise = null; });
     return lane.runningPromise;
+  }
+
+  let combinedPriorityPromise = null;
+  function check(priorityOnly = false) {
+    if (!priorityOnly) return checkLane("regular");
+    if (stopped) return combinedPriorityPromise || Promise.all([
+      checkLanes.focus.runningPromise,
+      checkLanes.priority.runningPromise,
+    ].filter(Boolean));
+    if (combinedPriorityPromise) {
+      checkLanes.focus.rerunRequested = true;
+      checkLanes.priority.rerunRequested = true;
+      return combinedPriorityPromise;
+    }
+    combinedPriorityPromise = Promise.all([
+      checkLane("focus"),
+      checkLane("priority"),
+    ]).finally(() => { combinedPriorityPromise = null; });
+    return combinedPriorityPromise;
   }
 
   async function runOrganizationCheck() {
@@ -3449,6 +3618,7 @@ export function createGithubMonitor(config, dependencies = {}) {
 
   let timer = null;
   let priorityTimer = null;
+  let focusTimer = null;
   let priorityPhaseTimer = null;
   let organizationTimer = null;
   let pullRequestTimer = null;
@@ -3459,13 +3629,25 @@ export function createGithubMonitor(config, dependencies = {}) {
     void checkPullRequests();
     timer = setIntervalImpl(() => check(false), regularSchedulerIntervalMs);
     timer.unref();
-    // Keep both startup probes immediate, then spread recurring repository
-    // traffic evenly across the minute without weakening either lane.
+    // Keep startup probes immediate, then let official Four/Flap/Binance
+    // repositories and other priority repositories progress on independent
+    // timers and worker pools. Their combined worker count stays bounded by
+    // githubPriorityPollConcurrency.
     priorityPhaseTimer = setTimeoutImpl(() => {
       priorityPhaseTimer = null;
       if (stopped) return;
-      const checking = check(true);
-      priorityTimer = setIntervalImpl(() => check(true), priorityPollIntervalMs);
+      const focusConfigured = [...repositories.values()].some(isFocusTelegramRepository);
+      const checking = focusConfigured
+        ? Promise.all([checkLane("focus"), checkLane("priority")])
+        : check(true);
+      if (focusConfigured) {
+        focusTimer = setIntervalImpl(() => checkLane("focus"), priorityPollIntervalMs);
+        focusTimer.unref();
+      }
+      priorityTimer = setIntervalImpl(
+        () => focusConfigured ? checkLane("priority") : check(true),
+        priorityPollIntervalMs,
+      );
       priorityTimer.unref();
       return checking;
     }, GITHUB_PRIORITY_PHASE_OFFSET_MS);
@@ -3493,19 +3675,23 @@ export function createGithubMonitor(config, dependencies = {}) {
     stop: () => {
       if (stopPromise) return stopPromise;
       stopped = true;
+      checkLanes.focus.rerunRequested = false;
       checkLanes.priority.rerunRequested = false;
       checkLanes.regular.rerunRequested = false;
       if (timer) clearIntervalImpl(timer);
       if (priorityTimer) clearIntervalImpl(priorityTimer);
+      if (focusTimer) clearIntervalImpl(focusTimer);
       if (priorityPhaseTimer) clearTimeoutImpl(priorityPhaseTimer);
       if (organizationTimer) clearIntervalImpl(organizationTimer);
       if (pullRequestTimer) clearIntervalImpl(pullRequestTimer);
       timer = null;
       priorityTimer = null;
+      focusTimer = null;
       priorityPhaseTimer = null;
       organizationTimer = null;
       pullRequestTimer = null;
       const inFlight = [
+        checkLanes.focus.runningPromise,
         checkLanes.priority.runningPromise,
         checkLanes.regular.runningPromise,
         organizationPromise,

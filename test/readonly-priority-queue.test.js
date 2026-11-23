@@ -3,6 +3,24 @@ import assert from 'node:assert/strict';
 import { enqueueReadonly,readonlyQueueSnapshot } from '../src/readonly-priority-queue.js';
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
+test('kline waits ahead of address notes but not ahead of a priority-1 quote or an exit', async () => {
+  const scheduler = {}, calls = [];
+  const note = enqueueReadonly(scheduler, () => calls.push('notes'), { kind: 'address:notes', priority: 0 });
+  const kline = enqueueReadonly(scheduler, () => calls.push('kline'), { kind: 'market:kline', priority: 0 });
+  const quote = enqueueReadonly(scheduler, () => calls.push('quote'), { kind: 'token:info', priority: 1 });
+  const exit = enqueueReadonly(scheduler, () => calls.push('exit'), { kind: 'token:info', priority: 2 });
+  await Promise.all([note, kline, quote, exit]);
+  assert.deepEqual(calls, ['exit', 'quote', 'kline', 'notes']);
+  const aged = {}, later = [];
+  let clock = 0;
+  const oldNote = enqueueReadonly(aged, () => later.push('notes'), { kind: 'address:notes', priority: 0, now: () => clock });
+  clock = 90000;
+  const freshQuote = enqueueReadonly(aged, () => later.push('quote'), { kind: 'token:info', priority: 1, now: () => clock - 1 });
+  const freshKline = enqueueReadonly(aged, () => later.push('kline'), { kind: 'market:kline', priority: 1, now: () => clock });
+  await Promise.all([oldNote, freshKline, freshQuote]);
+  assert.deepEqual(later, ['kline', 'notes', 'quote']);
+});
+
 test('pending exit quotes overtake research but never interrupt an active request', async () => {
   const scheduler = {}, calls = []; let release;
   const first = enqueueReadonly(scheduler, () => new Promise(resolve => { calls.push('active'); release = resolve; }));

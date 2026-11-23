@@ -2158,6 +2158,21 @@ function focusTitle(event, language = "zh") {
   else if (event?.type === "github_monitor_gap") label = zh ? "GitHub 缺口" : "GitHub gap";
   else if (event?.type === "github_repository_discovered") label = zh ? "新仓库" : "New repository";
   else if (event?.type === "github_repository_verified") label = zh ? "仓库认证" : "Repository verified";
+  else if (event?.type === "platform_capability_update" && event?.platform?.id === "hyperevm") {
+    const changes = event?.changes || {};
+    const bodyText = list(changes.documentBodyChanges).flatMap((change) => [...list(change?.added), ...list(change?.removed)]).join(" ");
+    if (list(changes.newChains).length || list(changes.chainStageChanges).length) {
+      label = zh ? "链/网络能力更新" : "Chain/network capability update";
+    } else if (list(changes.newContracts).length) {
+      label = zh ? "官方合约目录变化" : "Official contract-directory change";
+    } else if (/launchpad|launch\s+platform|launcher|factory/i.test(bodyText)) {
+      label = zh ? "生态/发射台线索（待核验）" : "Ecosystem/launchpad lead (unverified)";
+    } else if (list(changes.newPages).length) {
+      label = zh ? "新官方文档线索" : "New official-document lead";
+    } else {
+      label = zh ? "官方生态文档变化（待核验）" : "Official ecosystem-doc change (unverified)";
+    }
+  }
   else if (event?.type === "platform_capability_update") {
     const pool = list(event?.changes?.newFlapPools).length || list(event?.changes?.flapPoolChanges).length;
     label = pool ? (zh ? "底池更新" : "Pool update") : (zh ? "能力更新" : "Capability update");
@@ -2173,7 +2188,8 @@ function focusTitle(event, language = "zh") {
   else if (event?.type === "ai_official_update") label = zh ? "产品更新" : "Product update";
   else if (event?.type === "bsc_launchpad_update") {
     const tracked = flapTrackedPoolTokenDetails(event);
-    if (tracked) label = zh ? `第 ${tracked.ordinal}/${tracked.target} 个代币` : `Token ${tracked.ordinal}/${tracked.target}`;
+    if (event?.kind === "flap_pool_launch") label = "Pool Launch";
+    else if (tracked) label = zh ? `第 ${tracked.ordinal}/${tracked.target} 个代币` : `Token ${tracked.ordinal}/${tracked.target}`;
     else if (event?.featureFirstToken || event?.officialFirstToken) label = zh ? "首个代币" : "First token";
     else if (["new_launchpad", "new_factory"].includes(event?.kind)) label = zh ? "新发射台" : "New launchpad";
     else label = zh ? "新模式" : "New mode";
@@ -2654,6 +2670,15 @@ function bscModeFacts(event) {
 function bscFocusKey(event, language) {
   if (event?.type !== "bsc_launchpad_update") return null;
   const zh = language === "zh";
+  if (event?.kind === "flap_pool_launch") {
+    const launch = event.poolLaunches?.[0] || {};
+    const token = event.tokens?.[0]?.metadata || {};
+    const label = token.name || token.symbol || launch.name || launch.symbol || (zh ? "未命名代币" : "Unnamed token");
+    const graduated = launch.graduated === true ? (zh ? "已毕业" : "graduated") : (zh ? "未毕业" : "not graduated");
+    return zh
+      ? `Pool Launch ${label} · ${launch.quoteLabel || "报价未取得"} · ${graduated}`
+      : `Pool Launch ${label} · ${launch.quoteLabel || "quote n/a"} · ${graduated}`;
+  }
   const tracked = flapTrackedPoolTokenDetails(event);
   if (tracked) return zh
     ? `${tracked.quoteSymbol} 底池第 ${tracked.ordinal}/${tracked.target} 个代币 ${tracked.tokenLabel || "未命名代币"}`
@@ -2789,6 +2814,27 @@ function focusKey(event, changeModel, language = "zh", priority = null) {
       : `Binance confirmed a security incident${actions.length ? ` and suspended ${actions.join("/")}` : ""}`;
   }
   if (isPonFunRenderEvent(event)) return ponFunFocusKey(event, language);
+  if (event?.type === "platform_capability_update" && event?.platform?.id === "hyperevm") {
+    const changes = event.changes || {};
+    const bodyChange = list(changes.documentBodyChanges)[0];
+    if (bodyChange) {
+      const details = [
+        ...list(bodyChange.added).slice(0, 1).map((line) => `${zh ? "新增" : "Added"}: ${oneLine(line, 105)}`),
+        ...list(bodyChange.removed).slice(0, 1).map((line) => `${zh ? "移除" : "Removed"}: ${oneLine(line, 105)}`),
+      ].join(zh ? "；" : "; ");
+      return `${focusTitle(event, language)}${details ? ` · ${details}` : ""}`;
+    }
+    const chain = list(changes.newChains)[0] || list(changes.chainStageChanges)[0]?.after;
+    if (chain) {
+      const name = chain.name || "HyperEVM";
+      const chainId = chain.chainId ?? chain.id;
+      const environment = chain.environment === "mainnet" ? (zh ? "主网" : "mainnet")
+        : chain.environment === "testnet" ? (zh ? "测试网" : "testnet") : "";
+      const stage = chain.stage || chain.toStage;
+      return `${focusTitle(event, language)} · ${name}${chainId != null ? ` (${chainId})` : ""}${environment ? ` ${environment}` : ""}${stage ? ` · ${stage}` : ""}`;
+    }
+    return focusTitle(event, language);
+  }
   const flapQuote = flapQuotePairDetails(event);
   if (flapQuote) {
     const labels = flapQuote.assets.map((asset) => [asset.symbol, asset.name].filter(Boolean).join(" · "));
@@ -3144,6 +3190,14 @@ function focusEvidence(event) {
 
   const token = firstTokenAddress(event);
   if (event?.type === "bsc_launchpad_update") {
+    if (event?.kind === "flap_pool_launch") {
+      const launch = event.poolLaunches?.[0] || {};
+      const token = launch.token || event.tokens?.[0]?.token;
+      return [
+        token ? { zh: `CA ${token}`, en: `CA ${token}` } : null,
+        launch.pool ? { zh: `池 ${launch.pool}`, en: `Pool ${launch.pool}` } : null,
+      ].filter(Boolean).slice(0, 2);
+    }
     const tracked = flapTrackedPoolTokenDetails(event);
     if (tracked) return [{ zh: `CA ${tracked.token}`, en: `CA ${tracked.token}` }];
     const mode = bscModeFacts(event);
@@ -3366,6 +3420,13 @@ function fomoStage(event, language) {
 
 function bscStage(event, language) {
   const zh = language === "zh";
+  if (event?.kind === "flap_pool_launch") return event?.liveEligible === true
+    ? (zh
+      ? "Portal FlapDirectLaunched；可进入确认型模拟盘，实盘沿用现有闸门"
+      : "Portal FlapDirectLaunched; eligible for the confirmed paper session under existing live gates")
+    : (zh
+      ? "Portal FlapDirectLaunched；仅观察，不自动买入"
+      : "Portal FlapDirectLaunched; observe only, no automatic buy");
   const tracked = flapTrackedPoolTokenDetails(event);
   if (tracked) return zh
     ? `官方 TokenCreated + ${tracked.quoteSymbol} 配对；非自动交易`
@@ -4428,7 +4489,8 @@ function usesLocalStructuredChineseFocus(event) {
 }
 
 function usesLocalStructuredBilingualFocus(event) {
-  return event?.type === "fomo_monitor_health_update"
+  return (event?.type === "platform_capability_update" && event?.platform?.id === "hyperevm")
+    || event?.type === "fomo_monitor_health_update"
     || Boolean(flapTrackedPoolTokenDetails(event))
     || Boolean(publishedFomoCallDetails(event))
     || isPonFunRenderEvent(event)

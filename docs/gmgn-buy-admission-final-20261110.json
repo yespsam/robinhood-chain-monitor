@@ -1,0 +1,996 @@
+{
+  "version": "gmgn_buy_admission_final_v1",
+  "snapshotAt": "2026-11-09T18:25:23.304Z",
+  "snapshotLocalTime": "2026-11-10T02:25:23.304+08:00",
+  "sourceSnapshot": "/tmp/gmgn-admission-final-20261110-state.json",
+  "sourceSnapshotMode": "0600",
+  "collection": {
+    "strategyStateReads": 1,
+    "additionalGmgnRequests": 0,
+    "tradeRequests": 0,
+    "codeChanges": false,
+    "localLogReads": true
+  },
+  "runtime": {
+    "status": "ok",
+    "enabled": true,
+    "liveMirror": {
+      "enabled": true,
+      "chains": [
+        "bsc",
+        "sol"
+      ],
+      "signalSource": "paper-atm-confirmed-pvp-v2",
+      "strategyAllowlist": [
+        "*"
+      ]
+    },
+    "entryGuard": {
+      "allowed": true,
+      "reasons": []
+    },
+    "evidenceTierGate": true,
+    "accountVariant": null,
+    "lastError": null
+  },
+  "entryDiagnostics": {
+    "version": "paper_entry_diagnostics_v1",
+    "detected": 308,
+    "verifiedCatalyst": 0,
+    "externalStructure": 188,
+    "quoteResearchReady": 0,
+    "quoteScheduled": 0,
+    "eligible": 0,
+    "blockers": [
+      {
+        "code": "safety_blocked",
+        "label": "明确不可交易或安全检查未通过",
+        "count": 107
+      },
+      {
+        "code": "catalyst",
+        "label": "缺少有效原文催化或核实盈利钱包",
+        "count": 72
+      },
+      {
+        "code": "chart_missing",
+        "label": "买点数据未取得，尚不能判断有无机会",
+        "count": 51
+      },
+      {
+        "code": "research_excluded",
+        "label": "未进入常规 K 线研究：阶段、流动性或成交量条件未达标",
+        "count": 29
+      },
+      {
+        "code": "safety_data",
+        "label": "该入口所需安全字段尚未补齐",
+        "count": 17
+      },
+      {
+        "code": "chart_stale",
+        "label": "买点K线已过期，等待刷新",
+        "count": 17
+      },
+      {
+        "code": "reentry",
+        "label": "上次亏损后的重入证据不足",
+        "count": 12
+      },
+      {
+        "code": "chart_incomplete",
+        "label": "买点K线不足或断档，等待补齐",
+        "count": 2
+      },
+      {
+        "code": "setup",
+        "label": "买盘、形态或其他入场条件尚未成立",
+        "count": 1
+      }
+    ],
+    "note": "按链与 CA 去重的当前快照；每个候选只计一个主要状态。没有有效候选不代表市场没有机会，调度与条件通过均不等于成交。"
+  },
+  "stageSnapshot": [
+    {
+      "chain": "robinhood",
+      "observedCandidates": 94,
+      "freshMarket": 94,
+      "freshClosedCharts": 0,
+      "structuralSignals": 0,
+      "quoteReady": 0,
+      "mainQuoteReady": 0,
+      "comparisonQuoteReady": 0,
+      "liveQuoteTargets": 0
+    },
+    {
+      "chain": "sol",
+      "observedCandidates": 105,
+      "freshMarket": 105,
+      "freshClosedCharts": 1,
+      "structuralSignals": 0,
+      "quoteReady": 0,
+      "mainQuoteReady": 0,
+      "comparisonQuoteReady": 0,
+      "liveQuoteTargets": 0
+    },
+    {
+      "chain": "bsc",
+      "observedCandidates": 109,
+      "freshMarket": 109,
+      "freshClosedCharts": 0,
+      "structuralSignals": 0,
+      "quoteReady": 0,
+      "mainQuoteReady": 0,
+      "comparisonQuoteReady": 0,
+      "liveQuoteTargets": 0
+    },
+    {
+      "chain": "base",
+      "observedCandidates": 0,
+      "freshMarket": 0,
+      "freshClosedCharts": 0,
+      "structuralSignals": 0,
+      "quoteReady": 0,
+      "mainQuoteReady": 0,
+      "comparisonQuoteReady": 0,
+      "liveQuoteTargets": 0
+    },
+    {
+      "chain": "eth",
+      "observedCandidates": 0,
+      "freshMarket": 0,
+      "freshClosedCharts": 0,
+      "structuralSignals": 0,
+      "quoteReady": 0,
+      "mainQuoteReady": 0,
+      "comparisonQuoteReady": 0,
+      "liveQuoteTargets": 0
+    }
+  ],
+  "crossChecks": {
+    "completeFreshExternalChartCandidates": 1,
+    "completeFreshExternalIdentities": [
+      {
+        "chain": "sol",
+        "address": "6kmkcwKxxmoREhkxrbBvwDY3N2KSfpdMMtWtNoPpump",
+        "symbol": "LASTTRUCK",
+        "price": 0.000415757
+      }
+    ],
+    "externalRouteSignalReadyCandidates": 0,
+    "paperEligibleCandidates": 0,
+    "derivedEvidenceTiers": {
+      "shadow_only": 304,
+      "base": 4
+    },
+    "interpretation": "当前只有 1 个完整新鲜外盘窗口；两个例子分别是完整新鲜但形态未成立，以及时间尚新但真实源 K 线断档。冻结 86 的来源补查覆盖与此刻动态候选新鲜窗口是不同统计口径。"
+  },
+  "chartHealth": {
+    "version": "chart_health_v2",
+    "alert": false,
+    "warmup": false,
+    "evaluated": 308,
+    "chartReady": 1,
+    "klineOk": 21,
+    "legacyChartReady": 1,
+    "externalWindowReady": 1,
+    "hotLegacyChartReady": 1,
+    "hotExternalWindowReady": 1,
+    "chartReadinessNote": "chartReady 保留旧图表或外盘窗口任一通过的兼容计数；externalWindowReady 才是外盘实际收盘窗口校验通过数，仍不代表形态或买入条件通过。",
+    "notRequested": 286,
+    "notRequestedRatio": 0.9285714285714286,
+    "fetched": 22,
+    "fetchedUnavailable": 1,
+    "fetchedUnavailableRatio": 0.045454545454545456,
+    "sourceUnavailable": 1,
+    "sourceUnavailableRatio": 0.045454545454545456,
+    "staleClosedBars": 18,
+    "insufficientClosedBars": 2,
+    "hotCount": 3,
+    "hotFetched": 3,
+    "hotNotRequested": 0,
+    "hotRequestCoverageRate": 1,
+    "hotKlineOk": 3,
+    "hotChartReady": 1,
+    "hotKlineFresh": 3,
+    "hotKlineStale": 0,
+    "hotKlineUnknown": 0,
+    "hotKlineFreshRate": 1,
+    "hotKlineMaxClosedAgeMs": 83304,
+    "hotKlineFreshnessMaxAgeMs": 120000,
+    "hotChartReadyRate": 0.3333333333333333,
+    "chartReadyRate": 0.003246753246753247,
+    "klineOkRate": 0.06818181818181818,
+    "funnelChartReady": 0,
+    "funnelOhlcvReady": 1,
+    "chartDispatchCount": 78,
+    "chartCacheCount": 32,
+    "cachedUnavailable": 3,
+    "queueWaitMedianMs": 3292,
+    "queueWaitMaxMs": 43664,
+    "queueSamples": 40,
+    "note": "未请求的广谱候选单独计数。确认型漏斗 chartReady 是连续报价确认，ohlcvReady 才是 K 线结构。不代表可以开仓。"
+  },
+  "hotCandidates": [
+    {
+      "chain": "bsc",
+      "address": "0x3db2114a7abd610efa450384a8d8aeb4b3107777",
+      "symbol": "我靠",
+      "marketLeader": null,
+      "watchSince": "2026-11-09T18:25:14.220Z",
+      "watchUntil": "2026-11-09T18:27:14.220Z",
+      "chartClosedAt": "2026-11-09T18:24:00.000Z"
+    },
+    {
+      "chain": "sol",
+      "address": "6kmkcwKxxmoREhkxrbBvwDY3N2KSfpdMMtWtNoPpump",
+      "symbol": "LASTTRUCK",
+      "marketLeader": null,
+      "watchSince": "2026-11-09T18:23:44.420Z",
+      "watchUntil": "2026-11-09T18:25:44.420Z",
+      "chartClosedAt": "2026-11-09T18:25:00.000Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xdc45b71d7203c2e8baafc43a19bca0eb993bb54e",
+      "symbol": "DARK",
+      "marketLeader": null,
+      "watchSince": "2026-11-09T18:23:37.249Z",
+      "watchUntil": "2026-11-09T18:25:37.249Z",
+      "chartClosedAt": "2026-11-09T18:24:00.000Z"
+    }
+  ],
+  "hotFreshnessCaveat": "本快照热门源 K 线时间新鲜度为 3/3（120秒统计），实际完整外盘窗口仅 1/3；这是单一时点，不能推断所有时刻 3/3 或把它等同买入资格。",
+  "commitPolicy": {
+    "active": true,
+    "source": "src/paper-strategy-engine.js:875",
+    "gateSource": "src/paper-chase-gate.js:31",
+    "narrativeAdmissionGateEnabled": false,
+    "behavior": "外盘结构可在无叙事时进入研究，但实际主账本提交前仍调用 paperChaseGate；shadow_only 不占主盘现金，突破/趋势还需叙事及控盘。当前样本已在更早形态/窗口条件失败，派生主账本 gate 仅指出后续必经门槛，不代表新发生的下单拒绝。"
+  },
+  "ledgerDelta": {
+    "baselineAt": "2026-11-09T17:53:29.086Z",
+    "previousSnapshotAt": "2026-11-09T18:16:40.971Z",
+    "paper": {
+      "beforeTradeCount": 392,
+      "afterTradeCount": 392,
+      "newTrades": 0,
+      "cashUsd": 135.36608421185284,
+      "realizedPnlUsd": -101.40646925385492
+    },
+    "live": {
+      "positions": 1,
+      "realizedBuckets": 1,
+      "orderRows": 1,
+      "latestOrderEventAt": "2026-11-03T01:47:49.792Z",
+      "orderEventsSinceBaseline": 0,
+      "orderEventsSincePreviousSnapshot": 0,
+      "decisionRows": 14,
+      "latestDecisionAt": "2026-11-03T01:47:49.794Z",
+      "decisionEventsSinceBaseline": 0,
+      "files": [
+        {
+          "file": "data/live-gmgn-ledger.json",
+          "modifiedAt": "2026-11-03T01:47:49.793Z",
+          "sizeBytes": 6316,
+          "modifiedSinceBaseline": false
+        },
+        {
+          "file": "data/live-orders.jsonl",
+          "modifiedAt": "2026-11-03T01:47:49.792Z",
+          "sizeBytes": 226,
+          "modifiedSinceBaseline": false
+        },
+        {
+          "file": "data/live-decisions.jsonl",
+          "modifiedAt": "2026-11-03T01:47:49.795Z",
+          "sizeBytes": 4977,
+          "modifiedSinceBaseline": false
+        },
+        {
+          "file": "data/logs/dashboard.err.log",
+          "modifiedAt": "2026-11-03T01:20:52.740Z",
+          "sizeBytes": 3295,
+          "modifiedSinceBaseline": false
+        },
+        {
+          "file": "data/logs/dashboard.out.log",
+          "modifiedAt": "2026-11-09T18:10:33.187Z",
+          "sizeBytes": 14060,
+          "modifiedSinceBaseline": true
+        }
+      ],
+      "note": "live orders/decisions/ledger 均最后写于 Nov 3，本次检查没有新增订单或账本写入；旧日志错误不当作本次拦截。"
+    }
+  },
+  "quoteAvailability": {
+    "currentCandidateQuoteReady": 0,
+    "currentCandidateScheduled": 0,
+    "quoteLease": null,
+    "hotQuoteResearch": {
+      "version": "bounded_market_leader_v2",
+      "lease": null,
+      "target": null,
+      "note": "热门外盘最多 45 秒、3 次普通优先级报价预热；样本间隔至少 5 秒，结束后休息 45 秒；不占已合格入口、不直接授予买入许可"
+    },
+    "exitMonitor": {
+      "running": true,
+      "intervalMs": 1000,
+      "lastCheckedAt": "2026-11-09T18:25:23.304Z",
+      "checks": 743,
+      "staleQuotes": 0,
+      "entriesEnabled": true,
+      "lastError": null
+    },
+    "recentPriority2TokenInfo": [
+      {
+        "chain": "bsc",
+        "address": "0xb37e871c790ba7a9e002132e3a08570d92207777",
+        "status": "ok",
+        "completedAt": "2026-11-09T18:25:06.731Z",
+        "requestMs": 1018,
+        "priority": 2
+      },
+      {
+        "chain": "sol",
+        "address": "tV2wVqRjk7ugbQAFs2MAMxNF7HmuqUwgoFaQgUfpump",
+        "status": "ok",
+        "completedAt": "2026-11-09T18:25:08.368Z",
+        "requestMs": 1228,
+        "priority": 2
+      },
+      {
+        "chain": "bsc",
+        "address": "0xb37e871c790ba7a9e002132e3a08570d92207777",
+        "status": "ok",
+        "completedAt": "2026-11-09T18:25:09.457Z",
+        "requestMs": 1073,
+        "priority": 2
+      },
+      {
+        "chain": "sol",
+        "address": "tV2wVqRjk7ugbQAFs2MAMxNF7HmuqUwgoFaQgUfpump",
+        "status": "ok",
+        "completedAt": "2026-11-09T18:25:11.804Z",
+        "requestMs": 1190,
+        "priority": 2
+      },
+      {
+        "chain": "bsc",
+        "address": "0xb37e871c790ba7a9e002132e3a08570d92207777",
+        "status": "ok",
+        "completedAt": "2026-11-09T18:25:13.151Z",
+        "requestMs": 1172,
+        "priority": 2
+      },
+      {
+        "chain": "sol",
+        "address": "tV2wVqRjk7ugbQAFs2MAMxNF7HmuqUwgoFaQgUfpump",
+        "status": "ok",
+        "completedAt": "2026-11-09T18:25:14.444Z",
+        "requestMs": 994,
+        "priority": 2
+      },
+      {
+        "chain": "sol",
+        "address": "tV2wVqRjk7ugbQAFs2MAMxNF7HmuqUwgoFaQgUfpump",
+        "status": "ok",
+        "completedAt": "2026-11-09T18:25:18.173Z",
+        "requestMs": 1124,
+        "priority": 2
+      },
+      {
+        "chain": "bsc",
+        "address": "0xb37e871c790ba7a9e002132e3a08570d92207777",
+        "status": "ok",
+        "completedAt": "2026-11-09T18:25:19.153Z",
+        "requestMs": 1141,
+        "priority": 2
+      }
+    ],
+    "recentWindow": {
+      "from": "2026-11-09T18:23:50.135Z",
+      "to": "2026-11-09T18:25:19.153Z",
+      "total": 64,
+      "failures": []
+    },
+    "interpretation": "已有持仓通过同一 token-info 报价读取路径连续成功，exitMonitor.staleQuotes=0。当前候选未通过路线报价研究准入，quoteLease/probe target 为空；这是尚无合格候选，不是报价接口不可读的证据。此检查未发起新的报价。"
+  },
+  "catchup": {
+    "id": "chart-catchup-1794247887026",
+    "status": "complete",
+    "createdAt": "2026-11-09T18:11:27.026Z",
+    "deadlineAt": "2026-11-09T18:41:27.026Z",
+    "completedAt": "2026-11-09T18:23:56.858Z",
+    "counts": {
+      "fetched": 19,
+      "skipped": 26,
+      "cached": 1
+    }
+  },
+  "examples": [
+    {
+      "snapshotAt": "2026-11-09T18:25:23.304Z",
+      "identity": {
+        "chain": "sol",
+        "address": "6kmkcwKxxmoREhkxrbBvwDY3N2KSfpdMMtWtNoPpump",
+        "symbol": "LASTTRUCK",
+        "price": 0.000415757
+      },
+      "decision": "观察",
+      "paperEligible": false,
+      "marketFresh": true,
+      "independentPriceFresh": false,
+      "chartIsCompleteAndFreshNow": true,
+      "sourceChartDiagnostic": {
+        "chain": "sol",
+        "address": "6kmkcwKxxmoREhkxrbBvwDY3N2KSfpdMMtWtNoPpump",
+        "fetchedAt": "2026-11-09T18:25:10.462Z",
+        "observedAt": "2026-11-09T18:25:10.462Z",
+        "requestWindow": "latest_closed_at_dispatch",
+        "queuedAt": "2026-11-09T18:25:07.170Z",
+        "requestedAt": "2026-11-09T18:25:09.472Z",
+        "receivedAt": "2026-11-09T18:25:10.462Z",
+        "closedThroughAt": "2026-11-09T18:25:00.000Z",
+        "excludedUnclosedBars": 1,
+        "sourceStatus": "ok",
+        "sourceReason": null,
+        "sourceReasonCode": null,
+        "lastAttempt": null,
+        "ready": true,
+        "reason": null,
+        "diagnostics": {
+          "receivedBars": 60,
+          "closedBars": 60,
+          "lastClosedAtMs": 1794248700000,
+          "firstOpenAtMs": 1794245100000,
+          "windowPolicy": "contiguous_tail_v1",
+          "excludedPrefixBars": 0,
+          "usedBars": 60,
+          "usedFirstOpenAtMs": 1794245100000,
+          "gapBoundary": null,
+          "code": "ready",
+          "issue": null
+        }
+      },
+      "latestClosedAgeMs": 23304,
+      "currentReasons": [
+        "等待收盘放量突破并站稳前 12 根压力位"
+      ],
+      "currentMissing": [
+        "五秒内的独立报价",
+        "连续新鲜报价确认"
+      ],
+      "safety": {
+        "blocked": [],
+        "missing": [],
+        "auditComplete": true
+      },
+      "costGate": {
+        "version": "structure_net_cost_v1",
+        "source": "assumption",
+        "estimatedRate": 0.041176470588235224,
+        "admissionRate": 0.041176470588235224,
+        "gasExcludedFromAdmission": false,
+        "maximumRate": 0.15,
+        "evidenceTier": "shadow_only",
+        "legacyThresholdExceeded": false,
+        "ready": true,
+        "reason": null,
+        "needsStructure": false
+      },
+      "structureEconomics": {
+        "version": "opportunity_review_v2",
+        "ready": true,
+        "breakEvenPrice": 0.00043359299313599315,
+        "breakEvenRate": 0.04290004290004301,
+        "estimatedStopLossUsd": 1.9899461624925419,
+        "netRewardRisk": 2.9372457219815935,
+        "netReferenceGainUsd": 5.844960852754907,
+        "reason": null
+      },
+      "lossRepair": {
+        "entryPath": "external_structure",
+        "entryPathAllowed": true,
+        "catalystReady": false,
+        "researchReady": true,
+        "ready": true,
+        "reentry": {
+          "ready": true,
+          "reason": null,
+          "proof": "首次入场"
+        }
+      },
+      "derivedCommitGate": {
+        "version": "evidence_tier_chase_gate_v1",
+        "tier": "shadow_only",
+        "canChaseBreakout": false,
+        "breakout": true,
+        "frictionBudget": 0,
+        "costRate": 0.041176470588235224,
+        "narrative": {
+          "ok": false,
+          "score": 0,
+          "sources": 0,
+          "eligible": false
+        },
+        "control": {
+          "version": "paper_control_score_v1",
+          "status": "weak",
+          "ok": false,
+          "score": 20,
+          "parts": [
+            "筹码分散，不视为控盘",
+            "打包占比可接受",
+            "开发团队持仓可接受"
+          ],
+          "unknown": [],
+          "meaning": "控盘质量分是规则估算，不代表庄家意图或收益；缺字段一律 unknown。"
+        },
+        "mainAllowed": false,
+        "shadowOnly": true,
+        "reasons": [
+          "叙事证据不足（无叙事/exploratory），只进影子研究账本，不占主盘现金"
+        ]
+      },
+      "routes": [
+        {
+          "id": "external_breakout",
+          "signalReady": false,
+          "pattern": {
+            "closedAt": 1794248700000,
+            "close": 0.00041280233,
+            "volumeUsd": 28610.57261072,
+            "baselineVolumeUsd": 30834.00048555144,
+            "volumeMultiple": 0.9278903859434872,
+            "resistance": 0.00041075395,
+            "ready": false,
+            "support": 0.0003473965183333333,
+            "reason": "等待收盘放量突破并站稳前 12 根压力位",
+            "reviewVersion": "opportunity_review_v2",
+            "atr": 0.00005468838533333334,
+            "rangeHigh": 0.00043503665,
+            "rangeLow": 0.00015901738,
+            "targetPrice": 0.0006867732199999999,
+            "targetKind": "已观察区间幅度投影，非收益预测",
+            "reclaimPrice": 0.00041075395
+          },
+          "chartWindow": {
+            "receivedBars": 60,
+            "closedBars": 60,
+            "lastClosedAtMs": 1794248700000,
+            "firstOpenAtMs": 1794245100000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 60,
+            "usedFirstOpenAtMs": 1794245100000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          },
+          "decision": "观察",
+          "reasons": [
+            "等待收盘放量突破并站稳前 12 根压力位"
+          ],
+          "missing": [
+            "五秒内的独立报价",
+            "连续新鲜报价确认"
+          ],
+          "recoveryCheck": {
+            "ready": true,
+            "exitObservable": true,
+            "chartReady": true
+          },
+          "lossRepair": {
+            "catalystReady": false,
+            "entryPathAllowed": true,
+            "entryPath": "external_structure",
+            "reentry": {
+              "ready": true
+            }
+          }
+        },
+        {
+          "id": "external_pullback",
+          "signalReady": false,
+          "pattern": {
+            "closedAt": 1794248700000,
+            "close": 0.00041280233,
+            "volumeUsd": 28610.57261072,
+            "baselineVolumeUsd": 30834.00048555144,
+            "volumeMultiple": 0.9278903859434872,
+            "peak": 0.0004088517,
+            "base": 0.00011764554,
+            "trough": 0.00035103004,
+            "rise": 2.4752843159205185,
+            "pullback": 0.14142453119309517,
+            "ready": false,
+            "support": 0.0003407300973333333,
+            "reason": "等待拉升后有效回踩、抬高低点及放量收复",
+            "reviewVersion": "opportunity_review_v2",
+            "atr": 0.00005468838533333334,
+            "rangeHigh": 0.00043503665,
+            "rangeLow": 0.00015901738,
+            "targetPrice": 0.0004088517,
+            "targetKind": "历史峰值情景，非保证可达",
+            "targetSelectionVersion": "pullback_nearest_observed_level_v1",
+            "nearbyObservedLevel": null,
+            "upsideScenarioTargetPrice": 0.0004088517,
+            "reclaimPrice": 0.00041075395
+          },
+          "chartWindow": {
+            "receivedBars": 60,
+            "closedBars": 60,
+            "lastClosedAtMs": 1794248700000,
+            "firstOpenAtMs": 1794245100000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 60,
+            "usedFirstOpenAtMs": 1794245100000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          },
+          "decision": "观察",
+          "reasons": [
+            "已观察结构空间不足以覆盖往返成本及失效损失，继续观察",
+            "等待拉升后有效回踩、抬高低点及放量收复"
+          ],
+          "missing": [
+            "五秒内的独立报价",
+            "等待新鲜结构验证扣费后的空间",
+            "连续新鲜报价确认"
+          ],
+          "recoveryCheck": {
+            "ready": true,
+            "exitObservable": true,
+            "chartReady": true
+          },
+          "lossRepair": {
+            "catalystReady": false,
+            "entryPathAllowed": true,
+            "entryPath": "external_structure",
+            "reentry": {
+              "ready": true
+            }
+          }
+        },
+        {
+          "id": "external_trend",
+          "signalReady": false,
+          "pattern": {
+            "closedAt": 1794248700000,
+            "close": 0.00041280233,
+            "volumeUsd": 28610.57261072,
+            "baselineVolumeUsd": 30834.00048555144,
+            "volumeMultiple": 0.9278903859434872,
+            "ema8": 0.0003687532913545823,
+            "ema21": 0.00031675233391816884,
+            "priorEma8": 0.00035616785174160585,
+            "ready": false,
+            "support": 0.0003407300973333333,
+            "reason": "均线差、斜率或放量不足，弱趋势只观察",
+            "reviewVersion": "opportunity_review_v2",
+            "atr": 0.00005468838533333334,
+            "rangeHigh": 0.00043503665,
+            "rangeLow": 0.00015901738,
+            "targetPrice": 0.00069177627,
+            "targetKind": "已观察区间幅度投影，非收益预测",
+            "reclaimPrice": 0.0003687532913545823
+          },
+          "chartWindow": {
+            "receivedBars": 60,
+            "closedBars": 60,
+            "lastClosedAtMs": 1794248700000,
+            "firstOpenAtMs": 1794245100000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 60,
+            "usedFirstOpenAtMs": 1794245100000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          },
+          "decision": "观察",
+          "reasons": [
+            "均线差、斜率或放量不足，弱趋势只观察"
+          ],
+          "missing": [
+            "五秒内的独立报价",
+            "连续新鲜报价确认"
+          ],
+          "recoveryCheck": {
+            "ready": true,
+            "exitObservable": true,
+            "chartReady": true
+          },
+          "lossRepair": {
+            "catalystReady": false,
+            "entryPathAllowed": true,
+            "entryPath": "external_structure",
+            "reentry": {
+              "ready": true
+            }
+          }
+        }
+      ],
+      "interpretation": "完整新鲜 60 根连续收盘 K 线、外盘结构成本门槛通过；当前量比 0.927890 < 突破所需 1.5，突破不成立。回踩幅度 14.142% < 15%，回踩路线也未成立；趋势审查要求的放量 1.2 亦未达到。实际主账本还有叙事证据层门槛，当前 shadow_only。此次判断使用 02:25 快照，未复用之前追高边界的结论。",
+      "thresholdEvidence": {
+        "breakoutVolumeMultiple": 1.5,
+        "actualVolumeMultiple": 0.9278903859434872,
+        "minimumPullback": 0.15,
+        "actualPullback": 0.14142453119309517,
+        "trendReviewVolumeMultiple": 1.2,
+        "source": [
+          "src/paper-opportunity-policy.js:103",
+          "src/paper-opportunity-policy.js:111",
+          "src/paper-opportunity-review.js:48"
+        ]
+      }
+    },
+    {
+      "snapshotAt": "2026-11-09T18:25:23.304Z",
+      "identity": {
+        "chain": "bsc",
+        "address": "0x3db2114a7abd610efa450384a8d8aeb4b3107777",
+        "symbol": "我靠",
+        "price": 0.0000500212
+      },
+      "decision": "观察",
+      "paperEligible": false,
+      "marketFresh": true,
+      "independentPriceFresh": false,
+      "chartIsCompleteAndFreshNow": false,
+      "sourceChartDiagnostic": {
+        "chain": "bsc",
+        "address": "0x3db2114a7abd610efa450384a8d8aeb4b3107777",
+        "fetchedAt": "2026-11-09T18:24:07.829Z",
+        "observedAt": "2026-11-09T18:24:07.829Z",
+        "requestWindow": "latest_closed_at_dispatch",
+        "queuedAt": "2026-11-09T18:24:05.793Z",
+        "requestedAt": "2026-11-09T18:24:06.641Z",
+        "receivedAt": "2026-11-09T18:24:07.829Z",
+        "closedThroughAt": "2026-11-09T18:24:00.000Z",
+        "excludedUnclosedBars": 0,
+        "sourceStatus": "ok",
+        "sourceReason": null,
+        "sourceReasonCode": null,
+        "lastAttempt": null,
+        "ready": false,
+        "reason": "K 线缺口后连续收盘样本不足",
+        "diagnostics": {
+          "receivedBars": 20,
+          "closedBars": 20,
+          "lastClosedAtMs": 1794248640000,
+          "firstOpenAtMs": 1794245340000,
+          "code": "insufficient_contiguous_tail",
+          "issue": {
+            "index": 14,
+            "openAtMs": 1794248280000,
+            "previousOpenAtMs": 1794247800000,
+            "gapMs": 480000,
+            "missingIntervals": 7
+          }
+        }
+      },
+      "latestClosedAgeMs": 83304,
+      "currentReasons": [
+        "K 线缺口后连续收盘样本不足",
+        "等待可绑定入场的真实结构失效位，不能用买入前已有弱势作为新退出理由"
+      ],
+      "currentMissing": [
+        "五秒内的独立报价",
+        "等待新鲜结构验证扣费后的空间",
+        "连续新鲜报价确认",
+        "可持续取得的退出量价或地址行为证据"
+      ],
+      "safety": {
+        "blocked": [],
+        "missing": [],
+        "auditComplete": true
+      },
+      "costGate": {
+        "version": "structure_net_cost_v1",
+        "source": "assumption",
+        "estimatedRate": 0.05682352941176463,
+        "admissionRate": 0.05682352941176463,
+        "gasExcludedFromAdmission": false,
+        "maximumRate": 0.15,
+        "evidenceTier": "shadow_only",
+        "legacyThresholdExceeded": false,
+        "ready": false,
+        "reason": "等待新鲜结构验证扣费后的空间",
+        "needsStructure": true
+      },
+      "structureEconomics": null,
+      "lossRepair": {
+        "entryPath": "external_structure",
+        "entryPathAllowed": true,
+        "catalystReady": false,
+        "researchReady": false,
+        "ready": false,
+        "reentry": {
+          "ready": true,
+          "reason": null,
+          "proof": "首次入场"
+        }
+      },
+      "derivedCommitGate": {
+        "version": "evidence_tier_chase_gate_v1",
+        "tier": "shadow_only",
+        "canChaseBreakout": false,
+        "breakout": true,
+        "frictionBudget": 0,
+        "costRate": 0.05682352941176463,
+        "narrative": {
+          "ok": false,
+          "score": 0,
+          "sources": 0,
+          "eligible": false
+        },
+        "control": {
+          "version": "paper_control_score_v1",
+          "status": "weak",
+          "ok": false,
+          "score": 20,
+          "parts": [
+            "筹码分散，不视为控盘",
+            "打包占比可接受",
+            "开发团队持仓可接受"
+          ],
+          "unknown": [],
+          "meaning": "控盘质量分是规则估算，不代表庄家意图或收益；缺字段一律 unknown。"
+        },
+        "mainAllowed": false,
+        "shadowOnly": true,
+        "reasons": [
+          "叙事证据不足（无叙事/exploratory），只进影子研究账本，不占主盘现金"
+        ]
+      },
+      "routes": [
+        {
+          "id": "external_breakout",
+          "signalReady": false,
+          "pattern": {
+            "ready": false,
+            "missing": false,
+            "reason": "K 线缺口后连续收盘样本不足"
+          },
+          "chartWindow": {
+            "receivedBars": 20,
+            "closedBars": 20,
+            "lastClosedAtMs": 1794248640000,
+            "firstOpenAtMs": 1794245340000,
+            "code": "insufficient_contiguous_tail",
+            "issue": {
+              "index": 14,
+              "openAtMs": 1794248280000,
+              "previousOpenAtMs": 1794247800000,
+              "gapMs": 480000,
+              "missingIntervals": 7
+            }
+          },
+          "decision": "观察",
+          "reasons": [
+            "K 线缺口后连续收盘样本不足",
+            "等待可绑定入场的真实结构失效位，不能用买入前已有弱势作为新退出理由"
+          ],
+          "missing": [
+            "五秒内的独立报价",
+            "等待新鲜结构验证扣费后的空间",
+            "连续新鲜报价确认",
+            "可持续取得的退出量价或地址行为证据"
+          ],
+          "recoveryCheck": {
+            "ready": false,
+            "exitObservable": false,
+            "chartReady": false
+          },
+          "lossRepair": {
+            "catalystReady": false,
+            "entryPathAllowed": true,
+            "entryPath": "external_structure",
+            "reentry": {
+              "ready": true
+            }
+          }
+        },
+        {
+          "id": "external_pullback",
+          "signalReady": false,
+          "pattern": {
+            "ready": false,
+            "missing": false,
+            "reason": "K 线缺口后连续收盘样本不足"
+          },
+          "chartWindow": {
+            "receivedBars": 20,
+            "closedBars": 20,
+            "lastClosedAtMs": 1794248640000,
+            "firstOpenAtMs": 1794245340000,
+            "code": "insufficient_contiguous_tail",
+            "issue": {
+              "index": 14,
+              "openAtMs": 1794248280000,
+              "previousOpenAtMs": 1794247800000,
+              "gapMs": 480000,
+              "missingIntervals": 7
+            }
+          },
+          "decision": "观察",
+          "reasons": [
+            "K 线缺口后连续收盘样本不足",
+            "等待可绑定入场的真实结构失效位，不能用买入前已有弱势作为新退出理由"
+          ],
+          "missing": [
+            "五秒内的独立报价",
+            "等待新鲜结构验证扣费后的空间",
+            "连续新鲜报价确认",
+            "可持续取得的退出量价或地址行为证据"
+          ],
+          "recoveryCheck": {
+            "ready": false,
+            "exitObservable": false,
+            "chartReady": false
+          },
+          "lossRepair": {
+            "catalystReady": false,
+            "entryPathAllowed": true,
+            "entryPath": "external_structure",
+            "reentry": {
+              "ready": true
+            }
+          }
+        },
+        {
+          "id": "external_trend",
+          "signalReady": false,
+          "pattern": {
+            "ready": false,
+            "missing": false,
+            "reason": "K 线缺口后连续收盘样本不足"
+          },
+          "chartWindow": {
+            "receivedBars": 20,
+            "closedBars": 20,
+            "lastClosedAtMs": 1794248640000,
+            "firstOpenAtMs": 1794245340000,
+            "code": "insufficient_contiguous_tail",
+            "issue": {
+              "index": 14,
+              "openAtMs": 1794248280000,
+              "previousOpenAtMs": 1794247800000,
+              "gapMs": 480000,
+              "missingIntervals": 7
+            }
+          },
+          "decision": "观察",
+          "reasons": [
+            "K 线缺口后连续收盘样本不足",
+            "等待可绑定入场的真实结构失效位，不能用买入前已有弱势作为新退出理由"
+          ],
+          "missing": [
+            "五秒内的独立报价",
+            "等待新鲜结构验证扣费后的空间",
+            "连续新鲜报价确认",
+            "可持续取得的退出量价或地址行为证据"
+          ],
+          "recoveryCheck": {
+            "ready": false,
+            "exitObservable": false,
+            "chartReady": false
+          },
+          "lossRepair": {
+            "catalystReady": false,
+            "entryPathAllowed": true,
+            "entryPath": "external_structure",
+            "reentry": {
+              "ready": true
+            }
+          }
+        }
+      ],
+      "interpretation": "BSC 我靠有 20 根返回，最新收盘距快照约 83 秒；但原始样本存在 8 分钟时间跨度的缺口（缺 7 根），最后连续尾部仅 6 根，不足最低连续 13 根。属于新鲜但不完整，不应把 HTTP/K线读取成功或热门新鲜 3/3 等同可以买。"
+    }
+  ]
+}

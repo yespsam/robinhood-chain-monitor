@@ -1,0 +1,23 @@
+{
+  "target": {
+    "chain": "robinhood",
+    "network": "robinhood",
+    "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+    "symbol": "MEME",
+    "diagnostic": "insufficient_contiguous_tail",
+    "historicalArtifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+    "historicalFrom": 1794244680,
+    "historicalTo": 1794248280
+  },
+  "url": "https://api.geckoterminal.com/api/v2/networks/robinhood/tokens/0x19993b3cf15c1055063468eb932f5e335a7526ea/pools?include=base_token%2Cquote_token%2Cdex&include_inactive_source=true&page=1",
+  "requestedAt": "2026-11-10T04:44:25.678737+00:00",
+  "receivedAt": "2026-11-10T04:44:26.332967+00:00",
+  "httpStatus": 429,
+  "headers": {},
+  "rawResponse": {
+    "status": {
+      "error_code": 429,
+      "error_message": "You've exceeded the Rate Limit. Please visit https://www.coingecko.com/en/api/pricing to subscribe to our API plans for higher rate limits and use the onchain endpoints: https://docs.coingecko.com/reference/endpoint-overview"
+    }
+  }
+}

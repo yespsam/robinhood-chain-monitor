@@ -3,6 +3,7 @@ import { opportunityChart, MAIN_CHART_WINDOW_VERSION } from './paper-opportunity
 import { memeEntryContext } from './paper-meme-exit.js';
 import {launchContext,launchQuote,verifiedLaunchContext,LAUNCH_ENTRY_TEXT} from './paper-launch-policy.js';
 import {validCollectiveSignal,collectiveQuote,internalOnlySignal,walletSignalRoute} from './paper-collective-signal.js';
+import {validateChartProvenance} from './paper-chart-source.js';
 
 export const PAPER_RECOVERY_VERSION = 'paper_recovery_v1';
 export const EVIDENCE_GAP_EXIT_VERSION = 'evidence_gap_exit_v1';
@@ -90,6 +91,9 @@ export function recoveryEntryCheck(proof, token, event, nowMs, opportunity = nul
       exitObservable:quote.ready,chartReady:false,requiresChart:false,
       basis:'新盘按已核实事件与真实报价入场；资金行为与后续结构持续采集，不把缺失当健康'};
   }
+  const usesChart=!proof.collectiveSignal||!['internal','near_completion'].includes(proof.marketStage);
+  if(usesChart&&!validateChartProvenance(proof.chartProvenance,token,proof.candles,{nowMs}).ready)
+    return {ready:false,missing:['可验证且绑定此 CA 的 K 线来源'],reasons,entryFlow,breakoutFlow,exitObservable:false,chartReady:false};
   if(proof.collectiveSignal) {
     const valid=collectiveValid,quote=collectiveQuote(proof.quotes,token,proof.collectiveSignal,nowMs);
     const internal=['internal','near_completion'].includes(proof.marketStage);
@@ -142,6 +146,7 @@ function recoveryProof(token, input) {
     ...(input.memeExitMode?{chartWindowPolicy:MAIN_CHART_WINDOW_VERSION}:{}),
     observedAt:input.observedAt,flow:structuredClone(flow),
     candles:structuredClone((input.candles||[]).slice(-60)),klineStatus:input.klineStatus,
+    ...(input.chartProvenance!=null?{chartProvenance:structuredClone(input.chartProvenance)}:{}),
     quotes:structuredClone((input.quoteHistory||[]).slice(-10))};
 }
 

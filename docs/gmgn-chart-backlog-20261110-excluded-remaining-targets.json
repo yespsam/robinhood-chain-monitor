@@ -1,0 +1,257 @@
+{
+  "updatedAt": "2026-11-09T17:44:01.965Z",
+  "candidates": [
+    {
+      "chain": "sol",
+      "address": "CTKeXCVboLuAxHHHLDP5cc6JKSRKxYHBZSnbvcZaYkaU",
+      "symbol": "KALYX",
+      "price": 1.0195591e-09,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 4.72647142164,
+      "volume": {
+        "value": 21791.89,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "3bxHm72mrkvE6eQ6iV5Yua8n3eDQUSenMxn75vpqvY8z",
+      "symbol": "NZS",
+      "price": 1.4362619e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 98.67515180316,
+      "volume": {
+        "value": 4831.17,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "B1wk5PYYUAAA7YasYW3WhrTprKH1fmMHto9H567epump",
+      "symbol": "SI",
+      "price": 4.9832817e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 14588.7756542226,
+      "volume": {
+        "value": 25831.6,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "HxC7wnsYYb3gqRtk684i82SKXCXB2hYtjusGZHpPGd8g",
+      "symbol": "BabyPunch",
+      "price": 5.64041671727472e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 14850.04819192676,
+      "volume": {
+        "value": 337086.03,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "Aygw2Y2Bs9VQnvjNURgjrv1McPUHDxuvQhrzNwcBpump",
+      "symbol": "BabyPunch",
+      "price": 4.50761e-05,
+      "code": "chart_stale",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 16660.1,
+      "volume": {
+        "value": 84735.8,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 17,
+        "closedBars": 17,
+        "lastClosedAtMs": 1794245940000,
+        "firstOpenAtMs": 1794244920000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "sol",
+      "address": "XeaWBDDBxj5Qf6S6TshMC1SKaxSccJfRZUDj26opump",
+      "symbol": "MERLYN",
+      "price": 3.35483e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 11440,
+      "volume": {
+        "value": 3696.5,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+      "symbol": "MEME",
+      "price": 1.92203e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 9221.19,
+      "volume": {
+        "value": 8210.37,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x4d21483a44bf67a86b77e3da301411880797d452",
+      "symbol": "BA",
+      "price": 170.596,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 9958.93,
+      "volume": {
+        "value": 4952.56,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x608de3e89a6506b881125f67463623d7eb063fba",
+      "symbol": "NOVASI",
+      "price": 5.33658e-05,
+      "code": "chart_stale",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 19925.9,
+      "volume": {
+        "value": 1062.8,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 60,
+        "closedBars": 34,
+        "lastClosedAtMs": 1794244680000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x255979302fd6a5e2ff6dce0d8b018f51e06e243a",
+      "symbol": "UNIWALL",
+      "price": 0.0050968,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 17847.2,
+      "volume": {
+        "value": 933.158,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    }
+  ]
+}

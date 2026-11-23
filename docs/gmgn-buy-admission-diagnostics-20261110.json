@@ -1,0 +1,787 @@
+{
+  "version": "gmgn_buy_admission_diagnostics_v1",
+  "createdAt": "2026-11-09T17:56:07.311425+00:00",
+  "scope": "Read-only live snapshots plus offline source-provenance fix; no trade, restart or threshold changes. Runtime still uses pre-fix code until parent deploys.",
+  "snapshotAt": "2026-11-09T17:53:29.086Z",
+  "sourceSnapshotFiles": [
+    "/tmp/gmgn-gap-20261110-review-current.json",
+    "/tmp/gmgn-gap-20261110-review-latest.json"
+  ],
+  "liveStatus": {
+    "enabled": true,
+    "mode": null,
+    "status": null
+  },
+  "accountGuard": {
+    "allowed": true,
+    "reasons": []
+  },
+  "entryDiagnostics": {
+    "version": "paper_entry_diagnostics_v1",
+    "detected": 308,
+    "verifiedCatalyst": 0,
+    "externalStructure": 179,
+    "quoteResearchReady": 0,
+    "quoteScheduled": 0,
+    "eligible": 0,
+    "blockers": [
+      {
+        "code": "safety_blocked",
+        "label": "明确不可交易或安全检查未通过",
+        "count": 117
+      },
+      {
+        "code": "catalyst",
+        "label": "缺少有效原文催化或核实盈利钱包",
+        "count": 75
+      },
+      {
+        "code": "chart_missing",
+        "label": "买点数据未取得，尚不能判断有无机会",
+        "count": 49
+      },
+      {
+        "code": "research_excluded",
+        "label": "未进入常规 K 线研究：阶段、流动性或成交量条件未达标",
+        "count": 29
+      },
+      {
+        "code": "safety_data",
+        "label": "该入口所需安全字段尚未补齐",
+        "count": 18
+      },
+      {
+        "code": "reentry",
+        "label": "上次亏损后的重入证据不足",
+        "count": 14
+      },
+      {
+        "code": "chart_incomplete",
+        "label": "买点K线不足或断档，等待补齐",
+        "count": 3
+      },
+      {
+        "code": "chart_stale",
+        "label": "买点K线已过期，等待刷新",
+        "count": 2
+      },
+      {
+        "code": "structure",
+        "label": "入场结构或退出依据尚未建立",
+        "count": 1
+      }
+    ],
+    "note": "按链与 CA 去重的当前快照；每个候选只计一个主要状态。没有有效候选不代表市场没有机会，调度与条件通过均不等于成交。"
+  },
+  "stageSnapshot": [
+    {
+      "chain": "robinhood",
+      "observedCandidates": 95,
+      "freshMarket": 95,
+      "freshClosedCharts": 0,
+      "structuralSignals": 0,
+      "quoteReady": 0,
+      "mainQuoteReady": 0,
+      "comparisonQuoteReady": 0,
+      "liveQuoteTargets": 0
+    },
+    {
+      "chain": "sol",
+      "observedCandidates": 104,
+      "freshMarket": 104,
+      "freshClosedCharts": 0,
+      "structuralSignals": 0,
+      "quoteReady": 0,
+      "mainQuoteReady": 0,
+      "comparisonQuoteReady": 0,
+      "liveQuoteTargets": 0
+    },
+    {
+      "chain": "bsc",
+      "observedCandidates": 109,
+      "freshMarket": 109,
+      "freshClosedCharts": 1,
+      "structuralSignals": 0,
+      "quoteReady": 0,
+      "mainQuoteReady": 0,
+      "comparisonQuoteReady": 0,
+      "liveQuoteTargets": 0
+    },
+    {
+      "chain": "base",
+      "observedCandidates": 0,
+      "freshMarket": 0,
+      "freshClosedCharts": 0,
+      "structuralSignals": 0,
+      "quoteReady": 0,
+      "mainQuoteReady": 0,
+      "comparisonQuoteReady": 0,
+      "liveQuoteTargets": 0
+    },
+    {
+      "chain": "eth",
+      "observedCandidates": 0,
+      "freshMarket": 0,
+      "freshClosedCharts": 0,
+      "structuralSignals": 0,
+      "quoteReady": 0,
+      "mainQuoteReady": 0,
+      "comparisonQuoteReady": 0,
+      "liveQuoteTargets": 0
+    }
+  ],
+  "crossChecks": {
+    "anyRouteSignalReady": 0,
+    "freshIndependentPrice": 0,
+    "legacyNarrativeFresh": 6,
+    "verifiedCatalyst": 0,
+    "narrativeAdmissionEnabled": false,
+    "note": "Narrative admission diagnostics are not an enabled global blocking switch. External structure routes do not require narrative. No structurally valid route found in either sampled snapshot was misblocked by the quote scheduler."
+  },
+  "catchup": {
+    "id": "chart-catchup-1794246680788",
+    "status": "running",
+    "counts": {
+      "cached": 2,
+      "fetched": 2,
+      "skipped": 1,
+      "queued": 60
+    },
+    "deadlineAt": "2026-11-09T18:21:20.788Z"
+  },
+  "quoteResearch": {
+    "latest": {
+      "version": "bounded_market_leader_v2",
+      "lease": {
+        "key": "bsc:0xa0c56a8c0692bd10b3fa8f8ba79cf5332b7107f9",
+        "since": 1794246726943,
+        "until": 1794246771943,
+        "nextAllowedAt": 1794246816943,
+        "attempts": 1,
+        "inFlightAt": null,
+        "nextQuoteAt": 1794246752475,
+        "samples": [
+          1794246747475
+        ],
+        "endedAt": 1794246771943,
+        "served": {
+          "bsc:0xa0c56a8c0692bd10b3fa8f8ba79cf5332b7107f9": 1794246726943
+        }
+      },
+      "target": null,
+      "note": "热门外盘最多 45 秒、3 次普通优先级报价预热；样本间隔至少 5 秒，结束后休息 45 秒；不占已合格入口、不直接授予买入许可"
+    },
+    "earlierCompletedProbe": {
+      "snapshotAt": "2026-11-09T17:51:31.864Z",
+      "sampleTimesMs": [
+        1794246642303,
+        1794246659487,
+        1794246679536
+      ],
+      "sampleGapsMs": [
+        17184,
+        20049
+      ]
+    },
+    "interpretation": "Regular quote admission remains empty because route signals are absent. Bounded hot probes did run; their 17–20 second sample gaps cannot themselves meet the existing structural confirmation maximum 10-second gap. This is observed low-priority research latency, not proof that admitted priority-2 confirmation cannot work."
+  },
+  "sourceFreshness": {
+    "gmgnPlatformCalls": {
+      "updatedAt": "2026-11-09T17:53:28.053Z",
+      "gmgnStatus": "platform_calls_only",
+      "gmgnChains": {
+        "sol": {
+          "status": "healthy",
+          "lastAttemptAt": "2026-11-09T17:52:19.497Z",
+          "lastSuccessAt": "2026-11-09T17:52:44.052Z",
+          "nextAttemptAt": "2026-11-09T17:52:49.052Z",
+          "returned": 50,
+          "accepted": 50,
+          "failures": 0,
+          "truncated": true,
+          "coverage": "latest_50_platform_calls_not_full_twitter",
+          "requestMs": 24555
+        },
+        "bsc": {
+          "status": "healthy",
+          "lastAttemptAt": "2026-11-09T17:52:49.392Z",
+          "lastSuccessAt": "2026-11-09T17:53:08.100Z",
+          "nextAttemptAt": "2026-11-09T17:53:13.100Z",
+          "returned": 35,
+          "accepted": 35,
+          "failures": 0,
+          "truncated": false,
+          "coverage": "latest_50_platform_calls_not_full_twitter",
+          "requestMs": 18708
+        }
+      },
+      "fullTwitterConnected": false,
+      "ownDocumentCount": 17,
+      "gmgnSignalCount": 100,
+      "freshHints": 0,
+      "matchedExisting": 0,
+      "paperSignalCount": 0,
+      "unconsumedPaperSignals": 0
+    },
+    "xCollector": {
+      "status": "degraded",
+      "operationalStatus": "partial",
+      "checkedAt": "2026-11-09T17:56:02.360Z",
+      "lastSuccessAt": "2026-11-08T15:18:29.648Z",
+      "lastOperationalSuccessAt": "2026-11-09T17:56:02.360Z",
+      "eligibleCount": 51,
+      "activeCount": 36,
+      "freshCount": 42,
+      "backlogCount": 15,
+      "rejectedCount": 8,
+      "lastError": "X effective coverage limited: 36/51; cached=42; fresh=42; backlog=15; reasons=timeline_never_succeeded:9,admission_rejected:8,profile_http_404:6,timeline_stale:5; batch=fxtwitter_p"
+    },
+    "dedicatedTwitterCollector": {
+      "beffjezos": {
+        "status": "ok",
+        "checkedAt": 1794246940851,
+        "lastSuccessAt": 1794246941995,
+        "pending": 0,
+        "failed": 0,
+        "retryAt": null
+      },
+      "UsePaid": {
+        "status": "ok",
+        "checkedAt": 1794246952002,
+        "lastSuccessAt": 1794246953023,
+        "pending": 0,
+        "failed": 0,
+        "retryAt": null
+      },
+      "cz_binance": {
+        "status": "ok",
+        "checkedAt": 1794246952003,
+        "lastSuccessAt": 1794246953292,
+        "pending": 0,
+        "failed": 0,
+        "retryAt": null
+      },
+      "heyibinance": {
+        "status": "ok",
+        "checkedAt": 1794246963305,
+        "lastSuccessAt": 1794246964553,
+        "pending": 0,
+        "failed": 0,
+        "retryAt": null
+      },
+      "elonmusk": {
+        "status": "ok",
+        "checkedAt": 1794246963306,
+        "lastSuccessAt": 1794246964555,
+        "pending": 0,
+        "failed": 0,
+        "retryAt": null
+      },
+      "binance": {
+        "status": "ok",
+        "checkedAt": 1794246918507,
+        "lastSuccessAt": 1794246919651,
+        "pending": 0,
+        "failed": 0,
+        "retryAt": null
+      },
+      "BinanceWallet": {
+        "status": "ok",
+        "checkedAt": 1794246918508,
+        "lastSuccessAt": 1794246919623,
+        "pending": 0,
+        "failed": 0,
+        "retryAt": null
+      },
+      "fourdotmemezh": {
+        "status": "partial",
+        "checkedAt": 1794246929804,
+        "lastSuccessAt": 1794246930842,
+        "pending": 1,
+        "failed": 0,
+        "retryAt": null
+      },
+      "flapdotsh": {
+        "status": "ok",
+        "checkedAt": 1794246929805,
+        "lastSuccessAt": 1794246930757,
+        "pending": 0,
+        "failed": 0,
+        "retryAt": null
+      },
+      "pondotfun": {
+        "status": "ok",
+        "checkedAt": 1794246940850,
+        "lastSuccessAt": 1794246941649,
+        "pending": 0,
+        "failed": 0,
+        "retryAt": null
+      }
+    },
+    "interpretation": "Collectors continue checking; X coverage is partial. Successful polling does not renew original post times. Broad legacy narrativeFresh uses a 12/24-hour research window; event catalyst uses 1 hour. Current candidate-linked originals are older; platform-call rows are not full authenticated tweet contents."
+  },
+  "examples": [
+    {
+      "snapshotAt": "2026-11-09T17:51:31.864Z",
+      "token": {
+        "chain": "bsc",
+        "address": "0xa0c56a8c0692bd10b3fa8f8ba79cf5332b7107f9",
+        "symbol": "MERL",
+        "price": 0.03407382
+      },
+      "decision": "观察",
+      "explanation": "60 根有效收盘 K 线已经进入实际策略；三条结构路线均未触发，突破收盘价低于压力位、相对量 0.7045 倍低于 1.5 倍，成本空间也不通过；不是被误判缺图。",
+      "marketFresh": true,
+      "priceFresh": false,
+      "priceObservedAt": "2026-11-09T17:51:19.536Z",
+      "launchAgeMs": 51975349888,
+      "legacyChartReady": true,
+      "reasons": [
+        "已观察结构空间不足以覆盖往返成本及失效损失，继续观察",
+        "等待收盘放量突破并站稳前 12 根压力位"
+      ],
+      "missing": [
+        "五秒内的独立报价",
+        "等待新鲜结构验证扣费后的空间",
+        "连续新鲜报价确认"
+      ],
+      "reentry": {
+        "ready": true,
+        "reason": null,
+        "proof": "首次入场"
+      },
+      "cost": {
+        "version": "opportunity_review_v2",
+        "ready": false,
+        "breakEvenPrice": 0.03574944429309072,
+        "breakEvenRate": 0.049176297024833726,
+        "estimatedStopLossUsd": 0.5294551915488732,
+        "netRewardRisk": null,
+        "netReferenceGainUsd": -0.41964883648639884,
+        "reason": "已观察结构空间不足以覆盖往返成本及失效损失，继续观察"
+      },
+      "routes": [
+        {
+          "id": "external_breakout",
+          "signalReady": false,
+          "chartWindow": {
+            "receivedBars": 60,
+            "closedBars": 60,
+            "lastClosedAtMs": 1794246660000,
+            "firstOpenAtMs": 1794243060000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 60,
+            "usedFirstOpenAtMs": 1794243060000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          },
+          "pattern": {
+            "ready": false,
+            "close": 0.033915674,
+            "resistance": 0.033927295,
+            "volumeMultiple": 0.7045302676228401,
+            "reason": "等待收盘放量突破并站稳前 12 根压力位",
+            "ema8": null,
+            "ema21": null
+          }
+        },
+        {
+          "id": "external_pullback",
+          "signalReady": false,
+          "chartWindow": {
+            "receivedBars": 60,
+            "closedBars": 60,
+            "lastClosedAtMs": 1794246660000,
+            "firstOpenAtMs": 1794243060000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 60,
+            "usedFirstOpenAtMs": 1794243060000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          },
+          "pattern": {
+            "ready": false,
+            "close": 0.033915674,
+            "resistance": null,
+            "volumeMultiple": 0.7045302676228401,
+            "reason": "等待拉升后有效回踩、抬高低点及放量收复",
+            "ema8": null,
+            "ema21": null
+          }
+        },
+        {
+          "id": "external_trend",
+          "signalReady": false,
+          "chartWindow": {
+            "receivedBars": 60,
+            "closedBars": 60,
+            "lastClosedAtMs": 1794246660000,
+            "firstOpenAtMs": 1794243060000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 60,
+            "usedFirstOpenAtMs": 1794243060000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          },
+          "pattern": {
+            "ready": false,
+            "close": 0.033915674,
+            "resistance": null,
+            "volumeMultiple": 0.7045302676228401,
+            "reason": "均线差、斜率或放量不足，弱趋势只观察",
+            "ema8": 0.03384997671947329,
+            "ema21": 0.03388059662995437
+          }
+        }
+      ],
+      "narrative": {
+        "sourceAt": null,
+        "relationship": "unverified",
+        "catalyst": {
+          "phase": "unknown",
+          "ageMs": null,
+          "label": "催化时间未知"
+        }
+      },
+      "flow": {
+        "counts": {
+          "highProfitCount": 0,
+          "fomoCount": 0,
+          "uniqueBuyerCount": 0,
+          "netBuyUsd": 0,
+          "smartMoneyCount": 0
+        },
+        "provider": "gmgn",
+        "observedAt": "2026-11-09T17:51:04.663Z",
+        "complete": true,
+        "coverageGap": null,
+        "sourceIssue": "bounded_trade_feed_not_full_chain",
+        "tokenEvidence": {
+          "version": "ca_flow_window_v1",
+          "chain": "bsc",
+          "address": "0xa0c56a8c0692bd10b3fa8f8ba79cf5332b7107f9",
+          "scope": "gmgn_public_smartmoney_kol_5m",
+          "status": "healthy",
+          "complete": true,
+          "observedAt": "2026-11-09T17:51:04.663Z"
+        }
+      }
+    },
+    {
+      "snapshotAt": "2026-11-09T17:51:31.864Z",
+      "token": {
+        "chain": "robinhood",
+        "address": "0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
+        "symbol": "NVDA",
+        "price": 178.343
+      },
+      "decision": "观察",
+      "explanation": "60 根有效收盘 K 线已经进入实际策略；三条结构路线均未触发，相对量只有 0.6536 倍；此前同 CA 完整亏损后的重入证据也未修复。",
+      "marketFresh": true,
+      "priceFresh": false,
+      "priceObservedAt": null,
+      "launchAgeMs": 13215474888,
+      "legacyChartReady": true,
+      "reasons": [
+        "已观察结构空间不足以覆盖往返成本及失效损失，继续观察",
+        "均线差、斜率或放量不足，弱趋势只观察",
+        "同 CA 上次亏损原因未被新催化、新买家或结构修复推翻；仅更新时间不重买"
+      ],
+      "missing": [
+        "五秒内的独立报价",
+        "等待新鲜结构验证扣费后的空间",
+        "连续新鲜报价确认"
+      ],
+      "reentry": {
+        "ready": false,
+        "closedAt": 1790621233760,
+        "reason": "同 CA 上次亏损原因未被新催化、新买家或结构修复推翻；仅更新时间不重买",
+        "proof": null
+      },
+      "cost": {
+        "version": "opportunity_review_v2",
+        "ready": false,
+        "breakEvenPrice": 186.36628330129645,
+        "breakEvenRate": 0.04498793505378096,
+        "estimatedStopLossUsd": 0.4888417363275206,
+        "netRewardRisk": null,
+        "netReferenceGainUsd": -0.36512041467812395,
+        "reason": "已观察结构空间不足以覆盖往返成本及失效损失，继续观察"
+      },
+      "routes": [
+        {
+          "id": "external_breakout",
+          "signalReady": false,
+          "chartWindow": {
+            "receivedBars": 60,
+            "closedBars": 60,
+            "lastClosedAtMs": 1794246660000,
+            "firstOpenAtMs": 1794243060000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 60,
+            "usedFirstOpenAtMs": 1794243060000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          },
+          "pattern": {
+            "ready": false,
+            "close": 177.87999058,
+            "resistance": 178.41530713,
+            "volumeMultiple": 0.6536319720024005,
+            "reason": "等待收盘放量突破并站稳前 12 根压力位",
+            "ema8": null,
+            "ema21": null
+          }
+        },
+        {
+          "id": "external_pullback",
+          "signalReady": false,
+          "chartWindow": {
+            "receivedBars": 60,
+            "closedBars": 60,
+            "lastClosedAtMs": 1794246660000,
+            "firstOpenAtMs": 1794243060000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 60,
+            "usedFirstOpenAtMs": 1794243060000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          },
+          "pattern": {
+            "ready": false,
+            "close": 177.87999058,
+            "resistance": null,
+            "volumeMultiple": 0.6536319720024005,
+            "reason": "等待拉升后有效回踩、抬高低点及放量收复",
+            "ema8": null,
+            "ema21": null
+          }
+        },
+        {
+          "id": "external_trend",
+          "signalReady": false,
+          "chartWindow": {
+            "receivedBars": 60,
+            "closedBars": 60,
+            "lastClosedAtMs": 1794246660000,
+            "firstOpenAtMs": 1794243060000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 60,
+            "usedFirstOpenAtMs": 1794243060000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          },
+          "pattern": {
+            "ready": false,
+            "close": 177.87999058,
+            "resistance": null,
+            "volumeMultiple": 0.6536319720024005,
+            "reason": "均线差、斜率或放量不足，弱趋势只观察",
+            "ema8": 177.89082576825433,
+            "ema21": 177.94616860578952
+          }
+        }
+      ],
+      "narrative": {
+        "sourceAt": null,
+        "relationship": "unverified",
+        "catalyst": {
+          "phase": "unknown",
+          "ageMs": null,
+          "label": "催化时间未知"
+        }
+      },
+      "flow": {
+        "counts": {
+          "highProfitCount": 0,
+          "fomoCount": 0,
+          "uniqueBuyerCount": 0,
+          "netBuyUsd": 0,
+          "smartMoneyCount": 0
+        },
+        "provider": "gmgn",
+        "observedAt": "2026-11-09T17:50:25.298Z",
+        "complete": true,
+        "coverageGap": null,
+        "sourceIssue": "ambiguous_trade_legs",
+        "tokenEvidence": {
+          "version": "ca_flow_window_v1",
+          "chain": "robinhood",
+          "address": "0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
+          "scope": "gmgn_public_smartmoney_kol_5m",
+          "status": "healthy",
+          "complete": true,
+          "observedAt": "2026-11-09T17:50:25.298Z"
+        }
+      }
+    },
+    {
+      "snapshotAt": "2026-11-09T17:51:31.864Z",
+      "token": {
+        "chain": "sol",
+        "address": "FDboCUrbwVgNVbuSXvhk9Atpay4UW6q3gPqAc6wH6bZD",
+        "symbol": "NVIDIOT",
+        "price": 0.00013984061
+      },
+      "decision": "观察",
+      "explanation": "新代币在此快照只有约 8.95 分钟历史，收到 9 根 K 线；旧展示的 8 根标准已通过，外盘最少 13 根及绑定入场结构 24 根要求尚未满足。相同 NVIDIOT 名称的平台喊单对应另一 CA，不能借用。",
+      "marketFresh": true,
+      "priceFresh": false,
+      "priceObservedAt": null,
+      "launchAgeMs": 536888,
+      "legacyChartReady": true,
+      "reasons": [
+        "等待可绑定入场的真实结构失效位，不能用买入前已有弱势作为新退出理由"
+      ],
+      "missing": [
+        "五秒内的独立报价",
+        "新鲜且足够的 K 线",
+        "等待新鲜结构验证扣费后的空间",
+        "连续新鲜报价确认",
+        "可持续取得的退出量价或地址行为证据"
+      ],
+      "reentry": {
+        "ready": true,
+        "reason": null,
+        "proof": "首次入场"
+      },
+      "cost": null,
+      "routes": [
+        {
+          "id": "external_breakout",
+          "signalReady": false,
+          "chartWindow": {
+            "receivedBars": 9,
+            "closedBars": 9,
+            "lastClosedAtMs": 1794246660000,
+            "firstOpenAtMs": 1794246120000,
+            "code": "insufficient_closed_bars",
+            "issue": null
+          },
+          "pattern": {
+            "ready": false,
+            "close": null,
+            "resistance": null,
+            "volumeMultiple": null,
+            "reason": "新鲜且足够的 K 线",
+            "ema8": null,
+            "ema21": null
+          }
+        },
+        {
+          "id": "external_pullback",
+          "signalReady": false,
+          "chartWindow": {
+            "receivedBars": 9,
+            "closedBars": 9,
+            "lastClosedAtMs": 1794246660000,
+            "firstOpenAtMs": 1794246120000,
+            "code": "insufficient_closed_bars",
+            "issue": null
+          },
+          "pattern": {
+            "ready": false,
+            "close": null,
+            "resistance": null,
+            "volumeMultiple": null,
+            "reason": "新鲜且足够的 K 线",
+            "ema8": null,
+            "ema21": null
+          }
+        },
+        {
+          "id": "external_trend",
+          "signalReady": false,
+          "chartWindow": {
+            "receivedBars": 9,
+            "closedBars": 9,
+            "lastClosedAtMs": 1794246660000,
+            "firstOpenAtMs": 1794246120000,
+            "code": "insufficient_closed_bars",
+            "issue": null
+          },
+          "pattern": {
+            "ready": false,
+            "close": null,
+            "resistance": null,
+            "volumeMultiple": null,
+            "reason": "新鲜且足够的 K 线",
+            "ema8": null,
+            "ema21": null
+          }
+        }
+      ],
+      "narrative": {
+        "sourceAt": null,
+        "relationship": "unverified",
+        "catalyst": {
+          "phase": "unknown",
+          "ageMs": null,
+          "label": "催化时间未知"
+        }
+      },
+      "flow": {
+        "counts": {
+          "highProfitCount": 0,
+          "fomoCount": null,
+          "uniqueBuyerCount": 0,
+          "netBuyUsd": 0,
+          "smartMoneyCount": 0
+        },
+        "provider": "binance_smartmoney",
+        "observedAt": "2026-11-09T17:51:18.209Z",
+        "complete": true,
+        "coverageGap": null,
+        "sourceIssue": null,
+        "tokenEvidence": null
+      }
+    }
+  ],
+  "implementationFinding": {
+    "id": "social_ticker_promoted_to_direct_ca",
+    "status": "fixed_in_source_not_deployed",
+    "source": "src/paper-narrative-thesis.js parsed-source loop",
+    "observedExample": {
+      "chain": "robinhood",
+      "address": "0xe26cce3a32446c2bb8d31e5edd56a3522325fcef",
+      "symbol": "GROK",
+      "sourceUrl": "https://x.com/elonmusk/status/2119817540432244779",
+      "sourceAt": "2026-11-09T15:41:00.601Z",
+      "originalMatchKind": "ticker",
+      "incorrectRelationship": "direct_ca"
+    },
+    "impact": "Not the cause of current zero buys: current originals are old. With a fresh ticker-only source, incorrect direct_ca passes eventProof and sets catalystReady=true without the intended narrative-control requirement. Other trade gates still apply.",
+    "offlineBefore": {
+      "catalystReady": true,
+      "entryPath": "event_narrative"
+    },
+    "offlineAfterNameOnly": {
+      "catalystReady": false,
+      "entryPath": null
+    },
+    "offlinePreservedTickerWithControl": {
+      "catalystReady": true,
+      "entryPath": "narrative_control"
+    },
+    "fix": "Retain matchKind=ca; otherwise reuse existing project/permalink relation rules and name-only fallback. Leave narrativeAssessment, narrativeTier, control thresholds and existing routes unchanged.",
+    "validation": {
+      "newRegressionTestsFailedBefore": 2,
+      "newRegressionTestsPassAfter": 2,
+      "relatedTestsPassed": 59,
+      "relatedTestsFailed": 0,
+      "runtimeRestarted": false
+    }
+  }
+}

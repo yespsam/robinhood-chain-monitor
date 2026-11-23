@@ -1,0 +1,52 @@
+[
+  {
+    "chain": "bsc",
+    "network": "bsc",
+    "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+    "symbol": "MEME",
+    "diagnostic": "insufficient_contiguous_tail",
+    "historicalArtifact": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+    "historicalFrom": 1794243720,
+    "historicalTo": 1794247320
+  },
+  {
+    "chain": "bsc",
+    "network": "bsc",
+    "address": "0x2aad9bbc151659db46d379d44d9bf5e8d1888888",
+    "symbol": "MISU",
+    "diagnostic": "insufficient_closed_bars",
+    "historicalArtifact": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+    "historicalFrom": 1794243720,
+    "historicalTo": 1794247320
+  },
+  {
+    "chain": "sol",
+    "network": "solana",
+    "address": "D4CzGsZgusVj2K8R1its5H8WWdo9mazbDwBc6qvsmfun",
+    "symbol": "LAMPORT",
+    "diagnostic": "stale_closed_bars",
+    "historicalArtifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+    "historicalFrom": 1794244920,
+    "historicalTo": 1794248520
+  },
+  {
+    "chain": "sol",
+    "network": "solana",
+    "address": "J1p5JR1vC48djzmPYXiX5ME9MKnXofkaeTc6CXtSs7X5",
+    "symbol": "POLLY",
+    "diagnostic": "insufficient_closed_bars",
+    "historicalArtifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+    "historicalFrom": 1794243540,
+    "historicalTo": 1794247140
+  },
+  {
+    "chain": "robinhood",
+    "network": "robinhood",
+    "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+    "symbol": "MEME",
+    "diagnostic": "insufficient_contiguous_tail",
+    "historicalArtifact": "docs/gmgn-chart-backlog-20261110-diagnostic-final-audit.json",
+    "historicalFrom": 1794244680,
+    "historicalTo": 1794248280
+  }
+]

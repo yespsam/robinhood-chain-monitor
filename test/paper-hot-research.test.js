@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {marketLeaderHint,hotQuoteResearchReady,selectHotQuoteResearch,externalEntryCandles,advanceHotWatch,HOT_WATCH_MS} from '../src/paper-hot-research.js';
+import {marketLeaderHint,hotQuoteResearchReady,selectHotQuoteResearch,externalEntryCandles,advanceHotWatch,HOT_WATCH_MS,hotQuoteDispatchAllowed,markHotQuoteAttempt,markHotQuoteResult} from '../src/paper-hot-research.js';
 import {planHotResearch,selectResearchChart} from '../src/paper-research-scheduler.js';
 const NOW=Date.parse('2026-10-04T07:34:00Z'), CA='0xd75a0cc8614b7c8cac56f5af39d73491c2ea7777';
 const row=()=>({input:{memeExitMode:true,marketStatus:'ok',observedAt:new Date(NOW).toISOString(),
@@ -73,10 +73,10 @@ test('fresh hourly popularity survives a weaker minute rank without borrowing it
 test('quote prewarm can research a non-setup but never bypasses known data gaps or cooldown',()=>{
   const r=row(),before=structuredClone(r);assert.equal(hotQuoteResearchReady(r,NOW),true);
   const first=selectHotQuoteResearch([r],null,NOW);assert.equal(first.row,r);
-  assert.equal(selectHotQuoteResearch([r],first.lease,NOW+14999).row,r);
-  assert.equal(selectHotQuoteResearch([r],first.lease,NOW+15000).row,null);
-  assert.equal(selectHotQuoteResearch([r],first.lease,NOW+59999).row,null);
-  assert.equal(selectHotQuoteResearch([r],first.lease,NOW+60000).row,r);
+  assert.equal(selectHotQuoteResearch([r],first.lease,NOW+44999).row,r);
+  assert.equal(selectHotQuoteResearch([r],first.lease,NOW+45000).row,null);
+  assert.equal(selectHotQuoteResearch([r],first.lease,NOW+89999).row,null);
+  assert.equal(selectHotQuoteResearch([r],first.lease,NOW+90000).row,r);
   assert.deepEqual(r,before,'no decision/reason/evidence or admission mutated');
   for(const mutate of [x=>x.decisions[0].evidence.chart.ready=false,x=>x.decisions[0].evidence.safety.missing=['卖出税'],
     x=>x.decisions[0].evidence.lossRepair.reentry.ready=false,x=>x.decisions[0].evidence.costAssumptions.accountingEligible=false,
@@ -87,25 +87,85 @@ test('spare quote probes rotate across qualified leaders instead of repeatedly s
   const rows=Array.from({length:5},(_,i)=>{const r=row();r.input.token={...r.input.token,address:'0x'+String(i+1).repeat(40),rank:i+1};return r;});
   let lease=null;
   for(let i=0;i<10;i++){
-    const at=NOW+i*60000;for(const r of rows)r.input.observedAt=new Date(at).toISOString();
+    const at=NOW+i*90000;for(const r of rows)r.input.observedAt=new Date(at).toISOString();
     const picked=selectHotQuoteResearch(rows,lease,at);assert.equal(picked.row,rows[i%5]);lease=picked.lease;
     assert.equal(selectHotQuoteResearch([],lease,at+5000).row,null,'ordinary eligible entry preempts probe');
-    assert.equal(selectHotQuoteResearch(rows,lease,at+15000).row,null,'rotation never bypasses cooldown');
+    assert.equal(selectHotQuoteResearch(rows,lease,at+45000).row,null,'rotation never bypasses cooldown');
   }
   assert.equal(Object.keys(lease.served).length,5);
   const large={...lease,nextAllowedAt:0,served:Object.fromEntries(Array.from({length:30},(_,i)=>['old:'+i,NOW-i]))};
-  assert.equal(Object.keys(selectHotQuoteResearch(rows,large,NOW+600000).lease.served).length,20);
+  assert.equal(Object.keys(selectHotQuoteResearch(rows,large,NOW+900000).lease.served).length,20);
 });
 
 test('a busy candidate quote lane cannot consume the next token probe lease without requesting it',()=>{
   const a=row(),b=row();b.input.token={...b.input.token,address:'0x'+'b'.repeat(40)};
   const first=selectHotQuoteResearch([a],null,NOW);
-  const blocked=selectHotQuoteResearch([b],first.lease,NOW+60000,{laneAvailable:false});
-  assert.equal(blocked.row,null);assert.equal(blocked.lease,first.lease);
+  const blocked=selectHotQuoteResearch([b],first.lease,NOW+90000,{laneAvailable:false});
+  assert.equal(blocked.row,null);assert.equal(blocked.lease.key,first.lease.key);
   assert.equal(blocked.lease.served['bsc:'+b.input.token.address],undefined);
-  const next=selectHotQuoteResearch([b],blocked.lease,NOW+75000,{laneAvailable:true});
-  assert.equal(next.row,b);assert.equal(next.lease.until,NOW+90000);
+  const next=selectHotQuoteResearch([b],blocked.lease,NOW+105000,{laneAvailable:true});
+  assert.equal(next.row,b);assert.equal(next.lease.until,NOW+150000);
   assert.equal(selectHotQuoteResearch([b],null,NOW,{laneAvailable:false}).lease,null);
+});
+
+test('slow queued probe keeps three observations within a bounded request budget',()=>{
+  const r=row(),token=r.input.token,before=structuredClone(r);
+  let lease=selectHotQuoteResearch([r],null,NOW).lease;
+  for(const offset of [0,13500,27000]) {
+    const at=NOW+offset;
+    assert.equal(selectHotQuoteResearch([r],lease,at).row,r);
+    assert.equal(hotQuoteDispatchAllowed(lease,token,at),true);
+    lease=markHotQuoteAttempt(lease,token,at);
+    assert.equal(hotQuoteDispatchAllowed(lease,token,at),false,'in-flight request cannot duplicate');
+    assert.equal(selectHotQuoteResearch([r],lease,at+1000).row,null);
+    lease=markHotQuoteResult(lease,token,{...token,status:'ok',price:1,observedAt:new Date(at+8500).toISOString()},at+9600);
+  }
+  assert.equal(lease.attempts,3);
+  assert.deepEqual(lease.samples,[NOW+8500,NOW+22000,NOW+35500]);
+  assert.equal(lease.endedAt,NOW+36600);
+  assert.equal(lease.nextAllowedAt,NOW+81600);
+  assert.equal(hotQuoteDispatchAllowed(lease,token,NOW+38000),false,'no fourth request');
+  assert.equal(selectHotQuoteResearch([r],lease,NOW+81599).row,null);
+  const fresh=selectHotQuoteResearch([r],lease,NOW+81600);
+  assert.equal(fresh.row,r);
+  assert.deepEqual(fresh.lease.samples,[],'previous probe observations never carry into a new probe');
+  assert.equal(fresh.lease.attempts,0);
+  assert.deepEqual(r,before,'research never changes admission evidence');
+});
+
+test('fast responses still span ten seconds and cannot spend more than three requests',()=>{
+  const r=row(),token=r.input.token;
+  let lease=selectHotQuoteResearch([r],null,NOW).lease;
+  for(const offset of [0,5000,10000]) {
+    const at=NOW+offset;
+    lease=markHotQuoteAttempt(lease,token,at);
+    lease=markHotQuoteResult(lease,token,{...token,status:'ok',price:1,observedAt:new Date(at).toISOString()},at+100);
+    assert.equal(hotQuoteDispatchAllowed(lease,token,at+4999),false);
+  }
+  assert.equal(lease.samples.at(-1)-lease.samples[0],10000);
+  assert.equal(lease.attempts,3);
+  assert.equal(lease.nextAllowedAt,NOW+55100);
+  assert.equal(markHotQuoteAttempt(lease,token,NOW+11000),lease);
+});
+
+test('failures, late responses and lost eligibility cannot extend probe authority',()=>{
+  const r=row(),token=r.input.token;
+  let lease=selectHotQuoteResearch([r],null,NOW).lease;
+  const bad=structuredClone(r);bad.decisions[0].evidence.chart.ready=false;
+  assert.equal(selectHotQuoteResearch([bad],lease,NOW+5000).row,null,'chart gate remains required');
+  assert.equal(selectHotQuoteResearch([],lease,NOW+5000).row,null,'ordinary entry can preempt');
+  lease=markHotQuoteAttempt(lease,token,NOW);
+  lease=markHotQuoteResult(lease,token,{...token,status:'ok',price:1,observedAt:new Date(NOW-1).toISOString()},NOW+100);
+  assert.deepEqual(lease.samples,[],'pre-probe observations cannot qualify');
+  lease=markHotQuoteAttempt(lease,token,NOW+44000);
+  assert.equal(lease.attempts,2);
+  const expired=selectHotQuoteResearch([r],lease,NOW+45000);
+  assert.equal(expired.row,null);
+  assert.equal(hotQuoteDispatchAllowed(expired.lease,token,NOW+45000),false);
+  lease=markHotQuoteResult(expired.lease,token,{status:'unavailable'},NOW+50000);
+  assert.equal(lease.endedAt,NOW+50000);
+  assert.equal(lease.nextAllowedAt,NOW+95000,'rest starts after the final in-flight request ends');
+  assert.equal(selectHotQuoteResearch([r],lease,NOW+94999).row,null);
 });
 
 test('ambiguous launchpad creation/open timestamps use only the post-open source suffix',()=>{

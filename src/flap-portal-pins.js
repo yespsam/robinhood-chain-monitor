@@ -1,28 +1,38 @@
 // Shared by the producer, alert source gate and health checks. No network or
 // runtime side effects: importing the monitor here would create alert cycles.
 // Two-source fixed-block proof and interface checks:
-// docs/flap-v526-compatibility-evidence-2026-10-21.json, block 128920137.
-export const FLAP_PORTAL_VERIFIED_VERSION = 'v5.26.0';
-export const FLAP_PORTAL_VERIFIED_IMPLEMENTATION = '0x7a94f37b61a82c395f9812CF266b444783cC5e8c';
-export const FLAP_PORTAL_VERIFIED_IMPLEMENTATION_HASH = '0x3db27f98826706ac5ddedb919594d4670151874482dff23e31d2186858635194';
+// docs/flap-v5272-compatibility-evidence-2026-10-30.json, block 129871644.
+export const FLAP_PORTAL_VERIFIED_VERSION = 'v5.27.2';
+export const FLAP_PORTAL_VERIFIED_IMPLEMENTATION = '0x6FC1ac64c90A5A6d9E7EFc0d4064452AF3FC9968';
+export const FLAP_PORTAL_VERIFIED_IMPLEMENTATION_HASH = '0x90b3b19ddc87293d5bbd33167d7d977adf1cda5c078549b8cada05c6f9b3fa75';
 
-// Canonical EIP-1967 activation receipt: PublicNode returned the matching
-// Upgraded(address) log and BNB Data Seed independently returned its successful
+// Canonical EIP-1967 activation receipt: Chainstack returned the matching
+// Upgraded(address) log and Sentio independently returned its successful
 // canonical receipt and block header. This is an activation proof, not source
 // verification or a security audit of the implementation.
-export const FLAP_PORTAL_V526_UPGRADE_BLOCK = 128_914_179;
-export const FLAP_PORTAL_V526_UPGRADE_BLOCK_HASH = '0x025425840e296cff96ca378705da73882429d0b8cff3276c81bec26494e07616';
-export const FLAP_PORTAL_V526_UPGRADE_TRANSACTION = '0x04791db127459ee67718e1ce7610fc87c90483a94411b8c143d97db1bb8cd702';
+export const FLAP_PORTAL_V5272_UPGRADE_BLOCK = 129_871_644;
+export const FLAP_PORTAL_V5272_UPGRADE_BLOCK_HASH = '0xc4f242d2d4d38c73108c2196f25a7ea0ae03c0c99e05ec75b58eb3a2f5107914';
+export const FLAP_PORTAL_V5272_UPGRADE_TRANSACTION = '0x749ff286fa0b6caccdf2974e71e8d164fe752ab5b8af4ef578ca68f901090441';
 
 // Historical immutable receipt proofs remain historical. These bounds describe
 // independently supported identity windows, not permission to run an old Portal
 // or to trade an old event. Gaps between verified windows stay unsupported.
+export const FLAP_PORTAL_V526_UPGRADE_BLOCK = 128_914_179;
+export const FLAP_PORTAL_V526_UPGRADE_BLOCK_HASH = '0x025425840e296cff96ca378705da73882429d0b8cff3276c81bec26494e07616';
+export const FLAP_PORTAL_V526_UPGRADE_TRANSACTION = '0x04791db127459ee67718e1ce7610fc87c90483a94411b8c143d97db1bb8cd702';
+
 const evidenceIdentities = Object.freeze([
   Object.freeze({
     version: FLAP_PORTAL_VERIFIED_VERSION,
     implementation: FLAP_PORTAL_VERIFIED_IMPLEMENTATION,
     codeHash: FLAP_PORTAL_VERIFIED_IMPLEMENTATION_HASH,
-    fromBlock: FLAP_PORTAL_V526_UPGRADE_BLOCK, throughBlock: Number.MAX_SAFE_INTEGER,
+    fromBlock: FLAP_PORTAL_V5272_UPGRADE_BLOCK, throughBlock: Number.MAX_SAFE_INTEGER,
+  }),
+  Object.freeze({
+    version: 'v5.26.0',
+    implementation: '0x7a94f37b61a82c395f9812CF266b444783cC5e8c',
+    codeHash: '0x3db27f98826706ac5ddedb919594d4670151874482dff23e31d2186858635194',
+    fromBlock: FLAP_PORTAL_V526_UPGRADE_BLOCK, throughBlock: FLAP_PORTAL_V5272_UPGRADE_BLOCK - 1,
   }),
   Object.freeze({
     version: 'v5.25.0',

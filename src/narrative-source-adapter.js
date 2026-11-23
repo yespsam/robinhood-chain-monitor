@@ -662,3 +662,8 @@ export function createNarrativeSourceAdapter({ chainId = null } = {}) {
     },
   });
 }
+
+// KOL news lane (CZ / 何一): quotes and replies ARE usable here, unlike the
+// generic adapter. Output is a source_type "kol_tweet" record for the paper
+// KOL news sniper only; it never feeds the verified-evidence contract above.
+export { tweetToKolRecord as adaptKolTweet, KOL_TWEET_SOURCE_TYPE } from "./kol-news-sniper.js";

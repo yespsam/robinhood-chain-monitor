@@ -693,7 +693,25 @@ const czEntry = {
     {kind:'official_role',url:'https://www.binance.com/zh-TC/about',authority:'official_organization',status:'primary_verified',checkedAt:'2026-09-25',supports:['canonical_name','category','background']},
   ],review:{status:'reviewed',method:'manual_primary_source_review',reviewedAt:CZ_CATALOG_EXTENSION.publishedAt},
 };
-const reviewedEntries = deepFreeze([...seedEntries,czEntry]);
+// Additive 2026-11-03 review: Yi He (何一) for the KOL news lane. Own pinned manifest.
+export const HEYI_CATALOG_EXTENSION = Object.freeze({version:'2026-11-03.heyi.1',publishedAt:'2026-11-03T01:40:00.000Z',
+  hash:'sha256:66af8ce59a4e03a63c7aa292e5c173c048715e571b51f6c966b5b72c49c9068f'});
+const heyiEntry = {
+  id:'yi-he',subjectType:'person',handle:'heyibinance',expectedXUserId:'1003840309166366721',
+  canonicalName:'Yi He',category:'crypto_exchange',
+  affiliation:{name:'Binance',officialDomains:['binance.com']},
+  eligibility:{status:'reviewed_big_cap_leader',basis:'major_crypto_exchange_executive',evidenceUrl:'https://www.binance.com/zh-TC/about'},
+  background:{zh:'币安联合创始人；推文可形成关注度催化，不代表其发行或认可同名代币。',
+    en:'Binance co-founder; her posts may drive attention, but do not endorse similarly named tokens.'},
+  evidence:[
+    {kind:'x_profile',url:'https://x.com/heyibinance',authority:'subject_controlled',status:'primary_verified',checkedAt:'2026-11-03',supports:['exact_handle']},
+    {kind:'numeric_x_identity',url:'https://api.fxtwitter.com/heyibinance',authority:'public_profile_mirror',status:'corroborated',checkedAt:'2026-11-03',supports:['exact_handle','expected_x_user_id']},
+    {kind:'official_role',url:'https://www.binance.com/zh-TC/about',authority:'official_organization',status:'primary_verified',checkedAt:'2026-11-03',supports:['canonical_name','category','background']},
+  ],review:{status:'reviewed',method:'manual_primary_source_review',reviewedAt:HEYI_CATALOG_EXTENSION.publishedAt},
+};
+const computedHeyiExtensionHash = `sha256:${createHash('sha256').update(JSON.stringify(stableValue({
+  version:HEYI_CATALOG_EXTENSION.version,publishedAt:HEYI_CATALOG_EXTENSION.publishedAt,entries:[heyiEntry]}))).digest('hex')}`;
+const reviewedEntries = deepFreeze([...seedEntries,czEntry,heyiEntry]);
 const computedCatalogHash = contentHash(seedEntries);
 const computedExtensionHash = `sha256:${createHash('sha256').update(JSON.stringify(stableValue({
   version:CZ_CATALOG_EXTENSION.version,publishedAt:CZ_CATALOG_EXTENSION.publishedAt,entries:[czEntry]}))).digest('hex')}`;
@@ -785,7 +803,7 @@ export function validateCapitalKolCatalog(entries = reviewedEntries) {
     add(typeof entry?.background?.zh === "string" && entry.background.zh.trim().length >= 12, `${prefix}:invalid_background_zh`);
     add(typeof entry?.background?.en === "string" && entry.background.en.trim().length >= 24, `${prefix}:invalid_background_en`);
     add(entry?.review?.status === "reviewed" && entry?.review?.method === "manual_primary_source_review"
-      && entry?.review?.reviewedAt === (entry.id==='changpeng-zhao'?CZ_CATALOG_EXTENSION.publishedAt:CAPITAL_KOL_CATALOG_PUBLISHED_AT), `${prefix}:not_manually_reviewed`);
+      && entry?.review?.reviewedAt === (entry.id==='changpeng-zhao'?CZ_CATALOG_EXTENSION.publishedAt:entry.id==='yi-he'?HEYI_CATALOG_EXTENSION.publishedAt:CAPITAL_KOL_CATALOG_PUBLISHED_AT), `${prefix}:not_manually_reviewed`);
     add(!forbiddenFollowerField(entry), `${prefix}:followers_must_not_be_catalog_identity_data`);
 
     const evidence = Array.isArray(entry?.evidence) ? entry.evidence : [];
@@ -821,7 +839,7 @@ export function validateCapitalKolCatalog(entries = reviewedEntries) {
 
 export function verifyCapitalKolCatalogIntegrity() {
   const validation = validateCapitalKolCatalog(reviewedEntries);
-  const hashMatches = computedCatalogHash === EXPECTED_CAPITAL_KOL_CATALOG_HASH && computedExtensionHash === CZ_CATALOG_EXTENSION.hash;
+  const hashMatches = computedCatalogHash === EXPECTED_CAPITAL_KOL_CATALOG_HASH && computedExtensionHash === CZ_CATALOG_EXTENSION.hash && computedHeyiExtensionHash === HEYI_CATALOG_EXTENSION.hash;
   return deepFreeze({
     valid: validation.valid && hashMatches,
     reasons: [...validation.reasons, ...(!hashMatches ? ["catalog_hash_mismatch"] : [])],
@@ -875,7 +893,7 @@ export function createCapitalKolEventSnapshot(entryOrHandle) {
     : findReviewedCapitalKolByHandle(entryOrHandle?.handle);
   if (!entry || entry.expectedXUserId !== String(entryOrHandle?.expectedXUserId || entry.expectedXUserId)) return null;
   if (!verifyCapitalKolCatalogIntegrity().valid) return null;
-  const manifest=entry.id==='changpeng-zhao'?CZ_CATALOG_EXTENSION:
+  const manifest=entry.id==='changpeng-zhao'?CZ_CATALOG_EXTENSION:entry.id==='yi-he'?HEYI_CATALOG_EXTENSION:
     {version:CAPITAL_KOL_CATALOG_VERSION,publishedAt:CAPITAL_KOL_CATALOG_PUBLISHED_AT,hash:CAPITAL_KOL_CATALOG_HASH};
   return deepFreeze({
     schemaVersion: CAPITAL_KOL_CATALOG_SCHEMA_VERSION,
@@ -939,7 +957,7 @@ export function bindCapitalKolRuntimeIdentity(observation, options = {}) {
   }
   const nowMs = Number.isFinite(Number(options.nowMs)) ? Number(options.nowMs) : Date.now();
   const observedMs = Date.parse(observation?.observedAt || observation?.checkedAt || "");
-  if(entry.id==='changpeng-zhao'&&nowMs<Date.parse(CZ_CATALOG_EXTENSION.publishedAt))return quarantine('catalog_review_not_yet_published',observation);
+  if((entry.id==='changpeng-zhao'&&nowMs<Date.parse(CZ_CATALOG_EXTENSION.publishedAt))||(entry.id==='yi-he'&&nowMs<Date.parse(HEYI_CATALOG_EXTENSION.publishedAt)))return quarantine('catalog_review_not_yet_published',observation);
   const requestedMaximumAgeMs = Number(options.observationMaximumAgeMs);
   const maximumAgeMs = Math.min(DEFAULT_OBSERVATION_MAXIMUM_AGE_MS, Math.max(60_000,
     Number.isFinite(requestedMaximumAgeMs) ? requestedMaximumAgeMs : DEFAULT_OBSERVATION_MAXIMUM_AGE_MS));
@@ -1026,7 +1044,7 @@ export function getCapitalKolCatalogManifest() {
     publishedAt: CAPITAL_KOL_CATALOG_PUBLISHED_AT,
     hash: CAPITAL_KOL_CATALOG_HASH,
     count: reviewedEntries.length,
-    extensions:[{...CZ_CATALOG_EXTENSION,count:1,handles:['cz_binance']}],
+    extensions:[{...CZ_CATALOG_EXTENSION,count:1,handles:['cz_binance']},{...HEYI_CATALOG_EXTENSION,count:1,handles:['heyibinance']}],
     categories: [...CAPITAL_KOL_CATEGORIES],
     followersPolicy: CAPITAL_KOL_ELIGIBILITY_POLICY.followers,
   });

@@ -12,6 +12,7 @@ import {
   classifyTelegramNews,
   createTelegramNewsMonitor,
   parseTelegramPublicPreview,
+  resolveTelegramNewsRequestTimeoutMs,
 } from "../src/telegram-news-monitor.js";
 
 const CHANNEL_TITLE = "Holly 💎 好资源分享";
@@ -112,6 +113,14 @@ test("captured Telegram public-preview HTML shape decodes the live data-view ide
   assert.equal(record.sourceOccurredAt, "2026-08-23T13:15:18.000Z");
   assert.equal(record.channelTitle, CHANNEL_TITLE);
   assert.equal(classifyTelegramNews(record).accepted, true);
+});
+
+test("Telegram request timeout has enough network slack and remains bounded", () => {
+  assert.equal(resolveTelegramNewsRequestTimeoutMs(undefined), 10_000);
+  assert.equal(resolveTelegramNewsRequestTimeoutMs(3_000), 8_000, "legacy short settings are raised to the safe floor");
+  assert.equal(resolveTelegramNewsRequestTimeoutMs(12_000), 12_000);
+  assert.equal(resolveTelegramNewsRequestTimeoutMs(30_000), 15_000, "misconfigured values cannot stall polling indefinitely");
+  assert.equal(resolveTelegramNewsRequestTimeoutMs(Number.NaN), 10_000);
 });
 
 test("news classifier accepts substantive verticals and rejects politics, marketing, calls, failed translation, and thin content", () => {

@@ -1,0 +1,252 @@
+{
+  "target": {
+    "chain": "sol",
+    "network": "solana",
+    "address": "D4CzGsZgusVj2K8R1its5H8WWdo9mazbDwBc6qvsmfun",
+    "symbol": "LAMPORT",
+    "diagnostic": "stale_closed_bars",
+    "historicalArtifact": "docs/gmgn-chart-backlog-20261110-newly-delisted-audit.json",
+    "historicalFrom": 1794244920,
+    "historicalTo": 1794248520
+  },
+  "url": "https://api.geckoterminal.com/api/v2/networks/solana/tokens/D4CzGsZgusVj2K8R1its5H8WWdo9mazbDwBc6qvsmfun/pools?include=base_token%2Cquote_token%2Cdex&include_inactive_source=true&page=1",
+  "requestedAt": "2026-11-10T04:44:07.206246+00:00",
+  "receivedAt": "2026-11-10T04:44:08.493361+00:00",
+  "httpStatus": 200,
+  "headers": {
+    "Date": "Tue, 10 Nov 2026 04:44:10 GMT",
+    "Cache-Control": "max-age=30, public, must-revalidate, s-maxage=60"
+  },
+  "rawResponse": {
+    "data": [
+      {
+        "id": "solana_2ZJpQEnyTugE237Cs9X5FHPrXhPauC6DBx5jLV5FqyV7",
+        "type": "pool",
+        "attributes": {
+          "base_token_price_usd": "0.0001789244337",
+          "base_token_price_native_currency": "0.00000214819915405015",
+          "quote_token_price_usd": "85.879775658474507532665712171475911964261284774",
+          "quote_token_price_native_currency": "1.0",
+          "base_token_price_quote_token": "0.000002148199154",
+          "quote_token_price_base_token": "465506.188341351",
+          "address": "2ZJpQEnyTugE237Cs9X5FHPrXhPauC6DBx5jLV5FqyV7",
+          "name": "LAMPORT / SOL",
+          "pool_created_at": "2026-11-05T19:40:21Z",
+          "token_price_usd": "0.0001789244337",
+          "fdv_usd": "178924.4337",
+          "market_cap_usd": null,
+          "price_change_percentage": {
+            "m5": "-2.96",
+            "m15": "-2.719",
+            "m30": "-3.765",
+            "h1": "11.46",
+            "h6": "-32.06",
+            "h24": "501.66"
+          },
+          "transactions": {
+            "m5": {
+              "buys": 2,
+              "sells": 1,
+              "buyers": 1,
+              "sellers": 1
+            },
+            "m15": {
+              "buys": 6,
+              "sells": 1,
+              "buyers": 4,
+              "sellers": 1
+            },
+            "m30": {
+              "buys": 10,
+              "sells": 5,
+              "buyers": 6,
+              "sellers": 3
+            },
+            "h1": {
+              "buys": 20,
+              "sells": 7,
+              "buyers": 12,
+              "sellers": 5
+            },
+            "h6": {
+              "buys": 258,
+              "sells": 191,
+              "buyers": 112,
+              "sellers": 100
+            },
+            "h24": {
+              "buys": 1010,
+              "sells": 816,
+              "buyers": 400,
+              "sellers": 328
+            }
+          },
+          "volume_usd": {
+            "m5": "11.3825009737",
+            "m15": "52.3355696589",
+            "m30": "1162.6391731777",
+            "h1": "2955.0585671148",
+            "h6": "60317.1688033199",
+            "h24": "245321.801044495"
+          },
+          "reserve_in_usd": "40041.6086",
+          "last_trade_timestamp": "1794285458"
+        },
+        "relationships": {
+          "base_token": {
+            "data": {
+              "id": "solana_D4CzGsZgusVj2K8R1its5H8WWdo9mazbDwBc6qvsmfun",
+              "type": "token"
+            }
+          },
+          "quote_token": {
+            "data": {
+              "id": "solana_So11111111111111111111111111111111111111112",
+              "type": "token"
+            }
+          },
+          "dex": {
+            "data": {
+              "id": "raydium",
+              "type": "dex"
+            }
+          }
+        }
+      },
+      {
+        "id": "solana_8AH7RbjeeGR2QEff7oWoowJ7SXvBRwMkvbhA3MmkQxYa",
+        "type": "pool",
+        "attributes": {
+          "base_token_price_usd": "0.00003542887402",
+          "base_token_price_native_currency": "0.000000402572482952208",
+          "quote_token_price_usd": "89.4285863821",
+          "quote_token_price_native_currency": "1.0",
+          "base_token_price_quote_token": "0.000000402572483",
+          "quote_token_price_base_token": "2484024.72187528",
+          "address": "8AH7RbjeeGR2QEff7oWoowJ7SXvBRwMkvbhA3MmkQxYa",
+          "name": "LAMPORT / SOL",
+          "pool_created_at": "2026-11-05T19:38:14Z",
+          "token_price_usd": "0.00003542887402",
+          "fdv_usd": "35428.87402",
+          "market_cap_usd": null,
+          "price_change_percentage": {
+            "m5": "0",
+            "m15": "0",
+            "m30": "0",
+            "h1": "0",
+            "h6": "0",
+            "h24": "0"
+          },
+          "transactions": {
+            "m5": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m15": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m30": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h1": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h6": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h24": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            }
+          },
+          "volume_usd": {
+            "m5": "0.0",
+            "m15": "0.0",
+            "m30": "0.0",
+            "h1": "0.0",
+            "h6": "0.0",
+            "h24": "0.0"
+          },
+          "reserve_in_usd": "0.0",
+          "last_trade_timestamp": "1793907620"
+        },
+        "relationships": {
+          "base_token": {
+            "data": {
+              "id": "solana_D4CzGsZgusVj2K8R1its5H8WWdo9mazbDwBc6qvsmfun",
+              "type": "token"
+            }
+          },
+          "quote_token": {
+            "data": {
+              "id": "solana_So11111111111111111111111111111111111111112",
+              "type": "token"
+            }
+          },
+          "dex": {
+            "data": {
+              "id": "raydium-launchlab",
+              "type": "dex"
+            }
+          }
+        }
+      }
+    ],
+    "included": [
+      {
+        "id": "solana_D4CzGsZgusVj2K8R1its5H8WWdo9mazbDwBc6qvsmfun",
+        "type": "token",
+        "attributes": {
+          "address": "D4CzGsZgusVj2K8R1its5H8WWdo9mazbDwBc6qvsmfun",
+          "name": "Lamport Robotics",
+          "symbol": "LAMPORT",
+          "decimals": 6,
+          "image_url": "https://assets.geckoterminal.com/1lu8errkhx7yszoa1h9w16e3zwyd",
+          "coingecko_coin_id": null
+        }
+      },
+      {
+        "id": "solana_So11111111111111111111111111111111111111112",
+        "type": "token",
+        "attributes": {
+          "address": "So11111111111111111111111111111111111111112",
+          "name": "Wrapped SOL",
+          "symbol": "SOL",
+          "decimals": 9,
+          "image_url": "https://coin-images.coingecko.com/coins/images/21629/large/solana.jpg?1696520989",
+          "coingecko_coin_id": "wrapped-solana"
+        }
+      },
+      {
+        "id": "raydium",
+        "type": "dex",
+        "attributes": {
+          "name": "Raydium"
+        }
+      },
+      {
+        "id": "raydium-launchlab",
+        "type": "dex",
+        "attributes": {
+          "name": "Raydium Launchlab"
+        }
+      }
+    ]
+  }
+}

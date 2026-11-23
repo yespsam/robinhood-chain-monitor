@@ -76,7 +76,7 @@ const GENIUS_INTEGRITY_FAILURE_CODES = new Set([
   "GENIUS_X_CURSOR_INVALID", "GENIUS_HEALTH_STATE_INVALID", "GENIUS_DURABLE_EVENT_STATE_INVALID",
   "GENIUS_ANCHOR_STATE_INVALID", "GENIUS_UNRESOLVED_STATE_INVALID",
 ]);
-const FOUR_REGISTRY_STATE_VERSION = 11;
+const FOUR_REGISTRY_STATE_VERSION = 12;
 const FOUR_REGISTRY_CHAIN_ID = 56;
 const FOUR_REGISTRY_ADDRESS = "0x912cef0c3ae9ab6eb3ec87cab69371cfb317ab94";
 const FOUR_CORE_ADDRESS = "0xebe7b6c1089d9f72ad07f34e36d898e44e5e27f3";
@@ -2848,7 +2848,16 @@ function evaluateGenius(record, previous, nowMs, maximumAgeSeconds, required, po
   });
 }
 
-function evaluateGmgnFlow(record, nowMs, maximumAgeSeconds, sourceMaximumAgeSeconds, required) {
+// Chains deliberately excluded by data/trading-scan-scope.json are never polled by the
+// monitor (and hot discovery only runs with the full scope); report them as coverage, not outage.
+async function readTradingScanScope(dataDir) {
+  try {
+    const v = JSON.parse(await fs.readFile(path.join(dataDir, "trading-scan-scope.json"), "utf8"));
+    return v?.version === 1 && Array.isArray(v.chains) && v.chains.length ? v.chains.filter((c) => Object.hasOwn(GMGN_FLOW_CHAINS, c)) : null;
+  } catch { return null; }
+}
+
+function evaluateGmgnFlow(record, nowMs, maximumAgeSeconds, sourceMaximumAgeSeconds, required, scanChains = null) {
   if (!required) return laneResult({
     id: "gmgnFlow", required, maximumAgeSeconds, record, semantic: { configured: false },
   });
@@ -2879,8 +2888,11 @@ function evaluateGmgnFlow(record, nowMs, maximumAgeSeconds, sourceMaximumAgeSeco
     return { next, active: schedulerFresh && checked !== null && Number.isFinite(next)
       && next > nowMs && next > checked && next - checked <= 15 * 60_000 };
   };
+  const outOfScope = (key, hot) => Array.isArray(scanChains)
+    && scanChains.length < Object.keys(GMGN_FLOW_CHAINS).length && (hot || !scanChains.includes(key));
   const inspectSource = (key, item, hot = false) => {
     const prefix = `gmgn_flow_source_${key}`;
+    if (outOfScope(key, hot)) { coverageReasons.push(`${prefix}_out_of_trading_scope`); return { status: "out_of_scope" }; }
     if (!ponStateRecord(item)) { invalid(key); coverageReasons.push(`${prefix}_missing`); return null; }
     const statuses = hot ? ["initializing", "healthy", "partial", "backoff"]
       : ["initializing", "healthy", "partial", "backoff", "unsupported"];
@@ -3941,7 +3953,7 @@ export async function runHealthCheck({
     evaluateGenius(geniusRecord, previousLanes.genius, nowMs, limits.geniusAgeSeconds,
       requirements.genius, settings.geniusPollIntervals),
     evaluateGmgnFlow(gmgnFlowRecord, nowMs, limits.gmgnFlowAgeSeconds,
-      limits.gmgnFlowSourceAgeSeconds, requirements.gmgnFlow),
+      limits.gmgnFlowSourceAgeSeconds, requirements.gmgnFlow, await readTradingScanScope(dataDir)),
     evaluateFourRegistry(
       fourRegistryRecord,
       previousLanes.fourRegistry,

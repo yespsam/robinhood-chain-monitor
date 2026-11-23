@@ -760,7 +760,19 @@ function freshnessLabel(ageMs) {
   return { zh: "已陈旧", en: "stale" };
 }
 
-function deriveScore(target, narrative, market, risk) {
+// Only the narrative shadow pipeline supplies this read-only activity summary.
+// Cap each direction independently so repeated activity cannot dominate the score.
+function normalizedNotedWallets(evidence) {
+  if (!evidence || evidence.shadowOnly !== true) return null;
+  const count = (value) => Number.isSafeInteger(value) && value > 0 ? value : 0;
+  return {
+    boostBuys: count(evidence.boostBuys),
+    avoid: count(evidence.avoid),
+    shadowOnly: true,
+  };
+}
+
+function deriveScore(target, narrative, market, risk, notedWallets) {
   const catalystQuality = (narrative.eventStrength + narrative.novelty) / 2;
   const catalystRaw = narrative.verified ? round(20 * catalystQuality / 100) : 0;
   const mechanismRaw = narrative.verified && narrative.subjectMatch
@@ -772,6 +784,9 @@ function deriveScore(target, narrative, market, risk) {
   const liquidityRatio = market.liquidityUsd == null ? 0 : market.liquidityUsd / market.minimumLiquidityUsd;
   const components = {
     eventSubtotalAfterDecay,
+    ...(notedWallets ? {
+      notedWallets: Math.min(notedWallets.boostBuys, 3) * 5 - Math.min(notedWallets.avoid, 3) * 10,
+    } : {}),
     target: target.ca && target.caVerified && target.poolAddress && target.poolVerified ? 10 : 0,
     market: market.marketConfirmed ? 15 : 0,
     momentum: market.momentumConfirmed ? 5 : 0,
@@ -905,6 +920,7 @@ export function deriveNarrativeTradeSignal({
   narrativeEvidence = {},
   marketEvidence = {},
   riskEvidence = {},
+  notedWallets = null,
   asOf = null,
 } = {}) {
   const pool = normalizedPoolContext(poolContext);
@@ -913,7 +929,8 @@ export function deriveNarrativeTradeSignal({
   const market = normalizedMarket(marketEvidence, narrative.asOfMs);
   const riskState = normalizedRisk(riskEvidence, narrative.asOfMs);
   const hardBlocks = deriveHardBlocks(pool, targetState, market, riskState);
-  const scored = deriveScore(targetState, narrative, market, riskState);
+  const walletEvidence = normalizedNotedWallets(notedWallets);
+  const scored = deriveScore(targetState, narrative, market, riskState, walletEvidence);
   const missing = missingConfirmations(pool, targetState, narrative, market, scored.total);
   const decision = hardBlocks.length ? "reject" : missing.length ? "watch" : "do";
   const freshness = freshnessLabel(narrative.ageMs);
@@ -1041,6 +1058,7 @@ export function deriveNarrativeTradeSignal({
     },
     marketEvidence: market,
     riskEvidence: riskState,
+    ...(walletEvidence ? { notedWallets: walletEvidence } : {}),
   };
   const inputHash = digest(hashMaterial);
   const shadowOrder = decision === "do" ? {
@@ -1063,6 +1081,7 @@ export function deriveNarrativeTradeSignal({
     decision,
     score: scored.total,
     scoreDetails: scored.details,
+    ...(walletEvidence ? { notedWallets: walletEvidence } : {}),
     event: eventSection,
     mechanism: mechanismSection,
     target: targetSection,

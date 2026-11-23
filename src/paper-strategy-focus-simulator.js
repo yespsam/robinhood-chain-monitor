@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { narrativeAdmissionReview } from './paper-narrative-thesis.js';
 
 export const PAPER_STRATEGY_FOCUS_SIMULATION_VERSION = 'second_breakout_narrative_paper_v1';
 const SCHEMA = 'paper_strategy_focus_simulation_v1';
@@ -73,7 +74,7 @@ function normalizedCandidate(evaluation, nowMs, ticketUsd) {
   const liquidity = evidence.liquidity;
   if (!finite(liquidity) || liquidity < MAX_LIQUIDITY_USD) add('真实流动性不足 $50,000 或未知');
   const thesis = evidence.narrativeThesis;
-  const admission = evidence.narrativeAdmission;
+  const admission = thesis ? narrativeAdmissionReview(thesis,{token,nowMs}) : null;
   if (thesis?.researchOnly !== true || thesis?.chain !== chain
     || canonicalAddress(chain, thesis?.address) !== canonicalAddress(chain, address)) add('缺少与精确链 / CA 绑定的原文叙事分析');
   if (admission?.ready !== true) {
@@ -117,7 +118,7 @@ function normalizedCandidate(evaluation, nowMs, ticketUsd) {
       stopLossRate, entryCostsUsd: entryUsd - notionalUsd,
       feeRate: costs.feeRate, slippageRate: costs.slippageRate, sellTax: costs.sellTax, gasUsd,
       lastProcessedCandleClosedAt: iso(closedAt), markPrice: token.price, markAt: iso(confirmedAt),
-      markStatus: 'fresh', unrealizedPnlUsd: null, coverageStatus: 'awaiting_post_entry_candles',
+      markStatus: 'fresh', unrealizedPnlUsd: null, coverageStatus: 'awaiting_post_entry_candles', requiresStructureChart: true,
       narrativeEvent: short(thesis.event?.label), narrativeSourceUrl: short(thesis.event?.sourceUrl),
       operatorFootprintStatus: short(shadow.operatorFootprint?.status) } };
 }
@@ -133,14 +134,15 @@ function validateState(state, config) {
     && positive(position.supportPrice) && positive(position.targetPrice));
 }
 
-export function createPaperStrategyFocusSimulator({ dataDir, now = Date.now, initialCashUsd = 100,
+export function createPaperStrategyFocusSimulator({ dataDir, sessionId = null, now = Date.now, initialCashUsd = 100,
   ticketUsd = 10, maxOpenPositions = 1, maxTrades = 2000, maxOpenedSignalKeys = 5000, maxLatestChecks = 100 } = {}) {
   if (typeof dataDir !== 'string' || !dataDir || typeof now !== 'function'
     || !positive(initialCashUsd) || !positive(ticketUsd) || !Number.isSafeInteger(maxOpenPositions) || maxOpenPositions < 1
     || !Number.isSafeInteger(maxTrades) || maxTrades < 1 || !Number.isSafeInteger(maxOpenedSignalKeys) || maxOpenedSignalKeys < 1
     || !Number.isSafeInteger(maxLatestChecks) || maxLatestChecks < 1) throw new TypeError('invalid focus simulation configuration');
   const config = { initialCashUsd, ticketUsd, maxOpenPositions, maxTrades, maxOpenedSignalKeys, maxLatestChecks };
-  const filePath = path.join(dataDir, 'paper-strategy-focus-simulation-v1.json');
+  const suffix=sessionId==null?'':`-${createHash('sha256').update(String(sessionId)).digest('hex').slice(0,12)}`;
+  const filePath = path.join(dataDir, `paper-strategy-focus-simulation-v1${suffix}.json`);
   let state = { schema: SCHEMA, version: PAPER_STRATEGY_FOCUS_SIMULATION_VERSION, mode: 'paper_sidecar',
     execution: false, signing: false, broadcast: false, updatedAt: null, ...config,
     cashUsd: initialCashUsd, realizedPnlUsd: 0, positions: [], trades: [], openedSignalKeys: [],
@@ -224,7 +226,7 @@ export function createPaperStrategyFocusSimulator({ dataDir, now = Date.now, ini
       const bars = [...chart.rows].sort((a, b) => stamp(a.time) - stamp(b.time));
       for (const bar of bars) {
         const openAt = stamp(bar.time), closedAt = openAt + 60_000;
-        if (!Number.isFinite(openAt) || closedAt <= stamp(position.openedAt)
+        if (!Number.isFinite(openAt) || closedAt > nowMs || closedAt <= stamp(position.openedAt)
           || closedAt <= stamp(position.lastProcessedCandleClosedAt)) continue;
         if (![bar.open, bar.high, bar.low, bar.close].every(positive) || bar.high < Math.max(bar.open, bar.close, bar.low)
           || bar.low > Math.min(bar.open, bar.close)) {
@@ -251,7 +253,9 @@ export function createPaperStrategyFocusSimulator({ dataDir, now = Date.now, ini
       }
       if (exited) continue;
       if (hasFreshMark && nowMs - stamp(position.openedAt) >= MAX_HOLD_MS
-        && position.coverageStatus === 'continuous_post_entry_closed_candles') {
+        && position.coverageStatus === 'continuous_post_entry_closed_candles'
+        && Number.isFinite(stamp(position.lastProcessedCandleClosedAt))
+        && nowMs - stamp(position.lastProcessedCandleClosedAt) <= 120_000) {
         closePosition(position, mark.price, markAt, '连续收盘K线覆盖下达到 60 分钟纸面持有期限');
         continue;
       }

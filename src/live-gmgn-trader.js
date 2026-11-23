@@ -9,18 +9,23 @@ export const BSC_USDT = "0x55d398326f99059fF775485246999027B3197955";
 export const BSC_NATIVE_BNB = "0x0000000000000000000000000000000000000000";
 // gmgn-cli currency address for native SOL (9 decimals, lamports).
 export const SOL_NATIVE = "So11111111111111111111111111111111111111112";
-// Per-chain spend asset: bsc spends BNB, sol spends SOL. Anything else is refused.
-export const CHAIN_SPEC = {
-  bsc: { asset: "bnb", native: BSC_NATIVE_BNB, decimals: 18 },
-  sol: { asset: "sol", native: SOL_NATIVE, decimals: 9 },
+// Audited execution chains; freeze the exported map so callers cannot extend the live allowlist.
+export const CHAIN_SPEC = Object.freeze({
+  bsc: Object.freeze({ asset: "bnb", native: BSC_NATIVE_BNB, decimals: 18 }),
+  sol: Object.freeze({ asset: "sol", native: SOL_NATIVE, decimals: 9 }),
+});
+// Per-chain spend assets. Anything outside these audited pairs is refused.
+const CHAIN_SPEND_ASSETS = {
+  bsc: new Set(["bnb", "usdt"]),
+  sol: new Set(["sol"]),
 };
 export const normChain = (c) => { const s = String(c || "").toLowerCase(); return s === "solana" ? "sol" : s; };
 // Derive a single-chain cfg (chain/wallet/spendAsset/gasReserve) from the multi-chain cfg.
 export function chainCfg(cfg, chain = cfg.chain) {
   const c = normChain(chain);
+  if (!CHAIN_SPEC[c]) return { ...cfg, chain: c, unsupported: true };
   if (c === "sol") return { ...cfg, chain: "sol", wallet: cfg.solWallet, spendAsset: "sol", gasReserveNative: cfg.gasReserveSol };
-  if (c === cfg.chain || c === "bsc") return { ...cfg, chain: c, gasReserveNative: cfg.gasReserveBnb };
-  return { ...cfg, chain: c, unsupported: true };
+  return { ...cfg, chain: "bsc", gasReserveNative: cfg.gasReserveBnb };
 }
 const num = (v, d) => (Number.isFinite(Number(v)) && v !== "" && v != null ? Number(v) : d);
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -144,8 +149,12 @@ const finite = (v) => v != null && v !== "" && Number.isFinite(Number(v));
 export function checkGates(cfg, order, state, { now = Date.now(), fsx = fs } = {}) {
   if (cfg.enabled !== true) return { ok: false, reason: "LIVE_TRADING_ENABLED is not true" };
   if (fsx.existsSync(cfg.killFile)) return { ok: false, reason: "kill switch present" };
-  if (cfg.unsupported || (cfg.chains && !cfg.chains.includes(cfg.chain))) return { ok: false, reason: `chain ${cfg.chain} not enabled for live` };
-  if (cfg.chain === "sol") { if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(cfg.wallet || "")) return { ok: false, reason: "LIVE_SOL_WALLET invalid" }; }
+  const chain = normChain(cfg.chain);
+  const spendAsset = String(cfg.spendAsset || "").toLowerCase();
+  if (cfg.unsupported || !CHAIN_SPEC[chain]) return { ok: false, reason: `unsupported live chain ${cfg.chain}` };
+  if (!CHAIN_SPEND_ASSETS[chain].has(spendAsset)) return { ok: false, reason: `unsupported spend asset ${spendAsset} for ${chain}` };
+  if (cfg.chains && !cfg.chains.map(normChain).includes(chain)) return { ok: false, reason: `chain ${chain} not enabled for live` };
+  if (chain === "sol") { if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(cfg.wallet || "")) return { ok: false, reason: "LIVE_SOL_WALLET invalid" }; }
   else if (!/^0x[0-9a-f]{40}$/.test(cfg.wallet)) return { ok: false, reason: "LIVE_WALLET invalid" };
   if (order.source !== cfg.signalSource) return { ok: false, reason: `signal source ${order.source} not allowed` };
   if (/narrative/i.test(order.source || "") || /narrative/i.test(order.paperSessionId || "") || /narrative/i.test(order.paperStrategyId || "")) return { ok: false, reason: "narrative signals are shadow-only" };
@@ -171,14 +180,14 @@ export function checkGates(cfg, order, state, { now = Date.now(), fsx = fs } = {
   // Balance is mandatory and must be a finite, non-negative number (NaN/missing => refuse).
   if (!finite(state.balanceUsd) || Number(state.balanceUsd) < 0) return { ok: false, reason: "balance unavailable" };
   if (usd > Number(state.balanceUsd)) return { ok: false, reason: "insufficient balance" };
-  if (cfg.spendAsset === "sol") {
+  if (spendAsset === "sol") {
     if (!(Number(order.solPriceUsd) > 0) || !Number.isFinite(Number(order.solPriceUsd))) return { ok: false, reason: "SOL price unavailable" };
     const tip = Number(cfg.solTipFee), prio = Number(cfg.solPriorityFee);
     if (!(tip >= 0.00001 && tip <= 0.01) || !(prio > 0 && prio <= 0.01)) return { ok: false, reason: "invalid SOL tip/priority fee config" };
     if (state.balanceSol != null && !finite(state.balanceSol)) return { ok: false, reason: "SOL balance invalid" };
     if (state.balanceSol != null && usd / Number(order.solPriceUsd) + tip + prio > Number(state.balanceSol) - cfg.gasReserveSol) return { ok: false, reason: "insufficient SOL after fee reserve" };
   }
-  if (cfg.spendAsset === "bnb") {
+  if (spendAsset === "bnb") {
     if (!(Number(order.bnbPriceUsd) > 0) || !Number.isFinite(Number(order.bnbPriceUsd))) return { ok: false, reason: "BNB price unavailable" };
     if (state.balanceBnb != null) {
       if (!finite(state.balanceBnb)) return { ok: false, reason: "BNB balance invalid" };
@@ -227,17 +236,62 @@ export function checkLiveEvidence(cfg, ev, { now = Date.now() } = {}) {
 export async function preSubmitQuote(cfg, order, { run = runCli } = {}) {
   const a = buildSwapArgs(cfg, order);
   const get = (k) => a[a.indexOf(k) + 1];
+  const requestedInput = String(get("--amount") ?? "");
+  const slippageArgs = cfg.autoSlippage
+    ? ["--auto-slippage"]
+    : ["--slippage", String(cfg.maxSlippage || 30)];
   let r;
-  try { r = await run(["order", "quote", "--chain", cfg.chain, "--from", cfg.wallet, "--input-token", get("--input-token"), "--output-token", order.token, "--amount", get("--amount"), "--slippage", String(cfg.maxSlippage || 30), "--raw"]); }
+  try { r = await run(["order", "quote", "--chain", cfg.chain, "--from", cfg.wallet, "--input-token", get("--input-token"), "--output-token", order.token, "--amount", get("--amount"), ...slippageArgs, "--raw"]); }
   catch (e) { return { ok: false, reason: `pre-submit quote failed: ${String(e.message).slice(0, 200)}` }; }
   const q = r?.raw || {};
-  const out = Number(q.output_amount ?? q.tx?.amount_out);
-  if (!(out > 0)) return { ok: false, reason: "pre-submit quote has no output" };
+  const rawAmount = (value) => {
+    if (typeof value === "string" && /^\d+$/.test(value)) return value;
+    if (typeof value === "bigint" && value >= 0n) return String(value);
+    if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return String(value);
+    return null;
+  };
+  const inputAmount = rawAmount(q.input_amount ?? requestedInput);
+  const outputAmount = rawAmount(q.output_amount ?? q.tx?.amount_out);
+  const minOutputAmount = q.min_output_amount == null ? null : rawAmount(q.min_output_amount);
+  const rawSlippage = q.slippage == null ? null : String(q.slippage).trim();
+  const numericSlippage = rawSlippage == null ? null : Number(rawSlippage);
+  if (!inputAmount || inputAmount !== requestedInput) return { ok: false, reason: "pre-submit quote input differs from requested amount" };
+  if (!outputAmount || BigInt(outputAmount) <= 0n) return { ok: false, reason: "pre-submit quote has no output or invalid output" };
+  if (q.min_output_amount != null && (!minOutputAmount || BigInt(minOutputAmount) > BigInt(outputAmount))) {
+    return { ok: false, reason: "pre-submit quote minimum output is invalid" };
+  }
+  if (rawSlippage != null && (!Number.isInteger(numericSlippage) || numericSlippage < 0 || numericSlippage > 100)) {
+    return { ok: false, reason: "pre-submit quote slippage is invalid" };
+  }
+  if (!cfg.autoSlippage) {
+    const configuredSlippage = Number(cfg.maxSlippage || 30);
+    if (!Number.isInteger(configuredSlippage) || configuredSlippage < 0 || configuredSlippage > 100) {
+      return { ok: false, reason: "configured slippage is invalid" };
+    }
+    if (numericSlippage != null && numericSlippage !== configuredSlippage) {
+      return { ok: false, reason: "pre-submit quote slippage differs from configured order" };
+    }
+  }
   const inUsd = Number(q.amount_in_usd), outUsd = Number(q.amount_out_usd);
   if (inUsd > 0 && Number.isFinite(outUsd) && outUsd / inUsd < 1 - (cfg.maxQuoteLoss ?? 0.25)) return { ok: false, reason: `quote loss too high (${outUsd.toFixed(2)}/${inUsd.toFixed(2)} USD)` };
   const px = Number(q.token_out_usd_price), paper = Number(order.paperPrice);
   if (paper > 0 && px > paper * (1 + (cfg.maxPriceChase ?? 0.5))) return { ok: false, reason: `price ran ${((px / paper - 1) * 100).toFixed(0)}% above paper entry` };
-  return { ok: true, quote: { outputAmount: q.output_amount, amountInUsd: inUsd, amountOutUsd: outUsd, tokenUsdPrice: px, at: Date.now() } };
+  return { ok: true, quote: {
+    inputAmount,
+    outputAmount,
+    minOutputAmount,
+    slippage: cfg.autoSlippage ? `auto${q.slippage == null ? "" : `:${q.slippage}`}` : String(cfg.maxSlippage || 30),
+    amountInUsd: inUsd,
+    amountOutUsd: outUsd,
+    tokenUsdPrice: px,
+    at: Date.now(),
+  } };
+}
+
+function approvedQuoteMatches(expected, actual) {
+  if (!expected || !actual) return false;
+  return ["inputAmount", "outputAmount", "minOutputAmount", "slippage"].every((key) =>
+    expected[key] != null && actual[key] != null && String(expected[key]) === String(actual[key]));
 }
 
 const sameToken = (chain, a, b) => chain === "sol" ? String(a) === String(b) : String(a || "").toLowerCase() === String(b || "").toLowerCase();
@@ -305,11 +359,15 @@ export function buildConditionOrders(cfg) {
 }
 
 export function buildSwapArgs(cfg, order) {
-  const bnb = cfg.spendAsset === "bnb";
-  const sol = cfg.spendAsset === "sol";
+  const chain = normChain(cfg.chain);
+  const spendAsset = String(cfg.spendAsset || "").toLowerCase();
+  if (cfg.unsupported || !CHAIN_SPEC[chain]) throw new Error(`unsupported live chain ${cfg.chain}`);
+  if (!CHAIN_SPEND_ASSETS[chain].has(spendAsset)) throw new Error(`unsupported spend asset ${spendAsset} for ${chain}`);
+  const bnb = spendAsset === "bnb";
+  const sol = spendAsset === "sol";
   const raw = sol ? usdToLamports(order.usd, order.solPriceUsd) : bnb ? usdToBnbWei(order.usd, order.bnbPriceUsd)
     : BigInt(Math.round(Number(order.usd) * 1e6)) * 10n ** 12n; // USDT BSC has 18 decimals
-  const args = ["swap", "--chain", cfg.chain, "--from", cfg.wallet,
+  const args = ["swap", "--chain", chain, "--from", cfg.wallet,
     "--input-token", order.inputToken || (sol ? SOL_NATIVE : bnb ? BSC_NATIVE_BNB : BSC_USDT), "--output-token", order.token,
     "--amount", raw.toString(),
     "--condition-orders", JSON.stringify(buildConditionOrders(cfg)), "--yes", "--raw"];
@@ -318,7 +376,7 @@ export function buildSwapArgs(cfg, order) {
   if (cfg.autoSlippage) args.push("--auto-slippage");
   else args.push("--slippage", String(clamp(Number(order.slippage ?? cfg.maxSlippage), 10, 30)));
   // BSC + condition-orders requires --gas-price (gwei).
-  if (cfg.chain === "bsc") args.push("--gas-price", String(order.gasPriceGwei ?? cfg.gasPriceGwei ?? 1));
+  if (chain === "bsc") args.push("--gas-price", String(order.gasPriceGwei ?? cfg.gasPriceGwei ?? 1));
   // SOL + condition-orders requires both --priority-fee and --tip-fee (>= 0.00001 SOL).
   if (cfg.chain === "sol") args.push("--priority-fee", String(cfg.solPriorityFee || "0.0001"), "--tip-fee", String(cfg.solTipFee || "0.00001"));
   if (cfg.antiMev) args.push("--anti-mev");
@@ -416,6 +474,15 @@ export function createLiveTrader(baseCfg = loadLiveConfig(), { run = runCli, fsx
     if (br && now() < Number(br.until)) return refuse(`IP blocked circuit breaker until ${new Date(br.until).toISOString()} (${br.hits}x)`);
     let ledger;
     try { ledger = readLedger(cfg.ledgerPath, fsx); } catch (e) { return refuse(`${e.message}; refusing live trades`); }
+    if (order.manualCandidateId && ledger.positions.some((position) => position.manualCandidateId === order.manualCandidateId)) {
+      return refuse("strategy candidate already has a live ledger reservation");
+    }
+    if (order.manualCandidateId && ledger.positions.some((position) =>
+      position && RESERVING_STATUSES.has(position.status)
+      && normChain(position.chain || "") === ccfg.chain
+      && sameToken(ccfg.chain, position.token, order.token))) {
+      return refuse("manual strategy token already has a live ledger reservation");
+    }
     const pre = checkGates(ccfg, order, { ...ledger, ...extraState, positions: [] }, { fsx, now: now() });
     if (!pre.ok) return refuse(pre.reason); // cheap gates first, no CLI
     if (br || ledger.positions.some((p) => BLOCKING_STATUSES.has(p.status) || p.status === "pending")) {
@@ -430,6 +497,9 @@ export function createLiveTrader(baseCfg = loadLiveConfig(), { run = runCli, fsx
       const q = await preSubmitQuote(ccfg, order, { run });
       if (!q.ok) return refuse(q.reason);
       quote = q.quote;
+      if (order.approvedQuote && !approvedQuoteMatches(order.approvedQuote, quote)) {
+        return refuse("报价与用户确认时不同，请重新预览并逐笔确认");
+      }
       // Clock may have moved while quoting; recheck signal age.
       const again = checkGates(ccfg, order, { ...extraState, ...ledger }, { fsx, now: now() });
       if (!again.ok) return refuse(again.reason);
@@ -439,6 +509,7 @@ export function createLiveTrader(baseCfg = loadLiveConfig(), { run = runCli, fsx
       sol: order.solPriceUsd && ccfg.chain === "sol" ? Number(order.usd) / order.solPriceUsd : undefined, solPriceUsd: order.solPriceUsd,
       bnb: order.bnbPriceUsd ? usdToBnb(order.usd, order.bnbPriceUsd) : undefined, bnbPriceUsd: order.bnbPriceUsd,
       source: order.source, paperStrategyId: order.paperStrategyId, paperSessionId: order.paperSessionId, paperTradeId: order.paperTradeId,
+      manualApprovalId: order.manualApprovalId || null, manualCandidateId: order.manualCandidateId || null, manualConfirmedAt: order.manualConfirmedAt || null,
       status: "submitting", at: now(), quote,
     };
     ledger.positions.push(pos);

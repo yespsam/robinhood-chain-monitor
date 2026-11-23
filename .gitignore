@@ -41,3 +41,7 @@ dashboard/paper-diagnostic-status.json.tmp
 # Public deployment output; never deploy the workspace or local runtime data.
 .netlify/
 dist-public/
+
+# Graduation samples are appended under data/ and can grow. data/ already
+# ignores them; this names the file the telemetry CLI writes.
+data/flap-graduation-telemetry.jsonl

@@ -1,0 +1,792 @@
+{
+  "version": "excluded_chart_audit_summary_v1",
+  "generatedAt": "2026-11-09T18:10:25.010Z",
+  "status": "complete",
+  "note": "Independent read-only snapshots at different observation times; chart readiness is not trading admission. Raw responses are retained in linked audit artifacts. No runtime chart-cache or ledger writes. No third pass.",
+  "artifacts": [
+    {
+      "file": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+      "status": "interrupted",
+      "completedAt": "2026-11-09T18:00:45.985121+00:00",
+      "attempted": 11
+    },
+    {
+      "file": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+      "status": "complete",
+      "completedAt": "2026-11-09T18:02:45.647Z",
+      "attempted": 4
+    },
+    {
+      "file": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+      "status": "complete",
+      "completedAt": "2026-11-09T18:09:41.356Z",
+      "attempted": 10
+    }
+  ],
+  "summary": {
+    "targets": 21,
+    "uniqueTargets": 21,
+    "covered": 21,
+    "observations": 25,
+    "sourceOk": 21,
+    "chartReadyAtObservation": 8,
+    "entryThesisBarsReadyAtObservation": 5,
+    "unresolvedSourceErrors": 0,
+    "queuedBeforeFixedWindowStale": 4,
+    "sourceLastClosedBehindWindow": 3,
+    "byValidationCode": {
+      "stale_closed_bars": 7,
+      "insufficient_contiguous_tail": 2,
+      "insufficient_closed_bars": 4,
+      "ready": 8
+    }
+  },
+  "rows": [
+    {
+      "chain": "bsc",
+      "address": "0xe6c2021a443efb5d18c8cabb0cd930aa81ee7777",
+      "symbol": "ELON2028",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T17:52:49.990Z",
+      "sourceRequestedAt": "2026-11-09T17:52:48.900Z",
+      "sourceReceivedAt": "2026-11-09T17:52:49.976Z",
+      "rawBars": 50,
+      "closedBars": 49,
+      "validatedBars": 0,
+      "chartReadyAtObservation": false,
+      "entryThesisBarsReadyAtObservation": false,
+      "validationCode": "stale_closed_bars",
+      "sourceBoundaryLagSeconds": 120,
+      "ageAtReceiptSeconds": 169.99,
+      "staleAttribution": "last_closed_bar_behind_source_window",
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+          "startedAt": "2026-11-09T17:52:09.006Z",
+          "receivedAt": "2026-11-09T17:52:49.990Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T17:52:48.900Z"
+        }
+      ]
+    },
+    {
+      "chain": "bsc",
+      "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+      "symbol": "MEME",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T18:02:38.509Z",
+      "sourceRequestedAt": "2026-11-09T18:02:37.569Z",
+      "sourceReceivedAt": "2026-11-09T18:02:38.508Z",
+      "rawBars": 39,
+      "closedBars": 38,
+      "validatedBars": 0,
+      "chartReadyAtObservation": false,
+      "entryThesisBarsReadyAtObservation": false,
+      "validationCode": "insufficient_contiguous_tail",
+      "sourceBoundaryLagSeconds": 0,
+      "ageAtReceiptSeconds": 38.509,
+      "staleAttribution": null,
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+          "startedAt": "2026-11-09T17:52:49.996Z",
+          "receivedAt": "2026-11-09T17:54:09.980Z",
+          "sourceStatus": "unavailable",
+          "reasonCode": "GMGN_REQUEST_BUSY",
+          "requestedAt": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+          "startedAt": "2026-11-09T18:02:36.353Z",
+          "receivedAt": "2026-11-09T18:02:38.509Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T18:02:37.569Z"
+        }
+      ]
+    },
+    {
+      "chain": "bsc",
+      "address": "0x0da27398e363adb801300b4d36d600631fae7777",
+      "symbol": "spyless",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T18:02:39.632Z",
+      "sourceRequestedAt": "2026-11-09T18:02:38.682Z",
+      "sourceReceivedAt": "2026-11-09T18:02:39.632Z",
+      "rawBars": 58,
+      "closedBars": 57,
+      "validatedBars": 0,
+      "chartReadyAtObservation": false,
+      "entryThesisBarsReadyAtObservation": false,
+      "validationCode": "insufficient_contiguous_tail",
+      "sourceBoundaryLagSeconds": 0,
+      "ageAtReceiptSeconds": 39.632,
+      "staleAttribution": null,
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+          "startedAt": "2026-11-09T17:54:09.984Z",
+          "receivedAt": "2026-11-09T17:55:10.001Z",
+          "sourceStatus": "unavailable",
+          "reasonCode": "GMGN_QUEUE_EXPIRED",
+          "requestedAt": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+          "startedAt": "2026-11-09T18:02:38.511Z",
+          "receivedAt": "2026-11-09T18:02:39.632Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T18:02:38.682Z"
+        }
+      ]
+    },
+    {
+      "chain": "bsc",
+      "address": "0x2aad9bbc151659db46d379d44d9bf5e8d1888888",
+      "symbol": "MISU",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T18:02:43.711Z",
+      "sourceRequestedAt": "2026-11-09T18:02:42.759Z",
+      "sourceReceivedAt": "2026-11-09T18:02:43.711Z",
+      "rawBars": 12,
+      "closedBars": 12,
+      "validatedBars": 0,
+      "chartReadyAtObservation": false,
+      "entryThesisBarsReadyAtObservation": false,
+      "validationCode": "insufficient_closed_bars",
+      "sourceBoundaryLagSeconds": 1020,
+      "ageAtReceiptSeconds": 1063.711,
+      "staleAttribution": null,
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+          "startedAt": "2026-11-09T17:55:10.003Z",
+          "receivedAt": "2026-11-09T17:56:10.024Z",
+          "sourceStatus": "unavailable",
+          "reasonCode": "GMGN_QUEUE_EXPIRED",
+          "requestedAt": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+          "startedAt": "2026-11-09T18:02:39.634Z",
+          "receivedAt": "2026-11-09T18:02:43.711Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T18:02:42.759Z"
+        }
+      ]
+    },
+    {
+      "chain": "sol",
+      "address": "9j9zMCfQNZwo3qzUiWyRKju7mDeFMtUMW8WoQHsrhMP1",
+      "symbol": "AI",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T17:56:37.775Z",
+      "sourceRequestedAt": "2026-11-09T17:56:36.745Z",
+      "sourceReceivedAt": "2026-11-09T17:56:37.763Z",
+      "rawBars": 26,
+      "closedBars": 25,
+      "validatedBars": 25,
+      "chartReadyAtObservation": true,
+      "entryThesisBarsReadyAtObservation": true,
+      "validationCode": "ready",
+      "sourceBoundaryLagSeconds": 0,
+      "ageAtReceiptSeconds": 37.775,
+      "staleAttribution": null,
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+          "startedAt": "2026-11-09T17:56:10.028Z",
+          "receivedAt": "2026-11-09T17:56:37.775Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T17:56:36.745Z"
+        }
+      ]
+    },
+    {
+      "chain": "sol",
+      "address": "GCA6XC9GCv1ecBBsQScjQhM4dENabkd1D5Hc9efVpump",
+      "symbol": "NVIDIOT",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T17:56:56.593Z",
+      "sourceRequestedAt": "2026-11-09T17:56:55.327Z",
+      "sourceReceivedAt": "2026-11-09T17:56:56.585Z",
+      "rawBars": 14,
+      "closedBars": 13,
+      "validatedBars": 13,
+      "chartReadyAtObservation": true,
+      "entryThesisBarsReadyAtObservation": false,
+      "validationCode": "ready",
+      "sourceBoundaryLagSeconds": 0,
+      "ageAtReceiptSeconds": 56.593,
+      "staleAttribution": null,
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+          "startedAt": "2026-11-09T17:56:37.777Z",
+          "receivedAt": "2026-11-09T17:56:56.593Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T17:56:55.327Z"
+        }
+      ]
+    },
+    {
+      "chain": "sol",
+      "address": "A31fDS2KH1sHUEcuXHkmmnqQk89CUBeFuB7JFWhTHGoT",
+      "symbol": "PUSSY",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T18:02:45.642Z",
+      "sourceRequestedAt": "2026-11-09T18:02:44.404Z",
+      "sourceReceivedAt": "2026-11-09T18:02:45.642Z",
+      "rawBars": 22,
+      "closedBars": 21,
+      "validatedBars": 21,
+      "chartReadyAtObservation": true,
+      "entryThesisBarsReadyAtObservation": false,
+      "validationCode": "ready",
+      "sourceBoundaryLagSeconds": 0,
+      "ageAtReceiptSeconds": 45.642,
+      "staleAttribution": null,
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+          "startedAt": "2026-11-09T17:56:56.603Z",
+          "receivedAt": "2026-11-09T17:57:56.829Z",
+          "sourceStatus": "unavailable",
+          "reasonCode": "GMGN_QUEUE_EXPIRED",
+          "requestedAt": null
+        },
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+          "startedAt": "2026-11-09T18:02:43.712Z",
+          "receivedAt": "2026-11-09T18:02:45.642Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T18:02:44.404Z"
+        }
+      ]
+    },
+    {
+      "chain": "sol",
+      "address": "2UfvRT4TyVTQSi8xUzPyNxqFjHoRoG2z8PLEFwzhLupT",
+      "symbol": "NVIDIOT",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T17:58:12.919Z",
+      "sourceRequestedAt": "2026-11-09T17:58:11.756Z",
+      "sourceReceivedAt": "2026-11-09T17:58:12.917Z",
+      "rawBars": 17,
+      "closedBars": 16,
+      "validatedBars": 16,
+      "chartReadyAtObservation": true,
+      "entryThesisBarsReadyAtObservation": false,
+      "validationCode": "ready",
+      "sourceBoundaryLagSeconds": 0,
+      "ageAtReceiptSeconds": 72.919,
+      "staleAttribution": null,
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+          "startedAt": "2026-11-09T17:57:56.832Z",
+          "receivedAt": "2026-11-09T17:58:12.919Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T17:58:11.756Z"
+        }
+      ]
+    },
+    {
+      "chain": "sol",
+      "address": "51S5XBuGHQAnugqU85P3v5Kq3RzZ8nEa4NTynZ8MrsuQ",
+      "symbol": "NVIDIOT",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T17:58:42.485Z",
+      "sourceRequestedAt": "2026-11-09T17:58:41.419Z",
+      "sourceReceivedAt": "2026-11-09T17:58:42.482Z",
+      "rawBars": 2,
+      "closedBars": 2,
+      "validatedBars": 0,
+      "chartReadyAtObservation": false,
+      "entryThesisBarsReadyAtObservation": false,
+      "validationCode": "insufficient_closed_bars",
+      "sourceBoundaryLagSeconds": 900,
+      "ageAtReceiptSeconds": 942.485,
+      "staleAttribution": null,
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+          "startedAt": "2026-11-09T17:58:12.921Z",
+          "receivedAt": "2026-11-09T17:58:42.485Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T17:58:41.419Z"
+        }
+      ]
+    },
+    {
+      "chain": "sol",
+      "address": "GpFVhKtqjFiMtoS2SpfYNNRLTwe42DWUZ5fN7LkiL6se",
+      "symbol": "TREMP",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T17:59:11.874Z",
+      "sourceRequestedAt": "2026-11-09T17:59:10.730Z",
+      "sourceReceivedAt": "2026-11-09T17:59:11.872Z",
+      "rawBars": 1,
+      "closedBars": 1,
+      "validatedBars": 0,
+      "chartReadyAtObservation": false,
+      "entryThesisBarsReadyAtObservation": false,
+      "validationCode": "insufficient_closed_bars",
+      "sourceBoundaryLagSeconds": 1020,
+      "ageAtReceiptSeconds": 1091.874,
+      "staleAttribution": null,
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+          "startedAt": "2026-11-09T17:58:42.489Z",
+          "receivedAt": "2026-11-09T17:59:11.874Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T17:59:10.730Z"
+        }
+      ]
+    },
+    {
+      "chain": "sol",
+      "address": "J1p5JR1vC48djzmPYXiX5ME9MKnXofkaeTc6CXtSs7X5",
+      "symbol": "POLLY",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T17:59:52.955Z",
+      "sourceRequestedAt": "2026-11-09T17:59:51.293Z",
+      "sourceReceivedAt": "2026-11-09T17:59:52.944Z",
+      "rawBars": 10,
+      "closedBars": 10,
+      "validatedBars": 0,
+      "chartReadyAtObservation": false,
+      "entryThesisBarsReadyAtObservation": false,
+      "validationCode": "insufficient_closed_bars",
+      "sourceBoundaryLagSeconds": 480,
+      "ageAtReceiptSeconds": 532.955,
+      "staleAttribution": null,
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+          "startedAt": "2026-11-09T17:59:11.875Z",
+          "receivedAt": "2026-11-09T17:59:52.955Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T17:59:51.293Z"
+        }
+      ]
+    },
+    {
+      "chain": "sol",
+      "address": "CTKeXCVboLuAxHHHLDP5cc6JKSRKxYHBZSnbvcZaYkaU",
+      "symbol": "KALYX",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T18:03:37.062Z",
+      "sourceRequestedAt": "2026-11-09T18:03:32.917Z",
+      "sourceReceivedAt": "2026-11-09T18:03:37.047Z",
+      "rawBars": 30,
+      "closedBars": 30,
+      "validatedBars": 0,
+      "chartReadyAtObservation": false,
+      "entryThesisBarsReadyAtObservation": false,
+      "validationCode": "stale_closed_bars",
+      "sourceBoundaryLagSeconds": 1080,
+      "ageAtReceiptSeconds": 1117.062,
+      "staleAttribution": "last_closed_bar_behind_source_window",
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+          "startedAt": "2026-11-09T18:03:05.870Z",
+          "receivedAt": "2026-11-09T18:03:37.062Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T18:03:32.917Z"
+        }
+      ]
+    },
+    {
+      "chain": "sol",
+      "address": "3bxHm72mrkvE6eQ6iV5Yua8n3eDQUSenMxn75vpqvY8z",
+      "symbol": "NZS",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T18:04:28.251Z",
+      "sourceRequestedAt": "2026-11-09T18:04:27.212Z",
+      "sourceReceivedAt": "2026-11-09T18:04:28.245Z",
+      "rawBars": 18,
+      "closedBars": 18,
+      "validatedBars": 0,
+      "chartReadyAtObservation": false,
+      "entryThesisBarsReadyAtObservation": false,
+      "validationCode": "stale_closed_bars",
+      "sourceBoundaryLagSeconds": 420,
+      "ageAtReceiptSeconds": 508.251,
+      "staleAttribution": "last_closed_bar_behind_source_window",
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+          "startedAt": "2026-11-09T18:03:37.067Z",
+          "receivedAt": "2026-11-09T18:04:28.251Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T18:04:27.212Z"
+        }
+      ]
+    },
+    {
+      "chain": "sol",
+      "address": "B1wk5PYYUAAA7YasYW3WhrTprKH1fmMHto9H567epump",
+      "symbol": "SI",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T18:04:53.108Z",
+      "sourceRequestedAt": "2026-11-09T18:04:52.125Z",
+      "sourceReceivedAt": "2026-11-09T18:04:53.106Z",
+      "rawBars": 45,
+      "closedBars": 44,
+      "validatedBars": 44,
+      "chartReadyAtObservation": true,
+      "entryThesisBarsReadyAtObservation": true,
+      "validationCode": "ready",
+      "sourceBoundaryLagSeconds": 0,
+      "ageAtReceiptSeconds": 53.108,
+      "staleAttribution": null,
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+          "startedAt": "2026-11-09T18:04:28.264Z",
+          "receivedAt": "2026-11-09T18:04:53.108Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T18:04:52.125Z"
+        }
+      ]
+    },
+    {
+      "chain": "sol",
+      "address": "HxC7wnsYYb3gqRtk684i82SKXCXB2hYtjusGZHpPGd8g",
+      "symbol": "BabyPunch",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T18:05:11.791Z",
+      "sourceRequestedAt": "2026-11-09T18:05:10.609Z",
+      "sourceReceivedAt": "2026-11-09T18:05:11.788Z",
+      "rawBars": 34,
+      "closedBars": 33,
+      "validatedBars": 33,
+      "chartReadyAtObservation": true,
+      "entryThesisBarsReadyAtObservation": true,
+      "validationCode": "ready",
+      "sourceBoundaryLagSeconds": 0,
+      "ageAtReceiptSeconds": 71.791,
+      "staleAttribution": null,
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+          "startedAt": "2026-11-09T18:04:53.110Z",
+          "receivedAt": "2026-11-09T18:05:11.791Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T18:05:10.609Z"
+        }
+      ]
+    },
+    {
+      "chain": "sol",
+      "address": "Aygw2Y2Bs9VQnvjNURgjrv1McPUHDxuvQhrzNwcBpump",
+      "symbol": "BabyPunch",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T18:05:21.774Z",
+      "sourceRequestedAt": "2026-11-09T18:05:20.745Z",
+      "sourceReceivedAt": "2026-11-09T18:05:21.772Z",
+      "rawBars": 44,
+      "closedBars": 43,
+      "validatedBars": 43,
+      "chartReadyAtObservation": true,
+      "entryThesisBarsReadyAtObservation": true,
+      "validationCode": "ready",
+      "sourceBoundaryLagSeconds": 0,
+      "ageAtReceiptSeconds": 21.774,
+      "staleAttribution": null,
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+          "startedAt": "2026-11-09T18:05:11.807Z",
+          "receivedAt": "2026-11-09T18:05:21.774Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T18:05:20.745Z"
+        }
+      ]
+    },
+    {
+      "chain": "sol",
+      "address": "XeaWBDDBxj5Qf6S6TshMC1SKaxSccJfRZUDj26opump",
+      "symbol": "MERLYN",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T18:05:54.990Z",
+      "sourceRequestedAt": "2026-11-09T18:05:53.978Z",
+      "sourceReceivedAt": "2026-11-09T18:05:54.987Z",
+      "rawBars": 37,
+      "closedBars": 36,
+      "validatedBars": 36,
+      "chartReadyAtObservation": true,
+      "entryThesisBarsReadyAtObservation": true,
+      "validationCode": "ready",
+      "sourceBoundaryLagSeconds": 0,
+      "ageAtReceiptSeconds": 54.99,
+      "staleAttribution": null,
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+          "startedAt": "2026-11-09T18:05:21.777Z",
+          "receivedAt": "2026-11-09T18:05:54.990Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T18:05:53.978Z"
+        }
+      ]
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+      "symbol": "MEME",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T18:06:33.978Z",
+      "sourceRequestedAt": "2026-11-09T18:06:32.387Z",
+      "sourceReceivedAt": "2026-11-09T18:06:33.976Z",
+      "rawBars": 48,
+      "closedBars": 46,
+      "validatedBars": 0,
+      "chartReadyAtObservation": false,
+      "entryThesisBarsReadyAtObservation": false,
+      "validationCode": "stale_closed_bars",
+      "sourceBoundaryLagSeconds": 0,
+      "ageAtReceiptSeconds": 93.978,
+      "staleAttribution": "request_window_fixed_before_queue",
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+          "startedAt": "2026-11-09T18:05:54.995Z",
+          "receivedAt": "2026-11-09T18:06:33.978Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T18:06:32.387Z"
+        }
+      ]
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x4d21483a44bf67a86b77e3da301411880797d452",
+      "symbol": "BA",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T18:07:54.102Z",
+      "sourceRequestedAt": "2026-11-09T18:07:52.900Z",
+      "sourceReceivedAt": "2026-11-09T18:07:54.098Z",
+      "rawBars": 18,
+      "closedBars": 17,
+      "validatedBars": 0,
+      "chartReadyAtObservation": false,
+      "entryThesisBarsReadyAtObservation": false,
+      "validationCode": "stale_closed_bars",
+      "sourceBoundaryLagSeconds": 0,
+      "ageAtReceiptSeconds": 114.102,
+      "staleAttribution": "request_window_fixed_before_queue",
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+          "startedAt": "2026-11-09T18:06:33.980Z",
+          "receivedAt": "2026-11-09T18:07:54.102Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T18:07:52.900Z"
+        }
+      ]
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x608de3e89a6506b881125f67463623d7eb063fba",
+      "symbol": "NOVASI",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T18:08:44.467Z",
+      "sourceRequestedAt": "2026-11-09T18:08:43.079Z",
+      "sourceReceivedAt": "2026-11-09T18:08:44.464Z",
+      "rawBars": 59,
+      "closedBars": 57,
+      "validatedBars": 0,
+      "chartReadyAtObservation": false,
+      "entryThesisBarsReadyAtObservation": false,
+      "validationCode": "stale_closed_bars",
+      "sourceBoundaryLagSeconds": 0,
+      "ageAtReceiptSeconds": 104.467,
+      "staleAttribution": "request_window_fixed_before_queue",
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+          "startedAt": "2026-11-09T18:07:54.106Z",
+          "receivedAt": "2026-11-09T18:08:44.467Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T18:08:43.079Z"
+        }
+      ]
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x255979302fd6a5e2ff6dce0d8b018f51e06e243a",
+      "symbol": "UNIWALL",
+      "originalResearchExclusions": [
+        "liquidity"
+      ],
+      "sourceStatus": "ok",
+      "identityBound": true,
+      "sourceWindowValid": true,
+      "observedAt": "2026-11-09T18:09:41.348Z",
+      "sourceRequestedAt": "2026-11-09T18:09:40.189Z",
+      "sourceReceivedAt": "2026-11-09T18:09:41.343Z",
+      "rawBars": 51,
+      "closedBars": 50,
+      "validatedBars": 0,
+      "chartReadyAtObservation": false,
+      "entryThesisBarsReadyAtObservation": false,
+      "validationCode": "stale_closed_bars",
+      "sourceBoundaryLagSeconds": 0,
+      "ageAtReceiptSeconds": 101.348,
+      "staleAttribution": "request_window_fixed_before_queue",
+      "latestArtifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+      "observations": [
+        {
+          "artifact": "docs/gmgn-chart-backlog-20261110-excluded-remaining-audit.json",
+          "startedAt": "2026-11-09T18:08:44.472Z",
+          "receivedAt": "2026-11-09T18:09:41.348Z",
+          "sourceStatus": "ok",
+          "reasonCode": null,
+          "requestedAt": "2026-11-09T18:09:40.189Z"
+        }
+      ]
+    }
+  ]
+}

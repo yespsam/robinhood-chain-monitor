@@ -1,0 +1,171 @@
+{
+  "updatedAt": "2026-11-09T17:44:01.965Z",
+  "selection": "operator_requested_source_audit",
+  "scope": "Final exact seven source-uncovered CAs after the v28 finite job completed; all confirmed skipped by fresh research admission. Read-only diagnostic, no strategy injection.",
+  "candidates": [
+    {
+      "chain": "robinhood",
+      "address": "0x6511c233790ec10f7d673c64dc82c3f941d57828",
+      "symbol": "OAK",
+      "price": 0.000788209,
+      "code": "chart_missing",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 75719.6,
+      "volume": {
+        "value": 2162.49,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x15f3385625d7e364c5a6216fbbceadf10fa90e7d",
+      "symbol": "ABYSS",
+      "price": 2.28345e-05,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 153161,
+      "volume": {
+        "value": 2039.52,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 10,
+        "closedBars": 6,
+        "lastClosedAtMs": 1794243960000,
+        "firstOpenAtMs": 1794243120000,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x94641b97010608c3827fb058074889f19868ff33",
+      "symbol": "VRAX",
+      "price": 0.00353737,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 180206,
+      "volume": {
+        "value": 1886.79,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 27,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x98096d17e191b3da1d5f99a6d7b3584351b11e18",
+      "symbol": "BONER",
+      "price": 0.0039163,
+      "code": "chart_missing",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 543066,
+      "volume": {
+        "value": 1190.97,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x47569d49471bdbabfaf5531c0f74d9f2de82a11a",
+      "symbol": "PROPHET",
+      "price": 0.000282317,
+      "code": "chart_missing",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 45326.4,
+      "volume": {
+        "value": 1098.87,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x7fe995a80075df3dc8ae11a9b82c7fe4202cd87f",
+      "symbol": "HMM",
+      "price": 0.00544275,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 265580,
+      "volume": {
+        "value": 1033.53,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 13,
+        "closedBars": 6,
+        "lastClosedAtMs": 1794244320000,
+        "firstOpenAtMs": 1794243480000,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x2fc6de9c65a620f918ca7d1191d3afa495ca2898",
+      "symbol": "LOCKRA",
+      "price": 0.000225605,
+      "code": "chart_missing",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 31663.2,
+      "volume": {
+        "value": 902.192,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    }
+  ]
+}

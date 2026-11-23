@@ -48,7 +48,7 @@ test("reviewed runtime catalog is joined explicitly while candidate capability s
   const report = screenCapitalKolCandidates({ nowMs: NOW });
   assert.equal(report.status, "complete");
   assert.equal(report.counts.total, 500);
-  assert.equal(report.counts.reviewed, listReviewedCapitalKols().length);
+  assert.equal(report.counts.reviewed, listReviewedCapitalKols().filter((e) => e.handle !== "heyibinance").length /* heyi is outside the 500 screening universe */);
   assert.equal(report.reviewedCatalog.runtimeAdmissionIsSeparate, true);
 
   const vitalik = report.results.find((result) => result.handle.toLowerCase() === "vitalikbuterin");
@@ -141,8 +141,8 @@ test("numeric X identity collisions and unsafe integer IDs cannot become identit
   }
   assert.ok(report.results.find((entry) => entry.handle.toLowerCase() === "adam3us")
     .reasons.includes("numeric_x_user_id_precision_lost"));
-  assert.equal(report.counts.reviewed, listReviewedCapitalKols().length);
+  assert.equal(report.counts.reviewed, listReviewedCapitalKols().filter((e) => e.handle !== "heyibinance").length /* heyi is outside the 500 screening universe */);
   assert.equal(report.progress.manualReviewComplete, false);
-  assert.equal(report.progress.manualReviewRemaining, 500 - listReviewedCapitalKols().length);
+  assert.equal(report.progress.manualReviewRemaining, 500 - listReviewedCapitalKols().filter((e) => e.handle !== "heyibinance").length /* heyi is outside the 500 screening universe */);
   assert.equal(report.progress.identityReadyIsNotRuntimeAdmission, true);
 });

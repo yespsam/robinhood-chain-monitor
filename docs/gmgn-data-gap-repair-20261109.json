@@ -1,0 +1,2004 @@
+{
+  "date": "2026-11-09",
+  "timezone": "Asia/Shanghai",
+  "baseline": {
+    "observedAt": "2026-11-09T11:42:33.705Z",
+    "chartHealth": {
+      "version": "chart_health_v2",
+      "alert": false,
+      "warmup": false,
+      "evaluated": 315,
+      "chartReady": 1,
+      "klineOk": 14,
+      "notRequested": 299,
+      "notRequestedRatio": 0.9492063492063492,
+      "fetched": 16,
+      "fetchedUnavailable": 2,
+      "fetchedUnavailableRatio": 0.125,
+      "sourceUnavailable": 2,
+      "sourceUnavailableRatio": 0.125,
+      "staleClosedBars": 10,
+      "insufficientClosedBars": 3,
+      "hotCount": 3,
+      "hotFetched": 3,
+      "hotNotRequested": 0,
+      "hotRequestCoverageRate": 1,
+      "hotKlineOk": 3,
+      "hotChartReady": 1,
+      "hotKlineFresh": 3,
+      "hotKlineStale": 0,
+      "hotKlineUnknown": 0,
+      "hotKlineFreshRate": 1,
+      "hotKlineMaxClosedAgeMs": 93704,
+      "hotKlineFreshnessMaxAgeMs": 120000,
+      "hotChartReadyRate": 0.3333333333333333,
+      "chartReadyRate": 0.0031746031746031746,
+      "klineOkRate": 0.044444444444444446,
+      "funnelChartReady": 0,
+      "funnelOhlcvReady": 1,
+      "chartDispatchCount": 45,
+      "chartCacheCount": 21,
+      "cachedUnavailable": 4,
+      "queueWaitMedianMs": 3496,
+      "queueWaitMaxMs": 36720,
+      "queueSamples": 25,
+      "note": "未请求的广谱候选单独计数。确认型漏斗 chartReady 是连续报价确认，ohlcvReady 才是 K 线结构。不代表可以开仓。"
+    },
+    "entryDiagnostics": {
+      "version": "paper_entry_diagnostics_v1",
+      "detected": 315,
+      "verifiedCatalyst": 0,
+      "externalStructure": 189,
+      "quoteResearchReady": 0,
+      "quoteScheduled": 0,
+      "eligible": 0,
+      "blockers": [
+        {
+          "code": "safety_blocked",
+          "label": "明确不可交易或安全检查未通过",
+          "count": 121
+        },
+        {
+          "code": "chart_missing",
+          "label": "买点数据未取得，尚不能判断有无机会",
+          "count": 81
+        },
+        {
+          "code": "catalyst",
+          "label": "缺少有效原文催化或核实盈利钱包",
+          "count": 75
+        },
+        {
+          "code": "safety_data",
+          "label": "该入口所需安全字段尚未补齐",
+          "count": 18
+        },
+        {
+          "code": "reentry",
+          "label": "上次亏损后的重入证据不足",
+          "count": 11
+        },
+        {
+          "code": "chart_stale",
+          "label": "买点K线已过期，等待刷新",
+          "count": 7
+        },
+        {
+          "code": "chart_incomplete",
+          "label": "买点K线不足或断档，等待补齐",
+          "count": 2
+        }
+      ],
+      "note": "按链与 CA 去重的当前快照；每个候选只计一个主要状态。没有有效候选不代表市场没有机会，调度与条件通过均不等于成交。"
+    },
+    "chartDispatches": {
+      "holding": 14,
+      "entry": 0,
+      "hot": 12,
+      "wallet": 5,
+      "discovery": 14,
+      "proactive": 4
+    },
+    "quoteDispatches": {
+      "exit": 255,
+      "candidate": 2,
+      "comparisonCandidate": 0
+    },
+    "lastCandidateQuote": {
+      "chain": "bsc",
+      "address": "0xa0c56a8c0692bd10b3fa8f8ba79cf5332b7107f9",
+      "candidateBook": "main",
+      "requestedAt": "2026-11-09T11:35:45.717Z",
+      "receivedAt": "2026-11-09T11:35:55.341Z",
+      "status": "ok",
+      "bound": true,
+      "observedAt": "2026-11-09T11:35:54.194Z",
+      "ageAtReceiveMs": 1147,
+      "totalMs": 9624,
+      "queueMs": 8477,
+      "requestMs": 1147,
+      "confirmationHistoryCount": 2
+    },
+    "lastCandidateEvaluation": {
+      "chain": "bsc",
+      "address": "0xa0c56a8c0692bd10b3fa8f8ba79cf5332b7107f9",
+      "at": "2026-11-09T11:35:55.663Z",
+      "quoteObservedAt": "2026-11-09T11:35:54.194Z",
+      "evaluatedPriceObservedAt": "2026-11-09T11:35:54.194Z",
+      "decision": "观察",
+      "reasons": [
+        "已观察结构空间不足以覆盖往返成本及失效损失，继续观察",
+        "等待收盘放量突破并站稳前 12 根压力位"
+      ],
+      "missing": [
+        "等待新鲜结构验证扣费后的空间",
+        "连续新鲜报价确认"
+      ],
+      "mode": "targeted_main_quote_v1",
+      "quoteAgeAtDecisionMs": 1469,
+      "receivedToDecisionMs": 322,
+      "evaluationMs": 6,
+      "newFills": 0,
+      "evidenceReadMs": 13,
+      "writerWaitMs": 186,
+      "preparationMs": 117
+    },
+    "liveMirror": {
+      "enabled": true,
+      "chains": [
+        "bsc",
+        "sol"
+      ],
+      "signalSource": "paper-atm-confirmed-pvp-v2",
+      "strategyAllowlist": [
+        "*"
+      ]
+    }
+  },
+  "changes": [
+    "Due-detail-aware chart fairness",
+    "One overdue hot chart may overlap ordinary details within existing Plus limits",
+    "At most 3 hot quote attempts within 45 seconds, 5-second observation spacing and 45-second cooldown",
+    "Classified empty/invalid K-line responses with original attempt timing"
+  ],
+  "constraints": [
+    "No entry/safety thresholds relaxed",
+    "No shared rate-limit increase",
+    "No fabricated candles or timestamps",
+    "Live mirroring remains enabled; no test trades submitted"
+  ],
+  "samples": [
+    {
+      "checkedAt": "2026-11-09T11:49:24.574192+00:00",
+      "updatedAt": "2026-11-09T11:49:23.612Z",
+      "status": "ok",
+      "enabled": true,
+      "liveMirror": {
+        "enabled": true,
+        "chains": [
+          "bsc",
+          "sol"
+        ],
+        "signalSource": "paper-atm-confirmed-pvp-v2",
+        "strategyAllowlist": [
+          "*"
+        ]
+      },
+      "researchVersion": "research_evidence_shortlist_v25",
+      "chartHealth": {
+        "version": "chart_health_v2",
+        "alert": false,
+        "warmup": false,
+        "evaluated": 0,
+        "chartReady": 0,
+        "klineOk": 0,
+        "notRequested": 0,
+        "notRequestedRatio": null,
+        "fetched": 0,
+        "fetchedUnavailable": 0,
+        "fetchedUnavailableRatio": null,
+        "sourceUnavailable": 0,
+        "sourceUnavailableRatio": null,
+        "staleClosedBars": 0,
+        "insufficientClosedBars": 0,
+        "hotCount": 0,
+        "hotFetched": 0,
+        "hotNotRequested": 0,
+        "hotRequestCoverageRate": null,
+        "hotKlineOk": 0,
+        "hotChartReady": 0,
+        "hotKlineFresh": 0,
+        "hotKlineStale": 0,
+        "hotKlineUnknown": 0,
+        "hotKlineFreshRate": null,
+        "hotKlineMaxClosedAgeMs": null,
+        "hotKlineFreshnessMaxAgeMs": 120000,
+        "hotChartReadyRate": null,
+        "chartReadyRate": null,
+        "klineOkRate": null,
+        "funnelChartReady": 0,
+        "funnelOhlcvReady": 0,
+        "chartDispatchCount": 2,
+        "chartCacheCount": 2,
+        "cachedUnavailable": 2,
+        "queueWaitMedianMs": 0,
+        "queueWaitMaxMs": 5987,
+        "queueSamples": 4,
+        "note": "未请求的广谱候选单独计数。确认型漏斗 chartReady 是连续报价确认，ohlcvReady 才是 K 线结构。不代表可以开仓。"
+      },
+      "entryDiagnostics": {
+        "version": "paper_entry_diagnostics_v1",
+        "detected": 0,
+        "verifiedCatalyst": 0,
+        "externalStructure": 0,
+        "quoteResearchReady": 0,
+        "quoteScheduled": 0,
+        "eligible": 0,
+        "blockers": [],
+        "note": "按链与 CA 去重的当前快照；每个候选只计一个主要状态。没有有效候选不代表市场没有机会，调度与条件通过均不等于成交。"
+      },
+      "chartDispatches": {
+        "holding": 2,
+        "entry": 0,
+        "hot": 0,
+        "wallet": 0,
+        "discovery": 0,
+        "proactive": 0
+      },
+      "hotQuoteResearch": {
+        "version": "bounded_market_leader_v2",
+        "lease": null,
+        "target": null,
+        "note": "热门外盘最多 45 秒、3 次普通优先级报价预热；样本间隔至少 5 秒，结束后休息 45 秒；不占已合格入口、不直接授予买入许可"
+      },
+      "quoteDispatches": {
+        "exit": 6,
+        "candidate": 0,
+        "comparisonCandidate": 0
+      },
+      "lastCandidateQuote": null,
+      "lastCandidateEvaluation": null,
+      "chartDiagnostics": [
+        {
+          "chain": "bsc",
+          "address": "0xb37e871c790ba7a9e002132e3a08570d92207777",
+          "fetchedAt": "2026-11-09T11:49:19.327Z",
+          "observedAt": null,
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:49:13.340Z",
+          "requestedAt": "2026-11-09T11:49:18.035Z",
+          "receivedAt": "2026-11-09T11:49:19.327Z",
+          "closedThroughAt": "2026-11-09T11:49:00.000Z",
+          "excludedUnclosedBars": 0,
+          "sourceStatus": "unavailable",
+          "sourceReason": "empty_kline",
+          "sourceReasonCode": "GMGN_EMPTY_KLINE",
+          "lastAttempt": {
+            "queuedAt": "2026-11-09T11:49:13.340Z",
+            "requestedAt": "2026-11-09T11:49:18.035Z",
+            "receivedAt": "2026-11-09T11:49:19.327Z",
+            "completedAt": "2026-11-09T11:49:19.327Z",
+            "from": 1794221340,
+            "to": 1794224940,
+            "requestWindow": "latest_closed_at_dispatch"
+          },
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": null,
+            "closedBars": 0,
+            "lastClosedAtMs": null,
+            "code": "source_unavailable",
+            "issue": null
+          }
+        },
+        {
+          "chain": "sol",
+          "address": "tV2wVqRjk7ugbQAFs2MAMxNF7HmuqUwgoFaQgUfpump",
+          "fetchedAt": "2026-11-09T11:49:18.830Z",
+          "observedAt": null,
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:49:13.340Z",
+          "requestedAt": "2026-11-09T11:49:17.622Z",
+          "receivedAt": "2026-11-09T11:49:18.830Z",
+          "closedThroughAt": "2026-11-09T11:49:00.000Z",
+          "excludedUnclosedBars": 0,
+          "sourceStatus": "unavailable",
+          "sourceReason": "empty_kline",
+          "sourceReasonCode": "GMGN_EMPTY_KLINE",
+          "lastAttempt": {
+            "queuedAt": "2026-11-09T11:49:13.340Z",
+            "requestedAt": "2026-11-09T11:49:17.622Z",
+            "receivedAt": "2026-11-09T11:49:18.830Z",
+            "completedAt": "2026-11-09T11:49:18.830Z",
+            "from": 1794221340,
+            "to": 1794224940,
+            "requestWindow": "latest_closed_at_dispatch"
+          },
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": null,
+            "closedBars": 0,
+            "lastClosedAtMs": null,
+            "code": "source_unavailable",
+            "issue": null
+          }
+        }
+      ],
+      "livePositions": 1,
+      "liveOpenPositions": 0,
+      "liveDecisionCount": 14
+    },
+    {
+      "checkedAt": "2026-11-09T11:50:10.201799+00:00",
+      "updatedAt": "2026-11-09T11:50:08.924Z",
+      "status": "ok",
+      "enabled": true,
+      "liveMirror": {
+        "enabled": true,
+        "chains": [
+          "bsc",
+          "sol"
+        ],
+        "signalSource": "paper-atm-confirmed-pvp-v2",
+        "strategyAllowlist": [
+          "*"
+        ]
+      },
+      "researchVersion": "research_evidence_shortlist_v25",
+      "chartHealth": {
+        "version": "chart_health_v2",
+        "alert": true,
+        "warmup": false,
+        "evaluated": 315,
+        "chartReady": 3,
+        "klineOk": 4,
+        "notRequested": 311,
+        "notRequestedRatio": 0.9873015873015873,
+        "fetched": 4,
+        "fetchedUnavailable": 0,
+        "fetchedUnavailableRatio": 0,
+        "sourceUnavailable": 0,
+        "sourceUnavailableRatio": 0,
+        "staleClosedBars": 0,
+        "insufficientClosedBars": 1,
+        "hotCount": 3,
+        "hotFetched": 0,
+        "hotNotRequested": 3,
+        "hotRequestCoverageRate": 0,
+        "hotKlineOk": 0,
+        "hotChartReady": 0,
+        "hotKlineFresh": 0,
+        "hotKlineStale": 0,
+        "hotKlineUnknown": 3,
+        "hotKlineFreshRate": 0,
+        "hotKlineMaxClosedAgeMs": null,
+        "hotKlineFreshnessMaxAgeMs": 120000,
+        "hotChartReadyRate": 0,
+        "chartReadyRate": 0.009523809523809525,
+        "klineOkRate": 0.012698412698412698,
+        "funnelChartReady": 0,
+        "funnelOhlcvReady": 3,
+        "chartDispatchCount": 8,
+        "chartCacheCount": 7,
+        "cachedUnavailable": 2,
+        "queueWaitMedianMs": 2836,
+        "queueWaitMaxMs": 33422,
+        "queueSamples": 14,
+        "note": "热点候选里仍有较多 CA 没有第一次 K 线请求。广谱未请求不计入来源失败。买卖条件未放宽。"
+      },
+      "entryDiagnostics": {
+        "version": "paper_entry_diagnostics_v1",
+        "detected": 315,
+        "verifiedCatalyst": 0,
+        "externalStructure": 189,
+        "quoteResearchReady": 0,
+        "quoteScheduled": 0,
+        "eligible": 0,
+        "blockers": [
+          {
+            "code": "safety_blocked",
+            "label": "明确不可交易或安全检查未通过",
+            "count": 120
+          },
+          {
+            "code": "chart_missing",
+            "label": "买点数据未取得，尚不能判断有无机会",
+            "count": 88
+          },
+          {
+            "code": "catalyst",
+            "label": "缺少有效原文催化或核实盈利钱包",
+            "count": 77
+          },
+          {
+            "code": "safety_data",
+            "label": "该入口所需安全字段尚未补齐",
+            "count": 18
+          },
+          {
+            "code": "reentry",
+            "label": "上次亏损后的重入证据不足",
+            "count": 9
+          },
+          {
+            "code": "setup",
+            "label": "买盘、形态或其他入场条件尚未成立",
+            "count": 2
+          },
+          {
+            "code": "structure",
+            "label": "入场结构或退出依据尚未建立",
+            "count": 1
+          }
+        ],
+        "note": "按链与 CA 去重的当前快照；每个候选只计一个主要状态。没有有效候选不代表市场没有机会，调度与条件通过均不等于成交。"
+      },
+      "chartDispatches": {
+        "holding": 2,
+        "entry": 0,
+        "hot": 1,
+        "wallet": 1,
+        "discovery": 4,
+        "proactive": 0
+      },
+      "hotQuoteResearch": {
+        "version": "bounded_market_leader_v2",
+        "lease": null,
+        "target": null,
+        "note": "热门外盘最多 45 秒、3 次普通优先级报价预热；样本间隔至少 5 秒，结束后休息 45 秒；不占已合格入口、不直接授予买入许可"
+      },
+      "quoteDispatches": {
+        "exit": 35,
+        "candidate": 0,
+        "comparisonCandidate": 0
+      },
+      "lastCandidateQuote": null,
+      "lastCandidateEvaluation": null,
+      "chartDiagnostics": [
+        {
+          "chain": "bsc",
+          "address": "0x0cee7a04355b2e2d7248d9566db8889cf44f7777",
+          "fetchedAt": "2026-11-09T11:50:05.858Z",
+          "observedAt": "2026-11-09T11:50:05.858Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:49:32.436Z",
+          "requestedAt": "2026-11-09T11:50:04.829Z",
+          "receivedAt": "2026-11-09T11:50:05.858Z",
+          "closedThroughAt": "2026-11-09T11:50:00.000Z",
+          "excludedUnclosedBars": 0,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": false,
+          "reason": "K 线缺口后连续收盘样本不足",
+          "diagnostics": {
+            "receivedBars": 40,
+            "closedBars": 40,
+            "lastClosedAtMs": 1794225000000,
+            "firstOpenAtMs": 1794221400000,
+            "code": "insufficient_contiguous_tail",
+            "issue": {
+              "index": 38,
+              "openAtMs": 1794224880000,
+              "previousOpenAtMs": 1794224760000,
+              "gapMs": 120000,
+              "missingIntervals": 1
+            }
+          }
+        },
+        {
+          "chain": "bsc",
+          "address": "0x34257736852e866a7bf5b387b424fdec92737777",
+          "fetchedAt": "2026-11-09T11:49:55.135Z",
+          "observedAt": "2026-11-09T11:49:55.134Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:49:29.105Z",
+          "requestedAt": "2026-11-09T11:49:53.929Z",
+          "receivedAt": "2026-11-09T11:49:55.134Z",
+          "closedThroughAt": "2026-11-09T11:49:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": true,
+          "reason": null,
+          "diagnostics": {
+            "receivedBars": 60,
+            "closedBars": 59,
+            "lastClosedAtMs": 1794224940000,
+            "firstOpenAtMs": 1794221400000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 59,
+            "usedFirstOpenAtMs": 1794221400000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          }
+        },
+        {
+          "chain": "sol",
+          "address": "AJScypbPEC8sY5CekpEFipujvcthSo4z352bEFBrpump",
+          "fetchedAt": "2026-11-09T11:49:44.738Z",
+          "observedAt": "2026-11-09T11:49:44.738Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:49:41.902Z",
+          "requestedAt": "2026-11-09T11:49:43.140Z",
+          "receivedAt": "2026-11-09T11:49:44.738Z",
+          "closedThroughAt": "2026-11-09T11:49:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": 8,
+            "closedBars": 8,
+            "lastClosedAtMs": 1794224940000,
+            "firstOpenAtMs": 1794224460000,
+            "code": "insufficient_closed_bars",
+            "issue": null
+          }
+        },
+        {
+          "chain": "bsc",
+          "address": "0xa0c56a8c0692bd10b3fa8f8ba79cf5332b7107f9",
+          "fetchedAt": "2026-11-09T11:49:41.220Z",
+          "observedAt": "2026-11-09T11:49:41.220Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:49:29.105Z",
+          "requestedAt": "2026-11-09T11:49:40.078Z",
+          "receivedAt": "2026-11-09T11:49:41.220Z",
+          "closedThroughAt": "2026-11-09T11:49:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": true,
+          "reason": null,
+          "diagnostics": {
+            "receivedBars": 60,
+            "closedBars": 59,
+            "lastClosedAtMs": 1794224940000,
+            "firstOpenAtMs": 1794221400000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 59,
+            "usedFirstOpenAtMs": 1794221400000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          }
+        },
+        {
+          "chain": "bsc",
+          "address": "0x9b8e987e6fec8cf1380c4dca7071e2c7853aeea1",
+          "fetchedAt": "2026-11-09T11:49:31.686Z",
+          "observedAt": "2026-11-09T11:49:31.686Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:49:29.105Z",
+          "requestedAt": "2026-11-09T11:49:30.326Z",
+          "receivedAt": "2026-11-09T11:49:31.686Z",
+          "closedThroughAt": "2026-11-09T11:49:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": true,
+          "reason": null,
+          "diagnostics": {
+            "receivedBars": 60,
+            "closedBars": 59,
+            "lastClosedAtMs": 1794224940000,
+            "firstOpenAtMs": 1794221400000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 59,
+            "usedFirstOpenAtMs": 1794221400000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          }
+        },
+        {
+          "chain": "bsc",
+          "address": "0xb37e871c790ba7a9e002132e3a08570d92207777",
+          "fetchedAt": "2026-11-09T11:49:19.327Z",
+          "observedAt": null,
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:49:13.340Z",
+          "requestedAt": "2026-11-09T11:49:18.035Z",
+          "receivedAt": "2026-11-09T11:49:19.327Z",
+          "closedThroughAt": "2026-11-09T11:49:00.000Z",
+          "excludedUnclosedBars": 0,
+          "sourceStatus": "unavailable",
+          "sourceReason": "empty_kline",
+          "sourceReasonCode": "GMGN_EMPTY_KLINE",
+          "lastAttempt": {
+            "queuedAt": "2026-11-09T11:49:13.340Z",
+            "requestedAt": "2026-11-09T11:49:18.035Z",
+            "receivedAt": "2026-11-09T11:49:19.327Z",
+            "completedAt": "2026-11-09T11:49:19.327Z",
+            "from": 1794221340,
+            "to": 1794224940,
+            "requestWindow": "latest_closed_at_dispatch"
+          },
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": null,
+            "closedBars": 0,
+            "lastClosedAtMs": null,
+            "code": "source_unavailable",
+            "issue": null
+          }
+        },
+        {
+          "chain": "sol",
+          "address": "tV2wVqRjk7ugbQAFs2MAMxNF7HmuqUwgoFaQgUfpump",
+          "fetchedAt": "2026-11-09T11:49:18.830Z",
+          "observedAt": null,
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:49:13.340Z",
+          "requestedAt": "2026-11-09T11:49:17.622Z",
+          "receivedAt": "2026-11-09T11:49:18.830Z",
+          "closedThroughAt": "2026-11-09T11:49:00.000Z",
+          "excludedUnclosedBars": 0,
+          "sourceStatus": "unavailable",
+          "sourceReason": "empty_kline",
+          "sourceReasonCode": "GMGN_EMPTY_KLINE",
+          "lastAttempt": {
+            "queuedAt": "2026-11-09T11:49:13.340Z",
+            "requestedAt": "2026-11-09T11:49:17.622Z",
+            "receivedAt": "2026-11-09T11:49:18.830Z",
+            "completedAt": "2026-11-09T11:49:18.830Z",
+            "from": 1794221340,
+            "to": 1794224940,
+            "requestWindow": "latest_closed_at_dispatch"
+          },
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": null,
+            "closedBars": 0,
+            "lastClosedAtMs": null,
+            "code": "source_unavailable",
+            "issue": null
+          }
+        }
+      ],
+      "livePositions": 1,
+      "liveOpenPositions": 0,
+      "liveDecisionCount": 14
+    },
+    {
+      "checkedAt": "2026-11-09T11:50:56.073256+00:00",
+      "updatedAt": "2026-11-09T11:50:54.541Z",
+      "status": "ok",
+      "enabled": true,
+      "liveMirror": {
+        "enabled": true,
+        "chains": [
+          "bsc",
+          "sol"
+        ],
+        "signalSource": "paper-atm-confirmed-pvp-v2",
+        "strategyAllowlist": [
+          "*"
+        ]
+      },
+      "researchVersion": "research_evidence_shortlist_v25",
+      "chartHealth": {
+        "version": "chart_health_v2",
+        "alert": false,
+        "warmup": false,
+        "evaluated": 316,
+        "chartReady": 3,
+        "klineOk": 9,
+        "notRequested": 307,
+        "notRequestedRatio": 0.9715189873417721,
+        "fetched": 9,
+        "fetchedUnavailable": 0,
+        "fetchedUnavailableRatio": 0,
+        "sourceUnavailable": 0,
+        "sourceUnavailableRatio": 0,
+        "staleClosedBars": 4,
+        "insufficientClosedBars": 3,
+        "hotCount": 3,
+        "hotFetched": 3,
+        "hotNotRequested": 0,
+        "hotRequestCoverageRate": 1,
+        "hotKlineOk": 3,
+        "hotChartReady": 2,
+        "hotKlineFresh": 3,
+        "hotKlineStale": 0,
+        "hotKlineUnknown": 0,
+        "hotKlineFreshRate": 1,
+        "hotKlineMaxClosedAgeMs": 114197,
+        "hotKlineFreshnessMaxAgeMs": 120000,
+        "hotChartReadyRate": 0.6666666666666666,
+        "chartReadyRate": 0.00949367088607595,
+        "klineOkRate": 0.028481012658227847,
+        "funnelChartReady": 0,
+        "funnelOhlcvReady": 3,
+        "chartDispatchCount": 17,
+        "chartCacheCount": 12,
+        "cachedUnavailable": 2,
+        "queueWaitMedianMs": 1886,
+        "queueWaitMaxMs": 33422,
+        "queueSamples": 22,
+        "note": "未请求的广谱候选单独计数。确认型漏斗 chartReady 是连续报价确认，ohlcvReady 才是 K 线结构。不代表可以开仓。"
+      },
+      "entryDiagnostics": {
+        "version": "paper_entry_diagnostics_v1",
+        "detected": 316,
+        "verifiedCatalyst": 0,
+        "externalStructure": 188,
+        "quoteResearchReady": 0,
+        "quoteScheduled": 0,
+        "eligible": 0,
+        "blockers": [
+          {
+            "code": "safety_blocked",
+            "label": "明确不可交易或安全检查未通过",
+            "count": 121
+          },
+          {
+            "code": "chart_missing",
+            "label": "买点数据未取得，尚不能判断有无机会",
+            "count": 86
+          },
+          {
+            "code": "catalyst",
+            "label": "缺少有效原文催化或核实盈利钱包",
+            "count": 77
+          },
+          {
+            "code": "safety_data",
+            "label": "该入口所需安全字段尚未补齐",
+            "count": 18
+          },
+          {
+            "code": "reentry",
+            "label": "上次亏损后的重入证据不足",
+            "count": 8
+          },
+          {
+            "code": "chart_stale",
+            "label": "买点K线已过期，等待刷新",
+            "count": 3
+          },
+          {
+            "code": "setup",
+            "label": "买盘、形态或其他入场条件尚未成立",
+            "count": 2
+          },
+          {
+            "code": "chart_incomplete",
+            "label": "买点K线不足或断档，等待补齐",
+            "count": 1
+          }
+        ],
+        "note": "按链与 CA 去重的当前快照；每个候选只计一个主要状态。没有有效候选不代表市场没有机会，调度与条件通过均不等于成交。"
+      },
+      "chartDispatches": {
+        "holding": 4,
+        "entry": 0,
+        "hot": 3,
+        "wallet": 2,
+        "discovery": 8,
+        "proactive": 0
+      },
+      "hotQuoteResearch": {
+        "version": "bounded_market_leader_v2",
+        "lease": null,
+        "target": null,
+        "note": "热门外盘最多 45 秒、3 次普通优先级报价预热；样本间隔至少 5 秒，结束后休息 45 秒；不占已合格入口、不直接授予买入许可"
+      },
+      "quoteDispatches": {
+        "exit": 64,
+        "candidate": 0,
+        "comparisonCandidate": 0
+      },
+      "lastCandidateQuote": null,
+      "lastCandidateEvaluation": null,
+      "chartDiagnostics": [
+        {
+          "chain": "bsc",
+          "address": "0x8e6442663a4f8c50b6132c68d42a30e7dfe4ae15",
+          "fetchedAt": "2026-11-09T11:50:48.291Z",
+          "observedAt": "2026-11-09T11:50:48.291Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:50:37.063Z",
+          "requestedAt": "2026-11-09T11:50:47.148Z",
+          "receivedAt": "2026-11-09T11:50:48.291Z",
+          "closedThroughAt": "2026-11-09T11:50:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": true,
+          "reason": null,
+          "diagnostics": {
+            "receivedBars": 60,
+            "closedBars": 60,
+            "lastClosedAtMs": 1794225000000,
+            "firstOpenAtMs": 1794221400000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 60,
+            "usedFirstOpenAtMs": 1794221400000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          }
+        },
+        {
+          "chain": "sol",
+          "address": "HA9JHZn8S8VhtGtHtQcDVoLFBAssFPce9VthA2Pgpump",
+          "fetchedAt": "2026-11-09T11:50:42.650Z",
+          "observedAt": "2026-11-09T11:50:42.650Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:50:41.061Z",
+          "requestedAt": "2026-11-09T11:50:41.595Z",
+          "receivedAt": "2026-11-09T11:50:42.650Z",
+          "closedThroughAt": "2026-11-09T11:50:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": true,
+          "reason": null,
+          "diagnostics": {
+            "receivedBars": 42,
+            "closedBars": 42,
+            "lastClosedAtMs": 1794225000000,
+            "firstOpenAtMs": 1794222480000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 42,
+            "usedFirstOpenAtMs": 1794222480000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          }
+        },
+        {
+          "chain": "robinhood",
+          "address": "0xc0d6457c16cc70d6790dd43521c899c87ce02f35",
+          "fetchedAt": "2026-11-09T11:50:39.899Z",
+          "observedAt": "2026-11-09T11:50:39.898Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:50:37.063Z",
+          "requestedAt": "2026-11-09T11:50:38.654Z",
+          "receivedAt": "2026-11-09T11:50:39.898Z",
+          "closedThroughAt": "2026-11-09T11:50:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": 57,
+            "closedBars": 57,
+            "lastClosedAtMs": 1794224940000,
+            "firstOpenAtMs": 1794221400000,
+            "code": "stale_closed_bars",
+            "issue": null
+          }
+        },
+        {
+          "chain": "bsc",
+          "address": "0x8474d67585d93275b9c7a2d0f1c9ed2141777777",
+          "fetchedAt": "2026-11-09T11:50:38.949Z",
+          "observedAt": "2026-11-09T11:50:38.949Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:50:37.063Z",
+          "requestedAt": "2026-11-09T11:50:37.886Z",
+          "receivedAt": "2026-11-09T11:50:38.949Z",
+          "closedThroughAt": "2026-11-09T11:50:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": false,
+          "reason": "K 线缺口后连续收盘样本不足",
+          "diagnostics": {
+            "receivedBars": 58,
+            "closedBars": 58,
+            "lastClosedAtMs": 1794225000000,
+            "firstOpenAtMs": 1794221400000,
+            "code": "insufficient_contiguous_tail",
+            "issue": {
+              "index": 37,
+              "openAtMs": 1794223740000,
+              "previousOpenAtMs": 1794223620000,
+              "gapMs": 120000,
+              "missingIntervals": 1
+            }
+          }
+        },
+        {
+          "chain": "bsc",
+          "address": "0xb37e871c790ba7a9e002132e3a08570d92207777",
+          "fetchedAt": "2026-11-09T11:50:23.480Z",
+          "observedAt": null,
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:50:21.690Z",
+          "requestedAt": "2026-11-09T11:50:22.471Z",
+          "receivedAt": "2026-11-09T11:50:23.480Z",
+          "closedThroughAt": "2026-11-09T11:50:00.000Z",
+          "excludedUnclosedBars": 0,
+          "sourceStatus": "unavailable",
+          "sourceReason": "empty_kline",
+          "sourceReasonCode": "GMGN_EMPTY_KLINE",
+          "lastAttempt": {
+            "queuedAt": "2026-11-09T11:50:21.690Z",
+            "requestedAt": "2026-11-09T11:50:22.471Z",
+            "receivedAt": "2026-11-09T11:50:23.480Z",
+            "completedAt": "2026-11-09T11:50:23.480Z",
+            "from": 1794221400,
+            "to": 1794225000,
+            "requestWindow": "latest_closed_at_dispatch"
+          },
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": null,
+            "closedBars": 0,
+            "lastClosedAtMs": null,
+            "code": "source_unavailable",
+            "issue": null
+          }
+        },
+        {
+          "chain": "sol",
+          "address": "tV2wVqRjk7ugbQAFs2MAMxNF7HmuqUwgoFaQgUfpump",
+          "fetchedAt": "2026-11-09T11:50:21.543Z",
+          "observedAt": null,
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:50:19.819Z",
+          "requestedAt": "2026-11-09T11:50:20.501Z",
+          "receivedAt": "2026-11-09T11:50:21.543Z",
+          "closedThroughAt": "2026-11-09T11:50:00.000Z",
+          "excludedUnclosedBars": 0,
+          "sourceStatus": "unavailable",
+          "sourceReason": "empty_kline",
+          "sourceReasonCode": "GMGN_EMPTY_KLINE",
+          "lastAttempt": {
+            "queuedAt": "2026-11-09T11:50:19.819Z",
+            "requestedAt": "2026-11-09T11:50:20.501Z",
+            "receivedAt": "2026-11-09T11:50:21.543Z",
+            "completedAt": "2026-11-09T11:50:21.543Z",
+            "from": 1794221400,
+            "to": 1794225000,
+            "requestWindow": "latest_closed_at_dispatch"
+          },
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": null,
+            "closedBars": 0,
+            "lastClosedAtMs": null,
+            "code": "source_unavailable",
+            "issue": null
+          }
+        },
+        {
+          "chain": "bsc",
+          "address": "0x6bdf0406283413f14da6619ada0d23d055727777",
+          "fetchedAt": "2026-11-09T11:50:17.209Z",
+          "observedAt": "2026-11-09T11:50:17.208Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:49:45.652Z",
+          "requestedAt": "2026-11-09T11:50:15.475Z",
+          "receivedAt": "2026-11-09T11:50:17.208Z",
+          "closedThroughAt": "2026-11-09T11:50:00.000Z",
+          "excludedUnclosedBars": 0,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": 5,
+            "closedBars": 5,
+            "lastClosedAtMs": 1794223740000,
+            "firstOpenAtMs": 1794222240000,
+            "code": "insufficient_closed_bars",
+            "issue": null
+          }
+        },
+        {
+          "chain": "bsc",
+          "address": "0x0cee7a04355b2e2d7248d9566db8889cf44f7777",
+          "fetchedAt": "2026-11-09T11:50:05.858Z",
+          "observedAt": "2026-11-09T11:50:05.858Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:49:32.436Z",
+          "requestedAt": "2026-11-09T11:50:04.829Z",
+          "receivedAt": "2026-11-09T11:50:05.858Z",
+          "closedThroughAt": "2026-11-09T11:50:00.000Z",
+          "excludedUnclosedBars": 0,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": false,
+          "reason": "K 线缺口后连续收盘样本不足",
+          "diagnostics": {
+            "receivedBars": 40,
+            "closedBars": 40,
+            "lastClosedAtMs": 1794225000000,
+            "firstOpenAtMs": 1794221400000,
+            "code": "insufficient_contiguous_tail",
+            "issue": {
+              "index": 38,
+              "openAtMs": 1794224880000,
+              "previousOpenAtMs": 1794224760000,
+              "gapMs": 120000,
+              "missingIntervals": 1
+            }
+          }
+        },
+        {
+          "chain": "bsc",
+          "address": "0x34257736852e866a7bf5b387b424fdec92737777",
+          "fetchedAt": "2026-11-09T11:49:55.135Z",
+          "observedAt": "2026-11-09T11:49:55.134Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:49:29.105Z",
+          "requestedAt": "2026-11-09T11:49:53.929Z",
+          "receivedAt": "2026-11-09T11:49:55.134Z",
+          "closedThroughAt": "2026-11-09T11:49:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": 60,
+            "closedBars": 59,
+            "lastClosedAtMs": 1794224940000,
+            "firstOpenAtMs": 1794221400000,
+            "code": "stale_closed_bars",
+            "issue": null
+          }
+        },
+        {
+          "chain": "sol",
+          "address": "AJScypbPEC8sY5CekpEFipujvcthSo4z352bEFBrpump",
+          "fetchedAt": "2026-11-09T11:49:44.738Z",
+          "observedAt": "2026-11-09T11:49:44.738Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:49:41.902Z",
+          "requestedAt": "2026-11-09T11:49:43.140Z",
+          "receivedAt": "2026-11-09T11:49:44.738Z",
+          "closedThroughAt": "2026-11-09T11:49:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": 8,
+            "closedBars": 8,
+            "lastClosedAtMs": 1794224940000,
+            "firstOpenAtMs": 1794224460000,
+            "code": "insufficient_closed_bars",
+            "issue": null
+          }
+        }
+      ],
+      "livePositions": 1,
+      "liveOpenPositions": 0,
+      "liveDecisionCount": 14
+    },
+    {
+      "checkedAt": "2026-11-09T11:51:42.383377+00:00",
+      "updatedAt": "2026-11-09T11:51:39.996Z",
+      "status": "ok",
+      "enabled": true,
+      "liveMirror": {
+        "enabled": true,
+        "chains": [
+          "bsc",
+          "sol"
+        ],
+        "signalSource": "paper-atm-confirmed-pvp-v2",
+        "strategyAllowlist": [
+          "*"
+        ]
+      },
+      "researchVersion": "research_evidence_shortlist_v25",
+      "chartHealth": {
+        "version": "chart_health_v2",
+        "alert": false,
+        "warmup": false,
+        "evaluated": 318,
+        "chartReady": 2,
+        "klineOk": 12,
+        "notRequested": 306,
+        "notRequestedRatio": 0.9622641509433962,
+        "fetched": 12,
+        "fetchedUnavailable": 0,
+        "fetchedUnavailableRatio": 0,
+        "sourceUnavailable": 0,
+        "sourceUnavailableRatio": 0,
+        "staleClosedBars": 7,
+        "insufficientClosedBars": 3,
+        "hotCount": 3,
+        "hotFetched": 3,
+        "hotNotRequested": 0,
+        "hotRequestCoverageRate": 1,
+        "hotKlineOk": 3,
+        "hotChartReady": 0,
+        "hotKlineFresh": 3,
+        "hotKlineStale": 0,
+        "hotKlineUnknown": 0,
+        "hotKlineFreshRate": 1,
+        "hotKlineMaxClosedAgeMs": 98523,
+        "hotKlineFreshnessMaxAgeMs": 120000,
+        "hotChartReadyRate": 0,
+        "chartReadyRate": 0.006289308176100629,
+        "klineOkRate": 0.03773584905660377,
+        "funnelChartReady": 0,
+        "funnelOhlcvReady": 2,
+        "chartDispatchCount": 23,
+        "chartCacheCount": 15,
+        "cachedUnavailable": 2,
+        "queueWaitMedianMs": 2769,
+        "queueWaitMaxMs": 33422,
+        "queueSamples": 25,
+        "note": "未请求的广谱候选单独计数。确认型漏斗 chartReady 是连续报价确认，ohlcvReady 才是 K 线结构。不代表可以开仓。"
+      },
+      "entryDiagnostics": {
+        "version": "paper_entry_diagnostics_v1",
+        "detected": 318,
+        "verifiedCatalyst": 0,
+        "externalStructure": 189,
+        "quoteResearchReady": 0,
+        "quoteScheduled": 0,
+        "eligible": 0,
+        "blockers": [
+          {
+            "code": "safety_blocked",
+            "label": "明确不可交易或安全检查未通过",
+            "count": 119
+          },
+          {
+            "code": "chart_missing",
+            "label": "买点数据未取得，尚不能判断有无机会",
+            "count": 87
+          },
+          {
+            "code": "catalyst",
+            "label": "缺少有效原文催化或核实盈利钱包",
+            "count": 78
+          },
+          {
+            "code": "safety_data",
+            "label": "该入口所需安全字段尚未补齐",
+            "count": 18
+          },
+          {
+            "code": "reentry",
+            "label": "上次亏损后的重入证据不足",
+            "count": 9
+          },
+          {
+            "code": "chart_stale",
+            "label": "买点K线已过期，等待刷新",
+            "count": 6
+          },
+          {
+            "code": "chart_incomplete",
+            "label": "买点K线不足或断档，等待补齐",
+            "count": 1
+          }
+        ],
+        "note": "按链与 CA 去重的当前快照；每个候选只计一个主要状态。没有有效候选不代表市场没有机会，调度与条件通过均不等于成交。"
+      },
+      "chartDispatches": {
+        "holding": 6,
+        "entry": 0,
+        "hot": 6,
+        "wallet": 2,
+        "discovery": 9,
+        "proactive": 1
+      },
+      "hotQuoteResearch": {
+        "version": "bounded_market_leader_v2",
+        "lease": null,
+        "target": null,
+        "note": "热门外盘最多 45 秒、3 次普通优先级报价预热；样本间隔至少 5 秒，结束后休息 45 秒；不占已合格入口、不直接授予买入许可"
+      },
+      "quoteDispatches": {
+        "exit": 92,
+        "candidate": 0,
+        "comparisonCandidate": 0
+      },
+      "lastCandidateQuote": null,
+      "lastCandidateEvaluation": null,
+      "chartDiagnostics": [
+        {
+          "chain": "bsc",
+          "address": "0xb37e871c790ba7a9e002132e3a08570d92207777",
+          "fetchedAt": "2026-11-09T11:51:27.406Z",
+          "observedAt": null,
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:51:25.310Z",
+          "requestedAt": "2026-11-09T11:51:26.108Z",
+          "receivedAt": "2026-11-09T11:51:27.406Z",
+          "closedThroughAt": "2026-11-09T11:51:00.000Z",
+          "excludedUnclosedBars": 0,
+          "sourceStatus": "unavailable",
+          "sourceReason": "empty_kline",
+          "sourceReasonCode": "GMGN_EMPTY_KLINE",
+          "lastAttempt": {
+            "queuedAt": "2026-11-09T11:51:25.310Z",
+            "requestedAt": "2026-11-09T11:51:26.108Z",
+            "receivedAt": "2026-11-09T11:51:27.406Z",
+            "completedAt": "2026-11-09T11:51:27.406Z",
+            "from": 1794221460,
+            "to": 1794225060,
+            "requestWindow": "latest_closed_at_dispatch"
+          },
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": null,
+            "closedBars": 0,
+            "lastClosedAtMs": null,
+            "code": "source_unavailable",
+            "issue": null
+          }
+        },
+        {
+          "chain": "robinhood",
+          "address": "0xc0d6457c16cc70d6790dd43521c899c87ce02f35",
+          "fetchedAt": "2026-11-09T11:51:26.404Z",
+          "observedAt": "2026-11-09T11:51:26.404Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:51:23.635Z",
+          "requestedAt": "2026-11-09T11:51:25.220Z",
+          "receivedAt": "2026-11-09T11:51:26.404Z",
+          "closedThroughAt": "2026-11-09T11:51:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": false,
+          "reason": "K 线缺口后连续收盘样本不足",
+          "diagnostics": {
+            "receivedBars": 57,
+            "closedBars": 57,
+            "lastClosedAtMs": 1794225060000,
+            "firstOpenAtMs": 1794221460000,
+            "code": "insufficient_contiguous_tail",
+            "issue": {
+              "index": 56,
+              "openAtMs": 1794225000000,
+              "previousOpenAtMs": 1794224880000,
+              "gapMs": 120000,
+              "missingIntervals": 1
+            }
+          }
+        },
+        {
+          "chain": "sol",
+          "address": "tV2wVqRjk7ugbQAFs2MAMxNF7HmuqUwgoFaQgUfpump",
+          "fetchedAt": "2026-11-09T11:51:25.653Z",
+          "observedAt": null,
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:51:23.634Z",
+          "requestedAt": "2026-11-09T11:51:24.215Z",
+          "receivedAt": "2026-11-09T11:51:25.653Z",
+          "closedThroughAt": "2026-11-09T11:51:00.000Z",
+          "excludedUnclosedBars": 0,
+          "sourceStatus": "unavailable",
+          "sourceReason": "empty_kline",
+          "sourceReasonCode": "GMGN_EMPTY_KLINE",
+          "lastAttempt": {
+            "queuedAt": "2026-11-09T11:51:23.634Z",
+            "requestedAt": "2026-11-09T11:51:24.215Z",
+            "receivedAt": "2026-11-09T11:51:25.653Z",
+            "completedAt": "2026-11-09T11:51:25.653Z",
+            "from": 1794221460,
+            "to": 1794225060,
+            "requestWindow": "latest_closed_at_dispatch"
+          },
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": null,
+            "closedBars": 0,
+            "lastClosedAtMs": null,
+            "code": "source_unavailable",
+            "issue": null
+          }
+        },
+        {
+          "chain": "robinhood",
+          "address": "0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea",
+          "fetchedAt": "2026-11-09T11:51:13.518Z",
+          "observedAt": "2026-11-09T11:51:13.518Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:50:49.828Z",
+          "requestedAt": "2026-11-09T11:51:12.171Z",
+          "receivedAt": "2026-11-09T11:51:13.518Z",
+          "closedThroughAt": "2026-11-09T11:51:00.000Z",
+          "excludedUnclosedBars": 0,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": true,
+          "reason": null,
+          "diagnostics": {
+            "receivedBars": 60,
+            "closedBars": 60,
+            "lastClosedAtMs": 1794225060000,
+            "firstOpenAtMs": 1794221460000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 60,
+            "usedFirstOpenAtMs": 1794221460000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          }
+        },
+        {
+          "chain": "robinhood",
+          "address": "0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
+          "fetchedAt": "2026-11-09T11:51:03.454Z",
+          "observedAt": "2026-11-09T11:51:03.454Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:50:43.060Z",
+          "requestedAt": "2026-11-09T11:51:02.039Z",
+          "receivedAt": "2026-11-09T11:51:03.454Z",
+          "closedThroughAt": "2026-11-09T11:51:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": true,
+          "reason": null,
+          "diagnostics": {
+            "receivedBars": 60,
+            "closedBars": 60,
+            "lastClosedAtMs": 1794225060000,
+            "firstOpenAtMs": 1794221460000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 60,
+            "usedFirstOpenAtMs": 1794221460000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          }
+        },
+        {
+          "chain": "sol",
+          "address": "5huy2qsankp2PRxWRbtFjP5cYqR5JxSpfD1hejz5DMGA",
+          "fetchedAt": "2026-11-09T11:50:55.737Z",
+          "observedAt": "2026-11-09T11:50:55.737Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:50:41.061Z",
+          "requestedAt": "2026-11-09T11:50:54.600Z",
+          "receivedAt": "2026-11-09T11:50:55.737Z",
+          "closedThroughAt": "2026-11-09T11:50:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": 5,
+            "closedBars": 5,
+            "lastClosedAtMs": 1794225000000,
+            "firstOpenAtMs": 1794224700000,
+            "code": "insufficient_closed_bars",
+            "issue": null
+          }
+        },
+        {
+          "chain": "bsc",
+          "address": "0x8e6442663a4f8c50b6132c68d42a30e7dfe4ae15",
+          "fetchedAt": "2026-11-09T11:50:48.291Z",
+          "observedAt": "2026-11-09T11:50:48.291Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:50:37.063Z",
+          "requestedAt": "2026-11-09T11:50:47.148Z",
+          "receivedAt": "2026-11-09T11:50:48.291Z",
+          "closedThroughAt": "2026-11-09T11:50:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": 60,
+            "closedBars": 59,
+            "lastClosedAtMs": 1794225000000,
+            "firstOpenAtMs": 1794221460000,
+            "code": "stale_closed_bars",
+            "issue": null
+          }
+        },
+        {
+          "chain": "sol",
+          "address": "HA9JHZn8S8VhtGtHtQcDVoLFBAssFPce9VthA2Pgpump",
+          "fetchedAt": "2026-11-09T11:50:42.650Z",
+          "observedAt": "2026-11-09T11:50:42.650Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:50:41.061Z",
+          "requestedAt": "2026-11-09T11:50:41.595Z",
+          "receivedAt": "2026-11-09T11:50:42.650Z",
+          "closedThroughAt": "2026-11-09T11:50:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": 42,
+            "closedBars": 42,
+            "lastClosedAtMs": 1794225000000,
+            "firstOpenAtMs": 1794222480000,
+            "code": "stale_closed_bars",
+            "issue": null
+          }
+        },
+        {
+          "chain": "bsc",
+          "address": "0x8474d67585d93275b9c7a2d0f1c9ed2141777777",
+          "fetchedAt": "2026-11-09T11:50:38.949Z",
+          "observedAt": "2026-11-09T11:50:38.949Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:50:37.063Z",
+          "requestedAt": "2026-11-09T11:50:37.886Z",
+          "receivedAt": "2026-11-09T11:50:38.949Z",
+          "closedThroughAt": "2026-11-09T11:50:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": 58,
+            "closedBars": 57,
+            "lastClosedAtMs": 1794225000000,
+            "firstOpenAtMs": 1794221460000,
+            "code": "stale_closed_bars",
+            "issue": null
+          }
+        },
+        {
+          "chain": "bsc",
+          "address": "0x6bdf0406283413f14da6619ada0d23d055727777",
+          "fetchedAt": "2026-11-09T11:50:17.209Z",
+          "observedAt": "2026-11-09T11:50:17.208Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:49:45.652Z",
+          "requestedAt": "2026-11-09T11:50:15.475Z",
+          "receivedAt": "2026-11-09T11:50:17.208Z",
+          "closedThroughAt": "2026-11-09T11:50:00.000Z",
+          "excludedUnclosedBars": 0,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": 5,
+            "closedBars": 5,
+            "lastClosedAtMs": 1794223740000,
+            "firstOpenAtMs": 1794222240000,
+            "code": "insufficient_closed_bars",
+            "issue": null
+          }
+        }
+      ],
+      "livePositions": 1,
+      "liveOpenPositions": 0,
+      "liveDecisionCount": 14
+    },
+    {
+      "checkedAt": "2026-11-09T11:52:28.322878+00:00",
+      "updatedAt": "2026-11-09T11:52:26.406Z",
+      "status": "ok",
+      "enabled": true,
+      "liveMirror": {
+        "enabled": true,
+        "chains": [
+          "bsc",
+          "sol"
+        ],
+        "signalSource": "paper-atm-confirmed-pvp-v2",
+        "strategyAllowlist": [
+          "*"
+        ]
+      },
+      "researchVersion": "research_evidence_shortlist_v25",
+      "chartHealth": {
+        "version": "chart_health_v2",
+        "alert": false,
+        "warmup": false,
+        "evaluated": 317,
+        "chartReady": 6,
+        "klineOk": 15,
+        "notRequested": 302,
+        "notRequestedRatio": 0.9526813880126183,
+        "fetched": 15,
+        "fetchedUnavailable": 0,
+        "fetchedUnavailableRatio": 0,
+        "sourceUnavailable": 0,
+        "sourceUnavailableRatio": 0,
+        "staleClosedBars": 5,
+        "insufficientClosedBars": 5,
+        "hotCount": 3,
+        "hotFetched": 3,
+        "hotNotRequested": 0,
+        "hotRequestCoverageRate": 1,
+        "hotKlineOk": 3,
+        "hotChartReady": 2,
+        "hotKlineFresh": 3,
+        "hotKlineStale": 0,
+        "hotKlineUnknown": 0,
+        "hotKlineFreshRate": 1,
+        "hotKlineMaxClosedAgeMs": 26406,
+        "hotKlineFreshnessMaxAgeMs": 120000,
+        "hotChartReadyRate": 0.6666666666666666,
+        "chartReadyRate": 0.01892744479495268,
+        "klineOkRate": 0.0473186119873817,
+        "funnelChartReady": 0,
+        "funnelOhlcvReady": 6,
+        "chartDispatchCount": 29,
+        "chartCacheCount": 18,
+        "cachedUnavailable": 2,
+        "queueWaitMedianMs": 2581,
+        "queueWaitMaxMs": 33422,
+        "queueSamples": 28,
+        "note": "未请求的广谱候选单独计数。确认型漏斗 chartReady 是连续报价确认，ohlcvReady 才是 K 线结构。不代表可以开仓。"
+      },
+      "entryDiagnostics": {
+        "version": "paper_entry_diagnostics_v1",
+        "detected": 317,
+        "verifiedCatalyst": 0,
+        "externalStructure": 189,
+        "quoteResearchReady": 0,
+        "quoteScheduled": 0,
+        "eligible": 0,
+        "blockers": [
+          {
+            "code": "safety_blocked",
+            "label": "明确不可交易或安全检查未通过",
+            "count": 117
+          },
+          {
+            "code": "chart_missing",
+            "label": "买点数据未取得，尚不能判断有无机会",
+            "count": 87
+          },
+          {
+            "code": "catalyst",
+            "label": "缺少有效原文催化或核实盈利钱包",
+            "count": 77
+          },
+          {
+            "code": "safety_data",
+            "label": "该入口所需安全字段尚未补齐",
+            "count": 18
+          },
+          {
+            "code": "reentry",
+            "label": "上次亏损后的重入证据不足",
+            "count": 9
+          },
+          {
+            "code": "chart_stale",
+            "label": "买点K线已过期，等待刷新",
+            "count": 4
+          },
+          {
+            "code": "chart_incomplete",
+            "label": "买点K线不足或断档，等待补齐",
+            "count": 2
+          },
+          {
+            "code": "setup",
+            "label": "买盘、形态或其他入场条件尚未成立",
+            "count": 2
+          },
+          {
+            "code": "structure",
+            "label": "入场结构或退出依据尚未建立",
+            "count": 1
+          }
+        ],
+        "note": "按链与 CA 去重的当前快照；每个候选只计一个主要状态。没有有效候选不代表市场没有机会，调度与条件通过均不等于成交。"
+      },
+      "chartDispatches": {
+        "holding": 6,
+        "entry": 0,
+        "hot": 8,
+        "wallet": 3,
+        "discovery": 12,
+        "proactive": 1
+      },
+      "hotQuoteResearch": {
+        "version": "bounded_market_leader_v2",
+        "lease": null,
+        "target": null,
+        "note": "热门外盘最多 45 秒、3 次普通优先级报价预热；样本间隔至少 5 秒，结束后休息 45 秒；不占已合格入口、不直接授予买入许可"
+      },
+      "quoteDispatches": {
+        "exit": 117,
+        "candidate": 0,
+        "comparisonCandidate": 0
+      },
+      "lastCandidateQuote": null,
+      "lastCandidateEvaluation": null,
+      "chartDiagnostics": [
+        {
+          "chain": "bsc",
+          "address": "0x34257736852e866a7bf5b387b424fdec92737777",
+          "fetchedAt": "2026-11-09T11:52:22.362Z",
+          "observedAt": "2026-11-09T11:52:22.362Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:52:20.518Z",
+          "requestedAt": "2026-11-09T11:52:20.956Z",
+          "receivedAt": "2026-11-09T11:52:22.362Z",
+          "closedThroughAt": "2026-11-09T11:52:00.000Z",
+          "excludedUnclosedBars": 0,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": true,
+          "reason": null,
+          "diagnostics": {
+            "receivedBars": 60,
+            "closedBars": 60,
+            "lastClosedAtMs": 1794225120000,
+            "firstOpenAtMs": 1794221520000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 60,
+            "usedFirstOpenAtMs": 1794221520000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          }
+        },
+        {
+          "chain": "robinhood",
+          "address": "0x39dbed3a2bd333467115de45665cc57f813c4571",
+          "fetchedAt": "2026-11-09T11:52:19.375Z",
+          "observedAt": "2026-11-09T11:52:19.375Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:52:15.025Z",
+          "requestedAt": "2026-11-09T11:52:18.178Z",
+          "receivedAt": "2026-11-09T11:52:19.375Z",
+          "closedThroughAt": "2026-11-09T11:52:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": false,
+          "reason": "K 线缺口后连续收盘样本不足",
+          "diagnostics": {
+            "receivedBars": 58,
+            "closedBars": 58,
+            "lastClosedAtMs": 1794225120000,
+            "firstOpenAtMs": 1794221520000,
+            "code": "insufficient_contiguous_tail",
+            "issue": {
+              "index": 51,
+              "openAtMs": 1794224700000,
+              "previousOpenAtMs": 1794224580000,
+              "gapMs": 120000,
+              "missingIntervals": 1
+            }
+          }
+        },
+        {
+          "chain": "sol",
+          "address": "8rHoAfpdE89bi1SRRKaYUWfng3YpntoxZQyEQy9GPmZV",
+          "fetchedAt": "2026-11-09T11:52:16.811Z",
+          "observedAt": "2026-11-09T11:52:16.811Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:52:15.025Z",
+          "requestedAt": "2026-11-09T11:52:15.734Z",
+          "receivedAt": "2026-11-09T11:52:16.811Z",
+          "closedThroughAt": "2026-11-09T11:52:00.000Z",
+          "excludedUnclosedBars": 0,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": true,
+          "reason": null,
+          "diagnostics": {
+            "receivedBars": 60,
+            "closedBars": 60,
+            "lastClosedAtMs": 1794225120000,
+            "firstOpenAtMs": 1794221520000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 60,
+            "usedFirstOpenAtMs": 1794221520000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          }
+        },
+        {
+          "chain": "bsc",
+          "address": "0x8b9ee39195ea99d6ddd68030f44131116bc218f6",
+          "fetchedAt": "2026-11-09T11:51:46.936Z",
+          "observedAt": "2026-11-09T11:51:46.936Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:51:36.199Z",
+          "requestedAt": "2026-11-09T11:51:45.424Z",
+          "receivedAt": "2026-11-09T11:51:46.936Z",
+          "closedThroughAt": "2026-11-09T11:51:00.000Z",
+          "excludedUnclosedBars": 0,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": 15,
+            "closedBars": 15,
+            "lastClosedAtMs": 1794225000000,
+            "firstOpenAtMs": 1794221640000,
+            "code": "stale_closed_bars",
+            "issue": null
+          }
+        },
+        {
+          "chain": "sol",
+          "address": "HA9JHZn8S8VhtGtHtQcDVoLFBAssFPce9VthA2Pgpump",
+          "fetchedAt": "2026-11-09T11:51:40.950Z",
+          "observedAt": "2026-11-09T11:51:40.949Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:51:36.199Z",
+          "requestedAt": "2026-11-09T11:51:39.438Z",
+          "receivedAt": "2026-11-09T11:51:40.949Z",
+          "closedThroughAt": "2026-11-09T11:51:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": true,
+          "reason": null,
+          "diagnostics": {
+            "receivedBars": 43,
+            "closedBars": 43,
+            "lastClosedAtMs": 1794225060000,
+            "firstOpenAtMs": 1794222480000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 43,
+            "usedFirstOpenAtMs": 1794222480000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          }
+        },
+        {
+          "chain": "bsc",
+          "address": "0x8474d67585d93275b9c7a2d0f1c9ed2141777777",
+          "fetchedAt": "2026-11-09T11:51:39.525Z",
+          "observedAt": "2026-11-09T11:51:39.524Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:51:36.199Z",
+          "requestedAt": "2026-11-09T11:51:38.427Z",
+          "receivedAt": "2026-11-09T11:51:39.524Z",
+          "closedThroughAt": "2026-11-09T11:51:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": false,
+          "reason": "K 线缺口后连续收盘样本不足",
+          "diagnostics": {
+            "receivedBars": 58,
+            "closedBars": 57,
+            "lastClosedAtMs": 1794225060000,
+            "firstOpenAtMs": 1794221520000,
+            "code": "insufficient_contiguous_tail",
+            "issue": {
+              "index": 35,
+              "openAtMs": 1794223740000,
+              "previousOpenAtMs": 1794223620000,
+              "gapMs": 120000,
+              "missingIntervals": 1
+            }
+          }
+        },
+        {
+          "chain": "bsc",
+          "address": "0xb37e871c790ba7a9e002132e3a08570d92207777",
+          "fetchedAt": "2026-11-09T11:51:27.406Z",
+          "observedAt": null,
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:51:25.310Z",
+          "requestedAt": "2026-11-09T11:51:26.108Z",
+          "receivedAt": "2026-11-09T11:51:27.406Z",
+          "closedThroughAt": "2026-11-09T11:51:00.000Z",
+          "excludedUnclosedBars": 0,
+          "sourceStatus": "unavailable",
+          "sourceReason": "empty_kline",
+          "sourceReasonCode": "GMGN_EMPTY_KLINE",
+          "lastAttempt": {
+            "queuedAt": "2026-11-09T11:51:25.310Z",
+            "requestedAt": "2026-11-09T11:51:26.108Z",
+            "receivedAt": "2026-11-09T11:51:27.406Z",
+            "completedAt": "2026-11-09T11:51:27.406Z",
+            "from": 1794221460,
+            "to": 1794225060,
+            "requestWindow": "latest_closed_at_dispatch"
+          },
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": null,
+            "closedBars": 0,
+            "lastClosedAtMs": null,
+            "code": "source_unavailable",
+            "issue": null
+          }
+        },
+        {
+          "chain": "robinhood",
+          "address": "0xc0d6457c16cc70d6790dd43521c899c87ce02f35",
+          "fetchedAt": "2026-11-09T11:51:26.404Z",
+          "observedAt": "2026-11-09T11:51:26.404Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:51:23.635Z",
+          "requestedAt": "2026-11-09T11:51:25.220Z",
+          "receivedAt": "2026-11-09T11:51:26.404Z",
+          "closedThroughAt": "2026-11-09T11:51:00.000Z",
+          "excludedUnclosedBars": 1,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": false,
+          "reason": "K 线缺口后连续收盘样本不足",
+          "diagnostics": {
+            "receivedBars": 57,
+            "closedBars": 56,
+            "lastClosedAtMs": 1794225060000,
+            "firstOpenAtMs": 1794221520000,
+            "code": "insufficient_contiguous_tail",
+            "issue": {
+              "index": 55,
+              "openAtMs": 1794225000000,
+              "previousOpenAtMs": 1794224880000,
+              "gapMs": 120000,
+              "missingIntervals": 1
+            }
+          }
+        },
+        {
+          "chain": "sol",
+          "address": "tV2wVqRjk7ugbQAFs2MAMxNF7HmuqUwgoFaQgUfpump",
+          "fetchedAt": "2026-11-09T11:51:25.653Z",
+          "observedAt": null,
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:51:23.634Z",
+          "requestedAt": "2026-11-09T11:51:24.215Z",
+          "receivedAt": "2026-11-09T11:51:25.653Z",
+          "closedThroughAt": "2026-11-09T11:51:00.000Z",
+          "excludedUnclosedBars": 0,
+          "sourceStatus": "unavailable",
+          "sourceReason": "empty_kline",
+          "sourceReasonCode": "GMGN_EMPTY_KLINE",
+          "lastAttempt": {
+            "queuedAt": "2026-11-09T11:51:23.634Z",
+            "requestedAt": "2026-11-09T11:51:24.215Z",
+            "receivedAt": "2026-11-09T11:51:25.653Z",
+            "completedAt": "2026-11-09T11:51:25.653Z",
+            "from": 1794221460,
+            "to": 1794225060,
+            "requestWindow": "latest_closed_at_dispatch"
+          },
+          "ready": false,
+          "reason": "新鲜且足够的 K 线",
+          "diagnostics": {
+            "receivedBars": null,
+            "closedBars": 0,
+            "lastClosedAtMs": null,
+            "code": "source_unavailable",
+            "issue": null
+          }
+        },
+        {
+          "chain": "robinhood",
+          "address": "0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea",
+          "fetchedAt": "2026-11-09T11:51:13.518Z",
+          "observedAt": "2026-11-09T11:51:13.518Z",
+          "requestWindow": "latest_closed_at_dispatch",
+          "queuedAt": "2026-11-09T11:50:49.828Z",
+          "requestedAt": "2026-11-09T11:51:12.171Z",
+          "receivedAt": "2026-11-09T11:51:13.518Z",
+          "closedThroughAt": "2026-11-09T11:51:00.000Z",
+          "excludedUnclosedBars": 0,
+          "sourceStatus": "ok",
+          "sourceReason": null,
+          "sourceReasonCode": null,
+          "lastAttempt": null,
+          "ready": true,
+          "reason": null,
+          "diagnostics": {
+            "receivedBars": 60,
+            "closedBars": 59,
+            "lastClosedAtMs": 1794225060000,
+            "firstOpenAtMs": 1794221520000,
+            "windowPolicy": "contiguous_tail_v1",
+            "excludedPrefixBars": 0,
+            "usedBars": 59,
+            "usedFirstOpenAtMs": 1794221520000,
+            "gapBoundary": null,
+            "code": "ready",
+            "issue": null
+          }
+        }
+      ],
+      "livePositions": 1,
+      "liveOpenPositions": 0,
+      "liveDecisionCount": 14
+    }
+  ],
+  "validation": {
+    "targetedTests": 258,
+    "passed": 258,
+    "failed": 0,
+    "log": "/tmp/gmgn-data-gap-verification.log",
+    "liveObservationSeconds": 184
+  },
+  "remainingLimitations": [
+    "Broad candidates are sampled under the existing shared request budget; not all candidates have been charted.",
+    "Source-empty or non-contiguous candles are not filled with invented bars.",
+    "No live eligible buy emerged during observation; bounded hot-quote collection was verified with isolated tests, not a forced live buy."
+  ]
+}

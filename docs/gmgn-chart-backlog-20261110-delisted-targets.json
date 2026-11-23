@@ -1,0 +1,174 @@
+{
+  "updatedAt": "2026-11-09T17:44:01.965Z",
+  "priorJobId": "chart-catchup-1794247350010",
+  "candidates": [
+    {
+      "chain": "bsc",
+      "address": "0x7c8d5502b544ddaf8852fc46d1174e34876d545c",
+      "symbol": "BNC4",
+      "price": 4.73185,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 2146290,
+      "volume": {
+        "value": 1938.25,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 36,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x33fe24f4298a8659668e8d1f2044fd01e8a57777",
+      "symbol": "RM",
+      "price": 0.000108051,
+      "code": "chart_incomplete",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 36919.6,
+      "volume": {
+        "value": 1283.75,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 29,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "firstOpenAtMs": null,
+        "code": "insufficient_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xf1c599e9a5fbdea408a7409c0176a2fe42c64444",
+      "symbol": "Hachiko",
+      "price": 0.000711867,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 109531,
+      "volume": {
+        "value": 1179.03,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 14,
+        "closedBars": 13,
+        "lastClosedAtMs": 1794246060000,
+        "firstOpenAtMs": 1794243060000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xe9320db4ddfc689470d09c768a4cb9b05cf97777",
+      "symbol": "牛逼",
+      "price": 8.02044e-05,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 26439.1,
+      "volume": {
+        "value": 723.564,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 60,
+        "closedBars": 37,
+        "lastClosedAtMs": 1794244860000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x2a06ddb8f82b2926ccd852d8cdc2348246857777",
+      "symbol": "涨醒",
+      "price": 0.000335687,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 54868,
+      "volume": {
+        "value": 693.235,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 48,
+        "closedBars": 44,
+        "lastClosedAtMs": 1794246000000,
+        "firstOpenAtMs": 1794242700000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xbab528425edb1e0e36d3719bc3307d9c8cce8888",
+      "symbol": "Moolah",
+      "price": 0.0602922,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 1621350,
+      "volume": {
+        "value": 573.561,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 54,
+        "closedBars": 47,
+        "lastClosedAtMs": 1794245700000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x6b2ce31a577d92f73516c7a91febc7672247e694",
+      "symbol": "Gangstar",
+      "price": 7.12333e-05,
+      "code": "chart_stale",
+      "allowed": true,
+      "researchExclusions": [],
+      "liquidity": 30554.6,
+      "volume": {
+        "value": 499.443,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 17,
+        "closedBars": 16,
+        "lastClosedAtMs": 1794246120000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    }
+  ]
+}

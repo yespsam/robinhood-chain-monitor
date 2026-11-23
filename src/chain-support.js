@@ -18,6 +18,7 @@ const CHAIN_DEFINITIONS = [
   { id: "mantle", name: "Mantle", mainnetChainId: 5000, ids: { 5000: "mainnet", 5003: "testnet" }, pattern: /\bMantle(?:\s+(?:mainnet|sepolia|testnet|chain|network))?\b/, codes: ["mantle"] },
   { id: "sonic", name: "Sonic", mainnetChainId: 146, ids: { 146: "mainnet", 57054: "testnet" }, pattern: /\bSonic(?:\s+(?:mainnet|testnet|chain|network))?\b/, codes: ["sonic"] },
   { id: "berachain", name: "Berachain", mainnetChainId: 80094, ids: { 80094: "mainnet", 80069: "testnet" }, pattern: /\bberachain(?:\s+(?:mainnet|bepolia|testnet|chain|network))?\b/i, codes: ["bera", "berachain"] },
+  { id: "hyperevm", name: "HyperEVM", mainnetChainId: 999, ids: { 999: "mainnet", 998: "testnet" }, pattern: /\b(?:hyperevm|hyperliquid\s+evm)(?:\s+(?:mainnet|testnet|chain|network))?\b/i, codes: ["hyperevm", "hyperliquidevm"] },
   { id: "world-chain", name: "World Chain", mainnetChainId: 480, ids: { 480: "mainnet", 4801: "testnet" }, pattern: /\bworld\s+chain(?:\s+(?:mainnet|sepolia|testnet|network))?\b/i, codes: ["world", "worldchain"] },
   { id: "solana", name: "Solana", mainnetChainId: null, ids: {}, pattern: /\bsolana(?:\s+(?:mainnet|devnet|testnet|network))?\b/i, codes: ["sol", "solana"] },
   { id: "sui", name: "Sui", mainnetChainId: null, ids: {}, pattern: /\bSui(?:\s+(?:mainnet|devnet|testnet|network))?\b/, codes: ["sui"] },
@@ -32,7 +33,7 @@ const CHAIN_STAGE_RANK = { configured: 1, announced: 2, supported: 3, deployed: 
 const CHAIN_ACTION = /\b(?:add(?:s|ed|ing)?(?:\s+support)?|support(?:s|ed|ing)?|enable(?:s|d|ing)?|integrat(?:e|es|ed|ing|ion)|expand(?:s|ed|ing)?|launch(?:es|ed|ing)?|deploy(?:s|ed|ing|ment)?|available|live|roll(?:s|ed|ing)?\s+out|coming)\b/i;
 const EXPLICIT_NETWORK_ACTION = /\b(?:now\s+)?(?:live|available|launched|deployed)\s+(?:on|to)\b|\b(?:support|integration|deployment|expansion)\s+(?:for|on|to|with)\b|\b(?:add(?:s|ed|ing)?|enable(?:s|d|ing)?|expand(?:s|ed|ing)?)\s+(?:support\s+for\s+)?(?:a\s+)?(?:new\s+)?(?:chain|network|mainnet|testnet)\b/i;
 const GENERIC_NEW_CHAIN = /\b(?:new|another|additional)\s+(?:chain|network)\s+(?:support|integration|deployment|launch)\b|\b(?:multi|cross)[ -]?chain\s+(?:support|expansion|deployment|launch)\b|\b(?:deploy(?:s|ed|ing)?|deployment|launch(?:es|ed|ing)?|expand(?:s|ed|ing)?)\b[^\n]{0,60}\b(?:on|to)\s+(?:a\s+)?new\s+(?:chain|network)\b/i;
-const PLATFORM_CONTEXT = /\b(?:flap|four\.?meme|open\s*four|uniswap|long(?:\.xyz)?|pools?\.trade|liquidity[ -]launcher|launchpad|launcher|platform|protocol|factory|router|vault|token\s+manager|contracts?|app)\b/i;
+const PLATFORM_CONTEXT = /\b(?:flap|four\.?meme|open\s*four|uniswap|long(?:\.xyz)?|pools?\.trade|hyperliquid|hyperevm|liquidity[ -]launcher|launchpad|launcher|platform|protocol|factory|router|vault|token\s+manager|contracts?|app)\b/i;
 const NETWORK_LIST_CONTEXT = /\b(?:supported|available|enabled)\s+(?:chains?|networks?)\b|\b(?:chains?|networks?)\s*(?::|are\s+)?(?:supported|available|enabled)\b/i;
 const TESTNET = /\b(?:testnet|sepolia|chapel|amoy|fuji|devnet|bepolia)\b/i;
 const MAINNET = /\bmainnet\b/i;

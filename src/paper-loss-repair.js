@@ -4,8 +4,11 @@ import { classifyEntryEvidence } from './paper-evidence-review.js';
 import { ESTIMATED_COST_VERSION, ESTIMATED_COST_TEXT } from './paper-estimated-cost.js';
 import {verifiedLaunchContext,LAUNCH_THESIS_VERSION} from './paper-launch-policy.js';
 import {validPoolSignal,poolEntryAllowed} from './paper-pool-signal.js';
+import {validFlapPoolLaunchSignal} from './flap-pool-launch-signal.js';
 import {paperLossLearning} from './paper-loss-learning.js';
 import {validAlphaSignal,ALPHA_EVENT_TTL} from './binance-alpha-catalog.js';
+import {narrativeTier} from './paper-chase-gate.js';
+import {paperControlScore} from './paper-control-score.js';
 import {validCollectiveSignal,collectiveWalletThesis,walletSignalRoute} from './paper-collective-signal.js';
 
 export const LOSS_REPAIR_VERSION = 'paper_loss_repair_v1';
@@ -62,6 +65,8 @@ function eventProof(row,nowMs) {
   const poolSignal=row.evidence?.opportunity?.event;
   if(poolSignal?.source==='new_pool_first_three'&&validPoolSignal(poolSignal,row.token,nowMs))
     return {url:poolSignal.sourceUrl,identity:poolSignal.sourceId,at:stamp(poolSignal.sourceAt),binding:'onchain_pool'};
+  if(poolSignal?.source==='flap_pool_launch'&&validFlapPoolLaunchSignal(poolSignal,row.token,nowMs))
+    return {url:poolSignal.sourceUrl,identity:poolSignal.sourceId,at:stamp(poolSignal.sourceAt),binding:'flap_pool_launch'};
   const t=row.evidence?.narrativeThesis,c=classifyEntryEvidence({chain:row.token.chain,address:row.token.address,atMs:nowMs,entryEvidence:row.evidence});
   // Alpha has its own bounded follow-through window. Preserve the original
   // listing clock and exact catalog/CA binding; a generic old tweet cannot use it.
@@ -86,8 +91,8 @@ export function launchEventThesis(row,nowMs) {
   return {version:LAUNCH_THESIS_VERSION,chain:row.token.chain,address:row.token.address,createdAt:new Date(nowMs).toISOString(),
     entryPrice:row.token.price,sourceUrl:proof.url,sourceIdentity:proof.identity,sourceAt:new Date(proof.at).toISOString(),
     launchCreatedAt:new Date(c.creationTimestamp).toISOString(),...(c.pool?{pool:c.pool}:{}),
-    kind:c.pool?'新底池前三 CA 的链上创建顺序，非 K 线结构入场':'新盘事件与 CA 关联，非 K 线结构入场',
-    meaning:c.pool?'冻结底池与前三 CA 创建证据；持续核查资金行为和叙事失效，不虚构价格止损位':'冻结原文与新盘阶段；持续核查资金行为和叙事失效，不虚构价格止损位'};
+    kind:c.pool?.launchKind==='DIRECT_V2_POOL_TAX'?'Flap Pool Launch 的链上建池，非 K 线结构入场':c.pool?'新底池前三 CA 的链上创建顺序，非 K 线结构入场':'新盘事件与 CA 关联，非 K 线结构入场',
+    meaning:c.pool?.launchKind==='DIRECT_V2_POOL_TAX'?'冻结 Pool Launch 建池证据；沿用主盘退出与现有闸门，不虚构价格止损位':c.pool?'冻结底池与前三 CA 创建证据；持续核查资金行为和叙事失效，不虚构价格止损位':'冻结原文与新盘阶段；持续核查资金行为和叙事失效，不虚构价格止损位'};
 }
 
 export function validLaunchEventThesis(thesis,position) {
@@ -140,9 +145,11 @@ export function repairEntryReview(row,account,nowMs,{estimatedFees=false}={}) {
     &&e.marketStage==='external'&&!e.newLaunch&&e.opportunity?.basis==='ohlcv'
     &&['external_breakout','external_pullback','external_trend'].includes(e.opportunity.id);
   const collective=e.opportunity?.id===walletSignalRoute(e.collectiveSignal)&&validCollectiveSignal(e.collectiveSignal,row.token,nowMs);
-  const catalystReady=!!event||collective||wallet.wallet==='verified_profit';
+  // gate-relax 2026-10-31: 叙事达标 + 控盘 ok 也视为有效催化，不再强制原文催化或核实盈利钱包；无叙事仍不进主盘。
+  const narrativeControl=narrativeTier(e).ok&&paperControlScore(e).ok;
+  const catalystReady=!!event||collective||wallet.wallet==='verified_profit'||narrativeControl;
   const entryPathAllowed=catalystReady||external;
-  const group=collective?walletSignalRoute(e.collectiveSignal):event?.binding==='onchain_pool'?'new_pool_first_three':event?'event_narrative':wallet.wallet==='verified_profit'?'verified_wallet':e.opportunity?.basis==='ohlcv'?'price_only':'tagged_or_unknown_wallet';
+  const group=collective?walletSignalRoute(e.collectiveSignal):event?.binding==='flap_pool_launch'?'flap_pool_launch':event?.binding==='onchain_pool'?'new_pool_first_three':event?'event_narrative':wallet.wallet==='verified_profit'?'verified_wallet':narrativeControl?'narrative_control':e.opportunity?.basis==='ohlcv'?'price_only':'tagged_or_unknown_wallet';
   const researchReasons=[];
   if(e.opportunity?.event?.source==='new_pool_first_three'&&!poolEntryAllowed(e.opportunity.event,account,nowMs))
     researchReasons.push('新底池前三 CA 已消费、排序冲突或创建证明失效；不替补第四名');
@@ -154,7 +161,7 @@ export function repairEntryReview(row,account,nowMs,{estimatedFees=false}={}) {
         ? '官方 Alpha 目录、精确 CA 或二十四小时跟随窗口失效；等待有效目录或核实盈利买家'
       : hasSource && !fresh(e.narrativeThesis?.event?.sourceAt,nowMs,3600000)
         ? '已记录原文 / 官方目录，但已超过一小时催化窗口；等待新事件或核实盈利买家，不是未采到原文'
-        : '缺少有效原文催化或核实盈利钱包；仅标签 / 纯量价保留独立研究，不进主盘');
+        : '缺少有效原文催化、核实盈利钱包或叙事+控盘证据；仅标签 / 纯量价保留独立研究，不进主盘');
   }
   const thesis=e.newLaunch?launchEventThesis(row,nowMs):collective&&['internal','near_completion'].includes(e.marketStage)?collectiveWalletThesis(row,nowMs):entryBoundThesis(row,nowMs);
   if(e.collectiveSignal&&(!collective||JSON.stringify(e.collectiveSignal)!==JSON.stringify(e.recoveryEntry?.collectiveSignal)
@@ -167,7 +174,7 @@ export function repairEntryReview(row,account,nowMs,{estimatedFees=false}={}) {
   const modelReady=estimatedFees&&e.costAssumptions?.version===ESTIMATED_COST_VERSION;
   return {version:LOSS_REPAIR_VERSION,group,thesis,reentry,fee:modelReady?{status:'model_only',ready:true,actualOnchainFee:false}:{...ORDER_FEE_CAPABILITY},
     catalystReady,entryPathAllowed,entryRoutesVersion:PAPER_ENTRY_ROUTES_VERSION,
-    entryPath:collective?walletSignalRoute(e.collectiveSignal):external?'external_structure':event?'event_narrative':wallet.wallet==='verified_profit'?'verified_wallet':null,
+    entryPath:collective?walletSignalRoute(e.collectiveSignal):external?'external_structure':event?'event_narrative':wallet.wallet==='verified_profit'?'verified_wallet':narrativeControl?'narrative_control':null,
     researchReady:researchReasons.length===0,researchReasons,ready:modelReady&&researchReasons.length===0,
     reasons:[...(modelReady?[]:[ORDER_FEE_CAPABILITY.reason]),...researchReasons],automaticParameterChanges:false};
 }
@@ -203,6 +210,6 @@ export function lossRepairReport(account,evaluations,nowMs,{estimatedFees=false}
   return {version:LOSS_REPAIR_VERSION,status:estimatedFees?'estimated_experiment':'research_only',updatedAt:new Date(nowMs).toISOString(),
     learning:paperLossLearning(account,nowMs),
     feeCapability:estimatedFees?{status:'model_only',ready:true,actualOnchainFee:false}:{...ORDER_FEE_CAPABILITY},text:estimatedFees?ESTIMATED_COST_TEXT:LOSS_REPAIR_TEXT,automaticParameterChanges:false,
-    groups:Object.fromEntries(['event_narrative','new_pool_first_three','collective_smart_money','prequalified_wallet','internal_burst','onchain_internal_burst','verified_wallet','price_only','tagged_or_unknown_wallet'].map(g=>
+    groups:Object.fromEntries(['event_narrative','new_pool_first_three','flap_pool_launch','collective_smart_money','prequalified_wallet','internal_burst','onchain_internal_burst','verified_wallet','price_only','tagged_or_unknown_wallet'].map(g=>
       [g,evaluations.filter(e=>e.evidence?.lossRepair?.group===g).length])),alerts:alerts.slice(-20)};
 }

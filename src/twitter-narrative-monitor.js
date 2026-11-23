@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { parseFxTwitterTimeline } from './twitter-monitor.js';
 import { readNarrativeLearningSource } from './paper-narrative-learning-source.js';
+import { tweetToKolRecord } from './kol-news-sniper.js';
 
 // Public profile IDs pinned against the existing official catalog or checked
 // at api.fxtwitter.com/<handle> (people refreshed on 2026-10-01).
@@ -123,6 +124,8 @@ export function createTwitterNarrativeMonitor({dataDir,fetchImpl=fetch,sourceRea
       documents:valid.filter(p=>!p.isReply&&!p.isQuote).slice(0,200).map(p=>({id:p.url,url:p.url,text:p.text,at:p.at,
         observedAt:p.observedAt,author:p.author,authorId:p.userId,verifiedBy:p.verifiedBy,
         isReply:false,isQuote:false,authenticated:true,kind:'independent_x_research'})),
+      // CZ/何一 incl. quotes/replies → kol_tweet records for the paper KOL news lane.
+      kolTweets:valid.map(tweetToKolRecord).filter(Boolean).slice(0,60),
       note:'独立读取人物 / 平台推特，每轮最多两账户、每账户四条原文核验；与 TG 快线独立，不承诺秒级覆盖。回复与引用保留但上下文待核实，不自动认定认领或背书；历史补采不冒充首发买点。'};
   };
   function runOnce(){if(stopped)return Promise.resolve();if(job)return job;

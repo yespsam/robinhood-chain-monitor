@@ -1,8 +1,12 @@
 // Scheduling/data preparation only. None of these helpers grants entry permission.
 import { gmgnFlowAddress } from './gmgn-flow-signal.js';
 
-export const HOT_RESEARCH_VERSION = 'bounded_market_leader_v1';
+export const HOT_RESEARCH_VERSION = 'bounded_market_leader_v2';
 export const HOT_WATCH_MS = 120000;
+export const HOT_QUOTE_MAX_ATTEMPTS = 3;
+export const HOT_QUOTE_MAX_MS = 45000;
+export const HOT_QUOTE_SAMPLE_GAP_MS = 5000;
+export const HOT_QUOTE_COOLDOWN_MS = 45000;
 const stamp = v => typeof v === 'number' ? (v < 1e10 ? v * 1000 : v) : Date.parse(v || '');
 const key = t => `${t.chain}:${t.address}`;
 
@@ -65,15 +69,51 @@ export function hotQuoteResearchReady(row,nowMs) {
   });
 }
 
-// A maximum 15-second normal-priority probe, followed by 45 seconds without
-// another probe. Ordinary eligible entries always get the seat first.
+const finishHotQuote = (lease, at) => ({ ...lease, endedAt: at, nextAllowedAt: at + HOT_QUOTE_COOLDOWN_MS });
+
+// Recheck at dispatch, not just selection: a target can remain in a runtime
+// snapshot between evaluations while a request finishes or a deadline passes.
+export function hotQuoteDispatchAllowed(lease, token, nowMs) {
+  return !!lease && lease.key === key(token) && lease.endedAt == null
+    && Number.isFinite(nowMs) && nowMs >= lease.since && nowMs < lease.until
+    && (lease.attempts || 0) < HOT_QUOTE_MAX_ATTEMPTS && lease.inFlightAt == null
+    && nowMs >= (lease.nextQuoteAt ?? lease.since);
+}
+
+export function markHotQuoteAttempt(lease, token, nowMs) {
+  return hotQuoteDispatchAllowed(lease, token, nowMs)
+    ? { ...lease, attempts: (lease.attempts || 0) + 1, inFlightAt: nowMs } : lease;
+}
+
+export function markHotQuoteResult(lease, token, quote, nowMs) {
+  if (!lease || lease.key !== key(token) || lease.inFlightAt == null) return lease;
+  const observedAt = stamp(quote?.observedAt), samples = [...(lease.samples || [])];
+  const prior = samples.at(-1);
+  const valid = quote?.status === 'ok' && quote.chain === token.chain
+    && gmgnFlowAddress(quote.chain, quote.address) === gmgnFlowAddress(token.chain, token.address)
+    && Number.isFinite(quote.price) && quote.price > 0 && Number.isFinite(observedAt)
+    && observedAt >= lease.inFlightAt && observedAt <= nowMs && nowMs - observedAt <= 5000
+    && (prior == null || observedAt - prior >= HOT_QUOTE_SAMPLE_GAP_MS);
+  if (valid) samples.push(observedAt);
+  const next = { ...lease, inFlightAt: null, samples,
+    nextQuoteAt: Math.max(nowMs, (samples.at(-1) ?? nowMs) + HOT_QUOTE_SAMPLE_GAP_MS) };
+  // A response beyond the wall deadline gets no new dispatch; cooldown begins
+  // after it finishes so an in-flight request cannot overlap the next probe.
+  return next.attempts >= HOT_QUOTE_MAX_ATTEMPTS || nowMs >= next.until || next.endedAt != null
+    ? finishHotQuote(next, nowMs) : next;
+}
+
+// At most three normal-priority requests within 45 seconds. Three successful
+// observations span at least ten seconds, then every probe rests for 45s.
+// Shared limits, eligibility and ordinary-entry preemption remain unchanged.
 export function selectHotQuoteResearch(rows,current,nowMs,{laneAvailable=true}={}) {
   const served=current?.served || (current?.key?{[current.key]:current.since}:{});
   const usable=rows.filter(r=>hotQuoteResearchReady(r,nowMs)).sort((a,b)=>
     (served[key(a.input.token)]||0)-(served[key(b.input.token)]||0)||compareMarketLeaders(a,b,nowMs));
-  if(current && nowMs<current.nextAllowedAt) {
-    const row=nowMs>=current.since && nowMs<current.until ? usable.find(r=>key(r.input.token)===current.key) : null;
-    return {row:row||null,lease:current};
+  if(current && current.endedAt == null && nowMs >= current.until) current=finishHotQuote(current,current.until);
+  if(current && (current.endedAt == null || nowMs<current.nextAllowedAt || current.inFlightAt != null)) {
+    const row=usable.find(r=>key(r.input.token)===current.key);
+    return {row:laneAvailable && row && hotQuoteDispatchAllowed(current,row.input.token,nowMs)?row:null,lease:current};
   }
   // Do not spend a new candidate's entire probe window waiting for another
   // CA's in-flight request. Start its clock only when this lane is available.
@@ -81,7 +121,9 @@ export function selectHotQuoteResearch(rows,current,nowMs,{laneAvailable=true}={
   const row=usable[0];
   // Keep bounded rotation memory: a continuously qualified rank-one token
   // must not monopolize every probe while other leaders wait for quotes.
-  return row?{row,lease:{key:key(row.input.token),since:nowMs,until:nowMs+15000,nextAllowedAt:nowMs+60000,
+  return row?{row,lease:{key:key(row.input.token),since:nowMs,until:nowMs+HOT_QUOTE_MAX_MS,
+    nextAllowedAt:nowMs+HOT_QUOTE_MAX_MS+HOT_QUOTE_COOLDOWN_MS,
+    attempts:0,inFlightAt:null,nextQuoteAt:nowMs,samples:[],endedAt:null,
     served:Object.fromEntries(Object.entries({...served,[key(row.input.token)]:nowMs}).sort((a,b)=>b[1]-a[1]).slice(0,20))}}
     :{row:null,lease:current};
 }

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#080b0a" />
+    <title>yesp atm｜实盘监控与逐笔确认</title>
+    <link rel="icon" href="/grok-mark.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/brain-desk.css" />
+    <link rel="stylesheet" href="/brain-instrument.css" />
+    <link rel="stylesheet" href="/studio.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-lockup"><span class="studio-mark" aria-hidden="true">M</span><div><div class="brand-name">yesp atm</div><div class="brand-caption">实盘监控 · 逐笔确认</div></div></div>
+        <nav class="brain-nav" aria-label="工作室导航"><a href="/">决策大脑</a><a href="#liveSection">账户</a><a href="#fillsSection">执行日志</a><a href="#thinkSection">信号评估</a></nav>
+        <div class="topbar-controls"><span class="chain-label" id="chainLabel">BSC 实盘</span><div class="data-status" id="streamStatus"><span class="status-dot"></span><span id="streamLabel">连接中</span></div><time id="clock">--:--:--</time><a class="settings-link" href="/">返回仪表盘</a></div>
+      </header>
+      <main class="focus-shell" aria-label="实盘监控与人工确认">
+        <section class="focus-intro">
+          <div class="focus-title"><span class="eyebrow">BSC 实盘 · 状态与逐笔确认</span><h1>实盘运行状态</h1><p>策略信号只生成候选，不会自动跟单。只有在下方核对安全结果、最新报价和完整下单参数后，逐笔点击确认并提交，才会调用现有实盘执行器；已有急停与风险限制不会被绕过。</p></div>
+          <div class="focus-controls"><span class="studio-state" id="liveState">等待同步</span><small id="liveNote">候选只读 · 每笔需明确确认</small></div>
+        </section>
+        <p class="engine-notice" id="studioNotice" role="status">正在读取工作室快照…</p>
+
+        <section id="pipelineStatus" class="pipeline-diagnosis" aria-label="实盘触发链路诊断">
+          <div class="pipeline-heading"><h2>实盘触发链路</h2><span id="pipelineTitle">等待状态</span></div>
+          <p id="pipelineDetail">正在判断当前停在信号、配置预检还是执行层。</p>
+          <div class="pipeline-facts">
+            <div><span>信号输入</span><strong id="pipelineSource">—</strong></div>
+            <div><span>实盘范围</span><strong id="pipelineScope">—</strong></div>
+            <div><span>最近策略评估</span><strong id="pipelineLatest">—</strong></div>
+            <div><span>执行层记录</span><strong id="pipelineExecution">—</strong></div>
+          </div>
+        </section>
+
+        <section id="manualLiveSection" class="manual-live-section" aria-label="实盘逐笔确认">
+          <div class="section-heading"><h2>策略候选 · 逐笔实盘确认</h2><span id="manualLiveStatus">读取候选中</span></div>
+          <p class="section-note">仅支持 BSC。候选不会下单；预览确认单有效 15 秒且只能使用一次。确认前会再次检查急停、账本风险、GMGN 安全与报价；报价变化、数据缺失或风险未知均拒绝提交。这里不是盈利保证。</p>
+          <div id="manualLiveMessage" class="manual-live-message" role="status">正在读取策略买入候选…</div>
+          <div id="manualCandidates" class="manual-candidates"></div>
+          <div id="manualApproval" class="manual-approval" hidden></div>
+        </section>
+
+        <section id="liveSection" class="account-section" aria-label="实盘钱包">
+          <div class="section-heading"><h2>钱包与风险限制</h2><span id="walletAddr">—</span></div>
+          <div class="account-metrics">
+            <div><span>BNB 网络费余额</span><strong id="mBnb">—</strong></div>
+            <div><span>可用于下单（扣 gas）</span><strong id="mUsable">—</strong></div>
+            <div><span>账本今日已实现</span><strong id="mToday">—</strong></div>
+            <div><span>累计已实现（实盘账本）</span><strong id="mRealizedAll">—</strong></div>
+            <div><span>账本敞口 / 上限</span><strong id="mExposure">—</strong></div>
+            <div><span>单笔 / 当日止损限制</span><strong id="mCaps">—</strong></div>
+          </div>
+          <div class="account-notes"><span id="liveChips">—</span><span id="bnbPrice">—</span></div>
+        </section>
+
+        <section class="positions-section" aria-label="实盘账本持仓"><div class="section-heading"><h2>实盘账本持仓</h2><span id="posCount">等待同步</span></div><div id="posList"></div><p class="section-note">账本仓位不是链上余额证明；需要逐笔核对交易哈希、代币余额与卖出回执。</p></section>
+
+        <section id="fillsSection" class="trades-section" aria-label="实盘执行日志"><div class="section-heading"><h2>实盘执行日志</h2><span>尝试 / 拒绝 / 跳过；不等于链上成交确认</span></div><div class="trades-scroll" id="decisions"></div><p id="executionCoverage" class="section-note">条件止盈止损是否成交仍须对账 GMGN 订单及链上回执；策略日志不等于卖出已完成。</p></section>
+
+        <section id="thinkSection" class="think-section" aria-label="策略信号评估">
+          <div class="section-heading"><h2>信号与策略评估</h2><span id="scanMeta">—</span></div>
+          <div class="think-grid">
+            <div class="think-col">
+              <h3>① 只读闸门预演 · 假设满额 $<b id="gTicket">10</b> 信号</h3>
+              <div id="gateVerdict" class="gate-verdict">—</div>
+              <ul id="gateChecks" class="gate-checks"></ul>
+              <div id="gateWarnings"></div>
+              <h3>② 最近一次策略评估</h3>
+              <div id="lastThought"></div>
+              <h3>③ 策略评估常见原因 <small>缺证据/观察原因可重叠，不全是硬闸门</small></h3>
+              <ol id="topReasons" class="reason-rank"></ol>
+            </div>
+            <div class="think-col">
+              <h3>④ 候选清单 · 最接近触发的 10 个 <small>模拟/信号评估，不是实盘成交</small></h3>
+              <div id="cands" class="cand-list"></div>
+              <h3>⑤ 历史信号买入 · 链/会话范围复核</h3>
+              <div id="signalBuys"></div>
+            </div>
+          </div>
+        </section>
+        <p class="section-note">状态每 5 秒刷新；仅在逐笔确认单中显式点击并确认，页面才会请求实盘提交。任何错误、过期、未核验风险或急停都会拒绝新单。</p>
+      </main>
+    </div>
+    <script src="/studio.js" type="module"></script>
+  </body>
+</html>

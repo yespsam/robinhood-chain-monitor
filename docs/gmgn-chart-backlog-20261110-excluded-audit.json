@@ -1,0 +1,2347 @@
+{
+  "version": "finite_local_chart_audit_v1",
+  "input": "/Users/qohfq/Documents/Playground/robinhood-chain-monitor/docs/gmgn-chart-backlog-20261110-targets.json",
+  "inputSha256": "217f295a2a3a04d195bfaf428e359475f6602066c076f2557cd09d4ddca63d3f",
+  "snapshotAt": "2026-11-09T17:44:01.965Z",
+  "filter": "excluded",
+  "startedAt": "2026-11-09T17:52:09.004Z",
+  "completedAt": "2026-11-09T18:00:45.985121+00:00",
+  "status": "interrupted",
+  "policy": {
+    "concurrency": 1,
+    "maxAttemptsPerTarget": 1,
+    "timeoutMs": 120000,
+    "resolution": "1m",
+    "hours": 1,
+    "automaticRetries": false,
+    "injectedIntoStrategyCache": false,
+    "orderExecution": false
+  },
+  "targets": [
+    {
+      "chain": "bsc",
+      "address": "0xe6c2021a443efb5d18c8cabb0cd930aa81ee7777",
+      "symbol": "ELON2028",
+      "price": 8.22297e-06,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 8005.95,
+      "volume": {
+        "value": 1573.62,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+      "symbol": "MEME",
+      "price": 2.22736e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 10556.6,
+      "volume": {
+        "value": 11415.6,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x0da27398e363adb801300b4d36d600631fae7777",
+      "symbol": "spyless",
+      "price": 2.6095e-05,
+      "code": "chart_stale",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 14883.1,
+      "volume": {
+        "value": 933.171,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 59,
+        "closedBars": 28,
+        "lastClosedAtMs": 1794244320000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x2aad9bbc151659db46d379d44d9bf5e8d1888888",
+      "symbol": "MISU",
+      "price": 1.35239e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 8005.85,
+      "volume": {
+        "value": 848.947,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "9j9zMCfQNZwo3qzUiWyRKju7mDeFMtUMW8WoQHsrhMP1",
+      "symbol": "AI",
+      "price": 3.882613641826341e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 2041.1707654931,
+      "volume": {
+        "value": 19698.94,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "GCA6XC9GCv1ecBBsQScjQhM4dENabkd1D5Hc9efVpump",
+      "symbol": "NVIDIOT",
+      "price": 3.749070125942987e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 14708.3913933578,
+      "volume": {
+        "value": 0.06,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "A31fDS2KH1sHUEcuXHkmmnqQk89CUBeFuB7JFWhTHGoT",
+      "symbol": "PUSSY",
+      "price": 3.8196196e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 14844.47538450948,
+      "volume": {
+        "value": 77.56,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "2UfvRT4TyVTQSi8xUzPyNxqFjHoRoG2z8PLEFwzhLupT",
+      "symbol": "NVIDIOT",
+      "price": 3.847610816043007e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 14899.10286476858,
+      "volume": {
+        "value": 100.4,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "51S5XBuGHQAnugqU85P3v5Kq3RzZ8nEa4NTynZ8MrsuQ",
+      "symbol": "NVIDIOT",
+      "price": 2.8304639e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 0.02783099448,
+      "volume": {
+        "value": 22267.08,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "GpFVhKtqjFiMtoS2SpfYNNRLTwe42DWUZ5fN7LkiL6se",
+      "symbol": "TREMP",
+      "price": 1.4125006e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 0.01913377202,
+      "volume": {
+        "value": 2506.95,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "J1p5JR1vC48djzmPYXiX5ME9MKnXofkaeTc6CXtSs7X5",
+      "symbol": "POLLY",
+      "price": 1.6888316e-09,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 2.95462392652,
+      "volume": {
+        "value": 7446.27,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "CTKeXCVboLuAxHHHLDP5cc6JKSRKxYHBZSnbvcZaYkaU",
+      "symbol": "KALYX",
+      "price": 1.0195591e-09,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 4.72647142164,
+      "volume": {
+        "value": 21791.89,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "3bxHm72mrkvE6eQ6iV5Yua8n3eDQUSenMxn75vpqvY8z",
+      "symbol": "NZS",
+      "price": 1.4362619e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 98.67515180316,
+      "volume": {
+        "value": 4831.17,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "B1wk5PYYUAAA7YasYW3WhrTprKH1fmMHto9H567epump",
+      "symbol": "SI",
+      "price": 4.9832817e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 14588.7756542226,
+      "volume": {
+        "value": 25831.6,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "HxC7wnsYYb3gqRtk684i82SKXCXB2hYtjusGZHpPGd8g",
+      "symbol": "BabyPunch",
+      "price": 5.64041671727472e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 14850.04819192676,
+      "volume": {
+        "value": 337086.03,
+        "window": "24h"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "sol",
+      "address": "Aygw2Y2Bs9VQnvjNURgjrv1McPUHDxuvQhrzNwcBpump",
+      "symbol": "BabyPunch",
+      "price": 4.50761e-05,
+      "code": "chart_stale",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 16660.1,
+      "volume": {
+        "value": 84735.8,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 17,
+        "closedBars": 17,
+        "lastClosedAtMs": 1794245940000,
+        "firstOpenAtMs": 1794244920000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "sol",
+      "address": "XeaWBDDBxj5Qf6S6TshMC1SKaxSccJfRZUDj26opump",
+      "symbol": "MERLYN",
+      "price": 3.35483e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 11440,
+      "volume": {
+        "value": 3696.5,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+      "symbol": "MEME",
+      "price": 1.92203e-05,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 9221.19,
+      "volume": {
+        "value": 8210.37,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x4d21483a44bf67a86b77e3da301411880797d452",
+      "symbol": "BA",
+      "price": 170.596,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 9958.93,
+      "volume": {
+        "value": 4952.56,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x608de3e89a6506b881125f67463623d7eb063fba",
+      "symbol": "NOVASI",
+      "price": 5.33658e-05,
+      "code": "chart_stale",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 19925.9,
+      "volume": {
+        "value": 1062.8,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 60,
+        "closedBars": 34,
+        "lastClosedAtMs": 1794244680000,
+        "firstOpenAtMs": 1794242640000,
+        "code": "stale_closed_bars",
+        "issue": null
+      },
+      "klineStatus": "ok"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x255979302fd6a5e2ff6dce0d8b018f51e06e243a",
+      "symbol": "UNIWALL",
+      "price": 0.0050968,
+      "code": "chart_missing",
+      "allowed": false,
+      "researchExclusions": [
+        "liquidity"
+      ],
+      "liquidity": 17847.2,
+      "volume": {
+        "value": 933.158,
+        "window": "5m"
+      },
+      "marketStage": "external",
+      "chart": {
+        "receivedBars": 0,
+        "closedBars": 0,
+        "lastClosedAtMs": null,
+        "code": "source_unavailable",
+        "issue": null
+      },
+      "klineStatus": "unavailable"
+    }
+  ],
+  "results": [
+    {
+      "chain": "bsc",
+      "address": "0xe6c2021a443efb5d18c8cabb0cd930aa81ee7777",
+      "symbol": "ELON2028",
+      "originalCode": "chart_missing",
+      "originalAllowed": false,
+      "attempt": 1,
+      "startedAt": "2026-11-09T17:52:09.006Z",
+      "receivedAt": "2026-11-09T17:52:49.990Z",
+      "httpStatus": 200,
+      "sourceStatus": "ok",
+      "rawResponse": {
+        "status": "ok",
+        "source": "gmgn-cli",
+        "chain": "bsc",
+        "address": "0xe6c2021a443efb5d18c8cabb0cd930aa81ee7777",
+        "resolution": "1m",
+        "from": 1794243120,
+        "to": 1794246720,
+        "queuedAt": "2026-11-09T17:52:09.137Z",
+        "requestedAt": "2026-11-09T17:52:48.900Z",
+        "receivedAt": "2026-11-09T17:52:49.976Z",
+        "observedAt": "2026-11-09T17:52:49.976Z",
+        "candles": [
+          {
+            "time": 1794243120000,
+            "open": 8.0601166e-06,
+            "close": 7.9459689e-06,
+            "high": 8.0601166e-06,
+            "low": 7.9459689e-06,
+            "volume": 24.72812711,
+            "amount": 3107108.70684282,
+            "source": ""
+          },
+          {
+            "time": 1794243180000,
+            "open": 7.9459689e-06,
+            "close": 7.8894734e-06,
+            "high": 7.9459689e-06,
+            "low": 7.8894734e-06,
+            "volume": 2.54136985,
+            "amount": 321601.28677348,
+            "source": ""
+          },
+          {
+            "time": 1794243360000,
+            "open": 7.8894734e-06,
+            "close": 7.8564111e-06,
+            "high": 7.8894734e-06,
+            "low": 7.8564111e-06,
+            "volume": 16.6112572,
+            "amount": 2114409.76452396,
+            "source": ""
+          },
+          {
+            "time": 1794243600000,
+            "open": 7.8564111e-06,
+            "close": 7.8221346e-06,
+            "high": 7.8564111e-06,
+            "low": 7.8221346e-06,
+            "volume": 3.52840436,
+            "amount": 450804.7902576,
+            "source": ""
+          },
+          {
+            "time": 1794243660000,
+            "open": 7.8221346e-06,
+            "close": 1.0079749e-05,
+            "high": 1.0079749e-05,
+            "low": 7.8221346e-06,
+            "volume": 579.14665552,
+            "amount": 64435159.09480023,
+            "source": ""
+          },
+          {
+            "time": 1794243720000,
+            "open": 1.0079749e-05,
+            "close": 1.2282801e-05,
+            "high": 1.7731682e-05,
+            "low": 1.0079749e-05,
+            "volume": 4432.42269546,
+            "amount": 326480653.30273646,
+            "source": ""
+          },
+          {
+            "time": 1794243780000,
+            "open": 1.2282801e-05,
+            "close": 1.6582078e-05,
+            "high": 1.6582078e-05,
+            "low": 1.1936992e-05,
+            "volume": 2775.30089314,
+            "amount": 200157896.26957637,
+            "source": ""
+          },
+          {
+            "time": 1794243840000,
+            "open": 1.6582078e-05,
+            "close": 2.4373138e-05,
+            "high": 2.5920006e-05,
+            "low": 1.6582078e-05,
+            "volume": 3757.53049817,
+            "amount": 179613817.7830144,
+            "source": ""
+          },
+          {
+            "time": 1794243900000,
+            "open": 2.4373138e-05,
+            "close": 1.597368e-05,
+            "high": 2.4373138e-05,
+            "low": 1.366742e-05,
+            "volume": 4306.35868539,
+            "amount": 241505542.61822325,
+            "source": ""
+          },
+          {
+            "time": 1794243960000,
+            "open": 1.597368e-05,
+            "close": 1.6342782e-05,
+            "high": 1.7220742e-05,
+            "low": 1.4295612e-05,
+            "volume": 2482.59926717,
+            "amount": 161471450.74764693,
+            "source": ""
+          },
+          {
+            "time": 1794244020000,
+            "open": 1.6342782e-05,
+            "close": 1.5954216e-05,
+            "high": 1.7881191e-05,
+            "low": 1.4367585e-05,
+            "volume": 2895.81451657,
+            "amount": 180798775.19515908,
+            "source": ""
+          },
+          {
+            "time": 1794244080000,
+            "open": 1.5954216e-05,
+            "close": 1.6786258e-05,
+            "high": 1.7489659e-05,
+            "low": 1.4337811e-05,
+            "volume": 1539.85706152,
+            "amount": 96291447.07105276,
+            "source": ""
+          },
+          {
+            "time": 1794244140000,
+            "open": 1.6786258e-05,
+            "close": 1.5748843e-05,
+            "high": 1.6786258e-05,
+            "low": 1.5704692e-05,
+            "volume": 433.82176355,
+            "amount": 27020531.97501518,
+            "source": ""
+          },
+          {
+            "time": 1794244200000,
+            "open": 1.5748843e-05,
+            "close": 1.3087911e-05,
+            "high": 1.5748843e-05,
+            "low": 1.1762684e-05,
+            "volume": 1459.58128924,
+            "amount": 111503994.70477062,
+            "source": ""
+          },
+          {
+            "time": 1794244260000,
+            "open": 1.3087911e-05,
+            "close": 1.3334682e-05,
+            "high": 1.3891903e-05,
+            "low": 1.2730623e-05,
+            "volume": 702.46363583,
+            "amount": 52545490.49643369,
+            "source": ""
+          },
+          {
+            "time": 1794244320000,
+            "open": 1.3334682e-05,
+            "close": 1.446806e-05,
+            "high": 1.446806e-05,
+            "low": 1.3334682e-05,
+            "volume": 218.75275019,
+            "amount": 15744930.41940546,
+            "source": ""
+          },
+          {
+            "time": 1794244380000,
+            "open": 1.446806e-05,
+            "close": 1.415413e-05,
+            "high": 1.4499311e-05,
+            "low": 1.3940615e-05,
+            "volume": 170.049270949,
+            "amount": 12021564.18545666,
+            "source": ""
+          },
+          {
+            "time": 1794244440000,
+            "open": 1.415413e-05,
+            "close": 1.3762587e-05,
+            "high": 1.4244552e-05,
+            "low": 1.3762587e-05,
+            "volume": 271.94365271,
+            "amount": 19651357.56205289,
+            "source": ""
+          },
+          {
+            "time": 1794244500000,
+            "open": 1.3762587e-05,
+            "close": 6.2850955e-06,
+            "high": 1.3762587e-05,
+            "low": 5.7683033e-06,
+            "volume": 3123.75455046,
+            "amount": 405472172.15962386,
+            "source": ""
+          },
+          {
+            "time": 1794244560000,
+            "open": 6.2850955e-06,
+            "close": 6.5667856e-06,
+            "high": 7.3245237e-06,
+            "low": 5.9985203e-06,
+            "volume": 879.70760471,
+            "amount": 134690523.8783277,
+            "source": ""
+          },
+          {
+            "time": 1794244620000,
+            "open": 6.5667856e-06,
+            "close": 6.3027462e-06,
+            "high": 6.5750216e-06,
+            "low": 6.3006039e-06,
+            "volume": 86.19810445,
+            "amount": 13391308.07594932,
+            "source": ""
+          },
+          {
+            "time": 1794244680000,
+            "open": 6.3027462e-06,
+            "close": 5.9426513e-06,
+            "high": 6.3027462e-06,
+            "low": 5.7403135e-06,
+            "volume": 352.63344007,
+            "amount": 59179784.88518534,
+            "source": ""
+          },
+          {
+            "time": 1794244740000,
+            "open": 5.9426513e-06,
+            "close": 5.7317885e-06,
+            "high": 5.9426513e-06,
+            "low": 5.7317885e-06,
+            "volume": 75.99367112,
+            "amount": 13057888.56386773,
+            "source": ""
+          },
+          {
+            "time": 1794244800000,
+            "open": 5.7317885e-06,
+            "close": 5.4959173e-06,
+            "high": 5.7317885e-06,
+            "low": 5.4925682e-06,
+            "volume": 118.12969508,
+            "amount": 21314376.050221823,
+            "source": ""
+          },
+          {
+            "time": 1794244860000,
+            "open": 5.4959173e-06,
+            "close": 5.7549614e-06,
+            "high": 5.7549614e-06,
+            "low": 5.4959173e-06,
+            "volume": 138.40879639,
+            "amount": 24474211.99466825,
+            "source": ""
+          },
+          {
+            "time": 1794244920000,
+            "open": 5.7549614e-06,
+            "close": 5.8942168e-06,
+            "high": 5.8964357e-06,
+            "low": 5.7549614e-06,
+            "volume": 33.90837898,
+            "amount": 5752056.090935949,
+            "source": ""
+          },
+          {
+            "time": 1794244980000,
+            "open": 5.8942168e-06,
+            "close": 5.9070314e-06,
+            "high": 6.0241623e-06,
+            "low": 5.8942168e-06,
+            "volume": 107.42449264,
+            "amount": 18067020.42541412,
+            "source": ""
+          },
+          {
+            "time": 1794245040000,
+            "open": 5.9070314e-06,
+            "close": 5.8445588e-06,
+            "high": 5.9070314e-06,
+            "low": 5.8445588e-06,
+            "volume": 31.29795703,
+            "amount": 5349255.56135356,
+            "source": ""
+          },
+          {
+            "time": 1794245100000,
+            "open": 5.8445588e-06,
+            "close": 6.4368669e-06,
+            "high": 6.4775733e-06,
+            "low": 5.8445588e-06,
+            "volume": 235.97361051,
+            "amount": 38402242.10795153,
+            "source": ""
+          },
+          {
+            "time": 1794245160000,
+            "open": 6.4368669e-06,
+            "close": 6.4500215e-06,
+            "high": 6.4500215e-06,
+            "low": 6.4155847e-06,
+            "volume": 19.41208858,
+            "amount": 3018652.69561173,
+            "source": ""
+          },
+          {
+            "time": 1794245280000,
+            "open": 6.4500215e-06,
+            "close": 5.7078448e-06,
+            "high": 6.4607629e-06,
+            "low": 5.7078448e-06,
+            "volume": 228.17896997,
+            "amount": 37591616.5283163,
+            "source": ""
+          },
+          {
+            "time": 1794245340000,
+            "open": 5.7078448e-06,
+            "close": 5.6775978e-06,
+            "high": 5.7196899e-06,
+            "low": 5.6775978e-06,
+            "volume": 16.0017329783,
+            "amount": 2810391.54491937,
+            "source": ""
+          },
+          {
+            "time": 1794245400000,
+            "open": 5.6775978e-06,
+            "close": 5.6726623e-06,
+            "high": 5.6775978e-06,
+            "low": 5.6726623e-06,
+            "volume": 6.80057902,
+            "amount": 1198833.74346767,
+            "source": ""
+          },
+          {
+            "time": 1794245520000,
+            "open": 5.6726623e-06,
+            "close": 1.0966975e-05,
+            "high": 1.0966975e-05,
+            "low": 5.6726623e-06,
+            "volume": 1572.74879926,
+            "amount": 191523469.69282433,
+            "source": ""
+          },
+          {
+            "time": 1794245580000,
+            "open": 1.0966975e-05,
+            "close": 1.3217078e-05,
+            "high": 1.350139e-05,
+            "low": 9.0640664e-06,
+            "volume": 1790.6843463,
+            "amount": 162896082.5377829,
+            "source": ""
+          },
+          {
+            "time": 1794245640000,
+            "open": 1.3217078e-05,
+            "close": 1.0691129e-05,
+            "high": 1.4042334e-05,
+            "low": 1.0691129e-05,
+            "volume": 857.89781513,
+            "amount": 68584528.27830622,
+            "source": ""
+          },
+          {
+            "time": 1794245700000,
+            "open": 1.0691129e-05,
+            "close": 1.0028675e-05,
+            "high": 1.0943426e-05,
+            "low": 9.9089794e-06,
+            "volume": 374.20355671,
+            "amount": 35999740.12836877,
+            "source": ""
+          },
+          {
+            "time": 1794245760000,
+            "open": 1.0028675e-05,
+            "close": 9.5062556e-06,
+            "high": 1.0101869e-05,
+            "low": 9.5062556e-06,
+            "volume": 168.28232653,
+            "amount": 17087042.97488481,
+            "source": ""
+          },
+          {
+            "time": 1794245820000,
+            "open": 9.5062556e-06,
+            "close": 8.6531556e-06,
+            "high": 9.5062556e-06,
+            "low": 8.6531556e-06,
+            "volume": 227.70757933,
+            "amount": 25239572.70622274,
+            "source": ""
+          },
+          {
+            "time": 1794245880000,
+            "open": 8.6531556e-06,
+            "close": 7.4234686e-06,
+            "high": 8.6531556e-06,
+            "low": 7.4234686e-06,
+            "volume": 363.61992519,
+            "amount": 45760974.86006112,
+            "source": ""
+          },
+          {
+            "time": 1794245940000,
+            "open": 7.4234686e-06,
+            "close": 8.1585701e-06,
+            "high": 9.077999e-06,
+            "low": 7.2235104e-06,
+            "volume": 805.38694547,
+            "amount": 97115960.99229017,
+            "source": ""
+          },
+          {
+            "time": 1794246060000,
+            "open": 8.1585701e-06,
+            "close": 7.4557874e-06,
+            "high": 8.1585701e-06,
+            "low": 7.4557874e-06,
+            "volume": 216.32045085,
+            "amount": 28247884.017246533,
+            "source": ""
+          },
+          {
+            "time": 1794246120000,
+            "open": 7.4557874e-06,
+            "close": 8.1131737e-06,
+            "high": 8.1131737e-06,
+            "low": 7.4557874e-06,
+            "volume": 157.16000177,
+            "amount": 20049193.4929578,
+            "source": ""
+          },
+          {
+            "time": 1794246180000,
+            "open": 8.1131737e-06,
+            "close": 8.3143896e-06,
+            "high": 8.3143896e-06,
+            "low": 8.1131737e-06,
+            "volume": 31.48827413,
+            "amount": 3828827.86426213,
+            "source": ""
+          },
+          {
+            "time": 1794246240000,
+            "open": 8.3143896e-06,
+            "close": 8.2310142e-06,
+            "high": 8.3143896e-06,
+            "low": 8.2310142e-06,
+            "volume": 29.055875598,
+            "amount": 3530086.04045284,
+            "source": ""
+          },
+          {
+            "time": 1794246360000,
+            "open": 8.2310142e-06,
+            "close": 7.8899385e-06,
+            "high": 8.2310142e-06,
+            "low": 7.8899385e-06,
+            "volume": 133.92289689,
+            "amount": 16960792.64145707,
+            "source": ""
+          },
+          {
+            "time": 1794246420000,
+            "open": 7.8899385e-06,
+            "close": 7.5585019e-06,
+            "high": 7.8899385e-06,
+            "low": 7.5585019e-06,
+            "volume": 23.9900932,
+            "amount": 3160764.30605585,
+            "source": ""
+          },
+          {
+            "time": 1794246480000,
+            "open": 7.5585019e-06,
+            "close": 7.5327839e-06,
+            "high": 7.5585019e-06,
+            "low": 7.5276646e-06,
+            "volume": 6.422263,
+            "amount": 852675.26702396,
+            "source": ""
+          },
+          {
+            "time": 1794246540000,
+            "open": 7.5327839e-06,
+            "close": 7.5195729e-06,
+            "high": 7.5474336e-06,
+            "low": 7.5195729e-06,
+            "volume": 18.59139576,
+            "amount": 2471385.13032835,
+            "source": ""
+          },
+          {
+            "time": 1794246720000,
+            "open": 7.5195729e-06,
+            "close": 7.1422957e-06,
+            "high": 7.5195729e-06,
+            "low": 7.1422957e-06,
+            "volume": 146.28348536,
+            "amount": 20140177.94392553,
+            "source": ""
+          }
+        ]
+      },
+      "identityBound": true,
+      "validation": {
+        "checkedAt": "2026-11-09T17:52:49.990Z",
+        "ready": false,
+        "reason": "新鲜且足够的 K 线",
+        "sourceWindow": {
+          "valid": true,
+          "from": 1794243120,
+          "to": 1794246720,
+          "excludedBars": 1
+        },
+        "diagnostics": {
+          "receivedBars": 49,
+          "closedBars": 49,
+          "lastClosedAtMs": 1794246600000,
+          "firstOpenAtMs": 1794243120000,
+          "code": "stale_closed_bars",
+          "issue": null
+        },
+        "entryThesisBarsReady": false,
+        "validatedBars": 0
+      },
+      "error": null,
+      "durationMs": 40985
+    },
+    {
+      "chain": "bsc",
+      "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+      "symbol": "MEME",
+      "originalCode": "chart_missing",
+      "originalAllowed": false,
+      "attempt": 1,
+      "startedAt": "2026-11-09T17:52:49.996Z",
+      "receivedAt": "2026-11-09T17:54:09.980Z",
+      "httpStatus": 200,
+      "sourceStatus": "unavailable",
+      "rawResponse": {
+        "status": "unavailable",
+        "source": "gmgn-cli",
+        "reason": "gmgn_unavailable",
+        "observedAt": null,
+        "chain": "bsc",
+        "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+        "resolution": "1m",
+        "reasonCode": "GMGN_REQUEST_BUSY",
+        "lastAttempt": {
+          "queuedAt": "2026-11-09T17:52:50.002Z",
+          "requestedAt": null,
+          "receivedAt": null,
+          "completedAt": "2026-11-09T17:54:09.974Z",
+          "from": null,
+          "to": null,
+          "requestWindow": null
+        }
+      },
+      "identityBound": true,
+      "validation": {
+        "checkedAt": "2026-11-09T17:54:09.980Z",
+        "ready": false,
+        "reason": "新鲜且足够的 K 线",
+        "sourceWindow": {
+          "valid": false,
+          "from": null,
+          "to": null,
+          "excludedBars": null
+        },
+        "diagnostics": {
+          "receivedBars": 0,
+          "closedBars": 0,
+          "lastClosedAtMs": null,
+          "code": "invalid_source_window",
+          "issue": null
+        },
+        "entryThesisBarsReady": false,
+        "validatedBars": 0
+      },
+      "error": "invalid_source_window",
+      "durationMs": 79984
+    },
+    {
+      "chain": "bsc",
+      "address": "0x0da27398e363adb801300b4d36d600631fae7777",
+      "symbol": "spyless",
+      "originalCode": "chart_stale",
+      "originalAllowed": false,
+      "attempt": 1,
+      "startedAt": "2026-11-09T17:54:09.984Z",
+      "receivedAt": "2026-11-09T17:55:10.001Z",
+      "httpStatus": 200,
+      "sourceStatus": "unavailable",
+      "rawResponse": {
+        "status": "unavailable",
+        "source": "gmgn-cli",
+        "reason": "gmgn_unavailable",
+        "observedAt": null,
+        "chain": "bsc",
+        "address": "0x0da27398e363adb801300b4d36d600631fae7777",
+        "resolution": "1m",
+        "reasonCode": "GMGN_QUEUE_EXPIRED",
+        "lastAttempt": {
+          "queuedAt": "2026-11-09T17:54:09.989Z",
+          "requestedAt": null,
+          "receivedAt": null,
+          "completedAt": "2026-11-09T17:55:09.996Z",
+          "from": null,
+          "to": null,
+          "requestWindow": null
+        }
+      },
+      "identityBound": true,
+      "validation": {
+        "checkedAt": "2026-11-09T17:55:10.001Z",
+        "ready": false,
+        "reason": "新鲜且足够的 K 线",
+        "sourceWindow": {
+          "valid": false,
+          "from": null,
+          "to": null,
+          "excludedBars": null
+        },
+        "diagnostics": {
+          "receivedBars": 0,
+          "closedBars": 0,
+          "lastClosedAtMs": null,
+          "code": "invalid_source_window",
+          "issue": null
+        },
+        "entryThesisBarsReady": false,
+        "validatedBars": 0
+      },
+      "error": "invalid_source_window",
+      "durationMs": 60017
+    },
+    {
+      "chain": "bsc",
+      "address": "0x2aad9bbc151659db46d379d44d9bf5e8d1888888",
+      "symbol": "MISU",
+      "originalCode": "chart_missing",
+      "originalAllowed": false,
+      "attempt": 1,
+      "startedAt": "2026-11-09T17:55:10.003Z",
+      "receivedAt": "2026-11-09T17:56:10.024Z",
+      "httpStatus": 200,
+      "sourceStatus": "unavailable",
+      "rawResponse": {
+        "status": "unavailable",
+        "source": "gmgn-cli",
+        "reason": "gmgn_unavailable",
+        "observedAt": null,
+        "chain": "bsc",
+        "address": "0x2aad9bbc151659db46d379d44d9bf5e8d1888888",
+        "resolution": "1m",
+        "reasonCode": "GMGN_QUEUE_EXPIRED",
+        "lastAttempt": {
+          "queuedAt": "2026-11-09T17:55:10.014Z",
+          "requestedAt": null,
+          "receivedAt": null,
+          "completedAt": "2026-11-09T17:56:10.017Z",
+          "from": null,
+          "to": null,
+          "requestWindow": null
+        }
+      },
+      "identityBound": true,
+      "validation": {
+        "checkedAt": "2026-11-09T17:56:10.024Z",
+        "ready": false,
+        "reason": "新鲜且足够的 K 线",
+        "sourceWindow": {
+          "valid": false,
+          "from": null,
+          "to": null,
+          "excludedBars": null
+        },
+        "diagnostics": {
+          "receivedBars": 0,
+          "closedBars": 0,
+          "lastClosedAtMs": null,
+          "code": "invalid_source_window",
+          "issue": null
+        },
+        "entryThesisBarsReady": false,
+        "validatedBars": 0
+      },
+      "error": "invalid_source_window",
+      "durationMs": 60021
+    },
+    {
+      "chain": "sol",
+      "address": "9j9zMCfQNZwo3qzUiWyRKju7mDeFMtUMW8WoQHsrhMP1",
+      "symbol": "AI",
+      "originalCode": "chart_missing",
+      "originalAllowed": false,
+      "attempt": 1,
+      "startedAt": "2026-11-09T17:56:10.028Z",
+      "receivedAt": "2026-11-09T17:56:37.775Z",
+      "httpStatus": 200,
+      "sourceStatus": "ok",
+      "rawResponse": {
+        "status": "ok",
+        "source": "gmgn-cli",
+        "chain": "sol",
+        "address": "9j9zMCfQNZwo3qzUiWyRKju7mDeFMtUMW8WoQHsrhMP1",
+        "resolution": "1m",
+        "from": 1794243360,
+        "to": 1794246960,
+        "queuedAt": "2026-11-09T17:56:10.038Z",
+        "requestedAt": "2026-11-09T17:56:36.745Z",
+        "receivedAt": "2026-11-09T17:56:37.763Z",
+        "observedAt": "2026-11-09T17:56:37.763Z",
+        "candles": [
+          {
+            "time": 1794245460000,
+            "open": 1.0865388e-05,
+            "close": 2.219045e-05,
+            "high": 2.2774652e-05,
+            "low": 1.0865388e-05,
+            "volume": 741.90077158,
+            "amount": 63627278.549628004,
+            "source": ""
+          },
+          {
+            "time": 1794245520000,
+            "open": 2.219045e-05,
+            "close": 2.7797268e-05,
+            "high": 3.0446112e-05,
+            "low": 2.219045e-05,
+            "volume": 1976.32040654,
+            "amount": 72871981.66845602,
+            "source": ""
+          },
+          {
+            "time": 1794245580000,
+            "open": 2.7797268e-05,
+            "close": 3.228993e-05,
+            "high": 3.4016628e-05,
+            "low": 2.7746375e-05,
+            "volume": 1998.57720319,
+            "amount": 64896270.94708402,
+            "source": ""
+          },
+          {
+            "time": 1794245640000,
+            "open": 3.228993e-05,
+            "close": 3.4613936e-05,
+            "high": 3.5066164e-05,
+            "low": 3.228993e-05,
+            "volume": 1642.96376249,
+            "amount": 48906836.70536899,
+            "source": ""
+          },
+          {
+            "time": 1794245700000,
+            "open": 3.4613936e-05,
+            "close": 3.3889315e-05,
+            "high": 3.5081287e-05,
+            "low": 3.1774942e-05,
+            "volume": 1567.44837269,
+            "amount": 46777963.08782797,
+            "source": ""
+          },
+          {
+            "time": 1794245760000,
+            "open": 3.3889315e-05,
+            "close": 3.4440143e-05,
+            "high": 3.5329345e-05,
+            "low": 3.1976161e-05,
+            "volume": 1377.8076028,
+            "amount": 40878209.749867015,
+            "source": ""
+          },
+          {
+            "time": 1794245820000,
+            "open": 3.4440143e-05,
+            "close": 3.5057007e-05,
+            "high": 3.5057007e-05,
+            "low": 3.1907579e-05,
+            "volume": 1459.16814819,
+            "amount": 43431552.338378005,
+            "source": ""
+          },
+          {
+            "time": 1794245880000,
+            "open": 3.5057007e-05,
+            "close": 3.4230654e-05,
+            "high": 3.5105771e-05,
+            "low": 3.2397876e-05,
+            "volume": 1287.31938172,
+            "amount": 38135041.24293498,
+            "source": ""
+          },
+          {
+            "time": 1794245940000,
+            "open": 3.4230654e-05,
+            "close": 3.47376e-05,
+            "high": 3.5376764e-05,
+            "low": 3.2724344e-05,
+            "volume": 1246.29549502,
+            "amount": 36603341.45960401,
+            "source": ""
+          },
+          {
+            "time": 1794246000000,
+            "open": 3.47376e-05,
+            "close": 3.407705e-05,
+            "high": 3.5054925e-05,
+            "low": 3.1750005e-05,
+            "volume": 1654.62031453,
+            "amount": 49863733.589407034,
+            "source": ""
+          },
+          {
+            "time": 1794246060000,
+            "open": 3.407705e-05,
+            "close": 3.2077099e-05,
+            "high": 3.4803223e-05,
+            "low": 3.2077099e-05,
+            "volume": 1643.84980092,
+            "amount": 49199160.560127005,
+            "source": ""
+          },
+          {
+            "time": 1794246120000,
+            "open": 3.2077099e-05,
+            "close": 3.2774627e-05,
+            "high": 3.5164833e-05,
+            "low": 3.1745965e-05,
+            "volume": 1733.66377597,
+            "amount": 52115698.363266,
+            "source": ""
+          },
+          {
+            "time": 1794246180000,
+            "open": 3.2774627e-05,
+            "close": 3.849521e-05,
+            "high": 4.0341098e-05,
+            "low": 3.0799952e-05,
+            "volume": 1534.46435686,
+            "amount": 45487540.78085382,
+            "source": ""
+          },
+          {
+            "time": 1794246240000,
+            "open": 3.849521e-05,
+            "close": 4.4637763e-05,
+            "high": 4.4637763e-05,
+            "low": 3.666165e-05,
+            "volume": 1510.85812185,
+            "amount": 37536895.03311213,
+            "source": ""
+          },
+          {
+            "time": 1794246300000,
+            "open": 4.4637763e-05,
+            "close": 5.5090804e-05,
+            "high": 5.8685342e-05,
+            "low": 4.417774e-05,
+            "volume": 2307.53736742,
+            "amount": 45333983.357611,
+            "source": ""
+          },
+          {
+            "time": 1794246360000,
+            "open": 5.5090804e-05,
+            "close": 6.8723893e-05,
+            "high": 6.9048723e-05,
+            "low": 5.5013613e-05,
+            "volume": 2461.43780081,
+            "amount": 39326314.66888188,
+            "source": ""
+          },
+          {
+            "time": 1794246420000,
+            "open": 6.8723893e-05,
+            "close": 7.6245349e-05,
+            "high": 7.8335367e-05,
+            "low": 6.681411e-05,
+            "volume": 2196.46504799,
+            "amount": 30503988.818020113,
+            "source": ""
+          },
+          {
+            "time": 1794246480000,
+            "open": 7.6245349e-05,
+            "close": 0.00010724974,
+            "high": 0.00010724974,
+            "low": 7.5086966e-05,
+            "volume": 2978.0084961216,
+            "amount": 34574886.35301081,
+            "source": ""
+          },
+          {
+            "time": 1794246540000,
+            "open": 0.00010724974,
+            "close": 0.00010757738,
+            "high": 0.00011704338,
+            "low": 9.4604143e-05,
+            "volume": 3293.40879255,
+            "amount": 30558733.818678226,
+            "source": ""
+          },
+          {
+            "time": 1794246600000,
+            "open": 0.00010757738,
+            "close": 0.00010617873,
+            "high": 0.00011530709,
+            "low": 9.6706031e-05,
+            "volume": 3087.29750397,
+            "amount": 29720071.867947854,
+            "source": ""
+          },
+          {
+            "time": 1794246660000,
+            "open": 0.00010617873,
+            "close": 0.00015595939,
+            "high": 0.00015627049,
+            "low": 0.00010617873,
+            "volume": 2942.82419036,
+            "amount": 21711411.373599675,
+            "source": ""
+          },
+          {
+            "time": 1794246720000,
+            "open": 0.00015595939,
+            "close": 0.00016522269,
+            "high": 0.00017540263,
+            "low": 0.00013964537,
+            "volume": 3131.75860431,
+            "amount": 20221729.833928995,
+            "source": ""
+          },
+          {
+            "time": 1794246780000,
+            "open": 0.00016522269,
+            "close": 0.00015618996,
+            "high": 0.00016936192,
+            "low": 0.00014364386,
+            "volume": 2987.57756314,
+            "amount": 18839512.352040913,
+            "source": ""
+          },
+          {
+            "time": 1794246840000,
+            "open": 0.00015618996,
+            "close": 8.2691111e-09,
+            "high": 0.00016861998,
+            "low": 7.0287699e-10,
+            "volume": 2473.95139401,
+            "amount": 1849442416.998328,
+            "source": ""
+          },
+          {
+            "time": 1794246900000,
+            "open": 8.2691111e-09,
+            "close": 1.817057e-09,
+            "high": 8.2691111e-09,
+            "low": 1.6975559e-09,
+            "volume": 0.051993,
+            "amount": 30262239.082226,
+            "source": ""
+          },
+          {
+            "time": 1794246960000,
+            "open": 1.817057e-09,
+            "close": 1.8183337e-09,
+            "high": 1.8183337e-09,
+            "low": 1.817057e-09,
+            "volume": 0.0086517486,
+            "amount": 4762831.806651,
+            "source": ""
+          }
+        ]
+      },
+      "identityBound": true,
+      "validation": {
+        "checkedAt": "2026-11-09T17:56:37.775Z",
+        "ready": true,
+        "reason": null,
+        "sourceWindow": {
+          "valid": true,
+          "from": 1794243360,
+          "to": 1794246960,
+          "excludedBars": 1
+        },
+        "diagnostics": {
+          "receivedBars": 25,
+          "closedBars": 25,
+          "lastClosedAtMs": 1794246960000,
+          "firstOpenAtMs": 1794245460000,
+          "windowPolicy": "contiguous_tail_v1",
+          "excludedPrefixBars": 0,
+          "usedBars": 25,
+          "usedFirstOpenAtMs": 1794245460000,
+          "gapBoundary": null,
+          "code": "ready",
+          "issue": null
+        },
+        "entryThesisBarsReady": true,
+        "validatedBars": 25
+      },
+      "error": null,
+      "durationMs": 27747
+    },
+    {
+      "chain": "sol",
+      "address": "GCA6XC9GCv1ecBBsQScjQhM4dENabkd1D5Hc9efVpump",
+      "symbol": "NVIDIOT",
+      "originalCode": "chart_missing",
+      "originalAllowed": false,
+      "attempt": 1,
+      "startedAt": "2026-11-09T17:56:37.777Z",
+      "receivedAt": "2026-11-09T17:56:56.593Z",
+      "httpStatus": 200,
+      "sourceStatus": "ok",
+      "rawResponse": {
+        "status": "ok",
+        "source": "gmgn-cli",
+        "chain": "sol",
+        "address": "GCA6XC9GCv1ecBBsQScjQhM4dENabkd1D5Hc9efVpump",
+        "resolution": "1m",
+        "from": 1794243360,
+        "to": 1794246960,
+        "queuedAt": "2026-11-09T17:56:37.807Z",
+        "requestedAt": "2026-11-09T17:56:55.327Z",
+        "receivedAt": "2026-11-09T17:56:56.585Z",
+        "observedAt": "2026-11-09T17:56:56.585Z",
+        "candles": [
+          {
+            "time": 1794246180000,
+            "open": 4.2965179e-12,
+            "close": 3.7559674e-05,
+            "high": 0.097460783,
+            "low": 4.2965179e-12,
+            "volume": 5.14085728,
+            "amount": 200632882.13207605,
+            "source": ""
+          },
+          {
+            "time": 1794246240000,
+            "open": 3.7559674e-05,
+            "close": 3.8032081e-05,
+            "high": 3.8032081e-05,
+            "low": 3.7378826e-05,
+            "volume": 48.13981329,
+            "amount": 1274194.83581499,
+            "source": ""
+          },
+          {
+            "time": 1794246300000,
+            "open": 3.8032081e-05,
+            "close": 3.8524364e-05,
+            "high": 3.8524364e-05,
+            "low": 3.8032081e-05,
+            "volume": 44.96410245,
+            "amount": 1174423.888797,
+            "source": ""
+          },
+          {
+            "time": 1794246360000,
+            "open": 3.8524364e-05,
+            "close": 3.8983563e-05,
+            "high": 3.8983563e-05,
+            "low": 3.8524364e-05,
+            "volume": 44.85727346,
+            "amount": 1157238.701731,
+            "source": ""
+          },
+          {
+            "time": 1794246420000,
+            "open": 3.8983563e-05,
+            "close": 3.9506309e-05,
+            "high": 3.9506309e-05,
+            "low": 3.8801349e-05,
+            "volume": 48.53620037,
+            "amount": 1237097.96188,
+            "source": ""
+          },
+          {
+            "time": 1794246480000,
+            "open": 3.9506309e-05,
+            "close": 4.0048336e-05,
+            "high": 4.0048336e-05,
+            "low": 3.9441873e-05,
+            "volume": 51.29193676,
+            "amount": 1288970.17228199,
+            "source": ""
+          },
+          {
+            "time": 1794246540000,
+            "open": 4.0048336e-05,
+            "close": 4.0583436e-05,
+            "high": 4.0583436e-05,
+            "low": 4.0048336e-05,
+            "volume": 49.014176619,
+            "amount": 1215701.282584,
+            "source": ""
+          },
+          {
+            "time": 1794246600000,
+            "open": 4.0583436e-05,
+            "close": 4.1079579e-05,
+            "high": 4.1079579e-05,
+            "low": 4.058331e-05,
+            "volume": 43.057855817,
+            "amount": 1054442.83134699,
+            "source": ""
+          },
+          {
+            "time": 1794246660000,
+            "open": 4.1079579e-05,
+            "close": 4.1621832e-05,
+            "high": 4.1621832e-05,
+            "low": 4.1079579e-05,
+            "volume": 52.59228107,
+            "amount": 1271730.415303,
+            "source": ""
+          },
+          {
+            "time": 1794246720000,
+            "open": 4.1621832e-05,
+            "close": 4.2114114e-05,
+            "high": 4.2114114e-05,
+            "low": 4.1621832e-05,
+            "volume": 47.88776176,
+            "amount": 1143988.14032799,
+            "source": ""
+          },
+          {
+            "time": 1794246780000,
+            "open": 4.2114114e-05,
+            "close": 4.2664324e-05,
+            "high": 4.2664324e-05,
+            "low": 4.2114114e-05,
+            "volume": 48.46985314,
+            "amount": 1143287.057611999,
+            "source": ""
+          },
+          {
+            "time": 1794246840000,
+            "open": 4.2664324e-05,
+            "close": 4.3179164e-05,
+            "high": 4.3179164e-05,
+            "low": 4.2664324e-05,
+            "volume": 47.95717351,
+            "amount": 1117130.206779,
+            "source": ""
+          },
+          {
+            "time": 1794246900000,
+            "open": 4.3179164e-05,
+            "close": 4.370469e-05,
+            "high": 4.370469e-05,
+            "low": 4.3179164e-05,
+            "volume": 50.85838144,
+            "amount": 1171018.148202,
+            "source": ""
+          },
+          {
+            "time": 1794246960000,
+            "open": 4.370469e-05,
+            "close": 4.422136e-05,
+            "high": 4.422136e-05,
+            "low": 4.3700866e-05,
+            "volume": 41.94967121,
+            "amount": 953700.83021699,
+            "source": ""
+          }
+        ]
+      },
+      "identityBound": true,
+      "validation": {
+        "checkedAt": "2026-11-09T17:56:56.593Z",
+        "ready": true,
+        "reason": null,
+        "sourceWindow": {
+          "valid": true,
+          "from": 1794243360,
+          "to": 1794246960,
+          "excludedBars": 1
+        },
+        "diagnostics": {
+          "receivedBars": 13,
+          "closedBars": 13,
+          "lastClosedAtMs": 1794246960000,
+          "firstOpenAtMs": 1794246180000,
+          "windowPolicy": "contiguous_tail_v1",
+          "excludedPrefixBars": 0,
+          "usedBars": 13,
+          "usedFirstOpenAtMs": 1794246180000,
+          "gapBoundary": null,
+          "code": "ready",
+          "issue": null
+        },
+        "entryThesisBarsReady": false,
+        "validatedBars": 13
+      },
+      "error": null,
+      "durationMs": 18816
+    },
+    {
+      "chain": "sol",
+      "address": "A31fDS2KH1sHUEcuXHkmmnqQk89CUBeFuB7JFWhTHGoT",
+      "symbol": "PUSSY",
+      "originalCode": "chart_missing",
+      "originalAllowed": false,
+      "attempt": 1,
+      "startedAt": "2026-11-09T17:56:56.603Z",
+      "receivedAt": "2026-11-09T17:57:56.829Z",
+      "httpStatus": 200,
+      "sourceStatus": "unavailable",
+      "rawResponse": {
+        "status": "unavailable",
+        "source": "gmgn-cli",
+        "reason": "gmgn_unavailable",
+        "observedAt": null,
+        "chain": "sol",
+        "address": "A31fDS2KH1sHUEcuXHkmmnqQk89CUBeFuB7JFWhTHGoT",
+        "resolution": "1m",
+        "reasonCode": "GMGN_QUEUE_EXPIRED",
+        "lastAttempt": {
+          "queuedAt": "2026-11-09T17:56:56.701Z",
+          "requestedAt": null,
+          "receivedAt": null,
+          "completedAt": "2026-11-09T17:57:56.824Z",
+          "from": null,
+          "to": null,
+          "requestWindow": null
+        }
+      },
+      "identityBound": true,
+      "validation": {
+        "checkedAt": "2026-11-09T17:57:56.829Z",
+        "ready": false,
+        "reason": "新鲜且足够的 K 线",
+        "sourceWindow": {
+          "valid": false,
+          "from": null,
+          "to": null,
+          "excludedBars": null
+        },
+        "diagnostics": {
+          "receivedBars": 0,
+          "closedBars": 0,
+          "lastClosedAtMs": null,
+          "code": "invalid_source_window",
+          "issue": null
+        },
+        "entryThesisBarsReady": false,
+        "validatedBars": 0
+      },
+      "error": "invalid_source_window",
+      "durationMs": 60226
+    },
+    {
+      "chain": "sol",
+      "address": "2UfvRT4TyVTQSi8xUzPyNxqFjHoRoG2z8PLEFwzhLupT",
+      "symbol": "NVIDIOT",
+      "originalCode": "chart_missing",
+      "originalAllowed": false,
+      "attempt": 1,
+      "startedAt": "2026-11-09T17:57:56.832Z",
+      "receivedAt": "2026-11-09T17:58:12.919Z",
+      "httpStatus": 200,
+      "sourceStatus": "ok",
+      "rawResponse": {
+        "status": "ok",
+        "source": "gmgn-cli",
+        "chain": "sol",
+        "address": "2UfvRT4TyVTQSi8xUzPyNxqFjHoRoG2z8PLEFwzhLupT",
+        "resolution": "1m",
+        "from": 1794243420,
+        "to": 1794247020,
+        "queuedAt": "2026-11-09T17:57:56.843Z",
+        "requestedAt": "2026-11-09T17:58:11.756Z",
+        "receivedAt": "2026-11-09T17:58:12.917Z",
+        "observedAt": "2026-11-09T17:58:12.917Z",
+        "candles": [
+          {
+            "time": 1794246060000,
+            "open": 4.2945279e-12,
+            "close": 3.7526076e-05,
+            "high": 0.0027467742,
+            "low": 4.2945279e-12,
+            "volume": 11.68047844,
+            "amount": 200806937.04003093,
+            "source": ""
+          },
+          {
+            "time": 1794246120000,
+            "open": 3.7526076e-05,
+            "close": 3.8004359e-05,
+            "high": 3.8004359e-05,
+            "low": 3.7526076e-05,
+            "volume": 47.50585582,
+            "amount": 1257842.094133,
+            "source": ""
+          },
+          {
+            "time": 1794246180000,
+            "open": 3.8004359e-05,
+            "close": 3.8550301e-05,
+            "high": 3.8550301e-05,
+            "low": 3.8004359e-05,
+            "volume": 49.050816298,
+            "amount": 1280758.888216,
+            "source": ""
+          },
+          {
+            "time": 1794246240000,
+            "open": 3.8550301e-05,
+            "close": 3.9030916e-05,
+            "high": 3.9030916e-05,
+            "low": 3.8550301e-05,
+            "volume": 45.21205443,
+            "amount": 1165382.819205,
+            "source": ""
+          },
+          {
+            "time": 1794246300000,
+            "open": 3.9030916e-05,
+            "close": 3.9549356e-05,
+            "high": 3.9549356e-05,
+            "low": 3.9030916e-05,
+            "volume": 46.65438498,
+            "amount": 1187148.238683,
+            "source": ""
+          },
+          {
+            "time": 1794246360000,
+            "open": 3.9549356e-05,
+            "close": 4.0056128e-05,
+            "high": 4.0056128e-05,
+            "low": 3.9549356e-05,
+            "volume": 48.66097877,
+            "amount": 1222290.582968,
+            "source": ""
+          },
+          {
+            "time": 1794246420000,
+            "open": 4.0056128e-05,
+            "close": 4.0607656e-05,
+            "high": 4.0607656e-05,
+            "low": 4.0056128e-05,
+            "volume": 49.30416813,
+            "amount": 1222805.884877,
+            "source": ""
+          },
+          {
+            "time": 1794246480000,
+            "open": 4.0607656e-05,
+            "close": 4.1109109e-05,
+            "high": 4.1109109e-05,
+            "low": 4.0607656e-05,
+            "volume": 45.011883937,
+            "amount": 1101129.406307,
+            "source": ""
+          },
+          {
+            "time": 1794246540000,
+            "open": 4.1109109e-05,
+            "close": 4.1638114e-05,
+            "high": 4.1638114e-05,
+            "low": 4.1108972e-05,
+            "volume": 47.93296576,
+            "amount": 1158435.93548299,
+            "source": ""
+          },
+          {
+            "time": 1794246600000,
+            "open": 4.1638114e-05,
+            "close": 4.2171852e-05,
+            "high": 4.2171852e-05,
+            "low": 4.1638114e-05,
+            "volume": 45.74309425,
+            "amount": 1091514.848563,
+            "source": ""
+          },
+          {
+            "time": 1794246660000,
+            "open": 4.2171852e-05,
+            "close": 4.2652244e-05,
+            "high": 4.2652244e-05,
+            "low": 4.2171852e-05,
+            "volume": 46.33531326,
+            "amount": 1092394.434362,
+            "source": ""
+          },
+          {
+            "time": 1794246720000,
+            "open": 4.2652244e-05,
+            "close": 4.3180698e-05,
+            "high": 4.3180698e-05,
+            "low": 4.2652244e-05,
+            "volume": 50.36815821,
+            "amount": 1173854.873685,
+            "source": ""
+          },
+          {
+            "time": 1794246780000,
+            "open": 4.3180698e-05,
+            "close": 4.3692894e-05,
+            "high": 4.3692894e-05,
+            "low": 4.3180698e-05,
+            "volume": 44.41651456,
+            "amount": 1022432.424784,
+            "source": ""
+          },
+          {
+            "time": 1794246840000,
+            "open": 4.3692894e-05,
+            "close": 4.4189148e-05,
+            "high": 4.4189148e-05,
+            "low": 4.3692894e-05,
+            "volume": 45.57273713,
+            "amount": 1036999.573398,
+            "source": ""
+          },
+          {
+            "time": 1794246900000,
+            "open": 4.4189148e-05,
+            "close": 4.4935449e-05,
+            "high": 4.4935449e-05,
+            "low": 4.4187204e-05,
+            "volume": 70.64336428,
+            "amount": 1585709.904902,
+            "source": ""
+          },
+          {
+            "time": 1794246960000,
+            "open": 4.4935449e-05,
+            "close": 4.5744944e-05,
+            "high": 4.5744944e-05,
+            "low": 4.4935449e-05,
+            "volume": 70.23438608,
+            "amount": 1548488.027464999,
+            "source": ""
+          },
+          {
+            "time": 1794247020000,
+            "open": 4.5744944e-05,
+            "close": 4.6580136e-05,
+            "high": 4.6580136e-05,
+            "low": 4.5744944e-05,
+            "volume": 77.10408542,
+            "amount": 1670004.589751,
+            "source": ""
+          }
+        ]
+      },
+      "identityBound": true,
+      "validation": {
+        "checkedAt": "2026-11-09T17:58:12.919Z",
+        "ready": true,
+        "reason": null,
+        "sourceWindow": {
+          "valid": true,
+          "from": 1794243420,
+          "to": 1794247020,
+          "excludedBars": 1
+        },
+        "diagnostics": {
+          "receivedBars": 16,
+          "closedBars": 16,
+          "lastClosedAtMs": 1794247020000,
+          "firstOpenAtMs": 1794246060000,
+          "windowPolicy": "contiguous_tail_v1",
+          "excludedPrefixBars": 0,
+          "usedBars": 16,
+          "usedFirstOpenAtMs": 1794246060000,
+          "gapBoundary": null,
+          "code": "ready",
+          "issue": null
+        },
+        "entryThesisBarsReady": false,
+        "validatedBars": 16
+      },
+      "error": null,
+      "durationMs": 16087
+    },
+    {
+      "chain": "sol",
+      "address": "51S5XBuGHQAnugqU85P3v5Kq3RzZ8nEa4NTynZ8MrsuQ",
+      "symbol": "NVIDIOT",
+      "originalCode": "chart_missing",
+      "originalAllowed": false,
+      "attempt": 1,
+      "startedAt": "2026-11-09T17:58:12.921Z",
+      "receivedAt": "2026-11-09T17:58:42.485Z",
+      "httpStatus": 200,
+      "sourceStatus": "ok",
+      "rawResponse": {
+        "status": "ok",
+        "source": "gmgn-cli",
+        "chain": "sol",
+        "address": "51S5XBuGHQAnugqU85P3v5Kq3RzZ8nEa4NTynZ8MrsuQ",
+        "resolution": "1m",
+        "from": 1794243480,
+        "to": 1794247080,
+        "queuedAt": "2026-11-09T17:58:12.926Z",
+        "requestedAt": "2026-11-09T17:58:41.419Z",
+        "receivedAt": "2026-11-09T17:58:42.482Z",
+        "observedAt": "2026-11-09T17:58:42.482Z",
+        "candles": [
+          {
+            "time": 1794246060000,
+            "open": 3.8945678e-11,
+            "close": 5.9636895e-05,
+            "high": 8.8744872e-05,
+            "low": 3.8945678e-11,
+            "volume": 0.14478471,
+            "amount": 202988318.94699702,
+            "source": ""
+          },
+          {
+            "time": 1794246120000,
+            "open": 5.9636895e-05,
+            "close": 2.8304639e-05,
+            "high": 5.9636895e-05,
+            "low": 5.5557494e-08,
+            "volume": 0.03099445,
+            "amount": 187246.94840999998,
+            "source": ""
+          }
+        ]
+      },
+      "identityBound": true,
+      "validation": {
+        "checkedAt": "2026-11-09T17:58:42.485Z",
+        "ready": false,
+        "reason": "新鲜且足够的 K 线",
+        "sourceWindow": {
+          "valid": true,
+          "from": 1794243480,
+          "to": 1794247080,
+          "excludedBars": 0
+        },
+        "diagnostics": {
+          "receivedBars": 2,
+          "closedBars": 2,
+          "lastClosedAtMs": 1794246180000,
+          "firstOpenAtMs": 1794246060000,
+          "code": "insufficient_closed_bars",
+          "issue": null
+        },
+        "entryThesisBarsReady": false,
+        "validatedBars": 0
+      },
+      "error": null,
+      "durationMs": 29564
+    },
+    {
+      "chain": "sol",
+      "address": "GpFVhKtqjFiMtoS2SpfYNNRLTwe42DWUZ5fN7LkiL6se",
+      "symbol": "TREMP",
+      "originalCode": "chart_missing",
+      "originalAllowed": false,
+      "attempt": 1,
+      "startedAt": "2026-11-09T17:58:42.489Z",
+      "receivedAt": "2026-11-09T17:59:11.874Z",
+      "httpStatus": 200,
+      "sourceStatus": "ok",
+      "rawResponse": {
+        "status": "ok",
+        "source": "gmgn-cli",
+        "chain": "sol",
+        "address": "GpFVhKtqjFiMtoS2SpfYNNRLTwe42DWUZ5fN7LkiL6se",
+        "resolution": "1m",
+        "from": 1794243480,
+        "to": 1794247080,
+        "queuedAt": "2026-11-09T17:58:42.492Z",
+        "requestedAt": "2026-11-09T17:59:10.730Z",
+        "receivedAt": "2026-11-09T17:59:11.872Z",
+        "observedAt": "2026-11-09T17:59:11.872Z",
+        "candles": [
+          {
+            "time": 1794246000000,
+            "open": 3.8923121e-11,
+            "close": 1.4125006e-05,
+            "high": 6.3682989e-05,
+            "low": 3.8923121e-11,
+            "volume": 0.10499356,
+            "amount": 199361494.95397702,
+            "source": ""
+          }
+        ]
+      },
+      "identityBound": true,
+      "validation": {
+        "checkedAt": "2026-11-09T17:59:11.874Z",
+        "ready": false,
+        "reason": "新鲜且足够的 K 线",
+        "sourceWindow": {
+          "valid": true,
+          "from": 1794243480,
+          "to": 1794247080,
+          "excludedBars": 0
+        },
+        "diagnostics": {
+          "receivedBars": 1,
+          "closedBars": 1,
+          "lastClosedAtMs": 1794246060000,
+          "firstOpenAtMs": 1794246000000,
+          "code": "insufficient_closed_bars",
+          "issue": null
+        },
+        "entryThesisBarsReady": false,
+        "validatedBars": 0
+      },
+      "error": null,
+      "durationMs": 29385
+    },
+    {
+      "chain": "sol",
+      "address": "J1p5JR1vC48djzmPYXiX5ME9MKnXofkaeTc6CXtSs7X5",
+      "symbol": "POLLY",
+      "originalCode": "chart_missing",
+      "originalAllowed": false,
+      "attempt": 1,
+      "startedAt": "2026-11-09T17:59:11.875Z",
+      "receivedAt": "2026-11-09T17:59:52.955Z",
+      "httpStatus": 200,
+      "sourceStatus": "ok",
+      "rawResponse": {
+        "status": "ok",
+        "source": "gmgn-cli",
+        "chain": "sol",
+        "address": "J1p5JR1vC48djzmPYXiX5ME9MKnXofkaeTc6CXtSs7X5",
+        "resolution": "1m",
+        "from": 1794243540,
+        "to": 1794247140,
+        "queuedAt": "2026-11-09T17:59:12.235Z",
+        "requestedAt": "2026-11-09T17:59:51.293Z",
+        "receivedAt": "2026-11-09T17:59:52.944Z",
+        "observedAt": "2026-11-09T17:59:52.944Z",
+        "candles": [
+          {
+            "time": 1794243720000,
+            "open": 1.3755298e-05,
+            "close": 4.2052587e-05,
+            "high": 4.2145152e-05,
+            "low": 1.3755298e-05,
+            "volume": 1104.26085367,
+            "amount": 73295261.23169298,
+            "source": ""
+          },
+          {
+            "time": 1794243780000,
+            "open": 4.2052587e-05,
+            "close": 4.2090372e-05,
+            "high": 4.2090372e-05,
+            "low": 4.2052587e-05,
+            "volume": 0.52190064,
+            "amount": 12370.356859,
+            "source": ""
+          },
+          {
+            "time": 1794243840000,
+            "open": 4.2090372e-05,
+            "close": 4.2085042e-05,
+            "high": 4.2090372e-05,
+            "low": 4.2085042e-05,
+            "volume": 0.84222512,
+            "amount": 20062.614685,
+            "source": ""
+          },
+          {
+            "time": 1794243960000,
+            "open": 4.2085042e-05,
+            "close": 4.2067104e-05,
+            "high": 4.2085042e-05,
+            "low": 4.2067104e-05,
+            "volume": 0.47333135,
+            "amount": 11280.018386,
+            "source": ""
+          },
+          {
+            "time": 1794244320000,
+            "open": 4.2067104e-05,
+            "close": 4.1948919e-05,
+            "high": 4.2067104e-05,
+            "low": 4.1948919e-05,
+            "volume": 0.67230637,
+            "amount": 16062.119910000001,
+            "source": ""
+          },
+          {
+            "time": 1794245400000,
+            "open": 4.1948919e-05,
+            "close": 4.1755573e-05,
+            "high": 4.1948919e-05,
+            "low": 4.1755573e-05,
+            "volume": 0.045073225,
+            "amount": 1082.161363,
+            "source": ""
+          },
+          {
+            "time": 1794246000000,
+            "open": 4.1755573e-05,
+            "close": 2.5639747e-05,
+            "high": 4.5829266e-05,
+            "low": 2.4095206e-05,
+            "volume": 4398.51491509,
+            "amount": 124931804.12308195,
+            "source": ""
+          },
+          {
+            "time": 1794246060000,
+            "open": 2.5639747e-05,
+            "close": 1.8111626e-09,
+            "high": 2.6225294e-05,
+            "low": 7.14575e-10,
+            "volume": 1829.64924349,
+            "amount": 1463317454.551728,
+            "source": ""
+          },
+          {
+            "time": 1794246120000,
+            "open": 1.8111626e-09,
+            "close": 1.6888316e-09,
+            "high": 1.8111626e-09,
+            "low": 1.6888316e-09,
+            "volume": 0.088007297,
+            "amount": 52163536.532139,
+            "source": ""
+          },
+          {
+            "time": 1794246600000,
+            "open": 1.6888316e-09,
+            "close": 1.1057779e-09,
+            "high": 1.6888316e-09,
+            "low": 1.1057779e-09,
+            "volume": 0.19598824,
+            "amount": 177417617.989248,
+            "source": ""
+          }
+        ]
+      },
+      "identityBound": true,
+      "validation": {
+        "checkedAt": "2026-11-09T17:59:52.955Z",
+        "ready": false,
+        "reason": "新鲜且足够的 K 线",
+        "sourceWindow": {
+          "valid": true,
+          "from": 1794243540,
+          "to": 1794247140,
+          "excludedBars": 0
+        },
+        "diagnostics": {
+          "receivedBars": 10,
+          "closedBars": 10,
+          "lastClosedAtMs": 1794246660000,
+          "firstOpenAtMs": 1794243720000,
+          "code": "insufficient_closed_bars",
+          "issue": null
+        },
+        "entryThesisBarsReady": false,
+        "validatedBars": 0
+      },
+      "error": null,
+      "durationMs": 41080
+    }
+  ],
+  "note": "Audit-only source snapshots. Raw chart availability and valid bars do not establish a trading signal or admission.",
+  "externalStopReason": "Read-only audit stopped to load verified v27 recovery fix; uncompleted identities frozen separately and resumed after old dashboard drains.",
+  "summary": {
+    "selected": 21,
+    "attempted": 11,
+    "unattempted": 10
+  }
+}

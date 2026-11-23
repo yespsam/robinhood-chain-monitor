@@ -391,6 +391,68 @@ test('latest-closed cache advances by real minute while pending requests and fai
   clock+=10000;await client.kline(args);assert.equal(calls,3,'failed minute refresh retains the normal backoff');
 });
 
+test('empty K-line response is distinct from malformed data and retains actual request timing', async () => {
+  const base=Date.parse('2026-11-09T11:40:00Z');let clock=base+59000,calls=0;
+  const client=createReadonlyMarketClient({now:()=>clock,runner:async(args,options)=>{
+    calls++;clock=base+65000;options.onRequestStart(clock);clock=base+67000;
+    return JSON.stringify({data:{list:[]}});
+  }});
+  const args={chain:'bsc',address:'0xabc12345',resolution:'1m',from:base/1000-3600,to:base/1000,latestClosed:true};
+  const result=await client.kline(args);
+  assert.equal(result.status,'unavailable');assert.equal(result.reasonCode,'GMGN_EMPTY_KLINE');assert.equal(result.reason,'empty_kline');
+  assert.equal(result.observedAt,null);assert.equal(result.candles,undefined);
+  assert.equal(result.to,base/1000+60);assert.equal(result.from,result.to-3600);
+  assert.equal(result.requestWindow,'latest_closed_at_dispatch');
+  assert.deepEqual(result.lastAttempt,{queuedAt:new Date(base+59000).toISOString(),requestedAt:new Date(base+65000).toISOString(),
+    receivedAt:new Date(base+67000).toISOString(),completedAt:new Date(base+67000).toISOString(),
+    from:result.from,to:result.to,requestWindow:'latest_closed_at_dispatch'});
+  clock+=1000;assert.deepEqual(await client.kline(args),result);assert.equal(calls,1,'empty source retains normal retry backoff');
+});
+
+test('malformed K-line envelopes, list shapes and bars fail closed with a typed payload error', async () => {
+  for(const payload of ['not json','{}','{"data":{"list":{}}}','{"list":[{"time":null,"close":1}]}','{"code":500,"list":[]}']) {
+    const client=createReadonlyMarketClient({runner:async(args,options)=>{options.onRequestStart(Date.now());return payload;}});
+    const result=await client.kline({chain:'bsc',address:'0xabc12345'});
+    assert.equal(result.status,'unavailable');assert.equal(result.reasonCode,'GMGN_INVALID_KLINE_PAYLOAD');
+    assert.equal(result.reason,'invalid_kline_payload');assert.equal(result.observedAt,null);assert.equal(result.candles,undefined);
+    assert.ok(result.lastAttempt.receivedAt);
+  }
+});
+
+test('K-line identity mismatch remains separate from empty or malformed responses', async () => {
+  const client=createReadonlyMarketClient({runner:async()=>JSON.stringify({chain:'sol',list:[]})});
+  const result=await client.kline({chain:'bsc',address:'0xabc12345'});
+  assert.equal(result.status,'unavailable');assert.equal(result.reasonCode,'GMGN_IDENTITY_MISMATCH');
+  assert.equal(result.observedAt,null);
+});
+
+test('failed K-line refresh retains old evidence boundaries and exposes only the new failed attempt separately',async()=>{
+  const base=Date.parse('2026-11-09T11:40:00Z');let clock=base+1000,fail=false;
+  const client=createReadonlyMarketClient({now:()=>clock,runner:async(args,options)=>{
+    options.onRequestStart(clock);clock+=1000;
+    return fail?'[]':JSON.stringify({list:[{time:base-60000,open:1,high:2,low:1,close:2,volume:100}]});
+  }});
+  const args={chain:'bsc',address:'0xabc12345',resolution:'1m',from:base/1000-3600,to:base/1000,latestClosed:true};
+  const first=await client.kline(args);clock=base+61000;fail=true;
+  const stale=await client.kline(args);
+  assert.equal(stale.status,'stale');assert.equal(stale.reasonCode,'GMGN_EMPTY_KLINE');assert.equal(stale.staleReason,'empty_kline');
+  for(const field of ['observedAt','receivedAt','requestedAt','from','to','requestWindow'])assert.equal(stale[field],first[field],field);
+  assert.deepEqual(stale.candles,first.candles);
+  assert.equal(stale.lastAttempt.to,base/1000+60);assert.equal(stale.lastAttempt.receivedAt,new Date(base+62000).toISOString());
+});
+
+test('queue expiry reports no dispatched K-line boundary and keeps short retry backoff',async()=>{
+  const base=Date.parse('2026-11-09T11:40:00Z');let clock=base,calls=0;
+  const client=createReadonlyMarketClient({now:()=>clock,runner:async()=>{calls++;clock+=100;throw Object.assign(new Error('private detail'),{code:'GMGN_QUEUE_EXPIRED'});}});
+  const args={chain:'bsc',address:'0xabc12345',resolution:'1m',from:base/1000-3600,to:base/1000,latestClosed:true};
+  const result=await client.kline(args);
+  assert.equal(result.reasonCode,'GMGN_QUEUE_EXPIRED');assert.equal(result.lastAttempt.requestedAt,null);
+  assert.equal(result.lastAttempt.receivedAt,null);assert.equal(result.lastAttempt.to,null);assert.equal(result.requestWindow,undefined);
+  assert.doesNotMatch(JSON.stringify(result),/private detail/);
+  clock+=1000;await client.kline(args);assert.equal(calls,1);
+  clock+=5000;await client.kline(args);assert.equal(calls,2);
+});
+
 test('one malformed candle cannot silently disappear from an otherwise valid response',async()=>{
   const client=createReadonlyMarketClient({runner:async()=>JSON.stringify({list:[
     {time:1700000000000,open:1,high:2,low:1,close:2,volume:100},
@@ -449,6 +511,27 @@ test('readonly market accepts only supported read-only chains and resolutions', 
   await assert.rejects(() => client.trending({ chain: 'polygon', interval: '1m' }), /invalid chain/);
   await assert.rejects(() => client.trending({ chain: 'bsc', interval: '10m' }), /invalid interval/);
   await assert.rejects(() => client.kline({ chain: 'bsc', address: '0xabc12345', resolution: '10m' }), /invalid resolution/);
+  await assert.rejects(() => client.kline({ chain: 'bsc', address: '0xabc12345', resolution: '1s' }), /invalid resolution/);
+});
+
+test('1s kline is accepted only when GMGN_ONE_SECOND_KLINE=1 and is not a latest-closed entry window', async () => {
+  const previous = process.env.GMGN_ONE_SECOND_KLINE;
+  process.env.GMGN_ONE_SECOND_KLINE = '1';
+  try {
+    const calls = [];
+    const client = createReadonlyMarketClient({ runner: async args => {
+      calls.push(args);
+      return JSON.stringify({ list: [{ time: 1700000000000, open: '1', close: '2', high: '3', low: '0.5', volume: '10' }] });
+    } });
+    const result = await client.kline({ chain: 'bsc', address: '0xabc12345', resolution: '1s', from: 1700000000, to: 1700000060 });
+    assert.equal(result.status, 'ok');
+    assert.equal(result.resolution, '1s');
+    assert.equal(calls[0][calls[0].indexOf('--resolution') + 1], '1s');
+    await assert.rejects(() => client.kline({ chain: 'bsc', address: '0xabc12345', resolution: '1s', latestClosed: true }), /invalid latest closed window/);
+  } finally {
+    if (previous === undefined) delete process.env.GMGN_ONE_SECOND_KLINE;
+    else process.env.GMGN_ONE_SECOND_KLINE = previous;
+  }
 });
 
 const trenchesPayload = (categories = {}) => ({ code: 0, data: { new_creation: [], pump: [], completed: [], ...categories } });

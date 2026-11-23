@@ -1,0 +1,633 @@
+{
+  "id": "chart-catchup-1794286389118",
+  "status": "complete",
+  "createdAt": "2026-11-10T04:53:09.118Z",
+  "deadlineAt": "2026-11-10T05:23:09.118Z",
+  "items": [
+    {
+      "chain": "bsc",
+      "address": "0xe6c2021a443efb5d18c8cabb0cd930aa81ee7777",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "CURRENT_RESEARCH_INELIGIBLE",
+      "completedAt": "2026-11-10T04:53:09.118Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:53:09.118Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x8b9ee39195ea99d6ddd68030f44131116bc218f6",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:53:09.118Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x0cee7a04355b2e2d7248d9566db8889cf44f7777",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:53:09.118Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x7c8d5502b544ddaf8852fc46d1174e34876d545c",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:53:09.118Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xcafdbce93477261db8250e42bdae6e66733f9e20",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:53:09.118Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x33fe24f4298a8659668e8d1f2044fd01e8a57777",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:53:09.118Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xf1c599e9a5fbdea408a7409c0176a2fe42c64444",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:53:09.118Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x87acfa3fd7a6e0d48677d070644d76905c2bdc00",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-10T04:53:23.324Z",
+      "completedAt": "2026-11-10T04:53:25.902Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "insufficient_contiguous_tail",
+      "ready": false,
+      "closedBars": 38,
+      "closedThroughAt": "2026-11-10T04:53:00.000Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x7083609fce4d1d8dc0c979aab8c869ea2c873402",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:53:25.906Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x0da27398e363adb801300b4d36d600631fae7777",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "CURRENT_RESEARCH_INELIGIBLE",
+      "completedAt": "2026-11-10T04:53:25.906Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x2aad9bbc151659db46d379d44d9bf5e8d1888888",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:53:25.906Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x2a06ddb8f82b2926ccd852d8cdc2348246857777",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-10T04:53:53.954Z",
+      "completedAt": "2026-11-10T04:53:58.612Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "insufficient_contiguous_tail",
+      "ready": false,
+      "closedBars": 30,
+      "closedThroughAt": "2026-11-10T04:53:00.000Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x91152b4ef635403efbae860edd0f8c321d7c035d",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:53:58.277Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xb305e6954e4e0cd021c06ec355681abc8a00dbd7",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-10T04:53:58.277Z",
+      "completedAt": "2026-11-10T04:54:00.874Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "insufficient_contiguous_tail",
+      "ready": false,
+      "closedBars": 43,
+      "closedThroughAt": "2026-11-10T04:53:00.000Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xbab528425edb1e0e36d3719bc3307d9c8cce8888",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:54:01.277Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x6a3722e20d1c9727c290a1b3cccd5330180d9de4",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:54:01.277Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x6b2ce31a577d92f73516c7a91febc7672247e694",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:54:01.277Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x6a2608dabe09bc1128eec7275b92dfb939d5db3f",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:54:01.277Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0x6d145722564aaa0dba3e104dd1d680b227927777",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:54:01.277Z"
+    },
+    {
+      "chain": "bsc",
+      "address": "0xdd806e436dda5588bf54061c11590c77ddc87777",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-10T04:54:32.815Z",
+      "completedAt": "2026-11-10T04:54:35.979Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "insufficient_contiguous_tail",
+      "ready": false,
+      "closedBars": 43,
+      "closedThroughAt": "2026-11-10T04:54:00.000Z"
+    },
+    {
+      "chain": "sol",
+      "address": "FDboCUrbwVgNVbuSXvhk9Atpay4UW6q3gPqAc6wH6bZD",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:54:35.763Z"
+    },
+    {
+      "chain": "sol",
+      "address": "51S5XBuGHQAnugqU85P3v5Kq3RzZ8nEa4NTynZ8MrsuQ",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:54:35.763Z"
+    },
+    {
+      "chain": "sol",
+      "address": "GpFVhKtqjFiMtoS2SpfYNNRLTwe42DWUZ5fN7LkiL6se",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:54:35.763Z"
+    },
+    {
+      "chain": "sol",
+      "address": "J1p5JR1vC48djzmPYXiX5ME9MKnXofkaeTc6CXtSs7X5",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:54:35.763Z"
+    },
+    {
+      "chain": "sol",
+      "address": "CTKeXCVboLuAxHHHLDP5cc6JKSRKxYHBZSnbvcZaYkaU",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:54:35.763Z"
+    },
+    {
+      "chain": "sol",
+      "address": "E4w4LG1UMzRVHch6YpBq7duCiRup1G6CrKW7Kg5ufV7N",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:54:35.763Z"
+    },
+    {
+      "chain": "sol",
+      "address": "3bxHm72mrkvE6eQ6iV5Yua8n3eDQUSenMxn75vpqvY8z",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:54:35.763Z"
+    },
+    {
+      "chain": "sol",
+      "address": "4yxrjPyGVsAYSMwxPPKirxJPegDjGKiTCPxWwkoFpump",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:54:35.763Z"
+    },
+    {
+      "chain": "sol",
+      "address": "GMvCfcZg8YvkkQmwDaAzCtHDrrEtgE74nQpQ7xNabonk",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:54:35.763Z"
+    },
+    {
+      "chain": "sol",
+      "address": "D4CzGsZgusVj2K8R1its5H8WWdo9mazbDwBc6qvsmfun",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:54:35.763Z"
+    },
+    {
+      "chain": "sol",
+      "address": "8BnNS15Q6h6D5Vcq1sNPaUxhpRVdK8FGRbLvCrLxibSx",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:54:35.763Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x3cbbfc926a55d9751e78b91642b685c4e36479d5",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:54:35.763Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xc9a981fee1f9dec688bb123ccdecc63d0debfc4e",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-10T04:55:05.455Z",
+      "completedAt": "2026-11-10T04:55:07.962Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "ready",
+      "ready": true,
+      "closedBars": 57,
+      "closedThroughAt": "2026-11-10T04:55:00.000Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xdf0992e440dd0be65bd8439b609d6d4366bf1cb5",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:55:33.629Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xcec185eb182c47d1ba1efc84e6959e18cd620be4",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-10T04:55:33.629Z",
+      "completedAt": "2026-11-10T04:55:38.627Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "insufficient_contiguous_tail",
+      "ready": false,
+      "closedBars": 38,
+      "closedThroughAt": "2026-11-10T04:55:00.000Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x48e39e56acdba37b09020c0b734a613c9a2f100a",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:55:38.636Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:55:38.636Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x6330d8c3178a418788df01a47479c0ce7ccf450b",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:55:38.636Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-10T04:55:38.636Z",
+      "completedAt": "2026-11-10T04:55:42.599Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "insufficient_contiguous_tail",
+      "ready": false,
+      "closedBars": 25,
+      "closedThroughAt": "2026-11-10T04:55:00.000Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x72be1277e198d0c476869253cb4e62807e14533c",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:55:43.488Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x9f4ba41f91a59a34e17ee8c9eb3a51363b11abd5",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-10T04:55:43.488Z",
+      "completedAt": "2026-11-10T04:55:46.681Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "insufficient_contiguous_tail",
+      "ready": false,
+      "closedBars": 34,
+      "closedThroughAt": "2026-11-10T04:55:00.000Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x4d21483a44bf67a86b77e3da301411880797d452",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:55:46.706Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-10T04:55:46.706Z",
+      "completedAt": "2026-11-10T04:55:48.909Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "insufficient_contiguous_tail",
+      "ready": false,
+      "closedBars": 41,
+      "closedThroughAt": "2026-11-10T04:55:00.000Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:55:48.478Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x1b0e319c6a659f002271b69db8a7df2f911c153e",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:55:48.478Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xbc9e7b1c5c0081f4ae85e71ec95703d3dec9ffad",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:55:48.478Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x84cab63bc87912e71ad199ff14a0ba45de68fef8",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-10T04:56:37.150Z",
+      "completedAt": "2026-11-10T04:56:40.802Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "insufficient_contiguous_tail",
+      "ready": false,
+      "closedBars": 18,
+      "closedThroughAt": "2026-11-10T04:56:00.000Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xa2753fd0bc86b8ceb55ffd2698679c7f214785f1",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:56:41.450Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x6511c233790ec10f7d673c64dc82c3f941d57828",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-10T04:56:41.450Z",
+      "completedAt": "2026-11-10T04:56:44.422Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "stale_closed_bars",
+      "ready": false,
+      "closedBars": 25,
+      "closedThroughAt": "2026-11-10T04:56:00.000Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x15f3385625d7e364c5a6216fbbceadf10fa90e7d",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:56:44.066Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x94641b97010608c3827fb058074889f19868ff33",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-10T04:56:44.066Z",
+      "completedAt": "2026-11-10T04:56:50.733Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "insufficient_contiguous_tail",
+      "ready": false,
+      "closedBars": 18,
+      "closedThroughAt": "2026-11-10T04:56:00.000Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xf0c4bf4c582cb3836e98394b1d4e7b7281101be8",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:56:50.454Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xdc45b71d7203c2e8baafc43a19bca0eb993bb54e",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-10T04:56:50.454Z",
+      "completedAt": "2026-11-10T04:56:53.203Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "insufficient_closed_bars",
+      "ready": false,
+      "closedBars": 7,
+      "closedThroughAt": "2026-11-10T04:56:00.000Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xff080c8ce2e5feadaca0da81314ae59d232d4afd",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-10T04:57:21.753Z",
+      "completedAt": "2026-11-10T04:57:24.126Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "insufficient_contiguous_tail",
+      "ready": false,
+      "closedBars": 35,
+      "closedThroughAt": "2026-11-10T04:57:00.000Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x98096d17e191b3da1d5f99a6d7b3584351b11e18",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-10T04:57:34.661Z",
+      "completedAt": "2026-11-10T04:57:40.374Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "insufficient_contiguous_tail",
+      "ready": false,
+      "closedBars": 45,
+      "closedThroughAt": "2026-11-10T04:57:00.000Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x58ffe4a942d3885baa22d7520691f611ef09e7aa",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-10T04:57:40.394Z",
+      "completedAt": "2026-11-10T04:57:43.338Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "stale_closed_bars",
+      "ready": false,
+      "closedBars": 34,
+      "closedThroughAt": "2026-11-10T04:57:00.000Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x47569d49471bdbabfaf5531c0f74d9f2de82a11a",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:57:44.633Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x608de3e89a6506b881125f67463623d7eb063fba",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:57:44.633Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x7fe995a80075df3dc8ae11a9b82c7fe4202cd87f",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-10T04:57:44.633Z",
+      "completedAt": "2026-11-10T04:57:46.529Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "insufficient_contiguous_tail",
+      "ready": false,
+      "closedBars": 29,
+      "closedThroughAt": "2026-11-10T04:57:00.000Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xc72b96e0e48ecd4dc75e1e45396e26300bc39681",
+      "status": "fetched",
+      "attempts": 1,
+      "requestedAt": "2026-11-10T04:57:47.025Z",
+      "completedAt": "2026-11-10T04:57:48.833Z",
+      "chartStatus": "ok",
+      "reasonCode": null,
+      "chartDiagnostic": "stale_closed_bars",
+      "ready": false,
+      "closedBars": 34,
+      "closedThroughAt": "2026-11-10T04:57:00.000Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x255979302fd6a5e2ff6dce0d8b018f51e06e243a",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "CURRENT_RESEARCH_INELIGIBLE",
+      "completedAt": "2026-11-10T04:57:49.687Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0xe8ffd7e24187f72afb08d75b1bb13088a989a791",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:57:49.687Z"
+    },
+    {
+      "chain": "robinhood",
+      "address": "0x2fc6de9c65a620f918ca7d1191d3afa495ca2898",
+      "status": "skipped",
+      "attempts": 0,
+      "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+      "completedAt": "2026-11-10T04:57:49.687Z"
+    }
+  ],
+  "completedAt": "2026-11-10T04:57:49.687Z",
+  "counts": {
+    "skipped": 46,
+    "fetched": 18
+  }
+}

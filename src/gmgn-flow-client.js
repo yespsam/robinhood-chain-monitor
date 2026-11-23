@@ -86,7 +86,7 @@ export function createGmgnFlowClient(config = {}, dependencies = {}) {
   const stoppedError = () => failure("GMGN_STOPPED", "GMGN flow client is stopped");
   const assertActive = (signal) => { if (stopped || signal?.aborted) throw stoppedError(); };
   const limitedError = (until) => failure("GMGN_RATE_LIMITED", "GMGN account is cooling down", {
-    retryAt: new Date(until).toISOString(), retryAfterMs: Math.max(0, until - Number(now())), status: 429,
+    retryAt: new Date(until).toISOString(), reset_at: new Date(until).toISOString(), retryAfterMs: Math.max(0, until - Number(now())), status: 429,
   });
 
   async function readJson(file, maximumBytes) {
@@ -256,7 +256,7 @@ export function createGmgnFlowClient(config = {}, dependencies = {}) {
         throw failure(configuration ? "GMGN_CONFIG_FAILED" : "GMGN_CLI_FAILED", configuration ? "GMGN CLI configuration check failed" : "GMGN CLI request failed");
       }
     };
-    const execution = accountGate && !configuration ? accountGate(work,controller.signal,{priority})
+    const execution = accountGate && !configuration ? accountGate(work,controller.signal,{priority,kind:`${args[0]}:${args[1]}`})
       : scheduler.tail.catch(() => {}).then(work);
     job.execution = execution;
     // Legacy/no-gate callers still serialize complete responses. Gated calls
@@ -301,7 +301,7 @@ export function createGmgnFlowClient(config = {}, dependencies = {}) {
       if (!Number.isSafeInteger(fromSec) || !Number.isSafeInteger(toSec) || fromSec < 0 || toSec <= fromSec) {
         throw failure("GMGN_INVALID_ARGUMENT", "Invalid GMGN candle time range");
       }
-      return request(["market", "kline", "--chain", chain, "--address", address, "--resolution", "1m", "--from", String(fromSec), "--to", String(toSec)]);
+      return request(["market", "kline", "--chain", chain, "--address", address, "--resolution", "1m", "--from", String(fromSec), "--to", String(toSec)], {priority:1});
     },
     stats(chain, walletOrArray, period) {
       chainValue(chain);

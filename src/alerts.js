@@ -9,6 +9,7 @@ import {
   isFomoMonitorHealthUpdateAllowed,
   isFourMemePolicyFixRecoveryEvent,
   isOfficialFourMemeCapabilityUpdate,
+  isOfficialHyperEvmCapabilityUpdate,
   isOfficialMonitoringNews,
   isOfficialPonFunUpdate,
   isStrictBscOpenFourFirstTokenUpdate,
@@ -39,6 +40,7 @@ import {
   withTradingPriority,
 } from "./trading-priority.js";
 import { verifyNarrativeTradeSignalIntegrity } from "./narrative-trade-signal.js";
+import { isCanonicalFlapPoolLaunchUpdate } from "./flap-pool-launch.js";
 import {
   isKolSelfLaunchEvent,
   kolTokenLaunchCanonicalSignalIds,
@@ -67,8 +69,20 @@ const SMART_WALLET_BLOCKED_TAG = /(?:^|[_-])(?:wash(?:[_-]?trader)?|arbitrager|a
 const FRESHNESS_VERSION = 1;
 const ALERT_RENDER_VERSION = BILINGUAL_RENDER_VERSION;
 const LEGACY_ALERT_RENDER_VERSION = 2;
-const FOCUS_PLATFORMS = new Set(["flap", "fourmeme"]);
+const FOCUS_PLATFORMS = new Set(["flap", "fourmeme", "hyperevm"]);
 const BINANCE_PLATFORMS = new Set(["binance", "binancewallet", "binancefutures"]);
+// User focus (2026-10-30): BSC / Binance / Four.meme / Flap official GitHub
+// updates are all broadcast with a Chinese "what changed" card.
+const BSC_GITHUB_PLATFORMS = new Set(["bsc", "bnbchain"]);
+const FOCUS_BINANCE_GITHUB_REPOSITORIES = new Set([
+  "binance/binance-skills-hub", "binance/binance-web3-connector-js", "binance/binance-web3-connector-python",
+  "binance/binance-web3-connector-java", "binance/binance-cli", "binance/binance-spot-api-docs", "binance/binance-api-swagger",
+]);
+function isFocusBscOrBinanceGithubEvent(event) {
+  if (event?.type !== "github_module_update" || event.sourceTrust !== "official_verified") return false;
+  if (BSC_GITHUB_PLATFORMS.has(eventPlatform(event))) return true;
+  return isBinancePlatformEvent(event) && FOCUS_BINANCE_GITHUB_REPOSITORIES.has(String(event.repository || "").toLowerCase());
+}
 const PON_FUN_ALLOWED_KINDS = new Set([
   "market_created", "market_lifecycle", "factory_config", "curve_params", "stock_listing",
   "factory_paused", "factory_unpaused", "ownership_transfer_started", "ownership_transferred",
@@ -119,6 +133,7 @@ const STRONG_PLATFORM_CHANGE_KEYS = [
   "newCampaigns",
   "newChains",
   "chainStageChanges",
+  "documentBodyChanges",
 ];
 
 export function officialTokenDedupKey(event) {
@@ -188,7 +203,9 @@ function eventPlatform(event) {
 }
 
 export function isFocusPlatformEvent(event) {
-  return FOCUS_PLATFORMS.has(eventPlatform(event));
+  const platform = eventPlatform(event);
+  if (platform === "hyperevm") return isOfficialHyperEvmCapabilityUpdate(event);
+  return FOCUS_PLATFORMS.has(platform);
 }
 
 export function isBinancePlatformEvent(event) {
@@ -1093,6 +1110,12 @@ function platformCapabilityFacts(event) {
   const list = (key) => Array.isArray(changes[key]) ? changes[key] : [];
   const facts = [];
 
+  for (const change of list("documentBodyChanges").slice(0, 2)) {
+    const added = change.added.map((line) => oneLine(line, 112)).filter(Boolean);
+    const removed = change.removed.map((line) => oneLine(line, 112)).filter(Boolean);
+    facts.push(`官方文档正文变化（待核验）${added.length ? `：新增“${added.join("；") }”` : ""}${removed.length ? `；移除“${removed.join("；") }”` : ""}`);
+  }
+
   // A Flap pool is a first-class platform capability, not a rotating token
   // card. Keep the complete technical addresses in the alert so translation
   // and Telegram delivery cannot make the pool identity ambiguous.
@@ -1404,6 +1427,34 @@ const compact = (event) => {
         `状态: ${shadow ? "预发行原型变更，尚未正式启用" : "链上升级事件已确认；新增功能尚未解析"}`,
         `证据: ${shadow ? "源码与链上因果匹配" : corroborated ? "官网、部署清单与链上交叉一致" : "官方地址 + 链上升级事件"}`,
         compactAlertEventTime(event, event.blockTimestamp || event.timestamp, event.alertQueuedAt || event.observedAt),
+      ]);
+    }
+    if (event.kind === "flap_pool_launch" && isCanonicalFlapPoolLaunchUpdate(event)) {
+      const launch = event.poolLaunches?.[0] || {};
+      const sample = event.tokens?.[0]?.metadata || {};
+      const name = sample.name || launch.name || "未命名";
+      const symbol = sample.symbol || launch.symbol || "?";
+      const graduated = launch.graduated === true
+        ? "已毕业（同一笔交易内达到门槛）"
+        : launch.graduationFinal === true
+          ? "未毕业（该类型不会稍后补毕业）"
+          : "本笔未毕业（后续仍可能毕业）";
+      const vault = launch.vault ? `${launch.vault} · factory ${launch.vaultFactory || "未取得"}` : "无";
+      const price = launch.initialPriceQuotePerToken
+        ? `${launch.initialPriceQuotePerToken} ${launch.quoteLabel || "quote"}/token`
+        : "事件未携带（schema 未识别或字段缺失）";
+      return compactCard("👀 Flap Pool Launch", [
+        `代币: ${name} (${symbol}) · CA ${launch.token || event.tokens?.[0]?.token || "未取得"}`,
+        `池: ${launch.pool || "未取得"} · 创建者 ${launch.creator || "未取得"}`,
+        `报价: ${launch.quoteLabel || "未取得"} · 开盘价 ${price}`,
+        `供应: ${launch.totalSupply || "未取得"} · 毕业 ${graduated}`,
+        `Vault: ${vault}`,
+        "流动性: FlapDirectLaunched 给出开盘价和总供应，不包含报价种子数量",
+        event.liveEligible === true
+          ? "状态: 可进入确认型模拟盘；实盘只镜像已通过现有报价、流动性、税费、成本和亏损闸门的买入。本监控不签名、不广播"
+          : "状态: 仅观察/告警，不自动买入",
+        `证据: Portal ${event.launcher} · ${launch.launchKindName || "kind 未知"} · ${launch.schemaName || "schema 未识别"}`,
+        compactAlertEventTime(event, event.blockTimestamp, event.observedAt),
       ]);
     }
     if (event.mode?.selector === "v4-hook") {
@@ -1835,7 +1886,8 @@ const compact = (event) => {
       : pullRequestStage
       ? `🧪 ${event.launchpad || "发射台"} 新功能开发 PR`
       : aiOfficial ? `🧠 ${event.launchpad || "xAI / Grok"} 官方代码更新`
-        : isBinancePlatformEvent(event) ? "🟡 Binance Wallet 代码更新" : official ? `🧱 ${event.launchpad || "发射台"} 官方代码更新` : `🕵️ ${event.launchpad || "发射台"} 未认证代码线索`;
+        : BSC_GITHUB_PLATFORMS.has(eventPlatform(event)) ? "🟨 BSC 官方代码更新"
+        : isBinancePlatformEvent(event) ? `🟡 ${event.launchpad || "Binance"} 官方代码更新` : official ? `🧱 ${event.launchpad || "发射台"} 官方代码更新` : `🕵️ ${event.launchpad || "发射台"} 未认证代码线索`;
     const keyFiles = githubKeyFiles(files);
     const changeFacts = [
       ...(event.changeEvidence || []).map(githubChangeFact),
@@ -1937,6 +1989,13 @@ const compact = (event) => {
 };
 
 const TRUSTED_GITHUB_PULL_REQUEST_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
+const WATCHED_FOUR_FLAP_GITHUB_REPOSITORIES = new Set([
+  "flap-sh/flapvaultexample",
+  "flap-sh/flap-vault-component-template",
+  "flap-sh/flap-skills",
+  "four-meme-community/openfour-docs",
+  "four-meme-community/four-meme-ai",
+]);
 
 function isUntrustedOpenGithubPullRequest(event) {
   if (event?.type !== "github_module_update") return false;
@@ -2028,6 +2087,7 @@ export function isStrongAlert(event) {
     if (event.sourceTrust === "unverified_candidate") return false;
     if (event.xaiOfficial === true) return event.strong === true;
     if (isUniswapPlatformEvent(event)) return event.strong === true;
+    if (BSC_GITHUB_PLATFORMS.has(eventPlatform(event))) return event.sourceTrust === "official_verified";
     if (isBinancePlatformEvent(event)) return isRelevantBinanceGithubUpdate(event) && Boolean(event.modeChange?.candidate || event.strong);
     return isFocusPlatformEvent(event) || Boolean(event.modeChange?.candidate);
   }
@@ -4391,7 +4451,7 @@ function withFileLock(file, operation) {
 }
 
 async function mutateOutbox(config, mutation, { writeIf = () => true } = {}) {
-  const file = path.join(config.dataDir, "alert-outbox.json");
+  const file = config.alertOutboxPath || path.join(config.dataDir, "alert-outbox.json");
   return withFileLock(file, async () => {
     const outbox = await readOutbox(file);
     // Retention must use the same clock as enqueue, freshness and delivery.
@@ -4405,7 +4465,7 @@ async function mutateOutbox(config, mutation, { writeIf = () => true } = {}) {
 }
 
 async function inspectOutbox(config, inspection) {
-  const file = path.join(config.dataDir, "alert-outbox.json");
+  const file = config.alertOutboxPath || path.join(config.dataDir, "alert-outbox.json");
   return withFileLock(file, async () => inspection(await readOutbox(file)));
 }
 
@@ -4849,6 +4909,26 @@ export function alertDeliveryDisposition(event = {}) {
         : delayedTrackedTokenRecovery
         ? "flap_tracked_token_delayed_recovery"
         : "flap_tracked_token_monitor_only",
+    });
+  }
+  // Official Four.Meme/Flap repository commits and verified Binance product
+  // feature commits are monitoring updates, not trade entries. Keep their
+  // T2 classification and freshness ceiling, but do not route them through
+  // the generic T2 audit-only policy: that silently suppressed the GitHub
+  // updates users explicitly subscribed to in Telegram.
+  if (event.type === "github_module_update"
+    && event.sourceTrust === "official_verified"
+    && effectiveFreshnessDecision(event) !== "suppress"
+    && ((isFocusPlatformEvent(event)
+      && WATCHED_FOUR_FLAP_GITHUB_REPOSITORIES.has(String(event.repository || "").toLowerCase()))
+      || isRelevantBinanceGithubUpdate(event))
+    && isRelevantAlert(event)
+    && tier !== "T3") {
+    return Object.freeze({
+      mode: "immediate",
+      deliverImmediately: true,
+      tier,
+      reason: "official_github_repository_watch_only",
     });
   }
   const hardGateEligible = tier === "T0"
@@ -5757,30 +5837,44 @@ export async function cancelPendingFourRegistryEvent(config, cancellation) {
 async function claimAlertDestinations(config, eventId, force = false) {
   return mutateOutbox(config, (outbox) => {
     const entry = outbox.events[eventId];
-    if (!entry) return { event: null, destinations: [], destinationRetries: {}, createdAt: null, claimedAt: null, renderBundle: null, tradingPriority: null };
+    if (!entry) return { event: null, destinations: [], destinationRetries: {}, createdAt: null, claimedAt: null, renderBundle: null, tradingPriority: null, changed: false };
     const now = alertPipelineNow(config);
+    let changed = false;
     if (!["delivered", "suppressed"].includes(entry.status)) {
       // Also enforce current Genius filtering immediately before a direct retry;
       // old persisted render bundles are evidence, not permission to fan out.
       if (entry.event?.type === "genius_fun_update" && isGeniusOfficialEvent(entry.event)) {
-        entry.deliveryDisposition = alertDeliveryDisposition(entry.event);
-        disablePolicySuppressedDestinations(entry.destinations || {}, entry.deliveryDisposition, new Date(now).toISOString());
+        const disposition = alertDeliveryDisposition(entry.event);
+        if (JSON.stringify(entry.deliveryDisposition) !== JSON.stringify(disposition)) {
+          entry.deliveryDisposition = disposition;
+          changed = true;
+        }
+        changed = disablePolicySuppressedDestinations(entry.destinations || {}, entry.deliveryDisposition, new Date(now).toISOString()) || changed;
       }
-      disableExpiredTelegramDelivery(config, entry, now);
+      changed = disableExpiredTelegramDelivery(config, entry, now) || changed;
+      const previousStatus = entry.status;
       entry.status = outboxEntryStatus(entry.destinations);
-      if (entry.status === "suppressed") entry.suppressedAt ||= new Date(now).toISOString();
-      if (entry.status === "delivered") entry.deliveredAt ||= new Date(now).toISOString();
+      if (entry.status !== previousStatus) changed = true;
+      if (entry.status === "suppressed" && !entry.suppressedAt) {
+        entry.suppressedAt = new Date(now).toISOString();
+        changed = true;
+      }
+      if (entry.status === "delivered" && !entry.deliveredAt) {
+        entry.deliveredAt = new Date(now).toISOString();
+        changed = true;
+      }
     }
     if (["delivered", "suppressed"].includes(entry.status)) {
-      entry.updatedAt = new Date(now).toISOString();
+      if (changed) entry.updatedAt = new Date(now).toISOString();
       return {
         event: entry.event,
         destinations: [],
         destinationRetries: {},
         createdAt: entry.createdAt,
-        claimedAt: new Date(now).toISOString(),
+        claimedAt: entry.updatedAt || new Date(now).toISOString(),
         renderBundle: entry.renderBundle?.version === BILINGUAL_RENDER_VERSION ? entry.renderBundle : null,
         tradingPriority: entry.event?.tradingPriority || null,
+        changed,
       };
     }
     const immutableDuplicate = deliveredImmutableOpenFourDuplicate(outbox, eventId, entry.event);
@@ -5813,6 +5907,7 @@ async function claimAlertDestinations(config, eventId, force = false) {
         claimedAt: updatedAt,
         renderBundle: entry.renderBundle?.version === BILINGUAL_RENDER_VERSION ? entry.renderBundle : null,
         tradingPriority: entry.event?.tradingPriority || null,
+        changed: true,
       };
     }
     // Serialize every immutable Core proof by its base identity. Whichever
@@ -5820,15 +5915,15 @@ async function claimAlertDestinations(config, eventId, force = false) {
     // ordering; the waiter is rechecked against delivered ownership before it
     // can claim a destination.
     if (hasDeliveringOpenFourEntry(outbox, eventId, entry.event, now)) {
-      entry.updatedAt = new Date(now).toISOString();
       return {
         event: entry.event,
         destinations: [],
         destinationRetries: {},
         createdAt: entry.createdAt,
-        claimedAt: entry.updatedAt,
+        claimedAt: new Date(now).toISOString(),
         renderBundle: entry.renderBundle?.version === BILINGUAL_RENDER_VERSION ? entry.renderBundle : null,
         tradingPriority: entry.event?.tradingPriority || null,
+        changed,
       };
     }
     const claimed = [];
@@ -5845,9 +5940,10 @@ async function claimAlertDestinations(config, eventId, force = false) {
           updatedAt: new Date(now).toISOString(),
         };
         claimed.push(destination);
+        changed = true;
       }
     }
-    entry.updatedAt = new Date(now).toISOString();
+    if (changed) entry.updatedAt = new Date(now).toISOString();
     return {
       event: entry.event,
       destinations: claimed,
@@ -5856,8 +5952,9 @@ async function claimAlertDestinations(config, eventId, force = false) {
       claimedAt: new Date(now).toISOString(),
       renderBundle: entry.renderBundle?.version === BILINGUAL_RENDER_VERSION ? entry.renderBundle : null,
       tradingPriority: entry.event?.tradingPriority || null,
+      changed,
     };
-  });
+  }, { writeIf: (result) => result?.changed === true });
 }
 
 async function completeAlertDestinations(config, eventId, destinations, results) {
@@ -6008,7 +6105,35 @@ async function deliverOutboxEvent(config, eventId, { force = false, pipelineStar
   return finalEntry;
 }
 
-export async function drainAlertOutbox(config) {
+function outboxDestinationDue(destination, now) {
+  if (!destination || !["pending", "failed", "delivering"].includes(destination.status)) return false;
+  const dueAt = destination.status === "delivering"
+    ? Date.parse(destination.leaseUntil || "")
+    : Date.parse(destination.nextAttemptAt || "");
+  return !Number.isFinite(dueAt) || dueAt <= now;
+}
+
+function outboxEntryDue(entry, now) {
+  return Object.values(entry?.destinations || {}).some((destination) => outboxDestinationDue(destination, now));
+}
+
+function nextOutboxWorkAt(outbox, now) {
+  let earliest = null;
+  for (const entry of Object.values(outbox.events || {})) {
+    if (["delivered", "suppressed"].includes(entry.status) || isFlapQuoteProducerGatedEntry(entry)) continue;
+    for (const destination of Object.values(entry.destinations || {})) {
+      if (!destination || !["pending", "failed", "delivering"].includes(destination.status)) continue;
+      const dueAt = destination.status === "delivering"
+        ? Date.parse(destination.leaseUntil || "")
+        : Date.parse(destination.nextAttemptAt || "");
+      const candidate = Number.isFinite(dueAt) ? dueAt : now;
+      earliest = earliest === null ? candidate : Math.min(earliest, candidate);
+    }
+  }
+  return earliest;
+}
+
+async function runAlertOutbox(config) {
   const snapshot = await mutateOutbox(config, async (outbox) => {
     const now = alertPipelineNow(config);
     let changed = false;
@@ -6020,6 +6145,10 @@ export async function drainAlertOutbox(config) {
       // generic retry worker has no chain context and must leave it untouched.
       // The gate follows an exact canonical board/Portal takeover as well.
       if (isFlapQuoteProducerGatedEntry(entry)) continue;
+      // Failed Telegram deliveries carry an explicit nextAttemptAt. Do not
+      // repeatedly re-age, rewrite and retry a not-yet-due item; in particular
+      // it must not occupy the priority batch ahead of fresh pending signals.
+      if (!outboxEntryDue(entry, now)) continue;
       changed = true;
       const retryingDurableFlapTrackedToken = isDurablyAcceptedFlapTrackedTokenEntry(entry);
       const retryingDurableFourRegistry = isDurablyAcceptedFourRegistryEntry(entry);
@@ -6134,22 +6263,27 @@ export async function drainAlertOutbox(config) {
     }
     const pendingIds = Object.values(outbox.events || {})
       .filter((entry) => !["delivered", "suppressed"].includes(entry.status)
-        && !isFlapQuoteProducerGatedEntry(entry))
+        && !isFlapQuoteProducerGatedEntry(entry)
+        && outboxEntryDue(entry, now))
       .sort(compareTradingPriority)
       .slice(0, 100)
       .map((entry) => entry.id);
-    return { pendingIds, changed };
+    return { pendingIds, changed, nextWakeAt: nextOutboxWorkAt(outbox, now) };
   }, { writeIf: ({ changed }) => changed });
   const { pendingIds } = snapshot;
   for (const eventId of pendingIds) {
     try { await deliverOutboxEvent(config, eventId); }
     catch (error) { console.error(`[alert-outbox] ${eventId}: ${safeFailureMessage(error, [config.telegramToken, config.webhookUrl].filter(Boolean))}`); }
   }
-  return pendingIds.length;
+  return { pending: pendingIds.length, nextWakeAt: snapshot.nextWakeAt };
+}
+
+export async function drainAlertOutbox(config) {
+  return (await runAlertOutbox(config)).pending;
 }
 
 export function startAlertOutboxWorker(config) {
-  const key = path.join(config.dataDir, "alert-outbox.json");
+  const key = config.alertOutboxPath || path.join(config.dataDir, "alert-outbox.json");
   if (workers.has(key)) return workers.get(key);
   let runningPromise = null;
   let stopPromise = null;
@@ -6162,15 +6296,18 @@ export function startAlertOutboxWorker(config) {
     const execution = (async () => {
       const before = await outboxFileSignature(key);
       if (!force && before === idleSignature && Date.now() < idleUntil) return 0;
-      const pending = await drainAlertOutbox(config);
-      if (pending === 0) {
+      const result = await runAlertOutbox(config);
+      if (result.pending === 0) {
         idleSignature = await outboxFileSignature(key);
-        idleUntil = Date.now() + OUTBOX_IDLE_RECHECK_MS;
+        const maintenanceAt = Date.now() + OUTBOX_IDLE_RECHECK_MS;
+        idleUntil = result.nextWakeAt === null
+          ? maintenanceAt
+          : Math.min(maintenanceAt, Math.max(Date.now(), result.nextWakeAt));
       } else {
         idleSignature = null;
         idleUntil = 0;
       }
-      return pending;
+      return result.pending;
     })();
     runningPromise = execution.finally(() => { runningPromise = null; });
     return runningPromise;
@@ -6568,6 +6705,7 @@ export function isRelevantAlert(event) {
       && event.structural?.eligible === true;
   }
   if (event.type === "bsc_launchpad_update") {
+    if (event.kind === "flap_pool_launch") return isCanonicalFlapPoolLaunchUpdate(event);
     if (claimsFourRegistryUpdate(event)) return isStrictFourRegistryFirstTokenUpdate(event);
     if (event.kind === "flap_pool_token") return Boolean(flapTrackedTokenIdentity(event));
     if (claimsBscOpenFourFirstTokenUpdate(event)) return isStrictBscOpenFourFirstTokenUpdate(event);
@@ -6634,6 +6772,7 @@ export function isRelevantAlert(event) {
   if (event.type === "github_module_update") {
     if (event.xaiOfficial === true) return event.sourceTrust === "official_verified" && event.strong === true;
     if (isUniswapPlatformEvent(event)) return event.sourceTrust === "official_verified" && event.strong === true;
+    if (isFocusBscOrBinanceGithubEvent(event)) return true;
     if (isBinancePlatformEvent(event)) return isRelevantBinanceGithubUpdate(event);
     return isFocusPlatformEvent(event) || (event.sourceTrust !== "unverified_candidate" && Boolean(event.modeChange?.candidate));
   }

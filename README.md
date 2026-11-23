@@ -449,3 +449,8 @@ WEBHOOK_URL=https://example.com/robinhood-alert
 - LootPad V3: `0x280996bdDCd10A6eEc637Bfb55bD60131f31aa59`
 
 可通过 `KNOWN_FACTORIES` 追加，使用逗号分隔。
+
+## LIVE entry gates (paper-side)
+
+PR #6 adds consecutive-loss and paper-SQN gates before a LIVE ladder opens. They do **not** enable execution. Defaults: `LIVE_CONSECUTIVE_LOSS_PAUSE=3`, `LIVE_REQUIRE_PAPER_SQN=1.6`, `LIVE_REQUIRE_PAPER_CLOSED=30`. Inspect paper SQN with `npm run paper:sqn`.
+

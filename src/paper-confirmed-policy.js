@@ -176,7 +176,7 @@ export function confirmedPaperEntry(row, { sourceSafety, pulse, quoteHistory, na
   if (!(v.liquidity >= p.minLiquidity)) reasons.push('流动性低于 $20,000');
   if (!(v.volume.value > 0)) reasons.push('等待真实成交量');
   if (!(row.entryUsd >= p.minBudgetUsd)) reasons.push('预算低于 $1，固定成本不适合继续试单');
-  const costGate = paperCostGate(costs, { structureMain: memeExitMode && structural && !!route.reviewVersion, economics: route?.economics });
+  const costGate = paperCostGate(costs, { structureMain: memeExitMode && structural && !!route.reviewVersion, economics: route?.economics, evidence: v, chain: row.token?.chain });
   if (costGate.reason) (costGate.needsStructure ? missing : reasons).push(costGate.reason);
   const confirmation = structural ? route.confirmation : confirmPaperQuotes(quoteHistory, row.token, nowMs);
   if (!confirmation.ready) {

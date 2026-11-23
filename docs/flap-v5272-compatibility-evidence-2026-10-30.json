@@ -1,0 +1,45 @@
+{
+  "schema": "flap_portal_compatibility_evidence_v1",
+  "checkedAt": "2026-10-30T10:01:04.777Z",
+  "chainId": 56,
+  "portal": "0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0",
+  "sources": [
+    "bsc-mainnet.core.chainstack.com",
+    "bsc.rpc.sentio.xyz"
+  ],
+  "fixedBlock": {
+    "number": 129871644,
+    "hash": "0xc4f242d2d4d38c73108c2196f25a7ea0ae03c0c99e05ec75b58eb3a2f5107914",
+    "sameBeforeAfter": true
+  },
+  "proxy": {
+    "runtimeCodeHash": "0x0a3fe6f701ee3cb432f45912e054896327ce5902337eae4d62d01406005a91c3",
+    "runtimeCodeBytes": 2882
+  },
+  "implementation": {
+    "version": "v5.27.2",
+    "address": "0x6FC1ac64c90A5A6d9E7EFc0d4064452AF3FC9968",
+    "runtimeCodeHash": "0x90b3b19ddc87293d5bbd33167d7d977adf1cda5c078549b8cada05c6f9b3fa75",
+    "runtimeCodeBytes": 20643
+  },
+  "quoteCompatibility": {
+    "note": "getTokenV8Safe(address) eth_call succeeded at latest against prior sample token 0x16d4a9abe0c494263234b9eb312bcbbaa63a7777 (576 return bytes).",
+    "getTokenV8SafeOk": true
+  },
+  "upgrade": {
+    "block": 129871644,
+    "blockHash": "0xc4f242d2d4d38c73108c2196f25a7ea0ae03c0c99e05ec75b58eb3a2f5107914",
+    "transaction": "0x749ff286fa0b6caccdf2974e71e8d164fe752ab5b8af4ef578ca68f901090441",
+    "receiptStatus": "0x1",
+    "secondSource": {
+      "host": "bsc.rpc.sentio.xyz",
+      "status": "0x1",
+      "blockHash": "0xc4f242d2d4d38c73108c2196f25a7ea0ae03c0c99e05ec75b58eb3a2f5107914"
+    }
+  },
+  "rpcPolicy": {
+    "primary": "bsc-mainnet.core.chainstack.com",
+    "second": "bsc.rpc.sentio.xyz",
+    "note": "Activation proof via independent eth_getLogs/receipt/blockHash agreement; not a source audit."
+  }
+}

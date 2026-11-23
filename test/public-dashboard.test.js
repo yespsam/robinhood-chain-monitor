@@ -57,6 +57,31 @@ test('public entry diagnostics retain only aggregate states and remain idempoten
   assert.equal(JSON.stringify(result).includes('PRIVATE_SENTINEL'),false);
   assert.deepEqual(createPublicSnapshot(result,now),result);
 });
+test('public chart health exposes aggregate freshness only and remains idempotent',()=>{
+  const s=sample();s.researchPipeline={chartHealth:{version:'chart_health_v2',alert:true,hotKlineFresh:2,hotKlineStale:1,
+    hotKlineUnknown:1,hotCount:4,hotFetched:3,hotNotRequested:1,hotRequestCoverageRate:.75,
+    hotKlineMaxClosedAgeMs:150000,hotKlineFreshnessMaxAgeMs:120000,note:'热点最新收盘 K 线过期',
+    candles:[{raw:'PRIVATE_SENTINEL'}],apiKey:'PRIVATE_SENTINEL'}};
+  const r=createPublicSnapshot(s,now);assert.equal(r.researchPipeline.chartHealth.hotKlineFresh,2);
+  assert.equal(r.researchPipeline.chartHealth.hotKlineStale,1);assert.equal(r.researchPipeline.chartHealth.hotKlineMaxClosedAgeMs,150000);
+  assert.equal(r.researchPipeline.chartHealth.hotNotRequested,1);assert.equal(r.researchPipeline.chartHealth.hotRequestCoverageRate,.75);
+  assert.equal(JSON.stringify(r).includes('PRIVATE_SENTINEL'),false);assert.deepEqual(createPublicSnapshot(r,now),r);
+});
+test('public dashboard exposes bounded paper-sidecar status without raw research or secret fields',()=>{
+  const s=sample();s.strategyFocusSimulation={version:'second_breakout_narrative_paper_v1',mode:'paper_sidecar',enabled:true,
+    execution:false,signing:false,broadcast:false,status:'ready',entries:2,completedTrades:1,openPositions:1,
+    realizedPnlUsd:-1.25,unrealizedPnlUsd:null,note:'独立影子账本',secret:'PRIVATE_SENTINEL',
+    positions:[{chain:'bsc',address:`0x${'a'.repeat(40)}`,symbol:'TEST',entryPrice:1,ticketUsd:10,quantity:9,secret:'PRIVATE_SENTINEL'}],
+    latestChecks:[{signalKey:'bsc:signal',checkedAt:new Date(now).toISOString(),result:'rejected',reasons:['缺买盘'],payload:'PRIVATE_SENTINEL'}]};
+  s.strategyFocusShadow={version:'bounded_focus_shadow_journal_v1',status:'ready',sampleCount:3,entryAllowed:false,paperFillAllowed:false,
+    latestScan:{checkedAt:new Date(now).toISOString(),candidateCount:1,candidates:[{chain:'bsc',address:`0x${'b'.repeat(40)}`,researchOnly:true,
+      entryAllowed:false,paperFillAllowed:false,externalSecondBreakout:{status:'candidate',signalReady:true,reasons:[],metrics:{closedAt:new Date(now).toISOString()}}}]},
+    private:'PRIVATE_SENTINEL'};
+  const r=createPublicSnapshot(s,now);assert.equal(r.strategyFocusSimulation.entries,2);
+  assert.equal(r.strategyFocusSimulation.positions[0].symbol,'TEST');
+  assert.equal(r.strategyFocusShadow.latestScan.candidates[0].entryAllowed,false);
+  assert.equal(JSON.stringify(r).includes('PRIVATE_SENTINEL'),false);assert.deepEqual(createPublicSnapshot(r,now),r);
+});
 test('public fair-research counters expose no retry payloads or private data',()=>{
   const s=sample();s.researchPipeline={focusedReadBudget:{version:'fair_chart_detail_turn_v2',exploratoryConcurrency:1,
     chartTurnReserved:true,chartTurnDeferrals:4,detailBackoffCandidates:3,raw:'PRIVATE_SENTINEL'}};

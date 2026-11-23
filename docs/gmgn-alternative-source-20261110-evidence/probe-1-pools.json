@@ -1,0 +1,1146 @@
+{
+  "target": {
+    "chain": "bsc",
+    "network": "bsc",
+    "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+    "symbol": "MEME",
+    "diagnostic": "insufficient_contiguous_tail",
+    "historicalArtifact": "docs/gmgn-chart-backlog-20261110-excluded-second-pass-audit.json",
+    "historicalFrom": 1794243720,
+    "historicalTo": 1794247320
+  },
+  "url": "https://api.geckoterminal.com/api/v2/networks/bsc/tokens/0x19993b3cf15c1055063468eb932f5e335a7526ea/pools?include=base_token%2Cquote_token%2Cdex&include_inactive_source=true&page=1",
+  "requestedAt": "2026-11-10T04:43:48.598820+00:00",
+  "receivedAt": "2026-11-10T04:43:50.052946+00:00",
+  "httpStatus": 200,
+  "headers": {
+    "Date": "Tue, 10 Nov 2026 04:43:51 GMT",
+    "Cache-Control": "max-age=30, public, must-revalidate, s-maxage=60"
+  },
+  "rawResponse": {
+    "data": [
+      {
+        "id": "bsc_0xb3351e02821d14134bfc8c9aad1549d7e095e4372c7105c4066aaad64f07a819",
+        "type": "pool",
+        "attributes": {
+          "base_token_price_usd": "0.00008683888466",
+          "base_token_price_native_currency": "0.00000012614230361845",
+          "quote_token_price_usd": "688.42",
+          "quote_token_price_native_currency": "1.0",
+          "base_token_price_quote_token": "0.0000001261423036",
+          "quote_token_price_base_token": "7927554.60550933",
+          "address": "0xb3351e02821d14134bfc8c9aad1549d7e095e4372c7105c4066aaad64f07a819",
+          "name": "MEME / BNB",
+          "pool_created_at": "2026-11-08T03:47:56Z",
+          "token_price_usd": "0.00008683888466",
+          "fdv_usd": "96878.6127881134",
+          "market_cap_usd": null,
+          "price_change_percentage": {
+            "m5": "-0.1",
+            "m15": "-0.036",
+            "m30": "1.618",
+            "h1": "-2.86",
+            "h6": "-39.25",
+            "h24": "949.96"
+          },
+          "transactions": {
+            "m5": {
+              "buys": 2,
+              "sells": 1,
+              "buyers": 2,
+              "sellers": 1
+            },
+            "m15": {
+              "buys": 6,
+              "sells": 3,
+              "buyers": 4,
+              "sellers": 2
+            },
+            "m30": {
+              "buys": 11,
+              "sells": 5,
+              "buyers": 8,
+              "sellers": 4
+            },
+            "h1": {
+              "buys": 24,
+              "sells": 17,
+              "buyers": 14,
+              "sellers": 15
+            },
+            "h6": {
+              "buys": 410,
+              "sells": 330,
+              "buyers": 79,
+              "sellers": 115
+            },
+            "h24": {
+              "buys": 4703,
+              "sells": 4569,
+              "buyers": 436,
+              "sellers": 425
+            }
+          },
+          "volume_usd": {
+            "m5": "371.4337350044",
+            "m15": "813.7554561814",
+            "m30": "1151.9285288607",
+            "h1": "2957.3166025606",
+            "h6": "46218.2950773381",
+            "h24": "466712.232320211"
+          },
+          "reserve_in_usd": "30087.2375",
+          "last_trade_timestamp": "1794285799"
+        },
+        "relationships": {
+          "base_token": {
+            "data": {
+              "id": "bsc_0x19993b3cf15c1055063468eb932f5e335a7526ea",
+              "type": "token"
+            }
+          },
+          "quote_token": {
+            "data": {
+              "id": "bsc_0x0000000000000000000000000000000000000000",
+              "type": "token"
+            }
+          },
+          "dex": {
+            "data": {
+              "id": "uniswap-v4-bsc",
+              "type": "dex"
+            }
+          }
+        }
+      },
+      {
+        "id": "bsc_0xec7aacafa2840a9f099583f0bb7f1b789bee506d",
+        "type": "pool",
+        "attributes": {
+          "base_token_price_usd": "0.00009146575914",
+          "base_token_price_native_currency": "0.000000132884542054448",
+          "quote_token_price_usd": "0.000127878136053213",
+          "quote_token_price_native_currency": "0.000000185785672230845",
+          "base_token_price_quote_token": "0.7152572126",
+          "quote_token_price_base_token": "1.3980984497",
+          "address": "0xec7aacafa2840a9f099583f0bb7f1b789bee506d",
+          "name": "MEME / 自拉人生",
+          "pool_created_at": "2026-11-09T20:39:56Z",
+          "token_price_usd": "0.00009146575914",
+          "fdv_usd": "101675.505137364",
+          "market_cap_usd": null,
+          "price_change_percentage": {
+            "m5": "0",
+            "m15": "0",
+            "m30": "0",
+            "h1": "-2.77",
+            "h6": "-37.06",
+            "h24": "-51.17"
+          },
+          "transactions": {
+            "m5": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m15": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m30": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h1": {
+              "buys": 0,
+              "sells": 2,
+              "buyers": 0,
+              "sellers": 2
+            },
+            "h6": {
+              "buys": 18,
+              "sells": 24,
+              "buyers": 10,
+              "sellers": 13
+            },
+            "h24": {
+              "buys": 48,
+              "sells": 55,
+              "buyers": 15,
+              "sellers": 25
+            }
+          },
+          "volume_usd": {
+            "m5": "0.0",
+            "m15": "0.0",
+            "m30": "0.0",
+            "h1": "0.850592142",
+            "h6": "34.3405975845",
+            "h24": "84.4506577899"
+          },
+          "reserve_in_usd": "56.9937",
+          "last_trade_timestamp": "1794282623"
+        },
+        "relationships": {
+          "base_token": {
+            "data": {
+              "id": "bsc_0x19993b3cf15c1055063468eb932f5e335a7526ea",
+              "type": "token"
+            }
+          },
+          "quote_token": {
+            "data": {
+              "id": "bsc_0x3b27688def326eff59c59efd849becb4246f7777",
+              "type": "token"
+            }
+          },
+          "dex": {
+            "data": {
+              "id": "pancakeswap_v2",
+              "type": "dex"
+            }
+          }
+        }
+      },
+      {
+        "id": "bsc_0xdfad80d9a57a9c3d6f0f94da6837c31a8a47b79ad07af8746738c8a3dfd57f4f",
+        "type": "pool",
+        "attributes": {
+          "base_token_price_usd": "0.00008806223283",
+          "base_token_price_native_currency": "0.00000012793792542368",
+          "quote_token_price_usd": "0.996321597681572",
+          "quote_token_price_native_currency": "0.00144746861587862",
+          "base_token_price_quote_token": "0.00008838735709",
+          "quote_token_price_base_token": "11313.835292273",
+          "address": "0xdfad80d9a57a9c3d6f0f94da6837c31a8a47b79ad07af8746738c8a3dfd57f4f",
+          "name": "MEME / USDT 60%",
+          "pool_created_at": "2026-11-08T14:47:49Z",
+          "token_price_usd": "0.00008806223283",
+          "fdv_usd": "97892.0646447542",
+          "market_cap_usd": null,
+          "price_change_percentage": {
+            "m5": "0",
+            "m15": "0",
+            "m30": "0",
+            "h1": "0",
+            "h6": "0",
+            "h24": "322.88"
+          },
+          "transactions": {
+            "m5": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m15": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m30": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h1": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h6": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h24": {
+              "buys": 27,
+              "sells": 0,
+              "buyers": 11,
+              "sellers": 0
+            }
+          },
+          "volume_usd": {
+            "m5": "0.0",
+            "m15": "0.0",
+            "m30": "0.0",
+            "h1": "0.0",
+            "h6": "0.0",
+            "h24": "7.490099652"
+          },
+          "reserve_in_usd": "26.878",
+          "last_trade_timestamp": "1794256681"
+        },
+        "relationships": {
+          "base_token": {
+            "data": {
+              "id": "bsc_0x19993b3cf15c1055063468eb932f5e335a7526ea",
+              "type": "token"
+            }
+          },
+          "quote_token": {
+            "data": {
+              "id": "bsc_0x55d398326f99059ff775485246999027b3197955",
+              "type": "token"
+            }
+          },
+          "dex": {
+            "data": {
+              "id": "uniswap-v4-bsc",
+              "type": "dex"
+            }
+          }
+        }
+      },
+      {
+        "id": "bsc_0xc14db5eca8d7ee30f0e64ce3eaf84711211848f00a37b12157b5561dc430e7da",
+        "type": "pool",
+        "attributes": {
+          "base_token_price_usd": "0.00002458057986",
+          "base_token_price_native_currency": "0.0000000357109772484314",
+          "quote_token_price_usd": "0.996321597681572",
+          "quote_token_price_native_currency": "0.00144746861587862",
+          "base_token_price_quote_token": "0.00002467133094",
+          "quote_token_price_base_token": "40532.876090424",
+          "address": "0xc14db5eca8d7ee30f0e64ce3eaf84711211848f00a37b12157b5561dc430e7da",
+          "name": "MEME / USDT 89%",
+          "pool_created_at": "2026-11-08T21:42:12Z",
+          "token_price_usd": "0.00002458057986",
+          "fdv_usd": "27324.3550081884",
+          "market_cap_usd": null,
+          "price_change_percentage": {
+            "m5": "0",
+            "m15": "0",
+            "m30": "0",
+            "h1": "0",
+            "h6": "0",
+            "h24": "64"
+          },
+          "transactions": {
+            "m5": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m15": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m30": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h1": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h6": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h24": {
+              "buys": 11,
+              "sells": 0,
+              "buyers": 8,
+              "sellers": 0
+            }
+          },
+          "volume_usd": {
+            "m5": "0.0",
+            "m15": "0.0",
+            "m30": "0.0",
+            "h1": "0.0",
+            "h6": "0.0",
+            "h24": "0.7648432208"
+          },
+          "reserve_in_usd": "5.7202",
+          "last_trade_timestamp": "1794256681"
+        },
+        "relationships": {
+          "base_token": {
+            "data": {
+              "id": "bsc_0x19993b3cf15c1055063468eb932f5e335a7526ea",
+              "type": "token"
+            }
+          },
+          "quote_token": {
+            "data": {
+              "id": "bsc_0x55d398326f99059ff775485246999027b3197955",
+              "type": "token"
+            }
+          },
+          "dex": {
+            "data": {
+              "id": "uniswap-v4-bsc",
+              "type": "dex"
+            }
+          }
+        }
+      },
+      {
+        "id": "bsc_0x897c01d8e8d01ee4b90be0bc3f3bb1543b7307045b1e7c05269834be8ccb804b",
+        "type": "pool",
+        "attributes": {
+          "base_token_price_usd": "0.0001229354624",
+          "base_token_price_native_currency": "0.000000177966157649875",
+          "quote_token_price_usd": "0.999281638364119",
+          "quote_token_price_native_currency": "0.00144659897270349",
+          "base_token_price_quote_token": "0.000123023838",
+          "quote_token_price_base_token": "8128.5059575736",
+          "address": "0x897c01d8e8d01ee4b90be0bc3f3bb1543b7307045b1e7c05269834be8ccb804b",
+          "name": "MEME / USDT 33.033%",
+          "pool_created_at": "2026-11-09T20:33:03Z",
+          "token_price_usd": "0.0001229354624",
+          "fdv_usd": "136657.972954483",
+          "market_cap_usd": null,
+          "price_change_percentage": {
+            "m5": "0",
+            "m15": "0",
+            "m30": "0",
+            "h1": "0",
+            "h6": "-11.16",
+            "h24": "-29.46"
+          },
+          "transactions": {
+            "m5": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m15": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m30": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h1": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h6": {
+              "buys": 0,
+              "sells": 2,
+              "buyers": 0,
+              "sellers": 2
+            },
+            "h24": {
+              "buys": 0,
+              "sells": 3,
+              "buyers": 0,
+              "sellers": 2
+            }
+          },
+          "volume_usd": {
+            "m5": "0.0",
+            "m15": "0.0",
+            "m30": "0.0",
+            "h1": "0.0",
+            "h6": "0.3459261293",
+            "h24": "0.5023526599"
+          },
+          "reserve_in_usd": "3.5838",
+          "last_trade_timestamp": "1794273308"
+        },
+        "relationships": {
+          "base_token": {
+            "data": {
+              "id": "bsc_0x19993b3cf15c1055063468eb932f5e335a7526ea",
+              "type": "token"
+            }
+          },
+          "quote_token": {
+            "data": {
+              "id": "bsc_0x55d398326f99059ff775485246999027b3197955",
+              "type": "token"
+            }
+          },
+          "dex": {
+            "data": {
+              "id": "uniswap-v4-bsc",
+              "type": "dex"
+            }
+          }
+        }
+      },
+      {
+        "id": "bsc_0x552903f1091a1e7e66ca61149c1d49edd895ff23439b8c830ef39d9a1716351f",
+        "type": "pool",
+        "attributes": {
+          "base_token_price_usd": "0.00005336869038",
+          "base_token_price_native_currency": "0.0000000775358346983088",
+          "quote_token_price_usd": "1.00130726020803",
+          "quote_token_price_native_currency": "0.00145473298398691",
+          "base_token_price_quote_token": "0.0000532990147",
+          "quote_token_price_base_token": "18762.0729130893",
+          "address": "0x552903f1091a1e7e66ca61149c1d49edd895ff23439b8c830ef39d9a1716351f",
+          "name": "MEME / USDT 75%",
+          "pool_created_at": "2026-11-08T20:42:11Z",
+          "token_price_usd": "0.00005336869038",
+          "fdv_usd": "59325.9007952959",
+          "market_cap_usd": null,
+          "price_change_percentage": {
+            "m5": "0",
+            "m15": "0",
+            "m30": "0",
+            "h1": "0",
+            "h6": "0",
+            "h24": "264.62"
+          },
+          "transactions": {
+            "m5": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m15": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m30": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h1": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h6": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h24": {
+              "buys": 12,
+              "sells": 0,
+              "buyers": 7,
+              "sellers": 0
+            }
+          },
+          "volume_usd": {
+            "m5": "0.0",
+            "m15": "0.0",
+            "m30": "0.0",
+            "h1": "0.0",
+            "h6": "0.0",
+            "h24": "0.4399243556"
+          },
+          "reserve_in_usd": "1.5851",
+          "last_trade_timestamp": "1794256668"
+        },
+        "relationships": {
+          "base_token": {
+            "data": {
+              "id": "bsc_0x19993b3cf15c1055063468eb932f5e335a7526ea",
+              "type": "token"
+            }
+          },
+          "quote_token": {
+            "data": {
+              "id": "bsc_0x55d398326f99059ff775485246999027b3197955",
+              "type": "token"
+            }
+          },
+          "dex": {
+            "data": {
+              "id": "uniswap-v4-bsc",
+              "type": "dex"
+            }
+          }
+        }
+      },
+      {
+        "id": "bsc_0x88fbad72b0628ccf5ea223aafe870420fb093321a5c1711eb9860ab08bbf99e8",
+        "type": "pool",
+        "attributes": {
+          "base_token_price_usd": "0.00006487769572",
+          "base_token_price_native_currency": "0.0000000942140741238055",
+          "quote_token_price_usd": "0.999755114834193",
+          "quote_token_price_native_currency": "0.00145182410449042",
+          "base_token_price_quote_token": "0.0000648935872",
+          "quote_token_price_base_token": "15409.8431470291",
+          "address": "0x88fbad72b0628ccf5ea223aafe870420fb093321a5c1711eb9860ab08bbf99e8",
+          "name": "MEME / USDC 68%",
+          "pool_created_at": "2026-11-09T17:57:49Z",
+          "token_price_usd": "0.00006487769572",
+          "fdv_usd": "72119.5838366404",
+          "market_cap_usd": null,
+          "price_change_percentage": {
+            "m5": "0",
+            "m15": "0",
+            "m30": "0",
+            "h1": "0",
+            "h6": "0",
+            "h24": "2.16"
+          },
+          "transactions": {
+            "m5": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m15": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m30": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h1": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h6": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h24": {
+              "buys": 2,
+              "sells": 0,
+              "buyers": 2,
+              "sellers": 0
+            }
+          },
+          "volume_usd": {
+            "m5": "0.0",
+            "m15": "0.0",
+            "m30": "0.0",
+            "h1": "0.0",
+            "h6": "0.0",
+            "h24": "0.09742596902"
+          },
+          "reserve_in_usd": "2.8257",
+          "last_trade_timestamp": "1794256765"
+        },
+        "relationships": {
+          "base_token": {
+            "data": {
+              "id": "bsc_0x19993b3cf15c1055063468eb932f5e335a7526ea",
+              "type": "token"
+            }
+          },
+          "quote_token": {
+            "data": {
+              "id": "bsc_0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+              "type": "token"
+            }
+          },
+          "dex": {
+            "data": {
+              "id": "uniswap-v4-bsc",
+              "type": "dex"
+            }
+          }
+        }
+      },
+      {
+        "id": "bsc_0x6c111d09ab0189a95bb62c3e2860450422b00602321fc7c0502c121d6e70af19",
+        "type": "pool",
+        "attributes": {
+          "base_token_price_usd": "0.0001105899",
+          "base_token_price_native_currency": "0.000000160615069567114",
+          "quote_token_price_usd": "0.9941452840575",
+          "quote_token_price_native_currency": "0.00144384535983022",
+          "base_token_price_quote_token": "0.0001112411855",
+          "quote_token_price_base_token": "8989.4762908713",
+          "address": "0x6c111d09ab0189a95bb62c3e2860450422b00602321fc7c0502c121d6e70af19",
+          "name": "MEME / USDT 16.8%",
+          "pool_created_at": "2026-11-09T20:21:50Z",
+          "token_price_usd": "0.0001105899",
+          "fdv_usd": "122934.353263058",
+          "market_cap_usd": null,
+          "price_change_percentage": {
+            "m5": "0",
+            "m15": "0",
+            "m30": "0",
+            "h1": "0",
+            "h6": "-0.7",
+            "h24": "-21.54"
+          },
+          "transactions": {
+            "m5": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m15": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m30": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h1": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h6": {
+              "buys": 0,
+              "sells": 2,
+              "buyers": 0,
+              "sellers": 2
+            },
+            "h24": {
+              "buys": 2,
+              "sells": 3,
+              "buyers": 2,
+              "sellers": 2
+            }
+          },
+          "volume_usd": {
+            "m5": "0.0",
+            "m15": "0.0",
+            "m30": "0.0",
+            "h1": "0.0",
+            "h6": "0.1043856792",
+            "h24": "0.4365101333"
+          },
+          "reserve_in_usd": "0.4135",
+          "last_trade_timestamp": "1794272334"
+        },
+        "relationships": {
+          "base_token": {
+            "data": {
+              "id": "bsc_0x19993b3cf15c1055063468eb932f5e335a7526ea",
+              "type": "token"
+            }
+          },
+          "quote_token": {
+            "data": {
+              "id": "bsc_0x55d398326f99059ff775485246999027b3197955",
+              "type": "token"
+            }
+          },
+          "dex": {
+            "data": {
+              "id": "uniswap-v4-bsc",
+              "type": "dex"
+            }
+          }
+        }
+      },
+      {
+        "id": "bsc_0x45c0173c61446950e206f633a821849dc14dee2cc0b13a6071b2225ee1007371",
+        "type": "pool",
+        "attributes": {
+          "base_token_price_usd": "0.00003675927627",
+          "base_token_price_native_currency": "0.0000000533229996448456",
+          "quote_token_price_usd": "0.997754594211107",
+          "quote_token_price_native_currency": "0.00144734263778683",
+          "base_token_price_quote_token": "0.00003684200151",
+          "quote_token_price_base_token": "27142.9335826334",
+          "address": "0x45c0173c61446950e206f633a821849dc14dee2cc0b13a6071b2225ee1007371",
+          "name": "MEME / USDT 80%",
+          "pool_created_at": "2026-11-08T04:35:40Z",
+          "token_price_usd": "0.00003675927627",
+          "fdv_usd": "40862.4825112468",
+          "market_cap_usd": null,
+          "price_change_percentage": {
+            "m5": "0",
+            "m15": "0",
+            "m30": "0",
+            "h1": "0",
+            "h6": "0",
+            "h24": "380.73"
+          },
+          "transactions": {
+            "m5": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m15": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m30": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h1": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h6": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h24": {
+              "buys": 10,
+              "sells": 0,
+              "buyers": 4,
+              "sellers": 0
+            }
+          },
+          "volume_usd": {
+            "m5": "0.0",
+            "m15": "0.0",
+            "m30": "0.0",
+            "h1": "0.0",
+            "h6": "0.0",
+            "h24": "0.3433383878"
+          },
+          "reserve_in_usd": "0.2757",
+          "last_trade_timestamp": "1794256290"
+        },
+        "relationships": {
+          "base_token": {
+            "data": {
+              "id": "bsc_0x19993b3cf15c1055063468eb932f5e335a7526ea",
+              "type": "token"
+            }
+          },
+          "quote_token": {
+            "data": {
+              "id": "bsc_0x55d398326f99059ff775485246999027b3197955",
+              "type": "token"
+            }
+          },
+          "dex": {
+            "data": {
+              "id": "uniswap-v4-bsc",
+              "type": "dex"
+            }
+          }
+        }
+      },
+      {
+        "id": "bsc_0x1225ff7c13b3529dd075b43c98a2b415d9836cc6e2ec71fddb867921a80d6891",
+        "type": "pool",
+        "attributes": {
+          "base_token_price_usd": "0.00008943467779",
+          "base_token_price_native_currency": "0.000000129929943175849",
+          "quote_token_price_usd": "0.997092895613838",
+          "quote_token_price_native_currency": "0.00144856812228704",
+          "base_token_price_quote_token": "0.00008969543177",
+          "quote_token_price_base_token": "11148.8398045901",
+          "address": "0x1225ff7c13b3529dd075b43c98a2b415d9836cc6e2ec71fddb867921a80d6891",
+          "name": "MEME / USDT 30%",
+          "pool_created_at": "2026-11-09T18:16:38Z",
+          "token_price_usd": "0.00008943467779",
+          "fdv_usd": "99417.7069823162",
+          "market_cap_usd": null,
+          "price_change_percentage": {
+            "m5": "0",
+            "m15": "0",
+            "m30": "0",
+            "h1": "0",
+            "h6": "0",
+            "h24": "30.03"
+          },
+          "transactions": {
+            "m5": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m15": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m30": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h1": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h6": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h24": {
+              "buys": 2,
+              "sells": 0,
+              "buyers": 2,
+              "sellers": 0
+            }
+          },
+          "volume_usd": {
+            "m5": "0.0",
+            "m15": "0.0",
+            "m30": "0.0",
+            "h1": "0.0",
+            "h6": "0.0",
+            "h24": "0.1751673746"
+          },
+          "reserve_in_usd": "0.0",
+          "last_trade_timestamp": "1794253692"
+        },
+        "relationships": {
+          "base_token": {
+            "data": {
+              "id": "bsc_0x19993b3cf15c1055063468eb932f5e335a7526ea",
+              "type": "token"
+            }
+          },
+          "quote_token": {
+            "data": {
+              "id": "bsc_0x55d398326f99059ff775485246999027b3197955",
+              "type": "token"
+            }
+          },
+          "dex": {
+            "data": {
+              "id": "uniswap-v4-bsc",
+              "type": "dex"
+            }
+          }
+        }
+      },
+      {
+        "id": "bsc_0x96dac5fcd8b6b23abb1aeb8d480ca842622c8e9087f1356a9e7e0dc7e8b4aeea",
+        "type": "pool",
+        "attributes": {
+          "base_token_price_usd": "0.000220132487",
+          "base_token_price_native_currency": "0.000000319815907071935",
+          "quote_token_price_usd": "0.12166851982819",
+          "quote_token_price_native_currency": "0.000176764132190713",
+          "base_token_price_quote_token": "0.001809280554",
+          "quote_token_price_base_token": "552.7058794826",
+          "address": "0x96dac5fcd8b6b23abb1aeb8d480ca842622c8e9087f1356a9e7e0dc7e8b4aeea",
+          "name": "MEME / ACU 82.98%",
+          "pool_created_at": "2026-11-08T20:22:36Z",
+          "token_price_usd": "0.000220132487",
+          "fdv_usd": "244704.488579279",
+          "market_cap_usd": null,
+          "price_change_percentage": {
+            "m5": "0",
+            "m15": "0",
+            "m30": "0",
+            "h1": "0",
+            "h6": "0",
+            "h24": "163.78"
+          },
+          "transactions": {
+            "m5": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m15": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m30": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h1": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h6": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h24": {
+              "buys": 14,
+              "sells": 0,
+              "buyers": 6,
+              "sellers": 0
+            }
+          },
+          "volume_usd": {
+            "m5": "0.0",
+            "m15": "0.0",
+            "m30": "0.0",
+            "h1": "0.0",
+            "h6": "0.0",
+            "h24": "3.6333944345"
+          },
+          "reserve_in_usd": "0.0",
+          "last_trade_timestamp": "1794256665"
+        },
+        "relationships": {
+          "base_token": {
+            "data": {
+              "id": "bsc_0x19993b3cf15c1055063468eb932f5e335a7526ea",
+              "type": "token"
+            }
+          },
+          "quote_token": {
+            "data": {
+              "id": "bsc_0x6ef2ffb38d64afe18ce782da280b300e358cfeaf",
+              "type": "token"
+            }
+          },
+          "dex": {
+            "data": {
+              "id": "uniswap-v4-bsc",
+              "type": "dex"
+            }
+          }
+        }
+      }
+    ],
+    "included": [
+      {
+        "id": "bsc_0x19993b3cf15c1055063468eb932f5e335a7526ea",
+        "type": "token",
+        "attributes": {
+          "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+          "name": "memecoin",
+          "symbol": "MEME",
+          "decimals": 9,
+          "image_url": null,
+          "coingecko_coin_id": null
+        }
+      },
+      {
+        "id": "bsc_0x0000000000000000000000000000000000000000",
+        "type": "token",
+        "attributes": {
+          "address": "0x0000000000000000000000000000000000000000",
+          "name": "BNB",
+          "symbol": "BNB",
+          "decimals": 18,
+          "image_url": null,
+          "coingecko_coin_id": null
+        }
+      },
+      {
+        "id": "uniswap-v4-bsc",
+        "type": "dex",
+        "attributes": {
+          "name": "Uniswap V4 (BSC)"
+        }
+      },
+      {
+        "id": "bsc_0x3b27688def326eff59c59efd849becb4246f7777",
+        "type": "token",
+        "attributes": {
+          "address": "0x3b27688def326eff59c59efd849becb4246f7777",
+          "name": "自拉人生",
+          "symbol": "自拉人生",
+          "decimals": 18,
+          "image_url": null,
+          "coingecko_coin_id": null
+        }
+      },
+      {
+        "id": "pancakeswap_v2",
+        "type": "dex",
+        "attributes": {
+          "name": "Pancakeswap V2 (BSC)"
+        }
+      },
+      {
+        "id": "bsc_0x55d398326f99059ff775485246999027b3197955",
+        "type": "token",
+        "attributes": {
+          "address": "0x55d398326f99059ff775485246999027b3197955",
+          "name": "Tether USD",
+          "symbol": "USDT",
+          "decimals": 18,
+          "image_url": "https://coin-images.coingecko.com/coins/images/35021/large/USDT.png?1707233575",
+          "coingecko_coin_id": "binance-bridged-usdt-bnb-smart-chain"
+        }
+      },
+      {
+        "id": "bsc_0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+        "type": "token",
+        "attributes": {
+          "address": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+          "name": "USD Coin",
+          "symbol": "USDC",
+          "decimals": 18,
+          "image_url": "https://coin-images.coingecko.com/coins/images/35220/large/USDC.jpg?1707919050",
+          "coingecko_coin_id": "binance-bridged-usdc-bnb-smart-chain"
+        }
+      },
+      {
+        "id": "bsc_0x6ef2ffb38d64afe18ce782da280b300e358cfeaf",
+        "type": "token",
+        "attributes": {
+          "address": "0x6ef2ffb38d64afe18ce782da280b300e358cfeaf",
+          "name": "ACU",
+          "symbol": "ACU",
+          "decimals": 12,
+          "image_url": "https://coin-images.coingecko.com/coins/images/34367/large/Acurast-symbol-dark-bg.png?1728418440",
+          "coingecko_coin_id": "acurast"
+        }
+      }
+    ]
+  }
+}

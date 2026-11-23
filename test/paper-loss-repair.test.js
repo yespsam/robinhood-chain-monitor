@@ -9,6 +9,8 @@ import {createPaperStrategyRuntime} from '../src/paper-strategy-runtime.js';
 import {assessMemeExit,MEME_EXIT_POLICY} from '../src/paper-meme-exit.js';
 import {opportunityChart} from '../src/paper-opportunity-policy.js';
 import {ESTIMATED_COST_VERSION} from '../src/paper-estimated-cost.js';
+import {buildNarrativeThesis,createNarrativeResearchIndex} from '../src/paper-narrative-thesis.js';
+import {assessPaperNarrative} from '../src/paper-strategy-analysis.js';
 
 // Offline fixtures; no network, account secrets or runtime data.
 const NOW=Date.parse('2026-09-28T00:00:00Z'),iso=t=>new Date(t).toISOString(),CA='0x'+'a'.repeat(40);
@@ -22,6 +24,28 @@ const input=()=>({...modes,nowMs:NOW,token:{...token},observedAt:iso(NOW),market
   requireFastQuote:true,compoundingCash:100,klineStatus:'ok',candles:candles(),
   quoteHistory:[-4000,0].map(d=>({...token,status:'ok',observedAt:iso(NOW+d),price:d?1.028:1.03}))});
 const row=()=>evaluatePaperStrategies(input())[0];
+
+test('ticker research cannot borrow the exact-CA event catalyst, while narrative plus control stays admitted',()=>{
+  const candidate={...token,symbol:'Mooncake',name:'Mooncake',marketStage:'internal'};
+  const source={chain:candidate.chain,tokenAddress:CA,sourceAuthenticated:true,sourceKind:'authenticated_social',
+    matchKind:'ticker',reputableAuthor:true,sourceUrl:'https://x.com/example/status/901',sourceAt:iso(NOW-10000),
+    sourceText:'Mooncake meme community launch celebrates the holiday',authorKey:'x-id:901'};
+  const narrative={symbol:candidate.symbol,sources:[source]};
+  const bound=buildNarrativeThesis({token:candidate,narrative,index:createNarrativeResearchIndex({nowMs:NOW}),nowMs:NOW});
+  const result={token:candidate,evidence:{marketStage:'internal',opportunity:{id:'flow_momentum',basis:'flow'},narrativeThesis:bound}};
+  const plain=repairEntryReview(result,null,NOW);
+  assert.equal(plain.catalystReady,false);assert.equal(plain.entryPathAllowed,false);
+  result.evidence.narrativeAssessment=assessPaperNarrative({token:candidate,chain:candidate.chain,address:CA,narrative,nowMs:NOW});
+  assert.equal(result.evidence.narrativeAssessment.eligible,true,'ticker research policy is unchanged');
+  assert.equal(repairEntryReview(result,null,NOW).catalystReady,false,'name research alone cannot skip the control gate');
+  result.evidence.safety={metrics:{top10HolderRate:.4,bundlerRate:.1,devTeamHoldRate:.1}};
+  result.evidence.flow={netBuyUsd:600,uniqueBuyerCount:2,smartMoneyCount:1};
+  const controlled=repairEntryReview(result,null,NOW);
+  assert.equal(controlled.catalystReady,true);assert.equal(controlled.entryPath,'narrative_control');
+  const direct=buildNarrativeThesis({token:candidate,narrative:{sources:[{...source,matchKind:'ca'}]},nowMs:NOW});
+  const directReview=repairEntryReview({token:candidate,evidence:{marketStage:'internal',opportunity:{basis:'flow'},narrativeThesis:direct}},null,NOW);
+  assert.equal(directReview.catalystReady,true);assert.equal(directReview.entryPath,'event_narrative');
+});
 
 test('repair diagnostics distinguish missing catalyst and structure from unavailable actual fees',()=>{
   const r=row();r.evidence.costAssumptions.version=ESTIMATED_COST_VERSION;

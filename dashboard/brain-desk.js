@@ -22,8 +22,11 @@ export function renderBrainTelemetry(snapshot, online) {
   const scanChains=snapshot?.scanScope?.scanChains;
   const discovery=snapshot?.discoveryScope;
   const ages=rows(c.marketSourceAges).filter(s=>(!scanChains||scanChains.includes(s.chain))&&Number.isFinite(s.ageMs)&&s.ageMs>=0);
+  const health=p.chartHealth,pct=rate=>Number.isFinite(rate)?`${Math.round(rate*100)}%`:'待测';
   const fields=[['本地扫描间隔',seconds(c.actualTickGapMs)],['本轮计算耗时',seconds(c.lastTickDurationMs)],
-    ['最近报价排队',seconds(c.lastQuoteTiming?.queueMs)],['K 线处理中',Number.isFinite(p.chartRequestsPending)?`${p.chartRequestsPending} 个`:'待测']];
+    ['最近报价排队',seconds(c.lastQuoteTiming?.queueMs)],['K 线处理中',Number.isFinite(p.chartRequestsPending)?`${p.chartRequestsPending} 个`:'待测'],
+    ...(health?[['热点 K 线结构',`${value(health.hotChartReady)}/${value(health.hotCount)}${health.warmup?' · 预热':''}`],['热点 1m 新鲜',`${value(health.hotKlineFresh)}/${value(health.hotCount)} · 陈旧 ${value(health.hotKlineStale)} · 未证实 ${value(health.hotKlineUnknown)} · 最旧 ${Number.isFinite(health.hotKlineMaxClosedAgeMs)?seconds(health.hotKlineMaxClosedAgeMs):'待测'}`],['未请求',Number.isFinite(health.notRequested)?`${health.notRequested} 个`:'待测'],
+      ['空响应',pct(health.fetchedUnavailableRatio)],['K 线排队',Number.isFinite(health.queueWaitMedianMs)?seconds(health.queueWaitMedianMs):'待测']]:[])];
   return `<dl class="brain-telemetry-metrics">${fields.map(([label,v])=>`<div><dt>${esc(label)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
     <div class="brain-feed-strip"><span>${scanChains?`交易扫描：${scanChains.map(c=>esc(chain(c))).join('、')} · `:''}${online?'行情年龄':'上次记录 · 连接待恢复'}</span>${ages.map(s=>`<span data-stale="${s.status!=='ok'||s.ageMs>120000}">${esc(chain(s.chain))}<b>${Math.round(s.ageMs/1000)}s</b></span>`).join('')||'<span>等待来源时间</span>'}<small>${scanChains?'TG 新闻保持；其他链旧仓只做退出管理。':''}本地扫描 ≠ 每个 CA 的上游刷新</small></div>
     ${discovery?.version==='gmgn_three_lists_v1'?`<div class="brain-feed-strip"><span>GMGN 战壕/热门＋内盘快线</span>${rows(discovery.feeds).map(f=>`<span data-stale="${f.status!=='ok'}">${esc(f.label)}<b>${value(f.count)}</b></span>`).join('')}<small>四类去重 ${value(discovery.uniqueCandidates)} 个 · 5分钟是榜单统计窗口 · 内盘地址与逐笔放量可独立发现</small></div>`:''}`;
@@ -51,7 +54,8 @@ export function buildBrainView(snapshot, now=Date.now(), connected=true, selecte
     news:[['自有原文',`${value(s.newsWire?.ownDocumentCount)} 条已收录`],['GMGN 消息',`${value(s.newsWire?.gmgnSignalCount)} 条平台信号`],['覆盖说明',s.newsWire?.fullTwitterConnected?'以记录的来源范围为准':'非全量推特；平台喊单不等于原始推文']],
     narrative:[['带来源候选',`${value(s.narrativeDesk?.withSources)} 个`],['社区题材关联',`${value(s.narrativeDesk?.communityLinked)} 个`],['明确 CA 对应',`${value(s.narrativeDesk?.directCa)} 个；不等于作者发行`]],
     wallet:[['深采样钱包',`${value(s.learning?.walletCount)} 个`],['教师候选',`${value(s.learning?.roles?.teacher)} 个；不等于可直接跟单`],['当前局限','标签、单币盈利、长期盈利分开记录；同源资金不是控盘证明。']],
-    market:[['资料成功 / 请求',`${value(p.detailsSucceeded)} / ${value(p.detailsRequested)}`],['K 线待处理',`${value(p.chartRequestsPending)} 个`],['行情覆盖',`${rows(s.scanScope?.scanChains||p.stageSnapshot).length} 条扫描链；逐币上游更新速度不同`]],
+    market:[['资料成功 / 请求',`${value(p.detailsSucceeded)} / ${value(p.detailsRequested)}`],['K 线待处理',`${value(p.chartRequestsPending)} 个`],['行情覆盖',`${rows(s.scanScope?.scanChains||p.stageSnapshot).length} 条扫描链；逐币上游更新速度不同`],
+      ...(p.chartHealth?[['K 线供给',`${p.chartHealth.warmup?'预热':p.chartHealth.alert?'告警':'正常'} · 热点结构 ${value(p.chartHealth.hotChartReady)}/${value(p.chartHealth.hotCount)} · 1m 新鲜 ${value(p.chartHealth.hotKlineFresh)}/${value(p.chartHealth.hotCount)} · 陈旧 ${value(p.chartHealth.hotKlineStale)} · 未证实 ${value(p.chartHealth.hotKlineUnknown)} · 最旧收盘 ${Number.isFinite(p.chartHealth.hotKlineMaxClosedAgeMs)?(p.chartHealth.hotKlineMaxClosedAgeMs/1000).toFixed(1)+'s':'待测'} · 未请求 ${value(p.chartHealth.notRequested)} · 空响应 ${value(Number.isFinite(p.chartHealth.fetchedUnavailableRatio)?p.chartHealth.fetchedUnavailableRatio*100:null)}%`],['供给说明',p.chartHealth.note]]:[]),],
     decision:[['本轮候选',`${items.length} 个（非全链代币总数）`],['显示条件通过',`${ready} 个；${entry.blocked?'账户暂停或受阻，不会提交新仓':'不是已下单'}`],['开仓状态',entry.label],...(entry.blocked?entry.metrics:[])],
     execution:[['主盘持仓',`${held} 个`],['账本成交',`${s.publicSummary?.totalTrades??rows(s.account?.trades).length} 条；买卖各计一笔`],['百笔复盘',`${value(s.tradeCountReview?.pendingFills)} / 100；${value(s.tradeCountReview?.completedBatches)} 批完成`]]
   };
@@ -71,6 +75,7 @@ export function buildBrainView(snapshot, now=Date.now(), connected=true, selecte
   if(p.focusedReadBudget){const b=p.focusedReadBudget;
     facts.market.push(['研究调度',b.note],['K线轮次保留 / 缺字段退避',`${b.chartTurnReserved?'已保留下一轮':'按需调度'}；${value(b.detailBackoffCandidates)} 个候选等待重试，未知字段未放行`]);
   }
+  if(p.chartFallback?.enabled)facts.market.push(['备用 K 线',`GeckoTerminal · 已采用 ${value(p.chartFallback.accepted)} 个完整窗口；${p.chartFallback.pending?'正在补查':'按需补查'}，保留来源与原始收盘时间`]);
   if(['eligible_catalyst_recency_cost_v2','eligible_algorithm_catalyst_v3'].includes(p.candidateSelectionPolicy))facts.decision.push(
     ['选标排序','合格候选先看核实事件 / 新底池 / 集体盈利钱包信号，再看单独核实盈利钱包；同类催化看新鲜度，再比较成本。纯量价独立记录，不补故事。'],
     ['重点观察池',`${rows(p.hotCandidates).length} / ${value(p.hotLimit)} 个；保留普通发现轮次，研究排序不是买入许可。`]);
@@ -153,7 +158,7 @@ export function collectBrainEvents(history,snapshot,now=Date.now()) {
   }
   for(const c of rows(p.chartDiagnostics).slice(0,8))add({id:`chart:${caKey(c)}:${c.receivedAt||c.fetchedAt}`,type:'research',at:c.receivedAt||c.fetchedAt,
     title:`${c.sourceStatus==='ok'?'已取得 K 线':'K 线采集未成功'} · ${name(c)}`,
-    detail:c.sourceStatus==='ok'?(c.ready?'结构数据可用；不代表通过全部买入条件。':brief(c.reason)||'结构样本尚不足。'):'数据请求未成功，等待后续恢复。',meta:`${chain(c.chain)} · ${short(c.address)}`,href:'#caDesk'});
+    detail:c.sourceStatus==='ok'?(c.ready?'结构数据可用；不代表通过全部买入条件。':brief(c.reason)||'结构样本尚不足。'):'数据请求未成功，等待后续恢复。',meta:`${chain(c.chain)} · ${short(c.address)}${c.source==='geckoterminal'?' · GeckoTerminal':''}`,href:'#caDesk'});
   const d=p.lastDetail;
   if(d)add({id:`detail:${caKey(d)}:${d.startedAt}`,type:'research',at:d.finishedAt||d.startedAt,
     title:`${d.status==='ok'?'资料请求已完成':d.status==='pending'?'资料请求已发起':'资料请求待恢复'} · ${name(d)}`,

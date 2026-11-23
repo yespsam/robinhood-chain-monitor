@@ -2,6 +2,29 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {planHotResearch,selectResearchChart,selectQuoteCandidate,quoteCandidatePool,selectQuoteTarget,chartRefreshDue,advanceEntryFocus} from '../src/paper-research-scheduler.js';
 
+test('holding preemption preserves the owed discovery turn and its independent chain rotation',()=>{
+  const hot={input:{token:{chain:'bsc',address:'hot'}},decisions:[]};
+  const cold=['bsc','sol'].map(chain=>({input:{token:{chain,address:'cold'}},decisions:[]}));
+  const params={hot:[hot],broad:[hot,...cold],charts:new Map(),nowMs:100000,chains:['bsc','sol'],researchDispatch:2};
+  const held={chain:'bsc',address:'held',holdingTier:'main',requiresStructureChart:true};
+  assert.equal(selectResearchChart({...params,dispatch:2,holdings:[held]}).researchLane,'holding');
+  const next=selectResearchChart({...params,dispatch:3,holdings:[],lastDiscoveryChain:'sol'});
+  assert.equal(next.researchLane,'discovery');assert.equal(next.chain,'bsc');
+  assert.equal(selectResearchChart({...params,dispatch:9,holdings:[],lastDiscoveryChain:'bsc'}).chain,'sol');
+});
+
+test('cold first-attempt waiting age survives ranking churn and catchup yields to overdue hot charts',()=>{
+  const make=address=>({input:{token:{chain:'bsc',address}},decisions:[]});
+  const older=make('older'),newer=make('newer'),hot=make('hot');
+  const params={holdings:[],hot:[hot],broad:[newer,older,hot],charts:new Map(),nowMs:200000,dispatch:2,chains:['bsc'],
+    firstSeen:new Map([['bsc:older',1000],['bsc:newer',100000]])};
+  assert.equal(selectResearchChart(params).address,'older');
+  const catchup={chain:'bsc',address:'requested'};
+  assert.equal(selectResearchChart({...params,catchup}).researchLane,'catchup');
+  params.charts.set('bsc:hot',{status:'ok',fetchedAt:100000,closedThroughAtMs:100000});
+  assert.equal(selectResearchChart({...params,catchup}).address,'hot','deadline refresh retains priority');
+});
+
 test('admission expiry retries after five seconds while real upstream failures retain their backoff',()=>{
   for(const reasonCode of ['GMGN_QUEUE_EXPIRED','GMGN_REQUEST_BUSY']){
     const cached={status:'unavailable',fetchedAt:100000,reasonCode};

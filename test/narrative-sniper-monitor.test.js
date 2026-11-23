@@ -449,3 +449,29 @@ test("a transient shadow-ledger failure retries only after its persisted backoff
   assert.equal(state.signals[DECISION_HASH].ledger.attempts, 2);
   await monitor.stop();
 });
+
+test("target wallet notes reach scoring before hashing; quote and expired activities do not", async (t) => {
+  const dataDir = await temporaryDirectory(t);
+  await fs.writeFile(path.join(dataDir, "address-notes-activity.json"), JSON.stringify({ activities: [
+    { token: TARGET, wallet: QUOTE, follow: "boost", side: "buy", at: NOW - 1000 },
+    { token: TARGET, wallet: POOL, follow: "avoid", side: "sell", at: NOW - 1000 },
+    { token: TARGET, wallet: POOL, follow: "watch", side: "buy", at: NOW - 1000 },
+    { token: QUOTE, wallet: POOL, follow: "avoid", side: "buy", at: NOW - 1000 },
+    { token: TARGET, wallet: POOL, follow: "boost", side: "buy", at: NOW - 25 * 3600_000 },
+  ] }));
+  let evidence;
+  const { monitor } = monitorFixture(dataDir, {
+    deriveSignal: (input) => {
+      evidence = input.notedWallets;
+      return doSignal(input);
+    },
+  });
+  for (const event of [newsEvent(), flapContextEvent(), flapTargetEvent()]) await monitor.observe(event);
+  await monitor.check();
+  assert.equal(evidence.shadowOnly, true);
+  assert.equal(evidence.boostBuys, 1);
+  assert.equal(evidence.avoid, 1);
+  assert.equal(evidence.hits.length, 3);
+  const state = JSON.parse(await fs.readFile(path.join(dataDir, "narrative-sniper-state.json"), "utf8"));
+  assert.deepEqual(state.signals[DECISION_HASH].notedWallets, JSON.parse(JSON.stringify(evidence)));
+});

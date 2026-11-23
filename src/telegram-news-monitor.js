@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import https from "node:https";
+import { resolve4, resolve6 } from "node:dns/promises";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { sendAlerts } from "./alerts.js";
@@ -9,7 +11,10 @@ export const TELEGRAM_NEWS_VIEW_CHAT_ID = -2540748528;
 export const TELEGRAM_NEWS_USERNAME = "maxguruai";
 
 const DEFAULT_POLL_INTERVAL_MS = 4_000;
-const DEFAULT_REQUEST_TIMEOUT_MS = 3_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+const MIN_REQUEST_TIMEOUT_MS = 8_000;
+const MAX_REQUEST_TIMEOUT_MS = 15_000;
+const MAX_PREVIEW_RESPONSE_BYTES = 2 * 1024 * 1024;
 const DEFAULT_MAX_BACKOFF_MS = 15 * 60_000;
 const DEFAULT_CHANNEL_TITLE = "@maxguruai";
 const MAX_MESSAGES = 2_000;
@@ -440,9 +445,89 @@ const due = (health, current) => !health?.nextAttemptAt || (Date.parse(health.ne
 const NETWORK_RECOVERY_MAX_WAIT_MS = 60_000;
 const transientNetworkFailure = (message) => /timed?\s*out|timeout|fetch failed|network|ECONN|ENET|EAI_AGAIN|ENOTFOUND|operation was aborted/iu.test(String(message || ""));
 
+export function resolveTelegramNewsRequestTimeoutMs(value) {
+  const configured = Number(value);
+  const requested = Number.isFinite(configured) && configured > 0
+    ? Math.floor(configured)
+    : DEFAULT_REQUEST_TIMEOUT_MS;
+  return Math.min(MAX_REQUEST_TIMEOUT_MS, Math.max(MIN_REQUEST_TIMEOUT_MS, requested));
+}
+
+const telegramPreviewLookup = (hostname, options, callback) => {
+  const done = typeof options === "function" ? options : callback;
+  const lookupOptions = typeof options === "object" && options !== null ? options : {};
+  const resolver = resolve4(hostname).then(
+    (addresses) => addresses.map((address) => ({ address, family: 4 })),
+    async (ipv4Error) => {
+      try {
+        return (await resolve6(hostname)).map((address) => ({ address, family: 6 }));
+      } catch {
+        throw ipv4Error;
+      }
+    },
+  );
+  void resolver.then((addresses) => {
+    if (lookupOptions.all) done(null, addresses);
+    else done(null, addresses[0].address, addresses[0].family);
+  }, done);
+};
+
+const fetchTelegramPreviewOverHttps = (headers, timeoutMs) => new Promise((resolve, reject) => {
+  const url = new URL(TELEGRAM_NEWS_PREVIEW_URL);
+  let settled = false;
+  let responseBytes = 0;
+  const chunks = [];
+  let request;
+  const timer = setTimeout(() => {
+    request?.destroy(new Error(`Telegram preview request timed out after ${timeoutMs}ms`));
+  }, timeoutMs);
+  const finish = (callback, value) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    callback(value);
+  };
+
+  request = https.request(url, {
+    method: "GET",
+    headers,
+    agent: false,
+    lookup: telegramPreviewLookup,
+  }, (response) => {
+    response.on("data", (chunk) => {
+      responseBytes += chunk.length;
+      if (responseBytes > MAX_PREVIEW_RESPONSE_BYTES) {
+        request.destroy(new Error("Telegram preview response exceeded the 2 MiB safety limit"));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    response.on("aborted", () => finish(reject, new Error("Telegram preview response was aborted")));
+    response.on("error", (error) => finish(reject, error));
+    response.on("end", () => {
+      const status = Number(response.statusCode || 0);
+      const body = Buffer.concat(chunks).toString("utf8");
+      finish(resolve, {
+        status,
+        ok: status >= 200 && status < 300,
+        url: TELEGRAM_NEWS_PREVIEW_URL,
+        headers: {
+          get: (name) => {
+            const value = response.headers[String(name).toLowerCase()];
+            return Array.isArray(value) ? value.join(", ") : value || null;
+          },
+        },
+        text: async () => body,
+      });
+    });
+  });
+  request.on("error", (error) => finish(reject, error));
+  request.end();
+});
+
 export function createTelegramNewsMonitor(config = {}, dependencies = {}) {
   if (!config.dataDir && !dependencies.stateFile) throw new Error("Telegram news monitor requires config.dataDir or dependencies.stateFile");
-  const fetchImpl = dependencies.fetchImpl || globalThis.fetch;
+  const fetchImpl = dependencies.fetchImpl || null;
   const alertSender = dependencies.sendAlertsImpl || sendAlerts;
   const fsImpl = dependencies.fsImpl || fs;
   const now = dependencies.now || Date.now;
@@ -450,7 +535,7 @@ export function createTelegramNewsMonitor(config = {}, dependencies = {}) {
   const autoStart = dependencies.autoStart !== false;
   const stateFile = dependencies.stateFile || path.join(config.dataDir, "telegram-news-state.json");
   const pollIntervalMs = Math.min(5_000, Math.max(3_000, Number(config.telegramNewsPollIntervalMs) || DEFAULT_POLL_INTERVAL_MS));
-  const requestTimeoutMs = Math.min(5_000, Math.max(1_000, Number(config.telegramNewsRequestTimeoutMs) || DEFAULT_REQUEST_TIMEOUT_MS));
+  const requestTimeoutMs = resolveTelegramNewsRequestTimeoutMs(config.telegramNewsRequestTimeoutMs);
   const maximumBackoffMs = Math.max(60_000, Number(config.telegramNewsMaxBackoffMs) || DEFAULT_MAX_BACKOFF_MS);
   let state = emptyState();
   let initialized = false;
@@ -579,11 +664,23 @@ export function createTelegramNewsMonitor(config = {}, dependencies = {}) {
         ...(state.http.etag ? { "if-none-match": state.http.etag } : {}),
         ...(state.http.lastModified ? { "if-modified-since": state.http.lastModified } : {}),
       };
-      const response = await fetchImpl(TELEGRAM_NEWS_PREVIEW_URL, {
-        headers,
-        redirect: "error",
-        signal: AbortSignal.timeout(requestTimeoutMs),
-      });
+      let response;
+      if (fetchImpl) {
+        try {
+          response = await fetchImpl(TELEGRAM_NEWS_PREVIEW_URL, {
+            headers,
+            redirect: "error",
+            signal: AbortSignal.timeout(requestTimeoutMs),
+          });
+        } catch (error) {
+          if (error?.name === "TimeoutError" || error?.name === "AbortError") {
+            throw new Error(`Telegram preview request timed out after ${requestTimeoutMs}ms`);
+          }
+          throw error;
+        }
+      } else {
+        response = await fetchTelegramPreviewOverHttps(headers, requestTimeoutMs);
+      }
       const status = Number(response?.status || 0);
       if (status === 304) {
         if (!state.initializedAt) {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { STRATEGY_POLICIES, evaluatePaperStrategies, createPaperStrategyAccount, advancePaperStrategyAccount, validatePaperStrategyAccount } from '../src/paper-strategy-engine.js';
+import { STRATEGY_POLICIES, evaluatePaperStrategies, createPaperStrategyAccount, advancePaperStrategyAccount, validatePaperStrategyAccount, resolveInjectedGmgnStopClient } from '../src/paper-strategy-engine.js';
 import { breakoutCandles, sourcedNarrative } from './fixtures/paper-strategy-v2.js';
 import { reviewedTeacherSelection } from './fixtures/wallet-learning.js';
 
@@ -8,6 +8,12 @@ const NOW = Date.parse('2026-09-20T10:00:00Z');
 const CA = `0x${'a'.repeat(40)}`;
 const iso = value => new Date(value).toISOString();
 const closeTo = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
+test('paper strategy only uses an explicitly injected GMGN stop client', () => {
+  const client = { run() {} };
+  assert.equal(resolveInjectedGmgnStopClient(undefined), null);
+  assert.equal(resolveInjectedGmgnStopClient(null), null);
+  assert.equal(resolveInjectedGmgnStopClient(client), client);
+});
 function input(nowMs = NOW, changes = {}) {
   return {
     nowMs, marketStatus: 'ok', observedAt: iso(nowMs), klineStatus: 'ok',
@@ -542,7 +548,9 @@ test('entry evidence and structural levels cannot be rewritten by later research
   const entry = evaluation(), original = structuredClone(entry);
   const account = advancePaperStrategyAccount(createPaperStrategyAccount({ nowMs: NOW }), { evaluations: [entry], nowMs: NOW });
   entry.evidence.entryPlan.stopPrice = .1; entry.evidence.narrativeAssessment.event = 'replacement';
-  assert.deepEqual(account.trades[0].entryEvidence, original.evidence);
+  const { paperRisk, ...storedEvidence } = account.trades[0].entryEvidence;
+  assert.deepEqual(storedEvidence, original.evidence);
+  assert.deepEqual(paperRisk, { version: 'paper_planned_stop_r_v1', riskUsd: original.evidence.entryPlan.estimatedStopLossUsd });
   for (const change of [{ stopPrice: 0 }, { targetPrice: 100 }, { confirmedAt: iso(NOW + 1) }, { netRewardRisk: NaN }, { eligible: false }]) {
     const wrong = structuredClone(original); Object.assign(wrong.evidence.entryPlan, change);
     assert.equal(advancePaperStrategyAccount(createPaperStrategyAccount({ nowMs: NOW }), { evaluations: [wrong], nowMs: NOW }).trades.length, 0);

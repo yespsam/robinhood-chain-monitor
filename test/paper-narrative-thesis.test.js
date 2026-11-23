@@ -81,6 +81,30 @@ test('explicit CA, community permalink and name-only hypotheses remain distinct,
   assert.equal(narrativeSourceKey('javascript:alert(1)'),null);
 });
 
+test('parsed social ticker matches preserve their provenance instead of claiming an explicit CA',()=>{
+  const source={chain:token.chain,tokenAddress:CA,sourceAuthenticated:true,sourceKind:'authenticated_social',
+    matchKind:'ticker',reputableAuthor:true,sourceUrl:url('901'),sourceAt:iso(NOW-10000),
+    sourceText:'Mooncake meme community celebrates the holiday',authorKey:'x-id:901'};
+  const make=(changed={},extra={})=>thesis({narrative:{symbol:token.symbol,sources:[{...source,...changed}]},...extra});
+  for(const changed of [{},{reputableAuthor:false},{matchKind:undefined}]) {
+    const result=make(changed);
+    assert.equal(result.relationship.kind,'name_only');
+    assert.equal(result.sources[0].binding,'name_only');
+    assert.equal(result.sources[0].at,source.sourceAt,'source clock is unchanged');
+    assert.equal(result.admission.checks.exactCaBinding,false);
+  }
+  assert.equal(make({}, {token:{...token,twitterUsername:source.sourceUrl}}).relationship.kind,'community_link');
+  assert.equal(make({}, {token:{...token,symbol:'Elsewhere',name:'Elsewhere',twitterUsername:source.sourceUrl}}).relationship.kind,'project_link');
+  for(const changed of [{matchKind:'ca'},{sourceKind:'authenticated_x'},{sourceKind:'authenticated_call'}])
+    assert.equal(make(changed).relationship.kind,'direct_ca','existing authenticated exact-CA source stays bound');
+  assert.equal(make({contentConflict:true}).sources.length,0);
+  assert.equal(make({tokenAddress:OTHER}).sources.length,0);
+  const genuine=doc({url:url('902'),chain:token.chain,text:`Mooncake launch CA ${CA}`,at:NOW-20000});
+  const combined=make({}, {index:index([genuine])});
+  assert.equal(combined.relationship.kind,'direct_ca');
+  assert.equal(combined.event.sourceUrl,genuine.url,'a newer ticker hit cannot replace a genuine CA source');
+});
+
 test('unverified, future, conflicted and too-old sources cannot become current research facts',()=>{
   for(const d of [doc({authenticated:false}),doc({at:NOW+1}),doc({at:NOW-8*DAY})])assert.equal(thesis({index:index([d])}).sources.length,0);
   const conflict=index([doc(),doc({text:'Mooncake is cancelled.'})]);assert.equal(conflict.conflicts,1);

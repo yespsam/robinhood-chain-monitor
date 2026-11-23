@@ -58,7 +58,7 @@ const SQQQB_LOG_DATA = "0x00000000000000000000000025e572b466d152604d9e6c3e53b432
 
 const lower = (value) => String(value).toLowerCase();
 const clone = (value) => structuredClone(value);
-const PRODUCTION_FLAP_BLOCK_OFFSET = 128_914_179;
+const PRODUCTION_FLAP_BLOCK_OFFSET = 129_871_644;
 
 // The real source gate verifies the implementation's supported block window.
 // Keep tiny fake-provider coordinates local to the monitor fixture, but move
@@ -605,17 +605,19 @@ test("runtime wiring owns and destroys one fixed provider per configured Flap lo
   assert.match(envExample, new RegExp(`FLAP_QUOTE_STATE_RPC_URLS=${stateDefaults.replaceAll(".", "\\.")}`));
 });
 
-test("production Portal pins carry the two-source v5.26.0 identity", () => {
-  assert.equal(FLAP_PORTAL_VERIFIED_VERSION, "v5.26.0");
-  assert.equal(FLAP_PORTAL_VERIFIED_IMPLEMENTATION, "0x7a94f37b61a82c395f9812CF266b444783cC5e8c");
+test("production Portal pins carry the two-source v5.27.2 identity", () => {
+  assert.equal(FLAP_PORTAL_VERIFIED_VERSION, "v5.27.2");
+  assert.equal(FLAP_PORTAL_VERIFIED_IMPLEMENTATION, "0x6FC1ac64c90A5A6d9E7EFc0d4064452AF3FC9968");
   assert.equal(
     FLAP_PORTAL_VERIFIED_IMPLEMENTATION_HASH,
+    "0x90b3b19ddc87293d5bbd33167d7d977adf1cda5c078549b8cada05c6f9b3fa75",
+  );
+  assert.equal(FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION, "v5.26.0");
+  assert.equal(FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION, "0x7a94f37b61a82c395f9812CF266b444783cC5e8c");
+  assert.equal(
+    FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH,
     "0x3db27f98826706ac5ddedb919594d4670151874482dff23e31d2186858635194",
   );
-  assert.equal(FLAP_PORTAL_PREVIOUS_VERIFIED_VERSION, "v5.25.0");
-  assert.equal(FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION, "0xE13227370996f892a56d2Ff4a30f6026887B48Fb");
-  assert.equal(FLAP_PORTAL_PREVIOUS_VERIFIED_IMPLEMENTATION_HASH,
-    "0xf8d56fe09f2ec5e3eeaabdbfeeb0faf55e4ed8996a55bc1b69a78e62dbb792e4");
 });
 
 test("v5.23.1 identity and v5.24.0 upgrade evidence remain historical and unchanged", () => {

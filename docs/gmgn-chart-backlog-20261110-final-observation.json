@@ -1,0 +1,1520 @@
+{
+  "schema": "gmgn_chart_catchup_final_observation_v1",
+  "expectedCatchupId": "chart-catchup-1794247887026",
+  "startedAt": "2026-11-09T18:11:59.730667+00:00",
+  "durationTargetSeconds": 900,
+  "samples": [
+    {
+      "at": "2026-11-09T18:11:59.732350+00:00",
+      "elapsedSeconds": 0.0,
+      "id": "chart-catchup-1794247887026",
+      "status": "running",
+      "counts": {
+        "queued": 46
+      },
+      "attempts": 0,
+      "inFlight": [],
+      "reasonCodes": {},
+      "chartDiagnostics": {}
+    },
+    {
+      "at": "2026-11-09T18:12:44.787237+00:00",
+      "elapsedSeconds": 45.1,
+      "id": "chart-catchup-1794247887026",
+      "status": "running",
+      "counts": {
+        "fetched": 1,
+        "skipped": 1,
+        "queued": 44
+      },
+      "attempts": 1,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 1
+      },
+      "chartDiagnostics": {
+        "insufficient_contiguous_tail": 1
+      }
+    },
+    {
+      "at": "2026-11-09T18:13:29.850641+00:00",
+      "elapsedSeconds": 90.1,
+      "id": "chart-catchup-1794247887026",
+      "status": "running",
+      "counts": {
+        "fetched": 2,
+        "skipped": 6,
+        "queued": 38
+      },
+      "attempts": 2,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 6
+      },
+      "chartDiagnostics": {
+        "insufficient_contiguous_tail": 1,
+        "ready": 1
+      }
+    },
+    {
+      "at": "2026-11-09T18:14:14.875354+00:00",
+      "elapsedSeconds": 135.1,
+      "id": "chart-catchup-1794247887026",
+      "status": "running",
+      "counts": {
+        "fetched": 4,
+        "skipped": 9,
+        "cached": 1,
+        "queued": 32
+      },
+      "attempts": 4,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 8,
+        "CURRENT_RESEARCH_INELIGIBLE": 1
+      },
+      "chartDiagnostics": {
+        "insufficient_contiguous_tail": 1,
+        "ready": 4
+      }
+    },
+    {
+      "at": "2026-11-09T18:14:59.949633+00:00",
+      "elapsedSeconds": 180.3,
+      "id": "chart-catchup-1794247887026",
+      "status": "running",
+      "counts": {
+        "fetched": 5,
+        "skipped": 12,
+        "cached": 1,
+        "queued": 28
+      },
+      "attempts": 5,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 11,
+        "CURRENT_RESEARCH_INELIGIBLE": 1
+      },
+      "chartDiagnostics": {
+        "insufficient_contiguous_tail": 1,
+        "ready": 5
+      }
+    },
+    {
+      "at": "2026-11-09T18:15:45.633213+00:00",
+      "elapsedSeconds": 226.0,
+      "id": "chart-catchup-1794247887026",
+      "status": "running",
+      "counts": {
+        "fetched": 7,
+        "skipped": 12,
+        "cached": 1,
+        "queued": 26
+      },
+      "attempts": 7,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 11,
+        "CURRENT_RESEARCH_INELIGIBLE": 1
+      },
+      "chartDiagnostics": {
+        "insufficient_contiguous_tail": 3,
+        "ready": 5
+      }
+    },
+    {
+      "at": "2026-11-09T18:16:30.668469+00:00",
+      "elapsedSeconds": 271.0,
+      "id": "chart-catchup-1794247887026",
+      "status": "running",
+      "counts": {
+        "fetched": 8,
+        "skipped": 14,
+        "cached": 1,
+        "queued": 23
+      },
+      "attempts": 8,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 13,
+        "CURRENT_RESEARCH_INELIGIBLE": 1
+      },
+      "chartDiagnostics": {
+        "insufficient_contiguous_tail": 4,
+        "ready": 5
+      }
+    },
+    {
+      "at": "2026-11-09T18:17:15.882496+00:00",
+      "elapsedSeconds": 316.2,
+      "id": "chart-catchup-1794247887026",
+      "status": "running",
+      "counts": {
+        "fetched": 9,
+        "skipped": 16,
+        "cached": 1,
+        "queued": 20
+      },
+      "attempts": 9,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 15,
+        "CURRENT_RESEARCH_INELIGIBLE": 1
+      },
+      "chartDiagnostics": {
+        "insufficient_contiguous_tail": 5,
+        "ready": 5
+      }
+    },
+    {
+      "at": "2026-11-09T18:18:00.998329+00:00",
+      "elapsedSeconds": 361.3,
+      "id": "chart-catchup-1794247887026",
+      "status": "running",
+      "counts": {
+        "fetched": 10,
+        "skipped": 16,
+        "cached": 1,
+        "queued": 19
+      },
+      "attempts": 10,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 15,
+        "CURRENT_RESEARCH_INELIGIBLE": 1
+      },
+      "chartDiagnostics": {
+        "insufficient_contiguous_tail": 5,
+        "ready": 5,
+        "stale_closed_bars": 1
+      }
+    },
+    {
+      "at": "2026-11-09T18:18:46.018965+00:00",
+      "elapsedSeconds": 406.3,
+      "id": "chart-catchup-1794247887026",
+      "status": "running",
+      "counts": {
+        "fetched": 11,
+        "skipped": 19,
+        "cached": 1,
+        "queued": 15
+      },
+      "attempts": 11,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 18,
+        "CURRENT_RESEARCH_INELIGIBLE": 1
+      },
+      "chartDiagnostics": {
+        "insufficient_contiguous_tail": 6,
+        "ready": 5,
+        "stale_closed_bars": 1
+      }
+    },
+    {
+      "at": "2026-11-09T18:19:31.078623+00:00",
+      "elapsedSeconds": 451.4,
+      "id": "chart-catchup-1794247887026",
+      "status": "running",
+      "counts": {
+        "fetched": 11,
+        "skipped": 19,
+        "cached": 1,
+        "in_flight": 1,
+        "queued": 14
+      },
+      "attempts": 12,
+      "inFlight": [
+        {
+          "chain": "robinhood",
+          "address": "0xa2753fd0bc86b8ceb55ffd2698679c7f214785f1",
+          "attempts": 1,
+          "requestedAt": "2026-11-09T18:19:28.118Z"
+        }
+      ],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 18,
+        "CURRENT_RESEARCH_INELIGIBLE": 1
+      },
+      "chartDiagnostics": {
+        "insufficient_contiguous_tail": 6,
+        "ready": 5,
+        "stale_closed_bars": 1
+      }
+    },
+    {
+      "at": "2026-11-09T18:20:16.208014+00:00",
+      "elapsedSeconds": 496.5,
+      "id": "chart-catchup-1794247887026",
+      "status": "running",
+      "counts": {
+        "fetched": 12,
+        "skipped": 22,
+        "cached": 1,
+        "queued": 11
+      },
+      "attempts": 12,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 21,
+        "CURRENT_RESEARCH_INELIGIBLE": 1
+      },
+      "chartDiagnostics": {
+        "insufficient_contiguous_tail": 6,
+        "ready": 5,
+        "stale_closed_bars": 2
+      }
+    },
+    {
+      "at": "2026-11-09T18:21:01.238743+00:00",
+      "elapsedSeconds": 541.6,
+      "id": "chart-catchup-1794247887026",
+      "status": "running",
+      "counts": {
+        "fetched": 14,
+        "skipped": 22,
+        "cached": 1,
+        "in_flight": 1,
+        "queued": 8
+      },
+      "attempts": 15,
+      "inFlight": [
+        {
+          "chain": "robinhood",
+          "address": "0xc9675fe679c7d4e1b94416f66d61c96127eb964a",
+          "attempts": 1,
+          "requestedAt": "2026-11-09T18:20:52.971Z"
+        }
+      ],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 21,
+        "CURRENT_RESEARCH_INELIGIBLE": 1
+      },
+      "chartDiagnostics": {
+        "insufficient_contiguous_tail": 8,
+        "ready": 5,
+        "stale_closed_bars": 2
+      }
+    },
+    {
+      "at": "2026-11-09T18:21:46.261516+00:00",
+      "elapsedSeconds": 586.6,
+      "id": "chart-catchup-1794247887026",
+      "status": "running",
+      "counts": {
+        "fetched": 17,
+        "skipped": 22,
+        "cached": 1,
+        "waiting_source": 3,
+        "queued": 3
+      },
+      "attempts": 17,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 21,
+        "CURRENT_RESEARCH_INELIGIBLE": 1,
+        "DISCOVERY_SOURCE_UNAVAILABLE": 3
+      },
+      "chartDiagnostics": {
+        "insufficient_contiguous_tail": 10,
+        "ready": 6,
+        "stale_closed_bars": 2
+      }
+    },
+    {
+      "at": "2026-11-09T18:22:31.287030+00:00",
+      "elapsedSeconds": 631.6,
+      "id": "chart-catchup-1794247887026",
+      "status": "running",
+      "counts": {
+        "fetched": 17,
+        "skipped": 25,
+        "cached": 1,
+        "queued": 3
+      },
+      "attempts": 17,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 24,
+        "CURRENT_RESEARCH_INELIGIBLE": 1
+      },
+      "chartDiagnostics": {
+        "insufficient_contiguous_tail": 10,
+        "ready": 6,
+        "stale_closed_bars": 2
+      }
+    },
+    {
+      "at": "2026-11-09T18:23:17.355921+00:00",
+      "elapsedSeconds": 677.7,
+      "id": "chart-catchup-1794247887026",
+      "status": "running",
+      "counts": {
+        "fetched": 18,
+        "skipped": 25,
+        "cached": 1,
+        "waiting_source": 2
+      },
+      "attempts": 18,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 24,
+        "CURRENT_RESEARCH_INELIGIBLE": 1,
+        "DISCOVERY_SOURCE_UNAVAILABLE": 2
+      },
+      "chartDiagnostics": {
+        "insufficient_contiguous_tail": 11,
+        "ready": 6,
+        "stale_closed_bars": 2
+      }
+    },
+    {
+      "at": "2026-11-09T18:24:02.379160+00:00",
+      "elapsedSeconds": 722.7,
+      "id": "chart-catchup-1794247887026",
+      "status": "complete",
+      "counts": {
+        "fetched": 19,
+        "skipped": 26,
+        "cached": 1
+      },
+      "attempts": 19,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 25,
+        "CURRENT_RESEARCH_INELIGIBLE": 1
+      },
+      "chartDiagnostics": {
+        "insufficient_contiguous_tail": 12,
+        "ready": 6,
+        "stale_closed_bars": 2
+      }
+    }
+  ],
+  "states": [
+    {
+      "at": "2026-11-09T18:14:59.949633+00:00",
+      "elapsedSeconds": 180.3,
+      "updatedAt": "2026-11-09T18:14:59.615Z",
+      "status": "ok",
+      "enabled": true,
+      "liveMirror": {
+        "enabled": true,
+        "chains": [
+          "bsc",
+          "sol"
+        ],
+        "signalSource": "paper-atm-confirmed-pvp-v2",
+        "strategyAllowlist": [
+          "*"
+        ]
+      },
+      "research": {
+        "version": "research_evidence_shortlist_v28",
+        "discoveryFairness": {
+          "researchDispatch": 20,
+          "lastDiscoveryChain": "sol",
+          "waitingCandidates": 72
+        },
+        "chartDispatches": {
+          "holding": 9,
+          "entry": 0,
+          "hot": 11,
+          "wallet": 0,
+          "discovery": 4,
+          "proactive": 2,
+          "catchup": 5
+        },
+        "chartHealth": {
+          "version": "chart_health_v2",
+          "alert": false,
+          "warmup": false,
+          "evaluated": 305,
+          "chartReady": 3,
+          "klineOk": 10,
+          "legacyChartReady": 3,
+          "externalWindowReady": 3,
+          "hotLegacyChartReady": 2,
+          "hotExternalWindowReady": 2,
+          "chartReadinessNote": "chartReady 保留旧图表或外盘窗口任一通过的兼容计数；externalWindowReady 才是外盘实际收盘窗口校验通过数，仍不代表形态或买入条件通过。",
+          "notRequested": 294,
+          "notRequestedRatio": 0.9639344262295082,
+          "fetched": 11,
+          "fetchedUnavailable": 1,
+          "fetchedUnavailableRatio": 0.09090909090909091,
+          "sourceUnavailable": 1,
+          "sourceUnavailableRatio": 0.09090909090909091,
+          "staleClosedBars": 6,
+          "insufficientClosedBars": 1,
+          "hotCount": 3,
+          "hotFetched": 3,
+          "hotNotRequested": 0,
+          "hotRequestCoverageRate": 1,
+          "hotKlineOk": 3,
+          "hotChartReady": 2,
+          "hotKlineFresh": 3,
+          "hotKlineStale": 0,
+          "hotKlineUnknown": 0,
+          "hotKlineFreshRate": 1,
+          "hotKlineMaxClosedAgeMs": 59614,
+          "hotKlineFreshnessMaxAgeMs": 120000,
+          "hotChartReadyRate": 0.6666666666666666,
+          "chartReadyRate": 0.009836065573770493,
+          "klineOkRate": 0.03278688524590164,
+          "funnelChartReady": 0,
+          "funnelOhlcvReady": 3,
+          "chartDispatchCount": 24,
+          "chartCacheCount": 15,
+          "cachedUnavailable": 3,
+          "queueWaitMedianMs": 2105,
+          "queueWaitMaxMs": 43664,
+          "queueSamples": 29,
+          "note": "未请求的广谱候选单独计数。确认型漏斗 chartReady 是连续报价确认，ohlcvReady 才是 K 线结构。不代表可以开仓。"
+        },
+        "focusedReadBudget": {
+          "version": "chart_budget_hot_lane_v4",
+          "exploratoryConcurrency": 3,
+          "exploratoryActive": 1,
+          "lastKind": "chart",
+          "chartDeferrals": 144,
+          "detailDeferrals": 74,
+          "chartTurnDeferrals": 0,
+          "chartTurnReserved": true,
+          "detailOverlapInFlight": 0,
+          "detailOverlapDispatched": 4,
+          "chartsSinceDetail": 4,
+          "maxChartsBeforeDetail": 4,
+          "hotDeadlineDeferrals": 4,
+          "hotDeadlineReserved": false,
+          "detailBackoffCandidates": 0,
+          "note": "列表独立刷新。热点与钱包 K 线可并行到预算上限，随后把轮次让给普通详情。退出与已准入确认仍优先；缺字段退避、共享限频与买卖条件不变。"
+        },
+        "entryDiagnostics": {
+          "version": "paper_entry_diagnostics_v1",
+          "detected": 305,
+          "verifiedCatalyst": 0,
+          "externalStructure": 175,
+          "quoteResearchReady": 0,
+          "quoteScheduled": 0,
+          "eligible": 0,
+          "blockers": [
+            {
+              "code": "safety_blocked",
+              "label": "明确不可交易或安全检查未通过",
+              "count": 107
+            },
+            {
+              "code": "catalyst",
+              "label": "缺少有效原文催化或核实盈利钱包",
+              "count": 80
+            },
+            {
+              "code": "chart_missing",
+              "label": "买点数据未取得，尚不能判断有无机会",
+              "count": 51
+            },
+            {
+              "code": "research_excluded",
+              "label": "未进入常规 K 线研究：阶段、流动性或成交量条件未达标",
+              "count": 30
+            },
+            {
+              "code": "safety_data",
+              "label": "该入口所需安全字段尚未补齐",
+              "count": 17
+            },
+            {
+              "code": "reentry",
+              "label": "上次亏损后的重入证据不足",
+              "count": 10
+            },
+            {
+              "code": "chart_stale",
+              "label": "买点K线已过期，等待刷新",
+              "count": 6
+            },
+            {
+              "code": "setup",
+              "label": "买盘、形态或其他入场条件尚未成立",
+              "count": 2
+            },
+            {
+              "code": "chart_incomplete",
+              "label": "买点K线不足或断档，等待补齐",
+              "count": 1
+            },
+            {
+              "code": "structure",
+              "label": "入场结构或退出依据尚未建立",
+              "count": 1
+            }
+          ],
+          "note": "按链与 CA 去重的当前快照；每个候选只计一个主要状态。没有有效候选不代表市场没有机会，调度与条件通过均不等于成交。"
+        },
+        "hotCandidates": [
+          {
+            "chain": "bsc",
+            "address": "0x0cee7a04355b2e2d7248d9566db8889cf44f7777",
+            "symbol": "MI",
+            "marketLeader": null,
+            "watchSince": "2026-11-09T18:14:41.075Z",
+            "watchUntil": "2026-11-09T18:16:41.075Z",
+            "chartClosedAt": "2026-11-09T18:14:00.000Z"
+          },
+          {
+            "chain": "sol",
+            "address": "6kmkcwKxxmoREhkxrbBvwDY3N2KSfpdMMtWtNoPpump",
+            "symbol": "LASTTRUCK",
+            "marketLeader": null,
+            "watchSince": "2026-11-09T18:14:00.673Z",
+            "watchUntil": "2026-11-09T18:16:00.673Z",
+            "chartClosedAt": "2026-11-09T18:14:00.000Z"
+          },
+          {
+            "chain": "robinhood",
+            "address": "0x051e0bf2975940a55546db8a3df9aa8385a31bbb",
+            "symbol": "SPY",
+            "marketLeader": null,
+            "watchSince": "2026-11-09T18:13:06.601Z",
+            "watchUntil": "2026-11-09T18:15:06.601Z",
+            "chartClosedAt": "2026-11-09T18:14:00.000Z"
+          }
+        ],
+        "lastChartDispatch": {
+          "chain": "bsc",
+          "address": "0xb37e871c790ba7a9e002132e3a08570d92207777",
+          "lane": "holding",
+          "purpose": "exit",
+          "at": "2026-11-09T18:14:48.489Z",
+          "proactive": false,
+          "previousClosedAt": null,
+          "previousClosedAgeMs": null
+        },
+        "lastDetail": {
+          "chain": "bsc",
+          "address": "0x8d73dbd6a89e38a3cd5a7050c7f3d98e38667777",
+          "symbol": "飞兔商联",
+          "reason": "热点候选优先补齐或刷新，尚不代表可以入场",
+          "startedAt": "2026-11-09T18:14:08.727Z",
+          "status": "pending",
+          "priority": 2
+        },
+        "chartRequestsPending": 0
+      },
+      "cadence": {
+        "quoteDispatches": {
+          "exit": 152,
+          "candidate": 0,
+          "comparisonCandidate": 0
+        },
+        "quoteInFlight": [
+          {
+            "purpose": "exit",
+            "chain": "bsc",
+            "address": "0xb37e871c790ba7a9e002132e3a08570d92207777",
+            "candidateBook": null
+          },
+          {
+            "purpose": "exit",
+            "chain": "sol",
+            "address": "tV2wVqRjk7ugbQAFs2MAMxNF7HmuqUwgoFaQgUfpump",
+            "candidateBook": null
+          }
+        ],
+        "marketSourceAges": [
+          {
+            "chain": "bsc",
+            "status": "ok",
+            "observedAt": "2026-11-09T18:14:07.099Z",
+            "ageMs": 52444
+          },
+          {
+            "chain": "sol",
+            "status": "ok",
+            "observedAt": "2026-11-09T18:14:34.159Z",
+            "ageMs": 25384
+          },
+          {
+            "chain": "robinhood",
+            "status": "ok",
+            "observedAt": "2026-11-09T18:13:46.592Z",
+            "ageMs": 72951
+          }
+        ],
+        "marketAuxiliarySourceAges": [
+          {
+            "chain": "bsc",
+            "source": "trenches",
+            "status": "ok",
+            "observedAt": "2026-11-09T18:14:05.054Z",
+            "ageMs": 54489
+          },
+          {
+            "chain": "sol",
+            "source": "trenches",
+            "status": "ok",
+            "observedAt": "2026-11-09T18:14:31.308Z",
+            "ageMs": 28235
+          },
+          {
+            "chain": "robinhood",
+            "source": "trenches",
+            "status": "ok",
+            "observedAt": "2026-11-09T18:13:34.889Z",
+            "ageMs": 84654
+          }
+        ],
+        "detailRefreshPending": true,
+        "detailTargets": 46
+      }
+    },
+    {
+      "at": "2026-11-09T18:22:31.287030+00:00",
+      "elapsedSeconds": 631.6,
+      "updatedAt": "2026-11-09T18:22:30.516Z",
+      "status": "ok",
+      "enabled": true,
+      "liveMirror": {
+        "enabled": true,
+        "chains": [
+          "bsc",
+          "sol"
+        ],
+        "signalSource": "paper-atm-confirmed-pvp-v2",
+        "strategyAllowlist": [
+          "*"
+        ]
+      },
+      "research": {
+        "version": "research_evidence_shortlist_v28",
+        "discoveryFairness": {
+          "researchDispatch": 54,
+          "lastDiscoveryChain": "robinhood",
+          "waitingCandidates": 82
+        },
+        "chartDispatches": {
+          "holding": 23,
+          "entry": 0,
+          "hot": 31,
+          "wallet": 2,
+          "discovery": 4,
+          "proactive": 8,
+          "catchup": 17
+        },
+        "chartHealth": {
+          "version": "chart_health_v2",
+          "alert": false,
+          "warmup": false,
+          "evaluated": 308,
+          "chartReady": 4,
+          "klineOk": 21,
+          "legacyChartReady": 4,
+          "externalWindowReady": 3,
+          "hotLegacyChartReady": 2,
+          "hotExternalWindowReady": 2,
+          "chartReadinessNote": "chartReady 保留旧图表或外盘窗口任一通过的兼容计数；externalWindowReady 才是外盘实际收盘窗口校验通过数，仍不代表形态或买入条件通过。",
+          "notRequested": 286,
+          "notRequestedRatio": 0.9285714285714286,
+          "fetched": 22,
+          "fetchedUnavailable": 1,
+          "fetchedUnavailableRatio": 0.045454545454545456,
+          "sourceUnavailable": 1,
+          "sourceUnavailableRatio": 0.045454545454545456,
+          "staleClosedBars": 13,
+          "insufficientClosedBars": 4,
+          "hotCount": 3,
+          "hotFetched": 3,
+          "hotNotRequested": 0,
+          "hotRequestCoverageRate": 1,
+          "hotKlineOk": 3,
+          "hotChartReady": 2,
+          "hotKlineFresh": 3,
+          "hotKlineStale": 0,
+          "hotKlineUnknown": 0,
+          "hotKlineFreshRate": 1,
+          "hotKlineMaxClosedAgeMs": 89108,
+          "hotKlineFreshnessMaxAgeMs": 120000,
+          "hotChartReadyRate": 0.6666666666666666,
+          "chartReadyRate": 0.012987012987012988,
+          "klineOkRate": 0.06818181818181818,
+          "funnelChartReady": 0,
+          "funnelOhlcvReady": 4,
+          "chartDispatchCount": 60,
+          "chartCacheCount": 30,
+          "cachedUnavailable": 3,
+          "queueWaitMedianMs": 3342,
+          "queueWaitMaxMs": 57551,
+          "queueSamples": 41,
+          "note": "未请求的广谱候选单独计数。确认型漏斗 chartReady 是连续报价确认，ohlcvReady 才是 K 线结构。不代表可以开仓。"
+        },
+        "focusedReadBudget": {
+          "version": "chart_budget_hot_lane_v4",
+          "exploratoryConcurrency": 3,
+          "exploratoryActive": 1,
+          "lastKind": "chart",
+          "chartDeferrals": 413,
+          "detailDeferrals": 108,
+          "chartTurnDeferrals": 0,
+          "chartTurnReserved": true,
+          "detailOverlapInFlight": 0,
+          "detailOverlapDispatched": 1,
+          "chartsSinceDetail": 1,
+          "maxChartsBeforeDetail": 4,
+          "hotDeadlineDeferrals": 12,
+          "hotDeadlineReserved": true,
+          "detailBackoffCandidates": 0,
+          "note": "列表独立刷新。热点与钱包 K 线可并行到预算上限，随后把轮次让给普通详情。退出与已准入确认仍优先；缺字段退避、共享限频与买卖条件不变。"
+        },
+        "entryDiagnostics": {
+          "version": "paper_entry_diagnostics_v1",
+          "detected": 308,
+          "verifiedCatalyst": 0,
+          "externalStructure": 184,
+          "quoteResearchReady": 0,
+          "quoteScheduled": 0,
+          "eligible": 0,
+          "blockers": [
+            {
+              "code": "safety_blocked",
+              "label": "明确不可交易或安全检查未通过",
+              "count": 108
+            },
+            {
+              "code": "catalyst",
+              "label": "缺少有效原文催化或核实盈利钱包",
+              "count": 80
+            },
+            {
+              "code": "chart_missing",
+              "label": "买点数据未取得，尚不能判断有无机会",
+              "count": 49
+            },
+            {
+              "code": "research_excluded",
+              "label": "未进入常规 K 线研究：阶段、流动性或成交量条件未达标",
+              "count": 22
+            },
+            {
+              "code": "safety_data",
+              "label": "该入口所需安全字段尚未补齐",
+              "count": 17
+            },
+            {
+              "code": "reentry",
+              "label": "上次亏损后的重入证据不足",
+              "count": 13
+            },
+            {
+              "code": "chart_stale",
+              "label": "买点K线已过期，等待刷新",
+              "count": 12
+            },
+            {
+              "code": "chart_incomplete",
+              "label": "买点K线不足或断档，等待补齐",
+              "count": 4
+            },
+            {
+              "code": "setup",
+              "label": "买盘、形态或其他入场条件尚未成立",
+              "count": 3
+            }
+          ],
+          "note": "按链与 CA 去重的当前快照；每个候选只计一个主要状态。没有有效候选不代表市场没有机会，调度与条件通过均不等于成交。"
+        },
+        "hotCandidates": [
+          {
+            "chain": "bsc",
+            "address": "0x78573ab46e5436e126d3ea1fdef8766cce4efd2b",
+            "symbol": "SHIB",
+            "marketLeader": null,
+            "watchSince": "2026-11-09T18:21:15.208Z",
+            "watchUntil": "2026-11-09T18:23:15.208Z",
+            "chartClosedAt": "2026-11-09T18:21:00.000Z"
+          },
+          {
+            "chain": "sol",
+            "address": "22JKmY9YZfnQfb3pGYb6hctL5Jyvv3zhL3nQ8oyNuoYp",
+            "symbol": "Pepetide",
+            "marketLeader": null,
+            "watchSince": "2026-11-09T18:21:43.488Z",
+            "watchUntil": "2026-11-09T18:23:43.488Z",
+            "chartClosedAt": "2026-11-09T18:21:00.000Z"
+          },
+          {
+            "chain": "robinhood",
+            "address": "0xdc45b71d7203c2e8baafc43a19bca0eb993bb54e",
+            "symbol": "DARK",
+            "marketLeader": null,
+            "watchSince": "2026-11-09T18:22:23.740Z",
+            "watchUntil": "2026-11-09T18:24:23.740Z",
+            "chartClosedAt": "2026-11-09T18:21:00.000Z"
+          }
+        ],
+        "lastChartDispatch": {
+          "chain": "bsc",
+          "address": "0xb37e871c790ba7a9e002132e3a08570d92207777",
+          "lane": "holding",
+          "purpose": "exit",
+          "at": "2026-11-09T18:22:27.031Z",
+          "proactive": false,
+          "previousClosedAt": null,
+          "previousClosedAgeMs": null
+        },
+        "lastDetail": {
+          "chain": "bsc",
+          "address": "0x0a6d809c5ae53dd44ad29e364dcd96061a5e4444",
+          "symbol": "跌醒",
+          "reason": "补齐缺失的行情、阶段或安全字段",
+          "startedAt": "2026-11-09T18:22:24.160Z",
+          "status": "pending",
+          "priority": 0
+        },
+        "chartRequestsPending": 1
+      },
+      "cadence": {
+        "quoteDispatches": {
+          "exit": 408,
+          "candidate": 0,
+          "comparisonCandidate": 0
+        },
+        "quoteInFlight": [
+          {
+            "purpose": "exit",
+            "chain": "sol",
+            "address": "tV2wVqRjk7ugbQAFs2MAMxNF7HmuqUwgoFaQgUfpump",
+            "candidateBook": null
+          }
+        ],
+        "marketSourceAges": [
+          {
+            "chain": "bsc",
+            "status": "ok",
+            "observedAt": "2026-11-09T18:22:15.149Z",
+            "ageMs": 13871
+          },
+          {
+            "chain": "sol",
+            "status": "ok",
+            "observedAt": "2026-11-09T18:22:20.941Z",
+            "ageMs": 8079
+          },
+          {
+            "chain": "robinhood",
+            "status": "ok",
+            "observedAt": "2026-11-09T18:22:05.319Z",
+            "ageMs": 23701
+          }
+        ],
+        "marketAuxiliarySourceAges": [
+          {
+            "chain": "bsc",
+            "source": "trenches",
+            "status": "ok",
+            "observedAt": "2026-11-09T18:22:14.454Z",
+            "ageMs": 14566
+          },
+          {
+            "chain": "sol",
+            "source": "trenches",
+            "status": "ok",
+            "observedAt": "2026-11-09T18:22:19.433Z",
+            "ageMs": 9587
+          },
+          {
+            "chain": "robinhood",
+            "source": "trenches",
+            "status": "ok",
+            "observedAt": "2026-11-09T18:22:03.397Z",
+            "ageMs": 25623
+          }
+        ],
+        "detailRefreshPending": true,
+        "detailTargets": 45
+      }
+    }
+  ],
+  "lastCatchup": {
+    "id": "chart-catchup-1794247887026",
+    "status": "complete",
+    "createdAt": "2026-11-09T18:11:27.026Z",
+    "deadlineAt": "2026-11-09T18:41:27.026Z",
+    "items": [
+      {
+        "chain": "bsc",
+        "address": "0x6a2608dabe09bc1128eec7275b92dfb939d5db3f",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:12:15.013Z",
+        "completedAt": "2026-11-09T18:12:17.323Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "insufficient_contiguous_tail",
+        "ready": false,
+        "closedBars": 15,
+        "closedThroughAt": "2026-11-09T18:12:00.000Z"
+      },
+      {
+        "chain": "bsc",
+        "address": "0x6d145722564aaa0dba3e104dd1d680b227927777",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:12:18.570Z"
+      },
+      {
+        "chain": "bsc",
+        "address": "0x78573ab46e5436e126d3ea1fdef8766cce4efd2b",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:13:17.376Z",
+        "completedAt": "2026-11-09T18:13:24.849Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "ready",
+        "ready": true,
+        "closedBars": 57,
+        "closedThroughAt": "2026-11-09T18:13:00.000Z"
+      },
+      {
+        "chain": "bsc",
+        "address": "0xdd806e436dda5588bf54061c11590c77ddc87777",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:13:24.295Z"
+      },
+      {
+        "chain": "sol",
+        "address": "FDboCUrbwVgNVbuSXvhk9Atpay4UW6q3gPqAc6wH6bZD",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:13:24.295Z"
+      },
+      {
+        "chain": "sol",
+        "address": "FSzr1SzGZGSwU1mkkT4XRq82EciM86Y61c3xB2zXvFBJ",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:13:24.295Z"
+      },
+      {
+        "chain": "sol",
+        "address": "E4w4LG1UMzRVHch6YpBq7duCiRup1G6CrKW7Kg5ufV7N",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:13:24.295Z"
+      },
+      {
+        "chain": "sol",
+        "address": "p6o8NN4MiMrDW4LMucKj9fKoM4tQSFyzB7bEU3Upump",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:13:24.295Z"
+      },
+      {
+        "chain": "sol",
+        "address": "3AgytyBs815xU5JAbvpaXNscDqQ35N3325PsNABVpump",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:13:37.688Z",
+        "completedAt": "2026-11-09T18:13:40.392Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "ready",
+        "ready": true,
+        "closedBars": 40,
+        "closedThroughAt": "2026-11-09T18:13:00.000Z"
+      },
+      {
+        "chain": "sol",
+        "address": "4yxrjPyGVsAYSMwxPPKirxJPegDjGKiTCPxWwkoFpump",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:13:41.238Z"
+      },
+      {
+        "chain": "sol",
+        "address": "6kmkcwKxxmoREhkxrbBvwDY3N2KSfpdMMtWtNoPpump",
+        "status": "cached",
+        "attempts": 0,
+        "completedAt": "2026-11-09T18:13:41.238Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "ready",
+        "ready": true,
+        "closedBars": 60,
+        "closedThroughAt": "2026-11-09T18:13:00.000Z"
+      },
+      {
+        "chain": "sol",
+        "address": "2Tef3P9qRhUTEAKTyQDHCdn67RK3yTbaLU72fcn5pump",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "CURRENT_RESEARCH_INELIGIBLE",
+        "completedAt": "2026-11-09T18:13:41.238Z"
+      },
+      {
+        "chain": "sol",
+        "address": "GMvCfcZg8YvkkQmwDaAzCtHDrrEtgE74nQpQ7xNabonk",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:13:41.238Z"
+      },
+      {
+        "chain": "sol",
+        "address": "22JKmY9YZfnQfb3pGYb6hctL5Jyvv3zhL3nQ8oyNuoYp",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:13:41.238Z",
+        "completedAt": "2026-11-09T18:13:47.389Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "ready",
+        "ready": true,
+        "closedBars": 60,
+        "closedThroughAt": "2026-11-09T18:13:00.000Z"
+      },
+      {
+        "chain": "sol",
+        "address": "Hh3oTaqDCKKfdBgsQEvxp9sUwyNf8x9qmKqEMLBWpump",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:14:15.094Z",
+        "completedAt": "2026-11-09T18:14:27.409Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "ready",
+        "ready": true,
+        "closedBars": 60,
+        "closedThroughAt": "2026-11-09T18:14:00.000Z"
+      },
+      {
+        "chain": "sol",
+        "address": "D4CzGsZgusVj2K8R1its5H8WWdo9mazbDwBc6qvsmfun",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:14:27.412Z"
+      },
+      {
+        "chain": "sol",
+        "address": "8BnNS15Q6h6D5Vcq1sNPaUxhpRVdK8FGRbLvCrLxibSx",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:14:27.412Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x3cbbfc926a55d9751e78b91642b685c4e36479d5",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:14:27.412Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xc9a981fee1f9dec688bb123ccdecc63d0debfc4e",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:15:09.014Z",
+        "completedAt": "2026-11-09T18:15:12.873Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "insufficient_contiguous_tail",
+        "ready": false,
+        "closedBars": 59,
+        "closedThroughAt": "2026-11-09T18:15:00.000Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xdf0992e440dd0be65bd8439b609d6d4366bf1cb5",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:15:21.302Z",
+        "completedAt": "2026-11-09T18:15:29.247Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "insufficient_contiguous_tail",
+        "ready": false,
+        "closedBars": 46,
+        "closedThroughAt": "2026-11-09T18:15:00.000Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xcec185eb182c47d1ba1efc84e6959e18cd620be4",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:16:15.840Z",
+        "completedAt": "2026-11-09T18:16:20.054Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "insufficient_contiguous_tail",
+        "ready": false,
+        "closedBars": 51,
+        "closedThroughAt": "2026-11-09T18:16:00.000Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x48e39e56acdba37b09020c0b734a613c9a2f100a",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:16:20.489Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x6330d8c3178a418788df01a47479c0ce7ccf450b",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:16:20.489Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:17:05.571Z",
+        "completedAt": "2026-11-09T18:17:07.877Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "insufficient_contiguous_tail",
+        "ready": false,
+        "closedBars": 35,
+        "closedThroughAt": "2026-11-09T18:17:00.000Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x72be1277e198d0c476869253cb4e62807e14533c",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:17:09.187Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x9f4ba41f91a59a34e17ee8c9eb3a51363b11abd5",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:17:09.187Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:17:37.605Z",
+        "completedAt": "2026-11-09T18:17:40.535Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "stale_closed_bars",
+        "ready": false,
+        "closedBars": 43,
+        "closedThroughAt": "2026-11-09T18:17:00.000Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:18:26.474Z",
+        "completedAt": "2026-11-09T18:18:30.940Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "insufficient_contiguous_tail",
+        "ready": false,
+        "closedBars": 51,
+        "closedThroughAt": "2026-11-09T18:18:00.000Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x1b0e319c6a659f002271b69db8a7df2f911c153e",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:18:31.201Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xbc9e7b1c5c0081f4ae85e71ec95703d3dec9ffad",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:18:31.201Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x84cab63bc87912e71ad199ff14a0ba45de68fef8",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:18:31.201Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xa2753fd0bc86b8ceb55ffd2698679c7f214785f1",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:19:28.118Z",
+        "completedAt": "2026-11-09T18:19:31.714Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "stale_closed_bars",
+        "ready": false,
+        "closedBars": 27,
+        "closedThroughAt": "2026-11-09T18:19:00.000Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x6511c233790ec10f7d673c64dc82c3f941d57828",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:19:31.570Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x15f3385625d7e364c5a6216fbbceadf10fa90e7d",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:19:31.570Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x94641b97010608c3827fb058074889f19868ff33",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:19:31.570Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xf0c4bf4c582cb3836e98394b1d4e7b7281101be8",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:20:23.558Z",
+        "completedAt": "2026-11-09T18:20:43.300Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "insufficient_contiguous_tail",
+        "ready": false,
+        "closedBars": 34,
+        "closedThroughAt": "2026-11-09T18:20:00.000Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xdc45b71d7203c2e8baafc43a19bca0eb993bb54e",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:20:47.487Z",
+        "completedAt": "2026-11-09T18:20:51.029Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "insufficient_contiguous_tail",
+        "ready": false,
+        "closedBars": 28,
+        "closedThroughAt": "2026-11-09T18:20:00.000Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xc9675fe679c7d4e1b94416f66d61c96127eb964a",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:20:52.971Z",
+        "completedAt": "2026-11-09T18:21:04.020Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "ready",
+        "ready": true,
+        "closedBars": 57,
+        "closedThroughAt": "2026-11-09T18:20:00.000Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xff080c8ce2e5feadaca0da81314ae59d232d4afd",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:21:35.685Z",
+        "completedAt": "2026-11-09T18:21:39.902Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "insufficient_contiguous_tail",
+        "ready": false,
+        "closedBars": 52,
+        "closedThroughAt": "2026-11-09T18:21:00.000Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x98096d17e191b3da1d5f99a6d7b3584351b11e18",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "nextAttemptAtMs": 1794248528865,
+        "completedAt": "2026-11-09T18:22:09.092Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x58ffe4a942d3885baa22d7520691f611ef09e7aa",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:21:40.147Z",
+        "completedAt": "2026-11-09T18:21:44.986Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "insufficient_contiguous_tail",
+        "ready": false,
+        "closedBars": 26,
+        "closedThroughAt": "2026-11-09T18:21:00.000Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x47569d49471bdbabfaf5531c0f74d9f2de82a11a",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "nextAttemptAtMs": 1794248525671,
+        "completedAt": "2026-11-09T18:22:07.557Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x7fe995a80075df3dc8ae11a9b82c7fe4202cd87f",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "nextAttemptAtMs": 1794248525671,
+        "completedAt": "2026-11-09T18:22:07.557Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xc72b96e0e48ecd4dc75e1e45396e26300bc39681",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:22:41.384Z",
+        "completedAt": "2026-11-09T18:22:45.234Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "insufficient_contiguous_tail",
+        "ready": false,
+        "closedBars": 39,
+        "closedThroughAt": "2026-11-09T18:22:00.000Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xe8ffd7e24187f72afb08d75b1bb13088a989a791",
+        "status": "fetched",
+        "attempts": 1,
+        "reasonCode": null,
+        "nextAttemptAtMs": 1794248616719,
+        "requestedAt": "2026-11-09T18:23:53.604Z",
+        "completedAt": "2026-11-09T18:23:56.076Z",
+        "chartStatus": "ok",
+        "chartDiagnostic": "insufficient_contiguous_tail",
+        "ready": false,
+        "closedBars": 49,
+        "closedThroughAt": "2026-11-09T18:23:00.000Z"
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x2fc6de9c65a620f918ca7d1191d3afa495ca2898",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "nextAttemptAtMs": 1794248616719,
+        "completedAt": "2026-11-09T18:23:56.858Z"
+      }
+    ],
+    "completedAt": "2026-11-09T18:23:56.858Z",
+    "counts": {
+      "fetched": 19,
+      "skipped": 26,
+      "cached": 1
+    }
+  },
+  "completionReason": "catchup_complete_or_changed",
+  "finishedAt": "2026-11-09T18:24:02.480812+00:00",
+  "verification": {
+    "observedExpectedBatch": true,
+    "completed": true,
+    "maxSampledCatchupInFlight": 1,
+    "resultsByStatus": {
+      "fetched": {
+        "count": 19,
+        "chartStatus": {
+          "ok": 19
+        },
+        "chartDiagnostic": {
+          "insufficient_contiguous_tail": 12,
+          "ready": 5,
+          "stale_closed_bars": 2
+        },
+        "reasonCode": {
+          "null": 19
+        }
+      },
+      "cached": {
+        "count": 1,
+        "chartStatus": {
+          "ok": 1
+        },
+        "chartDiagnostic": {
+          "ready": 1
+        },
+        "reasonCode": {
+          "null": 1
+        }
+      },
+      "skipped": {
+        "count": 26,
+        "chartStatus": {
+          "null": 26
+        },
+        "chartDiagnostic": {
+          "null": 26
+        },
+        "reasonCode": {
+          "DELISTED_FROM_FRESH_SOURCES": 25,
+          "CURRENT_RESEARCH_INELIGIBLE": 1
+        }
+      }
+    },
+    "hotFreshnessSnapshots": [
+      {
+        "at": "2026-11-09T18:14:59.949633+00:00",
+        "count": 3,
+        "fresh": 3,
+        "maxClosedAgeMs": 59614
+      },
+      {
+        "at": "2026-11-09T18:22:31.287030+00:00",
+        "count": 3,
+        "fresh": 3,
+        "maxClosedAgeMs": 89108
+      }
+    ],
+    "detailOverlapEvidence": {
+      "detailStartedAt": "2026-11-09T18:14:08.727Z",
+      "catchupCompletedDuringDetailAt": "2026-11-09T18:14:27.409Z",
+      "detailStillPendingSnapshotAt": "2026-11-09T18:14:59.949633+00:00",
+      "overlapDispatchesInThatDetail": 4
+    },
+    "notes": [
+      "All 19 requests completed with successful source chart status; fetched does not imply eligible entry.",
+      "One valid cached result plus 19 actual source results: 6 ready, 12 insufficient contiguous tail, 2 stale closed bars at completion.",
+      "26 skipped are current fresh-list absence (25) or hard research ineligibility (1); they were not counted as obtained charts.",
+      "Transient waiting_source entries resumed or were classified only after source recovery; no network failure or scheduler expiry in this batch.",
+      "Monitoring is sampled every 45 seconds; max sampled in-flight is not an exhaustive proof of all instantaneous concurrency.",
+      "No code changes, restart, GMGN direct calls or trades were made by this observer."
+    ]
+  }
+}

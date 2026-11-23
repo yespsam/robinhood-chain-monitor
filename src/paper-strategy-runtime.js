@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import './live-env-loader.js';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { READONLY_ADMISSION_VERSION } from './readonly-admission-policy.js';
@@ -24,9 +25,9 @@ import { UPSIDE_EXIT_POLICY } from './paper-upside-policy.js';
 import { PVP_EXIT_POLICY, CONFIRMED_PVP_EXIT_POLICY, EVIDENCE_HOLD_EXIT_POLICY } from './paper-pvp-policy.js';
 import { PAPER_ENTRY_POLICY_VERSION, EXPLORATORY_FLOW } from './paper-entry-policy.js';
 import { mergePaperCandidateSnapshots, planPaperCandidateResearch, readyForPaperQuote, researchReadyForQuote, canPrefetchPaperFlow, onlyPricingOrFlowWarmupMissing, missingRequestedDetailFields } from './paper-candidate-research.js';
-import { FOCUSED_RESEARCH_BUDGET_VERSION, detailGapRetry, waitsForChartTurn, reserveHotChartTurn } from './paper-research-budget.js';
-import { paperEntryFunnel, paperEntryDiagnostics } from './paper-entry-funnel.js';
-import { gmgnReadonlyPolicy } from './gmgn-readonly-pacing.js';
+import { FOCUSED_RESEARCH_BUDGET_VERSION, chartPullBudget, quoteBlocksChartBudget, detailGapRetry, waitsForChartTurn, reserveHotChartTurn } from './paper-research-budget.js';
+import { paperEntryFunnel, paperEntryDiagnostics, summarizeChartHealth } from './paper-entry-funnel.js';
+import { gmgnReadonlyPolicy, oneSecondKlineEnabled } from './gmgn-readonly-pacing.js';
 import { PAPER_AUX_AUDIT_VERSION, PAPER_TAX_FILTER_VERSION, PAPER_MAX_TAX_RATE, PAPER_TAX_FILTER_TEXT, paperTaxScreen } from './paper-safety-policy.js';
 import { PAPER_DIAGNOSTIC_ENTRY_VERSION } from './paper-diagnostic-entry.js';
 import { CONFIRMED_PAPER_VERSION, CONFIRMED_PAPER_POLICY, confirmedAccountGate, CONTINUOUS_PAPER_VERSION, paperOperatingPolicy } from './paper-confirmed-policy.js';
@@ -36,30 +37,28 @@ import { advanceNarrativeRecall, validNarrativeMemory, freshNarrativeRecall } fr
 import { advanceNarrativeLearning, validNarrativeLearning } from './paper-narrative-learning.js';
 import { advanceNarrativeAcademy, validNarrativeAcademy } from './paper-narrative-academy.js';
 import { readNarrativeLearningSource } from './paper-narrative-learning-source.js';
-import { NARRATIVE_ADMISSION_VERSION } from './paper-narrative-thesis.js';
 import { OPPORTUNITY_VERSION, OPPORTUNITY_ROUTES, canResearchExternal, opportunityChart, MAIN_CHART_WINDOW_VERSION } from './paper-opportunity-policy.js';
-import { createPaperStrategyFocusShadowStore } from './paper-strategy-focus-shadow-store.js';
-import { createPaperStrategyFocusSimulator, PAPER_STRATEGY_FOCUS_SIMULATION_VERSION } from './paper-strategy-focus-simulator.js';
-import { MEME_STRUCTURE_ENTRY_VERSION, PULLBACK_TARGET_SELECTION_VERSION } from './paper-opportunity-review.js';
+import { MEME_STRUCTURE_ENTRY_VERSION } from './paper-opportunity-review.js';
 import { STRUCTURE_COST_POLICY_VERSION, STRUCTURE_COST_TEXT, MAIN_STRUCTURE_MAX_COST_RATE, GAS_ACCOUNT_ONLY_TEXT } from './paper-cost-policy.js';
-import { planHotResearch, selectResearchChart, quoteCandidatePool, selectQuoteTarget, chartRefreshDue, advanceEntryFocus, RESEARCH_SCHEDULER_VERSION } from './paper-research-scheduler.js';
-import { projectQuoteOpportunity, selectQuoteOpportunity, QUOTE_OPPORTUNITY_VERSION } from './paper-quote-opportunity.js';
+import { planHotResearch, selectResearchChart, selectQuoteCandidate, quoteCandidatePool, selectQuoteTarget, chartRefreshDue, advanceEntryFocus, RESEARCH_SCHEDULER_VERSION } from './paper-research-scheduler.js';
 import { createReviewComparison, validateReviewComparison, reviewComparisonSummary } from './paper-review-comparison.js';
 import { createExitComparison, validateExitComparison, advanceExitComparison, exitComparisonSummary, activateExitEntrySampling } from './paper-exit-comparison.js';
-import { createProfitRetentionObserver } from './paper-profit-retention-observer.js';
-import { PROFIT_RETENTION_MULTIARM_VERSION } from './paper-profit-retention-multiarm.js';
 import { nextScanDelay } from './paper-runtime-cadence.js';
 import { createTradeReview, advanceTradeReview, validateTradeReview, tradeReviewSummary } from './paper-trade-review.js';
-import { MEME_EXIT_POLICY, MEME_EXIT_TEXT, MEME_EXIT_FLOW_OBSERVATION_VERSION, MEME_EXIT_STRUCTURE_OBSERVATION_VERSION, memeEntryContext, memeExitEvaluation } from './paper-meme-exit.js';
-import { STRUCTURE_ENTRY_PROOF_VERSION } from './paper-structure-entry-proof.js';
+import { MEME_EXIT_POLICY, MEME_EXIT_TEXT, memeEntryContext, memeExitEvaluation } from './paper-meme-exit.js';
 import { buildPaperNewsWire } from './paper-news-wire.js';
 import { historicalTwitterAnchors } from './paper-twitter-event.js';
-import { PAPER_RECOVERY_VERSION, EVIDENCE_GAP_POLICY, RECOVERY_ENTRY_TEXT, ENTRY_FLOW_VERSION } from './paper-recovery-policy.js';
+import { PAPER_RECOVERY_VERSION, EVIDENCE_GAP_POLICY, RECOVERY_ENTRY_TEXT } from './paper-recovery-policy.js';
 import { PAPER_RECOVERY_SIZING_VERSION, PAPER_INTERNAL_DEPTH_SIZING_VERSION } from './paper-position-sizing.js';
-import { createNarrativeResearchIndex, narrativeDeskReport } from './paper-narrative-thesis.js';
+import { createNarrativeResearchIndex, narrativeDeskReport, buildNarrativeThesis, attachNarrativeThesis } from './paper-narrative-thesis.js';
 import { walletBuyResearchHint, WALLET_BUY_PRIORITY_VERSION } from './paper-wallet-priority.js';
-import { HOT_RESEARCH_VERSION, HOT_WATCH_MS, hotWatchEligible, advanceHotWatch, marketLeaderHint, selectHotQuoteResearch } from './paper-hot-research.js';
+import { HOT_RESEARCH_VERSION, HOT_WATCH_MS, hotWatchEligible, advanceHotWatch, marketLeaderHint, selectHotQuoteResearch, hotQuoteDispatchAllowed, markHotQuoteAttempt, markHotQuoteResult } from './paper-hot-research.js';
+import { createChartFallback } from './paper-chart-fallback.js';
 import { paperEventTriggers } from './paper-event-triggers.js';
+import { buildFlapPoolLaunchWire, validFlapPoolLaunchSignal } from './flap-pool-launch-signal.js';
+import { liveFlapPoolLaunchEnabled } from './flap-pool-launch.js';
+import { createPaperStrategyFocusShadowStore } from './paper-strategy-focus-shadow-store.js';
+import { createPaperStrategyFocusSimulator } from './paper-strategy-focus-simulator.js';
 import {buildCollectiveWire,COLLECTIVE_POLICY,COLLECTIVE_SIGNAL_VERSION,PREQUALIFIED_WALLET_POLICY,INTERNAL_BURST_POLICY,ONCHAIN_BURST_POLICY,ONCHAIN_BURST_VERSION,validCollectiveSignal} from './paper-collective-signal.js';
 import {buildOnchainTradeFlow} from './paper-onchain-flow.js';
 import { tradingScanChains } from './trading-scan-scope.js';
@@ -97,27 +96,17 @@ async function atomicWrite(file, value) {
   }
 }
 
+// Live mirror is OPT-IN per runtime instance (dashboard-server passes one). Tests/fixtures/replays
+// that build a runtime without it can never reach the live trader or the production decision log.
 export const liveMirrorCapability = (mirror) => ({ enabled: mirror?.cfg?.enabled === true, chains: mirror?.cfg?.chains || [], signalSource: mirror?.cfg?.signalSource || null, strategyAllowlist: mirror?.cfg?.strategyAllowlist || null });
-
-export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe = null, internalTradeMonitor = null, gasMonitor = null, jevResearch = null, chainGasAccounting = false, lossRepairMode = false, enforceLossGuards = lossRepairMode, session = null, chain = 'robinhood', chains = [chain], discoveryMode = 'all_sources', now = Date.now, intervalMs = 1000, marketIntervalMs = 1000, twitterNarrativeSnapshot = () => null, learningReportSnapshot = null,
-  evidenceLoader = createPaperEvidenceLoader(dataDir), evaluate = evaluatePaperStrategies, learningLoader = () => null, narrativeSourceReader = readNarrativeLearningSource, allowExploratory = false, compoundEntries = false, fixedEntryUsd = null, upsideMode = false, pvpMode = false, diagnosticMode = false, confirmedMode = false, evidenceHoldMode = false, continuousPaperMode = false, opportunityMode = false, thesisExitExperiment = false, activeEntrySampling = false, tradeReviewEvery = null, higherFrequencyResearch = false, memeExitMode = false, recoveryMode = false, minimalEntryMode = false, evidenceGapExitMode = true, narrativeAdmissionGate = false, profitRetentionShadow = false, strategyFocusSimulation = false, ...legacyOptions } = {}) {
-  const liveMirror = legacyOptions.liveMirror ?? null;
+export function createPaperStrategyRuntime({ liveMirror = null, market, secondaryMarket = null, dataDir, internalDepthProbe = null, internalTradeMonitor = null, gasMonitor = null, jevResearch = null, chainGasAccounting = false, lossRepairMode = false, enforceLossGuards = lossRepairMode, session = null, chain = 'robinhood', chains = [chain], discoveryMode = 'all_sources', now = Date.now, intervalMs = 1000, marketIntervalMs = 1000, twitterNarrativeSnapshot = () => null, learningReportSnapshot = null,
+  evidenceLoader = createPaperEvidenceLoader(dataDir), evaluate = evaluatePaperStrategies, learningLoader = () => null, narrativeSourceReader = readNarrativeLearningSource, allowExploratory = false, compoundEntries = false, fixedEntryUsd = null, upsideMode = false, pvpMode = false, diagnosticMode = false, confirmedMode = false, evidenceHoldMode = false, continuousPaperMode = false, opportunityMode = false, thesisExitExperiment = false, activeEntrySampling = false, tradeReviewEvery = null, higherFrequencyResearch = false, memeExitMode = false, recoveryMode = false, minimalEntryMode = false, evidenceGapExitMode = true, evidenceTierGate = false,
+  narrativeAdmissionGate = false, strategyFocusSimulation = false, externalStructureMainAdmission = false } = {}) {
   const liveMirrorJobs = new Set();
-  const mirrorLive = liveMirror ? (beforeCount, acct, sess) => {
-    let job;
-    job = Promise.resolve().then(() => liveMirror(beforeCount, acct, sess))
-      .catch(error => console.error(`[live-gmgn] ${error.message}`))
-      .finally(() => liveMirrorJobs.delete(job));
-    liveMirrorJobs.add(job);
-  } : () => {};
+  const mirrorLive = liveMirror ? (before, acct, sess) => { const job = liveMirror(before, acct, sess).catch(e => console.error(`[live-gmgn] ${e.message}`)).finally(() => liveMirrorJobs.delete(job)); liveMirrorJobs.add(job); } : () => {};
   if(typeof recoveryMode!=='boolean'||recoveryMode&&!memeExitMode)throw new TypeError('recovery requires meme paper main');
-  if(typeof narrativeAdmissionGate!=='boolean'||narrativeAdmissionGate&&!recoveryMode)throw new TypeError('narrative admission requires recovered paper main');
-  const focusSimulationReady = confirmedMode && opportunityMode && recoveryMode && narrativeAdmissionGate;
-  if(typeof strategyFocusSimulation!=='boolean'||strategyFocusSimulation&&!focusSimulationReady)
-    throw new TypeError('focus paper simulation requires confirmed multi-setup narrative-gated paper mode');
+  if(typeof externalStructureMainAdmission!=='boolean')throw new TypeError('external structure main admission must be explicitly boolean');
   const estimatedFeeMode=session?.costModel===ESTIMATED_COST_VERSION;
-  if(typeof profitRetentionShadow!=='boolean'||profitRetentionShadow&&(!estimatedFeeMode||!confirmedMode||!session))throw new TypeError('profit retention study requires an estimated confirmed paper session');
-  if(['profitRetentionPriceMultiple','profitRetentionPriceMultiples','triggerPriceMultiple','triggerPriceMultiples'].some(key=>Object.hasOwn(legacyOptions,key)))throw new TypeError('profit retention multiarm has fixed multiples 2, 3 and 5; single-multiple options are retired');
   if(typeof lossRepairMode!=='boolean'||lossRepairMode&&(!recoveryMode||!memeExitMode))throw new TypeError('loss repair requires recovered paper main');
   if(estimatedFeeMode&&recoveryMode&&(!lossRepairMode||chainGasAccounting||thesisExitExperiment||activeEntrySampling))throw new TypeError('estimated session requires isolated repair mode without legacy comparisons');
   if(typeof enforceLossGuards!=='boolean'||lossRepairMode&&!enforceLossGuards&&(!estimatedFeeMode||!continuousPaperMode))throw new TypeError('loss guard override requires continuous estimated paper');
@@ -133,6 +122,9 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
   if (typeof confirmedMode !== 'boolean' || confirmedMode && (!allowExploratory || !pvpMode || diagnosticMode || !fastQuoteAvailable(market))) throw new TypeError('invalid confirmed paper configuration');
   if (typeof minimalEntryMode !== 'boolean' || minimalEntryMode && (!confirmedMode || !allowExploratory || !pvpMode || diagnosticMode)) throw new TypeError('invalid minimal paper configuration');
   if (typeof evidenceGapExitMode !== 'boolean') throw new TypeError('invalid evidence gap exit mode');
+  if (typeof narrativeAdmissionGate !== 'boolean' || typeof strategyFocusSimulation !== 'boolean'
+    || strategyFocusSimulation && (!confirmedMode || !opportunityMode || !continuousPaperMode || !memeExitMode))
+    throw new TypeError('strategy focus simulation requires confirmed multi-setup narrative-gated paper mode');
   if (fixedEntryUsd !== null && (fixedEntryUsd !== PAPER_FIXED_ENTRY_USD || !confirmedMode)) throw new TypeError('invalid fixed paper ticket');
   if (typeof evidenceHoldMode !== 'boolean' || evidenceHoldMode && !confirmedMode) throw new TypeError('evidence hold requires confirmed paper mode');
   if (typeof continuousPaperMode !== 'boolean' || continuousPaperMode && !confirmedMode) throw new TypeError('continuous mode requires confirmed paper mode');
@@ -154,9 +146,6 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     if (!confirmedMode || session.chain !== chain || JSON.stringify(session.chains) !== JSON.stringify(chains)) throw new Error('独立实验只能使用已选择的 V2 策略与链配置');
   }
   const stateFile = path.join(dataDir, session ? paperSessionLedgerFile(session) : 'yesp-atm-strategy-paper.json'), lockFile = `${stateFile}.lock`;
-  const profitRetentionObserver = profitRetentionShadow ? createProfitRetentionObserver({dataDir,sessionId:session.id,sourceLedgerName:path.basename(stateFile),now}) : null;
-  const focusShadowStore = opportunityMode ? createPaperStrategyFocusShadowStore({dataDir,sessionId:session?.id||null,now}) : null;
-  const focusSimulator = strategyFocusSimulation ? createPaperStrategyFocusSimulator({dataDir,now}) : null;
   const owner = randomUUID();
   const researchReader = createPaperResearchReader({ evidenceLoader, learningLoader, now });
   let account = null, enabled = !lossRepairMode, initialized = false, stopped = false, started = false, lockHeld = false, timer, tail = Promise.resolve(), cycle = null;
@@ -277,15 +266,25 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       checks:collectiveWireState?.checks||[],records,retained:records.length,filled:records.filter(r=>r.status==='filled').length,
       note:`保留最近 200 个独立信号；触发不等于成交。延迟从本地首次检测或源事件计算；未检测时段未知。收益见分路线复盘；${POOL_FIRST_THREE_POLICY.coverageNote}`};
   }
-  const charts = new Map();
+  const charts = new Map(),primaryCharts=new Map();
+  let researchDispatch=0,lastDiscoveryChain=null,chartResearchRows=new Map(),chartCandidateRows=new Map(),chartCatchup=null,catchupReadActive=false;
+  const researchFirstSeen=new Map();
   const chartJobs = new Map(), quotes = new Map(), quoteAttempts = new Map();
-  // Three-list discovery owns the normal read seats. Exploratory chart/detail
-  // work has one shared, queue-free producer slot; exits/confirmed entries do
-  // not use it. The account gate still owns actual concurrency and pacing.
+  const chartFallback=createChartFallback({secondaryMarket,now,getPrimary:token=>primaryCharts.get(keyOf(token)),
+    isAdmitted:token=>{
+      const row=chartResearchRows.get(keyOf(token));
+      return !stopped&&!!row&&canResearchEntry(row.input.token)&&row.input.marketStatus==='ok'
+        &&fresh(row.input.observedAt,now())&&!paperTaxScreen(row.input.token).blocked
+        &&canResearchExternal({...row.input,nowMs:now()},row.decisions);
+    },
+    onReady:(token,item)=>{if(stopped)return;charts.set(keyOf(token),item);trimChartCaches();requestEventRecheck(token,'secondary_chart_ready');}});
+  // Three-list discovery still yields to details after a bounded run of charts.
+  // Hot and wallet K-lines may occupy several local slots; the account gate
+  // still owns actual concurrency, pacing and the exit seat.
   const exploratoryChartKeys=new Set();
   let lastExploratoryKind=null,exploratoryDetailDeferrals=0,exploratoryChartDeferrals=0;
   let exploratoryChartDemand=null,chartTurnDeferrals=0;
-  let chartsSinceDetail=0,hotDeadlineDeferrals=0,hotWatch=new Map(),hotWatchRows=[];
+  let chartsSinceDetail=0,hotDeadlineDeferrals=0,hotDetailSkips=0,hotWatch=new Map(),hotWatchRows=[];
   const detailGapRetries=new Map();
   const quoteHistories = new Map();
   const unavailable = { status: 'unavailable', tokens: [], observedAt: null };
@@ -296,6 +295,23 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
   // list membership or a persistent CA allowlist. Rebuild on every evidence
   // read; missing/disabled/conflicting/consumed evidence removes permission.
   let poolDiscoverySignals=new Map(),poolEvidenceSequence=0;
+  let flapLaunchSignals=new Map(),flapLaunchSequence=0;
+  function installFlapPoolLaunchWire(evidence,nowMs,research) {
+    const enabled=lossRepairMode&&estimatedFeeMode&&liveFlapPoolLaunchEnabled();
+    const wire=buildFlapPoolLaunchWire({events:enabled?evidence.events||[]:[],account,nowMs,enabled});
+    const sequence=researchSequences.get(research)||0;
+    if(sequence>=flapLaunchSequence) {
+      flapLaunchSequence=sequence;
+      flapLaunchSignals=new Map(wire.signals.filter(s=>scanChains.includes(s.chain)
+        &&validFlapPoolLaunchSignal(s,s,nowMs)).slice(0,64).map(s=>[keyOf(s),s]));
+    }
+    return wire;
+  }
+  const flapLaunchDiscovery=token=>{
+    if(!lossRepairMode||!estimatedFeeMode||!liveFlapPoolLaunchEnabled()||!scanChains.includes(token.chain))return null;
+    const signal=flapLaunchSignals.get(keyOf(token));
+    return validFlapPoolLaunchSignal(signal,token,now())?signal:null;
+  };
   function installPoolWire(evidence,nowMs,research) {
     const wire=buildPoolFirstThreeWire({events:lossRepairMode&&estimatedFeeMode?evidence.events||[]:[],
       account,sourceHealth:evidence.poolSourceHealth,launchSourceHealth:evidence.launchSourceHealth,nowMs});
@@ -331,8 +347,15 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     return collectiveWireState?.signals.find(s=>keyOf(s)===keyOf(token)&&fresh(s.sourceAt,now(),30000)
       &&fresh(s.sourceObservedAt,now(),30000))||null;
   };
-  const canResearchEntry=token=>listedForEntry(token)||!!walletDiscoverySignal(token)||!!poolDiscoverySignal(token);
-  const canEnterRow=row=>listedForEntry(row.token)||poolEntryRow(row)||['internal','near_completion'].includes(row.evidence?.marketStage)
+  const canResearchEntry=token=>listedForEntry(token)||!!walletDiscoverySignal(token)||!!poolDiscoverySignal(token)||!!flapLaunchDiscovery(token);
+  const flapLaunchEntryRow=row=>{
+    const signal=row.evidence?.opportunity?.event,current=flapLaunchDiscovery(row.token);
+    return !!current&&row.evidence?.opportunity?.id==='monitored_event'
+      &&row.evidence.opportunity.basis==='monitored_event'&&row.evidence.opportunity.signalId===current.id
+      &&signal?.id===current.id&&validFlapPoolLaunchSignal(signal,row.token,now())
+      &&JSON.stringify(signal.poolEvent)===JSON.stringify(current.poolEvent);
+  };
+  const canEnterRow=row=>listedForEntry(row.token)||poolEntryRow(row)||flapLaunchEntryRow(row)||['internal','near_completion'].includes(row.evidence?.marketStage)
     &&row.evidence?.opportunity?.basis==='wallet_signal'&&walletDiscoverySignal(row.token)?.id===row.evidence.collectiveSignal?.id
     &&validCollectiveSignal(row.evidence.collectiveSignal,row.token,now());
   let marketOffset = 0, refreshJob = null, refreshTimer, quoteTimer, fastCycle = null;
@@ -353,6 +376,8 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
   let exitJob = null, exitTimer, latestEvidence = {}, exitChecks = 0;
   const details = new Map();
   let detailJob = null, detailTargets = [], detailChainOffset = 0, lastDetailStart = null;
+  let detailIsSignal = false, detailOverlapCount = 0;
+  const detailOverlapKeys = new Set();
   let detailDispatchCount = 0, detailsSucceeded = 0, lastDetail = null, lastMarketRefreshStartedAt = null;
   let quoteTargets = [], lastQuoteTiming = null, lastTickAt = null, tickCount = 0, lastMarketRefreshAt = null;
   let lastComparisonQuoteAt = -Infinity;
@@ -361,8 +386,8 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
   const fastQuotes = typeof market.quote === 'function';
   let candidateOffset = 0;
   let lastOpportunityChartAt = -Infinity, chartDispatch = 0, hotResearchKeys = [], lastChartDispatch = null, quoteLease = null;
-  let quoteEventLeaseHistory = [], quoteEventPreemptionSuppressedUntil = 0;
   const chartDispatches={holding:0,entry:0,hot:0,wallet:0,discovery:0,proactive:0};
+  const recentHotChains=[];
   let entryFocus = null, hotQuoteLease = null;
   const researchDeferrals = { auxiliary: 0, details: 0, learning: 0, discovery: 0 };
   const entryWindowMs = memeExitMode ? 45000 : 20000;
@@ -376,16 +401,22 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
   let narrativeMemory = null, narrativeRecallState = null;
   let narrativeLearningMemory = null, narrativeLearningState = null, narrativeLearningTargets = [];
   let narrativeAcademyMemory = null, narrativeAcademyState = null, lastNarrativeAcademyAt = 0;
+  const focusShadowStore=createPaperStrategyFocusShadowStore({dataDir,sessionId:session?.id||null,now});
+  const focusSimulator=strategyFocusSimulation?createPaperStrategyFocusSimulator({dataDir,sessionId:session?.id||null,now}):null;
+  let focusShadowLatestScan={checkedAt:null,candidateCount:0,candidates:[]},focusSimulatorState=null;
+  const focusShadowState=()=>({...focusShadowStore.snapshot(),
+    durability:'bounded_persistent_journal_plus_latest_scan_snapshot',entryAllowed:false,paperFillAllowed:false,
+    latestScan:clone(focusShadowLatestScan)});
   let narrativeSourceTargets = [];
   let narrativeLearningJob = null, lastNarrativeLearningRequest = null;
   const narrativeLearningMarks = new Map();
   const narrativeSourceObservations = new Map();
-  let publicState = { status: 'loading', strategyVersion: STRATEGY_ANALYSIS_VERSION, entryPolicyVersion: PAPER_ENTRY_POLICY_VERSION, entryMode: minimalEntryMode ? 'minimal_hard_safety_v1' : confirmedMode ? CONFIRMED_PAPER_VERSION : diagnosticMode ? PAPER_DIAGNOSTIC_ENTRY_VERSION : allowExploratory ? 'standard_and_exploratory' : 'standard', minimalEntryMode, exitPolicy: exitProfile ? clone(exitProfile) : null, mode: 'paper', execution: false, signing: false, broadcast: false, enabled, chain, chains, learningChain: chain, updatedAt: null,
+  let publicState = { status: 'loading', strategyVersion: STRATEGY_ANALYSIS_VERSION, entryPolicyVersion: PAPER_ENTRY_POLICY_VERSION, entryMode: minimalEntryMode ? 'minimal_hard_safety_v1' : confirmedMode ? CONFIRMED_PAPER_VERSION : diagnosticMode ? PAPER_DIAGNOSTIC_ENTRY_VERSION : allowExploratory ? 'standard_and_exploratory' : 'standard', minimalEntryMode, evidenceTierGate, externalStructureMainAdmission, exitPolicy: exitProfile ? clone(exitProfile) : null, mode: 'paper', execution: false, signing: false, broadcast: false, liveMirror: liveMirrorCapability(liveMirror), enabled, chain, chains, learningChain: chain, updatedAt: null,
     session: session && clone(session), operatingPolicy: paperOperatingPolicy(continuousPaperMode, enforceLossGuards), lossGuards: lossRepairMode ? { enforced: enforceLossGuards, threshold: enforceLossGuards ? 'daily_or_round_10_percent' : null, newEntriesStop: enforceLossGuards } : { enforced: !continuousPaperMode, threshold: !continuousPaperMode ? 'daily_10_percent' : null, newEntriesStop: !continuousPaperMode }, newLaunchPolicy:lossRepairMode?{...LAUNCH_POLICY}:null, evidenceGapExitMode, opportunityMode:opportunityMode ? OPPORTUNITY_VERSION : null, auxiliaryAuditPolicy: !confirmedMode && allowExploratory && pvpMode ? PAPER_AUX_AUDIT_VERSION : 'strict_fields_v1',
     lastError: null, account: null, strategies: STRATEGY_POLICIES.map(p => ({ ...p, decision: '观察', eligibleCount: 0, observedCount: 0, reasons: ['等待首轮真实数据'], candidate: null })), coverage: {}, evaluations: [], pollIntervalMs: intervalMs,
+    strategyFocusShadow:focusShadowState(),strategyFocusSimulation:focusSimulator?.snapshot()||null,
     costModel: estimatedFeeMode ? ESTIMATED_COST_TEXT : lossRepairMode ? LOSS_REPAIR_TEXT : chainGasAccounting ? '主盘新仓 Gas 取近期链上 swap 实付费用样本，扣账但不因 Gas 高拒绝入场；费用样本不是本订单实际费用，平台费/滑点仍为模型。旧仓及对照盘保留原成本口径' : '费用、滑点及 gas 按模型估算；非实际成交报价', accountNote: session ? '独立虚拟实验；历史亏损账本单独保留，不合并成绩或自动补款' : '独立的服务端 100 美元模拟账户；旧浏览器账户只读保留',
     executionModel: `本地每 ${intervalMs / 1000} 秒检查；五分钟为滚动证据窗口，不是每笔等待；上游延迟另计，非毫秒抢跑` };
-  publicState.liveMirror = liveMirrorCapability(liveMirror);
   const serial = fn => { const result = tail.then(fn); tail = result.catch(() => {}); return result; };
   const errorState = error => { publicState = { ...publicState, status: 'error', lastError: String(error?.message || error).slice(0, 160), account: account && clone(account) }; };
 
@@ -435,7 +466,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
         enabled = stored.enabled && (!lossRepairMode || estimatedFeeMode) && account.stats.dailyLossGuard !== true;
         if(Array.isArray(stored.algorithmSignalJournal))algorithmSignalJournal=stored.algorithmSignalJournal.filter(r=>
           r&&typeof r.id==='string'&&r.chain==='bsc'&&gmgnFlowAddress('bsc',r.address)===r.address
-          &&['collective_smart_money','prequalified_wallet','internal_burst','onchain_internal_burst','new_pool_first_three'].includes(r.source)&&Number.isFinite(Date.parse(r.sourceAt))
+          &&['collective_smart_money','prequalified_wallet','internal_burst','onchain_internal_burst','new_pool_first_three','flap_pool_launch'].includes(r.source)&&Number.isFinite(Date.parse(r.sourceAt))
           &&Number.isFinite(Date.parse(r.firstDetectedAt))).slice(-200);
         if (stored.tradeCountReview != null) {
           tradeCountReview = stored.tradeCountReview;
@@ -469,11 +500,11 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       if (thesisExitExperiment && !exitComparison) exitComparison = createExitComparison(account, now());
       if (activeEntrySampling) exitComparison = activateExitEntrySampling(exitComparison, now());
       if (tradeReviewEvery && tradeCountReview == null) tradeCountReview = createTradeReview(account,now());
-      await profitRetentionObserver?.initialize({account,persistedAccount:stored?.account||account});
-      await focusShadowStore?.initialize();
-      await focusSimulator?.initialize();
+      await focusShadowStore.initialize();
+      if(focusSimulator)focusSimulatorState=await focusSimulator.initialize();
       initialized = true; publicState = { ...publicState, enabled, account: clone(account), updatedAt: account.updatedAt,
-        tradeCountReview: tradeReviewSummary(tradeCountReview,tradeCountReviewError) };
+        tradeCountReview: tradeReviewSummary(tradeCountReview,tradeCountReviewError),
+        strategyFocusShadow:focusShadowState(),strategyFocusSimulation:focusSimulatorState };
     } catch (error) { errorState(error); await releaseLock(); throw error; }
   }
 
@@ -484,19 +515,128 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     lockHeld = false;
   }
 
+  const catchupPending = item => ['queued','retry','waiting_source','in_flight'].includes(item.status);
+  function settleChartCatchup(at=now()) {
+    if(!chartCatchup)return;
+    if(at>=chartCatchup.deadlineMs)for(const item of chartCatchup.items)if(catchupPending(item)) {
+      if(item.status==='in_flight'){item.deadlineReached=true;continue;}
+      item.status='expired';item.reasonCode='CHART_CATCHUP_DEADLINE';item.completedAt=new Date(at).toISOString();
+    }
+    if(chartCatchup.status==='running'&&!chartCatchup.items.some(catchupPending)) {
+      chartCatchup.status='complete';chartCatchup.completedAt=new Date(at).toISOString();
+    }
+  }
+  function chartCatchupStatus() {
+    settleChartCatchup();
+    if(!chartCatchup)return null;
+    const counts={};for(const item of chartCatchup.items)counts[item.status]=(counts[item.status]||0)+1;
+    const {deadlineMs,...view}=chartCatchup;
+    return clone({...view,counts});
+  }
+  function queueChartCatchup(targets) {
+    if(stopped||!initialized)throw Object.assign(new Error('研究引擎尚未就绪'),{code:'CHART_CATCHUP_NOT_READY'});
+    if(!Array.isArray(targets)||!targets.length||targets.length>100)throw new TypeError('只接受 1–100 个链与 CA 目标');
+    const unique=new Map();
+    for(const target of targets) {
+      if(!target||typeof target.chain!=='string'||typeof target.address!=='string'||Object.keys(target).some(k=>!['chain','address'].includes(k)))throw new TypeError('补查目标只接受 chain/address');
+      const address=gmgnFlowAddress(target.chain,target.address);
+      if(!address||!scanChains.includes(target.chain))throw new TypeError('补查目标链或 CA 无效');
+      unique.set(`${target.chain}:${address}`,{chain:target.chain,address});
+    }
+    settleChartCatchup();
+    if(chartCatchup?.status==='running'||catchupReadActive)throw Object.assign(new Error('已有一轮 K 线补查正在进行'),{code:'CHART_CATCHUP_ACTIVE'});
+    const at=now();
+    chartCatchup={id:`chart-catchup-${at}`,status:'running',createdAt:new Date(at).toISOString(),deadlineMs:at+1800000,
+      deadlineAt:new Date(at+1800000).toISOString(),items:[...unique.values()].map(target=>({...target,status:'queued',attempts:0}))};
+    // Admission is rechecked on every ordinary scan; queued identities never
+    // grant access to an off-list, stale, unsafe or unqualified asset.
+    nextChartCatchupTarget(at);
+    return chartCatchupStatus();
+  }
+  function nextChartCatchupTarget(at) {
+    settleChartCatchup(at);
+    if(!chartCatchup||chartCatchup.status!=='running'||catchupReadActive)return null;
+    for(const item of chartCatchup.items) {
+      if(!['queued','retry','waiting_source'].includes(item.status)||(item.nextAttemptAtMs??0)>at)continue;
+      const row=chartResearchRows.get(keyOf(item));
+      if(!row||!canResearchEntry(row.input.token)||!canResearchExternal({...row.input,nowMs:at},row.decisions)) {
+        const sources=(marketSnapshots.get(item.chain)||[]).slice(0,2);
+        const healthy=sources.length===2&&sources.every(source=>source?.status==='ok'&&fresh(source.observedAt,at));
+        const current=chartCandidateRows.get(keyOf(item)),evidence=current?.decisions?.[0]?.evidence;
+        const hardIneligible=current&&(paperTaxScreen(current.input.token).blocked||evidence?.safety?.blocked?.length
+          ||['internal','near_completion'].includes(current.input.token.marketStage)||current.input.token.stageConflict
+          ||Number.isFinite(evidence?.liquidity)&&evidence.liquidity<20000
+          ||Number.isFinite(evidence?.volume?.value)&&evidence.volume.value<=0);
+        const delisted=healthy&&focusedDiscovery&&!focusedMembership(sources,item.chain,at).has(keyOf(item));
+        if(healthy&&(delisted||hardIneligible)) {
+          item.status='skipped';item.reasonCode=delisted?'DELISTED_FROM_FRESH_SOURCES':'CURRENT_RESEARCH_INELIGIBLE';item.completedAt=new Date(at).toISOString();
+        } else {
+          item.status='waiting_source';item.reasonCode=healthy?'RESEARCH_EVIDENCE_PENDING':'DISCOVERY_SOURCE_UNAVAILABLE';item.nextAttemptAtMs=at+5000;
+        }
+        continue;
+      }
+      const cached=charts.get(keyOf(item));
+      if(cached&&!chartRefreshDue(cached,at,{active:true})) {
+        if(['GMGN_NETWORK_FAILED','GMGN_QUEUE_EXPIRED','GMGN_REQUEST_BUSY'].includes(cached.reasonCode)) {
+          item.status='retry';item.reasonCode=cached.reasonCode;
+          item.nextAttemptAtMs=Math.max(at+1000,cached.fetchedAt+(cached.reasonCode==='GMGN_NETWORK_FAILED'?60000:5000));continue;
+        }
+        recordChartCatchupResult(item,cached,at,'cached');continue;
+      }
+      if(!chartJobs.has(keyOf(item)))return {...row.input.token,purpose:'candidate',researchLane:'catchup'};
+    }
+    settleChartCatchup(at);return null;
+  }
+  function beginChartCatchup(target,at) {
+    const item=chartCatchup?.items.find(item=>keyOf(item)===keyOf(target)&&['queued','retry','waiting_source'].includes(item.status));
+    if(!item)return null;
+    catchupReadActive=true;item.status='in_flight';item.attempts++;item.requestedAt=new Date(at).toISOString();
+    return item;
+  }
+  function recordChartCatchupResult(item,result,at,status) {
+    const analysis=opportunityChart(result?.candles,result?.status,at,{contiguousTail:memeExitMode});
+    Object.assign(item,{status,completedAt:new Date(at).toISOString(),chartStatus:result?.status||'unavailable',
+      source:result?.source||null,sourceDigest:result?.chartProvenance?.sourceDigest||null,poolId:result?.chartProvenance?.poolId||null,
+      reasonCode:result?.reasonCode||null,chartDiagnostic:analysis.diagnostics?.code||null,
+      ready:analysis.ready===true,closedBars:analysis.diagnostics?.closedBars??0,
+      closedThroughAt:Number.isFinite(result?.closedThroughAtMs)?new Date(result.closedThroughAtMs).toISOString():null});
+  }
+  function finishChartCatchup(item,result) {
+    const at=now();
+    catchupReadActive=false;
+    if(item.status!=='in_flight')return result;
+    recordChartCatchupResult(item,result,at,'fetched');
+    if(at>=chartCatchup.deadlineMs){item.status='expired';item.reasonCode='CHART_CATCHUP_DEADLINE';}
+    if(['GMGN_QUEUE_EXPIRED','GMGN_REQUEST_BUSY','GMGN_NETWORK_FAILED'].includes(result?.reasonCode)&&item.attempts<3&&at<chartCatchup.deadlineMs) {
+      item.status='retry';item.nextAttemptAtMs=at+(result.reasonCode==='GMGN_NETWORK_FAILED'?60000*2**(item.attempts-1):5000);delete item.completedAt;
+    }
+    settleChartCatchup(at);return result;
+  }
+
   async function getChart(token, nowMs) {
     const key = keyOf(token), cached = charts.get(key);
-    const active=['hot','holding','entry','wallet'].includes(token.researchLane);
-    if (!chartRefreshDue(cached,nowMs,{active})) return cached;
+    const active=['hot','holding','entry','wallet','catchup'].includes(token.researchLane);
+    if (!chartRefreshDue(cached,nowMs,{active})) {
+      const selected=chartFallback.observe(token,primaryCharts.get(key)||cached);
+      if(selected)charts.set(key,selected);
+      return selected;
+    }
     if (chartJobs.has(key)) return chartJobs.get(key);
     const exploratory=focusedDiscovery && token.purpose!=='exit' && token.researchLane!=='entry';
-    if(exploratory&&(detailJob||exploratoryChartKeys.size)) {exploratoryChartDeferrals++;return cached||{};}
-    if(exploratory){exploratoryChartKeys.add(key);lastExploratoryKind='chart';chartsSinceDetail=Math.min(2,chartsSinceDetail+1);}
+    const budget=researchLimits();
+    const firstHot=!cached && (token.researchLane==='hot'||token.researchLane==='wallet');
+    if(exploratory&&(detailBlocksChart(token,budget)||exploratoryChartKeys.size>=budget.focusedExploratory||(chartsSinceDetail>=budget.maxChartsBeforeDetail && !firstHot && ordinaryDetailTurnDue()))) {
+      exploratoryChartDeferrals++;return cached||{};
+    }
+    if(exploratory){if(detailJob){detailOverlapKeys.add(key);detailOverlapCount++;}exploratoryChartKeys.add(key);lastExploratoryKind='chart';if(!firstHot)chartsSinceDetail=Math.min(budget.maxChartsBeforeDetail,chartsSinceDetail+1);}
     const job = loadChart(token, nowMs).finally(() => {
-      chartJobs.delete(key);exploratoryChartKeys.delete(key);
-      // Give due details the next turn after a chart. No persistent CA queue:
-      // refreshDetails rechecks current membership, safety and due times.
-      if(exploratory&&started&&!stopped)void refreshDetails();
+      chartJobs.delete(key);exploratoryChartKeys.delete(key);detailOverlapKeys.delete(key);
+      // Give due details the next turn after a chart batch. No persistent CA
+      // queue: refreshDetails rechecks current membership, safety and due times.
+      if(exploratory&&started&&!stopped&&exploratoryChartKeys.size===0) {
+        const limits=researchLimits();
+        if(chartsSinceDetail>=limits.maxChartsBeforeDetail||!hotDeadlineReservation())void refreshDetails();
+      }
     });
     chartJobs.set(key, job); return job;
   }
@@ -506,8 +646,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     const to = Math.floor(nowMs / 60_000) * 60;
     let result;
     try { result = await market.kline({ chain: token.chain, address: token.address, resolution: '1m', from: to - 3600, to, latestClosed:true,
-      purpose: token.researchLane === 'entry' ? 'entry_confirmation' : token.purpose==='exit' ? 'exit'
-        : focusedDiscovery ? 'research' : token.purpose || 'candidate' }); }
+      purpose: chartReadPurpose(token) }); }
     catch { result = { status: 'unavailable', candles: [] }; }
     if (opportunityMode && (result.chain !== token.chain || gmgnFlowAddress(token.chain,result.address) !== gmgnFlowAddress(token.chain,token.address)
       || result.resolution !== '1m')) result = { status:'unavailable',candles:[],reason:'kline_binding_mismatch' };
@@ -530,10 +669,26 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       // completed OHLCV signal. Preserve that path when fast quotes are absent.
       markCandles: fastQuotes ? undefined : result.candles,
       excludedUnclosedBars: Array.isArray(result.candles) ? result.candles.length - candles.length : 0 };
-    charts.set(key, item);
-    if (charts.size > 100) charts.delete(charts.keys().next().value);
-    if(item.status==='ok')requestEventRecheck(token,'chart_ready');
-    return item;
+    primaryCharts.set(key,item);
+    const selected=chartFallback.observe(token,item);
+    charts.set(key,selected);
+    trimChartCaches();
+    if(selected.status==='ok')requestEventRecheck(token,'chart_ready');
+    return selected;
+  }
+
+  function trimChartCaches() {
+    const cacheLimit=researchLimits().cacheLimit;
+    while(charts.size>cacheLimit) {
+      let oldestKey=null,oldestAt=Infinity;
+      for(const [chartKey,chart] of charts) {
+        const at=Number.isFinite(chart?.fetchedAt)?chart.fetchedAt:0;
+        if(at<oldestAt){oldestAt=at;oldestKey=chartKey;}
+      }
+      if(!oldestKey)break;
+      charts.delete(oldestKey);primaryCharts.delete(oldestKey);
+    }
+    while(primaryCharts.size>cacheLimit)primaryCharts.delete(primaryCharts.keys().next().value);
   }
 
   function publishMarket(currentChain, index, result) {
@@ -554,10 +709,24 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     return quoteTargets.find(t => keyOf(t) === entryFocus.key && !t.researchOnly) || null;
   }
 
+  function chartReadPurpose(token) {
+    if (token.researchLane === 'entry') return 'entry_confirmation';
+    if (token.purpose === 'exit') return 'exit';
+    // Hot and wallet charts have to clear the closed-bar gate. Keep them on
+    // the candidate lane, ahead of address notes and other priority-0 reads.
+    if (['hot','wallet','catchup'].includes(token.researchLane)) return 'candidate';
+    if (focusedDiscovery) return 'research';
+    return token.purpose || 'candidate';
+  }
+
   function researchLimits() {
-    const parallel = higherFrequencyResearch && gmgnReadonlyPolicy(dataDir).normalConcurrency >= 2
-      && !focusedEntry() && ![...quoteJobs.values()].some(job=>job.purpose==='candidate');
-    return { concurrency: parallel ? 2 : 1, dispatchIntervalMs: parallel ? 2500 : 5000 };
+    return chartPullBudget({
+      policy: gmgnReadonlyPolicy(dataDir),
+      higherFrequency: higherFrequencyResearch,
+      entryFocused: !!focusedEntry(),
+      candidateQuoteInFlight: [...quoteJobs.values()].some(quoteBlocksChartBudget),
+      env: process.env,
+    });
   }
 
   function nextTradeReview(next, nowMs) {
@@ -669,6 +838,45 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     await Promise.allSettled(jobs);
   }
 
+  function dueDetailTargets() {
+    if (stopped || typeof market.details !== 'function') return [];
+    const freshAlpha=t=>Number.isFinite(t.alphaListingTime)&&t.alphaListingTime<=now()&&now()-t.alphaListingTime<=300000;
+    const freshMonitor=t=>fresh(t.monitorSourceAt,now());
+    const unseenNews=detailTargets.some(t=>(fresh(t.newsSourceAt,now())||freshAlpha(t)||freshMonitor(t)||fresh(t.walletBuyAt,now()))&&!details.has(keyOf(t)));
+    if (lastDetailStart !== null && now() - lastDetailStart < (unseenNews?1000:10_000)) return [];
+    // Never add research work while a live paper holding lacks its exit quote.
+    if (fastQuotes && (recoveryMode?Object.values(account?.positions||{}):heldTokens()).some(token => !recentQuote(token, now()))) return [];
+    const focus = focusedEntry();
+    return detailTargets.filter(token => canResearchEntry(token)
+      && (!focusedDiscovery || now() >= (detailGapRetries.get(keyOf(token))?.nextAttemptAt ?? 0))
+      && (!focus || keyOf(token) === keyOf(focus) || freshAlpha(token) || freshMonitor(token) || walletDiscoverySignal(token))
+      && (!details.has(keyOf(token)) || now() - details.get(keyOf(token)).fetchedAt >=
+        (['GMGN_QUEUE_EXPIRED','GMGN_REQUEST_BUSY'].includes(details.get(keyOf(token)).reasonCode)?5000:token.refreshAfterMs)));
+  }
+
+  // Fairness reserves a turn for work that can actually run. Completed
+  // research or detail backoff must not freeze every cached hot chart. Keep
+  // the saturated counter so the next due ordinary detail still wins.
+  function ordinaryDetailTurnDue() {
+    return dueDetailTargets().some(token => !walletDiscoverySignal(token) && !poolDiscoverySignal(token));
+  }
+
+  function detailBlocksChart(token,budget) {
+    if(!detailJob)return false;
+    // A single identity-tracked overlap seat is shared by hot refreshes and
+    // finite catchup. Completion releases that request only; a new detail must
+    // not reset another request's lease. The existing batch cap still yields.
+    if(detailIsSignal || detailOverlapKeys.size>0 || detailOverlapCount>=Math.min(4,budget.maxChartsBeforeDetail)
+      || gmgnReadonlyPolicy(dataDir).plan!=='plus' || budget.focusedExploratory<2
+      || chartJobs.size+1>=budget.concurrency || exploratoryChartKeys.size+1>=budget.focusedExploratory)return true;
+    const at=now();
+    if(token.researchLane==='catchup')return !chartResearchRows.has(keyOf(token))||!canResearchEntry(token);
+    const cached=charts.get(keyOf(token));
+    return token.researchLane!=='hot'||!listedForEntry(token)||cached?.status!=='ok'
+      ||!Number.isFinite(cached.closedThroughAtMs)||at-cached.closedThroughAtMs<60000
+      ||!chartRefreshDue(cached,at,{active:true});
+  }
+
   function refreshDetails() {
     if (stopped || typeof market.details !== 'function') return Promise.resolve();
     if (detailJob) return detailJob;
@@ -678,25 +886,15 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     if(focusedDiscovery && !signalPending && hotDeadlineReservation()) {
       hotDeadlineDeferrals++;return Promise.resolve();
     }
+    if(focusedDiscovery && !signalPending && hotAwaitingFirstFetch() && hotDetailSkips<hotResearchKeys.length+2) {
+      hotDetailSkips++;hotDeadlineDeferrals++;return Promise.resolve();
+    }
     if(focusedDiscovery && !signalPending && waitsForChartTurn({lastKind:lastExploratoryKind,demand:exploratoryChartDemand,nowMs:now(),
       listed:exploratoryChartDemand&&listedForEntry(exploratoryChartDemand.token),
       due:exploratoryChartDemand&&chartRefreshDue(charts.get(keyOf(exploratoryChartDemand.token)),now(),{active:true})})) {
       chartTurnDeferrals++;return Promise.resolve();
     }
-    const freshAlpha=t=>Number.isFinite(t.alphaListingTime)&&t.alphaListingTime<=now()&&now()-t.alphaListingTime<=300000;
-    const freshMonitor=t=>fresh(t.monitorSourceAt,now());
-    const unseenNews=detailTargets.some(t=>(fresh(t.newsSourceAt,now())||freshAlpha(t)||freshMonitor(t)||fresh(t.walletBuyAt,now()))&&!details.has(keyOf(t)));
-    if (lastDetailStart !== null && now() - lastDetailStart < (unseenNews?1000:10_000)) return Promise.resolve();
-    // Never add research work while a live paper holding lacks its exit quote.
-    if (fastQuotes && (recoveryMode?Object.values(account?.positions||{}):heldTokens()).some(token => !recentQuote(token, now()))) return Promise.resolve();
-    // Two priority dispatches then one fair chain rotation. Near-entry refresh
-    // must not wait behind every unknown token; discovery must not starve either.
-    const focus = focusedEntry();
-    const due = detailTargets.filter(token => canResearchEntry(token)
-      && (!focusedDiscovery || now() >= (detailGapRetries.get(keyOf(token))?.nextAttemptAt ?? 0))
-      && (!focus || keyOf(token) === keyOf(focus) || freshAlpha(token) || freshMonitor(token) || walletDiscoverySignal(token))
-      && (!details.has(keyOf(token)) || now() - details.get(keyOf(token)).fetchedAt >=
-        (['GMGN_QUEUE_EXPIRED','GMGN_REQUEST_BUSY'].includes(details.get(keyOf(token)).reasonCode)?5000:token.refreshAfterMs)));
+    const focus = focusedEntry(), due = dueDetailTargets();
     if (focus && !due.length) researchDeferrals.details++;
     const priority = Math.max(0, ...due.map(token => token.researchPriority));
     const pool = detailDispatchCount % 3 === 2 ? due : due.filter(token => token.researchPriority === priority);
@@ -710,7 +908,8 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     const signalFast=!!(walletDiscoverySignal(selected)||poolDiscoverySignal(selected));
     if(focusedDiscovery&&!signalFast&&exploratoryChartKeys.size){exploratoryDetailDeferrals++;return Promise.resolve();}
     const key = keyOf(selected); lastDetailStart = now(); detailDispatchCount += 1;
-    if(focusedDiscovery&&!signalFast){lastExploratoryKind='details';chartsSinceDetail=0;}
+    detailIsSignal=signalFast;detailOverlapCount=0;
+    if(focusedDiscovery&&!signalFast){lastExploratoryKind='details';chartsSinceDetail=0;hotDetailSkips=0;}
     lastDetail = { chain: selected.chain, address: selected.address, symbol: selected.symbol, reason: selected.researchReason,
       startedAt: new Date(lastDetailStart).toISOString(), status: 'pending', priority: selected.researchPriority };
     detailJob = Promise.resolve().then(() => market.details(focusedDiscovery&&!signalFast?{...selected,purpose:'research'}:selected)).catch(() => ({ status: 'unavailable' })).then(result => {
@@ -728,20 +927,24 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
         observedAt: bound ? result.observedAt || null : null, reasonCode: result?.reasonCode || null };
       if (details.size > 200) details.delete(details.keys().next().value);
       if(success)requestEventRecheck(selected,'details_ready');
-    }).finally(() => { detailJob = null; });
+    }).finally(() => { detailJob = null; detailIsSignal=false; });
     return detailJob;
   }
 
+  function hotAwaitingFirstFetch() {
+    return hotResearchKeys.some(key => !charts.has(key) && !chartJobs.has(key));
+  }
+
   function hotDeadlineReservation() {
-    const at=now();
-    if(chartsSinceDetail>=2 || focusedEntry())return false;
+    const at=now(),maxCharts=researchLimits().maxChartsBeforeDetail;
+    if(chartsSinceDetail>=maxCharts || focusedEntry())return false;
     return hotWatchRows.some(row=>{
       const token={...row.input.token,researchLane:'hot'},chart=charts.get(keyOf(token));
       if(!hotWatchEligible(row,at)||chartJobs.has(keyOf(token)))return false;
       const window=opportunityChart(chart?.candles,chart?.status,at,{contiguousTail:memeExitMode});
       if(!['ready','stale_closed_bars'].includes(window.diagnostics.code))return false;
       return reserveHotChartTurn({demand:{token,selectedAt:at,closedAtMs:window.diagnostics.lastClosedAtMs},nowMs:at,
-        listed:listedForEntry(token),due:chartRefreshDue(chart,at,{active:true}),chartsSinceDetail});
+        listed:listedForEntry(token),due:chartRefreshDue(chart,at,{active:true}),chartsSinceDetail,maxCharts});
     });
   }
 
@@ -781,6 +984,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       const occupied = { exit: 0, candidate: 0 };
       for (const job of quoteJobs.values()) occupied[job.purpose]++;
       const available = quoteTargets.filter(t => {
+        if (t.hotQuoteProbe && !hotQuoteDispatchAllowed(hotQuoteLease, t, now())) return false;
         const purpose = quoteJobPurpose(t),comparison=comparisonQuote(t);
         const last = quoteHistories.get(keyOf(t))?.at(-1);
         if(recoveryMode&&purpose==='exit') {
@@ -799,6 +1003,10 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
   }
 
   function dispatchQuote(token) {
+    if (token.hotQuoteProbe) {
+      if (!hotQuoteDispatchAllowed(hotQuoteLease, token, now())) return;
+      hotQuoteLease = markHotQuoteAttempt(hotQuoteLease, token, now());
+    }
     const key = keyOf(token), purpose = quoteJobPurpose(token),comparison=comparisonQuote(token);
     quoteDispatches[token.purpose==='candidate'&&comparison?'comparisonCandidate':purpose]++;
     lastQuoteDispatch={chain:token.chain,address:token.address,purpose:token.purpose,candidateBook:token.candidateBook||null,at:new Date(now()).toISOString()};
@@ -811,6 +1019,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       ...(purpose==='candidate' && recoveryMode && !token.researchOnly ? {purpose:'entry_confirmation'} : {}),
       ...(comparison?{purpose:'comparison'}:{}),
       ...(token.purpose==='candidate' && priorQuote ? {afterObservedAt:priorQuote.observedAt} : {}) })).catch(() => ({ status: 'unavailable' })).then(quote => {
+      if (token.hotQuoteProbe) hotQuoteLease = markHotQuoteResult(hotQuoteLease, token, quote, now());
       if (!stopped) {
         const bound = quote?.chain === token.chain && gmgnFlowAddress(token.chain, quote?.address) === gmgnFlowAddress(token.chain, token.address);
         quotes.set(key, bound ? quote : { status: 'unavailable' });
@@ -977,6 +1186,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       const evidence=withLearningEvidence(research),allowPrequalified=lossRepairMode&&estimatedFeeMode;
       collectiveWireState=buildCollectiveWire({state:evidence.flowState,onchainState:evidence.innerTradeState,account,nowMs:now(),allowPrequalified,allowBurst:allowPrequalified});
       installPoolWire(evidence,now(),research);
+      installFlapPoolLaunchWire(evidence,now(),research);
       const triggers=paperEventTriggers({evidence,account,chains:scanChains,nowMs:now(),allowPrequalified,allowBurst:allowPrequalified});
       let admitted=0;
       for(const trigger of triggers) {
@@ -1052,15 +1262,16 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     for(const ledger of [account,reviewComparison?.control,exitComparison?.control,exitComparison?.dynamic,learningShadow?.control,learningShadow?.student].filter(Boolean)) {
       for(const p of Object.values(ledger.positions)) {
         const key=keyOf(p),prior=holdings.get(key);
-        const requiresStructureChart=!!p.memeExitPolicy || p.pvpPolicy?.version==='structure_hold_v2' || p.exitExperiment?.version==='volume_structure_exit_v1';
+        const requiresStructureChart=!!p.requiresStructureChart || !!p.memeExitPolicy || p.pvpPolicy?.version==='structure_hold_v2' || p.exitExperiment?.version==='volume_structure_exit_v1';
         holdings.set(key,{...(prior||p),requiresStructureChart:!!prior?.requiresStructureChart || requiresStructureChart,
           ...(recoveryMode?{holdingTier:prior?.holdingTier==='main'||ledger===account?'main':'comparison'}:{})});
       }
     }
     for(const p of focusSimulator?.openPositions()||[]) {
       const key=keyOf(p),prior=holdings.get(key);
-      holdings.set(key,{...(prior||p),requiresStructureChart:true,focusPaperPosition:true,
-        ...(prior?.holdingTier?{holdingTier:prior.holdingTier}:{holdingTier:'focus_paper'})});
+      holdings.set(key,{...(prior||p),requiresStructureChart:true,
+        ...(recoveryMode?{holdingTier:prior?.holdingTier==='main'?'main':'comparison'}:{holdingTier:'comparison'}),
+        focusSimulationPosition:true});
     }
     return [...holdings.values()]; // Main-account exit needs cannot be overwritten by a legacy control lot.
   }
@@ -1105,16 +1316,8 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
           narrative: ledger.exitExperimentVersion || position.memeExitPolicy ? buildPaperNarrativeEvidence({ chain: position.chain, address: position.address, token: position, events: latestEvidence.events, nowMs }) : null,
           flow: positionFlow(position,latestEvidence,nowMs) }] : [];
       });
-      if(focusSimulator) {
-        const focusMarks=focusSimulator.openPositions().map(position=>{
-          const quote=recentQuote(position,nowMs);
-          return {...position,...(quote||{status:'unavailable'}),chart:quote?holdingChart(position,quote):null};
-        });
-        await focusSimulator.advance({marks:focusMarks,nowMs});
-      }
       if (holdings.length && fastQuotes) {
-        const mainMarks = marksFor(account);
-        const next = advancePaperStrategyAccount(account, { marks: mainMarks, enabled: false, nowMs, confirmedMode, continuousPaperMode, lossRepairMode, enforceLossGuards, evidenceGapExitMode,
+        const next = advancePaperStrategyAccount(account, { marks: marksFor(account), enabled: false, nowMs, confirmedMode, continuousPaperMode, lossRepairMode, enforceLossGuards, evidenceGapExitMode,
           ...(recoveryMode?{recoveryMode,memeExitMode,opportunityMode}:{}) });
         next.stats.enabled = enabled;
         const pair = learningShadow ? { ...learningShadow,
@@ -1127,7 +1330,6 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
         if (lossRepairMode && next.stats.dailyLossGuard) enabled = false;
         next.stats.enabled = enabled;
         await atomicWrite(stateFile, { schema: 'yesp_atm_runtime_v1', session, chain, chains, enabled, account: next, algorithmSignalJournal, learningShadow: pair, narrativeMemory, narrativeLearningMemory, narrativeAcademyMemory, reviewComparison:comparison, exitComparison: exits, tradeCountReview: nextReview });
-        profitRetentionObserver?.observeCommitted({beforeAccount:account,afterAccount:next,marks:mainMarks,nowMs,path:'exit'});
         tradeCountReview = nextReview;
         exitComparison = exits;
         reviewComparison=comparison;
@@ -1136,6 +1338,15 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
           entryGuard: confirmedMode ? confirmedAccountGate(account, nowMs, null, null, null, { continuousPaperMode, enforceLossGuards }) : null,
           learningComparison: { ...learningShadowSummary(learningShadow), chain },reviewComparison:reviewComparisonSummary(reviewComparison,account), exitComparison: exitComparisonSummary(exitComparison) };
       }
+      if(focusSimulator) {
+        const focusMarks=holdings.flatMap(position=>{
+          const quote=recentQuote(position,nowMs);
+          return quote?[{...quote,chart:holdingChart(position,quote)}]:[];
+        });
+        try { focusSimulatorState=await focusSimulator.advance({marks:focusMarks,nowMs}); }
+        catch(error) { focusSimulatorState={...focusSimulator.snapshot(),status:'error',lastError:String(error?.message||error).slice(0,180)}; }
+      }
+      publicState={...publicState,strategyFocusShadow:focusShadowState(),strategyFocusSimulation:focusSimulatorState};
       publicState = { ...publicState, exitMonitor: { running: started && !stopped, intervalMs: 1000,
         lastCheckedAt: new Date(nowMs).toISOString(), checks: ++exitChecks, staleQuotes: heldTokens().filter(p => !recentQuote(p, nowMs)).length,
         entriesEnabled: enabled, lastError: null } };
@@ -1154,8 +1365,10 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     const startedAt=now(),chart=charts.get(keyOf(request));
     // Same evaluator, admission rules and ledger as the periodic main book;
     // only the requested CA is evaluated. No control/shadow entries here.
-    let rows=input ? evaluate({...priced(input,startedAt),nowMs:startedAt,narrativeResearchIndex:input.narrativeResearchIndex||null,narrativeAdmissionGate,
-      candles:chart?.candles||[],klineStatus:chart?.status||'unavailable'}).filter(canEnterRow) : [];
+    const mainAdmissionGate=narrativeAdmissionGate&&input?.recoveryMode===true&&input?.memeExitMode===true;
+    let rows=input ? evaluate({...priced(input,startedAt),nowMs:startedAt,
+      narrativeResearchIndex:input.narrativeResearchIndex||null,narrativeAdmissionGate:mainAdmissionGate,
+      candles:chart?.candles||[],klineStatus:chart?.status||'unavailable',chartProvenance:chart?.chartProvenance||null}).filter(canEnterRow) : [];
     scheduleInternalDepth(input,rows);
     rows=rows.map(row=>{
       if(row.decision==='可模拟') {
@@ -1179,16 +1392,15 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     });
     const commitAt=now(),beforeCount=account.trades.length;
     const next=advancePaperStrategyAccount(account,{evaluations:rows,marks,enabled,nowMs:commitAt,
-      diagnosticMode,confirmedMode,continuousPaperMode,opportunityMode,memeExitMode,recoveryMode,minimalEntryMode,narrativeAdmissionGate,chainGasAccounting,lossRepairMode,enforceLossGuards,estimatedFeeMode,evidenceGapExitMode});
+      diagnosticMode,confirmedMode,continuousPaperMode,opportunityMode,memeExitMode,recoveryMode,minimalEntryMode,narrativeAdmissionGate:mainAdmissionGate,chainGasAccounting,lossRepairMode,enforceLossGuards,estimatedFeeMode,evidenceGapExitMode,evidenceTierGate,externalStructureMainAdmission});
     if (lossRepairMode && next.stats.dailyLossGuard) enabled = false;
     next.stats.enabled = enabled;
     const nextReview=nextTradeReview(next,commitAt);
     recordAlgorithmDecision(rows,commitAt);
     await atomicWrite(stateFile,{schema:'yesp_atm_runtime_v1',session,chain,chains,enabled,account:next,algorithmSignalJournal,learningShadow,narrativeMemory,
       narrativeLearningMemory,narrativeAcademyMemory,reviewComparison,exitComparison,tradeCountReview:nextReview});
-    mirrorLive(beforeCount,next,session);
-    profitRetentionObserver?.observeCommitted({beforeAccount:account,afterAccount:next,marks,nowMs:commitAt,path:'targeted_entry'});
     account=next;tradeCountReview=nextReview;
+    mirrorLive(beforeCount,next,session);
     const row=rows.find(r=>r.decision==='可模拟')||rows[0];
     lastCandidateEvaluation={chain:request.chain,address:request.address,at:new Date(commitAt).toISOString(),
       quoteObservedAt:request.quoteObservedAt,evaluatedPriceObservedAt:row?.evidence?.priceObservedAt||null,
@@ -1210,7 +1422,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
 
   function performEventAdmission(input,request) {
     const at=now(),chart=charts.get(keyOf(request));
-    const rows=input?evaluate({...priced(input,at),nowMs:at,candles:chart?.candles||[],klineStatus:chart?.status||'unavailable'}):[];
+    const rows=input?evaluate({...priced(input,at),nowMs:at,candles:chart?.candles||[],klineStatus:chart?.status||'unavailable',chartProvenance:chart?.chartProvenance||null}):[];
     recordAlgorithmDecision(rows,at);
     const quoteReady=rows.some(readyForPaperQuote)||rows.some(researchReadyForQuote);
     const blocked=!rows.length||rows.every(r=>r.decision==='不买'||r.evidence?.safety?.blocked?.length);
@@ -1275,6 +1487,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       account,nowMs:now(),allowPrequalified:lossRepairMode&&estimatedFeeMode,allowBurst:lossRepairMode&&estimatedFeeMode});
     collectiveWireState=collectiveWire;
     const poolWire=installPoolWire(evidence,now(),currentResearch);
+    const flapLaunchWire=installFlapPoolLaunchWire(evidence,now(),currentResearch);
     if(quoteRequest&&!canResearchEntry(quoteRequest))return;
     latestEvidence = evidence;
     const evidenceIndex = createPaperEvidenceIndex(evidence);
@@ -1338,17 +1551,17 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       candidates:newsCandidates.filter(item=>!paperTaxScreen(item.token).blocked),nowMs});
     phaseTiming.newsWireMs=Math.max(0,now()-newsWireStartedAt);
     const buys=account.trades.filter(t=>t.side==='buy'),consumedEvents=new Set(buys.map(t=>t.entryEvidence?.opportunity?.signalId).filter(Boolean));
-    observeAlgorithmSignals([...collectiveWire.signals.filter(canResearchEntry),...poolWire.signals.filter(canResearchEntry)],nowMs);
+    observeAlgorithmSignals([...collectiveWire.signals.filter(canResearchEntry),...poolWire.signals.filter(canResearchEntry),...flapLaunchWire.signals.filter(canResearchEntry)],nowMs);
     for(const s of collectiveWire.signals)if(canResearchEntry(s)&&!candidates.has(keyOf(s)))candidates.set(keyOf(s),{
       token:{chain:s.chain,address:s.address},observedAt:null,marketStatus:'unavailable',discoverySource:'collective_signal'});
     const alphaSignals=memeExitMode?alphaListingSignals(evidence.alphaCatalog,nowMs)
       .filter(s=>scanChains.includes(s.chain)&&!consumedEvents.has(s.id)):[];
-    const monitorSignals=memeExitMode?[...poolWire.signals,...newsWire.paperSignals].filter(s=>scanChains.includes(s.chain)&&!consumedEvents.has(s.id)
+    const monitorSignals=memeExitMode?[...poolWire.signals,...flapLaunchWire.signals,...newsWire.paperSignals].filter(s=>scanChains.includes(s.chain)&&!consumedEvents.has(s.id)
       &&!buys.some(t=>keyOf(t)===keyOf(s)&&t.atMs>=Date.parse(s.sourceAt))):[];
     for(const signal of alphaSignals)if(!focusedDiscovery&&!candidates.has(keyOf(signal)))candidates.set(keyOf(signal),{
       token:{chain:signal.chain,address:signal.address,symbol:signal.symbol,name:signal.name},
       observedAt:null,marketStatus:'unavailable',discoverySource:'binance_alpha'});
-    for(const token of [...poolWire.seeds,...newsWire.seeds])if((!focusedDiscovery||poolDiscoverySignal(token))
+    for(const token of [...poolWire.seeds,...flapLaunchWire.seeds,...newsWire.seeds])if((!focusedDiscovery||poolDiscoverySignal(token)||flapLaunchDiscovery(token))
       &&scanChains.includes(token.chain)&&!candidates.has(keyOf(token))) {
       // No signal snapshot is promoted to a fresh price, safety check or thesis.
       candidates.set(keyOf(token),{token,observedAt:null,marketStatus:'unavailable',discoverySource:'news_hint'});
@@ -1415,10 +1628,14 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     internalTradeTargets=selectInnerTradeTargets(inputs,{nowMs,listedForEntry,
       watchedTargets:internalTradeMonitor?.snapshot()?.targets||[]});
     const preliminary = await scanMap(inputs, input => { const chart=charts.get(keyOf(input.token)); return { input, candidateBook:'main', decisions: evaluate({ ...priced(input,nowMs),
-      ...(opportunityMode ? { candles:chart?.candles || [],klineStatus:chart?.status || 'unavailable' } : {}) }) }; });
+      ...(opportunityMode ? { candles:chart?.candles || [],klineStatus:chart?.status || 'unavailable',chartProvenance:chart?.chartProvenance||null } : {}) }) }; });
     for(const {input,decisions} of preliminary)scheduleInternalDepth(input,decisions);
     jevResearch?.observe(preliminary.flatMap(row=>row.decisions));
     const externalResearch=opportunityMode ? preliminary.filter(({input,decisions})=>!paperTaxScreen(input.token).blocked&&canResearchExternal(input,decisions)) : [];
+    chartCandidateRows=new Map(preliminary.map(row=>[keyOf(row.input.token),row]));
+    chartResearchRows=new Map(externalResearch.filter(row=>canResearchEntry(row.input.token)).map(row=>[keyOf(row.input.token),row]));
+    for(const key of researchFirstSeen.keys())if(!chartResearchRows.has(key))researchFirstSeen.delete(key);
+    for(const key of chartResearchRows.keys())if(!researchFirstSeen.has(key)&&researchFirstSeen.size<500)researchFirstSeen.set(key,nowMs);
     const hotPerChain=lossRepairMode&&scanChains.length===1&&scanChains[0]==='bsc'?3:1;
     const hotResearch=planHotResearch(externalResearch,scanChains,charts,nowMs,hotResearchKeys,
       (decision,at)=>jevResearch?.hint(decision,at)?.adjustment||0,{perChainLimit:hotPerChain,maintainLeader:focusedDiscovery,
@@ -1433,7 +1650,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       const chart=charts.get(keyOf(input.token));
       const controlInput={...input,opportunityReviewMode:false,memeExitMode:false,recoveryMode:false,minimalEntryMode:false,fixedEntryUsd,
         compoundingCash:Math.max(reviewComparison.control.cash,samplingCash),opportunityAccount:samplingActive?null:reviewComparison.control};
-      return {input:controlInput,candidateBook:'comparison',decisions:evaluate({...priced(controlInput,nowMs),candles:chart?.candles||[],klineStatus:chart?.status||'unavailable'})};}) : [];
+      return {input:controlInput,candidateBook:'comparison',decisions:evaluate({...priced(controlInput,nowMs),candles:chart?.candles||[],klineStatus:chart?.status||'unavailable',chartProvenance:chart?.chartProvenance||null})};}) : [];
     const researchFlowPolicy = confirmedMode ? { ...CONFIRMED_PAPER_POLICY, minHighProfit: 0 } : diagnosticMode ? { minBuyers: 1, minNetBuy: Number.MIN_VALUE, minHighProfit: 0, minSmartMoney: 0 } : allowExploratory ? EXPLORATORY_FLOW : { minBuyers: 4, minNetBuy: 1000, minHighProfit: 0, minSmartMoney: 0 };
     detailTargets = [];
     for (const { input, decisions } of preliminary) {
@@ -1475,7 +1692,16 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
         || decisions.some(readyForPaperQuote)
         || decisions.some(researchReadyForQuote)
         || canPrefetchPaperFlow(input.flow, researchFlowPolicy) && decisions.some(onlyPricingOrFlowWarmupMissing))
-      .map(row => projectQuoteOpportunity(row, {minimalEntryMode, recoveryMode}))
+      .map(({ input, decisions, candidateBook }) => ({ input,candidateBook,
+        // A route-level signal may deserve a quote while cost/structure is
+        // still unresolved. It is research, not an admitted confirmation; it
+        // must not seize critical capacity or pause all other discoveries.
+        researchOnly:recoveryMode&&!decisions.some(readyForPaperQuote),
+        // Warmup candidates share the bounded quote lane but remain ordinary
+        // observations until the full evaluator marks them paper-eligible.
+        canQuote: minimalEntryMode && decisions.some(result => result.decision !== '不买' && !result.evidence?.safety?.blocked?.length)
+          || decisions.some(readyForPaperQuote) || decisions.some(researchReadyForQuote),
+        score: Math.max(...decisions.map(result => result.score)) }))
       .sort((a, b) => Number(!!walletBuyResearchHint(b.input,nowMs))-Number(!!walletBuyResearchHint(a.input,nowMs)) || b.score - a.score);
     // Holdings always get fresh marks first, even when no longer in ranking/trenches.
     const marks = [];
@@ -1490,18 +1716,30 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       if (match?.marketStatus === 'ok' && fresh(match.observedAt, nowMs) && Number.isFinite(match.token.price) && match.token.price > 0) {
         marks.push({ ...position, price: match.token.price, observedAt: match.observedAt, status: 'ok' });
       } else {
-        if (background && chartJobs.size < 2) void getChart({ ...position, purpose: 'exit' }, nowMs).catch(() => {});
+        if (background && chartJobs.size < researchLimits().concurrency) void getChart({ ...position, purpose: 'exit' }, nowMs).catch(() => {});
         const chart = background ? charts.get(keyOf(position)) || {} : await getChart({ ...position, purpose: 'exit' }, nowMs);
         const last = (chart.markCandles || chart.candles || []).filter(c => Number.isFinite(c.close) && c.close > 0 && fresh(c.time, now())).sort((a, b) => stamp(a.time) - stamp(b.time)).at(-1);
         if (chart.status === 'ok' && last) marks.push({ chain: position.chain, address: position.address, price: last.close, observedAt: new Date(stamp(last.time)).toISOString(), status: 'ok' });
       }
     }
+    const prefetchLimits = researchLimits();
     if (initial.length && !(diagnosticMode || confirmedMode)) {
-      // Give the best candidate and one rotating candidate a chart budget.
-      const selected = [initial[0], initial[1 + candidateOffset % Math.max(1, initial.length - 1)]].filter(Boolean);
+      // Keep the historical best-plus-rotating pair, and spend any larger
+      // Plus budget on additional hot candidates in the same round.
+      const pull = Math.max(2, prefetchLimits.perRound), slots = Math.max(2, prefetchLimits.concurrency);
+      const selected = [], seen = new Set();
+      if (initial[0]) { selected.push(initial[0]); seen.add(keyOf(initial[0].input.token)); }
+      const span = Math.max(1, initial.length - 1);
+      for (let i = 0; selected.length < pull && i < initial.length; i++) {
+        const row = initial[1 + (candidateOffset + i) % span];
+        if (!row) continue;
+        const key = keyOf(row.input.token);
+        if (seen.has(key)) continue;
+        seen.add(key); selected.push(row);
+      }
       candidateOffset += 1;
       for (const { input } of selected) if (chartRefreshDue(charts.get(keyOf(input.token)),nowMs)) {
-        if (background) { if (chartJobs.size < 2) void getChart(input.token, nowMs).catch(() => {}); }
+        if (background) { if (chartJobs.size < slots) void getChart(input.token, nowMs).catch(() => {}); }
         else await getChart(input.token, nowMs);
       }
     }
@@ -1521,12 +1759,14 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     const monitorReady=quotePool.filter(r=>r.input.monitorSignal);
     const collectiveReady=quotePool.filter(r=>r.input.collectiveSignal);
     const launchReady=lossRepairMode?monitorReady.filter(r=>launchContext(r.input.token,r.input.monitorSignal,nowMs)):[];
-    const quoteSelection=selectQuoteOpportunity([...launchReady,...collectiveReady,...alphaReady,...monitorReady,...narrativeReady,...quotePool],quoteLease,nowMs,
-      {windowMs:entryWindowMs,mainFirst:recoveryMode,eventLeaseHistory:quoteEventLeaseHistory,
-        eventPreemptionSuppressedUntil:quoteEventPreemptionSuppressedUntil});
+    // A just-listed official event preempts a normal candidate once. Holdings
+    // retain priority and the event's original clock is never renewed.
+    if(launchReady.length&&!launchReady.some(r=>keyOf(r.input.token)===quoteLease?.key))quoteLease=null;
+    if((alphaReady.some(r=>nowMs-r.input.alphaSignal.listingTime<=300000)||monitorReady.length)
+      &&![...alphaReady,...monitorReady].some(r=>keyOf(r.input.token)===quoteLease?.key))quoteLease=null;
+    if(collectiveReady.length&&!collectiveReady.some(r=>keyOf(r.input.token)===quoteLease?.key))quoteLease=null;
+    const quoteSelection=selectQuoteCandidate([...launchReady,...collectiveReady,...alphaReady,...monitorReady,...narrativeReady,...quotePool],quoteLease,nowMs,{windowMs:entryWindowMs,mainFirst:recoveryMode});
     quoteLease=quoteSelection.lease;
-    quoteEventLeaseHistory=quoteSelection.eventLeaseHistory;
-    quoteEventPreemptionSuppressedUntil=quoteSelection.eventPreemptionSuppressedUntil;
     const quoteCandidate=quoteSelection.row;
     if (quoteCandidate && (!recoveryMode||enabled)) admitCandidate(targetMap,{ ...quoteCandidate.input.token, purpose:'candidate',
       ...(recoveryMode?{candidateBook:quoteCandidate.candidateBook,researchOnly:quoteCandidate.researchOnly}:{}) });
@@ -1535,7 +1775,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     const hotProbe=selectHotQuoteResearch(lossRepairMode && enabled && !quoteCandidate && !eventQuoteTargets.size
       ? externalResearch : [],hotQuoteLease,nowMs,{laneAvailable:![...quoteJobs.values()].some(j=>j.purpose==='candidate')});
     hotQuoteLease=hotProbe.lease;
-    if(hotProbe.row)admitCandidate(targetMap,{...hotProbe.row.input.token,purpose:'candidate',candidateBook:'main',researchOnly:true});
+    if(hotProbe.row)admitCandidate(targetMap,{...hotProbe.row.input.token,purpose:'candidate',candidateBook:'main',researchOnly:true,hotQuoteProbe:true});
     const previousCandidate = quoteTargets.find(t => t.purpose === 'candidate');
     quoteTargets = [...targetMap.values()];
     if (background) {
@@ -1549,25 +1789,35 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     }
     // Entry focus is bounded (45 seconds for evidence-exit main), then 10 seconds of
     // normal discovery admission. Holding charts always retain first priority.
-    // Alternate expensive producers when both are due, instead of enqueuing
-    // two charts plus info/security together on every fast cycle.
-    const chartLimits = researchLimits();
+    // One round may pull several hot charts. Details still get a turn after the
+    // bounded chart run. Plus shares one bounded hot/catchup overlap seat with an in-flight ordinary detail.
     if(focusedDiscovery)exploratoryChartDemand=null;
-    if (opportunityMode && chartJobs.size < chartLimits.concurrency && nowMs-lastOpportunityChartAt >= chartLimits.dispatchIntervalMs) {
-      const focus = background ? focusedEntry() : null;
-      const needsStructure=target=>lossRepairMode
-        ? ![...launchReady,...collectiveReady.filter(r=>['internal','near_completion'].includes(r.input.token.marketStage))].some(r=>keyOf(r.input.token)===keyOf(target))
-        : externalResearch.some(r=>keyOf(r.input.token)===keyOf(target));
-      const target=selectResearchChart({holdings:heldTokens(),hot:hotResearch,broad:externalResearch,charts,nowMs,dispatch:chartDispatch,chains:scanChains,lastHotChain:lastHotChartChain,
-        focus:focus&&{...focus,requiresStructureChart:needsStructure(focus)},
-        researchFocus:background&&quoteCandidate?.researchOnly?{...quoteCandidate.input.token,
-          requiresStructureChart:needsStructure(quoteCandidate.input.token)}:null,
-        pendingKeys: new Set(chartJobs.keys()) });
-      if(focusedDiscovery && target && target.purpose!=='exit' && target.researchLane!=='entry')
-        exploratoryChartDemand={token:target,selectedAt:nowMs};
-      if(background&&focusedDiscovery&&lastExploratoryKind==='chart')void refreshDetails();
-      if(target && (!focusedDiscovery || target.purpose==='exit' || target.researchLane==='entry'
-        || !detailJob&&!exploratoryChartKeys.size)) {
+    const chartLimits=researchLimits();
+    const chartRoom=Math.max(0,Math.min(chartLimits.perRound,chartLimits.concurrency-chartJobs.size));
+    if (opportunityMode && chartRoom>0 && nowMs-lastOpportunityChartAt >= chartLimits.dispatchIntervalMs) {
+      const pendingKeys=new Set(chartJobs.keys());
+      let dispatched=0;
+      if(background&&focusedDiscovery&&lastExploratoryKind==='chart'
+        &&(chartsSinceDetail>=chartLimits.maxChartsBeforeDetail||exploratoryChartKeys.size>=chartLimits.focusedExploratory))
+        void refreshDetails();
+      for(let n=0;n<chartRoom;n++) {
+        const focus = background ? focusedEntry() : null;
+        const needsStructure=target=>lossRepairMode
+          ? ![...launchReady,...collectiveReady.filter(r=>['internal','near_completion'].includes(r.input.token.marketStage))].some(r=>keyOf(r.input.token)===keyOf(target))
+          : externalResearch.some(r=>keyOf(r.input.token)===keyOf(target));
+        const catchupTarget=nextChartCatchupTarget(nowMs);
+        const target=selectResearchChart({holdings:heldTokens(),hot:hotResearch,broad:externalResearch,charts,nowMs,dispatch:chartDispatch,researchDispatch,lastDiscoveryChain,firstSeen:researchFirstSeen,catchup:catchupTarget,chains:scanChains,lastHotChain:lastHotChartChain,
+          focus:focus&&{...focus,requiresStructureChart:needsStructure(focus)},
+          researchFocus:background&&quoteCandidate?.researchOnly?{...quoteCandidate.input.token,
+            requiresStructureChart:needsStructure(quoteCandidate.input.token)}:null,
+          pendingKeys });
+        if(!target)break;
+        const exploratory=focusedDiscovery && target.purpose!=='exit' && target.researchLane!=='entry';
+        const firstHot=!charts.has(keyOf(target)) && (target.researchLane==='hot'||target.researchLane==='wallet');
+        if(exploratory)exploratoryChartDemand={token:target,selectedAt:nowMs};
+        if(exploratory && (detailBlocksChart(target,chartLimits)||exploratoryChartKeys.size>=chartLimits.focusedExploratory||(chartsSinceDetail>=chartLimits.maxChartsBeforeDetail && !firstHot && ordinaryDetailTurnDue()))) {
+          exploratoryChartDeferrals++;break;
+        }
         const row=externalResearch.find(r=>keyOf(r.input.token)===keyOf(target));
         // Bounded hot seats need current charts for independently admitted
         // external routes. Broad discovery stays low-priority; holdings and
@@ -1575,18 +1825,29 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
         if (lossRepairMode && target.researchLane==='discovery'
           && !row?.decisions.some(d=>d.evidence?.lossRepair?.catalystReady===true)
           && !fresh(row?.input.newsResearch?.sourceAt,nowMs)) target.purpose='research';
-        lastOpportunityChartAt=nowMs;chartDispatch++;
         const prior=charts.get(keyOf(target)),priorClosed=opportunityChart(prior?.candles,prior?.status,nowMs).diagnostics.lastClosedAtMs;
         lastChartDispatch={chain:target.chain,address:target.address,lane:target.researchLane,purpose:target.purpose,at:new Date(nowMs).toISOString(),
           ...(target.walletTrigger?{walletTrigger:target.walletTrigger}:{}),
           proactive:!!prior && !chartRefreshDue(prior,nowMs),
           previousClosedAt:priorClosed==null?null:new Date(priorClosed).toISOString(),
           previousClosedAgeMs:priorClosed==null?null:nowMs-priorClosed};
-        chartDispatches[target.researchLane]++;
+        chartDispatches[target.researchLane]=(chartDispatches[target.researchLane]||0)+1;
         if(lastChartDispatch.proactive)chartDispatches.proactive++;
-        if(target.researchLane==='hot'){lastHotChartChain=target.chain;hotChartDispatchesByChain[target.chain]++;}
-        if(background) void getChart(target,nowMs).catch(()=>{}); else await getChart(target,nowMs);
-      } else if(target&&focusedDiscovery)exploratoryChartDeferrals++;
+        if(target.researchLane==='hot'){
+          lastHotChartChain=target.chain;hotChartDispatchesByChain[target.chain]=(hotChartDispatchesByChain[target.chain]||0)+1;
+          recentHotChains.push(target.chain);if(recentHotChains.length>12)recentHotChains.shift();
+        }
+        chartDispatch++;dispatched++;pendingKeys.add(keyOf(target));
+        if(['hot','wallet','discovery','catchup'].includes(target.researchLane))researchDispatch++;
+        if(['discovery','catchup'].includes(target.researchLane))lastDiscoveryChain=target.chain;
+        // If the hot/holding lane selected the same due CA, observe that one
+        // real request instead of issuing another or hiding its failed attempt.
+        const catchupItem=target.researchLane==='catchup'||catchupTarget&&keyOf(catchupTarget)===keyOf(target)?beginChartCatchup(target,nowMs):null;
+        const chartJob=getChart(target,nowMs);
+        const tracked=catchupItem?chartJob.then(result=>finishChartCatchup(catchupItem,result)).catch(()=>finishChartCatchup(catchupItem,{status:'unavailable',reasonCode:'CHART_READ_FAILED'})):chartJob;
+        if(background)void tracked.catch(()=>{});else await tracked;
+      }
+      if(dispatched)lastOpportunityChartAt=nowMs;
     }
     if (background) { void refreshDetails(); void refreshNarrativeLearning(); }
     nowMs = now();
@@ -1594,17 +1855,17 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     const finalEvaluate = (input, overrides = {}) => {
       const chart = charts.get(keyOf(input.token));
       const key=keyOf(input.token);
-      const effectiveNarrativeAdmissionGate=narrativeAdmissionGate
-        &&overrides.recoveryMode!==false&&overrides.memeExitMode!==false;
       if(!finalEvidence.has(key))finalEvidence.set(key,{
         collectiveSignal:input.collectiveSignal,
         flow:entryFlow(input.token,input.collectiveSignal,evidence,evidenceIndex,nowMs),
         narrative:evidenceIndex.narrative({chain:input.token.chain,address:input.token.address,token:input.token,nowMs})});
+      const currentRecovery=overrides.recoveryMode===false?false:input.recoveryMode===true;
+      const currentMemeExit=overrides.memeExitMode===false?false:input.memeExitMode===true;
       return evaluate({ ...priced(input, nowMs), nowMs,
         ...finalEvidence.get(key),
-        ...overrides,
+        candles: chart?.candles || [], klineStatus: chart?.status || 'unavailable', chartProvenance:chart?.chartProvenance||null, ...overrides,
         narrativeResearchIndex:input.narrativeResearchIndex||narrativeResearchIndex||null,
-        candles: chart?.candles || [], klineStatus: chart?.status || 'unavailable', narrativeAdmissionGate:effectiveNarrativeAdmissionGate,
+        narrativeAdmissionGate:narrativeAdmissionGate&&currentRecovery&&currentMemeExit,
         ...(overrides.memeExitMode===false?{recoveryMode:false,lossRepairMode:false,estimatedFeeMode:false,fixedEntryUsd}:{}),
         ...(overrides.confirmedMode===false?{fixedEntryUsd:null,minimalEntryMode:false}:{}) });
     };
@@ -1620,7 +1881,25 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     });
     const evaluations=memeExitMode?originalEvaluations.map(row=>memeExitEvaluation(row,row.decision==='可模拟'
       ?memeEntryContext(row.token,finalEvidence.get(keyOf(row.token)),nowMs):null)):originalEvaluations;
-    if(focusSimulator) await focusSimulator.advance({evaluations,nowMs});
+    const focusRows=evaluations.flatMap(row=>{
+      const shadow=row.evidence?.strategyFocusShadow;
+      return shadow?.researchOnly===true?[{chain:row.token.chain,address:row.token.address,symbol:row.token.symbol,
+        marketStage:shadow.marketStage,...shadow}]:[];
+    });
+    focusShadowStore.record(focusRows,nowMs);
+    focusShadowLatestScan={checkedAt:new Date(nowMs).toISOString(),candidateCount:focusRows.length,
+      candidates:focusRows.slice(-30).map(row=>({chain:row.chain,address:row.address,symbol:row.symbol||null,
+        marketStage:row.marketStage||null,externalSecondBreakout:row.externalSecondBreakout||null,
+        internalSmartMoney:row.internalSmartMoney||null,operatorFootprint:row.operatorFootprint||null,
+        researchOnly:true,entryAllowed:false,paperFillAllowed:false}))};
+    const inputByKey=new Map(inputs.map(input=>[keyOf(input.token),input]));
+    const focusEvaluations=focusSimulator?evaluations.filter(row=>row.evidence?.strategyFocusShadow?.externalSecondBreakout?.signalReady===true).map(row=>{
+      const key=keyOf(row.token),input=inputByKey.get(key),chart=charts.get(key),context=finalEvidence.get(key)||{};
+      const thesis=buildNarrativeThesis({token:row.token,narrative:context.narrative||input?.narrative||{},
+        monitorSignal:input?.monitorSignal,alphaSignal:input?.alphaSignal,index:narrativeResearchIndex,
+        flow:context.flow||input?.flow||{},candles:chart?.candles||[],klineStatus:chart?.status||'unavailable',chartProvenance:chart?.chartProvenance||null,nowMs});
+      return attachNarrativeThesis(row,thesis,{requireAdmission:true,nowMs});
+    }):[];
     // Local research only. This casebook never changes evaluations, account
     // permissions or paid-call budgets. Persist under the existing ledger lock.
     if (confirmedMode && !narrativeAcademyState?.error && nowMs-lastNarrativeAcademyAt>=15000) {
@@ -1643,8 +1922,8 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     // finishes so a broad snapshot can never overwrite that fill.
     canDrainQuotes=false;
     nowMs=now();
-    const mainMarks = marksFor(account);
-    const next = advancePaperStrategyAccount(account, { evaluations:evaluations.filter(canEnterRow), marks: mainMarks, enabled, nowMs, diagnosticMode, confirmedMode, continuousPaperMode, opportunityMode, memeExitMode, recoveryMode, minimalEntryMode,narrativeAdmissionGate, chainGasAccounting,lossRepairMode,enforceLossGuards,estimatedFeeMode,evidenceGapExitMode });
+    const liveBeforeCount=account.trades.length;
+    const next = advancePaperStrategyAccount(account, { evaluations:evaluations.filter(canEnterRow), marks: marksFor(account), enabled, nowMs, diagnosticMode, confirmedMode, continuousPaperMode, opportunityMode, memeExitMode, recoveryMode, minimalEntryMode,narrativeAdmissionGate, chainGasAccounting,lossRepairMode,enforceLossGuards,estimatedFeeMode,evidenceGapExitMode, evidenceTierGate, externalStructureMainAdmission });
     if (lossRepairMode && next.stats.dailyLossGuard) enabled = false;
     next.stats.enabled = enabled;
     const controlEvaluations=opportunityMode && reviewComparison ? (await scanMap(inputs, input=>finalEvaluate(input,{opportunityReviewMode:false,memeExitMode:false,
@@ -1663,14 +1942,21 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     recordAlgorithmDecision(evaluations,nowMs);
     const ledgerWriteStartedAt = now();
     await atomicWrite(stateFile, { schema: 'yesp_atm_runtime_v1', session, chain, chains, enabled, account: next, algorithmSignalJournal, learningShadow: nextShadow, narrativeMemory, narrativeLearningMemory,narrativeAcademyMemory,reviewComparison:nextComparison, exitComparison: nextExits, tradeCountReview: nextReview });
-    mirrorLive(account.trades.length,next,session);
-    profitRetentionObserver?.observeCommitted({beforeAccount:account,afterAccount:next,marks:mainMarks,nowMs,path:'scan'});
     phaseTiming.ledgerWriteMs = Math.max(0, now() - ledgerWriteStartedAt);
     tradeCountReview = nextReview;
     exitComparison = nextExits;
     reviewComparison=nextComparison;
     learningShadow = nextShadow;
     account = next;
+    mirrorLive(liveBeforeCount,next,session);
+    if(focusSimulator) {
+      try {
+        focusSimulatorState=await focusSimulator.advance({evaluations:focusEvaluations,
+          marks:marks.map(mark=>({...mark,chart:holdingChart(mark,mark)})),nowMs});
+      } catch(error) {
+        focusSimulatorState={...focusSimulator.snapshot(),status:'error',lastError:String(error?.message||error).slice(0,180)};
+      }
+    }
     const coverage = snapshot => ({ status: snapshot?.status === 'ok' && !fresh(snapshot.observedAt,nowMs) ? 'stale' : snapshot?.status || 'loading', observedAt: snapshot?.observedAt || null, count: snapshot?.tokens?.length || 0, reason: snapshot?.reason || snapshot?.reasonCode || null });
     const flow = buildPaperDualFlowEvidence({ state: evidence.flowState, binanceState: evidence.binanceState, chain:scanChains[0], nowMs });
     const chainCoverage = Object.fromEntries(chains.map(currentChain => {
@@ -1704,31 +1990,6 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
         realizedPnl: trades.reduce((sum, trade) => sum + trade.realizedPnl, 0), entries: trades.filter(t => t.side === 'buy').length,
         costsUsd: trades.reduce((sum, trade) => sum + trade.costsUsd, 0) };
     });
-    const focusShadowRows = opportunityMode ? evaluations.filter(item=>item.evidence?.strategyFocusShadow)
-      .map(item=>({chain:item.token?.chain,address:item.token?.address,symbol:item.token?.symbol||null,
-        marketStage:item.evidence?.marketStage||null,
-        ...item.evidence.strategyFocusShadow})) : [];
-    const focusShadowPersistence = focusShadowStore?.record(focusShadowRows,nowMs)||null;
-    const strategyFocusShadow = opportunityMode ? {
-      version:'smartmoney_second_breakout_shadow_v1',researchOnly:true,entryAllowed:false,paperFillAllowed:false,
-      durability:'bounded_persistent_journal_plus_latest_scan_snapshot',persistence:focusShadowPersistence,
-      checkedAt:new Date(nowMs).toISOString(),evaluatedCandidates:focusShadowRows.length,
-      internalSmartMoneyWatchCount:focusShadowRows.filter(r=>r.internalSmartMoney?.status==='watch_smart_money_only').length,
-      externalSecondBreakoutCandidateCount:focusShadowRows.filter(r=>r.externalSecondBreakout?.signalReady===true).length,
-      byChain:Object.fromEntries(chains.map(currentChain=>{
-        const rows=focusShadowRows.filter(r=>r.chain===currentChain);
-        return [currentChain,{evaluated:rows.length,
-          internalSmartMoneyWatch:rows.filter(r=>r.internalSmartMoney?.status==='watch_smart_money_only').length,
-          secondBreakoutCandidates:rows.filter(r=>r.externalSecondBreakout?.signalReady===true).length,
-          dataIncomplete:rows.filter(r=>r.externalSecondBreakout?.status==='data_incomplete').length}];
-      })),
-      candidates:focusShadowRows.filter(r=>r.internalSmartMoney?.status==='watch_smart_money_only'
-        ||r.externalSecondBreakout?.signalReady===true).slice(0,20),
-      note:'候选/未触发/拒绝原因保存在独立有界研究文件并提供当前快照；不进入买卖路由、不生成模拟成交。'
-    } : null;
-    const strategyFocusSimulation = focusSimulator?.snapshot() || {
-      version:PAPER_STRATEGY_FOCUS_SIMULATION_VERSION,enabled:false,status:'disabled',mode:'paper_sidecar',
-      execution:false,signing:false,broadcast:false,note:'需确认的独立纸面前向实验；不进入主账本'};
     tickCount += 1;
     const marketSourceAges = scanChains.map(currentChain => {
       const source = marketSnapshots.get(currentChain)[0];
@@ -1766,7 +2027,8 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       quoteInFlight:[...quoteJobs.values()].map(({purpose,token})=>({purpose,chain:token.chain,address:token.address,candidateBook:token.candidateBook||null})),
       lastCandidateQuote,lastComparisonCandidateQuote,lastCandidateEvaluation,
       sharedRequestMinIntervalMs: gmgnReadonlyPolicy(dataDir).intervalMs,
-      sharedReadonlyPolicy: { ...gmgnReadonlyPolicy(dataDir), oneSecondKlineEnabled: false },
+      sharedReadonlyPolicy: { ...gmgnReadonlyPolicy(dataDir), oneSecondKlineEnabled: oneSecondKlineEnabled(),
+        oneSecondKlineNote: '仅当 GMGN_ONE_SECOND_KLINE=1 时允许只读 1 秒 K 线；模拟入场仍用 1 分钟收盘线，不因该开关放宽买卖条件。' },
       marketChains: scanChains.length, marketRefreshMode: 'bounded_chain_lanes_v2', detailRefreshPending: !!detailJob, detailTargets: detailTargets.length,
       flowLookbackMs: 300_000, focusFlowPollTargetMs: 5000, flowIndexBufferMs: 10_000,
       walletBuyPriority:{version:WALLET_BUY_PRIORITY_VERSION,researchOnly:true,
@@ -1790,7 +2052,10 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     }) : null;
     const taxChecks = [...candidates.values()].map(({token}) => ({chain:token.chain,address:token.address,symbol:token.symbol,...paperTaxScreen(token)}));
     const taxBlocked = taxChecks.filter(row => row.blocked);
-    publicState = { ...publicState, status: 'ok', lastError: null, enabled, updatedAt: account.updatedAt, account: clone(account), strategies, cadence, opportunityRoutes, strategyFocusShadow, strategyFocusSimulation,
+    const narrativeReport=recoveryMode?narrativeDeskReport(evaluations,narrativeResearchIndex,narrativeLearningState?.stageResearch,nowMs,
+      {admissionGate:narrativeAdmissionGate}):null;
+    publicState = { ...publicState, status: 'ok', lastError: null, enabled, updatedAt: account.updatedAt, account: clone(account), strategies, cadence, opportunityRoutes,
+      strategyFocusShadow:focusShadowState(),strategyFocusSimulation:focusSimulatorState,
       lossRepair:lossRepairMode?lossRepairReport(account,evaluations,nowMs,{estimatedFees:estimatedFeeMode}):null,
       recovery:recoveryMode?{version:PAPER_RECOVERY_VERSION,activation:clone(account.recoveryActivation),
         entriesEnabled:enabled,entryText:RECOVERY_ENTRY_TEXT,evidenceGapPolicy:{...EVIDENCE_GAP_POLICY},
@@ -1811,7 +2076,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
         alphaEntryVersion:ALPHA_ENTRY_VERSION,
         monitorEntryVersion:MONITOR_ENTRY_VERSION,
         quoteMaxAgeMs:5000,structureQuoteMaxGapMs:10000,entryWindowMs,
-        text:minimalEntryMode?'最小必要门槛：有效 CA、两分钟内真实行情、五秒内独立报价、可卖性、税率不高于 6%、非零流动性与链/CA 数据绑定。叙事、聪明钱、K 线、成本比例和恢复期证明只记录为研究证据，不再阻止模拟开仓；仅模拟，不签名、不广播。':lossRepairMode?(estimatedFeeMode?PAPER_ENTRY_ROUTES_TEXT:LOSS_REPAIR_TEXT):recoveryMode?`${RECOVERY_ENTRY_TEXT}${chainGasAccounting?GAS_ACCOUNT_ONLY_TEXT:STRUCTURE_COST_TEXT}${PAPER_TAX_FILTER_TEXT}`:`主盘监控事件快线：精确 CA 消息两分钟内，一次五秒内独立报价可试仓。无 CA 大 KOL 消息比较主题候选，名称与项目原帖链接同时匹配后才进入交易检查；超过两分钟至一小时只做当前报价重新走强的跟随，不补造狙击成交。同时持仓数量不限，受可用余额约束。Alpha 入口继续运行；真实行情、费用、明确不可交易标记和事件去重仍检查。${chainGasAccounting?GAS_ACCOUNT_ONLY_TEXT:STRUCTURE_COST_TEXT}${PAPER_TAX_FILTER_TEXT}`}:null,
+        text:minimalEntryMode?'最小必要门槛：有效 CA、两分钟内真实行情、五秒内独立报价、可卖性、税率不高于 6%、非零流动性与链/CA 数据绑定。叙事、聪明钱、K 线、成本比例和恢复期证明只记录为研究证据；'+(evidenceTierGate?'但主盘成交仍须通过叙事证据分级与可追门（叙事+控盘），无叙事只进影子研究':'不再阻止模拟开仓')+'；仅模拟，不签名、不广播。':lossRepairMode?(estimatedFeeMode?PAPER_ENTRY_ROUTES_TEXT:LOSS_REPAIR_TEXT):recoveryMode?`${RECOVERY_ENTRY_TEXT}${chainGasAccounting?GAS_ACCOUNT_ONLY_TEXT:STRUCTURE_COST_TEXT}${PAPER_TAX_FILTER_TEXT}`:`主盘监控事件快线：精确 CA 消息两分钟内，一次五秒内独立报价可试仓。无 CA 大 KOL 消息比较主题候选，名称与项目原帖链接同时匹配后才进入交易检查；超过两分钟至一小时只做当前报价重新走强的跟随，不补造狙击成交。同时持仓数量不限，受可用余额约束。Alpha 入口继续运行；真实行情、费用、明确不可交易标记和事件去重仍检查。${chainGasAccounting?GAS_ACCOUNT_ONLY_TEXT:STRUCTURE_COST_TEXT}${PAPER_TAX_FILTER_TEXT}`}:null,
       narrativeRecall: narrativeRecallState && clone(narrativeRecallState),
       poolFirstThreePolicy:lossRepairMode&&estimatedFeeMode?{...POOL_FIRST_THREE_POLICY}:null,
       separatedEntryPolicy:estimatedFeeMode?{version:PAPER_ENTRY_ROUTES_VERSION,text:PAPER_ENTRY_ROUTES_TEXT,paperOnly:true}:null,
@@ -1825,25 +2090,27 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
         seeds:undefined,hints:undefined,paperSignals:undefined,researchDocuments:undefined},
       narrativeLearning: narrativeLearningState && clone(narrativeLearningState),
       narrativeAcademy: narrativeAcademyState && clone(narrativeAcademyState),
-      narrativeDesk:recoveryMode?{...narrativeDeskReport(evaluations,narrativeResearchIndex,narrativeLearningState?.stageResearch,nowMs,
-        {admissionGate:narrativeAdmissionGate}),twitter:twitterNarrative}:null,
+      narrativeAdmission:narrativeReport?.admission||null,
+      narrativeDesk:narrativeReport?{...narrativeReport,twitter:twitterNarrative}:null,
       entryGuard: confirmedMode ? confirmedAccountGate(account, nowMs, null, null, null, { continuousPaperMode, enforceLossGuards }) : null,
       reviewComparison:reviewComparisonSummary(reviewComparison,account),
       exitComparison: exitComparisonSummary(exitComparison),
       researchPipeline: { version: RESEARCH_SCHEDULER_VERSION, detailsRequested: detailDispatchCount, detailsSucceeded, lastDetail: clone(lastDetail),
-        ...(focusedDiscovery?{focusedReadBudget:{version:FOCUSED_RESEARCH_BUDGET_VERSION,exploratoryConcurrency:1,
+        ...(focusedDiscovery?{focusedReadBudget:{version:FOCUSED_RESEARCH_BUDGET_VERSION,exploratoryConcurrency:chartLimits.focusedExploratory,
           exploratoryActive:exploratoryChartKeys.size+(detailJob?1:0),lastKind:lastExploratoryKind,
           chartDeferrals:exploratoryChartDeferrals,detailDeferrals:exploratoryDetailDeferrals,
           chartTurnDeferrals,chartTurnReserved:!!exploratoryChartDemand,
-          chartsSinceDetail,maxChartsBeforeDetail:2,hotDeadlineDeferrals,hotDeadlineReserved:hotDeadlineReservation(),
+          detailOverlapInFlight:detailOverlapKeys.size,detailOverlapDispatched:detailOverlapCount,
+          chartsSinceDetail,maxChartsBeforeDetail:chartLimits.maxChartsBeforeDetail,hotDeadlineDeferrals,hotDeadlineReserved:hotDeadlineReservation(),
           detailBackoffCandidates:[...detailGapRetries.values()].filter(r=>r.nextAttemptAt>nowMs).length,
-          note:'列表独立刷新；单后台席位，热点临期最多连续两次图表后让普通详情继续。最多两个热点保留两分钟观察，普通发现轮次和退出优先级不变；缺字段退避、共享限频与买卖条件不变。'}}:{}),
+          note:'列表独立刷新。热点与钱包 K 线可并行到预算上限，随后把轮次让给普通详情。退出与已准入确认仍优先；缺字段退避、共享限频与买卖条件不变。'}}:{}),
         candidateSelectionPolicy:lossRepairMode?CATALYST_SELECTION_VERSION:'eligible_cost_then_signal_recency_v1',
         readonlyAdmission:{version:READONLY_ADMISSION_VERSION,backgroundConcurrency:1,criticalAgingBypass:false,
           scope:'loaded_process',note:'本进程按分层规则进入共享账户队列；未重载的其他进程可能仍沿用旧调度。'},
         entryDiagnostics:paperEntryDiagnostics(evaluations,{quoteTargets}),
         researchMode: higherFrequencyResearch ? 'higher_frequency_bounded_v1' : 'standard',
-        chartConcurrency: chartLimits.concurrency, chartDispatchIntervalMs: chartLimits.dispatchIntervalMs,
+        chartBudgetVersion: chartLimits.version, chartConcurrency: chartLimits.concurrency, chartDispatchIntervalMs: chartLimits.dispatchIntervalMs,
+        chartPerRound: chartLimits.perRound, chartCacheLimit: chartLimits.cacheLimit, chartBudgetYielded: chartLimits.yielded,
         stageSnapshot:chains.map(currentChain=>{
           const rows=preliminary.filter(r=>r.input.token.chain===currentChain);
           return {chain:currentChain,observedCandidates:rows.length,
@@ -1864,23 +2131,29 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
             return at==null?null:new Date(at).toISOString();})()})),
         hotQuoteResearch:{version:HOT_RESEARCH_VERSION,lease:hotQuoteLease,
           target:hotProbe.row?{chain:hotProbe.row.input.token.chain,address:hotProbe.row.input.token.address}:null,
-          note:'热门外盘最多 15 秒普通优先级报价预热，再休息 45 秒；不占已合格入口、不直接授予买入许可'},
-        discoveryCandidates:externalResearch.length,hotLimit:scanChains.length*hotPerChain,lastChartDispatch,chartDispatches:{...chartDispatches},
+          note:'热门外盘最多 45 秒、3 次普通优先级报价预热；样本间隔至少 5 秒，结束后休息 45 秒；不占已合格入口、不直接授予买入许可'},
+        discoveryCandidates:externalResearch.length,hotLimit:scanChains.length*hotPerChain,lastChartDispatch,recentHotChains:[...recentHotChains],chartDispatches:{...chartDispatches},
         hotChartDispatchesByChain:{...hotChartDispatchesByChain},quoteLease,
-        quoteOpportunityScheduler:{version:QUOTE_OPPORTUNITY_VERSION,rememberedEventLeases:quoteEventLeaseHistory.length,
-          overflowPreemptionSuppressedUntil:quoteEventPreemptionSuppressedUntil||null},
         entryFocus: entryFocus && { ...entryFocus, active: !!focusedEntry(), maxWindowMs: entryWindowMs, discoveryIntervalMs: 10000 },
         researchDeferrals: { ...researchDeferrals },
+        discoveryFairness:{researchDispatch,lastDiscoveryChain,waitingCandidates:researchFirstSeen.size},
+        chartCatchup:chartCatchupStatus(),
         chartDiagnostics:[...charts.entries()].toSorted((a,b)=>b[1].fetchedAt-a[1].fetchedAt).slice(0,10).map(([key,c])=>{
           const [chartChain,address]=key.split(':'), result=opportunityChart(c.candles,c.status,nowMs,{contiguousTail:memeExitMode});
           return {chain:chartChain,address,fetchedAt:new Date(c.fetchedAt).toISOString(),observedAt:c.observedAt||null,
             requestWindow:c.requestWindow||null,queuedAt:c.queuedAt||null,requestedAt:c.requestedAt||null,receivedAt:c.receivedAt||null,
             closedThroughAt:new Date(c.closedThroughAtMs).toISOString(),excludedUnclosedBars:c.excludedUnclosedBars,
-            sourceStatus:c.status||'unavailable',sourceReason:c.reason||c.reasonCode||null,
+            source:c.source||'gmgn-cli',chartProvenance:c.chartProvenance||null,
+            sourceStatus:c.status||'unavailable',sourceReason:c.reason||c.reasonCode||null,sourceReasonCode:c.reasonCode||null,
+            lastAttempt:c.lastAttempt||null,
             ready:result.ready,reason:result.reason||null,diagnostics:result.diagnostics};
         }),
         nearEntryRefreshPending: detailTargets.filter(token => token.researchPriority === 2).length, chartReadyCandidates: new Set(chartReady.map(r=>keyOf(r.input.token))).size,
+        chartFallback:chartFallback.snapshot(),
         externalResearchCandidates:externalResearch.length,chartCacheCount:charts.size,chartRequestsPending:chartJobs.size,
+        chartHealth:summarizeChartHealth({evaluations,chartRows:[...charts.entries()].map(([chartKey,chart])=>({...chart,chartKey})),
+          hotKeys:hotResearchKeys,chartDispatchCount:['holding','entry','hot','wallet','discovery'].reduce((sum,lane)=>sum+(chartDispatches[lane]||0),0),
+          queueRecent:market.diagnostics?.().recent||[],funnels:Object.values(chainCoverage).map(row=>row.funnel)}),
         pending: detailTargets.slice(0, 20).map(token => ({ chain: token.chain, address: token.address, symbol: token.symbol, priority: token.researchPriority, reason: token.researchReason })) },
       positionSizing: recoveryMode?{mode:'cash_fraction_cap',version:PAPER_RECOVERY_SIZING_VERSION,
         fixedEntryUsd:null,exactTicket:false,cashBasis:account.cash,includesUnrealizedPnl:false,entryFraction:.1,maxEntryUsd:10,
@@ -1896,7 +2169,7 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
       coverage: { market: coverage(trending), trenches: coverage(trenches), flow: { status: flow.status, observedAt: flow.observedAt, fresh: flow.fresh, complete: flow.complete, coverageGap: flow.coverageGap, scope: flow.scope, evidenceScope: flow.evidenceScope, windowStartAt: flow.windowStartAt, windowEndAt: flow.windowEndAt, sourceIssue: flow.sourceIssue, provider: flow.provider, providerLabel: flow.providerLabel, sources: flow.sources } },
       evaluations: evaluations.map(({ evidence: detail, ...entry }) => ({ ...entry, evidence: detail })) };
     if(estimatedFeeMode&&publicState.mainEntryPolicy)publicState.mainEntryPolicy={...publicState.mainEntryPolicy,
-      text:minimalEntryMode?'最小必要门槛：有效 CA、两分钟内真实行情、五秒内独立报价、可卖性、税率不高于 6%、非零流动性与链/CA 数据绑定。叙事、聪明钱、K 线、成本比例和恢复期证明只记录为研究证据，不再阻止模拟开仓；仅模拟，不签名、不广播。':`${ESTIMATED_COST_TEXT} ${PAPER_ENTRY_ROUTES_TEXT}`,
+      text:minimalEntryMode?'最小必要门槛：有效 CA、两分钟内真实行情、五秒内独立报价、可卖性、税率不高于 6%、非零流动性与链/CA 数据绑定。叙事、聪明钱、K 线、成本比例和恢复期证明只记录为研究证据；'+(evidenceTierGate?'但主盘成交仍须通过叙事证据分级与可追门（叙事+控盘），无叙事只进影子研究':'不再阻止模拟开仓')+'；仅模拟，不签名、不广播。':`${ESTIMATED_COST_TEXT} ${PAPER_ENTRY_ROUTES_TEXT}`,
       structureCostVersion:minimalEntryMode?'minimal_hard_safety_v1':ESTIMATED_COST_VERSION};
     // Keep the old work metric comparable; expose the previously unmeasured
     // state-publication tail separately rather than silently changing its basis.
@@ -1957,31 +2230,17 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
     eventTimer=setTimeout(()=>{void refreshEvents().finally(scheduleEvents);},1000);eventTimer.unref?.();
   }
   return {
-    stateFile,
-    snapshot: () => ({...clone(publicState),
-      ...(opportunityMode?{strategyFocusShadow:{...(clone(publicState.strategyFocusShadow)||{
-        version:'smartmoney_second_breakout_shadow_v1',researchOnly:true,entryAllowed:false,paperFillAllowed:false,
-        durability:'bounded_persistent_journal_plus_latest_scan_snapshot'}),persistence:focusShadowStore?.snapshot()||null}}:{}),
-      strategyFocusSimulation:focusSimulator?.snapshot()||clone(publicState.strategyFocusSimulation)||{
-        version:PAPER_STRATEGY_FOCUS_SIMULATION_VERSION,enabled:false,status:'disabled',mode:'paper_sidecar',
-        execution:false,signing:false,broadcast:false},
-      profitRetentionShadow:profitRetentionObserver?.snapshot()||{version:PROFIT_RETENTION_MULTIARM_VERSION,enabled:false,status:'disabled',configuredPriceMultiples:[2,3,5],mode:'multiarm_paired_observation_only',execution:false,signing:false,broadcast:false},
-      ...(recoveryMode&&memeExitMode?{strategyValidationRequirements:{entryFlowVersion:ENTRY_FLOW_VERSION,
-        narrativeAdmissionVersion:NARRATIVE_ADMISSION_VERSION,narrativeAdmissionGate,
-        exitObservationVersion:MEME_EXIT_FLOW_OBSERVATION_VERSION,
-        exitStructureObservationVersion:MEME_EXIT_STRUCTURE_OBSERVATION_VERSION,
-        entryStructureBySetup:Object.fromEntries(['external_breakout','external_pullback','external_trend'].map(id=>[id,STRUCTURE_ENTRY_PROOF_VERSION])),
-        targetSelectionBySetup:{external_pullback:PULLBACK_TARGET_SELECTION_VERSION},
-        ...(estimatedFeeMode?{entryCostVersion:ESTIMATED_COST_VERSION,exitCostVersion:ESTIMATED_COST_VERSION}:{}),
-        note:'仅按已冻结的实际版本比较；缺版本不计作当前修复成绩，不宣称盈利优势'}}:{}),
-      ...(recoveryMode?{narrativeAdmission:{version:NARRATIVE_ADMISSION_VERSION,enabled:narrativeAdmissionGate,
-        note:narrativeAdmissionGate?'新开仓要求新鲜原文、精确 CA 关系、明确催化、资金承接和量价结构；旧仓退出照常':'未启用叙事入场复核'}}:{}),
-      ...(learningReportSnapshot?{learning:displayLearningReport()}:{}),discoveryScope:discoveryScopeSnapshot(),readonlyRequests:market.diagnostics?.()||null,algorithmSignals:algorithmSignalSnapshot(), scanScope:{version:1,scanChains:[...scanChains],managementChains:[...chains],
+    stateFile, queueChartCatchup, chartCatchupStatus,
+    // Mobile execution indicator must not clone/transfer the full research book.
+    liveStatus: () => ({ status: publicState.status, enabled, updatedAt: publicState.updatedAt,
+      liveMirror: liveMirrorCapability(liveMirror) }),
+    snapshot: () => ({...clone(publicState),...(learningReportSnapshot?{learning:displayLearningReport()}:{}),discoveryScope:discoveryScopeSnapshot(),readonlyRequests:market.diagnostics?.()||null,algorithmSignals:algorithmSignalSnapshot(), scanScope:{version:1,scanChains:[...scanChains],managementChains:[...chains],
       retainedExitChains:[...new Set(heldTokens().map(t=>t.chain))].filter(c=>!scanChains.includes(c)),
       newsMonitoring:'unchanged',effectiveOnRestart:true}, ...(lossRepairMode && account ? {lossGuards:paperLossGuard(account, now(), {enforced:enforceLossGuards})} : {}), ...(jevResearch ? {jevResearch:jevResearch.snapshot()} : {})}),
     walletResearchContext: () => ({readOnly:true,
       charts:[...charts.values()].filter(c=>c.status==='ok').map(c=>({chain:c.chain,address:c.address,status:c.status,
-        resolution:c.resolution,fetchedAt:c.fetchedAt,closedThroughAtMs:c.closedThroughAtMs,candles:clone(c.candles||[])})),
+        resolution:c.resolution,fetchedAt:c.fetchedAt,closedThroughAtMs:c.closedThroughAtMs,
+        source:c.source||'gmgn-cli',chartProvenance:clone(c.chartProvenance||null),candles:clone(c.candles||[])})),
       documents:validNarrativeAcademy(narrativeAcademyMemory)?clone(narrativeAcademyMemory.cases):[]}),
     runOnce, fastOnce, exitOnce, refreshMarket, refreshQuote, refreshDetails, refreshNarrativeLearning, refreshEvents,
     start: async () => { if (started || stopped) return; started = true; try { await serial(initialize); } catch (error) { started = false; throw error; }
@@ -2016,7 +2275,8 @@ export function createPaperStrategyRuntime({ market, dataDir, internalDepthProbe
         reviewComparison: reviewComparisonSummary(reviewComparison, account) };
       return clone(publicState);
     }),
-    stop: async () => { stopped = true; clearTimeout(timer); clearTimeout(refreshTimer); clearTimeout(quoteTimer); clearTimeout(exitTimer); clearTimeout(eventTimer);
-      await Promise.allSettled([internalTradeMonitor?.stop(),jevResearch?.stop(),cycle, fastCycle, quoteEvaluationJob, eventRefreshJob, depthJob, ...quotePreparationJobs, exitJob, refreshJob, ...marketJobs.values(), ...auxiliaryJobs.values(), ...[...quoteJobs.values()].map(x=>x.job), detailJob, narrativeLearningJob, ...chartJobs.values(), ...liveMirrorJobs]); await tail; await profitRetentionObserver?.flush(); await focusShadowStore?.flush(); await focusSimulator?.flush(); await releaseLock(); },
+      stop: async () => { stopped = true; clearTimeout(timer); clearTimeout(refreshTimer); clearTimeout(quoteTimer); clearTimeout(exitTimer); clearTimeout(eventTimer);
+      await Promise.allSettled([chartFallback.close(),internalTradeMonitor?.stop(),jevResearch?.stop(),cycle, fastCycle, quoteEvaluationJob, eventRefreshJob, depthJob, ...quotePreparationJobs, exitJob, refreshJob, ...marketJobs.values(), ...auxiliaryJobs.values(), ...[...quoteJobs.values()].map(x=>x.job), detailJob, narrativeLearningJob, ...chartJobs.values(), ...liveMirrorJobs]);
+      await Promise.allSettled([focusShadowStore.flush(),focusSimulator?.flush()]); await tail; await releaseLock(); },
   };
 }

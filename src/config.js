@@ -1,5 +1,6 @@
 import "dotenv/config";
 import path from "node:path";
+import { isIP } from "node:net";
 import { loadMonitorSourcePolicy, monitorSourceOverrides } from "./monitor-source-policy.js";
 export { applyPrivateBscRpcConfig } from "./bsc-private-rpc.js";
 
@@ -31,7 +32,15 @@ export const parseDistinctRpcOrigins = (name, rawValue, fallbackValue, { require
 
 const flapQuoteMonitorEnabled = !/^false$/i.test(process.env.FLAP_QUOTE_MONITOR_ENABLED || "true");
 const fourRegistryMonitorEnabled = !/^false$/i.test(process.env.FOUR_REGISTRY_MONITOR_ENABLED || "true");
+const fourMemeReplayEnabled = !/^false$/i.test(process.env.FOUR_MEME_REPLAY_ENABLED || "true");
 const robinhoodRpcUrl = process.env.RPC_URL || "https://rpc.mainnet.chain.robinhood.com";
+const githubPublicDnsServers = [...new Set(String(process.env.GITHUB_PUBLIC_DNS_SERVERS || "")
+  .split(",")
+  .map((server) => server.trim())
+  .filter(Boolean))];
+if (githubPublicDnsServers.some((server) => !isIP(server))) {
+  throw new Error("GITHUB_PUBLIC_DNS_SERVERS must be a comma-separated list of IP addresses");
+}
 
 export const config = {
   monitorScope: String(process.env.MONITOR_SCOPE || "all").trim().toLowerCase(),
@@ -58,7 +67,7 @@ export const config = {
   telegramStrongAlerts: !/^false$/i.test(process.env.TELEGRAM_STRONG_ALERTS || "true"),
   telegramNewsMonitorEnabled: /^true$/i.test(process.env.TELEGRAM_NEWS_MONITOR_ENABLED || "false"),
   telegramNewsPollIntervalMs: integer("TELEGRAM_NEWS_POLL_INTERVAL_MS", 4_000),
-  telegramNewsRequestTimeoutMs: integer("TELEGRAM_NEWS_REQUEST_TIMEOUT_MS", 3_000),
+  telegramNewsRequestTimeoutMs: integer("TELEGRAM_NEWS_REQUEST_TIMEOUT_MS", 10_000),
   telegramNewsMaxBackoffMs: integer("TELEGRAM_NEWS_MAX_BACKOFF_MS", 900_000),
   // AI narrative sniper v2 is shadow-only and opt-in. Enabling it admits
   // verified monitor events into a durable local evidence/ledger pipeline; it
@@ -126,6 +135,7 @@ export const config = {
   githubPriorityPollConcurrency: integer("GITHUB_PRIORITY_POLL_CONCURRENCY", 6),
   githubPriorityPollIntervalMs: integer("GITHUB_PRIORITY_POLL_INTERVAL_MS", 5_000),
   githubRequestTimeoutMs: integer("GITHUB_REQUEST_TIMEOUT_MS", 8_000),
+  githubPublicDnsServers,
   githubDynamicPollIntervalMs: integer("GITHUB_DYNAMIC_POLL_INTERVAL_MS", 300_000),
   githubPrPollIntervalMs: integer("GITHUB_PR_POLL_INTERVAL_MS", 60_000),
   githubOrganizationPollIntervalMs: integer("GITHUB_ORGANIZATION_POLL_INTERVAL_MS", 600_000),
@@ -243,6 +253,7 @@ export const config = {
   // the official OpenFour Registry/Core as an independent finalized-chain
   // source, with a silent first baseline and durable post-baseline events.
   fourRegistryMonitorEnabled,
+  fourMemeReplayEnabled,
   fourRegistryPollIntervalMs: integer("FOUR_REGISTRY_POLL_INTERVAL_MS", 5_000),
   fourRegistryCatchUpIntervalMs: integer("FOUR_REGISTRY_CATCH_UP_INTERVAL_MS", 5_000),
   fourRegistryConfirmations: integer("FOUR_REGISTRY_CONFIRMATIONS", 3),
@@ -399,6 +410,12 @@ export const config = {
   fomoCallGmgnDiscoveryTimeoutMs: integer("FOMO_CALL_GMGN_DISCOVERY_TIMEOUT_MS", 30_000),
   fomoCallGmgnAttributionMaxAgeMs: integer("FOMO_CALL_GMGN_ATTRIBUTION_MAX_AGE_MS", 86_400_000),
   fomoSmartMoneyMonitorEnabled: !/^false$/i.test(process.env.FOMO_SMART_MONEY_MONITOR_ENABLED || "true"),
+  addressNotesEnabled: /^true$/i.test(process.env.ADDRESS_NOTES_ENABLED || "false"),
+  addressNotesAlertsEnabled: /^true$/i.test(process.env.ADDRESS_NOTES_ALERTS_ENABLED || "false"),
+  addressNotesPollIntervalMs: Number(process.env.ADDRESS_NOTES_POLL_INTERVAL_MS || 60000),
+  addressNotesMinAlertUsd: Number(process.env.ADDRESS_NOTES_MIN_ALERT_USD || 50),
+  addressNotesFetchPerTick: Number(process.env.ADDRESS_NOTES_FETCH_PER_TICK || 2),
+  addressNotesFetchIntervalMs: Number(process.env.ADDRESS_NOTES_FETCH_INTERVAL_MS || 20000),
   fomoSmartMoneyDiscoveryIntervalMs: integer("FOMO_SMART_MONEY_DISCOVERY_INTERVAL_MS", 30_000),
   fomoSmartMoneyFeedLimit: integer("FOMO_SMART_MONEY_FEED_LIMIT", 200),
   fomoSmartMoneyStatsBatchLimit: integer("FOMO_SMART_MONEY_STATS_BATCH_LIMIT", 1),

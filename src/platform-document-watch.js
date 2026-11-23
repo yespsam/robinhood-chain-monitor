@@ -7,6 +7,10 @@ export const PLATFORM_DOCUMENT_MAX_PER_RUN = 4;
 const MAX_PAGES = 128, MAX_CHANGES = 32, MAX_BODY_BYTES = 2 * 1024 * 1024;
 const REFRESH_MS = 30 * 60_000, STALE_MS = 2 * 60 * 60_000;
 const BODY_ERROR_CODES = new Set(['body_too_large', 'body_unavailable', 'source_not_allowed', 'redirect_rejected']);
+const safeTransportCode = error => {
+  const code = error?.cause?.code ?? error?.transportCode ?? error?.code;
+  return typeof code === 'string' && /^[A-Z0-9_]{2,64}$/i.test(code) ? code : null;
+};
 const POLICIES = {
   flap: { origin: 'https://docs.flap.sh', sitemap: 'https://docs.flap.sh/sitemap.xml',
     path: /^\/flap\/(?:developers|skills|product-update)(?:\/|$)/i,
@@ -16,6 +20,15 @@ const POLICIES = {
     path: /^\/four\.meme\/(?:product-update|brand\/protocol-integration|guide\/how-it-works)(?:\/|$)/i,
     seeds:['https://four-meme.gitbook.io/four.meme', 'https://four-meme.gitbook.io/four.meme/guide/how-it-works',
       'https://four-meme.gitbook.io/four.meme/brand/protocol-integration', 'https://four-meme.gitbook.io/four.meme/product-update'] },
+  hyperevm: { origin: 'https://hyperliquid.gitbook.io', sitemap: 'https://hyperliquid.gitbook.io/hyperliquid-docs/sitemap.xml',
+    path: /^\/hyperliquid-docs\/(?:for-developers\/hyperevm(?:\/|$)|onboarding\/how-to-use-the-hyperevm(?:\/|$)|builder-tools\/hyperevm-tools(?:\/|$))/i,
+    seeds:['https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm',
+      'https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm/json-rpc',
+      'https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm/raw-hyperevm-block-data',
+      'https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm/dual-block-architecture',
+      'https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm/interacting-with-hypercore',
+      'https://hyperliquid.gitbook.io/hyperliquid-docs/onboarding/how-to-use-the-hyperevm',
+      'https://hyperliquid.gitbook.io/hyperliquid-docs/builder-tools/hyperevm-tools'] },
 };
 const stamp = value => Date.parse(value || '');
 const iso = value => new Date(value).toISOString();
@@ -139,10 +152,18 @@ async function boundedResponseText(response) {
 export async function fetchPlatformDocument(platform, page, fetchImpl, { nowMs = Date.now(), timeoutMs = 10_000 } = {}) {
   const url = allowedPlatformDocumentUrl(platform, page?.url);
   if (!url) throw Object.assign(new Error('document_source_not_allowed'), { code:'source_not_allowed' });
-  const headers = { accept:'text/html,text/markdown', 'accept-language':'en-US,en;q=0.9' };
+  // This bounded, low-frequency lane shares the process with live RPC polling.
+  // Request a fresh socket so stale keep-alive connections from the busy
+  // monitor cannot poison a whole documentation batch.
+  const headers = { accept:'text/html,text/markdown', 'accept-language':'en-US,en;q=0.9', connection:'close' };
   if (page.fingerprint && page.etag) headers['if-none-match'] = page.etag;
   if (page.fingerprint && page.lastModified) headers['if-modified-since'] = page.lastModified;
-  const response = await fetchImpl(url, { headers, redirect:'manual', signal:AbortSignal.timeout(Math.max(1000, Math.min(10_000, Number(timeoutMs) || 10_000))) });
+  let response;
+  try {
+    response = await fetchImpl(url, { headers, redirect:'manual', signal:AbortSignal.timeout(Math.max(1000, Math.min(20_000, Number(timeoutMs) || 10_000))) });
+  } catch (error) {
+    throw Object.assign(new Error('document_fetch_failed'), { code:'document_fetch_failed', transportCode:safeTransportCode(error) });
+  }
   // Never follow an untrusted Location, nor accept a fetch adapter which has
   // already followed one and returned a body from another page/origin.
   if ((response.status >= 300 && response.status < 400 && response.status !== 304)
@@ -154,7 +175,13 @@ export async function fetchPlatformDocument(platform, page, fetchImpl, { nowMs =
     const retryAfterMs = retry ? Number.isFinite(seconds) ? Math.max(0, seconds * 1000) : Math.max(0, stamp(retry) - nowMs) || 0 : 0;
     throw Object.assign(new Error(`document_http_${response.status}`), { status:response.status, retryAfterMs });
   }
-  return { ...platformDocumentSnapshot(await boundedResponseText(response)), etag:response.headers?.get?.('etag') || null,
+  let text;
+  try { text = await boundedResponseText(response); }
+  catch (error) {
+    if (error?.code) throw error;
+    throw Object.assign(new Error('document_body_fetch_failed'), { code:'document_body_fetch_failed', transportCode:safeTransportCode(error) });
+  }
+  return { ...platformDocumentSnapshot(text), etag:response.headers?.get?.('etag') || null,
     lastModified:response.headers?.get?.('last-modified') || null };
 }
 
@@ -171,6 +198,7 @@ export function applyPlatformDocumentResult(input, url, result, checkedAtMs, { r
     watch.pages[url] = { ...prior, status:'failed', lastAttemptAt:checkedAt, lastErrorAt:checkedAt,
       lastError:BODY_ERROR_CODES.has(result.error.code) ? result.error.code
         : Number.isInteger(status) ? `document_http_${status}` : 'document_fetch_failed',
+      lastTransportCode:safeTransportCode(result.error),
       lastErrorStatus:Number.isInteger(status) ? status : null, consecutiveFailures:failures, nextDueAt:due };
     if (httpCooldown) watch.originNextAttemptAt = iso(Math.max(stamp(watch.originNextAttemptAt) || 0, checkedAtMs + delay));
     return watch;
@@ -178,7 +206,7 @@ export function applyPlatformDocumentResult(input, url, result, checkedAtMs, { r
   const changed = !result.notModified && !!prior.fingerprint && prior.fingerprint !== result.fingerprint;
   const page = { ...prior, ...(result.notModified ? {} : result), status:'healthy', lastAttemptAt:checkedAt,
     lastSuccessAt:checkedAt, nextDueAt:iso(checkedAtMs + REFRESH_MS), consecutiveFailures:0,
-    lastError:null, lastErrorStatus:null, baselineAt:prior.baselineAt || checkedAt,
+    lastError:null, lastErrorStatus:null, lastTransportCode:null, baselineAt:prior.baselineAt || checkedAt,
     lastContentChangedAt:changed ? checkedAt : prior.lastContentChangedAt || null };
   if (changed) {
     const before = prior.segments || [], after = result.segments || [];

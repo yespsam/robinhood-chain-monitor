@@ -8,6 +8,7 @@ import {
   isStrictFourRegistryFirstTokenForPriority,
   isStrictFourMemeMarketCampaign,
 } from "./source-controls.js";
+import { isLiveFlapPoolLaunchUpdate } from "./flap-pool-launch.js";
 
 const PRIORITY_SCHEMA = "news_trading_priority_v2";
 
@@ -780,6 +781,11 @@ function category(event = {}, text = eventText(event)) {
   if (focusPlatform(platform)) {
     if (event.type === "bsc_launchpad_update" && event.kind === "flap_pool_token") {
       return isClosedFlapTrackedTokenMonitor(event) ? "focus_onchain" : "information";
+    }
+    // Pool Launch is an observe/alert record. It must not enter the on-chain
+    // trading tier used for new launch modes and first-three curve tokens.
+    if (event.type === "bsc_launchpad_update" && event.kind === "flap_pool_launch") {
+      return isLiveFlapPoolLaunchUpdate(event) ? "focus_onchain" : "information";
     }
     if (["bsc_launchpad_update", "evm_launchpad_update", "token_launch"].includes(event.type)) return "focus_onchain";
     if (event.type === "github_module_update" && !materialFocusGithub(event)) return "developer_maintenance";

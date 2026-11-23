@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { loadLiveConfig, checkGates, buildSwapArgs, createLiveTrader, crossChainTopUp, submitAndConfirm, BSC_NATIVE_BNB } from "../src/live-gmgn-trader.js";
+import { loadLiveConfig, CHAIN_SPEC, chainCfg, checkGates, buildSwapArgs, createLiveTrader, crossChainTopUp, submitAndConfirm, BSC_NATIVE_BNB } from "../src/live-gmgn-trader.js";
 const W = "0x2938b003b1e3c2f95ae73046730b91f3af22f828";
 const base = (o = {}) => ({ ...loadLiveConfig({ LIVE_PRESUBMIT_QUOTE: "false", LIVE_REQUIRE_EVIDENCE: "false", LIVE_CLOSE_SYNC_MS: "0", LIVE_TRADING_ENABLED: "true", LIVE_WALLET: W }, "/nonexistent"), ...o });
 const nofs = { existsSync: () => false };
@@ -12,6 +12,33 @@ test("disabled by default", () => {
   assert.match(checkGates(loadLiveConfig({ LIVE_WALLET: W }), order, empty, { fsx: nofs }).reason, /not true/);
 });
 test("passes when all ok", () => assert.equal(checkGates(base(), order, okEmpty, { fsx: nofs }).ok, true));
+test("unknown chains fail closed before any quote or swap CLI call", async () => {
+  assert.equal(Object.isFrozen(CHAIN_SPEC), true);
+  assert.equal(Object.isFrozen(CHAIN_SPEC.bsc), true);
+  const cases = [
+    [loadLiveConfig({ LIVE_TRADING_ENABLED: "true", LIVE_CHAIN: "morph", LIVE_CHAINS: "morph", LIVE_WALLET: W, LIVE_SPEND_ASSET: "bnb" }, "/nonexistent"), tmpCfg({ chain: "morph", chains: ["morph"] }), order],
+    [base(), tmpCfg(), { ...order, chain: "morph" }],
+  ];
+  for (const [cfg, executionCfg, candidate] of cases) {
+    let cliCalls = 0;
+    const result = checkGates(chainCfg(cfg, candidate.chain || cfg.chain), candidate, okEmpty, { fsx: nofs });
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /unsupported live chain/);
+    assert.equal(chainCfg(cfg, candidate.chain || cfg.chain).unsupported, true);
+    assert.throws(() => buildSwapArgs({ ...chainCfg(cfg, candidate.chain || cfg.chain), wallet: W }, candidate), /unsupported live chain/);
+    const trader = createLiveTrader(executionCfg, { run: () => { cliCalls += 1; throw new Error("must not invoke CLI"); }, log: { warn() {}, info() {} } });
+    const liveResult = await trader.buy(candidate);
+    assert.equal(liveResult.ok, false);
+    assert.match(liveResult.reason, /unsupported live chain/);
+    assert.equal(cliCalls, 0);
+  }
+});
+test("live spend assets are restricted to audited chain pairs", () => {
+  assert.match(checkGates(base({ spendAsset: "morph" }), order, okEmpty, { fsx: nofs }).reason, /unsupported spend asset/);
+  assert.match(checkGates(base({ spendAsset: "sol" }), order, okEmpty, { fsx: nofs }).reason, /unsupported spend asset/);
+  assert.equal(checkGates(base({ spendAsset: "usdt" }), order, okEmpty, { fsx: nofs }).ok, true);
+  assert.match(checkGates(base({ chain: "BSC", spendAsset: "BNB" }), { ...order, bnbPriceUsd: undefined }, okEmpty, { fsx: nofs }).reason, /BNB price unavailable/);
+});
 test("kill switch", () => assert.match(checkGates(base(), order, empty, { fsx: { existsSync: () => true } }).reason, /kill/));
 test("max per trade", () => assert.match(checkGates(base(), { ...order, usd: 10.01 }, empty, { fsx: nofs }).reason, /PER_TRADE/));
 test("max total", () => {

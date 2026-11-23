@@ -34,6 +34,7 @@ import { createFomoXCallMonitor } from "./fomo-x-call-monitor.js";
 import { createUniswapMonitor } from "./uniswap-monitor.js";
 import { createXaiOfficialMonitor } from "./xai-official-monitor.js";
 import { createTelegramNewsMonitor } from "./telegram-news-monitor.js";
+import { createLiveTrader } from "./live-gmgn-trader.js";
 import { createNarrativeSniperRuntime } from "./narrative-sniper-runtime.js";
 import { createNarrativeSourceAdapter } from "./narrative-source-adapter.js";
 import { createProductionNarrativeShadowQuoteProvider } from "./narrative-shadow-quote-runtime.js";
@@ -44,6 +45,7 @@ import { startRuntimeHeartbeat } from "./runtime-heartbeat.js";
 import { createBscWorkerClient } from "./bsc-worker-client.js";
 import { applyPrivateBscRpcConfig, loadPrivateBscRpcConfig } from "./bsc-private-rpc.js";
 import { createPaperLaunchEvidenceWriter } from "./paper-launch-evidence.js";
+import { createAddressNotesMonitor } from "./address-notes-monitor.js";
 
 for (const level of ["error", "info"]) {
   const write = console[level].bind(console);
@@ -166,6 +168,7 @@ let telegramNewsMonitor;
 let narrativeSniperRuntime;
 let narrativeEvidenceRpcProvider;
 let alertOutboxWorker;
+let githubAlertOutboxWorker;
 const PONS_V1_TOKEN_LAUNCHED_TOPIC = "0xdb51ea9ad51ab453a65a4cb7e60c3cb378c9501bb002609f8f97778fb6c4235a";
 const POOL_TOPICS = [
   id("PairCreated(address,address,address,uint256)"),
@@ -276,6 +279,17 @@ async function deliverAlert(runtimeConfig, event) {
     return narrativeSniperRuntime.sendAlert(runtimeConfig, event);
   }
   return sendAlerts(runtimeConfig, event);
+}
+
+async function deliverGithubAlert(runtimeConfig, event) {
+  // GitHub watch notifications must always use their isolated outbox. Do not
+  // route them through deliverAlert(): that path writes trading-evidence
+  // projections and may hand off to the optional narrative runtime, which is
+  // intentionally configured with the shared alert sender.
+  return sendAlerts({
+    ...runtimeConfig,
+    alertOutboxPath: path.join(runtimeConfig.dataDir, "github-alert-outbox.json"),
+  }, event);
 }
 
 async function processCandidate(transaction, receipt, block) {
@@ -439,7 +453,12 @@ function startIndependentMonitors() {
   if (config.narrativeShadowSimulatorEnabled && !config.narrativeSniperEnabled) {
     throw new Error("NARRATIVE_SHADOW_SIMULATOR_ENABLED requires NARRATIVE_SNIPER_ENABLED=true");
   }
+  try { console.log(createLiveTrader().describe()); } catch (e) { console.error(`[live-gmgn-init] ${e.message}`); }
   alertOutboxWorker = startAlertOutboxWorker(config);
+  githubAlertOutboxWorker = startAlertOutboxWorker({
+    ...config,
+    alertOutboxPath: path.join(config.dataDir, "github-alert-outbox.json"),
+  });
   if (config.narrativeSniperEnabled) {
     const readConfig = bscPrimaryReadConfig();
     narrativeEvidenceRpcProvider ||= createRpcPool(
@@ -469,6 +488,10 @@ function startIndependentMonitors() {
     void narrativeSniperRuntime.ready.catch((error) => {
       console.error(`[narrative-sniper-init] ${error.message}`);
     });
+  }
+  if (config.addressNotesEnabled) {
+    try { createAddressNotesMonitor(config).start(); console.log("[address-notes] monitor started"); }
+    catch (error) { console.error(`[address-notes-init] ${error.message}`); }
   }
   const pendingBscGithubCandidates = createBoundedStartupQueue();
   const pendingBscSiteCandidates = createBoundedStartupQueue();
@@ -541,7 +564,7 @@ function startIndependentMonitors() {
   startMonitor("github", () => {
     githubMonitor = createGithubMonitor(config, {
       onContractDiscovery: registerBscDiscovery,
-      sendAlertsImpl: deliverAlert,
+      sendAlertsImpl: deliverGithubAlert,
     });
     flushPending(pendingBscGithubCandidates, deliverGithubCandidate, "github");
   });
@@ -866,6 +889,7 @@ function stopNewScheduling() {
 function createdMonitorEntries() {
   return [
     ["alert-outbox", alertOutboxWorker],
+    ["github-alert-outbox", githubAlertOutboxWorker],
     ["narrative-sniper", narrativeSniperRuntime],
     ["github", githubMonitor],
     ["site", siteMonitor],

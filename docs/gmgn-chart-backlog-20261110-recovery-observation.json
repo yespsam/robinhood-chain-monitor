@@ -1,0 +1,981 @@
+{
+  "schema": "gmgn_chart_catchup_recovery_observation_v1",
+  "expectedCatchupId": "chart-catchup-1794247350010",
+  "startedAt": "2026-11-09T18:02:59.774481+00:00",
+  "durationTargetSeconds": 600,
+  "samples": [
+    {
+      "at": "2026-11-09T18:02:59.774800+00:00",
+      "elapsedSeconds": 0.0,
+      "id": "chart-catchup-1794247350010",
+      "status": "running",
+      "counts": {
+        "skipped": 1,
+        "queued": 59
+      },
+      "attempts": 0,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 1
+      },
+      "chartDiagnostics": {}
+    },
+    {
+      "at": "2026-11-09T18:03:44.826091+00:00",
+      "elapsedSeconds": 45.1,
+      "id": "chart-catchup-1794247350010",
+      "status": "running",
+      "counts": {
+        "skipped": 1,
+        "queued": 59
+      },
+      "attempts": 0,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 1
+      },
+      "chartDiagnostics": {}
+    },
+    {
+      "at": "2026-11-09T18:04:29.854848+00:00",
+      "elapsedSeconds": 90.1,
+      "id": "chart-catchup-1794247350010",
+      "status": "running",
+      "counts": {
+        "skipped": 3,
+        "fetched": 1,
+        "queued": 56
+      },
+      "attempts": 1,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 3
+      },
+      "chartDiagnostics": {
+        "ready": 1
+      }
+    },
+    {
+      "at": "2026-11-09T18:05:14.887444+00:00",
+      "elapsedSeconds": 135.1,
+      "id": "chart-catchup-1794247350010",
+      "status": "running",
+      "counts": {
+        "skipped": 3,
+        "fetched": 2,
+        "queued": 55
+      },
+      "attempts": 2,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 3
+      },
+      "chartDiagnostics": {
+        "ready": 1,
+        "insufficient_contiguous_tail": 1
+      }
+    },
+    {
+      "at": "2026-11-09T18:05:59.959877+00:00",
+      "elapsedSeconds": 180.2,
+      "id": "chart-catchup-1794247350010",
+      "status": "running",
+      "counts": {
+        "skipped": 3,
+        "fetched": 2,
+        "queued": 55
+      },
+      "attempts": 2,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 3
+      },
+      "chartDiagnostics": {
+        "ready": 1,
+        "insufficient_contiguous_tail": 1
+      }
+    },
+    {
+      "at": "2026-11-09T18:06:44.993555+00:00",
+      "elapsedSeconds": 225.2,
+      "id": "chart-catchup-1794247350010",
+      "status": "running",
+      "counts": {
+        "skipped": 3,
+        "fetched": 3,
+        "queued": 54
+      },
+      "attempts": 3,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 3
+      },
+      "chartDiagnostics": {
+        "ready": 1,
+        "insufficient_contiguous_tail": 2
+      }
+    },
+    {
+      "at": "2026-11-09T18:07:30.079058+00:00",
+      "elapsedSeconds": 270.3,
+      "id": "chart-catchup-1794247350010",
+      "status": "running",
+      "counts": {
+        "skipped": 5,
+        "fetched": 4,
+        "queued": 51
+      },
+      "attempts": 4,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 5
+      },
+      "chartDiagnostics": {
+        "ready": 2,
+        "insufficient_contiguous_tail": 2
+      }
+    },
+    {
+      "at": "2026-11-09T18:08:15.125486+00:00",
+      "elapsedSeconds": 315.3,
+      "id": "chart-catchup-1794247350010",
+      "status": "running",
+      "counts": {
+        "skipped": 5,
+        "fetched": 4,
+        "in_flight": 1,
+        "queued": 50
+      },
+      "attempts": 5,
+      "inFlight": [
+        {
+          "chain": "bsc",
+          "address": "0x91152b4ef635403efbae860edd0f8c321d7c035d",
+          "attempts": 1,
+          "requestedAt": "2026-11-09T18:08:14.058Z"
+        }
+      ],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 5
+      },
+      "chartDiagnostics": {
+        "ready": 2,
+        "insufficient_contiguous_tail": 2
+      }
+    },
+    {
+      "at": "2026-11-09T18:09:01.195225+00:00",
+      "elapsedSeconds": 361.4,
+      "id": "chart-catchup-1794247350010",
+      "status": "running",
+      "counts": {
+        "skipped": 5,
+        "fetched": 5,
+        "queued": 50
+      },
+      "attempts": 5,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 5
+      },
+      "chartDiagnostics": {
+        "ready": 2,
+        "insufficient_contiguous_tail": 3
+      }
+    },
+    {
+      "at": "2026-11-09T18:09:46.239704+00:00",
+      "elapsedSeconds": 406.5,
+      "id": "chart-catchup-1794247350010",
+      "status": "running",
+      "counts": {
+        "skipped": 7,
+        "fetched": 7,
+        "queued": 46
+      },
+      "attempts": 7,
+      "inFlight": [],
+      "reasonCodes": {
+        "DELISTED_FROM_FRESH_SOURCES": 7
+      },
+      "chartDiagnostics": {
+        "ready": 2,
+        "insufficient_contiguous_tail": 4,
+        "stale_closed_bars": 1
+      }
+    },
+    {
+      "at": "2026-11-09T18:10:31.349292+00:00",
+      "elapsedSeconds": 451.6,
+      "error": "HTTP Error 503: Service Unavailable"
+    }
+  ],
+  "states": [
+    {
+      "at": "2026-11-09T18:08:15.125486+00:00",
+      "elapsedSeconds": 315.3,
+      "updatedAt": "2026-11-09T18:08:14.906Z",
+      "status": "ok",
+      "enabled": true,
+      "liveMirror": {
+        "enabled": true,
+        "chains": [
+          "bsc",
+          "sol"
+        ],
+        "signalSource": "paper-atm-confirmed-pvp-v2",
+        "strategyAllowlist": [
+          "*"
+        ]
+      },
+      "research": {
+        "version": "research_evidence_shortlist_v27",
+        "discoveryFairness": {
+          "researchDispatch": 27,
+          "lastDiscoveryChain": "bsc",
+          "waitingCandidates": 74
+        },
+        "chartDispatches": {
+          "holding": 14,
+          "entry": 0,
+          "hot": 17,
+          "wallet": 1,
+          "discovery": 4,
+          "proactive": 5,
+          "catchup": 5
+        },
+        "chartHealth": {
+          "version": "chart_health_v2",
+          "alert": true,
+          "warmup": false,
+          "evaluated": 307,
+          "chartReady": 4,
+          "klineOk": 8,
+          "legacyChartReady": 4,
+          "externalWindowReady": 2,
+          "hotLegacyChartReady": 2,
+          "hotExternalWindowReady": 1,
+          "chartReadinessNote": "chartReady 保留旧图表或外盘窗口任一通过的兼容计数；externalWindowReady 才是外盘实际收盘窗口校验通过数，仍不代表形态或买入条件通过。",
+          "notRequested": 298,
+          "notRequestedRatio": 0.9706840390879479,
+          "fetched": 9,
+          "fetchedUnavailable": 1,
+          "fetchedUnavailableRatio": 0.1111111111111111,
+          "sourceUnavailable": 1,
+          "sourceUnavailableRatio": 0.1111111111111111,
+          "staleClosedBars": 4,
+          "insufficientClosedBars": 2,
+          "hotCount": 3,
+          "hotFetched": 2,
+          "hotNotRequested": 1,
+          "hotRequestCoverageRate": 0.6666666666666666,
+          "hotKlineOk": 2,
+          "hotChartReady": 2,
+          "hotKlineFresh": 2,
+          "hotKlineStale": 0,
+          "hotKlineUnknown": 1,
+          "hotKlineFreshRate": 0.6666666666666666,
+          "hotKlineMaxClosedAgeMs": 75177,
+          "hotKlineFreshnessMaxAgeMs": 120000,
+          "hotChartReadyRate": 0.6666666666666666,
+          "chartReadyRate": 0.013029315960912053,
+          "klineOkRate": 0.026058631921824105,
+          "funnelChartReady": 0,
+          "funnelOhlcvReady": 4,
+          "chartDispatchCount": 36,
+          "chartCacheCount": 13,
+          "cachedUnavailable": 3,
+          "queueWaitMedianMs": 3617,
+          "queueWaitMaxMs": 59687,
+          "queueSamples": 24,
+          "note": "热点候选里仍有较多 CA 没有第一次 K 线请求。广谱未请求不计入来源失败。买卖条件未放宽。"
+        },
+        "focusedReadBudget": {
+          "version": "chart_budget_hot_lane_v4",
+          "exploratoryConcurrency": 3,
+          "exploratoryActive": 3,
+          "lastKind": "chart",
+          "chartDeferrals": 193,
+          "detailDeferrals": 93,
+          "chartTurnDeferrals": 0,
+          "chartTurnReserved": true,
+          "chartsSinceDetail": 3,
+          "maxChartsBeforeDetail": 4,
+          "hotDeadlineDeferrals": 14,
+          "hotDeadlineReserved": true,
+          "detailBackoffCandidates": 0,
+          "note": "列表独立刷新。热点与钱包 K 线可并行到预算上限，随后把轮次让给普通详情。退出与已准入确认仍优先；缺字段退避、共享限频与买卖条件不变。"
+        },
+        "entryDiagnostics": {
+          "version": "paper_entry_diagnostics_v1",
+          "detected": 307,
+          "verifiedCatalyst": 0,
+          "externalStructure": 181,
+          "quoteResearchReady": 0,
+          "quoteScheduled": 0,
+          "eligible": 0,
+          "blockers": [
+            {
+              "code": "safety_blocked",
+              "label": "明确不可交易或安全检查未通过",
+              "count": 114
+            },
+            {
+              "code": "catalyst",
+              "label": "缺少有效原文催化或核实盈利钱包",
+              "count": 75
+            },
+            {
+              "code": "chart_missing",
+              "label": "买点数据未取得，尚不能判断有无机会",
+              "count": 55
+            },
+            {
+              "code": "research_excluded",
+              "label": "未进入常规 K 线研究：阶段、流动性或成交量条件未达标",
+              "count": 28
+            },
+            {
+              "code": "safety_data",
+              "label": "该入口所需安全字段尚未补齐",
+              "count": 17
+            },
+            {
+              "code": "reentry",
+              "label": "上次亏损后的重入证据不足",
+              "count": 10
+            },
+            {
+              "code": "chart_stale",
+              "label": "买点K线已过期，等待刷新",
+              "count": 4
+            },
+            {
+              "code": "chart_incomplete",
+              "label": "买点K线不足或断档，等待补齐",
+              "count": 2
+            },
+            {
+              "code": "structure",
+              "label": "入场结构或退出依据尚未建立",
+              "count": 1
+            },
+            {
+              "code": "setup",
+              "label": "买盘、形态或其他入场条件尚未成立",
+              "count": 1
+            }
+          ],
+          "note": "按链与 CA 去重的当前快照；每个候选只计一个主要状态。没有有效候选不代表市场没有机会，调度与条件通过均不等于成交。"
+        },
+        "hotCandidates": [
+          {
+            "chain": "bsc",
+            "address": "0x19993b3cf15c1055063468eb932f5e335a7526ea",
+            "symbol": "MEME",
+            "marketLeader": null,
+            "watchSince": "2026-11-09T18:07:40.997Z",
+            "watchUntil": "2026-11-09T18:09:40.997Z",
+            "chartClosedAt": "2026-11-09T18:07:00.000Z"
+          },
+          {
+            "chain": "sol",
+            "address": "CFPN1kdJXsg92RBcMfKkcKxSZUaRyT6htvo3Ns2oFPD5",
+            "symbol": "SPSC",
+            "marketLeader": null,
+            "watchSince": "2026-11-09T18:07:03.371Z",
+            "watchUntil": "2026-11-09T18:09:03.371Z",
+            "chartClosedAt": "2026-11-09T18:07:00.000Z"
+          },
+          {
+            "chain": "robinhood",
+            "address": "0xef67e3064bef1a27e81925ec7132f23e533bd5f6",
+            "symbol": "GME",
+            "marketLeader": null,
+            "watchSince": "2026-11-09T18:07:36.397Z",
+            "watchUntil": "2026-11-09T18:09:36.397Z",
+            "chartClosedAt": null
+          }
+        ],
+        "lastChartDispatch": {
+          "chain": "bsc",
+          "address": "0x91152b4ef635403efbae860edd0f8c321d7c035d",
+          "lane": "catchup",
+          "purpose": "candidate",
+          "at": "2026-11-09T18:08:14.058Z",
+          "proactive": false,
+          "previousClosedAt": null,
+          "previousClosedAgeMs": null
+        },
+        "lastDetail": {
+          "chain": "robinhood",
+          "address": "0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
+          "symbol": "NVDA",
+          "reason": "热点候选优先补齐或刷新，尚不代表可以入场",
+          "startedAt": "2026-11-09T18:07:14.042Z",
+          "status": "unavailable",
+          "priority": 2,
+          "finishedAt": "2026-11-09T18:08:14.165Z",
+          "observedAt": null,
+          "reasonCode": "GMGN_QUEUE_EXPIRED"
+        },
+        "chartRequestsPending": 3
+      },
+      "cadence": {
+        "quoteDispatches": {
+          "exit": 223,
+          "candidate": 0,
+          "comparisonCandidate": 0
+        },
+        "quoteInFlight": [],
+        "marketSourceAges": [
+          {
+            "chain": "bsc",
+            "status": "ok",
+            "observedAt": "2026-11-09T18:07:27.411Z",
+            "ageMs": 47682
+          },
+          {
+            "chain": "sol",
+            "status": "ok",
+            "observedAt": "2026-11-09T18:07:49.051Z",
+            "ageMs": 26042
+          },
+          {
+            "chain": "robinhood",
+            "status": "ok",
+            "observedAt": "2026-11-09T18:08:13.645Z",
+            "ageMs": 1448
+          }
+        ],
+        "marketAuxiliarySourceAges": [
+          {
+            "chain": "bsc",
+            "source": "trenches",
+            "status": "ok",
+            "observedAt": "2026-11-09T18:07:18.609Z",
+            "ageMs": 56484
+          },
+          {
+            "chain": "sol",
+            "source": "trenches",
+            "status": "ok",
+            "observedAt": "2026-11-09T18:07:46.610Z",
+            "ageMs": 28483
+          },
+          {
+            "chain": "robinhood",
+            "source": "trenches",
+            "status": "ok",
+            "observedAt": "2026-11-09T18:07:56.589Z",
+            "ageMs": 18504
+          }
+        ],
+        "detailRefreshPending": false,
+        "detailTargets": 45
+      }
+    }
+  ],
+  "lastCatchup": {
+    "id": "chart-catchup-1794247350010",
+    "status": "running",
+    "createdAt": "2026-11-09T18:02:30.010Z",
+    "deadlineAt": "2026-11-09T18:32:30.010Z",
+    "items": [
+      {
+        "chain": "bsc",
+        "address": "0x7c8d5502b544ddaf8852fc46d1174e34876d545c",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:02:30.010Z"
+      },
+      {
+        "chain": "bsc",
+        "address": "0x8e6442663a4f8c50b6132c68d42a30e7dfe4ae15",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:04:09.357Z",
+        "completedAt": "2026-11-09T18:04:20.920Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "ready",
+        "ready": true,
+        "closedBars": 60,
+        "closedThroughAt": "2026-11-09T18:04:00.000Z"
+      },
+      {
+        "chain": "bsc",
+        "address": "0x33fe24f4298a8659668e8d1f2044fd01e8a57777",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:04:21.936Z"
+      },
+      {
+        "chain": "bsc",
+        "address": "0xf1c599e9a5fbdea408a7409c0176a2fe42c64444",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:04:21.936Z"
+      },
+      {
+        "chain": "bsc",
+        "address": "0x87acfa3fd7a6e0d48677d070644d76905c2bdc00",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:05:02.575Z",
+        "completedAt": "2026-11-09T18:05:12.094Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "insufficient_contiguous_tail",
+        "ready": false,
+        "closedBars": 50,
+        "closedThroughAt": "2026-11-09T18:05:00.000Z"
+      },
+      {
+        "chain": "bsc",
+        "address": "0x7083609fce4d1d8dc0c979aab8c869ea2c873402",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:06:06.651Z",
+        "completedAt": "2026-11-09T18:06:11.355Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "insufficient_contiguous_tail",
+        "ready": false,
+        "closedBars": 27,
+        "closedThroughAt": "2026-11-09T18:06:00.000Z"
+      },
+      {
+        "chain": "bsc",
+        "address": "0x9b8e987e6fec8cf1380c4dca7071e2c7853aeea1",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:07:04.647Z",
+        "completedAt": "2026-11-09T18:07:10.139Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "ready",
+        "ready": true,
+        "closedBars": 59,
+        "closedThroughAt": "2026-11-09T18:07:00.000Z"
+      },
+      {
+        "chain": "bsc",
+        "address": "0xe9320db4ddfc689470d09c768a4cb9b05cf97777",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:07:11.232Z"
+      },
+      {
+        "chain": "bsc",
+        "address": "0x2a06ddb8f82b2926ccd852d8cdc2348246857777",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:07:11.232Z"
+      },
+      {
+        "chain": "bsc",
+        "address": "0x91152b4ef635403efbae860edd0f8c321d7c035d",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:08:14.058Z",
+        "completedAt": "2026-11-09T18:08:28.157Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "insufficient_contiguous_tail",
+        "ready": false,
+        "closedBars": 44,
+        "closedThroughAt": "2026-11-09T18:08:00.000Z"
+      },
+      {
+        "chain": "bsc",
+        "address": "0xb305e6954e4e0cd021c06ec355681abc8a00dbd7",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:09:22.261Z",
+        "completedAt": "2026-11-09T18:09:26.737Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "insufficient_contiguous_tail",
+        "ready": false,
+        "closedBars": 41,
+        "closedThroughAt": "2026-11-09T18:09:00.000Z"
+      },
+      {
+        "chain": "bsc",
+        "address": "0xbab528425edb1e0e36d3719bc3307d9c8cce8888",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:09:28.480Z"
+      },
+      {
+        "chain": "bsc",
+        "address": "0x6a3722e20d1c9727c290a1b3cccd5330180d9de4",
+        "status": "fetched",
+        "attempts": 1,
+        "requestedAt": "2026-11-09T18:09:28.480Z",
+        "completedAt": "2026-11-09T18:09:33.108Z",
+        "chartStatus": "ok",
+        "reasonCode": null,
+        "chartDiagnostic": "stale_closed_bars",
+        "ready": false,
+        "closedBars": 33,
+        "closedThroughAt": "2026-11-09T18:09:00.000Z"
+      },
+      {
+        "chain": "bsc",
+        "address": "0x6b2ce31a577d92f73516c7a91febc7672247e694",
+        "status": "skipped",
+        "attempts": 0,
+        "reasonCode": "DELISTED_FROM_FRESH_SOURCES",
+        "completedAt": "2026-11-09T18:09:32.703Z"
+      },
+      {
+        "chain": "bsc",
+        "address": "0x6a2608dabe09bc1128eec7275b92dfb939d5db3f",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "bsc",
+        "address": "0x6d145722564aaa0dba3e104dd1d680b227927777",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "bsc",
+        "address": "0x78573ab46e5436e126d3ea1fdef8766cce4efd2b",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "bsc",
+        "address": "0xdd806e436dda5588bf54061c11590c77ddc87777",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "sol",
+        "address": "FDboCUrbwVgNVbuSXvhk9Atpay4UW6q3gPqAc6wH6bZD",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "sol",
+        "address": "FSzr1SzGZGSwU1mkkT4XRq82EciM86Y61c3xB2zXvFBJ",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "sol",
+        "address": "E4w4LG1UMzRVHch6YpBq7duCiRup1G6CrKW7Kg5ufV7N",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "sol",
+        "address": "p6o8NN4MiMrDW4LMucKj9fKoM4tQSFyzB7bEU3Upump",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "sol",
+        "address": "3AgytyBs815xU5JAbvpaXNscDqQ35N3325PsNABVpump",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "sol",
+        "address": "4yxrjPyGVsAYSMwxPPKirxJPegDjGKiTCPxWwkoFpump",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "sol",
+        "address": "6kmkcwKxxmoREhkxrbBvwDY3N2KSfpdMMtWtNoPpump",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "sol",
+        "address": "2Tef3P9qRhUTEAKTyQDHCdn67RK3yTbaLU72fcn5pump",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "sol",
+        "address": "GMvCfcZg8YvkkQmwDaAzCtHDrrEtgE74nQpQ7xNabonk",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "sol",
+        "address": "22JKmY9YZfnQfb3pGYb6hctL5Jyvv3zhL3nQ8oyNuoYp",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "sol",
+        "address": "Hh3oTaqDCKKfdBgsQEvxp9sUwyNf8x9qmKqEMLBWpump",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "sol",
+        "address": "D4CzGsZgusVj2K8R1its5H8WWdo9mazbDwBc6qvsmfun",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "sol",
+        "address": "8BnNS15Q6h6D5Vcq1sNPaUxhpRVdK8FGRbLvCrLxibSx",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x3cbbfc926a55d9751e78b91642b685c4e36479d5",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xc9a981fee1f9dec688bb123ccdecc63d0debfc4e",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xdf0992e440dd0be65bd8439b609d6d4366bf1cb5",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xcec185eb182c47d1ba1efc84e6959e18cd620be4",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x48e39e56acdba37b09020c0b734a613c9a2f100a",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x6330d8c3178a418788df01a47479c0ce7ccf450b",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x72be1277e198d0c476869253cb4e62807e14533c",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x9f4ba41f91a59a34e17ee8c9eb3a51363b11abd5",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x1b0e319c6a659f002271b69db8a7df2f911c153e",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xbc9e7b1c5c0081f4ae85e71ec95703d3dec9ffad",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x84cab63bc87912e71ad199ff14a0ba45de68fef8",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xa2753fd0bc86b8ceb55ffd2698679c7f214785f1",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x6511c233790ec10f7d673c64dc82c3f941d57828",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x15f3385625d7e364c5a6216fbbceadf10fa90e7d",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x94641b97010608c3827fb058074889f19868ff33",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xf0c4bf4c582cb3836e98394b1d4e7b7281101be8",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xdc45b71d7203c2e8baafc43a19bca0eb993bb54e",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xc9675fe679c7d4e1b94416f66d61c96127eb964a",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xff080c8ce2e5feadaca0da81314ae59d232d4afd",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x98096d17e191b3da1d5f99a6d7b3584351b11e18",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x58ffe4a942d3885baa22d7520691f611ef09e7aa",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x47569d49471bdbabfaf5531c0f74d9f2de82a11a",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x7fe995a80075df3dc8ae11a9b82c7fe4202cd87f",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xc72b96e0e48ecd4dc75e1e45396e26300bc39681",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0xe8ffd7e24187f72afb08d75b1bb13088a989a791",
+        "status": "queued",
+        "attempts": 0
+      },
+      {
+        "chain": "robinhood",
+        "address": "0x2fc6de9c65a620f918ca7d1191d3afa495ca2898",
+        "status": "queued",
+        "attempts": 0
+      }
+    ],
+    "counts": {
+      "skipped": 7,
+      "fetched": 7,
+      "queued": 46
+    }
+  },
+  "finishedAt": "2026-11-09T18:10:48.403974+00:00",
+  "completionReason": "Stopped at parent request before v28 deployment; final live status had already cleared during restart, preserving last successful sample",
+  "finalSummary": {
+    "lastSampleAt": "2026-11-09T18:10:31.349292+00:00",
+    "status": "running",
+    "counts": {
+      "skipped": 7,
+      "fetched": 7,
+      "queued": 46
+    },
+    "attempts": 7,
+    "reasonCodes": {
+      "DELISTED_FROM_FRESH_SOURCES": 7
+    },
+    "chartDiagnostics": {
+      "ready": 2,
+      "insufficient_contiguous_tail": 4,
+      "stale_closed_bars": 1
+    }
+  },
+  "earlyDetailInvestigation": {
+    "updatedAt": "2026-11-09T18:03:41.404Z",
+    "lastDetail": {
+      "chain": "bsc",
+      "address": "0x8d73dbd6a89e38a3cd5a7050c7f3d98e38667777",
+      "symbol": "飞兔商联",
+      "reason": "热点候选优先补齐或刷新，尚不代表可以入场",
+      "startedAt": "2026-11-09T18:02:55.616Z",
+      "status": "pending",
+      "priority": 2
+    },
+    "focusedReadBudget": {
+      "version": "chart_budget_hot_lane_v4",
+      "exploratoryConcurrency": 3,
+      "exploratoryActive": 1,
+      "lastKind": "chart",
+      "chartDeferrals": 38,
+      "detailDeferrals": 69,
+      "chartTurnDeferrals": 0,
+      "chartTurnReserved": true,
+      "chartsSinceDetail": 1,
+      "maxChartsBeforeDetail": 4,
+      "hotDeadlineDeferrals": 5,
+      "hotDeadlineReserved": true,
+      "detailBackoffCandidates": 0,
+      "note": "列表独立刷新。热点与钱包 K 线可并行到预算上限，随后把轮次让给普通详情。退出与已准入确认仍优先；缺字段退避、共享限频与买卖条件不变。"
+    },
+    "chartRequestsPending": 0,
+    "lastChartDispatch": {
+      "chain": "sol",
+      "address": "3iothfnoeXqReEniZi7SUS2PsmZ2oAhouMFypuVw5oGS",
+      "lane": "hot",
+      "purpose": "candidate",
+      "at": "2026-11-09T18:03:30.161Z",
+      "proactive": false,
+      "previousClosedAt": "2026-11-09T18:02:00.000Z",
+      "previousClosedAgeMs": 90161
+    }
+  }
+}

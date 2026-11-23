@@ -10,6 +10,7 @@ import {
   classifyBinanceGithubChange,
   classifyFlapSkillChange,
   classifyGithubModeChange,
+  createGithubDnsLookup,
   createGithubMonitor,
   detectGithubChainSupportChange,
   extractBinanceConnectorChangeEvidence,
@@ -33,6 +34,57 @@ import { isMonitoringSourceEnabled } from "../src/source-controls.js";
 import { sendAlerts } from "../src/alerts.js";
 
 const githubFixture = (name) => fs.readFile(new URL(`./fixtures/github/${name}`, import.meta.url), "utf8");
+
+test("GitHub DNS lookup uses its scoped resolver and supports Node's all-address callback", async () => {
+  let configuredServers = null;
+  const lookup = createGithubDnsLookup(["1.1.1.1", "8.8.8.8"], () => ({
+    setServers(servers) { configuredServers = servers; },
+    setTimeout() {},
+    setTries() {},
+    async resolve4(hostname) {
+      assert.equal(hostname, "github.com");
+      return ["20.27.177.113", "20.27.177.114"];
+    },
+  }));
+  const addresses = await new Promise((resolve, reject) => {
+    lookup("github.com", { all: true, family: 4 }, (error, result) => error ? reject(error) : resolve(result));
+  });
+  assert.deepEqual(configuredServers, ["1.1.1.1", "8.8.8.8"]);
+  assert.deepEqual(addresses, [
+    { address: "20.27.177.113", family: 4 },
+    { address: "20.27.177.114", family: 4 },
+  ]);
+});
+
+test("GitHub DNS lookup coalesces concurrent requests for the same public hostname", async () => {
+  let resolverCalls = 0;
+  const resolverFactory = () => ({
+    setServers() {},
+    setTimeout() {},
+    setTries() {},
+    async resolve4(hostname) {
+      resolverCalls += 1;
+      assert.equal(hostname, "cache-coalesce.github.com");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return ["20.27.177.113"];
+    },
+  });
+  const lookup = createGithubDnsLookup(["192.0.2.53"], resolverFactory);
+  const resolveOnce = () => new Promise((resolve, reject) => {
+    lookup("cache-coalesce.github.com", { family: 4 }, (error, address, family) => {
+      if (error) reject(error);
+      else resolve({ address, family });
+    });
+  });
+
+  const results = await Promise.all([resolveOnce(), resolveOnce(), resolveOnce()]);
+  assert.equal(resolverCalls, 1);
+  assert.deepEqual(results, [
+    { address: "20.27.177.113", family: 4 },
+    { address: "20.27.177.113", family: 4 },
+    { address: "20.27.177.113", family: 4 },
+  ]);
+});
 
 test("detects structural chain additions for the three focus platforms and filters documentation noise", () => {
   const flap = detectGithubChainSupportChange("flap-sh/FlapVaultExample", "feat: deploy Base mainnet", [{
@@ -932,6 +984,62 @@ test("an Atom transport failure falls back to REST in the same poll", async (t) 
   assert.equal(state._health.repositories[repository].lastAtomRestFallbackReason, "atom_transport_failure");
 });
 
+test("an Atom transport failure keeps its short retry when the REST fallback is rate limited", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "github-atom-rest-rate-limit-retry-"));
+  const repository = "flap-sh/flap-skills";
+  const currentTime = new Date("2026-08-12T00:20:00.000Z");
+  let atomRequests = 0;
+  let restRequests = 0;
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.mock.method(console, "error", () => {});
+  await fs.writeFile(path.join(dataDir, "github-state.json"), JSON.stringify({
+    [repository]: { sha: "aaaa0001" },
+  }));
+  t.mock.method(globalThis, "fetch", async (url) => {
+    const parsed = new URL(url);
+    if (parsed.hostname === "github.com") {
+      atomRequests += 1;
+      if (atomRequests === 1) throw new TypeError("fetch failed", { cause: { code: "ECONNRESET" } });
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        text: async () => `<feed><entry><id>tag:github.com,2008:Grit::Commit/aaaa0001</id><updated>2026-08-12T00:19:00Z</updated><title>anchor</title></entry></feed>`,
+      };
+    }
+    if (parsed.hostname === "api.github.com") {
+      restRequests += 1;
+      return { ok: false, status: 429, headers: new Headers({ "retry-after": "3600" }), json: async () => ({ message: "rate limited" }) };
+    }
+    throw new Error(`unexpected request ${url}`);
+  });
+  const monitor = createGithubMonitor({
+    dataDir,
+    githubToken: "",
+    githubRetryBaseMs: 1_000,
+    githubRetryMaxMs: 3_600_000,
+  }, {
+    autoStart: false,
+    repositories: [{ repository, launchpad: "Flap", sourceTrust: "official_verified", priority: true }],
+    sendAlertsImpl: async () => {},
+    now: () => new Date(currentTime),
+    random: () => 1,
+  });
+
+  await monitor.check(true);
+  let state = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
+  assert.equal(state._health.repositories[repository].lastError, "fetch failed");
+  assert.ok(state._health.repositories[repository].backoffMs <= 60_000);
+  assert.ok(state._health.repositories[repository].backoffMs < 3_600_000);
+
+  currentTime.setTime(currentTime.getTime() + 61_000);
+  await monitor.check(true);
+  state = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
+  assert.equal(atomRequests, 2, "the public Atom source should be retried after its short transport backoff");
+  assert.equal(restRequests, 1, "the open REST rate-limit circuit must not be retried");
+  assert.equal(state._health.repositories[repository].status, "healthy");
+});
+
 test("an unauthenticated REST rate limit opens a shared circuit while public Atom polling continues", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "github-rest-circuit-"));
   const repositories = ["example/rate-limited-one", "example/rate-limited-two"];
@@ -970,9 +1078,10 @@ test("an unauthenticated REST rate limit opens a shared circuit while public Ato
   const state = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
   assert.equal(atomRequests.length, 2, "the circuit must not suppress public Atom reads");
   assert.deepEqual(apiRequests, ["/repos/example/rate-limited-one/commits"]);
-  assert.match(state._health.repositories[repositories[1]].lastError, /REST circuit is open/);
-  assert.ok(state._health.repositories[repositories[0]].backoffMs >= 59 * 60_000);
-  assert.ok(state._health.repositories[repositories[1]].backoffMs >= 59 * 60_000);
+  assert.match(state._health.repositories[repositories[0]].lastError, /HTTP 503/);
+  assert.match(state._health.repositories[repositories[1]].lastError, /HTTP 503/);
+  assert.ok(state._health.repositories[repositories[0]].backoffMs <= 60_000, "REST limit must not replace Atom's transient service failure");
+  assert.ok(state._health.repositories[repositories[1]].backoffMs <= 60_000, "REST circuit cooldown must not be copied into the Atom retry state");
 });
 
 test("the REST commit path keeps token, ETag, and rate-limit retry metadata", async (t) => {
@@ -1671,6 +1780,79 @@ test("priority polling starts Flap and Four.Meme without waiting for a slow veri
     releasePons();
   }
   await check;
+});
+
+test("official Four/Flap/Binance focus polling progresses independently of slow unrelated priority repositories", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "github-focus-lane-isolation-"));
+  const uniswapRepository = "Uniswap/liquidity-launcher";
+  const xaiRepository = "xai-org/grok-build";
+  const focusRepository = "flap-sh/flap-skills";
+  const repositories = [uniswapRepository, xaiRepository, focusRepository];
+  const shas = new Map(repositories.map((repository, index) => [repository, `sha0000${index + 1}`]));
+  let releaseSlow;
+  const slowPriorityRequests = new Promise((resolve) => { releaseSlow = resolve; });
+  let startedUnrelated;
+  const unrelatedStarted = new Promise((resolve) => { startedUnrelated = resolve; });
+  let startedFocus;
+  const focusStarted = new Promise((resolve) => { startedFocus = resolve; });
+  let completed = false;
+  t.after(async () => {
+    releaseSlow();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+  await fs.writeFile(path.join(dataDir, "github-state.json"), JSON.stringify(Object.fromEntries(
+    repositories.map((repository) => [repository, { sha: shas.get(repository) }]),
+  )));
+  t.mock.method(globalThis, "fetch", async (url) => {
+    const parsed = new URL(url);
+    if (parsed.hostname !== "github.com" || !parsed.pathname.endsWith(".atom")) {
+      throw new Error(`unexpected request ${url}`);
+    }
+    const repository = parsed.pathname.split("/").slice(1, 3).join("/");
+    if (repository === uniswapRepository || repository === xaiRepository) {
+      startedUnrelated();
+      await slowPriorityRequests;
+    }
+    if (repository === focusRepository) startedFocus();
+    const sha = shas.get(repository);
+    return {
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      text: async () => `<feed><entry><id>tag:github.com,2008:Grit::Commit/${sha}</id><updated>2026-08-20T00:00:00Z</updated><title>anchor</title></entry></feed>`,
+    };
+  });
+  const monitor = createGithubMonitor({
+    dataDir,
+    githubToken: "",
+    githubPriorityPollConcurrency: 2,
+  }, {
+    autoStart: false,
+    repositories: [
+      { repository: uniswapRepository, launchpad: "Uniswap", sourceTrust: "official_verified", priority: true },
+      { repository: xaiRepository, launchpad: "xAI", sourceTrust: "official_verified", priority: true },
+      { repository: focusRepository, launchpad: "Flap", sourceTrust: "official_verified", priority: true },
+    ],
+    sendAlertsImpl: async () => {},
+    now: () => new Date("2026-08-20T00:01:00.000Z"),
+  });
+
+  const checking = monitor.check(true).then(() => { completed = true; });
+  await Promise.race([
+    focusStarted,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("focus repository did not start independently")), 1_000)),
+  ]);
+  await Promise.race([
+    unrelatedStarted,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("unrelated priority lane did not start")), 1_000)),
+  ]);
+  assert.equal(completed, false, "the unrelated priority request should still be holding its own worker");
+  releaseSlow();
+  await checking;
+
+  const state = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
+  assert.equal(state._health.repositories[focusRepository.toLowerCase()].status, "healthy");
+  assert.equal(state._health.repositories[uniswapRepository.toLowerCase()].status, "healthy");
 });
 
 test("overlapping GitHub lane ticks coalesce into one immediate follow-up without same-lane concurrency", async (t) => {
@@ -4167,6 +4349,54 @@ test("startup probes persisted focus3 transport backoff once but preserves GitHu
   const state = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
   assert.equal(state._health.repositories[transportRepository].status, "healthy");
   assert.equal(state._health.repositories[rateLimitedRepository].nextAttemptAt, future);
+});
+
+test("priority official commit Atom polling remains active while the unauthenticated REST circuit is open", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "github-rest-circuit-atom-retry-"));
+  const repository = "four-meme-community/openfour-docs";
+  const currentTime = new Date("2026-08-08T00:00:00.000Z");
+  const future = "2026-08-08T01:00:00.000Z";
+  const requested = [];
+  t.after(() => {
+    PRIORITY_REPOSITORIES.delete(repository);
+    return fs.rm(dataDir, { recursive: true, force: true });
+  });
+  await fs.writeFile(path.join(dataDir, "github-state.json"), JSON.stringify({
+    [repository]: { sha: "bbbb0001" },
+    _health: {
+      repositories: {
+        [repository]: {
+          status: "degraded",
+          lastError: "GitHub REST circuit is open for /repos/four-meme-community/openfour-docs/commits?per_page=100&page=1",
+          lastErrorStatus: 429,
+          consecutiveFailures: 3,
+          nextAttemptAt: future,
+        },
+      },
+    },
+  }));
+  t.mock.method(globalThis, "fetch", async (url) => {
+    requested.push(String(url));
+    return {
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      text: async () => `<feed><entry><id>tag:github.com,2008:Grit::Commit/bbbb0001</id><updated>2026-08-07T23:59:00Z</updated><title>anchor</title></entry></feed>`,
+    };
+  });
+  const monitor = createGithubMonitor({ dataDir, githubToken: "" }, {
+    autoStart: false,
+    repositories: [{ repository, launchpad: "Four.meme", sourceTrust: "official_verified", priority: true }],
+    sendAlertsImpl: async () => {},
+    now: () => new Date(currentTime),
+  });
+
+  await monitor.check(true);
+  assert.equal(requested.length, 1);
+  assert.equal(requested[0].includes("/commits/main.atom"), true);
+  const state = JSON.parse(await fs.readFile(path.join(dataDir, "github-state.json"), "utf8"));
+  assert.equal(state._health.repositories[repository].status, "healthy");
+  assert.equal(state._health.repositories[repository].nextAttemptAt, null);
 });
 
 test("GitHub transport retry backoff is capped at sixty seconds", async (t) => {

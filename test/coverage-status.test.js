@@ -5,7 +5,7 @@ const now = Date.parse('2026-09-22T08:30:00Z'), iso = ms => new Date(ms).toISOSt
 const quote = age => ({ status: 'ok', observedAt: iso(now - age) });
 test('an unseen cold-start feed is distinguished from an upstream failure',()=>{
   const status=marketCoverageStatus({status:'loading',observedAt:null,reason:'not_requested'},now);
-  assert.equal(status.fresh,false);assert.match(status.label,/首次采集/);
+  assert.equal(status.status,'waiting');assert.equal(status.fresh,false);assert.match(status.label,/首次采集/);
 });
 test('a connected engine cannot show healthy while all upstream data is stale', () => {
   const feed = { market: quote(1000), trenches: quote(1000), flow: { ...quote(1000), complete: true, fresh: true } };
@@ -28,6 +28,26 @@ test('fresh external evidence cannot make an expired internal snapshot look curr
   const external = marketCoverageStatus(quote(1000), now), internal = marketCoverageStatus(quote(160000), now);
   assert.match(external.label, /新鲜/); assert.match(internal.label, /已过期/);
   assert.equal(external.fresh && internal.fresh, false);
+});
+test('machine freshness separates quiet-but-healthy inputs from stale or unverified feeds', () => {
+  const freshFeed = { market: quote(1000), flow: { ...quote(1000), complete: true, fresh: true } };
+  const quiet = tradingDataHealth({ chains: ['bsc'], chainCoverage: { bsc: freshFeed }, candidates: [] }, now);
+  assert.equal(quiet.status, 'ok');
+  assert.equal(quiet.marketData.status, 'fresh');
+  assert.equal(quiet.flowData.status, 'fresh');
+  assert.match(quiet.summary, /不判断有没有交易机会/);
+
+  const stale = tradingDataHealth({ chains: ['bsc'], chainCoverage: { bsc: {
+    market: quote(120001), trenches: quote(120001), flow: { ...quote(120001), complete: true, fresh: true },
+  } } }, now);
+  assert.equal(stale.status, 'blocked');
+  assert.equal(stale.marketData.status, 'stale');
+  assert.equal(stale.flowData.status, 'stale');
+
+  const missing = tradingDataHealth({ chains: ['bsc'], chainCoverage: {} }, now);
+  assert.equal(missing.status, 'blocked');
+  assert.equal(missing.marketData.status, 'unverified');
+  assert.equal(missing.flowData.status, 'unverified');
 });
 test('missing, malformed and future timestamps never appear fresh', () => {
   for (const observedAt of [null, '', 'not-a-date', iso(now + 1)]) {

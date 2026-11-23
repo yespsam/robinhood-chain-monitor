@@ -1,5 +1,6 @@
 /** Rule-based, source-grounded research. Scores measure evidence, never win probability. */
 import { gmgnFlowAddress } from './gmgn-flow-signal.js';
+import { narrativeSemantics } from './paper-narrative-semantic.js';
 
 const MINUTE = 60_000;
 export const STRATEGY_ANALYSIS_VERSION = 'narrative_structure_v2';
@@ -20,19 +21,20 @@ const THEMES = [
   ['游戏 / 社区文化', /games?|gaming|meme|community|游戏|迷因|社区|文化/i],
 ];
 
-export function assessPaperNarrative({ narrative = {}, chain, address, nowMs = Date.now() } = {}) {
+export function assessPaperNarrative({ narrative = {}, chain, address, token = null, nowMs = Date.now() } = {}) {
   const ca = gmgnFlowAddress(chain, address);
   const rows = Array.isArray(narrative.sources) ? narrative.sources : [narrative];
   const byUrl = new Map();
   for (const row of rows) {
-    if (!row || row.sourceAuthenticated !== true || !['authenticated_x', 'authenticated_call'].includes(row.sourceKind)
+    if (!row || row.sourceAuthenticated !== true || !['authenticated_x', 'authenticated_call', 'authenticated_social'].includes(row.sourceKind)
       || !ca || row.chain !== chain || gmgnFlowAddress(chain, row.tokenAddress || row.address) !== ca) continue;
     const url = sourceUrl(row.sourceUrl), at = stamp(row.sourceAt);
     if (!url || !Number.isFinite(at) || at > nowMs) continue;
     const body = clean(row.sourceText || row.text).slice(0, 4000);
     if (!body) continue;
     url.search = ''; url.hash = '';
-    const item = { text: body, sourceUrl: url.toString(), sourceId: clean(row.sourceId) || null, sourceAt: iso(at), authorKey: clean(row.authorKey) || null, authorLabel: clean(row.authorLabel) || null, sourceKind: row.sourceKind, contentConflict: row.contentConflict === true };
+    const item = { text: body, sourceUrl: url.toString(), sourceId: clean(row.sourceId) || null, sourceAt: iso(at), authorKey: clean(row.authorKey) || null, authorLabel: clean(row.authorLabel) || null, sourceKind: row.sourceKind, contentConflict: row.contentConflict === true,
+      matchKind: row.sourceKind === 'authenticated_social' ? row.matchKind : 'ca', reputableAuthor: row.reputableAuthor === true };
     // Fomo may provide only a profile URL; its authenticated immutable call ID distinguishes posts.
     const key = row.sourceKind === 'authenticated_call' && item.sourceId ? item.sourceId : item.sourceUrl;
     const prior = byUrl.get(key);
@@ -58,21 +60,31 @@ export function assessPaperNarrative({ narrative = {}, chain, address, nowMs = D
   const substantive = stripped.length >= 24 && themes.length > 0 && eventful;
   const caution = sources.some(row => nowMs - stamp(row.sourceAt) <= 6 * 60 * MINUTE && /\b(?:fake|scam|unaffiliated|denied|cancelled|not official)\b|假币|仿盘|骗局|非官方|否认|取消发布/i.test(row.text));
   const conflict = sources.some(row => row.contentConflict);
-  const eligible = narrative.caBound === true && !!latest && ageMs <= 6 * 60 * MINUTE && substantive && !caution && !conflict && independent.length > 0;
+  // Semantic layer (LLM cached verdict, else heuristic). Social ticker matches need a semantic "yes".
+  const social = latest?.sourceKind === 'authenticated_social';
+  const semantic = latest ? narrativeSemantics(text, { chain, symbol: token?.symbol || narrative.symbol, name: token?.name || narrative.name },
+    { reputableAuthor: latest.reputableAuthor, nameMatched: true, corpus: sources.map(r => ({ ...r, text: r.text || r.sourceText })) }) : null;
+  const understood = social ? semantic?.isNarrative === true : substantive || semantic?.method === 'llm' && semantic.isNarrative && !semantic.noise;
+  const semanticVeto = semantic?.scam === true || semantic?.method === 'llm' && (semantic.noise || !semantic.isNarrative) && !social && !substantive;
+  const bound = narrative.caBound === true || social && (latest.matchKind === 'ca' || latest.matchKind === 'ticker' && latest.reputableAuthor === true);
+  const maxAge = (social ? 12 : 6) * 60 * MINUTE;
+  const eligible = bound && !!latest && ageMs <= maxAge && understood && !semanticVeto && !caution && !conflict && independent.length > 0;
   const gaps = [];
   if (!latest) gaps.push('缺少经过身份校验、绑定精确 CA 的原始内容');
-  if (latest && !substantive) gaps.push('原文只有口号或无法识别具体事件，不能建立交易主线');
-  if (ageMs > 6 * 60 * MINUTE) gaps.push('叙事超过六小时，等待新的可核实催化');
+  if (latest && (!understood || semanticVeto)) gaps.push('原文只有口号或无法识别具体事件，不能建立交易主线');
+  if (ageMs > maxAge) gaps.push(social ? '社交叙事超过十二小时，等待新的催化' : '叙事超过六小时，等待新的可核实催化');
   if (caution) gaps.push('原文含否认或争议信号，需复核，不能当作利好');
   if (conflict) gaps.push('同一出处的原文存在冲突，等待复核');
   if (latest && !independent.length) gaps.push('来源作者身份不足');
-  if (narrative.caBound !== true) gaps.push('精确链与合约绑定未通过');
+  if (!bound) gaps.push('精确链与合约绑定未通过（且无知名账号点名该币）');
+  if (semantic?.scam) gaps.push('语义层判定为诈骗/否认/仿冒');
   const quality = !latest ? narrative.status === 'project_claim' ? '项目自述，未独立核实' : '无可用出处' : independent.length >= 2 ? '多账号来源，仍非事实核验' : '单一已校验账号，未交叉证实';
   return { version: STRATEGY_ANALYSIS_VERSION, eligible, quality, phase, ageMs,
-    theme: themes.join(' / ') || '未确认主线', event: latest ? text : clean(narrative.text) || '暂无可核实事件',
+    theme: [...new Set([...themes, ...(semantic?.themes || [])])].join(' / ') || '未确认主线',
+    semantic, matchKind: latest?.matchKind || null, event: latest ? text : clean(narrative.text) || '暂无可核实事件',
     mechanism: latest ? '研究假设：事件可能带来关注；是否转化为买盘，必须由新鲜净流入与价格结构另行确认。' : '没有原始出处，不根据币名推断资金逻辑。',
     independentSourceCount: independent.length, sourceCount: sources.length, sources, gaps,
-    evidenceScore: Math.min(100, (latest ? 30 : 0) + (ageMs !== null && ageMs <= 6 * 60 * MINUTE ? 20 : 0) + (substantive ? 20 : 0) + (independent.length >= 2 ? 20 : 0)),
+    evidenceScore: Math.min(100, (latest ? 30 : 0) + (ageMs !== null && ageMs <= 6 * 60 * MINUTE ? 20 : 0) + (understood ? 20 : 0) + (social && latest.reputableAuthor ? 10 : 0) + (independent.length >= 2 ? 20 : 0)),
     scoreMeaning: '来源完整度，非胜率；身份校验不代表官方发行或内容为真',
     invalidation: '来源被否认、CA 对应关系不成立或催化过期时停止叙事开仓；未知数据不冒充证伪。' };
 }

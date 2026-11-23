@@ -4,11 +4,71 @@ import http from 'node:http';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { gunzipSync } from 'node:zlib';
-import { createDashboardServer } from '../scripts/dashboard-server.js';
+import { createDashboardServer, createDashboardLiveMirror } from '../scripts/dashboard-server.js';
 import { renderTradeCountReview } from '../dashboard/trade-count-review.js';
 import { renderNewsWire } from '../dashboard/news-wire.js';
 import { entryStatus } from '../dashboard/entry-status.js';
 import { strategyCohortSummary } from '../dashboard/strategy-cohorts.js';
+
+test('automatic mirror needs explicit opt-in and cannot override the live master switch', () => {
+  const cfg = { enabled: true, maxPerTradeUsd: 20, dailyLossStopUsd: 30, chains: ['bsc', 'sol'] };
+  const createMirror = options => options;
+  for (const value of [undefined, '', 'false', 'TRUE', '1']) {
+    assert.equal(createDashboardLiveMirror({ cfg, env: { LIVE_AUTO_MIRROR_ENABLED: value }, createMirror }).cfg.enabled, false);
+  }
+  const env = { LIVE_AUTO_MIRROR_ENABLED: 'true' };
+  const active = createDashboardLiveMirror({ cfg, env, createMirror });
+  assert.deepEqual(active.cfg, cfg, 'switch preserves all limits and chains');
+  assert.equal(active.env, env);
+  assert.equal(createDashboardLiveMirror({ cfg: { ...cfg, enabled: false }, env, createMirror }).cfg.enabled, false);
+  assert.equal(cfg.enabled, true, 'factory does not mutate the shared manual config');
+});
+
+test('strategy API reports the actual automatic mirror capability', async t => {
+  let enabled = false;
+  const app = createDashboardServer({ host: '127.0.0.1', port: 0,
+    strategyRuntime: { snapshot: () => ({ mode: 'paper', enabled: true, liveMirror: { enabled, chains: ['bsc', 'sol'] } }) } });
+  const address = await app.listen();
+  t.after(() => app.close());
+  const url = `http://${address.address}:${address.port}/api/strategy-state`;
+  assert.equal((await (await fetch(url)).json()).liveMirror.enabled, false);
+  enabled = true;
+  assert.equal((await (await fetch(url)).json()).liveMirror.enabled, true);
+});
+
+test('compact live status reads runtime capability without copying the research book', async t => {
+  const state = { status: 'ok', enabled: true, updatedAt: '2026-11-09T12:00:00Z', liveMirror: { enabled: true, chains: ['bsc', 'sol'] } };
+  const app = createDashboardServer({ host: '127.0.0.1', port: 0,
+    strategyRuntime: { liveStatus: () => state, snapshot: () => { throw new Error('full snapshot must not be read'); } } });
+  const address = await app.listen();
+  t.after(() => app.close());
+  const url = `http://${address.address}:${address.port}/api/live-runtime-status`;
+  assert.deepEqual(await (await fetch(url)).json(), state);
+  assert.equal((await fetch(url, { method: 'POST' })).status, 405);
+});
+
+test('finite chart catchup endpoint accepts only bounded same-origin local research requests', async t => {
+  const calls = [], status = { status: 'idle', items: [] };
+  const app = createDashboardServer({ host: '127.0.0.1', port: 0, strategyRuntime: {
+    chartCatchupStatus: () => status,
+    queueChartCatchup: targets => { calls.push(targets); return { ...status, status: 'running' }; },
+  } });
+  const address = await app.listen(), origin = `http://${address.address}:${address.port}`, url = `${origin}/api/research/chart-catchup`;
+  t.after(() => app.close());
+  const targets = [{ chain: 'bsc', address: '0x' + 'a'.repeat(40) }];
+  const send = (payload, headers = {}) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(payload) });
+  const local = { origin, 'sec-fetch-site': 'same-origin' };
+  assert.deepEqual(await (await fetch(url)).json(), status);
+  assert.equal((await send({ targets })).status, 403);
+  assert.equal((await send({ targets }, { ...local, origin: 'https://example.com' })).status, 403);
+  assert.equal((await send({ targets: Array(101).fill(targets[0]) }, local)).status, 400);
+  assert.equal((await send({ targets, bypassSafety: true }, local)).status, 400);
+  assert.equal(calls.length, 0);
+  const response = await send({ targets }, local);
+  assert.equal(response.status, 202);
+  assert.equal((await response.json()).status, 'running');
+  assert.deepEqual(calls, [targets]);
+});
 
 test('recovery lane budget shows current capped cash fraction, not the retired two-percent label',()=>{
   const app=fs.readFileSync(new URL('../dashboard/app.js',import.meta.url),'utf8');
@@ -140,13 +200,26 @@ test('confirmed-mode multi-chain coverage renders quote confirmation without a s
   const source = app.slice(app.indexOf('function renderCoverage()'), app.indexOf('function renderTrades()'));
   const target = { innerHTML: '' };
   const context = { state: { snapshot: { entryMode: 'confirmed_pvp_v2', chains: ['base', 'bsc'],
-    chainCoverage: { base: { funnel: { chartReady: 3 } }, bsc: {} } } },
+    researchPipeline: { chartFallback:{enabled:true,pending:true,accepted:2}, chartHealth: { alert: true, warmup: false, hotChartReady: 3, hotCount: 8, hotKlineFresh: 2, hotKlineStale: 1,
+      hotKlineMaxClosedAgeMs: 150000, fetched: 12, notRequested: 300, fetchedUnavailableRatio: 0.25,
+      staleClosedBars: 20, insufficientClosedBars: 4, queueWaitMedianMs: 10000, queueWaitMaxMs: 30000,
+      hotKlineUnknown: 5, note: '热点最新收盘 K 线超过 120 秒' } },
+    chainCoverage: { base: { funnel: { chartReady: 3, ohlcvReady: 2, confirmationReady: 3 } }, bsc: {} } } },
     $: () => target, num: n => Number(n) || 0, chainName: s => s, escapeHtml: s => s,
     humanText: s => s, clock: s => s,
     marketCoverageStatus: () => ({ fresh: true, label: '测试行情' }),
     flowCoverageStatus: () => ({ fresh: true, label: '测试资金流' }) };
   vm.runInNewContext(`${source}\nrenderCoverage();`, context);
   assert.match(target.innerHTML, /连续报价确认 3/);
+  assert.match(target.innerHTML, /热点 1m 新鲜 2\/8/);
+  assert.match(target.innerHTML, /陈旧 1 · 新鲜度未证实 5 · 最旧收盘 150 秒/);
+  assert.match(target.innerHTML, /https:\/\/www\.geckoterminal\.com\//);
+  assert.match(target.innerHTML, /Powered by GeckoTerminal/);
+  assert.match(target.innerHTML, /已采用 2 个完整窗口 · 正在补查/);
+  assert.match(target.innerHTML, /未请求 300/);
+  assert.match(target.innerHTML, /排队中位 10000 ms \/ 最大 30000 ms/);
+  assert.match(target.innerHTML, /K 线结构 2/);
+  assert.match(target.innerHTML, /超过 120 秒/);
   assert.doesNotMatch(target.innerHTML, /形态免筛选|K 线齐全/);
 });
 
@@ -290,10 +363,14 @@ test('dashboard exposes read-only GMGN market and kline routes without trade exe
   assert.equal(calls[1][1].chain, 'bsc');
   assert.equal(calls[1][1].resolution, '1m');
   assert.equal(calls[1][1].address, '0xabc12345');
+  assert.equal(calls[1][1].latestClosed, true, 'relative 1m window follows actual dispatch, not queue admission');
+  assert.equal(calls[1][1].to - calls[1][1].from, 2 * 3600);
   const defaultMarket = await fetch(`${base}/api/market`);
   assert.equal(defaultMarket.status, 200);
   assert.equal(calls[2][0], 'trending');
   assert.equal(calls[2][1].chain, 'robinhood');
+  assert.equal((await fetch(`${base}/api/kline?chain=bsc&address=0xabc12345&resolution=5m&hours=2`)).status, 200);
+  assert.equal(calls[3][1].latestClosed, false, 'other resolutions retain their existing window contract');
 });
 
 test('dashboard exposes a read-only AI research team report', async t => {

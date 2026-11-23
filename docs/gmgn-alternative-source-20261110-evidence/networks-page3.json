@@ -1,0 +1,213 @@
+{
+  "url": "https://api.geckoterminal.com/api/v2/networks?page=3",
+  "requestedAt": "2026-11-10T04:43:23.739058+00:00",
+  "receivedAt": "2026-11-10T04:43:24.704399+00:00",
+  "httpStatus": 200,
+  "headers": {
+    "Date": "Tue, 10 Nov 2026 04:43:26 GMT",
+    "cache-control": "max-age=30, public, must-revalidate, s-maxage=60",
+    "Age": "25"
+  },
+  "rawResponse": {
+    "data": [
+      {
+        "id": "thorchain",
+        "type": "network",
+        "attributes": {
+          "name": "THORChain",
+          "coingecko_asset_platform_id": "thorchain"
+        }
+      },
+      {
+        "id": "zigchain",
+        "type": "network",
+        "attributes": {
+          "name": "ZIGChain",
+          "coingecko_asset_platform_id": "zigchain"
+        }
+      },
+      {
+        "id": "gensyn",
+        "type": "network",
+        "attributes": {
+          "name": "Gensyn",
+          "coingecko_asset_platform_id": "gensyn"
+        }
+      },
+      {
+        "id": "bot-chain",
+        "type": "network",
+        "attributes": {
+          "name": "BOT Chain",
+          "coingecko_asset_platform_id": "bot-chain"
+        }
+      },
+      {
+        "id": "fluent",
+        "type": "network",
+        "attributes": {
+          "name": "Fluent",
+          "coingecko_asset_platform_id": "fluent"
+        }
+      },
+      {
+        "id": "fonchain",
+        "type": "network",
+        "attributes": {
+          "name": "FONChain",
+          "coingecko_asset_platform_id": "fonchain"
+        }
+      },
+      {
+        "id": "igra",
+        "type": "network",
+        "attributes": {
+          "name": "Igra",
+          "coingecko_asset_platform_id": "igra"
+        }
+      },
+      {
+        "id": "anubis",
+        "type": "network",
+        "attributes": {
+          "name": "Anubis",
+          "coingecko_asset_platform_id": "anubis"
+        }
+      },
+      {
+        "id": "dungeon-chain",
+        "type": "network",
+        "attributes": {
+          "name": "Dungeon Chain",
+          "coingecko_asset_platform_id": "dungeon-chain"
+        }
+      },
+      {
+        "id": "klever",
+        "type": "network",
+        "attributes": {
+          "name": "Klever",
+          "coingecko_asset_platform_id": null
+        }
+      },
+      {
+        "id": "robinhood",
+        "type": "network",
+        "attributes": {
+          "name": "Robinhood",
+          "coingecko_asset_platform_id": "robinhood"
+        }
+      },
+      {
+        "id": "keeta",
+        "type": "network",
+        "attributes": {
+          "name": "Keeta",
+          "coingecko_asset_platform_id": null
+        }
+      },
+      {
+        "id": "doma",
+        "type": "network",
+        "attributes": {
+          "name": "Doma",
+          "coingecko_asset_platform_id": "doma"
+        }
+      },
+      {
+        "id": "zeniq",
+        "type": "network",
+        "attributes": {
+          "name": "Zeniq",
+          "coingecko_asset_platform_id": null
+        }
+      },
+      {
+        "id": "stable",
+        "type": "network",
+        "attributes": {
+          "name": "Stable",
+          "coingecko_asset_platform_id": "stable"
+        }
+      },
+      {
+        "id": "pharos",
+        "type": "network",
+        "attributes": {
+          "name": "Pharos",
+          "coingecko_asset_platform_id": "pharos"
+        }
+      },
+      {
+        "id": "axiome",
+        "type": "network",
+        "attributes": {
+          "name": "Axiome",
+          "coingecko_asset_platform_id": "axiome-chain"
+        }
+      },
+      {
+        "id": "unit-network",
+        "type": "network",
+        "attributes": {
+          "name": "Unit Network",
+          "coingecko_asset_platform_id": null
+        }
+      },
+      {
+        "id": "arc",
+        "type": "network",
+        "attributes": {
+          "name": "Arc",
+          "coingecko_asset_platform_id": "arc"
+        }
+      },
+      {
+        "id": "xphere",
+        "type": "network",
+        "attributes": {
+          "name": "Xphere",
+          "coingecko_asset_platform_id": null
+        }
+      },
+      {
+        "id": "x1-network",
+        "type": "network",
+        "attributes": {
+          "name": "X1 Network",
+          "coingecko_asset_platform_id": null
+        }
+      },
+      {
+        "id": "rise",
+        "type": "network",
+        "attributes": {
+          "name": "Rise",
+          "coingecko_asset_platform_id": null
+        }
+      },
+      {
+        "id": "aleo",
+        "type": "network",
+        "attributes": {
+          "name": "Aleo",
+          "coingecko_asset_platform_id": "aleo"
+        }
+      },
+      {
+        "id": "elysium",
+        "type": "network",
+        "attributes": {
+          "name": "Elysium",
+          "coingecko_asset_platform_id": "elysium-kinetiq"
+        }
+      }
+    ],
+    "links": {
+      "first": "https://api.geckoterminal.com/api/v2/networks?page=1",
+      "prev": "https://api.geckoterminal.com/api/v2/networks?page=2",
+      "next": null,
+      "last": "https://api.geckoterminal.com/api/v2/networks?page=3"
+    }
+  }
+}

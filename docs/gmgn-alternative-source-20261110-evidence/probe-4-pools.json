@@ -1,0 +1,252 @@
+{
+  "target": {
+    "chain": "sol",
+    "network": "solana",
+    "address": "J1p5JR1vC48djzmPYXiX5ME9MKnXofkaeTc6CXtSs7X5",
+    "symbol": "POLLY",
+    "diagnostic": "insufficient_closed_bars",
+    "historicalArtifact": "docs/gmgn-chart-backlog-20261110-excluded-audit.json",
+    "historicalFrom": 1794243540,
+    "historicalTo": 1794247140
+  },
+  "url": "https://api.geckoterminal.com/api/v2/networks/solana/tokens/J1p5JR1vC48djzmPYXiX5ME9MKnXofkaeTc6CXtSs7X5/pools?include=base_token%2Cquote_token%2Cdex&include_inactive_source=true&page=1",
+  "requestedAt": "2026-11-10T04:44:16.498750+00:00",
+  "receivedAt": "2026-11-10T04:44:17.672714+00:00",
+  "httpStatus": 200,
+  "headers": {
+    "Date": "Tue, 10 Nov 2026 04:44:19 GMT",
+    "Cache-Control": "max-age=30, public, must-revalidate, s-maxage=60"
+  },
+  "rawResponse": {
+    "data": [
+      {
+        "id": "solana_2YQ7hjcK9rioRpQo1pBzu215iXaC1w47krV2sYsdbTu1",
+        "type": "pool",
+        "attributes": {
+          "base_token_price_usd": "0.0000000005535912886",
+          "base_token_price_native_currency": "0.00000000000600006437521879",
+          "quote_token_price_usd": "86.818532972031727375637698755038200539934539406",
+          "quote_token_price_native_currency": "1.0",
+          "base_token_price_quote_token": "0.000000000006000064375",
+          "quote_token_price_base_token": "166664878485.33",
+          "address": "2YQ7hjcK9rioRpQo1pBzu215iXaC1w47krV2sYsdbTu1",
+          "name": "POLLY / SOL",
+          "pool_created_at": "2026-11-09T17:40:06Z",
+          "token_price_usd": "0.0000000005535912886",
+          "fdv_usd": "0.5535912886",
+          "market_cap_usd": null,
+          "price_change_percentage": {
+            "m5": "0",
+            "m15": "0",
+            "m30": "0",
+            "h1": "0",
+            "h6": "0",
+            "h24": "-100"
+          },
+          "transactions": {
+            "m5": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m15": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m30": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h1": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h6": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h24": {
+              "buys": 348,
+              "sells": 368,
+              "buyers": 191,
+              "sellers": 174
+            }
+          },
+          "volume_usd": {
+            "m5": "0.0",
+            "m15": "0.0",
+            "m30": "0.0",
+            "h1": "0.0",
+            "h6": "0.0",
+            "h24": "6341.3286968402"
+          },
+          "reserve_in_usd": "0.8522",
+          "last_trade_timestamp": "1794253283"
+        },
+        "relationships": {
+          "base_token": {
+            "data": {
+              "id": "solana_J1p5JR1vC48djzmPYXiX5ME9MKnXofkaeTc6CXtSs7X5",
+              "type": "token"
+            }
+          },
+          "quote_token": {
+            "data": {
+              "id": "solana_So11111111111111111111111111111111111111112",
+              "type": "token"
+            }
+          },
+          "dex": {
+            "data": {
+              "id": "meteora-damm-v2",
+              "type": "dex"
+            }
+          }
+        }
+      },
+      {
+        "id": "solana_FrQRMipz9uZ9VLit8E7AcnmwsgHQyJ5Y5EBHLfZ3Fbgt",
+        "type": "pool",
+        "attributes": {
+          "base_token_price_usd": "0.00004235446969",
+          "base_token_price_native_currency": "0.000000482779202679776",
+          "quote_token_price_usd": "86.207620972792263693568866219584944790748218503",
+          "quote_token_price_native_currency": "1.0",
+          "base_token_price_quote_token": "0.0000004827792027",
+          "quote_token_price_base_token": "2071340.26165434",
+          "address": "FrQRMipz9uZ9VLit8E7AcnmwsgHQyJ5Y5EBHLfZ3Fbgt",
+          "name": "POLLY / SOL",
+          "pool_created_at": "2026-11-09T17:02:06Z",
+          "token_price_usd": "0.00004235446969",
+          "fdv_usd": "42354.46969",
+          "market_cap_usd": null,
+          "price_change_percentage": {
+            "m5": "0",
+            "m15": "0",
+            "m30": "0",
+            "h1": "0",
+            "h6": "0",
+            "h24": "19.67"
+          },
+          "transactions": {
+            "m5": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m15": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "m30": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h1": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h6": {
+              "buys": 0,
+              "sells": 0,
+              "buyers": 0,
+              "sellers": 0
+            },
+            "h24": {
+              "buys": 21,
+              "sells": 15,
+              "buyers": 19,
+              "sellers": 14
+            }
+          },
+          "volume_usd": {
+            "m5": "0.0",
+            "m15": "0.0",
+            "m30": "0.0",
+            "h1": "0.0",
+            "h6": "0.0",
+            "h24": "1133.3673633693"
+          },
+          "reserve_in_usd": "0.0",
+          "last_trade_timestamp": "1794246000"
+        },
+        "relationships": {
+          "base_token": {
+            "data": {
+              "id": "solana_J1p5JR1vC48djzmPYXiX5ME9MKnXofkaeTc6CXtSs7X5",
+              "type": "token"
+            }
+          },
+          "quote_token": {
+            "data": {
+              "id": "solana_So11111111111111111111111111111111111111112",
+              "type": "token"
+            }
+          },
+          "dex": {
+            "data": {
+              "id": "meteora-dbc",
+              "type": "dex"
+            }
+          }
+        }
+      }
+    ],
+    "included": [
+      {
+        "id": "solana_J1p5JR1vC48djzmPYXiX5ME9MKnXofkaeTc6CXtSs7X5",
+        "type": "token",
+        "attributes": {
+          "address": "J1p5JR1vC48djzmPYXiX5ME9MKnXofkaeTc6CXtSs7X5",
+          "name": "Polly Town",
+          "symbol": "POLLY",
+          "decimals": 6,
+          "image_url": "https://assets.geckoterminal.com/bv6skfarrq0l2yn7arq4fzb1dx65",
+          "coingecko_coin_id": null
+        }
+      },
+      {
+        "id": "solana_So11111111111111111111111111111111111111112",
+        "type": "token",
+        "attributes": {
+          "address": "So11111111111111111111111111111111111111112",
+          "name": "Wrapped SOL",
+          "symbol": "SOL",
+          "decimals": 9,
+          "image_url": "https://coin-images.coingecko.com/coins/images/21629/large/solana.jpg?1696520989",
+          "coingecko_coin_id": "wrapped-solana"
+        }
+      },
+      {
+        "id": "meteora-damm-v2",
+        "type": "dex",
+        "attributes": {
+          "name": "Meteora DAMM V2"
+        }
+      },
+      {
+        "id": "meteora-dbc",
+        "type": "dex",
+        "attributes": {
+          "name": "Meteora DBC"
+        }
+      }
+    ]
+  }
+}

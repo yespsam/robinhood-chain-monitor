@@ -132,8 +132,9 @@ test('errors retain previous fingerprints; persisted origin cooldown honors Retr
   assert.equal(watch.originNextAttemptAt,new Date(NOW+61*MINUTE).toISOString());
   assert.deepEqual(planPlatformDocumentWatch(flap,{...entry,documentWatch:watch},NOW+31*MINUTE).selected,[]);
   assert.ok(planPlatformDocumentWatch(flap,{...entry,documentWatch:watch},NOW+61*MINUTE).selected.length);
-  watch=applyPlatformDocumentResult(watch,source,{error:new Error('secret credential in transport URL')},NOW+62*MINUTE);
+  watch=applyPlatformDocumentResult(watch,source,{error:Object.assign(new Error('secret credential in transport URL'),{transportCode:'ECONNRESET'})},NOW+62*MINUTE);
   assert.equal(watch.pages[source].lastError,'document_fetch_failed');
+  assert.equal(watch.pages[source].lastTransportCode,'ECONNRESET');
   assert.equal(JSON.stringify(watch).includes('secret'),false);
   const existing={...entry,sources:{a:{url:source,lastErrorStatus:403,nextAttemptAt:new Date(NOW+60*MINUTE).toISOString()}}};
   assert.equal(planPlatformDocumentWatch(flap,existing,NOW).selected.length,0);
@@ -156,6 +157,7 @@ test('document fetch rejects redirects/provenance substitutions, uses conditiona
   const url=urlFor(0); let options;
   const baseline=await fetchPlatformDocument(flap,{url},async (value,opts)=>{options=opts;return reply(value,body(),{headers:{etag:'"v1"'}});},{nowMs:NOW});
   assert.equal(options.redirect,'manual');
+  assert.equal(options.headers.connection,'close');
   assert.equal(baseline.etag,'"v1"');
   const unchanged=await fetchPlatformDocument(flap,{url,...baseline},async(value,opts)=>{
     assert.equal(opts.headers['if-none-match'],'"v1"');return reply(value,'',{status:304,ok:false});

@@ -131,7 +131,7 @@ test("explicit paid host stays first for heads, scoped logs and archive state ac
   assert.deepEqual(calls.map(([, kind]) => kind), ["standard", "standard", "archive", "archive", "archive"]);
 });
 
-test("busy healthy paid readers use their original bounded queue before idle public readers", async (t) => {
+test("a saturated paid host yields bounded BSC reads to idle public readers", async (t) => {
   const admitted = [], calls = [];
   const pool = createRpcPool([publicUrl, paidUrl], [publicUrl, paidUrl], 1, {
     preferredHosts: [paidHost], physicalWaitMs: 200, stateReadBudgetMs: 10_000,
@@ -148,8 +148,10 @@ test("busy healthy paid readers use their original bounded queue before idle pub
   t.after(() => pool.destroy());
   await pool.getBlockNumber();
   await pool.getCode('0x1111111111111111111111111111111111111111', 90);
-  assert.deepEqual(calls, [[paidHost, 'standard'], [paidHost, 'archive']]);
-  assert.ok(admitted.every(call => call.host === paidHost && call.lane === 'background' && call.options.waitMs === 200));
+  assert.deepEqual(calls, [['bsc-rpc.publicnode.com', 'standard'], ['bsc-rpc.publicnode.com', 'archive']]);
+  assert.ok(admitted.every(call => call.host === 'bsc-rpc.publicnode.com'
+    && call.lane === 'background' && call.options.waitMs === 200),
+  "known-saturated paid requests use the available secondary without occupying the paid wait queue");
 });
 
 test("an occupied paid recovery probe yields to an independent healthy fallback", async (t) => {

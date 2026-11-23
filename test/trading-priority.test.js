@@ -1341,6 +1341,55 @@ test("official T2 news notifies only when important, while ordinary notices and 
   ]) assert.equal(alertDeliveryDisposition(invalid).deliverImmediately, false);
 });
 
+test("fresh official Four.Meme, Flap, and Binance GitHub updates are watch-only Telegram alerts", () => {
+  const now = new Date().toISOString();
+  const four = withTradingPriority({
+    type: "github_module_update",
+    launchpad: "Four.meme",
+    repository: "four-meme-community/openfour-docs",
+    sourceTrust: "official_verified",
+    strong: true,
+    // A commit that missed the strict trade-entry window remains a useful
+    // platform update while it is still inside the GitHub Telegram freshness
+    // window. It must stay T2 and watch-only, never be promoted to T1.
+    committedAt: new Date(Date.now() - 16 * 60_000).toISOString(),
+    observedAt: now,
+    freshness: { scope: "github", decision: "realtime" },
+    modeChange: { candidate: true, reason: "new_chain_support" },
+    files: [{ filename: "docs/agent-id.md", status: "added", additions: 20, deletions: 0 }],
+    message: "docs: add official mechanism guide",
+  }, { nowMs: Date.now() });
+  assert.equal(four.tradingPriority.tier, "T2");
+  assert.deepEqual(alertDeliveryDisposition(four), {
+    mode: "immediate",
+    deliverImmediately: true,
+    tier: "T2",
+    reason: "official_github_repository_watch_only",
+  });
+
+  const flap = withTradingPriority({
+    ...four,
+    launchpad: "Flap",
+    repository: "flap-sh/flap-skills",
+    message: "feat: update official agent skill",
+  });
+  assert.equal(alertDeliveryDisposition(flap).deliverImmediately, true);
+
+  const binance = withTradingPriority({
+    ...four,
+    launchpad: "Binance Wallet",
+    repository: "binance/binance-skills-hub",
+    binanceOfficial: true,
+    binanceChange: { classification: "product_feature", productFeature: true },
+  });
+  assert.equal(alertDeliveryDisposition(binance).deliverImmediately, true);
+
+  const stale = { ...four, freshness: { scope: "github", decision: "suppress" } };
+  assert.equal(alertDeliveryDisposition(stale).deliverImmediately, false, "expired commits remain suppressed");
+  const unrelated = { ...four, launchpad: "Uniswap", uniswapOfficial: true };
+  assert.equal(alertDeliveryDisposition(unrelated).deliverImmediately, false, "the exception stays scoped to requested platforms");
+});
+
 test("outbox drain migrates old active priority and delivers only T0/T1 plus health", async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "trading-priority-outbox-"));
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));

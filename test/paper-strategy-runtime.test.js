@@ -6,6 +6,8 @@ import path from 'node:path';
 import { createPaperStrategyRuntime } from '../src/paper-strategy-runtime.js';
 import { createPaperStrategyAccount, advancePaperStrategyAccount, evaluatePaperStrategies } from '../src/paper-strategy-engine.js';
 import { createConfirmedPaperSession } from '../src/paper-account-session.js';
+import { ESTIMATED_COST_VERSION } from '../src/paper-estimated-cost.js';
+import { CONFIRMED_PAPER_VERSION } from '../src/paper-confirmed-policy.js';
 import { NOW as RECALL_NOW, DAY as RECALL_DAY, TEXT as RECALL_TEXT, kolEvent } from './fixtures/paper-narrative-recall.js';
 import { discoverPaperFlowCandidates } from '../src/paper-candidate-discovery.js';
 import { breakoutCandles } from './fixtures/paper-strategy-v2.js';
@@ -47,7 +49,7 @@ test('BSC scan overlay rejects other-chain cached/event candidates without rewri
   }finally{await runtime.stop();}
 });
 
-test('focus simulator is exposed only for confirmed narrative-gated paper mode and stays separate from the main ledger',async t=>{
+test('focus simulator is isolated from the main admission path and main paper ledger',async t=>{
   let clock=NOW;const dataDir=await directory(t),candidate={...token,chain:'bsc',marketStage:'external',price:1.42};
   const feed={...market(()=>clock),
     trending:async()=>({status:'ok',observedAt:iso(clock),tokens:[candidate]}),
@@ -57,7 +59,7 @@ test('focus simulator is exposed only for confirmed narrative-gated paper mode a
   const runtime=createPaperStrategyRuntime({dataDir,market:feed,chain:'bsc',chains:['bsc'],now:()=>clock,
     evidenceLoader:()=>({}),allowExploratory:true,pvpMode:true,confirmedMode:true,
     evidenceHoldMode:true,continuousPaperMode:true,opportunityMode:true,memeExitMode:true,recoveryMode:true,
-    narrativeAdmissionGate:true,strategyFocusSimulation:true});
+    narrativeAdmissionGate:false,strategyFocusSimulation:true});
   try{
     await runtime.runOnce();
     const state=runtime.snapshot();
@@ -463,12 +465,13 @@ test('higher research cadence admits two distinct Plus charts while Free/downgra
       allowExploratory:true,pvpMode:true,confirmedMode:true,evidenceHoldMode:true,opportunityMode:true,higherFrequencyResearch:true});
     try{
       for(let i=0;i<3;i++)await runtime.refreshMarket({background:true});
-      await runtime.fastOnce();assert.equal(calls.length,1);
-      clock+=2500;await runtime.fastOnce();assert.equal(calls.length,plan==='plus'?2:1);
-      clock+=2500;await runtime.fastOnce();assert.equal(calls.length,plan==='plus'?2:1);
+      const cap=plan==='plus'?3:1;
+      await runtime.fastOnce();assert.equal(calls.length,cap);
+      clock+=2500;await runtime.fastOnce();assert.equal(calls.length,cap,'pending charts fill the budget instead of multiplying every tick');
+      clock+=2500;await runtime.fastOnce();assert.equal(calls.length,cap);
       assert.equal(new Set(calls.map(c=>`${c.target.chain}:${c.target.address}`)).size,calls.length);
       await fs.writeFile(planFile,JSON.stringify({version:1,plan:'free'}));clock+=10000;await runtime.fastOnce();
-      assert.equal(calls.length,plan==='plus'?2:1);assert.equal(runtime.snapshot().researchPipeline.chartConcurrency,1);
+      assert.equal(calls.length,cap);assert.equal(runtime.snapshot().researchPipeline.chartConcurrency,1);
       let drained=false;const stopping=runtime.stop().then(()=>{drained=true;});await new Promise(resolve=>setImmediate(resolve));assert.equal(drained,false);
       calls.forEach(c=>c.resolve({status:'unavailable'}));await stopping;
       assert.equal(runtime.snapshot().account.trades.length,0);
@@ -552,6 +555,236 @@ test('unloaded charts do not claim near-entry priority while unseen-chain resear
     assert.deepEqual(calls, ['base'],'complete fields waiting for a chart must not trigger another detail refresh');
     assert.equal(runtime.snapshot().account.trades.length, 0);
   } finally { await runtime.stop(); }
+});
+
+async function chartCatchupFixture(t,onRead=()=>null) {
+  let clock=NOW,sourceStatus='ok';
+  const candidates=Array.from({length:5},(_,i)=>({...token,chain:'bsc',address:`0x${String(i+1).repeat(40)}`,marketStage:'external',volume:10000,volumeWindow:'5m'}));
+  let visible=[...candidates];const calls=[];
+  const feed={trending:async()=>({status:sourceStatus,interval:'5m',observedAt:iso(clock),tokens:visible}),
+    trenches:async()=>({status:sourceStatus,observedAt:iso(clock),tokens:[]}),quote:async()=>({status:'unavailable'}),
+    kline:async query=>{calls.push(query);return await onRead(query,()=>clock)||{chain:query.chain,address:query.address,resolution:'1m',status:'ok',candles:candles(clock)};}};
+  const runtime=createPaperStrategyRuntime({dataDir:await directory(t),market:feed,chain:'bsc',chains:['bsc'],
+    discoveryMode:'gmgn_three_lists_v1',now:()=>clock,evidenceLoader:()=>({}),
+    allowExploratory:true,pvpMode:true,confirmedMode:true,evidenceHoldMode:true,
+    continuousPaperMode:true,opportunityMode:true,memeExitMode:true});
+  return {runtime,candidates,calls,advance:ms=>{clock+=ms;},setSourceStatus:status=>{sourceStatus=status;},setVisible:rows=>{visible=rows;},target:i=>({chain:'bsc',address:candidates[i].address})};
+}
+
+test('finite chart catchup reuses cache, fills the real cache, skips delisted targets and never creates a trade',async t=>{
+  const f=await chartCatchupFixture(t);
+  try{
+    await f.runtime.runOnce();assert.equal(f.calls.length,1);
+    assert.throws(()=>f.runtime.queueChartCatchup(Array(101).fill(f.target(1))),/1–100/);
+    const queued=f.runtime.queueChartCatchup([f.target(0),f.target(1),f.target(2),f.target(1)]);
+    assert.equal(queued.items.length,3);assert.equal(queued.items[0].status,'cached');
+    assert.throws(()=>f.runtime.queueChartCatchup([f.target(3)]),{code:'CHART_CATCHUP_ACTIVE'});
+    f.setVisible(f.candidates.filter((_,i)=>i!==2));
+    for(let i=0;i<6&&f.runtime.chartCatchupStatus().status==='running';i++){f.advance(5000);await f.runtime.runOnce();}
+    const result=f.runtime.chartCatchupStatus();assert.equal(result.status,'complete');
+    assert.equal(result.items[1].status,'fetched');assert.equal(result.items[1].attempts,1);
+    assert.equal(result.items[2].status,'skipped');assert.equal(result.items[2].reasonCode,'DELISTED_FROM_FRESH_SOURCES');
+    assert.ok(f.runtime.walletResearchContext().charts.some(chart=>chart.address===f.target(1).address),'result entered the actual runtime chart cache');
+    assert.equal(f.calls.filter(q=>q.address===f.target(2).address).length,0);
+    assert.equal(f.runtime.snapshot().account.trades.length,0);
+  }finally{await f.runtime.stop();}
+});
+
+test('transient discovery failure waits within the original catchup deadline and resumes when current eligibility returns',async t=>{
+  const f=await chartCatchupFixture(t);
+  try{
+    await f.runtime.runOnce();const queued=f.runtime.queueChartCatchup([f.target(1),f.target(2)]);
+    f.setSourceStatus('unavailable');f.advance(121000);await f.runtime.runOnce();
+    const waiting=f.runtime.chartCatchupStatus();assert.equal(waiting.status,'running');
+    assert.ok(waiting.items.every(item=>item.status==='waiting_source'&&item.attempts===0));
+    assert.ok(waiting.items.every(item=>item.reasonCode==='DISCOVERY_SOURCE_UNAVAILABLE'));
+    assert.equal(waiting.deadlineAt,queued.deadlineAt,'temporary source failures never renew the deadline');
+    f.setSourceStatus('ok');
+    for(let i=0;i<8&&f.runtime.chartCatchupStatus().status==='running';i++){f.advance(5000);await f.runtime.runOnce();}
+    const result=f.runtime.chartCatchupStatus();assert.equal(result.status,'complete');
+    assert.ok(result.items.every(item=>['fetched','cached'].includes(item.status)));
+    assert.equal(result.deadlineAt,queued.deadlineAt);assert.equal(f.runtime.snapshot().account.trades.length,0);
+  }finally{await f.runtime.stop();}
+});
+
+test('network-failed charts remain retryable without accepting the failure cache or bypassing bounded backoff',async t=>{
+  let failures=0;
+  const f=await chartCatchupFixture(t,q=>q.address===`0x${'2'.repeat(40)}`&&++failures<=2
+    ?{chain:q.chain,address:q.address,resolution:'1m',status:'unavailable',reasonCode:'GMGN_NETWORK_FAILED',candles:[]}:null);
+  try{
+    await f.runtime.runOnce();f.runtime.queueChartCatchup([f.target(1)]);f.advance(5000);await f.runtime.runOnce();
+    let item=f.runtime.chartCatchupStatus().items[0];assert.equal(item.status,'retry');assert.equal(item.attempts,1);
+    const firstRetry=item.nextAttemptAtMs;f.advance(5000);await f.runtime.runOnce();
+    item=f.runtime.chartCatchupStatus().items[0];assert.equal(item.status,'retry');assert.equal(item.attempts,1);assert.equal(item.nextAttemptAtMs,firstRetry);
+    f.advance(55000);
+    for(let i=0;i<6&&f.runtime.chartCatchupStatus().items[0].attempts<2;i++){await f.runtime.runOnce();if(f.runtime.chartCatchupStatus().items[0].attempts<2)f.advance(5000);}
+    item=f.runtime.chartCatchupStatus().items[0];
+    assert.equal(item.status,'retry');assert.equal(item.attempts,2);assert.equal(item.nextAttemptAtMs-Date.parse(item.requestedAt),120000);
+    f.advance(120000);
+    for(let i=0;i<6&&f.runtime.chartCatchupStatus().status==='running';i++){await f.runtime.runOnce();f.advance(5000);}
+    const result=f.runtime.chartCatchupStatus();assert.equal(result.status,'complete');assert.equal(result.items[0].status,'fetched');
+    assert.equal(result.items[0].attempts,3);assert.equal(result.items[0].reasonCode,null);
+  }finally{await f.runtime.stop();}
+});
+
+test('a newly queued catchup does not complete from a still-fresh network failure cache',async t=>{
+  const f=await chartCatchupFixture(t,q=>({chain:q.chain,address:q.address,resolution:'1m',status:'unavailable',reasonCode:'GMGN_NETWORK_FAILED',candles:[]}));
+  try{
+    await f.runtime.runOnce();const queued=f.runtime.queueChartCatchup([f.target(0)]);
+    assert.equal(queued.status,'running');assert.equal(queued.items[0].status,'retry');assert.equal(queued.items[0].attempts,0);
+    assert.equal(f.calls.length,1,'enqueue cannot bypass the existing failed-source cache backoff');
+    f.advance(61000);await f.runtime.runOnce();
+    assert.equal(f.runtime.chartCatchupStatus().items[0].status,'retry');assert.equal(f.runtime.chartCatchupStatus().items[0].attempts,1);
+  }finally{await f.runtime.stop();}
+});
+
+test('chart catchup retries only bounded queue failures and retains an in-flight lease past its deadline',async t=>{
+  let release,hang=false;
+  const f=await chartCatchupFixture(t,(q)=>{
+    if(q.address===`0x${'2'.repeat(40)}`)return {chain:q.chain,address:q.address,resolution:'1m',status:'unavailable',reasonCode:'GMGN_REQUEST_BUSY',candles:[]};
+    if(hang&&q.address===`0x${'3'.repeat(40)}`)return new Promise(resolve=>{release=()=>resolve({chain:q.chain,address:q.address,resolution:'1m',status:'unavailable',reasonCode:'GMGN_EMPTY_KLINE',candles:[]});});
+  });
+  let pending;
+  try{
+    await f.runtime.runOnce();f.runtime.queueChartCatchup([f.target(1)]);
+    for(let i=0;i<8&&f.runtime.chartCatchupStatus().status==='running';i++){f.advance(5000);await f.runtime.runOnce();}
+    const retried=f.runtime.chartCatchupStatus();assert.equal(retried.status,'complete');assert.equal(retried.items[0].attempts,3);
+    assert.equal(retried.items[0].reasonCode,'GMGN_REQUEST_BUSY');
+    hang=true;f.runtime.queueChartCatchup([f.target(2)]);f.advance(61000);
+    pending=f.runtime.runOnce();await new Promise(resolve=>setTimeout(resolve,20));
+    if(!release){await pending;f.advance(5000);pending=f.runtime.runOnce();await new Promise(resolve=>setTimeout(resolve,20));}
+    assert.equal(typeof release,'function');f.advance(1800001);
+    const late=f.runtime.chartCatchupStatus();assert.equal(late.status,'running');assert.equal(late.items[0].status,'in_flight');assert.equal(late.items[0].deadlineReached,true);
+    assert.throws(()=>f.runtime.queueChartCatchup([f.target(4)]),{code:'CHART_CATCHUP_ACTIVE'});
+    release();await pending;pending=null;
+    assert.equal(f.runtime.chartCatchupStatus().status,'complete');assert.equal(f.runtime.chartCatchupStatus().items[0].status,'expired');
+  }finally{release?.();await pending;await f.runtime.stop();}
+});
+
+test('focused cached hot charts keep refreshing when no detail work is due', async t => {
+  let clock = NOW, chartReads = 0, detailReads = 0;
+  const candidate = { ...token, chain: 'bsc', marketStage: 'external', volume: 10000, volumeWindow: '5m' };
+  const feed = {
+    trending: async () => ({ status: 'ok', interval: '5m', observedAt: iso(clock), tokens: [candidate] }),
+    trenches: async () => ({ status: 'ok', observedAt: iso(clock), tokens: [] }),
+    quote: async () => ({ status: 'unavailable' }),
+    details: async () => { detailReads++; return { status: 'ok', observedAt: iso(clock), token: candidate }; },
+    kline: async ({ chain, address }) => { chartReads++; return { chain, address, resolution: '1m', status: 'ok', candles: candles(clock) }; },
+  };
+  const runtime = createPaperStrategyRuntime({ dataDir: await directory(t), market: feed, chain: 'bsc', chains: ['bsc'],
+    discoveryMode: 'gmgn_three_lists_v1', now: () => clock, evidenceLoader: () => multiSources(['bsc'], clock),
+    allowExploratory: true, pvpMode: true, confirmedMode: true, evidenceHoldMode: true,
+    continuousPaperMode: true, opportunityMode: true, memeExitMode: true });
+  try {
+    for (let i = 0; i < 7; i++) {
+      await runtime.runOnce();
+      await runtime.refreshDetails();
+      clock += 61_000;
+    }
+    assert.equal(detailReads, 0, 'complete current feed fields do not need a detail request');
+    assert.equal(chartReads, 7, 'a nonexistent detail turn must not permanently exhaust the chart budget');
+    assert.equal(runtime.snapshot().account.trades.length, 0, 'fresh charts alone grant no entry permission');
+  } finally { await runtime.stop(); }
+});
+
+for (const plan of ['plus','free']) test(`${plan} bounds overdue hot charts during an ordinary detail within its existing cap`, async t => {
+  const dataDir=await directory(t);
+  await fs.writeFile(path.join(dataDir,'gmgn-readonly-plan.json'),JSON.stringify({version:1,plan}));
+  let clock=NOW, chartReads=0, missing=false, release;
+  const candidate=()=>({...token,chain:'bsc',marketStage:'external',volume:10000,volumeWindow:'5m',rugRatio:missing?null:.01});
+  const feed={
+    trending:async()=>({status:'ok',interval:'5m',observedAt:iso(clock),tokens:[candidate()]}),
+    trenches:async()=>({status:'ok',observedAt:iso(clock),tokens:[]}),
+    quote:async()=>({status:'unavailable'}),
+    details:()=>new Promise(resolve=>{release=()=>resolve({status:'ok',observedAt:iso(clock),token:{...candidate(),rugRatio:.01}});}),
+    kline:async({chain,address})=>{chartReads++;return {chain,address,resolution:'1m',status:'ok',candles:candles(clock)};},
+  };
+  const runtime=createPaperStrategyRuntime({dataDir,market:feed,chain:'bsc',chains:['bsc'],
+    discoveryMode:'gmgn_three_lists_v1',now:()=>clock,evidenceLoader:()=>multiSources(['bsc'],clock),
+    allowExploratory:true,pvpMode:true,confirmedMode:true,evidenceHoldMode:true,
+    continuousPaperMode:true,opportunityMode:true,memeExitMode:true});
+  let pending;
+  try{
+    await runtime.runOnce();assert.equal(chartReads,1);
+    clock+=1000;missing=true;await runtime.runOnce();
+    pending=runtime.refreshDetails();await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(typeof release,'function','ordinary detail is in flight');
+    clock+=61000;await runtime.runOnce();
+    assert.equal(chartReads,plan==='plus'?2:1,'only Plus can use a spare existing seat; Free stays serial');
+    clock+=61000;await runtime.runOnce();
+    assert.equal(chartReads,plan==='plus'?3:1,'completed overlap releases its seat without changing Free serialization');
+    clock+=61000;await runtime.runOnce();
+    assert.equal(chartReads,plan==='plus'?3:1,'the configured two-chart detail batch still caps repeated overlap');
+    assert.equal(runtime.snapshot().account.trades.length,0);
+  }finally{release?.();await pending;await runtime.stop();}
+});
+
+test('slow Plus details share one reusable overlap seat with finite catchup and yield after four chart requests',async t=>{
+  const dataDir=await directory(t);await fs.writeFile(path.join(dataDir,'gmgn-readonly-plan.json'),JSON.stringify({version:1,plan:'plus'}));
+  let clock=NOW,missing=false,detailRelease,chartRelease,holdCharts=false,activeCharts=0,maxActive=0,reads=0;
+  const candidates=()=>Array.from({length:8},(_,i)=>({...token,chain:'bsc',address:`0x${String(i+1).repeat(40)}`,marketStage:'external',volume:10000,volumeWindow:'5m',rugRatio:missing&&i===0?null:.01}));
+  const feed={trending:async()=>({status:'ok',interval:'5m',observedAt:iso(clock),tokens:candidates()}),
+    trenches:async()=>({status:'ok',observedAt:iso(clock),tokens:[]}),quote:async()=>({status:'unavailable'}),
+    details:q=>new Promise(resolve=>{detailRelease=()=>resolve({status:'ok',observedAt:iso(clock),token:{...candidates().find(t=>t.address===q.address),rugRatio:.01}});}),
+    kline:async q=>{reads++;activeCharts++;maxActive=Math.max(maxActive,activeCharts);
+      if(holdCharts)await new Promise(resolve=>{chartRelease=resolve;});
+      activeCharts--;return {chain:q.chain,address:q.address,resolution:'1m',status:'ok',candles:candles(clock)};}};
+  const runtime=createPaperStrategyRuntime({dataDir,market:feed,chain:'bsc',chains:['bsc'],
+    discoveryMode:'gmgn_three_lists_v1',now:()=>clock,evidenceLoader:()=>({}),higherFrequencyResearch:true,
+    allowExploratory:true,pvpMode:true,confirmedMode:true,evidenceHoldMode:true,continuousPaperMode:true,opportunityMode:true,memeExitMode:true});
+  let detail;
+  try{
+    await runtime.runOnce();clock+=1000;missing=true;await runtime.runOnce();
+    detail=runtime.refreshDetails();await new Promise(resolve=>setImmediate(resolve));assert.equal(typeof detailRelease,'function');
+    const already=new Set(runtime.walletResearchContext().charts.map(c=>c.address));
+    const targets=candidates().filter(t=>!already.has(t.address)).map(({chain,address})=>({chain,address}));
+    assert.ok(targets.length>=5);runtime.queueChartCatchup(targets);holdCharts=true;const before=reads;
+    for(let i=0;i<4;i++){
+      clock+=5000;await runtime.fastOnce();await new Promise(resolve=>setImmediate(resolve));assert.equal(activeCharts,1);
+      clock+=2000;await runtime.fastOnce();assert.equal(activeCharts,1,'another fast tick cannot claim a second overlap seat');
+      chartRelease();await new Promise(resolve=>setImmediate(resolve));assert.equal(activeCharts,0);
+    }
+    assert.equal(reads-before,4);assert.equal(maxActive,1);clock+=5000;await runtime.fastOnce();
+    assert.equal(reads-before,4,'a slow detail cannot be flooded by an unbounded chart batch');
+    holdCharts=false;detailRelease();await detail;detail=null;clock+=5000;await runtime.fastOnce();await new Promise(resolve=>setImmediate(resolve));
+    assert.ok(reads-before>4,'the remaining finite queue resumes after the detail finishes');assert.equal(runtime.snapshot().account.trades.length,0);
+  }finally{holdCharts=false;chartRelease?.();detailRelease?.();await detail;await runtime.stop();}
+});
+
+test('runtime hot quote probes enforce five-second observations and three attempts even between scan ticks',async t=>{
+  let clock=NOW;const reads=[];
+  const dataDir=await directory(t),session={schema:'yesp_atm_paper_session_v1',id:'confirmed-pvp-v2-hot-probe-test',label:'估算费用独立模拟盘',mode:'paper',initialCash:100,
+    strategyVersion:CONFIRMED_PAPER_VERSION,createdAt:iso(NOW),chain:'bsc',chains:['bsc'],costModel:ESTIMATED_COST_VERSION,
+    legacy:{file:'yesp-atm-confirmed-pvp-v2-fixture.json',sha256:'a'.repeat(64),cash:100,realizedPnl:0,tradeCount:0}};
+  await fs.writeFile(path.join(dataDir,`yesp-atm-${session.id}.json`),JSON.stringify({schema:'yesp_atm_runtime_v1',session,chain:'bsc',chains:['bsc'],enabled:true,
+    account:{...createPaperStrategyAccount({nowMs:NOW}),estimatedCostModel:ESTIMATED_COST_VERSION}}));
+  const candidate={...token,chain:'bsc',marketStage:'external',rank:3,volume:100000,volumeWindow:'5m'};
+  const feed={
+    trending:async()=>({status:'ok',interval:'5m',observedAt:iso(clock),tokens:[candidate]}),
+    trenches:async()=>({status:'ok',observedAt:iso(clock),tokens:[]}),
+    quote:async request=>{reads.push(request);return {chain:request.chain,address:request.address,status:'ok',price:1,observedAt:iso(clock)};},
+    kline:async({chain,address})=>({chain,address,resolution:'1m',status:'ok',candles:candles(clock)}),
+  };
+  // Inject a researched non-setup to exercise scheduler/dispatch plumbing;
+  // the ordinary evaluator's account fields remain intact and no buy is eligible.
+  const evaluate=input=>evaluatePaperStrategies(input).map(row=>({...row,decision:'观察',reasons:['均线尚未收复'],missing:['五秒内的独立报价'],
+    evidence:{...row.evidence,marketFresh:true,chart:{ready:true},safety:{blocked:[],missing:[]},
+      costAssumptions:{...row.evidence.costAssumptions,accountingEligible:true},
+      lossRepair:{entryPath:'external_structure',entryPathAllowed:true,reentry:{ready:true}},
+      opportunityRoutes:[{basis:'ohlcv',signalReady:false,pattern:{ready:false},decision:'观察',reasons:['均线尚未收复'],missing:['五秒内的独立报价']} ]}}));
+  const runtime=createPaperStrategyRuntime({dataDir,session,market:feed,chain:'bsc',chains:['bsc'],
+    discoveryMode:'gmgn_three_lists_v1',now:()=>clock,evidenceLoader:()=>({}),evaluate,
+    allowExploratory:true,pvpMode:true,confirmedMode:true,evidenceHoldMode:true,
+    continuousPaperMode:true,opportunityMode:true,memeExitMode:true,recoveryMode:true,lossRepairMode:true});
+  try{
+    await runtime.runOnce();await runtime.refreshQuote();assert.equal(reads.length,1);
+    assert.equal(reads[0].hotQuoteProbe,true);assert.equal(reads[0].researchOnly,true);assert.equal(reads[0].purpose,'candidate');
+    await runtime.refreshQuote();clock+=4999;await runtime.refreshQuote();assert.equal(reads.length,1);
+    clock++;await runtime.refreshQuote();assert.equal(reads.length,2);
+    clock+=5000;await runtime.refreshQuote();assert.equal(reads.length,3);
+    clock+=5000;await runtime.refreshQuote();assert.equal(reads.length,3,'stale target cannot dispatch a fourth request');
+    assert.equal(runtime.snapshot().account.trades.length,0);
+  }finally{await runtime.stop();}
 });
 
 test('recovering flow can prefetch safety and charts but cannot request entry quotes or trade before completeness', async t => {
